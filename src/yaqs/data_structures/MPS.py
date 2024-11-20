@@ -33,6 +33,7 @@ class MPS:
             tensor = np.transpose(tensor, (2, 0, 1))
             self.tensors.append(tensor)
         self.flipped = False
+        # self.orthogonality_center = 0
 
     def write_max_bond_dim(self) -> int:
         global_max = 0
@@ -61,8 +62,9 @@ class MPS:
         new_tensors.reverse()
         self.tensors = new_tensors
         self.flipped = not self.flipped
+        # self.orthogonality_center = self.length+1-self.orthogonality_center
 
-    def shift_orthogonality_center_right(self, current_orthogonality_center: int):
+    def shift_orthogonality_center_right(self, current_orthogonality_center):
         """ Left and right normalizes an MPS around a selected site
 
         Args:
@@ -83,6 +85,21 @@ class MPS:
         if current_orthogonality_center+1 < self.length:
             self.tensors[current_orthogonality_center+1] = oe.contract('ij, ajc->aic', R, self.tensors[current_orthogonality_center+1])
 
+    def shift_orthogonality_center_left(self, current_orthogonality_center):
+        """ Left and right normalizes an MPS around a selected site
+
+        Args:
+            MPS: list of rank-3 tensors with a physical dimension d^2
+            selected_site: site of matrix M around which we normalize
+        Returns:
+            new_MPS: list of rank-3 tensors at each site
+        """
+        self.flip_network()
+        self.shift_orthogonality_center_right(self.length-current_orthogonality_center-1)
+        self.flip_network()
+
+    # TODO: Needs to be adjusted based on current orthogonality center
+    #       Rather than sweeping the full chain
     def set_canonical_form(self, orthogonality_center: int):
         """ Left and right normalizes an MPS around a selected site
         Args:
@@ -103,7 +120,7 @@ class MPS:
         sweep_decomposition(flipped_orthogonality_center)
         self.flip_network()
 
-    def normalize(self, form: str='A'):
+    def normalize(self, form: str='B'):
         if form == 'B':
             self.flip_network()
         
@@ -130,7 +147,7 @@ class MPS:
             assert tensor.shape[1] == right_bond
             right_bond = tensor.shape[2]
 
-    def _check_canonical_form(self):
+    def check_canonical_form(self):
         """ Checks what canonical form an MPS is in if any
 
         Args:
@@ -156,15 +173,19 @@ class MPS:
             test_identity = np.eye(M.shape[0], dtype=complex)
             B_truth.append(np.allclose(M, test_identity))
 
+        print(A_truth)
+        print(B_truth)
         if all(A_truth):
             print("MPS is left (A) canonical.")
             print("MPS is site canonical at site % d" % (self.length-1))
+            return [self.length-1]
 
-        elif all(B_truth):
+        if all(B_truth):
             print("MPS is right (B) canonical.")
             print("MPS is site canonical at site 0")
+            return [0]
 
-        else:
+        if not (all(A_truth) and all(B_truth)):
             sites = []
             for truth_value in A_truth:
                 if truth_value:
@@ -175,12 +196,15 @@ class MPS:
                 sites.append(truth_value)
 
             try:
-                print("MPS is site canonical at site % d." % sites.index(False))
+                return sites.index(False)
+                # print("MPS is site canonical at site % d." % sites.index(False))
             except:
-                form = []
-                for i in range(len(A_truth)):
-                    if A_truth[i]:
-                        form.append('A')
-                    elif B_truth[i]:
-                        form.append('B')
-                print("The MPS has the form: ", form)
+                # form = []
+                for i, value in enumerate(A_truth):
+                    if not value:
+                        return [i-1, i]
+                    # if A_truth[i]:
+                    #     form.append('A')
+                    # elif B_truth[i]:
+                    #     form.append('B')
+                # print("The MPS has the form: ", form)
