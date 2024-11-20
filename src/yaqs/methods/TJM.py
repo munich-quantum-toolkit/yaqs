@@ -55,19 +55,18 @@ def run_trajectory(args):
     return single_trajectory_exp_values
 
 
+
 def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', full_data=False, multi_core=True) -> np.ndarray:
     all_trajectories_exp_values = []
-    # TODO: Extend to multiple measurements
     observables = list(sim_params.measurements.keys())
     sites = list(sim_params.measurements.values())
 
     times = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
-
-    # TODO: Can this be written cleaner?
     args = [(i, initial_state, noise_model, sim_params, observables, sites, times, H) for i in range(sim_params.N)]
 
     if multi_core:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+        max_workers = max(1, multiprocessing.cpu_count() - 1)  # Leave one core for the system
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(run_trajectory, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.N, desc="Processing trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
@@ -75,11 +74,13 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
                     try:
                         result = future.result()
                         all_trajectories_exp_values.append(result)
-                        pbar.update(1)
                     except Exception as e:
                         print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
-                        # all_trajectories_exp_values.append(run_trajectory(args[i]))
-                    
+                        retry_result = run_trajectory(args[i])
+                        all_trajectories_exp_values.append(retry_result)
+                    finally:
+                        pbar.update(1)
+
     else:
         with tqdm(total=sim_params.N, desc="Processing trajectories") as pbar:
             for i in range(sim_params.N):
