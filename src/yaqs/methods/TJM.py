@@ -16,13 +16,38 @@ if TYPE_CHECKING:
     from yaqs.data_structures.simulation_parameters import SimulationParams
 
 
-def initialize(state: 'MPS', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS': 
+def initialize(state: 'MPS', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS':
+    """
+    Initialize the sampling MPS for second-order Trotterization.
+    Corresponds to F0 in the TJM paper.
+
+    Args:
+        state (MPS): Initial state of the system.
+        noise_model (NoiseModel): Noise model to apply to the system.
+        sim_params (SimulationParams): Simulation parameters, including time step.
+
+    Returns:
+        MPS: The initialized sampling MPS Phi(0).
+    """
     previous_state = copy.deepcopy(state)
     apply_dissipation(state, noise_model, sim_params.dt/2)
     return stochastic_process(previous_state, state, noise_model, sim_params.dt)
 
 
-def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS': 
+def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS':
+    """
+    Perform a single time step of the TJM of the system state.
+    Corresponds to Fj in the TJM paper.
+
+    Args:
+        state (MPS): Current state of the system.
+        H (MPO): Hamiltonian operator for the system.
+        noise_model (NoiseModel): Noise model to apply to the system.
+        sim_params (SimulationParams): Simulation parameters, including time step and max bond dimension.
+
+    Returns:
+        MPS: The updated state after performing the time step evolution.
+    """
     previous_state = copy.deepcopy(state)
     dynamic_TDVP(state, H, sim_params.dt, sim_params.max_bond_dim)
     apply_dissipation(state, noise_model, sim_params.dt)
@@ -30,6 +55,19 @@ def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 
 
 
 def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS':
+    """
+    Sample the quantum state and measure an observable from the sampling MPS.
+    Corresponds to Fn in the TJM paper.
+
+    Args:
+        phi (MPS): State of the system before sampling.
+        H (MPO): Hamiltonian operator for the system.
+        noise_model (NoiseModel): Noise model to apply to the system.
+        sim_params (SimulationParams): Simulation parameters, including time step and measurements.
+
+    Returns:
+        MPS: The measured observable value.
+    """
     psi = copy.deepcopy(phi)
     dynamic_TDVP(psi, H, sim_params.dt, sim_params.max_bond_dim)
     apply_dissipation(psi, noise_model, sim_params.dt/2)
@@ -38,14 +76,22 @@ def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'Simulat
 
 
 def run_trajectory(args):
+    """
+    Run a single trajectory of the TJM.
+
+    Args:
+        args (tuple): Tuple containing index, initial state, noise model, simulation parameters, observables, sites, times, and Hamiltonian.
+
+    Returns:
+        list: Expectation values for the trajectory over time.
+    """
     i, initial_state, noise_model, sim_params, observables, sites, times, H = args
 
     # Create deep copies of the shared inputs to avoid race conditions
-    trajectory_state = copy.deepcopy(initial_state)
+    state = copy.deepcopy(initial_state)
+    single_trajectory_exp_values = [state.measure_observable(observables[0], sites[0])]
 
-    single_trajectory_exp_values = [trajectory_state.measure_observable(observables[0], sites[0])]
-
-    phi = initialize(trajectory_state, noise_model, sim_params)
+    phi = initialize(state, noise_model, sim_params)
     single_trajectory_exp_values.append(sample(phi, H, noise_model, sim_params))
 
     for _ in times[2:]:
@@ -55,8 +101,22 @@ def run_trajectory(args):
     return single_trajectory_exp_values
 
 
-
 def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', full_data=False, multi_core=True) -> np.ndarray:
+    """
+    Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
+
+    Args:
+        initial_state (MPS): Initial state of the system.
+        H (MPO): System Hamiltonian.
+        noise_model (NoiseModel): Noise model to apply to the system.
+        sim_params (SimulationParams): Simulation parameters, including time step, number of trajectories, and measurements.
+        full_data (bool, optional): Whether to return the results of all trajectories. Defaults to False.
+        multi_core (bool, optional): Whether to use multiple cores for parallel processing. Defaults to True.
+
+    Returns:
+        np.ndarray: Array containing times and expectation values. If full_data is True, this is for each trajectory.
+                    Otherwise, it only contains the average over N trajectories.
+    """
     all_trajectories_exp_values = []
     observables = list(sim_params.measurements.keys())
     sites = list(sim_params.measurements.values())
@@ -94,4 +154,3 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
         return times, all_trajectories_exp_values
     else:
         return times, np.mean(all_trajectories_exp_values, axis=0)
-
