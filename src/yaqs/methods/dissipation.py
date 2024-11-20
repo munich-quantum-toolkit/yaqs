@@ -34,7 +34,9 @@ def apply_dissipation(state: 'MPS', noise_model: 'NoiseModel', dt: float):
     dissipative_operator = expm(-0.5 * dt * A)
 
     # Apply the dissipative operator to each tensor in the MPS
-    for i in range(state.length):
+    for i in reversed(range(state.length)):
         state.tensors[i] = oe.contract('ab, bcd->acd', dissipative_operator, state.tensors[i])
-        if i < state.length - 1:
-            state.shift_orthogonality_center_right(current_orthogonality_center=i)
+        # Prepares state for probability calculation, results in mixed canonical form at site 0
+        # Shifting it during the sweep is faster than setting it at the end
+        if i != 0:
+            state.shift_orthogonality_center_left(current_orthogonality_center=i)
