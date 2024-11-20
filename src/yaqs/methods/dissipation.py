@@ -12,12 +12,29 @@ if TYPE_CHECKING:
 #       Could be sped-up by pre-calculating exponential somewhere else
 #       Likely not a problem since it's only exponentiating small matrices
 def apply_dissipation(state: 'MPS', noise_model: 'NoiseModel', dt: float):
-    A = np.zeros(noise_model.jump_operators[0].shape)
-    for i, jump_operator in enumerate(noise_model.jump_operators):
-        A += noise_model.strengths[i]*np.conj(jump_operator).T @ jump_operator
-    dissipative_operator = expm(-1/2*dt*A)
+    """
+    Apply dissipation to the system state using the given noise model and time step.
 
-    for i, tensor in enumerate(state.tensors):
-        state.tensors[i] = oe.contract('ab, bcd->acd', dissipative_operator, tensor)
-        if i < state.length-1:
+    This function modifies the state tensors by applying a dissipative operator that is calculated
+    from the noise model's jump operators and strengths.
+
+    Args:
+        state (MPS): The Matrix Product State (MPS) representing the current state of the system.
+        noise_model (NoiseModel): The noise model containing jump operators and their corresponding strengths.
+        dt (float): The time step for the evolution.
+
+    Returns:
+        None
+    """
+    # Calculate the dissipation operator A
+    A = sum(noise_model.strengths[i] * np.conj(jump_operator).T @ jump_operator
+            for i, jump_operator in enumerate(noise_model.jump_operators))
+    
+    # Compute the dissipative operator by exponentiating the matrix A
+    dissipative_operator = expm(-0.5 * dt * A)
+
+    # Apply the dissipative operator to each tensor in the MPS
+    for i in range(state.length):
+        state.tensors[i] = oe.contract('ab, bcd->acd', dissipative_operator, state.tensors[i])
+        if i < state.length - 1:
             state.shift_orthogonality_center_right(current_orthogonality_center=i)
