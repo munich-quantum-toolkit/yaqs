@@ -1,0 +1,477 @@
+lindbladmpo solver log. Solver version: 0.3.1
+---------------------------------------------
+Full list of parameters (taken from the command line, input file, and defaults):
+1q_components = X,Y,Z
+1q_indices = 
+2q_components = zz
+2q_indices = 
+3q_components = 
+3q_indices = 
+J = -2
+J_z = -1.0
+N = 3
+apply_gates = 
+b_apply_gate_compression = 1
+b_force_rho_trace = 1
+b_initial_rho_compression = 0
+b_periodic_x = False
+b_periodic_y = False
+b_quiet = 0
+b_save_final_state = 0
+collapse = 
+custom_observables = 
+cut_off_rho = 1e-16
+first_bond_indices = 
+force_rho_hermitian_gates = 0
+force_rho_hermitian_step = 4
+g_0 = 0.1
+g_1 = 0
+g_2 = 0.1
+g_3 = 0
+g_4 = 0
+h_x = 0
+h_y = 0
+h_z = -1.0
+init_cz_gates = 
+init_graph_state = 
+init_pauli_state = 
+init_product_state = -z,+z,+z
+input_file = lindblad.input.txt
+l_x = 3
+l_y = 1
+load_files_prefix = 
+max_dim_rho = 400
+metadata = 
+output_files_prefix = lindblad
+output_step = 1
+second_bond_indices = 
+t_final = 5
+t_init = 0
+tau = 0.1
+trotter_order = 4
+unique_id = 
+------------------------------------------------------------------
+Initializing a square lattice of size (l_x = 3) * (l_y = 1) = 3 qubits.
+List of bonds:
+[0]1 [1]2 
+[0]2 [1]3 
+------------------------------------------------------------------
+Constructing rho from |psi>... Norm of |psi>, (<psi|psi>)^(1/2) = 1 psi2rho done.
+Max bond dimension of rho: 1.
+Tr{rho}: (1,0)
+Tr{rho^2}: (1,0)
+Computing exp(tau*L) as an MPO... done.
+Largest bond dimension of exp(tau*L): 7.
+
+Simulation initialization duration: 0.007s
+
+Solution time t = 0 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 1 -> 1. Duration: 0s
+	Tr{rho}: (1,0), Renyi Entropy S_2: -0
+	Operator space entanglement entropy at center bond: 0
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 0.1 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,4.9682164e-17), Renyi Entropy S_2: 0.021901185
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.32216848
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 0.2 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-1.7907275e-17), Renyi Entropy S_2: 0.053759176
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.8107106
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 0.3 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-1.1724788e-16), Renyi Entropy S_2: 0.099369273
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.1987217
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 0.4 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 6. Duration: 0s
+	Tr{rho}: (1,-6.4702618e-18), Renyi Entropy S_2: 0.15612966
+	Operator space entanglement entropy at center bond: 1.3746705
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 0.5 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-1.9679858e-17), Renyi Entropy S_2: 0.21890665
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.3151043
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 0.6 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-3.2620933e-17), Renyi Entropy S_2: 0.28348617
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.0822132
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 0.7 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-7.5178409e-17), Renyi Entropy S_2: 0.34668727
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.79863271
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 0.8 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 5. Duration: 0s
+	Tr{rho}: (1,1.0313192e-17), Renyi Entropy S_2: 0.40442992
+	Operator space entanglement entropy at center bond: 0.58588616
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 0.9 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-1.3588992e-16), Renyi Entropy S_2: 0.45180816
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.49319834
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 1 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-5.0011366e-16), Renyi Entropy S_2: 0.48663587
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.47645695
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 1.1 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-5.1846548e-16), Renyi Entropy S_2: 0.51263665
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.46672955
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 1.2 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 5. Duration: 0s
+	Tr{rho}: (1,-1.2691552e-18), Renyi Entropy S_2: 0.53779296
+	Operator space entanglement entropy at center bond: 0.43505549
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 1.3 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-2.2269809e-16), Renyi Entropy S_2: 0.56903645
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.40136449
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 1.4 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-4.1380439e-16), Renyi Entropy S_2: 0.60840387
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.42191926
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 1.5 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-5.0773103e-16), Renyi Entropy S_2: 0.6535032
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.54867703
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 1.6 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 13. Duration: 0s
+	Tr{rho}: (1,-2.8557948e-17), Renyi Entropy S_2: 0.70083431
+	Operator space entanglement entropy at center bond: 0.77113915
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 1.7 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-2.8971491e-17), Renyi Entropy S_2: 0.748357
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.016394
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 1.8 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-2.7570922e-18), Renyi Entropy S_2: 0.79510645
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.1945118
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 1.9 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-1.2236238e-17), Renyi Entropy S_2: 0.83928416
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.2425053
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 2 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 6. Duration: 0s
+	Tr{rho}: (1,5.6361599e-18), Renyi Entropy S_2: 0.87799086
+	Operator space entanglement entropy at center bond: 1.1597972
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 2.1 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,2.6213976e-17), Renyi Entropy S_2: 0.90948536
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.0220104
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 2.2 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,4.6953154e-17), Renyi Entropy S_2: 0.93532859
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.93937933
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 2.3 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,5.199427e-17), Renyi Entropy S_2: 0.95953362
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.96236172
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 2.4 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 7. Duration: 0s
+	Tr{rho}: (1,2.9278238e-17), Renyi Entropy S_2: 0.98539553
+	Operator space entanglement entropy at center bond: 1.0389259
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 2.5 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,1.9793519e-17), Renyi Entropy S_2: 1.0132836
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.0852528
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 2.6 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,4.8397345e-18), Renyi Entropy S_2: 1.0413296
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 1.060202
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 2.7 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,7.1426053e-18), Renyi Entropy S_2: 1.0678278
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.98230395
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 2.8 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 7. Duration: 0s
+	Tr{rho}: (1,5.8573103e-17), Renyi Entropy S_2: 1.0926372
+	Operator space entanglement entropy at center bond: 0.90328671
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 2.9 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,5.0905198e-17), Renyi Entropy S_2: 1.1163487
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.86070754
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 3 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,4.8627103e-17), Renyi Entropy S_2: 1.1386762
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.85097148
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 3.1 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,4.1945919e-17), Renyi Entropy S_2: 1.158241
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.84810088
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 3.2 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 10. Duration: 0s
+	Tr{rho}: (1,2.0908863e-16), Renyi Entropy S_2: 1.1740154
+	Operator space entanglement entropy at center bond: 0.8358759
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 3.3 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,2.0515096e-16), Renyi Entropy S_2: 1.1866182
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.81354244
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 3.4 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,2.0363943e-16), Renyi Entropy S_2: 1.1978579
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.78041572
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 3.5 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,2.129318e-16), Renyi Entropy S_2: 1.2090567
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.72790479
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 3.6 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 8. Duration: 0s
+	Tr{rho}: (1,-3.499883e-18), Renyi Entropy S_2: 1.2200263
+	Operator space entanglement entropy at center bond: 0.6497094
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 3.7 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,6.5899163e-18), Renyi Entropy S_2: 1.2296591
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.55601108
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 3.8 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-3.8785639e-18), Renyi Entropy S_2: 1.2372711
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.4742562
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 3.9 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-1.7347235e-18), Renyi Entropy S_2: 1.243163
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.4309822
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 4 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 10. Duration: 0s
+	Tr{rho}: (1,3.5758546e-17), Renyi Entropy S_2: 1.2479516
+	Operator space entanglement entropy at center bond: 0.42821684
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 4.1 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-1.6882002e-17), Renyi Entropy S_2: 1.2516738
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.44305976
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 4.2 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-9.0168775e-18), Renyi Entropy S_2: 1.2537769
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.45156525
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 4.3 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-9.8255822e-18), Renyi Entropy S_2: 1.2539288
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.44479808
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 4.4 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 9. Duration: 0s
+	Tr{rho}: (1,1.0503262e-16), Renyi Entropy S_2: 1.2526209
+	Operator space entanglement entropy at center bond: 0.42597525
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 4.5 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,1.3466839e-16), Renyi Entropy S_2: 1.2508484
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.40076699
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 4.6 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,1.2400372e-16), Renyi Entropy S_2: 1.2492617
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.37340955
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 4.7 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,1.4420058e-16), Renyi Entropy S_2: 1.247721
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.34971395
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 4.8 ---------------------- Total run duration: 0.00hr
+	Make rho Hermitian; Max bond dimension: 4 -> 8. Duration: 0s
+	Tr{rho}: (1,-3.3144659e-17), Renyi Entropy S_2: 1.2456411
+	Operator space entanglement entropy at center bond: 0.33761616
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.001s
+
+Solution time t = 4.9 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-7.0653824e-17), Renyi Entropy S_2: 1.242637
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.33967771
+	9 1-qubit expectation values saved to file. Duration: 0s
+	6 2-qubit expectation values saved to file. Duration: 0s
+	Time evolving the state -> done. Duration: 0.002s
+
+Solution time t = 5 ---------------------- Total run duration: 0.00hr
+	Tr{rho}: (1,-6.7227099e-17), Renyi Entropy S_2: 1.2387612
+	Max bond dimension: 4
+	Operator space entanglement entropy at center bond: 0.34609962
+	9 1-qubit expectation values saved to file. Duration: 0.001s
+	6 2-qubit expectation values saved to file. Duration: 0s
+
+Time evolution done.
+
+Total simulation duration: 0.00hr
