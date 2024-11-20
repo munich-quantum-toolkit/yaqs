@@ -42,17 +42,19 @@ def create_probability_distribution(state: 'MPS', noise_model: 'NoiseModel', dt:
     # Ordered as [Jump 0 Site 0, Jump 1 Site 0, Jump 0 Site 1, Jump 1 Site 1...]
     jump_dict = {'jumps': [], 'strengths': [], 'sites': [], 'probabilities': []}
     dp_m_list = []
-    
-    for i, tensor in enumerate(state.tensors):
+
+    # Set to canonical form without normalizing
+    for site, tensor in enumerate(state.tensors):
+        state.set_canonical_form(site)
         for j, jump_operator in enumerate(noise_model.jump_operators):
             jumped_state = copy.deepcopy(state)
-            jumped_state.tensors[i] = oe.contract('ab, bcd->acd', jump_operator, tensor)
+            jumped_state.tensors[site] = oe.contract('ab, bcd->acd', jump_operator, tensor)
 
-            dp_m = dt * noise_model.strengths[j] * scalar_product(jumped_state, jumped_state)
+            dp_m = dt * noise_model.strengths[j] * scalar_product(jumped_state, jumped_state, site)
             dp_m_list.append(dp_m.real)
             jump_dict['jumps'].append(jump_operator)
             jump_dict['strengths'].append(noise_model.strengths[j])
-            jump_dict['sites'].append(i)
+            jump_dict['sites'].append(site)
     
     # Normalize the probabilities
     jump_dict['probabilities'] = (dp_m_list / np.sum(dp_m_list)).astype(float)
@@ -86,6 +88,6 @@ def stochastic_process(previous_state: 'MPS', state: 'MPS', noise_model: 'NoiseM
         choice = np.random.choice(choices, p=jump_dict['probabilities'])
         jump_operator = jump_dict['jumps'][choice]
         previous_state.tensors[jump_dict['sites'][choice]] = oe.contract('ab, bcd->acd', jump_operator, previous_state.tensors[jump_dict['sites'][choice]])
-        previous_state.normalize(form='B')
+        previous_state.normalize()
         return previous_state
 

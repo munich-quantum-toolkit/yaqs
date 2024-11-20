@@ -278,7 +278,7 @@ def single_site_TDVP(state: 'MPS', H: 'MPO',  dt, numsteps: int, numiter_lanczos
     assert L == state.length
 
     # right-normalize input matrix product state
-    state.normalize()
+    # state.normalize(form='B')
 
     # left and right operator blocks
     # initialize leftmost block by 1x1x1 identity
@@ -357,7 +357,7 @@ def two_site_TDVP(state: 'MPS', H: 'MPO', dt, numsteps: int, numiter_lanczos: in
     assert L >= 2
 
     # right-normalize input matrix product state
-    state.normalize()
+    # state.normalize(form='B')
 
     # left and right operator blocks
     # initialize leftmost block by 1x1x1 identity

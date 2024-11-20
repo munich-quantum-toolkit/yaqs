@@ -39,7 +39,9 @@ def scalar_product(A: 'MPS', B: 'MPS', site: int=-1):
     # Used for ignoring other tensors if MPS is in canonical form
     else:
         # Single site operators
-        result = oe.contract('ijk, ijk', A_copy[site], B_copy[site])
+        print(site, A._check_canonical_form())
+        # assert A._check_canonical_form() == site or A._check_canonical_form == 0 or A._check_canonical_form == A.length-1
+        result = oe.contract('ijk, ijk', A_copy.tensors[site], B_copy.tensors[site])
 
     return result
 
@@ -56,9 +58,10 @@ def local_expval(state: 'MPS', operator: np.ndarray, site: int):
         E.real: real portion of calculated expectation value
     """
     # TODO: Could be more memory-efficient by not copying state
+    state.set_canonical_form(site)
     temp_state = copy.deepcopy(state)
     temp_state.tensors[site] = oe.contract('ab, bcd->acd', operator, temp_state.tensors[site])
-    E = scalar_product(temp_state, state)
+    E = scalar_product(temp_state, state, site)
 
     return E.real
 
