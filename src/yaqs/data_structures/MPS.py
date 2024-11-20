@@ -132,7 +132,8 @@ class MPS:
 
     def measure_observable(self, name: str, site: int):
         assert site in range(0, self.length), "State is shorter than selected site for expectation value."
-        return local_expval(self, getattr(TensorLibrary, name)().matrix, site)
+        # Copying done to stop the state from messing up its own canonical form
+        return local_expval(copy.deepcopy(self), getattr(TensorLibrary, name)().matrix, site)
 
     def norm(self):
         return scalar_product(self, self)
