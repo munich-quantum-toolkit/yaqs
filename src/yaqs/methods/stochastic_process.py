@@ -18,11 +18,12 @@ def calculate_stochastic_factor(state: 'MPS') -> float:
 
     Args:
         state (MPS): The Matrix Product State (MPS) representing the current state of the system.
+                     Must be mixed canonical form at site 0 or B normalized
 
     Returns:
         float: The calculated stochastic factor.
     """
-    return 1 - scalar_product(state, state)
+    return 1 - scalar_product(state, state, 0)
 
 
 def create_probability_distribution(state: 'MPS', noise_model: 'NoiseModel', dt: float) -> dict:
@@ -33,6 +34,7 @@ def create_probability_distribution(state: 'MPS', noise_model: 'NoiseModel', dt:
 
     Args:
         state (MPS): The Matrix Product State (MPS) representing the current state of the system.
+                     Must be in mixed canonical form at site 0 (not normalized).
         noise_model (NoiseModel): The noise model containing jump operators and their corresponding strengths.
         dt (float): The time step for the evolution.
 
@@ -43,9 +45,11 @@ def create_probability_distribution(state: 'MPS', noise_model: 'NoiseModel', dt:
     jump_dict = {'jumps': [], 'strengths': [], 'sites': [], 'probabilities': []}
     dp_m_list = []
 
-    # Set to canonical form without normalizing
+    # Dissipative sweep should always result in a mixed canonical form at site L
     for site, tensor in enumerate(state.tensors):
-        state.set_canonical_form(site)
+        if site != 0:
+            state.shift_orthogonality_center_right(site-1)
+
         for j, jump_operator in enumerate(noise_model.jump_operators):
             jumped_state = copy.deepcopy(state)
             jumped_state.tensors[site] = oe.contract('ab, bcd->acd', jump_operator, tensor)
@@ -69,6 +73,7 @@ def stochastic_process(previous_state: 'MPS', state: 'MPS', noise_model: 'NoiseM
 
     Args:
         previous_state (MPS): The previous Matrix Product State (MPS) before the current evolution step.
+                              Must be site canonical at site 0 (following dissipative sweep).
         state (MPS): The current Matrix Product State (MPS).
         noise_model (NoiseModel): The noise model containing jump operators and their corresponding strengths.
         dt (float): The time step for the evolution.
@@ -79,7 +84,7 @@ def stochastic_process(previous_state: 'MPS', state: 'MPS', noise_model: 'NoiseM
     dp = calculate_stochastic_factor(state)
     if np.random.rand() >= dp:
         # No jump
-        state.normalize()
+        state.shift_orthogonality_center_left(0)
         return state
     else:
         # Jump
