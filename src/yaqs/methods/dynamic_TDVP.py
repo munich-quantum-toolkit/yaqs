@@ -22,7 +22,7 @@ def dynamic_TDVP(state: 'MPS', H: 'MPO', dt: float, max_bond_dim: int):
         None
     """
     current_max_bond_dim = state.write_max_bond_dim()
-
+    # state.normalize('B')
     if current_max_bond_dim <= max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_TDVP(state, H, dt, numsteps=1, tol_split=1e-6)
