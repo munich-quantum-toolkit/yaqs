@@ -68,14 +68,16 @@ def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'Simulat
     Returns:
         MPS: The measured observable value.
     """
+    previous_state = copy.deepcopy(phi)
     psi = copy.deepcopy(phi)
     dynamic_TDVP(psi, H, sim_params.dt, sim_params.max_bond_dim)
     apply_dissipation(psi, noise_model, sim_params.dt/2)
+    # psi = stochastic_process(previous_state, psi, noise_model, sim_params.dt)
     psi.normalize('B')
     return psi.measure_observable(list(sim_params.measurements.keys())[0], list(sim_params.measurements.values())[0])
 
 
-def run_trajectory(args):
+def run_trajectory_second_order(args):
     """
     Run a single trajectory of the TJM.
 
@@ -101,7 +103,33 @@ def run_trajectory(args):
     return single_trajectory_exp_values
 
 
-def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', full_data=False, multi_core=True) -> np.ndarray:
+def run_trajectory_first_order(args):
+    """
+    Run a single trajectory of the TJM.
+
+    Args:
+        args (tuple): Tuple containing index, initial state, noise model, simulation parameters, observables, sites, times, and Hamiltonian.
+
+    Returns:
+        list: Expectation values for the trajectory over time.
+    """
+    i, initial_state, noise_model, sim_params, observables, sites, times, H = args
+
+    # Create deep copies of the shared inputs to avoid race conditions
+    state = copy.deepcopy(initial_state)
+    single_trajectory_exp_values = [state.measure_observable(observables[0], sites[0])]
+
+    for _ in times[1:]:
+        previous_state = copy.deepcopy(state)
+        dynamic_TDVP(state, H, sim_params.dt, sim_params.max_bond_dim)
+        apply_dissipation(state, noise_model, sim_params.dt)
+        state = stochastic_process(previous_state, state, noise_model, sim_params.dt)
+        single_trajectory_exp_values.append(state.measure_observable(observables[0], sites[0]))
+
+    return single_trajectory_exp_values
+
+
+def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', full_data=False, multi_core=True, order=2) -> np.ndarray:
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 
@@ -120,14 +148,18 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
     all_trajectories_exp_values = []
     observables = list(sim_params.measurements.keys())
     sites = list(sim_params.measurements.values())
-
     times = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
+
+    initial_state.normalize('B')
     args = [(i, initial_state, noise_model, sim_params, observables, sites, times, H) for i in range(sim_params.N)]
 
     if multi_core:
         max_workers = max(1, multiprocessing.cpu_count() - 1)  # Leave one core for the system
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(run_trajectory, arg): arg[0] for arg in args}
+            if order == 2:
+                futures = {executor.submit(run_trajectory_second_order, arg): arg[0] for arg in args}
+            elif order == 1:
+                futures = {executor.submit(run_trajectory_first_order, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.N, desc="Processing trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
@@ -136,15 +168,15 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
                         all_trajectories_exp_values.append(result)
                     except Exception as e:
                         print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
-                        retry_result = run_trajectory(args[i])
-                        all_trajectories_exp_values.append(retry_result)
+                        # retry_result = run_trajectory(args[i])
+                        # all_trajectories_exp_values.append(retry_result)
                     finally:
                         pbar.update(1)
 
     else:
         with tqdm(total=sim_params.N, desc="Processing trajectories") as pbar:
             for i in range(sim_params.N):
-                single_trajectory_exp_values = run_trajectory(args[i])
+                single_trajectory_exp_values = run_trajectory_first_order(args[i])
                 all_trajectories_exp_values.append(single_trajectory_exp_values)
                 pbar.update(1)
 
