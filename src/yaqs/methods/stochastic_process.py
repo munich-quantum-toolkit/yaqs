@@ -46,15 +46,16 @@ def create_probability_distribution(state: 'MPS', noise_model: 'NoiseModel', dt:
     dp_m_list = []
 
     # Dissipative sweep should always result in a mixed canonical form at site L
-    for site, tensor in enumerate(state.tensors):
-        if site != 0:
-            state.shift_orthogonality_center_right(site-1)
+    for site, _ in enumerate(state.tensors):
+        # state.set_canonical_form(site)
+        # if site != 0 and site != state.length-1:
+        #     state.shift_orthogonality_center_right(site-1)
 
         for j, jump_operator in enumerate(noise_model.jump_operators):
             jumped_state = copy.deepcopy(state)
-            jumped_state.tensors[site] = oe.contract('ab, bcd->acd', jump_operator, tensor)
+            jumped_state.tensors[site] = oe.contract('ab, bcd->acd', jump_operator, state.tensors[site])
 
-            dp_m = dt * noise_model.strengths[j] * scalar_product(jumped_state, jumped_state, site)
+            dp_m = dt * noise_model.strengths[j] * scalar_product(jumped_state, jumped_state)
             dp_m_list.append(dp_m.real)
             jump_dict['jumps'].append(jump_operator)
             jump_dict['strengths'].append(noise_model.strengths[j])
@@ -84,7 +85,8 @@ def stochastic_process(previous_state: 'MPS', state: 'MPS', noise_model: 'NoiseM
     dp = calculate_stochastic_factor(state)
     if np.random.rand() >= dp:
         # No jump
-        state.shift_orthogonality_center_left(0)
+        # state.shift_orthogonality_center_left(0)
+        state.normalize('B')
         return state
     else:
         # Jump
@@ -93,6 +95,5 @@ def stochastic_process(previous_state: 'MPS', state: 'MPS', noise_model: 'NoiseM
         choice = np.random.choice(choices, p=jump_dict['probabilities'])
         jump_operator = jump_dict['jumps'][choice]
         previous_state.tensors[jump_dict['sites'][choice]] = oe.contract('ab, bcd->acd', jump_operator, previous_state.tensors[jump_dict['sites'][choice]])
-        previous_state.normalize()
+        previous_state.normalize('B')
         return previous_state
-
