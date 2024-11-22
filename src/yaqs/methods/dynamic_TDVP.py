@@ -2,11 +2,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from yaqs.data_structures.MPO import MPO
     from yaqs.data_structures.MPS import MPS
-
+    from yaqs.data_structures.simulation_parameters import SimulationParams
 from yaqs.methods.TDVP import single_site_TDVP, two_site_TDVP
 
 
-def dynamic_TDVP(state: 'MPS', H: 'MPO', dt: float, max_bond_dim: int):
+def dynamic_TDVP(state: 'MPS', H: 'MPO', sim_params: 'SimulationParams'):
     """
     Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 
@@ -23,9 +23,9 @@ def dynamic_TDVP(state: 'MPS', H: 'MPO', dt: float, max_bond_dim: int):
     """
     current_max_bond_dim = state.write_max_bond_dim()
     # state.normalize('B')
-    if current_max_bond_dim <= max_bond_dim:
+    if current_max_bond_dim <= sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
-        two_site_TDVP(state, H, dt, numsteps=1, tol_split=1e-6)
+        two_site_TDVP(state, H, sim_params.dt, threshold=sim_params.threshold, numsteps=1, )
     else:
         # Perform 1TDVP when the bond dimension exceeds the allowed limit
-        single_site_TDVP(state, H, dt, numsteps=1)
+        single_site_TDVP(state, H, sim_params.dt, numsteps=1)
