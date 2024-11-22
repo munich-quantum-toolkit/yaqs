@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from yaqs.data_structures.MPS import MPS
     from yaqs.data_structures.MPO import MPO
 
-import pytenet
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
     """
