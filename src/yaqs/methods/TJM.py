@@ -49,7 +49,7 @@ def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 
         MPS: The updated state after performing the time step evolution.
     """
     previous_state = copy.deepcopy(state)
-    dynamic_TDVP(state, H, sim_params.dt, sim_params.max_bond_dim)
+    dynamic_TDVP(state, H, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
     return stochastic_process(previous_state, state, noise_model, sim_params.dt)
 
@@ -70,7 +70,7 @@ def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'Simulat
     """
     previous_state = copy.deepcopy(phi)
     psi = copy.deepcopy(phi)
-    dynamic_TDVP(psi, H, sim_params.dt, sim_params.max_bond_dim)
+    dynamic_TDVP(psi, H, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt/2)
     # psi = stochastic_process(previous_state, psi, noise_model, sim_params.dt)
     psi.normalize('B')
@@ -121,7 +121,7 @@ def run_trajectory_first_order(args):
 
     for _ in times[1:]:
         previous_state = copy.deepcopy(state)
-        dynamic_TDVP(state, H, sim_params.dt, sim_params.max_bond_dim)
+        dynamic_TDVP(state, H, sim_params)
         apply_dissipation(state, noise_model, sim_params.dt)
         state = stochastic_process(previous_state, state, noise_model, sim_params.dt)
         single_trajectory_exp_values.append(state.measure_observable(observables[0], sites[0]))
