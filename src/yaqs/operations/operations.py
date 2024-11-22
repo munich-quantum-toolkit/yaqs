@@ -60,13 +60,14 @@ def local_expval(state: 'MPS', operator: np.ndarray, site: int):
     # TODO: Could be more memory-efficient by not copying state
 
     # This loop assumes a B form MPS
-    # for i in range(site):
-    #     state.shift_orthogonality_center_right(i)
+    for i in range(site):
+        state.shift_orthogonality_center_right(i)
+
     # state.set_canonical_form(site)
     temp_state = copy.deepcopy(state)
     # temp_state.set_canonical_form(site)
     temp_state.tensors[site] = oe.contract('ab, bcd->acd', operator, temp_state.tensors[site])
-    E = scalar_product(temp_state, state)
+    E = scalar_product(temp_state, state, site)
 
     return E.real
 
