@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from yaqs.data_structures.MPS import MPS
     from yaqs.data_structures.MPO import MPO
 
+import pytenet
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
     """
@@ -67,7 +68,6 @@ def _merge_mpo_tensor_pair(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
     A = A.reshape((s[0]*s[1], s[2]*s[3], s[4], s[5]))
     return A
 
-
 def _contraction_operator_step_right(A: np.ndarray, B: np.ndarray, W: np.ndarray, R: np.ndarray):
     r"""
     Contraction step from right to left, with a matrix product operator
@@ -96,9 +96,14 @@ def _contraction_operator_step_right(A: np.ndarray, B: np.ndarray, W: np.ndarray
     assert B.ndim == 3
     assert W.ndim == 4
     assert R.ndim == 3
-
-    Rnext = oe.contract('abc, adef, dgh, hfc->geb', np.conj(B), W, A, R)
-
+    # multiply with A tensor
+    T = np.tensordot(A, R, 1)
+    # multiply with W tensor
+    T = np.tensordot(W, T, axes=((1, 3), (0, 2)))
+    # interchange levels 0 <-> 2 in T
+    T = T.transpose((2, 1, 0, 3))
+    # multiply with conjugated B tensor
+    Rnext = np.tensordot(T, B.conj(), axes=((2, 3), (0, 2)))
     return Rnext
 
 
@@ -130,26 +135,26 @@ def _contraction_operator_step_left(A: np.ndarray, B: np.ndarray, W: np.ndarray,
     assert B.ndim == 3
     assert W.ndim == 4
     assert L.ndim == 3
-
-    Lnext = oe.contract('abc, dce, dfbg, fai->ige', L, np.conj(B), W, A)
-
+    # multiply with conjugated B tensor
+    T = np.tensordot(L, B.conj(), axes=(2, 1))
+    # multiply with W tensor
+    T = np.tensordot(W, T, axes=((0, 2), (2, 1)))
+    # multiply with A tensor
+    Lnext = np.tensordot(A, T, axes=((0, 1), (0, 2)))
     return Lnext
 
 
-def _compute_right_operator_blocks(state: 'MPS', H: 'MPO'):
+def _compute_right_operator_blocks(psi: 'MPS', op: 'MPO'):
     """
     Compute all partial contractions from the right.
     """
-    L = state.length
-    assert L == H.length
-
+    L = psi.length
+    assert L == op.length
     BR = [None for _ in range(L)]
-
     # initialize rightmost dummy block
     BR[L-1] = np.array([[[1]]], dtype=complex)
-
     for i in reversed(range(L-1)):
-        BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
+        BR[i] = _contraction_operator_step_right(psi.tensors[i+1], psi.tensors[i+1], op.tensors[i+1], BR[i+1])
     return BR
 
 
@@ -181,9 +186,14 @@ def _apply_local_hamiltonian(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.
     assert R.ndim == 3
     assert W.ndim == 4
     assert A.ndim == 3
-
-    T = oe.contract('abc, daf, gdbh, fhi->gci', L, A, W, R)
-
+    # multiply A with R tensor and store result in T
+    T = np.tensordot(A, R, 1)
+    # multiply T with W tensor
+    T = np.tensordot(W, T, axes=((1, 3), (0, 2)))
+    # multiply T with L tensor
+    T = np.tensordot(T, L, axes=((2, 1), (0, 1)))
+    # interchange levels 1 <-> 2 in T
+    T = T.transpose((0, 2, 1))
     return T
 
 
@@ -213,13 +223,165 @@ def _apply_local_bond_contraction(L, R, C):
     assert L.ndim == 3
     assert R.ndim == 3
     assert C.ndim == 2
-
-    T = oe.contract('abc, ad, dbf->cf', L, C, R)
-    # # multiply C with R tensor and store result in T
-    # T = np.tensordot(C, R, 1)
-    # # multiply L with T tensor
-    # T = np.tensordot(L, T, axes=((0, 1), (0, 1)))
+    # multiply C with R tensor and store result in T
+    T = np.tensordot(C, R, 1)
+    # multiply L with T tensor
+    T = np.tensordot(L, T, axes=((0, 1), (0, 1)))
     return T
+
+
+# def _contraction_operator_step_right(A: np.ndarray, B: np.ndarray, W: np.ndarray, R: np.ndarray):
+#     r"""
+#     Contraction step from right to left, with a matrix product operator
+#     sandwiched in between.
+
+#     To-be contracted tensor network::
+
+#           _____           ______
+#          /     \         /
+#       ---|1 B*2|---   ---|2
+#          \__0__/         |
+#             |            |
+#                          |
+#           __|__          |
+#          /  0  \         |
+#       ---|2 W 3|---   ---|1   R
+#          \__1__/         |
+#             |            |
+#                          |
+#           __|__          |
+#          /  0  \         |
+#       ---|1 A 2|---   ---|0
+#          \_____/         \______
+#     """
+#     assert A.ndim == 3
+#     assert B.ndim == 3
+#     assert W.ndim == 4
+#     assert R.ndim == 3
+
+#     Rnext = oe.contract('abc, adef, dgh, hfc->geb', np.conj(B), W, A, R, optimize='random-greedy')
+
+#     return Rnext
+
+
+# def _contraction_operator_step_left(A: np.ndarray, B: np.ndarray, W: np.ndarray, L: np.ndarray):
+#     r"""
+#     Contraction step from left to right, with a matrix product operator
+#     sandwiched in between.
+
+#     To-be contracted tensor network::
+
+#      ______           _____
+#            \         /     \
+#           2|---   ---|1 B*2|---
+#            |         \__0__/
+#            |            |
+#            |
+#            |          __|__
+#            |         /  0  \
+#       L   1|---   ---|2 W 3|---
+#            |         \__1__/
+#            |            |
+#            |
+#            |          __|__
+#            |         /  0  \
+#           0|---   ---|1 A 2|---
+#      ______/         \_____/
+#     """
+#     assert A.ndim == 3
+#     assert B.ndim == 3
+#     assert W.ndim == 4
+#     assert L.ndim == 3
+
+#     Lnext = oe.contract('abc, dce, dfbg, fai->ige', L, np.conj(B), W, A, optimize='random-greedy')
+
+#     return Lnext
+
+
+# def _compute_right_operator_blocks(state: 'MPS', H: 'MPO'):
+#     """
+#     Compute all partial contractions from the right.
+#     """
+#     L = state.length
+#     assert L == H.length
+
+#     BR = [None for _ in range(L)]
+
+#     # initialize rightmost dummy block
+#     BR[L-1] = np.array([[[1]]], dtype=complex)
+
+#     for i in reversed(range(L-1)):
+#         BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
+#     return BR
+
+
+# def _apply_local_hamiltonian(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray):
+#     r"""
+#     Apply a local Hamiltonian operator.
+
+#     To-be contracted tensor network (the indices at the open legs
+#     show the ordering for the output tensor)::
+
+#      ______                           ______
+#            \                         /
+#           2|---1                 2---|2
+#            |                         |
+#            |                         |
+#            |            0            |
+#            |          __|__          |
+#            |         /  0  \         |
+#       L   1|---   ---|2 W 3|---   ---|1   R
+#            |         \__1__/         |
+#            |            |            |
+#            |                         |
+#            |          __|__          |
+#            |         /  0  \         |
+#           0|---   ---|1 A 2|---   ---|0
+#      ______/         \_____/         \______
+#     """
+#     assert L.ndim == 3
+#     assert R.ndim == 3
+#     assert W.ndim == 4
+#     assert A.ndim == 3
+
+#     T = oe.contract('abc, daf, gdbh, fhi->gci', L, A, W, R, optimize='random-greedy')
+
+#     return T
+
+
+# def _apply_local_bond_contraction(L, R, C):
+#     r"""
+#     Apply "zero-site" bond contraction.
+
+#     To-be contracted tensor network::
+
+#      ______                           ______
+#            \                         /
+#           2|---                   ---|2
+#            |                         |
+#            |                         |
+#            |                         |
+#            |                         |
+#            |                         |
+#       L   1|-----------   -----------|1   R
+#            |                         |
+#            |                         |
+#            |                         |
+#            |          _____          |
+#            |         /     \         |
+#           0|---   ---|0 C 1|---   ---|0
+#      ______/         \_____/         \______
+#     """
+#     assert L.ndim == 3
+#     assert R.ndim == 3
+#     assert C.ndim == 2
+
+#     T = oe.contract('abc, ad, dbf->cf', L, C, R, optimize='random-greedy')
+#     # # multiply C with R tensor and store result in T
+#     # T = np.tensordot(C, R, 1)
+#     # # multiply L with T tensor
+#     # T = np.tensordot(L, T, axes=((0, 1), (0, 1)))
+#     return T
 
 
 def _local_hamiltonian_step(L, R, W, A, dt, numiter: int):
