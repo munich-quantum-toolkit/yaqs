@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
+from yaqs.data_structures.simulation_parameters import Observable
 from yaqs.library.tensor_library import TensorLibrary
 from yaqs.operations.operations import local_expval, scalar_product
 
@@ -130,10 +131,10 @@ class MPS:
         if form == 'B':
             self.flip_network()
 
-    def measure_observable(self, name: str, site: int):
-        assert site in range(0, self.length), "State is shorter than selected site for expectation value."
+    def measure(self, observable: 'Observable'):
+        assert observable.site in range(0, self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        return local_expval(copy.deepcopy(self), getattr(TensorLibrary, name)().matrix, site)
+        return local_expval(copy.deepcopy(self), getattr(TensorLibrary, observable.name)().matrix, observable.site)
 
     def norm(self):
         return scalar_product(self, self)
