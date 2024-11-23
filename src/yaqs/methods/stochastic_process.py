@@ -66,7 +66,7 @@ def create_probability_distribution(state: 'MPS', noise_model: 'NoiseModel', dt:
     return jump_dict
 
 
-def stochastic_process(previous_state: 'MPS', state: 'MPS', noise_model: 'NoiseModel', dt: float) -> 'MPS':
+def stochastic_process(state: 'MPS', noise_model: 'NoiseModel', dt: float) -> 'MPS':
     """
     Perform a stochastic process on the given state.
 
@@ -96,6 +96,6 @@ def stochastic_process(previous_state: 'MPS', state: 'MPS', noise_model: 'NoiseM
         choices = list(range(len(jump_dict['probabilities'])))
         choice = np.random.choice(choices, p=jump_dict['probabilities'])
         jump_operator = jump_dict['jumps'][choice]
-        previous_state.tensors[jump_dict['sites'][choice]] = oe.contract('ab, bcd->acd', jump_operator, previous_state.tensors[jump_dict['sites'][choice]])
-        previous_state.normalize('B')
-        return previous_state
+        state.tensors[jump_dict['sites'][choice]] = oe.contract('ab, bcd->acd', jump_operator, state.tensors[jump_dict['sites'][choice]])
+        state.normalize('B')
+        return state
