@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import numpy as np
 import qutip as qt
 
@@ -10,7 +11,7 @@ from yaqs.methods.TJM import TJM
 
 
 # Define the system Hamiltonian
-L = 10
+L = 5
 d = 2
 J = 1
 g = 0.5
@@ -28,7 +29,7 @@ noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma_relaxation, gamma_d
 # Define the simulation parameters
 T = 10
 dt = 0.1
-N = 100
+N = 1000
 max_bond_dim = 4
 threshold = 1e-6
 measurements = [Observable('x', site) for site in range(L)]
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     ax[0].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
     cbar = plt.colorbar(im, ax=ax[0])
     cbar.ax.set_title('$\\langle X \\rangle$')
-    ########################################
+    #########################################
 
     ######### QuTip Exact Solver ############
     # Time vector
@@ -94,7 +95,7 @@ if __name__ == "__main__":
     # Error heatmap
     heatmap = np.array(heatmap)
     heatmap2 = np.array(heatmap2)
-    im2 = ax[1].imshow(np.abs(heatmap2-heatmap), cmap='Reds', aspect='auto', extent=[0, T, L, 0])
+    im2 = ax[1].imshow(np.abs(heatmap2-heatmap), cmap='Reds', aspect='auto', extent=[0, T, L, 0], norm=LogNorm())
     ax[1].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
 
     cbar = plt.colorbar(im2, ax=ax[1])
