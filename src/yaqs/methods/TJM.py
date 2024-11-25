@@ -52,7 +52,7 @@ def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS':
+def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', results: np.ndarray, j: int) -> 'MPS':
     """
     Sample the quantum state and measure an observable from the sampling MPS.
     Corresponds to Fn in the TJM paper.
@@ -70,7 +70,8 @@ def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'Simulat
     dynamic_TDVP(psi, H, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt/2)
     psi.normalize('B')
-    return psi.measure(sim_params.observables[0])
+    for obs_index, observable in enumerate(sim_params.observables):
+        results[obs_index, j] = copy.deepcopy(psi).measure(observable)
 
 
 def run_trajectory_second_order(args):
@@ -88,19 +89,19 @@ def run_trajectory_second_order(args):
     # Create deep copies of the shared inputs to avoid race conditions
     state = copy.deepcopy(initial_state)
     
-    # single_trajectory_exp_values = [state.measure(sim_params.observables[0])]
+    results = np.zeros((len(sim_params.observables), len(times)))
+
+    for obs_index, observable in enumerate(sim_params.observables):
+        results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     phi = initialize(state, noise_model, sim_params)
-    sample(phi, H, noise_model, sim_params)
-    # single_trajectory_exp_values.append(sample(phi, H, noise_model, sim_params))
+    sample(phi, H, noise_model, sim_params, results, j=1)
 
-    for _ in times[2:]:
+    for j, _ in enumerate(times[2:], start=2):
         phi = step_through(phi, H, noise_model, sim_params)
-        sample(phi, H, noise_model, sim_params)
-        # single_trajectory_exp_values.append(sample(phi, H, noise_model, sim_params))
+        sample(phi, H, noise_model, sim_params, results, j)
 
-    # return single_trajectory_exp_values
-
+    return results
 
 def run_trajectory_first_order(args):
     i, initial_state, noise_model, sim_params, times, H = args
@@ -120,7 +121,7 @@ def run_trajectory_first_order(args):
     return results
 
 
-def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', full_data=False, multi_core=True, order=2) -> np.ndarray:
+def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', multi_core=True, order=2) -> np.ndarray:
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 
@@ -137,13 +138,14 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
                     Otherwise, it only contains the average over N trajectories.
     """
     all_trajectories_exp_values = []
+
     # Reset any previous results
     for observable in sim_params.observables:
         observable.initialize(sim_params)
-    # observables = sim_params.measurements[0].observables
-    # sites = sim_params.measurements[0].sites
+
     times = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
 
+    # State must start in B form
     initial_state.normalize('B')
     args = [(i, initial_state, noise_model, sim_params, times, H) for i in range(sim_params.N)]
 
@@ -159,21 +161,22 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
                     try:
-                        result = future.result()  # Get the result from the process
+                        result = future.result()
                         for obs_index, observable in enumerate(sim_params.observables):
-                            observable.trajectories[i] = result[obs_index]  # Update observable trajectories
+                            observable.trajectories[i] = result[obs_index]
                     except Exception as e:
-                        print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
-                        # Retry could be done here, similar to the original logic
+                            print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
+                            # Retry could be done here
                     finally:
                         pbar.update(1)
 
     else:
-        with tqdm(total=sim_params.N, desc="Processing trajectories") as pbar:
+        with tqdm(total=sim_params.N, desc="Processing trajectories", ncols=80) as pbar:
             for i in range(sim_params.N):
                 single_trajectory_exp_values = run_trajectory_first_order(args[i])
                 all_trajectories_exp_values.append(single_trajectory_exp_values)
                 pbar.update(1)
 
+    # Save average value of trajectories
     for observable in sim_params.observables:
         observable.results = np.mean(observable.trajectories, axis=0)
