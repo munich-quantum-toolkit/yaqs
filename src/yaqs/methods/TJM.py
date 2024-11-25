@@ -121,7 +121,7 @@ def run_trajectory_first_order(args):
     return results
 
 
-def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', order=1) -> np.ndarray:
+def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', order=1):
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 
@@ -133,8 +133,7 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
         order (int): First or second order Trotterization.
 
     Returns:
-        np.ndarray: Array containing times and expectation values. If full_data is True, this is for each trajectory.
-                    Otherwise, it only contains the average over N trajectories.
+        None: Observables in SimulationParams are updated directly.
     """
     # Reset any previous results
     for observable in sim_params.observables:
