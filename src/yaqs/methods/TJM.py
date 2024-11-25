@@ -169,7 +169,6 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
                             # Retry could be done here
                     finally:
                         pbar.update(1)
-
     else:
         with tqdm(total=sim_params.N, desc="Processing trajectories", ncols=80) as pbar:
             for i in range(sim_params.N):
