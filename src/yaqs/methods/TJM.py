@@ -121,7 +121,7 @@ def run_trajectory_first_order(args):
     return results
 
 
-def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', multi_core=True, order=1) -> np.ndarray:
+def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', order=1) -> np.ndarray:
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 
@@ -149,32 +149,25 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
     initial_state.normalize('B')
     args = [(i, initial_state, noise_model, sim_params, times, H) for i in range(sim_params.N)]
 
-    if multi_core:
-        max_workers = max(1, multiprocessing.cpu_count() - 1)
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            if order == 2:
-                futures = {executor.submit(run_trajectory_second_order, arg): arg[0] for arg in args}
-            elif order == 1:
-                futures = {executor.submit(run_trajectory_first_order, arg): arg[0] for arg in args}
+    max_workers = max(1, multiprocessing.cpu_count() - 1)
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        if order == 2:
+            futures = {executor.submit(run_trajectory_second_order, arg): arg[0] for arg in args}
+        elif order == 1:
+            futures = {executor.submit(run_trajectory_first_order, arg): arg[0] for arg in args}
 
-            with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
-                for future in concurrent.futures.as_completed(futures):
-                    i = futures[future]
-                    try:
-                        result = future.result()
-                        for obs_index, observable in enumerate(sim_params.observables):
-                            observable.trajectories[i] = result[obs_index]
-                    except Exception as e:
-                            print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
-                            # Retry could be done here
-                    finally:
-                        pbar.update(1)
-    else:
-        with tqdm(total=sim_params.N, desc="Processing trajectories", ncols=80) as pbar:
-            for i in range(sim_params.N):
-                single_trajectory_exp_values = run_trajectory_first_order(args[i])
-                all_trajectories_exp_values.append(single_trajectory_exp_values)
-                pbar.update(1)
+        with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
+            for future in concurrent.futures.as_completed(futures):
+                i = futures[future]
+                try:
+                    result = future.result()
+                    for obs_index, observable in enumerate(sim_params.observables):
+                        observable.trajectories[i] = result[obs_index]
+                except Exception as e:
+                        print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
+                        # Retry could be done here
+                finally:
+                    pbar.update(1)
 
     # Save average value of trajectories
     for observable in sim_params.observables:
