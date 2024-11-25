@@ -24,8 +24,8 @@ noise_model = NoiseModel(['relaxation', 'dephasing'], [0.1, 0.1])
 # Define the simulation parameters
 T = 10
 dt = 0.1
-max_bond_dim = 4
 N = 100
+max_bond_dim = 4
 threshold = 1e-6
 measurements = [Observable('x', site) for site in range(L)]
 sim_params = SimulationParams(measurements, T, dt, N, max_bond_dim, threshold)
