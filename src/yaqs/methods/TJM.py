@@ -130,15 +130,12 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
         H (MPO): System Hamiltonian.
         noise_model (NoiseModel): Noise model to apply to the system.
         sim_params (SimulationParams): Simulation parameters, including time step, number of trajectories, and measurements.
-        full_data (bool, optional): Whether to return the results of all trajectories. Defaults to False.
-        multi_core (bool, optional): Whether to use multiple cores for parallel processing. Defaults to True.
+        order (int): First or second order Trotterization.
 
     Returns:
         np.ndarray: Array containing times and expectation values. If full_data is True, this is for each trajectory.
                     Otherwise, it only contains the average over N trajectories.
     """
-    all_trajectories_exp_values = []
-
     # Reset any previous results
     for observable in sim_params.observables:
         observable.initialize(sim_params)
