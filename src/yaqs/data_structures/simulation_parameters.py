@@ -14,6 +14,7 @@ class Observable:
     def initialize(self, sim_params: 'SimulationParams'):
         self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
         self.results = np.empty(len(sim_params.times), dtype=float)
+        self.times = sim_params.times
 
 class SimulationParams:
     def __init__(self, observables: list[Observable], T: float, dt: float, N: int, max_bond_dim: int, threshold: float):
