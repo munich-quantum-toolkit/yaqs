@@ -123,7 +123,7 @@ def run_trajectory_first_order(args):
     return results
 
 
-def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', order=1):
+def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams'):
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 
@@ -149,9 +149,9 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
 
     max_workers = max(1, multiprocessing.cpu_count() - 1)
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        if order == 2:
+        if sim_params.order == 2:
             futures = {executor.submit(run_trajectory_second_order, arg): arg[0] for arg in args}
-        elif order == 1:
+        elif sim_params.order == 1:
             futures = {executor.submit(run_trajectory_first_order, arg): arg[0] for arg in args}
 
         with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
