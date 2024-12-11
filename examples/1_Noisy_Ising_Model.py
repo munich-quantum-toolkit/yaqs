@@ -29,11 +29,12 @@ noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma_relaxation, gamma_d
 # Define the simulation parameters
 T = 10
 dt = 0.1
+sample_timesteps = True
 N = 1000
 max_bond_dim = 4
 threshold = 1e-6
 measurements = [Observable('x', site) for site in range(L)]
-sim_params = SimulationParams(measurements, T, dt, N, max_bond_dim, threshold)
+sim_params = SimulationParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold)
 
 fig, ax = plt.subplots(2, 1)
 if __name__ == "__main__":
