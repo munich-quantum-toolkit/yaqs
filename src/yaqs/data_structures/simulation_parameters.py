@@ -17,11 +17,12 @@ class Observable:
         self.times = sim_params.times
 
 class SimulationParams:
-    def __init__(self, observables: list[Observable], T: float, dt: float, N: int, max_bond_dim: int, threshold: float):
+    def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6):
         self.observables = observables
         self.T = T
         self.dt = dt
         self.times = np.arange(0, T+dt, dt)
+        self.sample_timesteps = sample_timesteps
         self.N = N
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
