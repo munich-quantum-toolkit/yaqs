@@ -95,11 +95,13 @@ def run_trajectory_second_order(args):
         results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     phi = initialize(state, noise_model, sim_params)
-    sample(phi, H, noise_model, sim_params, results, j=1)
+    if sim_params.sample_timesteps:
+        sample(phi, H, noise_model, sim_params, results, j=1)
 
     for j, _ in enumerate(times[2:], start=2):
         phi = step_through(phi, H, noise_model, sim_params)
-        sample(phi, H, noise_model, sim_params, results, j)
+        if sim_params.sample_timesteps and j != len(times)-1:
+            sample(phi, H, noise_model, sim_params, results, j)
 
     return results
 
