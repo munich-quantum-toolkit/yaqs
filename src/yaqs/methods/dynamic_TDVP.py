@@ -25,7 +25,7 @@ def dynamic_TDVP(state: 'MPS', H: 'MPO', sim_params: 'SimulationParams'):
     # state.normalize('B')
     if current_max_bond_dim <= sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
-        two_site_TDVP(state, H, sim_params.dt, threshold=sim_params.threshold, numsteps=1, )
+        two_site_TDVP(state, H, sim_params.dt, threshold=sim_params.threshold, numsteps=1)
     else:
         # Perform 1TDVP when the bond dimension exceeds the allowed limit
         single_site_TDVP(state, H, sim_params.dt, numsteps=1)
