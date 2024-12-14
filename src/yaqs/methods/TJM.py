@@ -83,7 +83,7 @@ def run_trajectory_second_order(args):
     Run a single trajectory of the TJM.
 
     Args:
-        args (tuple): Tuple containing index, initial state, noise model, simulation parameters, observables, sites, times, and Hamiltonian.
+        args (tuple): Tuple containing index, initial state, noise model, simulation parameters, observables, sites, and Hamiltonian.
 
     Returns:
         list: Expectation values for the trajectory over time.
@@ -149,8 +149,7 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
         initial_state (MPS): Initial state of the system.
         H (MPO): System Hamiltonian.
         noise_model (NoiseModel): Noise model to apply to the system.
-        sim_params (SimulationParams): Simulation parameters, including time step, number of trajectories, and measurements.
-        order (int): First or second order Trotterization.
+        sim_params (SimulationParams): Parameters needed to define all variables of the simulation.
 
     Returns:
         None: Observables in SimulationParams are updated directly.
