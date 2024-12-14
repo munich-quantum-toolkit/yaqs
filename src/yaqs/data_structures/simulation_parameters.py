@@ -12,9 +12,15 @@ class Observable:
         self.trajectories = None
 
     def initialize(self, sim_params: 'SimulationParams'):
-        self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
+        if sim_params.sample_timesteps:
+            self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
+        else:
+            self.trajectories = np.empty((sim_params.N, 1), dtype=float)
         self.results = np.empty(len(sim_params.times), dtype=float)
-        self.times = sim_params.times
+        if sim_params.sample_timesteps:
+            self.times = sim_params.times
+        else:
+            self.times = sim_params.T
 
 class SimulationParams:
     def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, order: int=1):
