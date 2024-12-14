@@ -70,8 +70,12 @@ def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'Simulat
     dynamic_TDVP(psi, H, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt/2)
     psi.normalize('B')
-    for obs_index, observable in enumerate(sim_params.observables):
-        results[obs_index, j] = copy.deepcopy(psi).measure(observable)
+    if sim_params.sample_timesteps:
+        for obs_index, observable in enumerate(sim_params.observables):
+            results[obs_index, j] = copy.deepcopy(psi).measure(observable)
+    else:
+        for obs_index, observable in enumerate(sim_params.observables):
+            results[obs_index, 0] = copy.deepcopy(psi).measure(observable)
 
 
 def run_trajectory_second_order(args):
@@ -84,41 +88,55 @@ def run_trajectory_second_order(args):
     Returns:
         list: Expectation values for the trajectory over time.
     """
-    i, initial_state, noise_model, sim_params, times, H = args
+    i, initial_state, noise_model, sim_params, H = args
 
     # Create deep copies of the shared inputs to avoid race conditions
     state = copy.deepcopy(initial_state)
-    
-    results = np.zeros((len(sim_params.observables), len(times)))
+    if sim_params.sample_timesteps:
+        results = np.zeros((len(sim_params.observables), len(sim_params.times)))
+    else:
+        results = np.zeros((len(sim_params.observables), 1))
 
-    for obs_index, observable in enumerate(sim_params.observables):
-        results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+    if sim_params.sample_timesteps:
+        for obs_index, observable in enumerate(sim_params.observables):
+            results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     phi = initialize(state, noise_model, sim_params)
     if sim_params.sample_timesteps:
         sample(phi, H, noise_model, sim_params, results, j=1)
 
-    for j, _ in enumerate(times[2:], start=2):
+    for j, _ in enumerate(sim_params.times[2:], start=2):
         phi = step_through(phi, H, noise_model, sim_params)
-        if sim_params.sample_timesteps and j != len(times)-1:
+        if sim_params.sample_timesteps:
+            sample(phi, H, noise_model, sim_params, results, j)
+        elif j == len(sim_params.times)-1:
             sample(phi, H, noise_model, sim_params, results, j)
 
     return results
 
 def run_trajectory_first_order(args):
-    i, initial_state, noise_model, sim_params, times, H = args
+    i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
-    results = np.zeros((len(sim_params.observables), len(times)))
 
-    for obs_index, observable in enumerate(sim_params.observables):
-        results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+    if sim_params.sample_timesteps:
+        results = np.zeros((len(sim_params.observables), len(sim_params.times)))
+    else:
+        results = np.zeros((len(sim_params.observables), 1))
 
-    for j, _ in enumerate(times[1:], start=1):
+    if sim_params.sample_timesteps:
+        for obs_index, observable in enumerate(sim_params.observables):
+            results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+
+    for j, _ in enumerate(sim_params.times[1:], start=1):
         dynamic_TDVP(state, H, sim_params)
         apply_dissipation(state, noise_model, sim_params.dt)
         state = stochastic_process(state, noise_model, sim_params.dt)
-        for obs_index, observable in enumerate(sim_params.observables):
-            results[obs_index, j] = copy.deepcopy(state).measure(observable)
+        if sim_params.sample_timesteps:
+            for obs_index, observable in enumerate(sim_params.observables):
+                results[obs_index, j] = copy.deepcopy(state).measure(observable)
+        elif j == len(sim_params.times)-1:
+            for obs_index, observable in enumerate(sim_params.observables):
+                results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     return results
 
@@ -141,11 +159,11 @@ def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
     for observable in sim_params.observables:
         observable.initialize(sim_params)
 
-    times = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
+    # times = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
 
     # State must start in B form
     initial_state.normalize('B')
-    args = [(i, initial_state, noise_model, sim_params, times, H) for i in range(sim_params.N)]
+    args = [(i, initial_state, noise_model, sim_params, H) for i in range(sim_params.N)]
 
     max_workers = max(1, multiprocessing.cpu_count() - 1)
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
