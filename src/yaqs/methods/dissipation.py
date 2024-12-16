@@ -4,8 +4,8 @@ from scipy.linalg import expm
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPS import MPS
-    from yaqs.general.data_structures.noise_model import NoiseModel
+    from yaqs.data_structures.MPS import MPS
+    from yaqs.data_structures.noise_model import NoiseModel
 
 
 # TODO: Assumes noise is same at all sites

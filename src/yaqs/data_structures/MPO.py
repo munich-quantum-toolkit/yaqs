@@ -1,6 +1,6 @@
 import numpy as np
 
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.library.tensor_library import TensorLibrary
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
 class MPO:

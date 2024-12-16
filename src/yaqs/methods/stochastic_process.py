@@ -2,12 +2,12 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from src.yaqs.general.tensor_operations.tensor_operations import scalar_product
+from yaqs.operations.operations import scalar_product
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPS import MPS
-    from yaqs.general.data_structures.noise_model import NoiseModel
+    from yaqs.data_structures.MPS import MPS
+    from yaqs.data_structures.noise_model import NoiseModel
 
 
 def calculate_stochastic_factor(state: 'MPS') -> float:
