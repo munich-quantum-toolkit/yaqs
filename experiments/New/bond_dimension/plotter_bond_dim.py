@@ -154,46 +154,46 @@ for site in range(L):
 # error_heatmap = np.mean(error_heatmap, axis=0)
 # im = axes[1, 0].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
 
-# data = pickle.load(open("TJM_convergence_bond4.pickle", "rb"))
-# heatmap1000 = []
-# for observable in data['sim_params'].observables:
-#         heatmap1000.append(observable.results)
+data = pickle.load(open("TJM_convergence_Bond4.pickle", "rb"))
+heatmap1000 = []
+for observable in data['sim_params'].observables:
+        heatmap1000.append(observable.results)
 
-# heatmap1000 = np.array(heatmap1000)
-# heatmap_exact = np.array(heatmap_exact)
-# im = axes[2, 1].imshow(np.abs(heatmap_exact-heatmap1000), cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+heatmap1000 = np.array(heatmap1000)
+heatmap_exact = np.array(heatmap_exact)
+im = axes[2, 1].imshow(np.abs(heatmap_exact-heatmap1000), cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
 
-# trajectories = 10
-# num_samples = 100
-# error_heatmap = []
-# for _ in range(num_samples):
-#     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
-#     heatmap = []
-#     for site in range(L):
-#         samples = data['sim_params'].observables[site].trajectories[indices]
-#         heatmap.append(np.mean(samples, axis=0))
-#     heatmap = np.array(heatmap)
-#     error_heatmap.append(np.abs(heatmap_exact-heatmap))
-# error_heatmap = np.array(error_heatmap)
-# error_heatmap = np.mean(error_heatmap, axis=0)
-# im = axes[0, 1].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+trajectories = 100
+num_samples = 100
+error_heatmap = []
+for _ in range(num_samples):
+    indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
+    heatmap = []
+    for site in range(L):
+        samples = data['sim_params'].observables[site].trajectories[indices]
+        heatmap.append(np.mean(samples, axis=0))
+    heatmap = np.array(heatmap)
+    error_heatmap.append(np.abs(heatmap_exact-heatmap))
+error_heatmap = np.array(error_heatmap)
+error_heatmap = np.mean(error_heatmap, axis=0)
+im = axes[0, 1].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
 
-# trajectories = 100
-# num_samples = 100
-# error_heatmap = []
-# for _ in range(num_samples):
-#     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
-#     heatmap = []
-#     for site in range(L):
-#         samples = data['sim_params'].observables[site].trajectories[indices]
-#         heatmap.append(np.mean(samples, axis=0))
-#     heatmap = np.array(heatmap)
-#     error_heatmap.append(np.abs(heatmap_exact-heatmap))
-# error_heatmap = np.array(error_heatmap)
-# error_heatmap = np.mean(error_heatmap, axis=0)
-# im = axes[1, 1].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+trajectories = 1000
+num_samples = 100
+error_heatmap = []
+for _ in range(num_samples):
+    indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
+    heatmap = []
+    for site in range(L):
+        samples = data['sim_params'].observables[site].trajectories[indices]
+        heatmap.append(np.mean(samples, axis=0))
+    heatmap = np.array(heatmap)
+    error_heatmap.append(np.abs(heatmap_exact-heatmap))
+error_heatmap = np.array(error_heatmap)
+error_heatmap = np.mean(error_heatmap, axis=0)
+im = axes[1, 1].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
 
-data = pickle.load(open("TJM_convergence_bond8.pickle", "rb"))
+data = pickle.load(open("TJM_convergence_Bond8.pickle", "rb"))
 heatmap1000 = []
 for observable in data['sim_params'].observables:
         heatmap1000.append(observable.results)
