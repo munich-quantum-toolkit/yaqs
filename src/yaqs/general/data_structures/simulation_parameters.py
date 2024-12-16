@@ -1,6 +1,6 @@
 import numpy as np
 
-from yaqs.library.tensor_library import TensorLibrary
+from yaqs.general.libraries.tensor_library import TensorLibrary
 
 
 class Observable:
