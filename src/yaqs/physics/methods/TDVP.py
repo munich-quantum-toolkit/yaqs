@@ -1,12 +1,12 @@
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.operations.matrix_exponential import expm_krylov
+from yaqs.physics.tensor_operations.matrix_exponential import expm_krylov
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.data_structures.MPS import MPS
-    from yaqs.data_structures.MPO import MPO
+    from yaqs.general.data_structures.MPS import MPS
+    from yaqs.general.data_structures.MPO import MPO
 
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):

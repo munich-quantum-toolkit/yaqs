@@ -1,4 +1,4 @@
-from yaqs.library.noise_library import NoiseLibrary
+from yaqs.general.libraries.noise_library import NoiseLibrary
 
 
 class NoiseModel:
