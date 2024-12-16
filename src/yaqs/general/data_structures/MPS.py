@@ -9,8 +9,8 @@ from src.yaqs.general.tensor_operations.tensor_operations import local_expval, s
 
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
-    def __init__(self, length: int, physical_dimensions: list=[], state: str='zeros'):
-        self.tensors = []
+    def __init__(self, length: int, tensors: list=[], physical_dimensions: list=[], state: str='zeros'):
+        self.tensors = self.tensors
         self.length = length
         self.physical_dimensions = physical_dimensions
         if not physical_dimensions:
@@ -19,20 +19,21 @@ class MPS:
                 self.physical_dimensions.append(2)
         assert len(physical_dimensions) == length
 
-        # Create d-level |0> state
-        for d in physical_dimensions:
-            vector = np.zeros(d)
-            if state == 'zeros':
-                vector[0] = 1
-            elif state == 'ones':
-                vector[1] = 1
-            else:
-                raise ValueError("Invalid state string")
+        if not tensors:
+            # Create d-level |0> state
+            for d in physical_dimensions:
+                vector = np.zeros(d)
+                if state == 'zeros':
+                    vector[0] = 1
+                elif state == 'ones':
+                    vector[1] = 1
+                else:
+                    raise ValueError("Invalid state string")
 
-            tensor = np.expand_dims(vector, axis=(0, 1))
+                tensor = np.expand_dims(vector, axis=(0, 1))
 
-            tensor = np.transpose(tensor, (2, 0, 1))
-            self.tensors.append(tensor)
+                tensor = np.transpose(tensor, (2, 0, 1))
+                self.tensors.append(tensor)
         self.flipped = False
         # self.orthogonality_center = 0
 
