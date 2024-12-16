@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.physics.tensor_operations.operations import scalar_product
+from src.yaqs.general.tensor_operations.tensor_operations import scalar_product
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
