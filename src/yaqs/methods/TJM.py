@@ -69,7 +69,7 @@ def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'Simulat
     psi = copy.deepcopy(phi)
     dynamic_TDVP(psi, H, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt/2)
-    psi.normalize('B')
+    psi = stochastic_process(psi, noise_model, sim_params.dt)
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.observables):
             results[obs_index, j] = copy.deepcopy(psi).measure(observable)
