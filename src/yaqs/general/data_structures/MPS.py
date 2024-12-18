@@ -26,6 +26,9 @@ class MPS:
                 vector[0] = 1
             elif state == 'ones':
                 vector[1] = 1
+            elif state == 'x':
+                vector[0] = 1/np.sqrt(2)
+                vector[1] = 1/np.sqrt(2)
             elif state == 'Neel':
                 if i % 2:
                     vector[0] = 1
