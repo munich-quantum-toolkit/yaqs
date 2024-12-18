@@ -83,7 +83,8 @@ class MPO:
         for i, tensor in enumerate(self.tensors):
             # left, right, sigma, sigma'
             self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-
+        self.length = length
+        self.physical_dimension = physical_dimension
     def init_custom(self, length:int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray):
         self.tensors = [left_bound] + [inner]*(length-2) + [right_bound]
 
