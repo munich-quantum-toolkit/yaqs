@@ -20,12 +20,17 @@ class MPS:
         assert len(physical_dimensions) == length
 
         # Create d-level |0> state
-        for d in physical_dimensions:
+        for i, d in enumerate(physical_dimensions):
             vector = np.zeros(d)
             if state == 'zeros':
                 vector[0] = 1
             elif state == 'ones':
                 vector[1] = 1
+            elif state == 'Neel':
+                if i % 2:
+                    vector[0] = 1
+                else:
+                    vector[1] = 1
             else:
                 raise ValueError("Invalid state string")
 
