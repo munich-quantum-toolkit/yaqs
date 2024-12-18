@@ -4,8 +4,8 @@ import numpy as np
 from matplotlib.legend_handler import HandlerTuple
 import os
 from matplotlib.gridspec import GridSpec
-from matplotlib.colors import LogNorm
-
+from matplotlib.colors import LogNorm, Normalize, CenteredNorm, Colormap
+from matplotlib import cm
 
 def combine_trajectories(dir):
     dir = dir + '/'
@@ -36,7 +36,7 @@ def combine_trajectories(dir):
 ### Overall Plot
 # fig = plt.figure()
 
-fig, axes = plt.subplots(3, 3)
+fig, axes = plt.subplots(3, 3, figsize=(7.2, 4))
 # gs = GridSpec(3, 2, figure=fig)
 # ax1 = fig.add_subplot(gs[:, 0])
 # ax2 = fig.add_subplot(gs[0, 1])
@@ -53,9 +53,6 @@ plt.rcParams['lines.linewidth'] = 2
 axes[0, 0].set_title("$\\chi=2$", fontsize=12)
 axes[0, 1].set_title("$\\chi=4$", fontsize=12)
 axes[0, 2].set_title("$\\chi=8$", fontsize=12)
-axes[0, 0].set_ylabel("$N=10$", fontsize=12)
-axes[1, 0].set_ylabel("$N=100$", fontsize=12)
-axes[2, 0].set_ylabel("$N=1000$", fontsize=12)
 axes[0, 0].set_ylabel("Site", fontsize=12)
 axes[1, 0].set_ylabel("Site", fontsize=12)
 axes[2, 0].set_ylabel("Site", fontsize=12)
@@ -115,44 +112,62 @@ heatmap_exact = []
 for site in range(L):
     heatmap_exact.append(data['observables'][site])
 
-# data = pickle.load(open("TJM_convergence_bond2.pickle", "rb"))
-# heatmap1000 = []
-# for observable in data['sim_params'].observables:
-#         heatmap1000.append(observable.results)
+num_samples = 1
+norm = LogNorm(vmin=1e-3, vmax=1e-1)
+# norm = Normalize(vmin=1e-3, vmax=2e-2)
+# norm = CenteredNorm(vcenter=1e-2)
+cmap = cm.coolwarm
 
-# heatmap1000 = np.array(heatmap1000)
-# heatmap_exact = np.array(heatmap_exact)
-# im = axes[2, 0].imshow(np.abs(heatmap_exact-heatmap1000), cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+data = pickle.load(open("TJM_convergence_Bond2.pickle", "rb"))
+heatmap1000 = []
+for observable in data['sim_params'].observables:
+        heatmap1000.append(observable.results)
 
-# trajectories = 10
-# num_samples = 100
-# error_heatmap = []
-# for _ in range(num_samples):
-#     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
-#     heatmap = []
-#     for site in range(L):
-#         samples = data['sim_params'].observables[site].trajectories[indices]
-#         heatmap.append(np.mean(samples, axis=0))
-#     heatmap = np.array(heatmap)
-#     error_heatmap.append(np.abs(heatmap_exact-heatmap))
-# error_heatmap = np.array(error_heatmap)
-# error_heatmap = np.mean(error_heatmap, axis=0)
-# im = axes[0, 0].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+heatmap1000 = np.array(heatmap1000)
+heatmap_exact = np.array(heatmap_exact)
+# im = axes[2, 0].imshow(np.abs(heatmap_exact-heatmap1000), cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
-# trajectories = 100
-# num_samples = 100
-# error_heatmap = []
-# for _ in range(num_samples):
-#     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
-#     heatmap = []
-#     for site in range(L):
-#         samples = data['sim_params'].observables[site].trajectories[indices]
-#         heatmap.append(np.mean(samples, axis=0))
-#     heatmap = np.array(heatmap)
-#     error_heatmap.append(np.abs(heatmap_exact-heatmap))
-# error_heatmap = np.array(error_heatmap)
-# error_heatmap = np.mean(error_heatmap, axis=0)
-# im = axes[1, 0].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+trajectories = 100
+error_heatmap = []
+for _ in range(num_samples):
+    indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
+    heatmap = []
+    for site in range(L):
+        samples = data['sim_params'].observables[site].trajectories[indices]
+        heatmap.append(np.mean(samples, axis=0))
+    heatmap = np.array(heatmap)
+    error_heatmap.append(np.abs(heatmap_exact-heatmap))
+error_heatmap = np.array(error_heatmap)
+error_heatmap = np.mean(error_heatmap, axis=0)
+im = axes[0, 0].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
+
+trajectories = 1000
+error_heatmap = []
+for _ in range(num_samples):
+    indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
+    heatmap = []
+    for site in range(L):
+        samples = data['sim_params'].observables[site].trajectories[indices]
+        heatmap.append(np.mean(samples, axis=0))
+    heatmap = np.array(heatmap)
+    error_heatmap.append(np.abs(heatmap_exact-heatmap))
+error_heatmap = np.array(error_heatmap)
+error_heatmap = np.mean(error_heatmap, axis=0)
+im = axes[1, 0].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
+
+trajectories = 9999
+error_heatmap = []
+for _ in range(num_samples):
+    indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
+    heatmap = []
+    for site in range(L):
+        samples = data['sim_params'].observables[site].trajectories[indices]
+        heatmap.append(np.mean(samples, axis=0))
+    heatmap = np.array(heatmap)
+    error_heatmap.append(np.abs(heatmap_exact-heatmap))
+error_heatmap = np.array(error_heatmap)
+error_heatmap = np.mean(error_heatmap, axis=0)
+im = axes[2, 0].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 data = pickle.load(open("TJM_convergence_Bond4.pickle", "rb"))
 heatmap1000 = []
@@ -161,10 +176,9 @@ for observable in data['sim_params'].observables:
 
 heatmap1000 = np.array(heatmap1000)
 heatmap_exact = np.array(heatmap_exact)
-im = axes[2, 1].imshow(np.abs(heatmap_exact-heatmap1000), cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+# im = axes[2, 1].imshow(np.abs(heatmap_exact-heatmap1000), cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 trajectories = 100
-num_samples = 100
 error_heatmap = []
 for _ in range(num_samples):
     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
@@ -176,10 +190,9 @@ for _ in range(num_samples):
     error_heatmap.append(np.abs(heatmap_exact-heatmap))
 error_heatmap = np.array(error_heatmap)
 error_heatmap = np.mean(error_heatmap, axis=0)
-im = axes[0, 1].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+im = axes[0, 1].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 trajectories = 1000
-num_samples = 100
 error_heatmap = []
 for _ in range(num_samples):
     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
@@ -191,7 +204,21 @@ for _ in range(num_samples):
     error_heatmap.append(np.abs(heatmap_exact-heatmap))
 error_heatmap = np.array(error_heatmap)
 error_heatmap = np.mean(error_heatmap, axis=0)
-im = axes[1, 1].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+im = axes[1, 1].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
+
+trajectories = 9999
+error_heatmap = []
+for _ in range(num_samples):
+    indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
+    heatmap = []
+    for site in range(L):
+        samples = data['sim_params'].observables[site].trajectories[indices]
+        heatmap.append(np.mean(samples, axis=0))
+    heatmap = np.array(heatmap)
+    error_heatmap.append(np.abs(heatmap_exact-heatmap))
+error_heatmap = np.array(error_heatmap)
+error_heatmap = np.mean(error_heatmap, axis=0)
+im = axes[2, 1].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 data = pickle.load(open("TJM_convergence_Bond8.pickle", "rb"))
 heatmap1000 = []
@@ -200,10 +227,9 @@ for observable in data['sim_params'].observables:
 
 heatmap1000 = np.array(heatmap1000)
 heatmap_exact = np.array(heatmap_exact)
-im = axes[2, 2].imshow(np.abs(heatmap_exact-heatmap1000), cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+# im = axes[2, 2].imshow(np.abs(heatmap_exact-heatmap1000), cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 trajectories = 100
-num_samples = 100
 error_heatmap = []
 for _ in range(num_samples):
     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
@@ -215,10 +241,9 @@ for _ in range(num_samples):
     error_heatmap.append(np.abs(heatmap_exact-heatmap))
 error_heatmap = np.array(error_heatmap)
 error_heatmap = np.mean(error_heatmap, axis=0)
-im = axes[0, 2].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+im = axes[0, 2].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 trajectories = 1000
-num_samples = 100
 error_heatmap = []
 for _ in range(num_samples):
     indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
@@ -230,7 +255,21 @@ for _ in range(num_samples):
     error_heatmap.append(np.abs(heatmap_exact-heatmap))
 error_heatmap = np.array(error_heatmap)
 error_heatmap = np.mean(error_heatmap, axis=0)
-im = axes[1, 2].imshow(error_heatmap, cmap='Reds', aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+im = axes[1, 2].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
+
+trajectories = 9999
+error_heatmap = []
+for _ in range(num_samples):
+    indices = np.random.choice(data['sim_params'].observables[0].trajectories.shape[0], trajectories, replace=False)
+    heatmap = []
+    for site in range(L):
+        samples = data['sim_params'].observables[site].trajectories[indices]
+        heatmap.append(np.mean(samples, axis=0))
+    heatmap = np.array(heatmap)
+    error_heatmap.append(np.abs(heatmap_exact-heatmap))
+error_heatmap = np.array(error_heatmap)
+error_heatmap = np.mean(error_heatmap, axis=0)
+im = axes[2, 2].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 # Adjust the layout to make room for vertically rotated labels
 fig.subplots_adjust(left=0.2, right=0.875, bottom=0.1, top=0.9, wspace=0.3, hspace=0.3)
@@ -241,20 +280,20 @@ axes[1, 0].text(-0.55, 0.5, "$N=1000$", fontsize=12, transform=axes[1, 0].transA
 axes[2, 0].text(-0.55, 0.5, "$N=10000$", fontsize=12, transform=axes[2, 0].transAxes, va='center', ha='center', rotation=90)
 
 # Add "Average" and "Typical" above the vertical labels
-axes[0, 0].text(-0.75, 0.5, "Average", fontsize=12, transform=axes[0, 0].transAxes, va='center', ha='center', rotation=90)
-axes[1, 0].text(-0.75, 0.5, "Average", fontsize=12, transform=axes[1, 0].transAxes, va='center', ha='center', rotation=90)
-axes[2, 0].text(-0.75, 0.5, "Typical", fontsize=12, transform=axes[2, 0].transAxes, va='center', ha='center', rotation=90)
+# axes[0, 0].text(-0.75, 0.5, "Average", fontsize=12, transform=axes[0, 0].transAxes, va='center', ha='center', rotation=90)
+# axes[1, 0].text(-0.75, 0.5, "Average", fontsize=12, transform=axes[1, 0].transAxes, va='center', ha='center', rotation=90)
+# axes[2, 0].text(-0.75, 0.5, "Typical", fontsize=12, transform=axes[2, 0].transAxes, va='center', ha='center', rotation=90)
 
 cbar_ax = fig.add_axes([0.9, 0.1, 0.025, 0.75])
 cbar = fig.colorbar(im, cax=cbar_ax)
 cbar.ax.set_title('$\\epsilon$')
 
 # Add a dotted line between row 2 and row 3
-fig_width, fig_height = fig.get_size_inches()
-line_y = 0.35  # Approximate position between the second and third rows (normalized figure coordinate)
+# fig_width, fig_height = fig.get_size_inches()
+# line_y = 0.35  # Approximate position between the second and third rows (normalized figure coordinate)
 
 # Draw the dotted line across the entire figure width
-fig.add_artist(plt.Line2D([0.025, 0.875], [line_y, line_y], transform=fig.transFigure, color='black', linestyle='dotted', linewidth=1))
+# fig.add_artist(plt.Line2D([0.025, 0.875], [line_y, line_y], transform=fig.transFigure, color='black', linestyle='dotted', linewidth=1))
 
 plt.savefig("results.pdf", dpi=300, format="pdf")
 plt.show()

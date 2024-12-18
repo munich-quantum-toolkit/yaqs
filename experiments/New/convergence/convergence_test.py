@@ -33,17 +33,17 @@ fig, ax = plt.subplots(2, 1)
 if __name__ == "__main__":
     # Define the simulation parameters
     T = 1
-    dt = 0.01
+    dt = 0.1
     sample_timesteps = False
     N = 10000
     threshold = 1e-6
     max_bond_dim = 4
-    order = 2
+    order = 1
     measurements = [Observable('x', site) for site in range(L)]
     sim_params = SimulationParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
     TJM(state, H_0, noise_model, sim_params)
 
-    filename = f"TJM_Convergence_dt001.pickle"
+    filename = f"TJM_Convergence_dt01.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'sim_params': sim_params,

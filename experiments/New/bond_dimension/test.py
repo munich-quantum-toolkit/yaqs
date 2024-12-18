@@ -37,13 +37,13 @@ if __name__ == "__main__":
     sample_timesteps = True
     N = 10000
     threshold = 1e-6
-    max_bond_dim = 4
+    max_bond_dim = 2
     order = 2
     measurements = [Observable('x', site) for site in range(L)]
     sim_params = SimulationParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
     TJM(state, H_0, noise_model, sim_params)
 
-    filename = f"TJM_Convergence_Bond4.pickle"
+    filename = f"TJM_Convergence_Bond2.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'sim_params': sim_params,
