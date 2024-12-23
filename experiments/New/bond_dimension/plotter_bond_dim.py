@@ -36,7 +36,7 @@ def combine_trajectories(dir):
 ### Overall Plot
 # fig = plt.figure()
 
-fig, axes = plt.subplots(3, 3, figsize=(7.2, 4))
+fig, axes = plt.subplots(3, 3, figsize=(7.2, 4.5))
 # gs = GridSpec(3, 2, figure=fig)
 # ax1 = fig.add_subplot(gs[:, 0])
 # ax2 = fig.add_subplot(gs[0, 1])
@@ -59,9 +59,9 @@ axes[2, 0].set_ylabel("Site", fontsize=12)
 axes[0, 0].set_yticks([x-0.5 for x in list(range(2,L+2, 2))], range(2,L+2, 2))
 axes[1, 0].set_yticks([x-0.5 for x in list(range(2,L+2, 2))], range(2,L+2, 2))
 axes[2, 0].set_yticks([x-0.5 for x in list(range(2,L+2, 2))], range(2,L+2, 2))
-axes[2, 0].set_xlabel("Time (Jt)", fontsize=12)
-axes[2, 1].set_xlabel("Time (Jt)", fontsize=12)
-axes[2, 2].set_xlabel("Time (Jt)", fontsize=12)
+axes[2, 0].set_xlabel("Time ($Jt$)", fontsize=12)
+axes[2, 1].set_xlabel("Time ($Jt$)", fontsize=12)
+axes[2, 2].set_xlabel("Time ($Jt$)", fontsize=12)
 
 axes[0, 0].set_xticks([])
 axes[0, 1].set_xticks([])
