@@ -47,7 +47,7 @@ if __name__ == "__main__":
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"100L_T1.pickle"
+    filename = f"1000L_T1.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"100L_T5.pickle"
+    filename = f"1000L_T5.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"100L_T10.pickle"
+    filename = f"1000L_T10.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
