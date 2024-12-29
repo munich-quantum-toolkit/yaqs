@@ -112,7 +112,12 @@ def expm_krylov(Afunc, v, dt, numiter, hermitian=False):
     if hermitian:
         alpha, beta, V = _lanczos_iteration(Afunc, v, numiter)
         # diagonalize Hessenberg matrix
-        w_hess, u_hess = eigh_tridiagonal(alpha, beta)
+        try:
+            # Faster implementation
+            w_hess, u_hess = eigh_tridiagonal(alpha, beta)
+        except:
+            # More stable implementation
+            w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver='stebz')
         return V @ (u_hess @ (np.linalg.norm(v) * np.exp(-1j*dt*w_hess) * u_hess[0]))
     else:
         H, V = _arnoldi_iteration(Afunc, v, numiter)
