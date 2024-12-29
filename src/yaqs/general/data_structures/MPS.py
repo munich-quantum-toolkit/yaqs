@@ -34,6 +34,11 @@ class MPS:
                     vector[0] = 1
                 else:
                     vector[1] = 1
+            elif state == 'wall':
+                if i < length // 2:
+                    vector[0] = 1
+                else:
+                    vector[1] = 1
             else:
                 raise ValueError("Invalid state string")
 
