@@ -82,12 +82,12 @@ axes[1].text(-0.125, 0.5, "$\\gamma = 0.1$", fontsize=12, transform=axes[1].tran
 # axes[2].text(-0.125, 0.5, "$ \\Delta $", fontsize=12, transform=axes[2].transAxes, va='center', ha='center', rotation=90)
 
 
-fig.subplots_adjust(right=0.88)
-cbar_ax = fig.add_axes([0.9, 0.39, 0.025, 0.48])
+fig.subplots_adjust(top=0.95, right=0.88)
+cbar_ax = fig.add_axes([0.9, 0.42, 0.025, 0.48])
 cbar = fig.colorbar(im_exact, cax=cbar_ax)
 cbar.ax.set_title('$\\langle Z \\rangle$')
 
-cbar_ax = fig.add_axes([0.9, 0.1, 0.025, 0.225])
+cbar_ax = fig.add_axes([0.9, 0.12, 0.025, 0.225])
 cbar = fig.colorbar(im, cax=cbar_ax)
 cbar.ax.set_title('$\\Delta$')
 

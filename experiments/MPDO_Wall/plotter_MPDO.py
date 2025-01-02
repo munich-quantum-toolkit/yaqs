@@ -29,7 +29,7 @@ plt.rcParams.update({
     "lines.linewidth": 3
 })
 
-fig  = plt.figure(figsize=(7.2, 4.2))  # a size often acceptable for Nature
+fig  = plt.figure(figsize=(7.2, 4.1))  # a size often acceptable for Nature
 
 gs = GridSpec(3, 1, figure=fig)
 ax1 = fig.add_subplot(gs[0, 0])
@@ -87,8 +87,8 @@ axes[1].text(-0.125, 0.5, "TJM \n ($\\gamma = 0.1$)", fontsize=12, transform=axe
 axes[2].text(-0.125, 0.5, "MPDO \n ($\\gamma = 0.1$)", fontsize=12, transform=axes[2].transAxes, va='center', ha='center', rotation=90)
 
 
-fig.subplots_adjust(right=0.88)
-cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.75])
+fig.subplots_adjust(top=0.95, right=0.88)
+cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.8])
 cbar = fig.colorbar(im, cax=cbar_ax)
 cbar.ax.set_title('$\\langle Z \\rangle$')
 

@@ -29,7 +29,7 @@ plt.rcParams.update({
     "text.latex.preamble": r"\usepackage{newtxtext}\usepackage{newtxmath}",
     "lines.linewidth": 3
 })
-fig  = plt.figure(figsize=(7.2, 6))  # a size often acceptable for Nature
+fig  = plt.figure(figsize=(7.2, 5))  # a size often acceptable for Nature
 
 gs = GridSpec(1, 3, figure=fig)
 ax1 = fig.add_subplot(gs[0, 0])
@@ -93,8 +93,8 @@ im = axes[2].imshow(heatmap, aspect='auto', extent=(0, 100, 100, 0), vmin=-1, vm
 axes[2].set_xticks(tick_positions)
 axes[2].set_xticklabels(tick_labels, rotation=rotation)
 
-fig.subplots_adjust(right=0.88)
-cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.75])
+fig.subplots_adjust(top=0.95, right=0.88)
+cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.8])
 cbar = fig.colorbar(im, cax=cbar_ax)
 cbar.ax.set_title('$\\langle Z \\rangle$')
 # axes[0].legend(title='$\\delta t$', loc='upper right')
