@@ -76,12 +76,13 @@ for observable in data['sim_params'].observables:
 
 im = axes[1].imshow(heatmap, aspect='auto', vmin=-1, vmax=1)
 
-data = pickle.load(open("30L_Noise.pickle", "rb"))
-heatmap = []
-for observable in data['sim_params'].observables:
-    heatmap.append(observable.results)
+data = pickle.load(open("lindblad_mpo_results.pkl", "rb"))
+# print(data['z_expectation_values_mpo'].shape)
+# heatmap = []
+# for observable in data['sim_params'].observables:
+#     heatmap.append(observable.results)
 
-im = axes[2].imshow(heatmap, aspect='auto', vmin=-1, vmax=1)
+im = axes[2].imshow(data['z_expectation_values_mpo'], aspect='auto', vmin=-1, vmax=1)
 
 # Add vertical annotations on the left side above the "Site" label
 axes[0].text(-0.125, 0.5, "TJM \n ($\\gamma = 0$)", fontsize=12, transform=axes[0].transAxes, va='center', ha='center', rotation=90)

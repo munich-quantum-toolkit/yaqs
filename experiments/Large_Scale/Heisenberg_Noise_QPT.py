@@ -11,7 +11,7 @@ from yaqs.physics.methods.TJM import TJM
 
 
 # Define the system Hamiltonian
-L = 1000
+L = 500
 d = 2
 J = 1
 g = 0.5
@@ -34,7 +34,7 @@ measurements = [Observable('x', site) for site in range(L)]
 fig, ax = plt.subplots(1, 1)
 gammas = np.logspace(-4, 1, 100)
 if __name__ == "__main__":
-    T = 1
+    T = 10
     heatmap = np.empty((L, len(gammas)))
     for j, gamma in enumerate(gammas):
         print("Gamma =", gamma)
@@ -47,7 +47,7 @@ if __name__ == "__main__":
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"1000L_T1.pickle"
+    filename = f"500L_T10.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
@@ -66,13 +66,13 @@ if __name__ == "__main__":
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"1000L_T5.pickle"
+    filename = f"500L_T5.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
         }, f)
 
-    T = 10
+    T = 1
     heatmap = np.empty((L, len(gammas)))
     for j, gamma in enumerate(gammas):
         print("Gamma =", gamma)
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"1000L_T10.pickle"
+    filename = f"500L_T1.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
