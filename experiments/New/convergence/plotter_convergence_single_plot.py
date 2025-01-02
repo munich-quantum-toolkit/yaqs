@@ -33,6 +33,15 @@ def combine_trajectories(dir):
 
 
 ### Overall Plot
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern Roman"],
+    "mathtext.fontset": "cm",
+    "text.latex.preamble": r"\usepackage{amsmath}",
+    "text.latex.preamble": r"\usepackage{newtxtext}\usepackage{newtxmath}",
+    "lines.linewidth": 3
+})
 fig  = plt.figure(figsize=(3.5, 3), constrained_layout=True)  # a size often acceptable for Nature
 
 gs = GridSpec(1, 1, figure=fig)
@@ -42,16 +51,12 @@ ax1 = fig.add_subplot(gs[0])
 # ax4 = fig.add_subplot(gs[1, 2])
 
 axes = [ax1]
-plt.rcParams.update({'font.size': 10})
-plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = 'Arial'
-plt.rcParams['lines.linewidth'] = 3
 # plt.rcParams['pdf.fonttype'] = 42  # ensures fonts are embedded
 # axes[0].set_frame_on(False)
 # axes[0].tick_params(labeltop=False, top=False, labelright=False, right=False)
 
 
-axes[0].set_xlabel('Trajectories (N)', fontsize=12)
+axes[0].set_xlabel('Trajectories ($N$)', fontsize=12)
 axes[0].set_ylabel("$|\\langle X^{[5]} \\rangle - \\langle \\tilde{X}^{[5]} \\rangle|$", fontsize=12)
 axes[0].tick_params(labelsize=10)
 axes[0].set_xlim(1, 1e4)

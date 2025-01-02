@@ -35,8 +35,17 @@ def combine_trajectories(dir):
 
 ### Overall Plot
 # fig = plt.figure()
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern Roman"],
+    "mathtext.fontset": "cm",
+    "text.latex.preamble": r"\usepackage{amsmath}",
+    "text.latex.preamble": r"\usepackage{newtxtext}\usepackage{newtxmath}",
+    "lines.linewidth": 3
+})
 
-fig, axes = plt.subplots(3, 3, figsize=(7.2, 4.5))
+fig, axes = plt.subplots(3, 3, figsize=(7.2, 4.3))
 # gs = GridSpec(3, 2, figure=fig)
 # ax1 = fig.add_subplot(gs[:, 0])
 # ax2 = fig.add_subplot(gs[0, 1])
@@ -44,11 +53,6 @@ fig, axes = plt.subplots(3, 3, figsize=(7.2, 4.5))
 # ax4 = fig.add_subplot(gs[2, 1])
 
 L = 10
-plt.rcParams.update({'font.size': 10})
-plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = 'Arial'
-plt.rcParams['lines.linewidth'] = 2
-
 
 axes[0, 0].set_title("$\\chi=2$", fontsize=12)
 axes[0, 1].set_title("$\\chi=4$", fontsize=12)
@@ -272,12 +276,12 @@ error_heatmap = np.mean(error_heatmap, axis=0)
 im = axes[2, 2].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].T, L, 0], norm=norm)
 
 # Adjust the layout to make room for vertically rotated labels
-fig.subplots_adjust(left=0.2, right=0.875, bottom=0.1, top=0.9, wspace=0.3, hspace=0.3)
+fig.subplots_adjust(left=0.1, right=0.875, bottom=0.1, top=0.9, wspace=0.3, hspace=0.3)
 
 # Add vertical annotations on the left side above the "Site" label
-axes[0, 0].text(-0.55, 0.5, "$N=100$", fontsize=12, transform=axes[0, 0].transAxes, va='center', ha='center', rotation=90)
-axes[1, 0].text(-0.55, 0.5, "$N=1000$", fontsize=12, transform=axes[1, 0].transAxes, va='center', ha='center', rotation=90)
-axes[2, 0].text(-0.55, 0.5, "$N=10000$", fontsize=12, transform=axes[2, 0].transAxes, va='center', ha='center', rotation=90)
+axes[0, 0].text(-0.4, 0.5, "$N=100$", fontsize=12, transform=axes[0, 0].transAxes, va='center', ha='center', rotation=90)
+axes[1, 0].text(-0.4, 0.5, "$N=1000$", fontsize=12, transform=axes[1, 0].transAxes, va='center', ha='center', rotation=90)
+axes[2, 0].text(-0.4, 0.5, "$N=10000$", fontsize=12, transform=axes[2, 0].transAxes, va='center', ha='center', rotation=90)
 
 # Add "Average" and "Typical" above the vertical labels
 # axes[0, 0].text(-0.75, 0.5, "Average", fontsize=12, transform=axes[0, 0].transAxes, va='center', ha='center', rotation=90)
