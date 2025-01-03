@@ -4,7 +4,7 @@ import opt_einsum as oe
 
 from yaqs.general.data_structures.simulation_parameters import Observable
 from yaqs.general.libraries.tensor_library import TensorLibrary
-from yaqs.general.tensor_operations.tensor_operations import local_expval, scalar_product
+from yaqs.general.operations.operations import local_expval, scalar_product
 
 
 # Convention (sigma, chi_l-1, chi_l)

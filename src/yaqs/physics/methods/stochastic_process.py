@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.operations import scalar_product
+from yaqs.general.operations.operations import scalar_product
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:

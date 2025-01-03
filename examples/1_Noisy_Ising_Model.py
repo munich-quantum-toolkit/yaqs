@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
-import qutip as qt
+# import qutip as qt
 
 from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.data_structures.MPS import MPS
@@ -55,50 +55,50 @@ if __name__ == "__main__":
     cbar.ax.set_title('$\\langle X \\rangle$')
     #########################################
 
-    ######### QuTip Exact Solver ############
-    # Time vector
-    t = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
+    # ######### QuTip Exact Solver ############
+    # # Time vector
+    # t = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
 
-    # Define Pauli matrices
-    sx = qt.sigmax()
-    sy = qt.sigmay()
-    sz = qt.sigmaz()
+    # # Define Pauli matrices
+    # sx = qt.sigmax()
+    # sy = qt.sigmay()
+    # sz = qt.sigmaz()
 
-    # Construct the Ising Hamiltonian
-    H = 0
-    for i in range(L-1):
-        H += J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
-    for i in range(L):
-        H += g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
+    # # Construct the Ising Hamiltonian
+    # H = 0
+    # for i in range(L-1):
+    #     H += J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
+    # for i in range(L):
+    #     H += g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
 
-    # Construct collapse operators
-    c_ops = []
+    # # Construct collapse operators
+    # c_ops = []
 
-    # Dephasing operators
-    for i in range(L):
-        c_ops.append(np.sqrt(gamma_dephasing) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
+    # # Dephasing operators
+    # for i in range(L):
+    #     c_ops.append(np.sqrt(gamma_dephasing) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
 
-    # Relaxation operators
-    for i in range(L):
-        c_ops.append(np.sqrt(gamma_relaxation) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
+    # # Relaxation operators
+    # for i in range(L):
+    #     c_ops.append(np.sqrt(gamma_relaxation) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
 
-    # Initial state
-    psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
+    # # Initial state
+    # psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
 
-    # Define measurement operators
-    sx_list = [qt.tensor([sx if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
+    # # Define measurement operators
+    # sx_list = [qt.tensor([sx if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
 
-    # Exact Lindblad solution
-    result_lindblad = qt.mesolve(H, psi0, t, c_ops, sx_list, progress_bar=True)
-    heatmap2 = []
-    for site in range(len(sx_list)):
-            heatmap2.append(result_lindblad.expect[site])
+    # # Exact Lindblad solution
+    # result_lindblad = qt.mesolve(H, psi0, t, c_ops, sx_list, progress_bar=True)
+    # heatmap2 = []
+    # for site in range(len(sx_list)):
+    #         heatmap2.append(result_lindblad.expect[site])
 
-    # Error heatmap
-    heatmap = np.array(heatmap)
-    heatmap2 = np.array(heatmap2)
-    im2 = ax[1].imshow(np.abs(heatmap2-heatmap), cmap='Reds', aspect='auto', extent=[0, T, L, 0], norm=LogNorm())
-    ax[1].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
+    # # Error heatmap
+    # heatmap = np.array(heatmap)
+    # heatmap2 = np.array(heatmap2)
+    # im2 = ax[1].imshow(np.abs(heatmap2-heatmap), cmap='Reds', aspect='auto', extent=[0, T, L, 0], norm=LogNorm())
+    # ax[1].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
 
     cbar = plt.colorbar(im2, ax=ax[1])
     cbar.ax.set_title('Error')
