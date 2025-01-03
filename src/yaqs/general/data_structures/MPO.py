@@ -1,5 +1,6 @@
 import numpy as np
 
+from yaqs.general.data_structures.MPS import MPS
 from yaqs.general.libraries.tensor_library import TensorLibrary
 from yaqs.general.operations.operations import scalar_product
 
@@ -98,7 +99,7 @@ class MPO:
         self.physical_dimension = physical_dimension
 
         self.tensors = []
-        for i in range(length):
+        for _ in range(length):
             self.tensors.append(M)
 
     def init_custom(self, length:int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray):
@@ -108,7 +109,7 @@ class MPO:
         converted_tensors = []
         for tensor in self.tensors:
             converted_tensors.append(np.reshape(tensor, (tensor.shape[0]*tensor.shape[1], tensor.shape[2], tensor.shape[3])))
-
+        
         return MPS(self.length, converted_tensors)
 
     def write_tensor_shapes(self):
@@ -127,9 +128,8 @@ class MPO:
 
         identity_MPS = identity_MPO.convert_to_MPS()
         MPS = self.convert_to_MPS()
-
         trace = scalar_product(MPS, identity_MPS)
-
+        
         # Checks if trace is not a singular values for partial trace
         if trace.size != 1 or np.round(np.abs(trace), 1) / 2**self.length < fidelity:
             return False
