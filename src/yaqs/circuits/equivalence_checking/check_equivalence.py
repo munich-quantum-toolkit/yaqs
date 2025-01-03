@@ -2,6 +2,7 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit, circuit_to_dag
 from qiskit.dagcircuit.dagnode import DAGOpNode
+import time
 
 from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.libraries.tensor_library import TensorLibrary
@@ -24,10 +25,9 @@ def decompose_theta(theta, threshold):
 
     # Create site tensors
     U = np.reshape(U, (dims[0], dims[1], dims[2], len(S_list)))
-    U = np.transpose(U, (0, 2, 1, 3))
     M = np.diag(S_list) @ V
     M = np.reshape(M, (len(S_list), dims[3], dims[4], dims[5]))
-    M = np.transpose(M, (1, 0, 2, 3))
+    M = np.transpose(M, (1, 2, 0, 3))
 
     return U, M
 
@@ -384,9 +384,8 @@ def iterate(mpo: 'MPO', dag1, dag2, threshold):
 
 
 def run(circuit1, circuit2, threshold: float=1e-13, fidelity: float=1-1e-13):
-    # Initialization
     assert circuit1.num_qubits == circuit2.num_qubits
-    N = circuit1.num_qubits
+    start_time = time.time()
     mpo = MPO()
     mpo.init_identity(circuit1.num_qubits)
 
@@ -394,4 +393,4 @@ def run(circuit1, circuit2, threshold: float=1e-13, fidelity: float=1-1e-13):
     circuit2_dag = circuit_to_dag(circuit2)
     iterate(mpo, circuit1_dag, circuit2_dag, threshold)
 
-    return mpo.check_if_identity(fidelity)
+    return {'equivalent': mpo.check_if_identity(fidelity), 'elapsed_time': time.time()-start_time}
