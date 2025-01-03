@@ -54,7 +54,7 @@ class MPO:
 
         # Left boundary: shape (1,5, d, d)
         # [I, Jx*X, Jy*Y, Jz*Z, h*Z]
-        left_bound = np.array([identity, Jx*X, Jy*Y, Jz*Z, h*Z])[np.newaxis, :]
+        left_bound = np.array([identity, -Jx*X, -Jy*Y, -Jz*Z, -h*Z])[np.newaxis, :]
 
         # Inner tensor: shape (5,5, d, d)
         # W = [[ I,    Jx*X,  Jy*Y,  Jz*Z,   h*Z ],
@@ -65,10 +65,10 @@ class MPO:
 
         inner = np.zeros((5,5,physical_dimension,physical_dimension), dtype=complex)
         inner[0,0] = identity
-        inner[0,1] = Jx*X
-        inner[0,2] = Jy*Y
-        inner[0,3] = Jz*Z
-        inner[0,4] = h*Z
+        inner[0,1] = -Jx*X
+        inner[0,2] = -Jy*Y
+        inner[0,3] = -Jz*Z
+        inner[0,4] = -h*Z
         inner[1,4] = X
         inner[2,4] = Y
         inner[3,4] = Z
