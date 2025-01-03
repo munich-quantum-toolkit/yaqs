@@ -91,12 +91,15 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-    def init_identity(self, length: int):
+    def init_identity(self, length: int, physical_dimension: int=2):
         M = np.eye(2)
         M = np.expand_dims(M, (2, 3))
+        self.length = length
+        self.physical_dimension = physical_dimension
 
+        self.tensors = []
         for i in range(length):
-            self.tensors[i] = M
+            self.tensors.append(M)
 
     def init_custom(self, length:int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray):
         self.tensors = [left_bound] + [inner]*(length-2) + [right_bound]
