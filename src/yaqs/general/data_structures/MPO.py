@@ -1,7 +1,7 @@
 import numpy as np
 
 from yaqs.general.libraries.tensor_library import TensorLibrary
-from yaqs.general.tensor_operations.tensor_operations import scalar_product
+from yaqs.general.operations.operations import scalar_product
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
