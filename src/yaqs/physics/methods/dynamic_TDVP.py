@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.data_structures.MPO import MPO
-    from yaqs.data_structures.MPS import MPS
-    from yaqs.data_structures.simulation_parameters import SimulationParams
-from yaqs.methods.TDVP import single_site_TDVP, two_site_TDVP
+    from yaqs.general.data_structures.MPO import MPO
+    from yaqs.general.data_structures.MPS import MPS
+    from yaqs.general.data_structures.simulation_parameters import SimulationParams
+from yaqs.physics.methods.TDVP import single_site_TDVP, two_site_TDVP
 
 
 def dynamic_TDVP(state: 'MPS', H: 'MPO', sim_params: 'SimulationParams'):

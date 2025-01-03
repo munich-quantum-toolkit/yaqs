@@ -4,11 +4,11 @@ import numpy as np
 import pickle
 # import qutip as qt
 
-from yaqs.data_structures.MPO import MPO
-from yaqs.data_structures.MPS import MPS
-from yaqs.data_structures.noise_model import NoiseModel
-from yaqs.data_structures.simulation_parameters import Observable, SimulationParams
-from yaqs.methods.TJM import TJM
+from yaqs.general.data_structures.MPO import MPO
+from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.noise_model import NoiseModel
+from yaqs.general.data_structures.simulation_parameters import Observable, SimulationParams
+from yaqs.physics.methods.TJM import TJM
 
 
 # Define the system Hamiltonian

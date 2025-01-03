@@ -4,16 +4,16 @@ import multiprocessing
 import numpy as np
 from tqdm import tqdm
 
-from yaqs.methods.dissipation import apply_dissipation
-from yaqs.methods.dynamic_TDVP import dynamic_TDVP
-from yaqs.methods.stochastic_process import stochastic_process
+from yaqs.physics.methods.dissipation import apply_dissipation
+from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
+from yaqs.physics.methods.stochastic_process import stochastic_process
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.data_structures.MPO import MPO
-    from yaqs.data_structures.MPS import MPS
-    from yaqs.data_structures.noise_model import NoiseModel
-    from yaqs.data_structures.simulation_parameters import SimulationParams
+    from yaqs.general.data_structures.MPO import MPO
+    from yaqs.general.data_structures.MPS import MPS
+    from yaqs.general.data_structures.noise_model import NoiseModel
+    from yaqs.general.data_structures.simulation_parameters import SimulationParams
 
 
 def initialize(state: 'MPS', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS':

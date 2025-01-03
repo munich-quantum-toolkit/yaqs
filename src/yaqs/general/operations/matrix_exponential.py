@@ -1,5 +1,4 @@
 import numpy as np
-import opt_einsum as oe
 from scipy.linalg import eigh_tridiagonal, expm
 
 
