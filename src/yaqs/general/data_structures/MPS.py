@@ -10,7 +10,7 @@ from yaqs.general.operations.operations import local_expval, scalar_product
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
     def __init__(self, length: int, tensors: list=[], physical_dimensions: list=[], state: str='zeros'):
-        self.tensors = self.tensors
+        self.tensors = tensors
         self.length = length
         self.physical_dimensions = physical_dimensions
         if not physical_dimensions:
