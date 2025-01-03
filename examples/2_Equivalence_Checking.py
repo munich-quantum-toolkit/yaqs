@@ -22,7 +22,4 @@ fidelity = 1-1e-13
 transpiled_circuit = qiskit.compiler.transpile(circuit, basis_gates=basis_gates, optimization_level=1)
 
 result = run(copy.deepcopy(circuit), copy.deepcopy(transpiled_circuit), threshold, fidelity)
-assert result
-# end_time = time.time()
-# TN_time = end_time - start_time
-# print("TN", TN_time)
+print(result)
