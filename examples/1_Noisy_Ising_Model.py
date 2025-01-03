@@ -7,7 +7,7 @@ from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.data_structures.MPS import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
 from yaqs.general.data_structures.simulation_parameters import Observable, SimulationParams
-from yaqs.physics.methods import TJM
+from yaqs.physics.methods.TJM import TJM
 
 
 # Define the system Hamiltonian
@@ -30,7 +30,7 @@ noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma_relaxation, gamma_d
 T = 10
 dt = 0.1
 sample_timesteps = True
-N = 1000
+N = 100
 max_bond_dim = 4
 threshold = 1e-6
 order = 1
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     cbar.ax.set_title('$\\langle X \\rangle$')
     #########################################
 
-    ######### QuTip Exact Solver ############
+    # ######### QuTip Exact Solver ############
     # Time vector
     t = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
 

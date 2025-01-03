@@ -1,7 +1,7 @@
 import numpy as np
 import opt_einsum as oe
 
-from src.yaqs.physics.methods.matrix_exponential import expm_krylov
+from yaqs.general.operations.matrix_exponential import expm_krylov
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:

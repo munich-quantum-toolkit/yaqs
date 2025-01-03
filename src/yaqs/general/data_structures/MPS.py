@@ -4,7 +4,7 @@ import opt_einsum as oe
 
 from yaqs.general.data_structures.simulation_parameters import Observable
 from yaqs.general.libraries.tensor_library import TensorLibrary
-from src.yaqs.general.tensor_operations.tensor_operations import local_expval, scalar_product
+from yaqs.general.operations.operations import local_expval, scalar_product
 
 
 # Convention (sigma, chi_l-1, chi_l)
@@ -19,21 +19,33 @@ class MPS:
                 self.physical_dimensions.append(2)
         assert len(physical_dimensions) == length
 
-        if not tensors:
-            # Create d-level |0> state
-            for d in physical_dimensions:
-                vector = np.zeros(d)
-                if state == 'zeros':
+        # Create d-level |0> state
+        for i, d in enumerate(physical_dimensions):
+            vector = np.zeros(d)
+            if state == 'zeros':
+                vector[0] = 1
+            elif state == 'ones':
+                vector[1] = 1
+            elif state == 'x':
+                vector[0] = 1/np.sqrt(2)
+                vector[1] = 1/np.sqrt(2)
+            elif state == 'Neel':
+                if i % 2:
                     vector[0] = 1
-                elif state == 'ones':
-                    vector[1] = 1
                 else:
-                    raise ValueError("Invalid state string")
+                    vector[1] = 1
+            elif state == 'wall':
+                if i < length // 2:
+                    vector[0] = 1
+                else:
+                    vector[1] = 1
+            else:
+                raise ValueError("Invalid state string")
 
-                tensor = np.expand_dims(vector, axis=(0, 1))
+            tensor = np.expand_dims(vector, axis=(0, 1))
 
-                tensor = np.transpose(tensor, (2, 0, 1))
-                self.tensors.append(tensor)
+            tensor = np.transpose(tensor, (2, 0, 1))
+            self.tensors.append(tensor)
         self.flipped = False
         # self.orthogonality_center = 0
 
