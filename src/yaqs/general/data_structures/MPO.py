@@ -102,8 +102,13 @@ class MPO:
         for _ in range(length):
             self.tensors.append(M)
 
-    def init_custom(self, length:int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray):
+    def init_custom_Hamiltonian(self, length: int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray):
         self.tensors = [left_bound] + [inner]*(length-2) + [right_bound]
+
+    def init_custom(self, tensors: list[np.ndarray]):
+        self.tensors = tensors
+        self.length = len(self.tensors)
+        self.physical_dimension = tensors[0].shape[0]
 
     def convert_to_MPS(self):
         converted_tensors = []
@@ -135,3 +140,9 @@ class MPO:
             return False
         else:
             return True
+
+    def rotate(self, conjugate: bool=False):
+        for i, tensor in enumerate(self.tensors):
+            if conjugate:
+                tensor = np.conj(tensor)
+            self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
