@@ -4,10 +4,10 @@ import qiskit.circuit
 import qiskit.compiler
 from qiskit.circuit.library.n_local import TwoLocal
 
-from yaqs.circuits.equivalence_checking.check_equivalence import run
+from yaqs.circuits.equivalence_checking import equivalence_checker
 
 # Define the initial circuit
-num_qubits = 10
+num_qubits = 5
 depth = num_qubits
 circuit = qiskit.circuit.QuantumCircuit(num_qubits)
 
@@ -25,5 +25,5 @@ transpiled_circuit = qiskit.compiler.transpile(circuit, basis_gates=basis_gates,
 # Define parameters for equivalence checking
 threshold = 1e-6
 fidelity = 1-1e-13
-result = run(circuit, transpiled_circuit, threshold, fidelity)
+result = equivalence_checker.run(circuit, circuit, threshold, fidelity)
 print(result)
