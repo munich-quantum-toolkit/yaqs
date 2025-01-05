@@ -33,7 +33,7 @@ sample_timesteps = True
 N = 100
 max_bond_dim = 4
 threshold = 1e-6
-order = 1
+order = 2
 measurements = [Observable('x', site) for site in range(L)]
 sim_params = SimulationParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
@@ -67,9 +67,9 @@ if __name__ == "__main__":
     # Construct the Ising Hamiltonian
     H = 0
     for i in range(L-1):
-        H += J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
+        H += -J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
     for i in range(L):
-        H += g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
+        H += -g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
 
     # Construct collapse operators
     c_ops = []
@@ -92,12 +92,12 @@ if __name__ == "__main__":
     result_lindblad = qt.mesolve(H, psi0, t, c_ops, sx_list, progress_bar=True)
     heatmap2 = []
     for site in range(len(sx_list)):
-            heatmap2.append(result_lindblad.expect[site])
+        heatmap2.append(result_lindblad.expect[site])
 
     # Error heatmap
     heatmap = np.array(heatmap)
     heatmap2 = np.array(heatmap2)
-    im2 = ax[1].imshow(np.abs(heatmap2-heatmap), cmap='Reds', aspect='auto', extent=[0, T, L, 0], norm=LogNorm())
+    im2 = ax[1].imshow(np.abs(heatmap2-heatmap), cmap='Reds', aspect='auto', extent=[0, T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
     ax[1].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
 
     cbar = plt.colorbar(im2, ax=ax[1])
