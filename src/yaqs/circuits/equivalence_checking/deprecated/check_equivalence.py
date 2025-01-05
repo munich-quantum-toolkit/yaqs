@@ -9,10 +9,14 @@ from yaqs.general.libraries.tensor_library import TensorLibrary
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from qiskit.circuit.quantumcircuit import QuantumCircuit
+    from qiskit._accelerate.circuit import DAGCircuit
     from yaqs.general.data_structures.MPO import MPO
+    from yaqs.general.libraries.tensor_library import TensorLibrary
 
 
-def decompose_theta(theta, threshold):
+
+def decompose_theta(theta: np.ndarray, threshold: float):
     dims = theta.shape
     theta = np.transpose(theta, (0, 3, 2, 1, 4, 5))
     theta_matrix = np.reshape(theta, (dims[0]*dims[1]*dims[2], dims[3]*dims[4]*dims[5]))
@@ -32,7 +36,7 @@ def decompose_theta(theta, threshold):
     return U, M
 
 
-def apply_gate(gate, theta, site0, site1, conjugate=False):
+def apply_gate(gate: 'TensorLibrary', theta: np.ndarray, site0: int, site1: int, conjugate: bool=False):
     assert (gate.interaction == 1 or gate.interaction == 2)
 
     if gate.interaction == 1:
@@ -97,7 +101,7 @@ def apply_gate(gate, theta, site0, site1, conjugate=False):
     return theta
 
 
-def convert_dag_to_tensor_algorithm(dag):
+def convert_dag_to_tensor_algorithm(dag: 'DAGCircuit'):
     algorithm = []
 
     # Check if single node
@@ -146,7 +150,7 @@ def convert_dag_to_tensor_algorithm(dag):
     return algorithm
 
 
-def get_causal_cone(dag, qubits):
+def get_causal_cone(dag: 'DAGCircuit', qubits: list[int]):
     new_dag = dag.copy_empty_like()
     layers = list(dag.multigraph_layers())
     qubits_to_check = set()
@@ -176,11 +180,11 @@ def get_causal_cone(dag, qubits):
         # Cone has ended for all
         if len(qubits_to_check) == 0:
             break
-    # print(dag_to_circuit(new_dag))
+
     return new_dag
 
 
-def apply_causal_cone(theta, dag, qubits, conjugate=False):
+def apply_causal_cone(theta: np.ndarray, dag: 'DAGCircuit', qubits: list[int], conjugate: bool=False):
     n = qubits[0]
     if dag.op_nodes():
         causal_circuit = get_causal_cone(dag, [n, n+1])
@@ -190,15 +194,9 @@ def apply_causal_cone(theta, dag, qubits, conjugate=False):
     return theta
 
 
-def update_MPO(MPO, dag1, dag2, qubits, threshold):
+def update_MPO(MPO: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', qubits: list[int], threshold: float):
     n = qubits[0]
 
-    # print("UPDATE", n, n+1)
-    # OLD: sigma_l, chi_l, sigma'_l, chi_l+1 -- sigma_l+1, chi_l+1, sigma'_l+1, chi_l+2
-    #      --> sigma_l, sigma_l+1, chi_l, sigma'_l, sigma'_l+1, chi_l+2
-    #       ijkl, mlno -> imjkno
-    # New: sigma_l, sigma'_l, chi_l, chi_l+1 -- sigma_l+1, sigma'_l+1, chi_l+1, chi_l+2
-    #       abcd, efdg -> aecbfg
     # TODO: Change order to remove transpose in decompose_theta?
     theta = oe.contract('abcd, efdg->aecbfg', MPO.tensors[n], MPO.tensors[n+1])
     # theta = oe.contract('ijkl, mlno->imjkno', MPO.tensors[n], MPO.tensors[n+1])
@@ -207,7 +205,7 @@ def update_MPO(MPO, dag1, dag2, qubits, threshold):
     MPO.tensors[n], MPO.tensors[n+1] = decompose_theta(theta, threshold)
 
 
-def apply_layer(MPO, circuit1_dag, circuit2_dag, first_iterator, second_iterator, threshold):
+def apply_layer(MPO: 'MPO', circuit1_dag: 'DAGCircuit', circuit2_dag: 'DAGCircuit', first_iterator: range, second_iterator: range, threshold: float):
     for n in first_iterator:
         # print(n, n+1)
         update_MPO(MPO, circuit1_dag, circuit2_dag, [n, n+1], threshold)
@@ -217,105 +215,118 @@ def apply_layer(MPO, circuit1_dag, circuit2_dag, first_iterator, second_iterator
         update_MPO(MPO, circuit1_dag, circuit2_dag, [n, n+1], threshold)
 
 
-# def apply_long_range_layer(MPO, dag1, dag2, conjugate, threshold):
-#     # TODO: MPO on both sides
-#     # Identify gate and its position
-#     if not conjugate:
-#         dag_to_search = dag1
-#     else:
-#         dag_to_search = dag2
+def apply_long_range_layer(mpo: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', conjugate: bool, threshold: float):
+    # TODO: MPO on both sides
+    # Identify gate and its position
+    if not conjugate:
+        dag_to_search = dag1
+    else:
+        dag_to_search = dag2
 
-#     for layer in dag_to_search.layers():
-#         first_layer = layer
-#         break
+    for layer in dag_to_search.layers():
+        first_layer = layer
+        break
 
-#     if 'first_layer' in locals():
-#         layer_circuit = dag_to_circuit(first_layer['graph'])
-#         for gate in layer_circuit.data:
-#             if gate.operation.num_qubits > 1:
-#                 distance = np.abs(gate.qubits[0]._index - gate.qubits[-1]._index)+1
-#                 if distance > 2:
-#                     # Save location
-#                     location = min(gate.qubits[0]._index, gate.qubits[-1]._index)
-#                     # Create gate MPO
-#                     if not conjugate:
-#                         for node in dag1.op_nodes():
-#                             # Guarantees the correct node is removed
-#                             if node.name == gate.operation.name and len(node.qargs) >= 2 and node.qargs[0]._index == gate.qubits[0]._index and node.qargs[1]._index == gate.qubits[1]._index:
-#                                 gate_MPO = convert_dag_to_tensor_algorithm(node)[0].tensor
-#                                 # Remove from dag
-#                                 dag1.remove_op_node(node)
-#                                 break
-#                     else:
-#                         for node in dag2.op_nodes():
-#                             # Guarantees the correct node is removed
-#                             if node.name == gate.operation.name and len(node.qargs) >= 2 and node.qargs[0]._index == gate.qubits[0]._index and node.qargs[1]._index == gate.qubits[1]._index:
-#                                 gate_MPO = convert_dag_to_tensor_algorithm(node)[0].tensor
-#                                 flip_network(gate_MPO, conjugate=True)
-#                                 # Remove from dag
-#                                 dag2.remove_op_node(node) 
-#                                 break
-#                     break
+    if 'first_layer' in locals():
+        layer_circuit = dag_to_circuit(first_layer['graph'])
+        for gate in layer_circuit.data:
+            if gate.operation.num_qubits > 1:
+                distance = np.abs(gate.qubits[0]._index - gate.qubits[-1]._index)+1
+                if distance > 2:
+                    # Save location
+                    location = min(gate.qubits[0]._index, gate.qubits[-1]._index)
+                    # Create gate MPO
+                    if not conjugate:
+                        for node in dag1.op_nodes():
+                            # Guarantees the correct node is removed
+                            if node.name == gate.operation.name and len(node.qargs) >= 2 and node.qargs[0]._index == gate.qubits[0]._index and node.qargs[1]._index == gate.qubits[1]._index:
+                                gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
+                                # Remove from dag
+                                dag1.remove_op_node(node)
+                                break
+                    else:
+                        for node in dag2.op_nodes():
+                            # Guarantees the correct node is removed
+                            if node.name == gate.operation.name and len(node.qargs) >= 2 and node.qargs[0]._index == gate.qubits[0]._index and node.qargs[1]._index == gate.qubits[1]._index:
+                                gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
+                                gate_MPO.rotate(conjugate=True)
+                                # Remove from dag
+                                dag2.remove_op_node(node) 
+                                break
+                    break
 
-#     assert 'gate_MPO' in locals()
+    assert 'gate_MPO' in locals()
 
-#     assert len(gate_MPO) <= len(MPO)
-#     # MPO_2 must be the larger MPO
-#     if len(gate_MPO) == len(MPO):
-#         sites = range(0, len(MPO))
-#     else:
-#         sites = range(location, location+distance)
+    assert gate_MPO.length <= mpo.length
+    # MPO_2 must be the larger MPO
+    if gate_MPO.length == mpo.length:
+        sites = range(0, mpo.length)
+    else:
+        sites = range(location, location+distance)
 
-#     # TODO: Only contract first site with gate, then just SVD across chain to second gate tensor
-#     for site_gate_MPO, overall_site in enumerate(sites):
-#         # Even sites of gate MPO
-#         if site_gate_MPO != len(sites)-1 and site_gate_MPO % 2 == 0:
-#             # sigma i, sigma i+1, upper bond gate, upper bond MPO, sigma' i, sigma' i+1, lower bond gate, lower bond MPO
-#             if not conjugate:
-#                 theta = oe.contract('abcd,edfg,chij,fjkl->aebhikgl', gate_MPO[site_gate_MPO], gate_MPO[site_gate_MPO+1], MPO[overall_site], MPO[overall_site+1])
-#             else:
-#                 flip_network(MPO)
-#                 theta = oe.contract('abcd,edfg,chij,fjkl->ikhbaelg', gate_MPO[site_gate_MPO], gate_MPO[site_gate_MPO+1], MPO[overall_site], MPO[overall_site+1])
-#                 flip_network(MPO)
+    # TODO: Only contract first site with gate, then just SVD across chain to second gate tensor
+    for site_gate_MPO, overall_site in enumerate(sites):
+        # Even sites of gate MPO
+        if site_gate_MPO != len(sites)-1 and site_gate_MPO % 2 == 0:
+            # TODO: Could be sped up without putting all tensors together
+            # TODO: Remove all transposes from new index order
+            # sigma i, sigma i+1, upper bond gate, upper bond MPO, sigma' i, sigma' i+1, lower bond gate, lower bond MPO
+            if not conjugate:
+                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
+                tensor2 = np.transpose(gate_MPO.tensors[site_gate_MPO+1], (0, 2, 1, 3))
+                tensor3 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
+                tensor4 = np.transpose(mpo.tensors[overall_site+1], (0, 2, 1, 3))
+                theta = oe.contract('abcd,edfg,chij,fjkl->aebhikgl', tensor1, tensor2, tensor3, tensor4)
+            else:
+                mpo.rotate()
+                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
+                tensor2 = np.transpose(gate_MPO.tensors[site_gate_MPO+1], (0, 2, 1, 3))
+                tensor3 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
+                tensor4 = np.transpose(mpo.tensors[overall_site+1], (0, 2, 1, 3))
+                theta = oe.contract('abcd,edfg,chij,fjkl->ikhbaelg', tensor1, tensor2, tensor3, tensor4)
+                mpo.rotate()
 
-#             # Apply causal cone on each side
-#             theta = apply_causal_cone(theta, dag1, [overall_site, overall_site+1], conjugate=False)
-#             theta = apply_causal_cone(theta, dag2, [overall_site, overall_site+1], conjugate=True)
+            # Apply causal cone on each side
+            theta = apply_causal_cone(theta, dag1, [overall_site, overall_site+1], conjugate=False)
+            theta = apply_causal_cone(theta, dag2, [overall_site, overall_site+1], conjugate=True)
 
-#             dims = theta.shape
-#             theta = np.reshape(theta, (dims[0], dims[1], dims[2]*dims[3], dims[4], dims[5], dims[6]*dims[7]))
-#             MPO[overall_site], MPO[overall_site+1] = decompose_theta(theta, threshold)
+            dims = theta.shape
+            theta = np.reshape(theta, (dims[0], dims[1], dims[2]*dims[3], dims[4], dims[5], dims[6]*dims[7]))
+            mpo.tensors[overall_site], mpo.tensors[overall_site+1] = decompose_theta(theta, threshold)
 
-#             # Used to track tensors already applied
-#             gate_MPO[site_gate_MPO] = None
-#             gate_MPO[site_gate_MPO+1] = None
+            # Used to track tensors already applied
+            gate_MPO.tensors[site_gate_MPO] = None
+            gate_MPO.tensors[site_gate_MPO+1] = None
 
-#         # Odd length gate MPO, single hanging tensor
-#         if site_gate_MPO == len(sites)-1 and any(type(tensor) == np.ndarray for tensor in gate_MPO):
-#             if not conjugate:
-#                 theta = oe.contract('abcd,cefg->abefdg', gate_MPO[site_gate_MPO], MPO[overall_site])
-#             else:
-#                 flip_network(MPO)
-#                 theta = oe.contract('abcd,cefg->febagd', gate_MPO[site_gate_MPO], MPO[overall_site])
-#                 flip_network(MPO)
+        # Odd length gate MPO, single hanging tensor
+        if site_gate_MPO == len(sites)-1 and any(type(tensor) == np.ndarray for tensor in gate_MPO.tensors):
+            if not conjugate:
+                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
+                tensor2 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
+                theta = oe.contract('abcd,cefg->abefdg', tensor1, tensor2)
+            else:
+                mpo.rotate()
+                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
+                tensor2 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
+                theta = oe.contract('abcd,cefg->febagd', tensor1, tensor2)
+                mpo.rotate()
 
-#             dims = theta.shape
-#             theta = np.reshape(theta, (dims[0], dims[1]*dims[2], dims[3], dims[4]*dims[5]))
+            dims = theta.shape
+            theta = np.reshape(theta, (dims[0], dims[1]*dims[2], dims[3], dims[4]*dims[5]))
 
-#             theta = oe.contract('abcd, edfg->aebcfg', MPO[overall_site-1], theta)
+            tensor1 = np.transpose(mpo.tensors[overall_site-1], (0, 2, 1, 3))
+            theta = oe.contract('abcd, edfg->aebcfg', tensor1, theta)
             
-#             theta = apply_causal_cone(theta, dag1, [overall_site-1, overall_site], conjugate=False)
-#             theta = apply_causal_cone(theta, dag2, [overall_site-1, overall_site], conjugate=True)
+            theta = apply_causal_cone(theta, dag1, [overall_site-1, overall_site], conjugate=False)
+            theta = apply_causal_cone(theta, dag2, [overall_site-1, overall_site], conjugate=True)
 
-#             MPO[overall_site-1], MPO[overall_site] = decompose_theta(theta, threshold)
-#             gate_MPO[site_gate_MPO] = None
+            mpo.tensors[overall_site-1], mpo.tensors[overall_site] = decompose_theta(theta, threshold)
+            gate_MPO.tensors[site_gate_MPO] = None
 
-#     assert not any(type(tensor) == np.ndarray for tensor in gate_MPO)
-
-#     return MPO
+    assert not any(type(tensor) == np.ndarray for tensor in gate_MPO.tensors)
 
 
-def check_longest_gate(DAG_circuit):
+def check_longest_gate(DAG_circuit: 'DAGCircuit'):
     largest_distance = 1
     for layer in DAG_circuit.layers():
         first_layer = layer
@@ -333,7 +344,7 @@ def check_longest_gate(DAG_circuit):
     return largest_distance
 
 
-def select_starting_point(N, DAG_circuit):
+def select_starting_point(N: int, DAG_circuit: 'DAGCircuit'):
     assert N > 0
 
     for layer in DAG_circuit.layers():
@@ -358,7 +369,7 @@ def select_starting_point(N, DAG_circuit):
     return first_iterator, second_iterator
 
 
-def iterate(mpo: 'MPO', dag1, dag2, threshold):
+def iterate(mpo: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', threshold: float):
     # Ensures we start at a two-qubit gate (Adds performance boost)
     # Loop while nodes are removed from DAG
     N = mpo.length
@@ -374,16 +385,15 @@ def iterate(mpo: 'MPO', dag1, dag2, threshold):
 
         if largest_distance1 in [1, 2] and largest_distance2 in [1, 2]:
             apply_layer(mpo, dag1, dag2, first_iterator, second_iterator, threshold)
-        # else:
-        #     if largest_distance1 >= largest_distance2:
-        #         conjugate = False
-        #     else:
-        #         conjugate = True
-            # apply_long_range_layer(mpo, dag1, dag2, conjugate, threshold)
-    # return mpo
+        else:
+            if largest_distance1 >= largest_distance2:
+                conjugate = False
+            else:
+                conjugate = True
+            apply_long_range_layer(mpo, dag1, dag2, conjugate, threshold)
 
 
-def run(circuit1, circuit2, threshold: float=1e-13, fidelity: float=1-1e-13):
+def run(circuit1: 'QuantumCircuit', circuit2: 'QuantumCircuit', threshold: float=1e-13, fidelity: float=1-1e-13):
     assert circuit1.num_qubits == circuit2.num_qubits
     start_time = time.time()
     mpo = MPO()
