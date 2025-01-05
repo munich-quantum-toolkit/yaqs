@@ -1,111 +1,79 @@
 import numpy as np
 
+import yaqs.general.data_structures.MPO
 
-def _split_tensor(tensor: np.ndarray):
-    if tensor.shape == (2, 2, 2, 2):
-        # Splits two-qubit matrix
-        matrix = np.transpose(tensor, (0, 2, 1, 3))
-        dims = matrix.shape
-        matrix = np.reshape(matrix, (dims[0]*dims[1], dims[2]*dims[3]))
-        U, S_list, V = np.linalg.svd(matrix, full_matrices=False)
-        S_list = S_list[S_list > 1e-6]
-        U = U[:, 0:len(S_list)]
-        V = V[0:len(S_list), :]
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.general.data_structures.MPO import MPO
 
-        tensor1 = U
-        tensor2 = np.diag(S_list) @ V
 
-        # Reshape into physical dimensions and bond dimension from shape
-        tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))
-        tensor2 = np.reshape(tensor2, (tensor2.shape[0], 2, 2))
-        tensor2 = np.transpose(tensor2, (1, 0, 2))
+def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
+    assert tensor.shape == (2, 2, 2, 2)
 
-        # Add dummy dimension to boundaries
-        tensor1 = np.expand_dims(tensor1, axis=1)
-        tensor2 = np.expand_dims(tensor2, axis=3)
-        tensors = [tensor1, tensor2]
+    # Splits two-qubit matrix
+    matrix = np.transpose(tensor, (0, 2, 1, 3))
+    dims = matrix.shape
+    matrix = np.reshape(matrix, (dims[0]*dims[1], dims[2]*dims[3]))
+    U, S_list, V = np.linalg.svd(matrix, full_matrices=False)
+    S_list = S_list[S_list > 1e-6]
+    U = U[:, 0:len(S_list)]
+    V = V[0:len(S_list), :]
 
-    elif tensor.shape == (2, 2, 2, 2, 2, 2):
-        # Splits two-qubit matrix
-        matrix = np.transpose(tensor, (0, 3, 4, 1, 2, 5))
-        dims = matrix.shape
-        matrix = np.reshape(matrix, (dims[0]*dims[1], dims[2]*dims[3]*dims[4]*dims[5]))
-        U, S_list, V = np.linalg.svd(matrix, full_matrices=False)
-        S_list = S_list[S_list > 1e-6]
-        U = U[:, 0:len(S_list)]
-        V = V[0:len(S_list), :]
+    tensor1 = U
+    tensor2 = np.diag(S_list) @ V
 
-        tensor1 = U
-        tensor2 = np.diag(S_list) @ V
+    # Reshape into physical dimensions and bond dimension from shape
+    tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))
+    tensor2 = np.reshape(tensor2, (tensor2.shape[0], 2, 2))
+    # tensor2 = np.transpose(tensor2, (1, 0, 2))
+    tensor2 = np.transpose(tensor2, (1, 2, 0))
 
-        # Reshape into physical dimensions and bond dimension from shape
-        tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))
-        tensor2 = np.reshape(tensor2, (tensor2.shape[0], 4, 4))
-
-        matrix = np.reshape(tensor2, (tensor2.shape[0]*tensor2.shape[1], tensor2.shape[2]))
-
-        U, S_list, V = np.linalg.svd(matrix, full_matrices=False)
-        S_list = S_list[S_list > 1e-6]
-        U = U[:, 0:len(S_list)]
-        V = V[0:len(S_list), :]
-
-        tensor2 = U
-        tensor3 = np.diag(S_list) @ V
-
-        tensor2 = np.reshape(tensor2, (tensor1.shape[2], 2, 2, tensor3.shape[0]))
-        tensor2 = np.transpose(tensor2, (1, 0, 2, 3))
-
-        tensor3 = np.reshape(tensor3, (tensor3.shape[0], 2, 2))
-        tensor3 = np.transpose(tensor3, (1, 0, 2))
-
-        # Add dummy dimension to boundaries
-        tensor1 = np.expand_dims(tensor1, axis=1)
-        tensor3 = np.expand_dims(tensor3, axis=3)
-        tensors = [tensor1, tensor2, tensor3]
+    # Add dummy dimension to boundaries
+    tensor1 = np.expand_dims(tensor1, axis=2)
+    tensor2 = np.expand_dims(tensor2, axis=3)
+    tensors = [tensor1, tensor2]
 
     return tensors
 
 
-def _extend_gate(tensor: np.ndarray, sites: list):
-    # assert tensor.ndim == 4
-
+def _extend_gate(tensor: np.ndarray, sites: list) -> 'MPO':
     tensors = _split_tensor(tensor)
-
     if len(tensors) == 2:
     # Adds identity tensors between sites
-        MPO = [tensors[0]]
+        mpo_tensors = [tensors[0]]
         for _ in range(np.abs(sites[0]-sites[1])-1):
-            previous_right_bond = MPO[-1].shape[3]
-            identity_tensor = np.zeros((2, previous_right_bond, 2, previous_right_bond))
+            previous_right_bond = mpo_tensors[-1].shape[3]
+            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
             for i in range(previous_right_bond):
-                identity_tensor[:, i, :, i] = np.identity(2)
-            MPO.append(identity_tensor)
-        MPO.append(tensors[1])
+                identity_tensor[:, :, i, i] = np.identity(2)
+            mpo_tensors.append(identity_tensor)
+        mpo_tensors.append(tensors[1])
 
         if sites[1] < sites[0]:
-            MPO.reverse()
-            for i, tensor in enumerate(MPO):
-                MPO[i] = np.transpose(tensor, (0, 3, 2, 1))
+            mpo_tensors.reverse()
+            for i, tensor in enumerate(mpo_tensors):
+                mpo_tensors[i] = np.transpose(tensor, (0, 1, 3, 2))
 
     elif len(tensors) == 3:
-        MPO = [tensors[0]]
+        mpo_tensors = [tensors[0]]
         for _ in range(np.abs(sites[0]-sites[1])-1):
-            previous_right_bond = MPO[-1].shape[3]
-            identity_tensor = np.zeros((2, previous_right_bond, 2, previous_right_bond))
+            previous_right_bond = mpo_tensors[-1].shape[3]
+            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
             for i in range(previous_right_bond):
-                identity_tensor[:, i, :, i] = np.identity(2)
-            MPO.append(identity_tensor)
-        MPO.append(tensors[1])
+                identity_tensor[:, :, i, i] = np.identity(2)
+            mpo_tensors.append(identity_tensor)
+        mpo_tensors.append(tensors[1])
         for _ in range(np.abs(sites[1]-sites[2])-1):
-            previous_right_bond = MPO[-1].shape[3]
-            identity_tensor = np.zeros((2, previous_right_bond, 2, previous_right_bond))
+            previous_right_bond = mpo_tensors[-1].shape[3]
+            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
             for i in range(previous_right_bond):
-                identity_tensor[:, i, :, i] = np.identity(2)
-            MPO.append(identity_tensor)
-        MPO.append(tensors[2])
+                identity_tensor[:, :, i, i] = np.identity(2)
+            mpo_tensors.append(identity_tensor)
+        mpo_tensors.append(tensors[2])
 
-    return MPO
-
+    mpo = yaqs.general.data_structures.MPO.MPO()
+    mpo.init_custom(mpo_tensors)
+    return mpo
 
 class X:
     name = 'x'
@@ -115,7 +83,6 @@ class X:
 
     tensor = matrix
 
-    # MPO = [np.expand_dims(tensor, axis=(1, 3))]
     def set_sites(self, site0: int):
         self.sites = [site0]
 
@@ -128,7 +95,7 @@ class Y:
     interaction = 1
 
     tensor = matrix
-    # MPO = [np.expand_dims(tensor, axis=(1, 3))]
+
     def set_sites(self, site0: int):
         self.sites = [site0]
 
@@ -141,7 +108,7 @@ class Z:
     interaction = 1
 
     tensor = matrix
-    # MPO = [np.expand_dims(tensor, axis=(1, 3))]
+
     def set_sites(self, site0: int):
         self.sites = [site0]
 
@@ -154,7 +121,7 @@ class SX:
     interaction = 1
 
     tensor = matrix
-    # MPO = [np.expand_dims(tensor, axis=(1, 3))]
+
     def set_sites(self, site0: int):
         self.sites = [site0]
 
@@ -167,7 +134,7 @@ class H:
     interaction = 1
 
     tensor = matrix
-    # MPO = [np.expand_dims(tensor, axis=(1, 3))]
+
     def set_sites(self, site0: int):
         self.sites = [site0]
 
@@ -180,7 +147,7 @@ class I:
     interaction = 1
 
     tensor = matrix
-    # MPO = [np.expand_dims(tensor, axis=(1, 3))]
+
     def set_sites(self, site0: int):
         self.sites = [site0]
 
@@ -196,7 +163,6 @@ class U2:
         self.matrix = np.array([[1, -(np.cos(self.lam)+1j*np.sin(self.lam))],
                                 [np.cos(self.phi)+1j*np.sin(self.phi), np.cos(self.phi+self.lam)+1j*np.sin(self.phi+self.lam)]])
         self.tensor = self.matrix
-        self.MPO = [np.expand_dims(self.tensor, axis=(1, 3))]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -212,7 +178,6 @@ class Phase:
         self.matrix = np.array([[1, 0],
                                 [0, np.cos(self.theta)+1j*np.sin(self.theta)]])
         self.tensor = self.matrix
-        self.MPO = [np.expand_dims(self.tensor, axis=(1, 3))]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -229,7 +194,6 @@ class Rx:
         self.matrix = np.array([[np.cos(self.theta/2), -1j*np.sin(self.theta/2)],
                                 [-1j*np.sin(self.theta/2), np.cos(self.theta/2)]])
         self.tensor = self.matrix
-        self.MPO = [np.expand_dims(self.tensor, axis=(1, 3))]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -245,7 +209,6 @@ class Ry:
         self.matrix = np.array([[np.cos(self.theta/2), -np.sin(self.theta/2)],
                                 [np.sin(self.theta/2), np.cos(self.theta/2)]])
         self.tensor = self.matrix
-        self.MPO = [np.expand_dims(self.tensor, axis=(1, 3))]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -261,7 +224,6 @@ class Rz:
         self.matrix = np.array([[np.cos(self.theta/2)-1j*np.sin(self.theta/2), 0],
                                 [0, np.cos(self.theta/2)+1j*np.sin(self.theta/2)]])
         self.tensor = self.matrix
-        self.MPO = [np.expand_dims(self.tensor, axis=(1, 3))]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -281,7 +243,7 @@ class CX:
         self.interaction = np.abs(site0 - site1)+1
 
         if self.interaction > 2:
-            self.tensor = _extend_gate(self.tensor, self.sites)
+            self.mpo = _extend_gate(self.tensor, self.sites)
         else:
             # If control is above target
             if site1 < site0:
@@ -302,7 +264,7 @@ class CZ:
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         self.interaction = np.abs(site0 - site1)+1
         if self.interaction > 2:
-            self.tensor = _extend_gate(self.tensor, self.sites)
+            self.mpo = _extend_gate(self.tensor, self.sites)
         else:
             # If control is above target
             if site1 < site0:
@@ -328,7 +290,7 @@ class CPhase:
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         self.interaction = np.abs(site0 - site1)+1
         if self.interaction > 2:
-            self.tensor = _extend_gate(self.tensor, self.sites)
+            self.mpo = _extend_gate(self.tensor, self.sites)
         else:
             # If control is above target
             if site1 < site0:
@@ -348,7 +310,7 @@ class SWAP:
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         self.interaction = np.abs(site0 - site1)+1
         if self.interaction > 2:
-            self.tensor = _extend_gate(self.tensor, self.sites)
+            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 class Rxx:
@@ -370,7 +332,7 @@ class Rxx:
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         self.interaction = np.abs(site0 - site1)+1
         if self.interaction > 2:
-            self.tensor = _extend_gate(self.tensor, self.sites)
+            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 class Ryy:
@@ -392,7 +354,7 @@ class Ryy:
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         self.interaction = np.abs(site0 - site1)+1
         if self.interaction > 2:
-            self.tensor = _extend_gate(self.tensor, self.sites)
+            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 class Rzz:
@@ -414,7 +376,7 @@ class Rzz:
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         self.interaction = np.abs(site0 - site1)+1
         if self.interaction > 2:
-            self.tensor = _extend_gate(self.tensor, self.sites)
+            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 
