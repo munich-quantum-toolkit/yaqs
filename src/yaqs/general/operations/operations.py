@@ -4,7 +4,6 @@ import opt_einsum as oe
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPO import MPO
     from yaqs.general.data_structures.MPS import MPS
 
 
