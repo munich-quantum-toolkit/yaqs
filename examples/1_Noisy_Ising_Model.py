@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
 import numpy as np
 import qutip as qt
 
@@ -11,7 +10,7 @@ from yaqs.physics.methods.TJM import TJM
 
 
 # Define the system Hamiltonian
-L = 5
+L = 10
 d = 2
 J = 1
 g = 0.5
@@ -22,9 +21,8 @@ H_0.init_Ising(L, d, J, g)
 state = MPS(L, state='zeros')
 
 # Define the noise model
-gamma_relaxation = 0.1
-gamma_dephasing = 0.1
-noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma_relaxation, gamma_dephasing])
+gamma = 0.1
+noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
 
 # Define the simulation parameters
 T = 10
@@ -46,13 +44,11 @@ if __name__ == "__main__":
     for observable in sim_params.observables:
         heatmap.append(observable.results)
 
-    im = ax[0].imshow(heatmap, aspect='auto', extent=[0, T, L, 0])
+    im = ax[0].imshow(heatmap, aspect='auto', extent=[0, T, L, 0], vmin=0, vmax=0.5)
     ax[0].set_ylabel('Site')
 
     # Centers site ticks
     ax[0].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
-    cbar = plt.colorbar(im, ax=ax[0])
-    cbar.ax.set_title('$\\langle X \\rangle$')
     #########################################
 
     # ######### QuTip Exact Solver ############
@@ -74,13 +70,13 @@ if __name__ == "__main__":
     # Construct collapse operators
     c_ops = []
 
-    # Dephasing operators
-    for i in range(L):
-        c_ops.append(np.sqrt(gamma_dephasing) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
-
     # Relaxation operators
     for i in range(L):
-        c_ops.append(np.sqrt(gamma_relaxation) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
+        c_ops.append(np.sqrt(gamma) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
+
+    # Dephasing operators
+    for i in range(L):
+        c_ops.append(np.sqrt(gamma) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
 
     # Initial state
     psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
@@ -97,11 +93,15 @@ if __name__ == "__main__":
     # Error heatmap
     heatmap = np.array(heatmap)
     heatmap2 = np.array(heatmap2)
-    im2 = ax[1].imshow(np.abs(heatmap2-heatmap), cmap='Reds', aspect='auto', extent=[0, T, L, 0], norm=LogNorm(vmin=1e-3, vmax=1e-1))
+    im2 = ax[1].imshow(heatmap2, aspect='auto', extent=[0, T, L, 0], vmin=0, vmax=0.5)
+
     ax[1].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
 
-    cbar = plt.colorbar(im2, ax=ax[1])
-    cbar.ax.set_title('Error')
+    fig.subplots_adjust(top=0.95, right=0.88)
+    cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.8])
+    cbar = fig.colorbar(im, cax=cbar_ax)
+    cbar.ax.set_title('$\\langle X \\rangle$')
+
     ax[1].set_xlabel('t')
     ax[1].set_ylabel('Site')
     plt.show()
