@@ -18,7 +18,7 @@ J = 1
 g = 0.5
 H_0 = MPO()
 # H_0.init_Ising(L, d, J, g)
-H_0.init_Heisenberg(L, d, -J, -J, -J, -g)
+H_0.init_Heisenberg(L, d, J, J, J, g)
 
 # Define the initial state
 state = MPS(L, state='wall')
