@@ -1,4 +1,4 @@
-![Banner](images/banner.png)
+![Banner](images/banner.jpeg)
 
 # yaqs (Yet Another Quantum Simulator)
 yaqs (Yet Another Quantum Simulator) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
