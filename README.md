@@ -15,16 +15,20 @@ This repository follows a “src/” layout to keep the code organized and testa
 ## Installation
 
 1. Clone this repository:
+   
    git clone https://github.com/aaronleesander/yaqs.git
    cd yaqs
 
 2. Create and activate a virtual environment:
+```bash
 python -m venv venv
 source venv/bin/activate  # On macOS/Linux
 (.\venv\Scripts\activate  # On Windows)
 
 3. Install YAQS in editable mode (along with dependencies):
+```bash
 pip install -e .
+
 
 4. Check the yaqs/examples folder for usage details.
 
