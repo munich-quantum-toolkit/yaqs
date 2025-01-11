@@ -1,9 +1,10 @@
-# yaqs
+![Banner](images/banner.png)
+
+# yaqs (Yet Another Quantum Simulator)
 yaqs (Yet Another Quantum Simulator) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
 This repository follows a “src/” layout to keep the code organized and testable.
 
-## NOTE: This is an ultra-early alpha version released to provide code for various works released in the context of my work (Aaron Sander).
- A full release will come later once
+## NOTE: This is an ultra-early alpha version released to provide code for various works released in the context of my work (Aaron Sander). A full release will come later once more features are added.
 
 ## Features
 - **Tensor Jump Method**: Simulate large-scale open quantum systems with a paralellized implementation
@@ -14,11 +15,10 @@ This repository follows a “src/” layout to keep the code organized and testa
 ## Installation
 
 1. Clone this repository:
-   git clone https://github.com/your-username/YAQS.git
-   cd YAQS
+   git clone https://github.com/aaronleesander/yaqs.git
+   cd yaqs
 
 2. Create and activate a virtual environment:
-
 python -m venv venv
 source venv/bin/activate  # On macOS/Linux
 (.\venv\Scripts\activate  # On Windows)
