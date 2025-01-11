@@ -25,5 +25,5 @@ transpiled_circuit = qiskit.compiler.transpile(circuit, basis_gates=basis_gates,
 # Define parameters for equivalence checking
 threshold = 1e-6
 fidelity = 1-1e-13
-result = equivalence_checker.run(circuit, circuit, threshold, fidelity)
+result = equivalence_checker.run(circuit, transpiled_circuit, threshold, fidelity)
 print(result)
