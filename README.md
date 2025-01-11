@@ -20,18 +20,23 @@ This repository follows a “src/” layout to keep the code organized and testa
 ```
 
 2. Create and activate a virtual environment:
+On macOS/Linux
 ```bash
 python -m venv venv
-source venv/bin/activate  # On macOS/Linux
-(.\venv\Scripts\activate.ps1  # On Windows)
+source venv/bin/activate
+```
+On Windows (PowerShell)
+```bash
+python -m venv venv
+.\venv\Scripts\activate.ps1
 ```
 
-3. Install YAQS in editable mode (along with dependencies):
+3. Install YAQS in editable mode so that your changes appear immediately:
 ```bash
 pip install -e .
 ```
 
-4. Check the yaqs/examples folder for usage details.
+4. Check the ```yaqs/examples``` folder for usage details.
 
 ## Contributing
 Fork the repository and clone your fork.
