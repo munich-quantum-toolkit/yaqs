@@ -1,8 +1,8 @@
 ![Banner](images/banner.png)
 ## NOTE: This is an early alpha version released to provide code for various works released in the context of my work (Aaron Sander). A full release will come later once more features are added.
 
-# YAQS (Yet Another Quantum Simulator)
-YAQS (Yet Another Quantum Simulator) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
+# YAQS
+YAQS (pronounced like the animals "yaks") is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
 This repository follows a “src/” layout to keep the code organized and testable.
 
 ## Features
