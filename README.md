@@ -1,13 +1,15 @@
 ![Banner](images/banner.png)
-## NOTE: This is an early alpha version released to provide code for various works released in the context of my work (Aaron Sander). A full release will come later once more features are added.
+## NOTE: This is an early alpha version released to provide code for various related works. A full release will come later once more features are added.
 
 # YAQS
-YAQS (pronounced like the animals "yaks") is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
+YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
 This repository follows a “src/” layout to keep the code organized and testable.
 
 ## Features
 - **Simulation of Open Quantum Systems**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM)
 - **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method
+
+## Upcoming Features (Check back soon)
 - **WIP: Noisy Quantum Circuit Simulation**: Investigate the effect of noise on large quantum circuits
 - **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
 
@@ -20,11 +22,13 @@ This repository follows a “src/” layout to keep the code organized and testa
 ```
 
 2. Create and activate a virtual environment:
+
 On macOS/Linux
 ```bash
 python -m venv venv
 source venv/bin/activate
 ```
+
 On Windows (PowerShell)
 ```bash
 python -m venv venv
