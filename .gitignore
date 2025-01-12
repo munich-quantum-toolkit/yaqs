@@ -1,6 +1,6 @@
 # Custom
 sandbox/
-experiments/
+experiments_hidden/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
