@@ -12,23 +12,6 @@ YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused
 - **WIP: Noisy Quantum Circuit Simulation**: Investigate the effect of noise on large quantum circuits
 - **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
 
-## Citations
-If you use this code in your research, please consider citing the relevant papers:
-
-[Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946)
-
-```bibtex
-@misc{sander2024equivalencecheckingquantumcircuits,
-      title={Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator}, 
-      author={Aaron Sander and Lukas Burgholzer and Robert Wille},
-      year={2024},
-      eprint={2410.10946},
-      archivePrefix={arXiv},
-      primaryClass={quant-ph},
-      url={https://arxiv.org/abs/2410.10946}, 
-}
-```
-
 ## Installation
 
 1. Clone this repository:
@@ -69,3 +52,8 @@ If you have anything you want to share or collaboration ideas, feel free to reac
 Email: [aaron.sander@tum.de](mailto:aaron.sander@tum.de)
 
 LinkedIn: [https://www.linkedin.com/in/aaron-sander/](https://www.linkedin.com/in/aaron-sander/)
+
+## Citations
+If you use this code in your research, please consider citing the relevant papers:
+
+[Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946)
