@@ -4,7 +4,7 @@ from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.converters import dag_to_circuit
 
 from yaqs.general.data_structures.MPO import MPO
-from yaqs.circuits.equivalence_checking.dag_utils import apply_causal_cone, check_longest_gate, select_starting_point, convert_dag_to_tensor_algorithm
+from yaqs.circuits.equivalence_checking.dag_utils import apply_temporal_zone, check_longest_gate, select_starting_point, convert_dag_to_tensor_algorithm
 
 
 def decompose_theta(theta: np.ndarray, threshold: float):
@@ -58,9 +58,9 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
     theta = oe.contract('abcd, efdg->aecbfg', mpo.tensors[n], mpo.tensors[n + 1])
 
     # Apply G gates
-    theta = apply_causal_cone(theta, dag1, qubits, conjugate=False)
+    theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
     # Apply G' gates
-    theta = apply_causal_cone(theta, dag2, qubits, conjugate=True)
+    theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
 
     # Decompose back
     mpo.tensors[n], mpo.tensors[n + 1] = decompose_theta(theta, threshold)
@@ -169,8 +169,8 @@ def apply_long_range_layer(mpo: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', c
                 mpo.rotate()
 
             # Apply causal cone on each side
-            theta = apply_causal_cone(theta, dag1, [overall_site, overall_site+1], conjugate=False)
-            theta = apply_causal_cone(theta, dag2, [overall_site, overall_site+1], conjugate=True)
+            theta = apply_temporal_zone(theta, dag1, [overall_site, overall_site+1], conjugate=False)
+            theta = apply_temporal_zone(theta, dag2, [overall_site, overall_site+1], conjugate=True)
 
             dims = theta.shape
             theta = np.reshape(theta, (dims[0], dims[1], dims[2]*dims[3], dims[4], dims[5], dims[6]*dims[7]))
@@ -199,8 +199,8 @@ def apply_long_range_layer(mpo: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', c
             tensor1 = np.transpose(mpo.tensors[overall_site-1], (0, 2, 1, 3))
             theta = oe.contract('abcd, edfg->aebcfg', tensor1, theta)
             
-            theta = apply_causal_cone(theta, dag1, [overall_site-1, overall_site], conjugate=False)
-            theta = apply_causal_cone(theta, dag2, [overall_site-1, overall_site], conjugate=True)
+            theta = apply_temporal_zone(theta, dag1, [overall_site-1, overall_site], conjugate=False)
+            theta = apply_temporal_zone(theta, dag2, [overall_site-1, overall_site], conjugate=True)
 
             mpo.tensors[overall_site-1], mpo.tensors[overall_site] = decompose_theta(theta, threshold)
             gate_MPO.tensors[site_gate_MPO] = None

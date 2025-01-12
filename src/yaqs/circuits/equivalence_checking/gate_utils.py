@@ -1,6 +1,4 @@
 import numpy as np
-import opt_einsum as oe
-from qiskit.dagcircuit.dagnode import DAGOpNode
 
 from yaqs.general.libraries.tensor_library import TensorLibrary
 
