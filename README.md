@@ -3,7 +3,6 @@
 
 # YAQS
 YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
-This repository follows a “src/” layout to keep the code organized and testable.
 
 ## Features
 - **Simulation of Open Quantum Systems**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM)
@@ -46,3 +45,10 @@ pip install -e .
 Fork the repository and clone your fork.
 Create a new branch for your changes.
 Commit and push your work, then open a Pull Request.
+
+## Questions, Comments, Thoughts?
+If you have anything you want to share or collaboration ideas, feel free to reach out!
+
+Email: [aaron.sander@tum.de](mailto:aaron.sander@tum.de)
+
+LinkedIn: [https://www.linkedin.com/in/aaron-sander/](https://www.linkedin.com/in/aaron-sander/)
