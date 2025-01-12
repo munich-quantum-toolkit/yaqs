@@ -63,18 +63,18 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
     return algorithm
 
 
-def get_causal_cone(dag: DAGCircuit, qubits: list[int]):
+def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
     """
-    Extracts the causal cone from a DAGCircuit for the specified qubits.
-    The causal cone is the subset of operations acting only on these qubits
+    Extracts the temporal zone from a DAGCircuit for the specified qubits.
+    The temporal zone is the subset of operations acting only on these qubits
     until they no longer participate in further gates.
 
     Args:
         dag: The input DAGCircuit.
-        qubits: List of qubit indices for which to retrieve the causal cone.
+        qubits: List of qubit indices for which to retrieve the temporal zone.
 
     Returns:
-        A new DAGCircuit containing only the operations within the causal cone
+        A new DAGCircuit containing only the operations within the temporal zone
         of the specified qubits.
     """
     new_dag = dag.copy_empty_like()
@@ -110,23 +110,23 @@ def get_causal_cone(dag: DAGCircuit, qubits: list[int]):
     return new_dag
 
 
-def apply_causal_cone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False):
+def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False):
     """
-    Applies the causal cone of `dag` to a local tensor `theta`.
+    Applies the temporal zone of `dag` to a local tensor `theta`.
 
     Args:
         theta: The local tensor to which gates will be applied.
         dag: The DAGCircuit from which to extract and apply gates.
-        qubits: The qubits on which to apply the causal cone.
+        qubits: The qubits on which to apply the temporal zone.
         conjugate: Whether to apply gates in a conjugated manner.
 
     Returns:
-        The updated tensor after applying the causal cone.
+        The updated tensor after applying the temporal zone.
     """
     n = qubits[0]
     if dag.op_nodes():
-        causal_circuit = get_causal_cone(dag, [n, n+1])
-        tensor_circuit = convert_dag_to_tensor_algorithm(causal_circuit)
+        temporal_zone = get_temporal_zone(dag, [n, n+1])
+        tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
 
         from .gate_utils import apply_gate
         for gate in tensor_circuit:
