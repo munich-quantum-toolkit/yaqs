@@ -6,7 +6,7 @@ YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused
 
 ## Features
 - **Simulation of Open Quantum Systems**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM)
-- **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method
+- **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method ([Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946))
 
 ## Upcoming Features (Check back soon)
 - **WIP: Noisy Quantum Circuit Simulation**: Investigate the effect of noise on large quantum circuits
