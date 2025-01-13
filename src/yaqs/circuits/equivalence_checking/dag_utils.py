@@ -110,30 +110,6 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
     return new_dag
 
 
-def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False):
-    """
-    Applies the temporal zone of `dag` to a local tensor `theta`.
-
-    Args:
-        theta: The local tensor to which gates will be applied.
-        dag: The DAGCircuit from which to extract and apply gates.
-        qubits: The qubits on which to apply the temporal zone.
-        conjugate: Whether to apply gates in a conjugated manner.
-
-    Returns:
-        The updated tensor after applying the temporal zone.
-    """
-    n = qubits[0]
-    if dag.op_nodes():
-        temporal_zone = get_temporal_zone(dag, [n, n+1])
-        tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
-
-        from .gate_utils import apply_gate
-        for gate in tensor_circuit:
-            theta = apply_gate(gate, theta, n, n+1, conjugate)
-    return theta
-
-
 def check_longest_gate(dag: DAGCircuit):
     """
     Checks the maximum 'distance' between qubits in any multi-qubit gate
