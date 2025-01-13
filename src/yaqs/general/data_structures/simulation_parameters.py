@@ -33,3 +33,10 @@ class PhysicsSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
+
+class CircuitSimParams:
+    def __init__(self, observables: list[Observable], N: int=1000, max_bond_dim: int=2, threshold: float=1e-6):
+        self.observables = observables
+        self.N = N
+        self.max_bond_dim = max_bond_dim
+        self.threshold = threshold
