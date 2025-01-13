@@ -3,7 +3,7 @@ import opt_einsum as oe
 from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.converters import dag_to_circuit
 
-from yaqs.circuits.equivalence_checking.dag_utils import check_longest_gate, get_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
+from yaqs.circuits.dag.dag_utils import check_longest_gate, get_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
 from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.libraries.tensor_library import TensorLibrary
 
