@@ -129,8 +129,9 @@ def run_trajectory_first_order(args):
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         dynamic_TDVP(state, H, sim_params)
-        apply_dissipation(state, noise_model, sim_params.dt)
-        state = stochastic_process(state, noise_model, sim_params.dt)
+        if noise_model:
+            apply_dissipation(state, noise_model, sim_params.dt)
+            state = stochastic_process(state, noise_model, sim_params.dt)
         if sim_params.sample_timesteps:
             for obs_index, observable in enumerate(sim_params.observables):
                 results[obs_index, j] = copy.deepcopy(state).measure(observable)
@@ -141,15 +142,15 @@ def run_trajectory_first_order(args):
     return results
 
 
-def run(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams'):
+def run(initial_state: 'MPS', H: 'MPO', sim_params: 'SimulationParams', noise_model: 'NoiseModel'=None):
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 
     Args:
         initial_state (MPS): Initial state of the system.
         H (MPO): System Hamiltonian.
-        noise_model (NoiseModel): Noise model to apply to the system.
         sim_params (SimulationParams): Parameters needed to define all variables of the simulation.
+        noise_model (NoiseModel): Noise model to apply to the system.
 
     Returns:
         None: Observables in SimulationParams are updated directly.
@@ -157,6 +158,11 @@ def run(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
     # Reset any previous results
     for observable in sim_params.observables:
         observable.initialize(sim_params)
+
+    # Guarantee one trajectory if no noise model
+    if not noise_model:
+        sim_params.N = 1
+        sim_params.order = 1
 
     # State must start in B form
     initial_state.normalize('B')
