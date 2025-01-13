@@ -4,19 +4,16 @@ import multiprocessing
 import numpy as np
 from tqdm import tqdm
 
+from yaqs.general.data_structures.MPO import MPO
+from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.noise_model import NoiseModel
+from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams
 from yaqs.physics.methods.dissipation import apply_dissipation
 from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
 from yaqs.physics.methods.stochastic_process import stochastic_process
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPO import MPO
-    from yaqs.general.data_structures.MPS import MPS
-    from yaqs.general.data_structures.noise_model import NoiseModel
-    from yaqs.general.data_structures.simulation_parameters import SimulationParams
 
-
-def initialize(state: 'MPS', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS':
+def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
     """
     Initialize the sampling MPS for second-order Trotterization.
     Corresponds to F0 in the TJM paper.
@@ -33,7 +30,7 @@ def initialize(state: 'MPS', noise_model: 'NoiseModel', sim_params: 'SimulationP
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams') -> 'MPS':
+def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
     """
     Perform a single time step of the TJM of the system state.
     Corresponds to Fj in the TJM paper.
@@ -52,7 +49,7 @@ def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams', results: np.ndarray, j: int) -> 'MPS':
+def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams, results: np.ndarray, j: int) -> MPS:
     """
     Sample the quantum state and measure an observable from the sampling MPS.
     Corresponds to Fn in the TJM paper.
@@ -142,7 +139,7 @@ def run_trajectory_first_order(args):
     return results
 
 
-def run(initial_state: 'MPS', H: 'MPO', sim_params: 'SimulationParams', noise_model: 'NoiseModel'=None):
+def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: NoiseModel=None):
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 

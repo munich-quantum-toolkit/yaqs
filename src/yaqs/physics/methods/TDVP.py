@@ -1,12 +1,10 @@
 import numpy as np
 import opt_einsum as oe
 
+from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.operations.matrix_exponential import expm_krylov
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPS import MPS
-    from yaqs.general.data_structures.MPO import MPO
 
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
@@ -143,7 +141,7 @@ def _contraction_operator_step_left(A: np.ndarray, B: np.ndarray, W: np.ndarray,
     return Lnext
 
 
-def _compute_right_operator_blocks(psi: 'MPS', op: 'MPO'):
+def _compute_right_operator_blocks(psi: MPS, op: MPO):
     """
     Compute all partial contractions from the right.
     """
@@ -246,7 +244,7 @@ def _local_bond_step(L, R, C, dt, numiter: int):
             C.reshape(-1), -dt, numiter, hermitian=True).reshape(C.shape)
 
 
-def single_site_TDVP(state: 'MPS', H: 'MPO',  dt, numsteps: int, numiter_lanczos: int = 25):
+def single_site_TDVP(state: MPS, H: MPO,  dt, numsteps: int, numiter_lanczos: int = 25):
     """
     Symmetric single-site TDVP integration.
     `psi` is overwritten in-place with the time-evolved state.
@@ -323,7 +321,7 @@ def single_site_TDVP(state: 'MPS', H: 'MPO',  dt, numsteps: int, numiter_lanczos
             state.tensors[i-1] = _local_hamiltonian_step(BL[i-1], BR[i-1], H.tensors[i-1], state.tensors[i-1], 0.5*dt, numiter_lanczos)
 
 
-def two_site_TDVP(state: 'MPS', H: 'MPO', dt, numsteps: int, numiter_lanczos: int = 25, threshold = 0):
+def two_site_TDVP(state: MPS, H: MPO, dt, numsteps: int, numiter_lanczos: int = 25, threshold = 0):
     """
     Symmetric two-site TDVP integration.
     `psi` is overwritten in-place with the time-evolved state.

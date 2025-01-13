@@ -2,16 +2,14 @@ import numpy as np
 import opt_einsum as oe
 from scipy.linalg import expm
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPS import MPS
-    from yaqs.general.data_structures.noise_model import NoiseModel
+from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.noise_model import NoiseModel
 
 
 # TODO: Assumes noise is same at all sites
 #       Could be sped-up by pre-calculating exponential somewhere else
 #       Likely not a problem since it's only exponentiating small matrices
-def apply_dissipation(state: 'MPS', noise_model: 'NoiseModel', dt: float):
+def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float):
     """
     Apply dissipation to the system state using the given noise model and time step.
 

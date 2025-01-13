@@ -1,12 +1,10 @@
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPO import MPO
-    from yaqs.general.data_structures.MPS import MPS
-    from yaqs.general.data_structures.simulation_parameters import SimulationParams
+from yaqs.general.data_structures.MPO import MPO
+from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams
 from yaqs.physics.methods.TDVP import single_site_TDVP, two_site_TDVP
 
 
-def dynamic_TDVP(state: 'MPS', H: 'MPO', sim_params: 'SimulationParams'):
+def dynamic_TDVP(state: MPS, H: MPO, sim_params: PhysicsSimParams):
     """
     Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 
