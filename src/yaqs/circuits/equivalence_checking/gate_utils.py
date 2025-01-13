@@ -1,5 +1,7 @@
 import numpy as np
+from qiskit._accelerate.circuit import DAGCircuit
 
+from yaqs.circuits.equivalence_checking.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone
 from yaqs.general.libraries.tensor_library import TensorLibrary
 
 
@@ -84,4 +86,27 @@ def apply_gate(gate: TensorLibrary, theta: np.ndarray, site0: int, site1: int, c
         if conjugate:
             theta = np.transpose(theta, (4, 5, 3, 2, 0, 1, 6, 7))
 
+    return theta
+
+
+def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False):
+    """
+    Applies the temporal zone of `dag` to a local tensor `theta`.
+
+    Args:
+        theta: The local tensor to which gates will be applied.
+        dag: The DAGCircuit from which to extract and apply gates.
+        qubits: The qubits on which to apply the temporal zone.
+        conjugate: Whether to apply gates in a conjugated manner.
+
+    Returns:
+        The updated tensor after applying the temporal zone.
+    """
+    n = qubits[0]
+    if dag.op_nodes():
+        temporal_zone = get_temporal_zone(dag, [n, n+1])
+        tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
+
+        for gate in tensor_circuit:
+            theta = apply_gate(gate, theta, n, n+1, conjugate)
     return theta

@@ -38,7 +38,7 @@ sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond
 fig, ax = plt.subplots(2, 1)
 if __name__ == "__main__":
     ########## TJM Example #################
-    TJM.run(state, H_0, noise_model, sim_params)
+    TJM.run(state, H_0, sim_params, noise_model)
 
     heatmap = []
     for observable in sim_params.observables:
