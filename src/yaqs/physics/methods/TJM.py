@@ -158,8 +158,6 @@ def run(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: '
     for observable in sim_params.observables:
         observable.initialize(sim_params)
 
-    # times = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
-
     # State must start in B form
     initial_state.normalize('B')
     args = [(i, initial_state, noise_model, sim_params, H) for i in range(sim_params.N)]
