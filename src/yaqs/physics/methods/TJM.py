@@ -141,7 +141,7 @@ def run_trajectory_first_order(args):
     return results
 
 
-def TJM(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams'):
+def run(initial_state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'SimulationParams'):
     """
     Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
 
