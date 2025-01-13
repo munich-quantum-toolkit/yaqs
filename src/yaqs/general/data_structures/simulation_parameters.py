@@ -11,7 +11,7 @@ class Observable:
         self.results = None
         self.trajectories = None
 
-    def initialize(self, sim_params: 'SimulationParams'):
+    def initialize(self, sim_params: 'PhysicsSimParams'):
         if sim_params.sample_timesteps:
             self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
         else:
@@ -22,7 +22,7 @@ class Observable:
         else:
             self.times = sim_params.T
 
-class SimulationParams:
+class PhysicsSimParams:
     def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, order: int=1):
         self.observables = observables
         self.T = T

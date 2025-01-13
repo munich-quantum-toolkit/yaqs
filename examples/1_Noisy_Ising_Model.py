@@ -5,7 +5,7 @@ import qutip as qt
 from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.data_structures.MPS import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.data_structures.simulation_parameters import Observable, SimulationParams
+from yaqs.general.data_structures.simulation_parameters import Observable, PhysicsSimParams
 from yaqs.physics.methods import TJM
 
 
@@ -33,7 +33,7 @@ max_bond_dim = 4
 threshold = 1e-6
 order = 2
 measurements = [Observable('x', site) for site in range(L)]
-sim_params = SimulationParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
+sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
 fig, ax = plt.subplots(2, 1)
 if __name__ == "__main__":
