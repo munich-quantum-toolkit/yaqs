@@ -22,8 +22,7 @@ class Observable:
             self.results = np.empty(len(sim_params.times), dtype=float)
         elif type(sim_params) == CircuitSimParams:
             self.trajectories = np.empty((sim_params.N, 1), dtype=float)
-            self.times = sim_params.T
-            self.results = np.empty(len(sim_params.times), dtype=float)
+            self.results = np.empty(1, dtype=float)
 
 class PhysicsSimParams:
     def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, order: int=1):
