@@ -43,7 +43,7 @@ def run_trajectory(args):
 
     # Decides whether to start with even or odd qubits
     first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
-    while dag.op_nodes:
+    while dag.op_nodes():
         mpo = MPO()
         mpo.init_identity(circuit.num_qubits)
         if not noise_model:
@@ -51,8 +51,6 @@ def run_trajectory(args):
         dynamic_TDVP(state, mpo, sim_params)
     for obs_index, observable in enumerate(sim_params.observables):
         results[obs_index, 0] = copy.deepcopy(state).measure(observable)
-
-
 
     # for j, _ in enumerate(sim_params.times[1:], start=1):
     #     dynamic_TDVP(state, H, sim_params)
