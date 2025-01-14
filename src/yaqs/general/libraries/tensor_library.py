@@ -2,10 +2,6 @@ import numpy as np
 
 import yaqs.general.data_structures.MPO
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPO import MPO
-
 
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     assert tensor.shape == (2, 2, 2, 2)
@@ -36,7 +32,7 @@ def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     return tensors
 
 
-def _extend_gate(tensor: np.ndarray, sites: list) -> 'MPO':
+def _extend_gate(tensor: np.ndarray, sites: list):
     tensors = _split_tensor(tensor)
     if len(tensors) == 2:
     # Adds identity tensors between sites
