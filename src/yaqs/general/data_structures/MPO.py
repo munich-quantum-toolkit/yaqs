@@ -1,6 +1,6 @@
 import numpy as np
 
-from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.networks import MPS
 from yaqs.general.libraries.gate_library import GateLibrary
 from yaqs.general.operations.operations import scalar_product
 

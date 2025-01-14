@@ -1,8 +1,7 @@
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.data_structures.MPS import MPS
-from yaqs.general.data_structures.MPO import MPO
+from yaqs.general.data_structures.networks import MPO, MPS
 from yaqs.general.operations.matrix_exponential import expm_krylov
 from yaqs.general.data_structures.simulation_parameters import CircuitSimParams, PhysicsSimParams
 

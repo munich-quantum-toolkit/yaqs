@@ -4,7 +4,7 @@ import opt_einsum as oe
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPS import MPS
+    from yaqs.general.data_structures.networks import MPS
 
 
 def scalar_product(A: 'MPS', B: 'MPS', site: int=-1):

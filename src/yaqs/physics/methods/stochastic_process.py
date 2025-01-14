@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.networks import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
 from yaqs.general.operations.operations import scalar_product
 

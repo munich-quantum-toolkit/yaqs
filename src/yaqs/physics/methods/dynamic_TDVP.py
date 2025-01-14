@@ -1,5 +1,4 @@
-from yaqs.general.data_structures.MPO import MPO
-from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.networks import MPO, MPS
 from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams
 from yaqs.physics.methods.TDVP import single_site_TDVP, two_site_TDVP
 
