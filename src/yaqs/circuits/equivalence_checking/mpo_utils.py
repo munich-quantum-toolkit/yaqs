@@ -163,9 +163,11 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
     theta = oe.contract('abcd, efdg->aecbfg', mpo.tensors[n], mpo.tensors[n + 1])
 
     # Apply G gates
-    theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
+    if dag1:
+        theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
     # Apply G' gates
-    theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
+    if dag2:
+        theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
 
     # Decompose back
     mpo.tensors[n], mpo.tensors[n + 1] = decompose_theta(theta, threshold)
