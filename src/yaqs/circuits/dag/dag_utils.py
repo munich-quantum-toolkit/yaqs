@@ -3,7 +3,7 @@ import numpy as np
 from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.dagcircuit.dagnode import DAGOpNode
 
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.general.libraries.gate_library import GateLibrary
 
 
 def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
@@ -23,7 +23,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
         gate = dag
         name = gate.op.name
 
-        attr = getattr(TensorLibrary, name)
+        attr = getattr(GateLibrary, name)
         gate_object = attr()
         if gate.op.params:
             gate_object.set_params(gate.op.params)
@@ -44,7 +44,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
             if name in ['measure', 'barrier']:
                 continue
 
-            attr = getattr(TensorLibrary, name)
+            attr = getattr(GateLibrary, name)
             gate_object = attr()
 
             if gate.op.params:

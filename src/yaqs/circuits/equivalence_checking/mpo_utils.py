@@ -5,7 +5,7 @@ from qiskit.converters import dag_to_circuit
 
 from yaqs.circuits.dag.dag_utils import check_longest_gate, get_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
 from yaqs.general.data_structures.MPO import MPO
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.general.libraries.gate_library import GateLibrary
 
 
 def decompose_theta(theta: np.ndarray, threshold: float):
@@ -42,7 +42,7 @@ def decompose_theta(theta: np.ndarray, threshold: float):
     return U, M
 
 
-def apply_gate(gate: TensorLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False):
+def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False):
     """
     Applies a single- or two-qubit gate (or multi-qubit gate) from a TensorLibrary object
     to the local tensor `theta`.

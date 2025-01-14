@@ -405,7 +405,7 @@ class CCX:
         self.tensor = _extend_gate(self.tensor, self.sites)
 
 
-class TensorLibrary:
+class GateLibrary:
     x = X
     y = Y
     z = Z

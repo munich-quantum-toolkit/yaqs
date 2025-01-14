@@ -1,11 +1,11 @@
 import numpy as np
 
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.general.libraries.gate_library import GateLibrary
 
 
 class Observable:
     def __init__(self, name: str, site: int):
-        assert getattr(TensorLibrary, name), "Selected observable to measure does not exist."
+        assert getattr(GateLibrary, name), "Selected observable to measure does not exist."
         self.name = name
         self.site = site
         self.results = None

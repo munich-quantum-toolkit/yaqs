@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.general.libraries.gate_library import GateLibrary
 from yaqs.general.operations.operations import local_expval, scalar_product
 
 from typing import TYPE_CHECKING
@@ -150,7 +150,7 @@ class MPS:
     def measure(self, observable: 'Observable'):
         assert observable.site in range(0, self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        return local_expval(copy.deepcopy(self), getattr(TensorLibrary, observable.name)().matrix, observable.site)
+        return local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)
 
     def norm(self):
         return scalar_product(self, self)
