@@ -85,7 +85,7 @@ def stochastic_process(state: MPS, noise_model: NoiseModel, dt: float) -> MPS:
     if np.random.rand() >= dp:
         # No jump
         # Replaces normalization since state should be in
-        # mixed canonical form at site 0
+        # mixed canonical form at site 0 from TDVP
         state.shift_orthogonality_center_left(0)
         # state.normalize('B')
         return state
