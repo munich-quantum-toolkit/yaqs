@@ -329,7 +329,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
             state.tensors[i-1] = _local_hamiltonian_step(BL[i-1], BR[i-1], H.tensors[i-1], state.tensors[i-1], 0.5*sim_params.dt, numiter_lanczos)
     elif type(sim_params) == CircuitSimParams:
         state.tensors[i] = _apply_local_hamiltonian(BL[i], BR[i], H.tensors[i], state.tensors[i])
-        state.set_canonical_form(0)
+        state.normalize(form='B')
 
 
 def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
@@ -421,4 +421,4 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
             # update the right blocks
             BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
     elif type(sim_params) == CircuitSimParams:
-        state.set_canonical_form(0)
+        state.normalize(form='B')
