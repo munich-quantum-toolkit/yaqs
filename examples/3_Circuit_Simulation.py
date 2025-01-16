@@ -10,7 +10,7 @@ from yaqs.general.data_structures.simulation_parameters import Observable, Circu
 from yaqs.circuits.simulation import simulator
 
 # Define the circuit
-num_qubits = 2
+num_qubits = 10
 depth = num_qubits
 circuit = qiskit.circuit.QuantumCircuit(num_qubits)
 
@@ -36,17 +36,18 @@ state = MPS(num_qubits, state='zeros')
 # noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
 
 # Define the simulation parameters
+shots = 10000
 N = 1
 max_bond_dim = 4
 threshold = 1e-6
-measurements = [Observable('x', site) for site in range(num_qubits)]
-sim_params = CircuitSimParams(measurements, N, max_bond_dim, threshold)
+# measurements = [Observable('x', site) for site in range(num_qubits)]
+sim_params = CircuitSimParams(shots, N, max_bond_dim, threshold)
 
 if __name__ == "__main__":
     simulator.run(state, circuit, sim_params)
-    amplitudes = []
-    for observable in sim_params.observables:
-        amplitudes.append(observable.results)
+    print(sim_params.prob_dists)
 
-    plt.hist(amplitudes)
+    plt.bar(sim_params.prob_dists[0].keys(), sim_params.prob_dists[0].values())
+    plt.xlabel("Bitstring")
+    plt.ylabel("Counts")
     plt.show()
