@@ -190,8 +190,8 @@ class MPS:
             test_identity = np.eye(M.shape[0], dtype=complex)
             B_truth.append(np.allclose(M, test_identity))
 
-        print(A_truth)
-        print(B_truth)
+        print("A Form:", A_truth)
+        print("B Form:", B_truth)
         if all(A_truth):
             print("MPS is left (A) canonical.")
             print("MPS is site canonical at site % d" % (self.length-1))
