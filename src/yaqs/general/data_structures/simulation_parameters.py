@@ -38,12 +38,10 @@ class PhysicsSimParams:
 
 
 class WeakSimParams:
-    def __init__(self, shots: int, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6):
-        # self.observables = observables
+    def __init__(self, shots: int, max_bond_dim: int=2, threshold: float=1e-6):
         self.avg_prob_dist = None
-        self.prob_dists = N*[None]
+        self.prob_dists = shots*[None]
         self.shots = shots
-        self.N = N
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
 
