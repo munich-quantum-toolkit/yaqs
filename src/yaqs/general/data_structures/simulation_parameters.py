@@ -44,3 +44,13 @@ class WeakSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
 
+    def aggregate_measurements(self):
+        self.results = {}
+        # Noise-free simulation stores shots in first element
+        if None in self.measurements:
+            self.results = self.measurements[0]
+        else:
+            for d in self.measurements:
+                for key, value in d.items():
+                    self.results[key] = self.results.get(key, 0) + value
+

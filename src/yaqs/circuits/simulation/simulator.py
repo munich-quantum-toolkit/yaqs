@@ -77,10 +77,10 @@ def run_trajectory(args):
     #         for obs_index, observable in enumerate(sim_params.observables):
     #             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
-    if noise_model:
-        return measure(state, shots=1)
-    else:
+    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         return measure(state, sim_params.shots)
+    else:
+        return measure(state, shots=1)
 
 
 def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'WeakSimParams', noise_model: 'NoiseModel'=None):
@@ -119,6 +119,8 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'WeakSimPar
                         # Retry could be done here
                 finally:
                     pbar.update(1)
+
+    sim_params.aggregate_measurements()
 
     # Save average value of trajectories
     # for observable in sim_params.observables:
