@@ -71,6 +71,37 @@ def local_expval(state: 'MPS', operator: np.ndarray, site: int):
     return E.real
 
 
+def measure(state: 'MPS', shots: int):
+    # TODO: Could be more memory-efficient by not copying state
+
+    # Assumes MPS is in B-form or canonical at site 0
+    results = {}
+    for _ in range(shots):
+        # Stops us from manipulating the actual state
+        temp_state = copy.deepcopy(state)
+        bitstring = []
+        for site, tensor in enumerate(temp_state.tensors):
+            reduced_density_matrix = oe.contract('abc, dbc->ad', tensor, np.conj(tensor))
+            probabilities = np.diag(reduced_density_matrix).real
+            chosen_index = np.random.choice(len(probabilities), p=probabilities)
+            bitstring.append(chosen_index)
+            selected_state = np.zeros(len(probabilities))
+            selected_state[chosen_index] = 1
+            # Multiply state
+            tensor = oe.contract('a, acd->cd', selected_state, tensor)
+            # Multiply site into next site
+            if site != state.length-1:
+                temp_state.tensors[site+1] = 1/np.sqrt(probabilities[chosen_index])*oe.contract('ab, cbd->cad', tensor, temp_state.tensors[site+1])
+                # temp_state.shift_orthogonality_center_right(site)
+            else:
+                basis_state = sum(c << i for i, c in enumerate(bitstring))
+                results[basis_state] = results.get(basis_state, 0) + 1
+
+    return results
+
+# def sample_prob_dist(state: 'MPS', samples: int):
+#     return {key: np.abs(value)**2 for key, value in sample_amplitudes(state, samples).items()}
+
 # def variance(expval, MPS):
 #     norm = scalar_product(MPS,MPS)
 #     return norm - expval**2
