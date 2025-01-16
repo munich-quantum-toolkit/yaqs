@@ -44,8 +44,8 @@ def run_trajectory(args):
 
     # Decides whether to start with even or odd qubits
     first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
+    mpo = MPO()
     while dag.op_nodes():
-        mpo = MPO()
         mpo.init_identity(circuit.num_qubits)
         if not noise_model:
             apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
@@ -80,7 +80,10 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'CircuitSim
     # Guarantee one trajectory if no noise model
     if not noise_model:
         sim_params.N = 1
-        sim_params.order = 1
+    else:
+        # Shots themselves become the trajectories
+        sim_params.N = sim_params.shots
+        sim_params.shots = 1
 
     # State must start in B form
     initial_state.normalize('B')
