@@ -3,7 +3,7 @@ import opt_einsum as oe
 from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.converters import dag_to_circuit
 
-from yaqs.circuits.dag.dag_utils import check_longest_gate, get_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
+from yaqs.circuits.dag.dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, get_restricted_temporal_zone, select_starting_point
 from yaqs.general.data_structures.networks import MPO
 from yaqs.general.libraries.gate_library import GateLibrary
 
@@ -123,7 +123,7 @@ def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, con
     return theta
 
 
-def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False):
+def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], restricted: bool = False, conjugate: bool = False):
     """
     Applies the temporal zone of `dag` to a local tensor `theta`.
 
@@ -138,7 +138,10 @@ def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], c
     """
     n = qubits[0]
     if dag.op_nodes():
-        temporal_zone = get_temporal_zone(dag, [n, n+1])
+        if restricted:
+            temporal_zone = get_restricted_temporal_zone(dag, [n, n+1])
+        else:
+            temporal_zone = get_temporal_zone(dag, [n, n+1])
         tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
 
         for gate in tensor_circuit:
@@ -146,7 +149,7 @@ def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], c
     return theta
 
 
-def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float):
+def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float, restricted: bool = False):
     """
     Applies the gates from `dag1` and `dag2` on the specified `qubits` in `mpo`,
     first with gates from `dag1`, then gates from `dag2`.
@@ -164,10 +167,10 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
 
     # Apply G gates
     if dag1:
-        theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
+        theta = apply_temporal_zone(theta, dag1, qubits, restricted, conjugate=False)
     # Apply G' gates
     if dag2:
-        theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
+        theta = apply_temporal_zone(theta, dag2, qubits, restricted, conjugate=True)
 
     # Decompose back
     mpo.tensors[n], mpo.tensors[n + 1] = decompose_theta(theta, threshold)
@@ -191,6 +194,11 @@ def apply_layer(mpo: MPO, circuit1_dag, circuit2_dag, first_iterator, second_ite
 
     for n in second_iterator:
         update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n+1], threshold)
+
+
+def apply_restricted_layer(mpo: MPO, circuit1_dag, circuit2_dag, iterator, threshold: float):
+    for n in iterator:
+        update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n+1], threshold, restricted=True)
 
 
 def apply_long_range_layer(mpo: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', conjugate: bool, threshold: float):
