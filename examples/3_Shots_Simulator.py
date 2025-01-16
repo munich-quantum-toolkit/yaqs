@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from yaqs.general.data_structures.networks import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.data_structures.simulation_parameters import Observable, CircuitSimParams
+from yaqs.general.data_structures.simulation_parameters import Observable, WeakSimParams
 from yaqs.circuits.simulation import simulator
 
 # Define the circuit
@@ -41,11 +41,10 @@ N = 1
 max_bond_dim = 4
 threshold = 1e-6
 # measurements = [Observable('x', site) for site in range(num_qubits)]
-sim_params = CircuitSimParams(shots, N, max_bond_dim, threshold)
+sim_params = WeakSimParams(shots, N, max_bond_dim, threshold)
 
 if __name__ == "__main__":
     simulator.run(state, circuit, sim_params)
-    print(sim_params.prob_dists)
 
     plt.bar(sim_params.prob_dists[0].keys(), sim_params.prob_dists[0].values())
     plt.xlabel("Bitstring")
