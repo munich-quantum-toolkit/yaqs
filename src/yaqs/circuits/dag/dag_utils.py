@@ -110,6 +110,48 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
     return new_dag
 
 
+def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int]):
+    new_dag = dag.copy_empty_like()
+    layers = list(dag.multigraph_layers())
+    qubits_to_check = set()
+    for qubit in range(min(qubits), max(qubits) + 1):
+        qubits_to_check.add(dag.qubits[qubit])
+
+    for layer in layers:
+        for node in layer:
+            if isinstance(node, DAGOpNode):
+                qubit_set = set(node.qargs)
+
+                # Gate is entirely within the temporal zone
+                if qubit_set < qubits_to_check:
+                    if node.op.name in ['measure', 'barrier']:
+                        dag.remove_op_node(node)
+                        continue
+                    new_dag.apply_operation_back(node.op, node.qargs)
+                    dag.remove_op_node(node)
+
+                # Check if the gate is a two-qubit gate and include it before stopping
+                elif qubit_set == qubits_to_check:
+                    if node.op.name not in ['measure', 'barrier']:
+                        new_dag.apply_operation_back(node.op, node.qargs)
+                        dag.remove_op_node(node)
+                    return new_dag
+
+                # Remove overlapping qubits from the zone for partial overlap
+                # else:
+                #     if node.op.name in ['measure', 'barrier']:
+                #         dag.remove_op_node(node)
+                #         continue
+                #     for item in qubit_set & qubits_to_check:
+                #         qubits_to_check.remove(item)
+
+        # Once no qubits remain in the zone, stop
+        if len(qubits_to_check) == 0:
+            break
+
+    return new_dag
+
+
 def check_longest_gate(dag: DAGCircuit):
     """
     Checks the maximum 'distance' between qubits in any multi-qubit gate
