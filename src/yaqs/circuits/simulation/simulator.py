@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from yaqs.general.data_structures.networks import MPS
     from qiskit.circuit.quantumcircuit import QuantumCircuit
-    from yaqs.general.data_structures.simulation_parameters import CircuitSimParams
+    from yaqs.general.data_structures.simulation_parameters import WeakSimParams
     from yaqs.general.data_structures.noise_model import NoiseModel
 
 
@@ -49,6 +49,8 @@ def run_trajectory(args):
         mpo.init_identity(circuit.num_qubits)
         if not noise_model:
             apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
+        else:
+            apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
         dynamic_TDVP(state, mpo, sim_params)
 
     # results = sample_prob_dist(state, sim_params.samples)
@@ -70,7 +72,7 @@ def run_trajectory(args):
     return measure(state, sim_params.shots)
 
 
-def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'CircuitSimParams', noise_model: 'NoiseModel'=None):
+def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'WeakSimParams', noise_model: 'NoiseModel'=None):
     assert initial_state.length == circuit.num_qubits
 
     # Reset any previous results
@@ -98,7 +100,7 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'CircuitSim
                 i = futures[future]
                 try:
                     result = future.result()
-                    sim_params.prob_dists[i] = result
+                    sim_params.measurements[i] = result
                     # for obs_index, observable in enumerate(sim_params.observables):
                     #     observable.trajectories[i] = result[obs_index]
                 except Exception as e:
