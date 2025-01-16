@@ -7,8 +7,10 @@ from tqdm import tqdm
 
 from yaqs.general.data_structures.networks import MPO
 from yaqs.circuits.dag.dag_utils import get_temporal_zone, select_starting_point
-from yaqs.circuits.equivalence_checking.mpo_utils import apply_layer
+from yaqs.circuits.equivalence_checking.mpo_utils import apply_layer, apply_restricted_layer
 from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
+from yaqs.physics.methods.dissipation import apply_dissipation
+from yaqs.physics.methods.stochastic_process import stochastic_process
 from yaqs.general.operations.operations import measure
 
 from typing import TYPE_CHECKING
@@ -46,12 +48,18 @@ def run_trajectory(args):
     first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
     mpo = MPO()
     while dag.op_nodes():
-        mpo.init_identity(circuit.num_qubits)
         if not noise_model:
+            mpo.init_identity(circuit.num_qubits)
             apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
+            dynamic_TDVP(state, mpo, sim_params)
         else:
-            apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
-        dynamic_TDVP(state, mpo, sim_params)
+            for iterator in [first_iterator, second_iterator]:
+                mpo.init_identity(circuit.num_qubits)
+                # apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
+                apply_restricted_layer(mpo, dag, None, iterator, sim_params.threshold)
+                dynamic_TDVP(state, mpo, sim_params)
+                apply_dissipation(state, noise_model, dt=1)
+                state = stochastic_process(state, noise_model, dt=1)
 
     # results = sample_prob_dist(state, sim_params.samples)
     # for obs_index, observable in enumerate(sim_params.observables):
@@ -69,7 +77,10 @@ def run_trajectory(args):
     #         for obs_index, observable in enumerate(sim_params.observables):
     #             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
-    return measure(state, sim_params.shots)
+    if noise_model:
+        return measure(state, shots=1)
+    else:
+        return measure(state, sim_params.shots)
 
 
 def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'WeakSimParams', noise_model: 'NoiseModel'=None):
@@ -80,7 +91,7 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'WeakSimPar
     #     observable.initialize(sim_params)
 
     # Guarantee one trajectory if no noise model
-    if not noise_model:
+    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
     else:
         # Shots themselves become the trajectories
@@ -100,7 +111,7 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params: 'WeakSimPar
                 i = futures[future]
                 try:
                     result = future.result()
-                    sim_params.measurements[i] = result
+                    sim_params.measurements[i] = result                        
                     # for obs_index, observable in enumerate(sim_params.observables):
                     #     observable.trajectories[i] = result[obs_index]
                 except Exception as e:
