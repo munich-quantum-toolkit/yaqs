@@ -3,7 +3,7 @@ import opt_einsum as oe
 
 from yaqs.general.data_structures.networks import MPO, MPS
 from yaqs.general.operations.matrix_exponential import expm_krylov
-from yaqs.general.data_structures.simulation_parameters import CircuitSimParams, PhysicsSimParams
+from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams, WeakSimParams
 
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
@@ -283,7 +283,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         # evolve psi.A[i] forward in time by half a time step
         if type(sim_params) == PhysicsSimParams:
             state.tensors[i] = _local_hamiltonian_step(BL[i], BR[i], H.tensors[i], state.tensors[i], 0.5*sim_params.dt, numiter_lanczos)
-        elif type(sim_params) == CircuitSimParams:
+        elif type(sim_params) == WeakSimParams:
             state.tensors[i] = _apply_local_hamiltonian(BL[i], BR[i], H.tensors[i], state.tensors[i])
 
         # left-orthonormalize current psi.A[i]
@@ -297,7 +297,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         # evolve C backward in time by half a time step
         if type(sim_params) == PhysicsSimParams:
             C = _local_bond_step(BL[i+1], BR[i], C, -0.5*sim_params.dt, numiter_lanczos)
-        elif type(sim_params) == CircuitSimParams:
+        elif type(sim_params) == WeakSimParams:
             C = _apply_local_bond_contraction(BL[i+1], BR[i], C)
 
         # update psi.A[i+1] tensor: multiply with C from left
@@ -327,7 +327,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
             state.tensors[i-1] = oe.contract(state.tensors[i-1], (0, 1, 3), C, (3, 2), (0, 1, 2))
             # evolve psi.A[i-1] forward in time by half a time step
             state.tensors[i-1] = _local_hamiltonian_step(BL[i-1], BR[i-1], H.tensors[i-1], state.tensors[i-1], 0.5*sim_params.dt, numiter_lanczos)
-    elif type(sim_params) == CircuitSimParams:
+    elif type(sim_params) == WeakSimParams:
         state.tensors[i] = _apply_local_hamiltonian(BL[i], BR[i], H.tensors[i], state.tensors[i])
         state.normalize(form='B')
 
@@ -377,7 +377,7 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         # evolve Am forward in time by half a time step
         if type(sim_params) == PhysicsSimParams:
             Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, 0.5*sim_params.dt, numiter_lanczos)
-        elif type(sim_params) == CircuitSimParams:
+        elif type(sim_params) == WeakSimParams:
             Am = _apply_local_hamiltonian(BL[i], BR[i+1], Hm, Am)
         # split Am
         state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'right', threshold=sim_params.threshold)
@@ -387,7 +387,7 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         # evolve psi.A[i+1] backward in time by half a time step
         if type(sim_params) == PhysicsSimParams:
             state.tensors[i+1] = _local_hamiltonian_step(BL[i+1], BR[i+1], H.tensors[i+1], state.tensors[i+1], -0.5*sim_params.dt, numiter_lanczos)
-        elif type(sim_params) == CircuitSimParams:
+        elif type(sim_params) == WeakSimParams:
             state.tensors[i+1] = _apply_local_hamiltonian(BL[i+1], BR[i+1], H.tensors[i+1], state.tensors[i+1])
 
     # rightmost tensor pair
@@ -398,7 +398,7 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     # # evolve Am forward in time by a full time step
     if type(sim_params) == PhysicsSimParams:
         Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, sim_params.dt, numiter_lanczos)
-    elif type(sim_params) == CircuitSimParams:
+    elif type(sim_params) == WeakSimParams:
         Am = _apply_local_hamiltonian(BL[i], BR[i+1], Hm, Am)
 
     # # split Am
@@ -420,5 +420,5 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
             state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'left', threshold=sim_params.threshold)
             # update the right blocks
             BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
-    elif type(sim_params) == CircuitSimParams:
+    elif type(sim_params) == WeakSimParams:
         state.normalize(form='B')

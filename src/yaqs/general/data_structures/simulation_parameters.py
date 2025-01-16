@@ -20,7 +20,7 @@ class Observable:
                 self.trajectories = np.empty((sim_params.N, 1), dtype=float)
                 self.times = sim_params.T
             self.results = np.empty(len(sim_params.times), dtype=float)
-        elif type(sim_params) == CircuitSimParams:
+        elif type(sim_params) == WeakSimParams:
             self.trajectories = np.empty((sim_params.N, 1), dtype=float)
             self.results = np.empty(1, dtype=float)
 
@@ -37,7 +37,7 @@ class PhysicsSimParams:
         self.order = order
 
 
-class CircuitSimParams:
+class WeakSimParams:
     def __init__(self, shots: int, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6):
         # self.observables = observables
         self.avg_prob_dist = None
