@@ -6,47 +6,46 @@ import matplotlib.pyplot as plt
 
 from yaqs.general.data_structures.networks import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.data_structures.simulation_parameters import Observable, CircuitSimParams
+from yaqs.general.data_structures.simulation_parameters import Observable, StrongSimParams
 from yaqs.circuits.simulation import simulator
 
 # Define the circuit
 num_qubits = 10
-depth = num_qubits
+depth = 1
 circuit = qiskit.circuit.QuantumCircuit(num_qubits)
 
 # Example: Two-Local Circuit
-twolocal = TwoLocal(num_qubits, ['rx'], ['rzz'], entanglement='linear', reps=depth).decompose()        
+twolocal = TwoLocal(num_qubits, ['rz'], ['cx'], entanglement='linear', reps=depth).decompose()        
 num_pars = len(twolocal.parameters)
 values = np.random.uniform(low=-np.pi, high=np.pi, size=num_pars)
 circuit = copy.deepcopy(twolocal).assign_parameters(values)
-circuit.measure_all()
 
-# L = 10
-# d = 2
-# J = 1
-# g = 0.5
-# H_0 = MPO()
-# H_0.init_Ising(L, d, J, g)
+# Define the noise model
+gamma = 0
+noise_model = NoiseModel(['excitation', 'dephasing'], [gamma, gamma])
 
 # Define the initial state
 state = MPS(num_qubits, state='zeros')
 
-# Define the noise model
-# gamma = 0.1
-# noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
-
 # Define the simulation parameters
-shots = 10000
-N = 1
+N = 1000
 max_bond_dim = 4
 threshold = 1e-6
-# measurements = [Observable('x', site) for site in range(num_qubits)]
-sim_params = CircuitSimParams(shots, N, max_bond_dim, threshold)
+measurements = [Observable('z', site) for site in range(num_qubits)]
+sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold)
 
 if __name__ == "__main__":
-    simulator.run(state, circuit, sim_params)
+    simulator.run(state, circuit, sim_params, noise_model)
+    heatmap = []
+    for observable in sim_params.observables:
+        heatmap.append(observable.results)
+        print(observable.results)
 
-    plt.bar(sim_params.prob_dists[0].keys(), sim_params.prob_dists[0].values())
-    plt.xlabel("Bitstring")
-    plt.ylabel("Counts")
+    fig, ax = plt.subplots(1, 1)
+    im = ax.imshow(heatmap, aspect='auto')
+    ax.set_ylabel('Site')
+
+    # plt.bar(sim_params.results.keys(), sim_params.results.values())
+    # plt.xlabel("Bitstring")
+    # plt.ylabel("Counts")
     plt.show()

@@ -21,14 +21,14 @@ values = np.random.uniform(low=-np.pi, high=np.pi, size=num_pars)
 circuit = copy.deepcopy(twolocal).assign_parameters(values)
 
 # Define the noise model
-gamma = 0
+gamma = 1
 noise_model = NoiseModel(['relaxation'], [gamma])
 
 # Define the initial state
 state = MPS(num_qubits, state='zeros')
 
 # Define the simulation parameters
-shots = 10000
+shots = 1000
 max_bond_dim = 4
 threshold = 1e-6
 sim_params = WeakSimParams(shots, max_bond_dim, threshold)
