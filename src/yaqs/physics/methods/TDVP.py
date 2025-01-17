@@ -3,7 +3,7 @@ import opt_einsum as oe
 
 from yaqs.general.data_structures.networks import MPO, MPS
 from yaqs.general.operations.matrix_exponential import expm_krylov
-from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams, WeakSimParams
+from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
@@ -327,8 +327,9 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
             state.tensors[i-1] = oe.contract(state.tensors[i-1], (0, 1, 3), C, (3, 2), (0, 1, 2))
             # evolve psi.A[i-1] forward in time by half a time step
             state.tensors[i-1] = _local_hamiltonian_step(BL[i-1], BR[i-1], H.tensors[i-1], state.tensors[i-1], 0.5*sim_params.dt, numiter_lanczos)
-    elif type(sim_params) == WeakSimParams:
+    elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
         state.tensors[i] = _apply_local_hamiltonian(BL[i], BR[i], H.tensors[i], state.tensors[i])
+        # state.set_canonical_form(-1)
         state.normalize(form='B')
 
 
@@ -420,5 +421,6 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
             state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'left', threshold=sim_params.threshold)
             # update the right blocks
             BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
-    elif type(sim_params) == WeakSimParams:
+    elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
+        # state.set_canonical_form(-1)
         state.normalize(form='B')
