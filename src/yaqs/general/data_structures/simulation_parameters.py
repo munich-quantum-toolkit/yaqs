@@ -52,10 +52,13 @@ class WeakSimParams:
         # Noise-free simulation stores shots in first element
         if None in self.measurements:
             self.results = self.measurements[0]
+            self.results = dict(sorted(self.results.items()))
+
         else:
             for d in self.measurements:
                 for key, value in d.items():
                     self.results[key] = self.results.get(key, 0) + value
+            self.results = dict(sorted(self.results.items()))
 
 
 class StrongSimParams:
