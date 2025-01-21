@@ -82,7 +82,7 @@ def stochastic_process(state: MPS, noise_model: NoiseModel, dt: float) -> MPS:
         MPS: The updated state after performing the stochastic process.
     """
     dp = calculate_stochastic_factor(state)
-    if np.random.rand() >= dp:
+    if np.random.rand() >= dp or all(gamma == 0 for gamma in noise_model.strengths):
         # No jump
         # Replaces normalization since state should be in
         # mixed canonical form at site 0 from TDVP
