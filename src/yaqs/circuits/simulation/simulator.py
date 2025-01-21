@@ -25,7 +25,7 @@ def run_trajectory(args):
     i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
 
-    if type(sim_params) == StrongSimParams:
+    if isinstance(sim_params, StrongSimParams):
         results = np.zeros((len(sim_params.observables), 1))
 
 
@@ -37,8 +37,10 @@ def run_trajectory(args):
     while dag.op_nodes():
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             mpo.init_identity(circuit.num_qubits)
-            apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
+            apply_layer(mpo, None, dag, first_iterator, second_iterator, sim_params.threshold)
             dynamic_TDVP(state, mpo, sim_params)
+            apply_dissipation(state, noise_model, dt=0)
+            state = stochastic_process(state, noise_model, dt=0)
         else:
             for iterator in [first_iterator, second_iterator]:
                 mpo.init_identity(circuit.num_qubits)
@@ -48,12 +50,12 @@ def run_trajectory(args):
                 apply_dissipation(state, noise_model, dt=1)
                 state = stochastic_process(state, noise_model, dt=1)
 
-    if type(sim_params) == WeakSimParams:
+    if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             return measure(state, sim_params.shots)
         else:
             return measure(state, shots=1)
-    elif type(sim_params) == StrongSimParams:
+    elif isinstance(sim_params, StrongSimParams):
         for obs_index, observable in enumerate(sim_params.observables):
             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
         return results
@@ -66,13 +68,13 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params, noise_model
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
     else:
-        if type(sim_params) == WeakSimParams:
+        if isinstance(sim_params, WeakSimParams):
             # Shots themselves become the trajectories
             sim_params.N = sim_params.shots
             sim_params.shots = 1
 
     # Reset any previous results
-    if type(sim_params) == StrongSimParams:
+    if isinstance(sim_params, StrongSimParams):
         for observable in sim_params.observables:
             observable.initialize(sim_params)
 
@@ -89,9 +91,9 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params, noise_model
                 i = futures[future]
                 try:
                     result = future.result()
-                    if type(sim_params) == WeakSimParams:
+                    if isinstance(sim_params, WeakSimParams):
                         sim_params.measurements[i] = result   
-                    elif type(sim_params) == StrongSimParams:                     
+                    elif isinstance(sim_params, StrongSimParams):                     
                         for obs_index, observable in enumerate(sim_params.observables):
                             observable.trajectories[i] = result[obs_index]
                 except Exception as e:
@@ -100,9 +102,9 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params, noise_model
                 finally:
                     pbar.update(1)
 
-    if type(sim_params) == WeakSimParams:
+    if isinstance(sim_params, WeakSimParams):
         sim_params.aggregate_measurements()
-    elif type(sim_params) == StrongSimParams:                     
+    elif isinstance(sim_params, StrongSimParams):                     
         # Save average value of trajectories
         for observable in sim_params.observables:
             observable.results = np.mean(observable.trajectories, axis=0)
