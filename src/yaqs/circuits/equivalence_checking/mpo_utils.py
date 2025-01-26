@@ -42,7 +42,7 @@ def decompose_theta(theta: np.ndarray, threshold: float):
     return U, M
 
 
-def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False):
+def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, side: str, conjugate: bool = False):
     """
     Applies a single- or two-qubit gate (or multi-qubit gate) from a TensorLibrary object
     to the local tensor `theta`.
@@ -69,7 +69,7 @@ def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, con
 
     # Nearest-neighbor gates (theta.ndim == 6) or long-range gates (theta.ndim == 8)
     if theta.ndim == 6:
-        if conjugate:
+        if side == 'right' or conjugate:
             theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
         if gate.name == "I":
@@ -90,12 +90,11 @@ def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, con
                 theta = oe.contract('ijkl, klmnop->ijmnop', np.conj(gate.tensor), theta)
             else:
                 theta = oe.contract('ijkl, klmnop->ijmnop', gate.tensor, theta)
-
-        if conjugate:
+        if side == 'right' or conjugate:
             theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
     elif theta.ndim == 8:
-        if conjugate:
+        if side == 'right':
             theta = np.transpose(theta, (4, 5, 3, 2, 0, 1, 6, 7))
 
         if gate.name == "I":
@@ -117,13 +116,13 @@ def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, con
             else:
                 theta = oe.contract('abcd, cdefghij->abefghij', gate.tensor, theta)
 
-        if conjugate:
+        if side == 'right':
             theta = np.transpose(theta, (4, 5, 3, 2, 0, 1, 6, 7))
 
     return theta
 
 
-def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], restricted: bool = False, conjugate: bool = False):
+def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], restricted: bool = False, side: str='left', conjugate: bool = False):
     """
     Applies the temporal zone of `dag` to a local tensor `theta`.
 
@@ -145,7 +144,8 @@ def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], r
         tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
 
         for gate in tensor_circuit:
-            theta = apply_gate(gate, theta, n, n+1, conjugate)
+            theta = apply_gate(gate, theta, n, n+1, side, conjugate)
+
     return theta
 
 
@@ -167,10 +167,15 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
 
     # Apply G gates
     if dag1:
-        theta = apply_temporal_zone(theta, dag1, qubits, restricted, conjugate=False)
+        theta = apply_temporal_zone(theta, dag1, qubits, restricted, side='left', conjugate=False)
     # Apply G' gates
     if dag2:
-        theta = apply_temporal_zone(theta, dag2, qubits, restricted, conjugate=True)
+        # Used to create MPO during circuit simulation
+        # Dag1 comes from left, Dag2 comes from right
+        if dag1 == None:
+            theta = apply_temporal_zone(theta, dag2, qubits, restricted, side='right', conjugate=False)
+        else:
+            theta = apply_temporal_zone(theta, dag2, qubits, restricted, side='right', conjugate=True)
 
     # Decompose back
     mpo.tensors[n], mpo.tensors[n + 1] = decompose_theta(theta, threshold)
