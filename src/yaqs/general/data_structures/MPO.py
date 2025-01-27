@@ -104,6 +104,8 @@ class MPO:
 
     def init_custom_Hamiltonian(self, length: int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray):
         self.tensors = [left_bound] + [inner]*(length-2) + [right_bound]
+        self.length = len(self.tensors)
+        self.physical_dimension = self.tensors[0].shape[0]
 
     def init_custom(self, tensors: list[np.ndarray]):
         self.tensors = tensors
@@ -114,7 +116,7 @@ class MPO:
         converted_tensors = []
         for tensor in self.tensors:
             converted_tensors.append(np.reshape(tensor, (tensor.shape[0]*tensor.shape[1], tensor.shape[2], tensor.shape[3])))
-        
+
         return MPS(self.length, converted_tensors)
 
     def write_tensor_shapes(self):
