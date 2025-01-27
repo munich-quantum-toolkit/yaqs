@@ -1,14 +1,10 @@
-import concurrent.futures
 import copy
-import multiprocessing
 import numpy as np
 import opt_einsum as oe
-from tqdm import tqdm
-
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.general.data_structures.networks import MPS
+    from yaqs.general.data_structures.MPS import MPS
 
 
 def scalar_product(A: 'MPS', B: 'MPS', site: int=-1):
@@ -75,64 +71,10 @@ def local_expval(state: 'MPS', operator: np.ndarray, site: int):
     return E.real
 
 
-def measure_single_shot(state):
-    """
-    Performs a single-shot measurement of the MPS state.
-    Args:
-        state ('MPS'): The MPS state to measure.
-    Returns:
-        int: The observed basis state as an integer.
-    """
-    temp_state = copy.deepcopy(state)
-    bitstring = []
-    for site, tensor in enumerate(temp_state.tensors):
-        reduced_density_matrix = oe.contract('abc, dbc->ad', tensor, np.conj(tensor))
-        probabilities = np.diag(reduced_density_matrix).real
-        chosen_index = np.random.choice(len(probabilities), p=probabilities)
-        bitstring.append(chosen_index)
-        selected_state = np.zeros(len(probabilities))
-        selected_state[chosen_index] = 1
-        # Multiply state
-        tensor = oe.contract('a, acd->cd', selected_state, tensor)
-        # Multiply site into next site
-        if site != state.length - 1:
-            temp_state.tensors[site + 1] = 1 / np.sqrt(probabilities[chosen_index]) * oe.contract(
-                'ab, cbd->cad', tensor, temp_state.tensors[site + 1])
-    return sum(c << i for i, c in enumerate(bitstring))
+# def variance(expval, MPS):
+#     norm = scalar_product(MPS,MPS)
+#     return norm - expval**2
 
-
-def measure(state: 'MPS', shots: int):
-    """
-    Measures an MPS state for a given number of shots.
-    
-    Args:
-        state ('MPS'): The MPS state to measure.
-        shots (int): Number of measurements (shots) to perform.
-        
-    Returns:
-        dict: A dictionary mapping basis states to their observed counts.
-    """
-
-    if shots > 1:
-        max_workers = max(1, multiprocessing.cpu_count() - 1)
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            with tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar:
-                results = {}
-                futures = [executor.submit(measure_single_shot, copy.deepcopy(state)) for _ in range(shots)]
-                for future in concurrent.futures.as_completed(futures):
-                    try:
-                        result = future.result()
-                        results[result] = results.get(result, 0) + 1
-                    except Exception as e:
-                        print(f"Shot measurement failed with exception: {e}.")
-                    finally:
-                        pbar.update(1)
-        return results
-    else:
-        results = {}
-        basis_state = measure_single_shot(state)
-        results[basis_state] = results.get(basis_state, 0) + 1
-        return results
 
 
 # def fidelity(A, B):

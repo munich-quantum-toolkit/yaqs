@@ -1,9 +1,10 @@
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.data_structures.networks import MPO, MPS
+from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.operations.matrix_exponential import expm_krylov
-from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
+
 
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
@@ -243,7 +244,7 @@ def _local_bond_step(L, R, C, dt, numiter: int):
             C.reshape(-1), -dt, numiter, hermitian=True).reshape(C.shape)
 
 
-def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
+def single_site_TDVP(state: MPS, H: MPO,  dt, numsteps: int, numiter_lanczos: int = 25):
     """
     Symmetric single-site TDVP integration.
     `psi` is overwritten in-place with the time-evolved state.
@@ -277,36 +278,27 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     BL = [None for _ in range(L)]
     BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
 
-    # for _ in range(numsteps):
-    # sweep from left to right
+    for _ in range(numsteps):
+        # sweep from left to right
+        for i in range(L - 1):
+            # evolve psi.A[i] forward in time by half a time step
+            state.tensors[i] = _local_hamiltonian_step(BL[i], BR[i], H.tensors[i], state.tensors[i], 0.5*dt, numiter_lanczos)
+            # left-orthonormalize current psi.A[i]
+            s = state.tensors[i].shape
+            Q, C = np.linalg.qr(state.tensors[i].reshape((s[0]*s[1], s[2])))
+            state.tensors[i] = Q.reshape((s[0], s[1], Q.shape[1]))
 
-    for i in range(L - 1):
-        # evolve psi.A[i] forward in time by half a time step
-        if isinstance(sim_params, PhysicsSimParams):
-            state.tensors[i] = _local_hamiltonian_step(BL[i], BR[i], H.tensors[i], state.tensors[i], 0.5*sim_params.dt, numiter_lanczos)
-        elif isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-            state.tensors[i] = _apply_local_hamiltonian(BL[i], BR[i], H.tensors[i], state.tensors[i])
+            # update the left blocks
+            BL[i+1] = _contraction_operator_step_left(state.tensors[i], state.tensors[i], H.tensors[i], BL[i])
 
-        # left-orthonormalize current psi.A[i]
-        s = state.tensors[i].shape
-        Q, C = np.linalg.qr(state.tensors[i].reshape((s[0]*s[1], s[2])))
-        state.tensors[i] = Q.reshape((s[0], s[1], Q.shape[1]))
+            # evolve C backward in time by half a time step
+            C = _local_bond_step(BL[i+1], BR[i], C, -0.5*dt, numiter_lanczos)
+            # update psi.A[i+1] tensor: multiply with C from left
+            state.tensors[i+1] = oe.contract(state.tensors[i+1], (0, 3, 2), C, (1, 3), (0, 1, 2))
 
-        # update the left blocks
-        BL[i+1] = _contraction_operator_step_left(state.tensors[i], state.tensors[i], H.tensors[i], BL[i])
-
-        # evolve C backward in time by half a time step
-        if type(sim_params) == PhysicsSimParams:
-            C = _local_bond_step(BL[i+1], BR[i], C, -0.5*sim_params.dt, numiter_lanczos)
-        elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
-            C = _apply_local_bond_contraction(BL[i+1], BR[i], C)
-        # update psi.A[i+1] tensor: multiply with C from left
-        state.tensors[i+1] = oe.contract(state.tensors[i+1], (0, 3, 2), C, (1, 3), (0, 1, 2))
-
-    i = L-1
-    if isinstance(sim_params, PhysicsSimParams):
         # evolve psi.A[L-1] forward in time by a full time step
-        state.tensors[i] = _local_hamiltonian_step(BL[i], BR[i], H.tensors[i], state.tensors[i], sim_params.dt, numiter_lanczos)
+        i = L - 1
+        state.tensors[i] = _local_hamiltonian_step(BL[i], BR[i], H.tensors[i], state.tensors[i], dt, numiter_lanczos)
 
         # sweep from right to left
         for i in reversed(range(1, L)):
@@ -322,17 +314,14 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
             BR[i-1] = _contraction_operator_step_right(state.tensors[i], state.tensors[i], H.tensors[i], BR[i])
             # evolve C backward in time by half a time step
             C = np.transpose(C)
-            C = _local_bond_step(BL[i], BR[i-1], C, -0.5*sim_params.dt, numiter_lanczos)
+            C = _local_bond_step(BL[i], BR[i-1], C, -0.5*dt, numiter_lanczos)
             # update psi.A[i-1] tensor: multiply with C from right
             state.tensors[i-1] = oe.contract(state.tensors[i-1], (0, 1, 3), C, (3, 2), (0, 1, 2))
             # evolve psi.A[i-1] forward in time by half a time step
-            state.tensors[i-1] = _local_hamiltonian_step(BL[i-1], BR[i-1], H.tensors[i-1], state.tensors[i-1], 0.5*sim_params.dt, numiter_lanczos)
-    elif isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        state.tensors[i] = _apply_local_hamiltonian(BL[i], BR[i], H.tensors[i], state.tensors[i])
-        for i in reversed(range(1, L)):
-            state.shift_orthogonality_center_left(i)
+            state.tensors[i-1] = _local_hamiltonian_step(BL[i-1], BR[i-1], H.tensors[i-1], state.tensors[i-1], 0.5*dt, numiter_lanczos)
 
-def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
+
+def two_site_TDVP(state: MPS, H: MPO, dt, numsteps: int, numiter_lanczos: int = 25, threshold = 0):
     """
     Symmetric two-site TDVP integration.
     `psi` is overwritten in-place with the time-evolved state.
@@ -368,61 +357,44 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     BL = [None for _ in range(L)]
     BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
 
-    # for _ in range(numsteps):
-    # sweep from left to right
-    for i in range(L - 2):
-        # merge neighboring tensors
-        Am = _merge_mps_tensor_pair(state.tensors[i], state.tensors[i+1])
-        Hm = _merge_mpo_tensor_pair(H.tensors[i], H.tensors[i+1])
-        # evolve Am forward in time by half a time step
-        if type(sim_params) == PhysicsSimParams:
-            Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, 0.5*sim_params.dt, numiter_lanczos)
-        elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
-            Am = _apply_local_hamiltonian(BL[i], BR[i+1], Hm, Am)
-        # split Am
-        state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'right', threshold=sim_params.threshold)
-
-        # update the left blocks
-        BL[i+1] = _contraction_operator_step_left(state.tensors[i], state.tensors[i], H.tensors[i], BL[i])
-        # evolve psi.A[i+1] backward in time by half a time step
-        if type(sim_params) == PhysicsSimParams:
-            state.tensors[i+1] = _local_hamiltonian_step(BL[i+1], BR[i+1], H.tensors[i+1], state.tensors[i+1], -0.5*sim_params.dt, numiter_lanczos)
-        elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
-            state.tensors[i+1] = _apply_local_hamiltonian(BL[i+1], BR[i+1], H.tensors[i+1], state.tensors[i+1])
-
-    # rightmost tensor pair
-    i = L - 2
-    # merge neighboring tensors
-    Am = _merge_mps_tensor_pair(state.tensors[i], state.tensors[i+1])
-    Hm = _merge_mpo_tensor_pair(H.tensors[i], H.tensors[i+1])
-
-    # # evolve Am forward in time by a full time step
-    if type(sim_params) == PhysicsSimParams:
-        Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, sim_params.dt, numiter_lanczos)
-    elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
-        Am = _apply_local_hamiltonian(BL[i], BR[i+1], Hm, Am)
-
-    # # split Am
-    state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'left', threshold=sim_params.threshold)
-    # # update the right blocks
-    BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
-
-    if type(sim_params) == PhysicsSimParams:
-        # sweep from right to left
-        for i in reversed(range(L - 2)):
-            # evolve psi.A[i+1] backward in time by half a time step
-            state.tensors[i+1] = _local_hamiltonian_step(BL[i+1], BR[i+1], H.tensors[i+1], state.tensors[i+1], -0.5*sim_params.dt, numiter_lanczos)
+    for _ in range(numsteps):
+        # sweep from left to right
+        for i in range(L - 2):
             # merge neighboring tensors
             Am = _merge_mps_tensor_pair(state.tensors[i], state.tensors[i+1])
             Hm = _merge_mpo_tensor_pair(H.tensors[i], H.tensors[i+1])
             # evolve Am forward in time by half a time step
-            Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, 0.5*sim_params.dt, numiter_lanczos)
+            Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, 0.5*dt, numiter_lanczos)
             # split Am
-            state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'left', threshold=sim_params.threshold)
+            state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'right', threshold=threshold)
+
+            # update the left blocks
+            BL[i+1] = _contraction_operator_step_left(state.tensors[i], state.tensors[i], H.tensors[i], BL[i])
+            # evolve psi.A[i+1] backward in time by half a time step
+            state.tensors[i+1] = _local_hamiltonian_step(BL[i+1], BR[i+1], H.tensors[i+1], state.tensors[i+1], -0.5*dt, numiter_lanczos)
+
+        # rightmost tensor pair
+        i = L - 2
+        # merge neighboring tensors
+        Am = _merge_mps_tensor_pair(state.tensors[i], state.tensors[i+1])
+        Hm = _merge_mpo_tensor_pair(H.tensors[i], H.tensors[i+1])
+        # # evolve Am forward in time by a full time step
+        Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, dt, numiter_lanczos)
+        # # split Am
+        state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'left', threshold=threshold)
+        # # update the right blocks
+        BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
+
+        # sweep from right to left
+        for i in reversed(range(L - 2)):
+            # evolve psi.A[i+1] backward in time by half a time step
+            state.tensors[i+1] = _local_hamiltonian_step(BL[i+1], BR[i+1], H.tensors[i+1], state.tensors[i+1], -0.5*dt, numiter_lanczos)
+            # merge neighboring tensors
+            Am = _merge_mps_tensor_pair(state.tensors[i], state.tensors[i+1])
+            Hm = _merge_mpo_tensor_pair(H.tensors[i], H.tensors[i+1])
+            # evolve Am forward in time by half a time step
+            Am = _local_hamiltonian_step(BL[i], BR[i+1], Hm, Am, 0.5*dt, numiter_lanczos)
+            # split Am
+            state.tensors[i], state.tensors[i+1] = _split_mps_tensor(Am, 'left', threshold=threshold)
             # update the right blocks
             BR[i] = _contraction_operator_step_right(state.tensors[i+1], state.tensors[i+1], H.tensors[i+1], BR[i+1])
-    elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
-        for i in reversed(range(0, L-1)):
-            state.shift_orthogonality_center_left(i)
-        state.normalize('B')
-        state.check_canonical_form()

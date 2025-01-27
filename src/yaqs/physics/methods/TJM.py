@@ -4,7 +4,8 @@ import multiprocessing
 import numpy as np
 from tqdm import tqdm
 
-from yaqs.general.data_structures.networks import MPO, MPS
+from yaqs.general.data_structures.MPO import MPO
+from yaqs.general.data_structures.MPS import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
 from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams
 from yaqs.physics.methods.dissipation import apply_dissipation

@@ -1,6 +1,10 @@
 import numpy as np
 
-import yaqs.general.data_structures.networks
+import yaqs.general.data_structures.MPO
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.general.data_structures.MPO import MPO
 
 
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
@@ -32,7 +36,7 @@ def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     return tensors
 
 
-def _extend_gate(tensor: np.ndarray, sites: list):
+def _extend_gate(tensor: np.ndarray, sites: list) -> 'MPO':
     tensors = _split_tensor(tensor)
     if len(tensors) == 2:
     # Adds identity tensors between sites
@@ -67,7 +71,7 @@ def _extend_gate(tensor: np.ndarray, sites: list):
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[2])
 
-    mpo = yaqs.general.data_structures.networks.MPO()
+    mpo = yaqs.general.data_structures.MPO.MPO()
     mpo.init_custom(mpo_tensors)
     return mpo
 
@@ -405,7 +409,7 @@ class CCX:
         self.tensor = _extend_gate(self.tensor, self.sites)
 
 
-class GateLibrary:
+class TensorLibrary:
     x = X
     y = Y
     z = Z

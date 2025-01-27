@@ -2,7 +2,7 @@ import numpy as np
 import opt_einsum as oe
 from scipy.linalg import expm
 
-from yaqs.general.data_structures.networks import MPS
+from yaqs.general.data_structures.MPS import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
 
 
