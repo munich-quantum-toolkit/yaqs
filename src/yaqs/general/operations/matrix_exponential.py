@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.linalg import eigh_tridiagonal, expm
+from scipy.linalg import eigh_tridiagonal
 
 
 def _lanczos_iteration(Afunc, vstart, numiter):
@@ -48,57 +48,7 @@ def _lanczos_iteration(Afunc, vstart, numiter):
     alpha[j] = np.vdot(w, V[j]).real
     return (alpha, beta, V.T)
 
-
-def _arnoldi_iteration(Afunc, vstart, numiter):
-    """
-    Perform a "matrix free" Arnoldi iteration.
-
-    Args:
-        Afunc:      "matrix free" linear transformation of a given vector
-        vstart:     starting vector for iteration
-        numiter:    number of iterations (should be much smaller than dimension of vstart)
-
-    Returns:
-        tuple: tuple containing
-          - H:      `numiter x numiter` upper Hessenberg matrix
-          - V:      `len(vstart) x numiter` matrix containing the orthonormal Arnoldi vectors
-    """
-    # normalize starting vector
-    nrmv = np.linalg.norm(vstart)
-    assert nrmv > 0
-    vstart = vstart / nrmv
-
-    H = np.zeros((numiter, numiter), dtype=complex)
-    V = np.zeros((numiter, len(vstart)), dtype=complex)
-    V[0] = vstart
-
-    for j in range(numiter-1):
-        w = Afunc(V[j])
-        # subtract the projections on previous vectors
-        for k in range(j+1):
-            H[k, j] = np.vdot(V[k], w)
-            w -= H[k, j]*V[k]
-        H[j+1, j] = np.linalg.norm(w)
-        # if H[j+1, j] < 100*len(vstart)*np.finfo(float).eps:
-        #     warnings.warn(
-        #         f'H[{j+1}, {j}] ~= 0 encountered during Arnoldi iteration.',
-        #         RuntimeWarning)
-        #     # premature end of iteration
-        #     numiter = j + 1
-        #     return H[:numiter, :numiter], V[:numiter, :].T
-        V[j+1] = w / H[j+1, j]
-
-    # complete final iteration
-    j = numiter-1
-    w = Afunc(V[j])
-    for k in range(j+1):
-        H[k, j] = np.vdot(V[k], w)
-        w -= H[k, j]*V[k]
-
-    return H, V.T
-
-
-def expm_krylov(Afunc, v, dt, numiter, hermitian=False):
+def expm_krylov(Afunc, v, dt, numiter):
     """
     Compute Krylov subspace approximation of the matrix exponential
     applied to input vector: `expm(dt*A)*v`.
@@ -108,16 +58,12 @@ def expm_krylov(Afunc, v, dt, numiter, hermitian=False):
         On Krylov subspace approximations to the matrix exponential operator
         SIAM J. Numer. Anal. 34, 1911 (1997)
     """
-    if hermitian:
-        alpha, beta, V = _lanczos_iteration(Afunc, v, numiter)
-        # diagonalize Hessenberg matrix
-        try:
-            # Faster implementation
-            w_hess, u_hess = eigh_tridiagonal(alpha, beta)
-        except:
-            # More stable implementation
-            w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver='stebz')
-        return V @ (u_hess @ (np.linalg.norm(v) * np.exp(-1j*dt*w_hess) * u_hess[0]))
-    else:
-        H, V = _arnoldi_iteration(Afunc, v, numiter)
-        return V @ (np.linalg.norm(v) * expm(-1j*dt*H)[:, 0])
+    alpha, beta, V = _lanczos_iteration(Afunc, v, numiter)
+    # diagonalize Hessenberg matrix
+    try:
+        # Faster implementation
+        w_hess, u_hess = eigh_tridiagonal(alpha, beta)
+    except:
+        # More stable implementation
+        w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver='stebz')
+    return V @ (u_hess @ (np.linalg.norm(v) * np.exp(-1j*dt*w_hess) * u_hess[0]))
