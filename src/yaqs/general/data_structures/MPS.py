@@ -20,32 +20,33 @@ class MPS:
         assert len(physical_dimensions) == length
 
         # Create d-level |0> state
-        for i, d in enumerate(physical_dimensions):
-            vector = np.zeros(d)
-            if state == 'zeros':
-                vector[0] = 1
-            elif state == 'ones':
-                vector[1] = 1
-            elif state == 'x':
-                vector[0] = 1/np.sqrt(2)
-                vector[1] = 1/np.sqrt(2)
-            elif state == 'Neel':
-                if i % 2:
+        if not tensors:
+            for i, d in enumerate(physical_dimensions):
+                vector = np.zeros(d)
+                if state == 'zeros':
                     vector[0] = 1
-                else:
+                elif state == 'ones':
                     vector[1] = 1
-            elif state == 'wall':
-                if i < length // 2:
-                    vector[0] = 1
+                elif state == 'x':
+                    vector[0] = 1/np.sqrt(2)
+                    vector[1] = 1/np.sqrt(2)
+                elif state == 'Neel':
+                    if i % 2:
+                        vector[0] = 1
+                    else:
+                        vector[1] = 1
+                elif state == 'wall':
+                    if i < length // 2:
+                        vector[0] = 1
+                    else:
+                        vector[1] = 1
                 else:
-                    vector[1] = 1
-            else:
-                raise ValueError("Invalid state string")
+                    raise ValueError("Invalid state string")
 
-            tensor = np.expand_dims(vector, axis=(0, 1))
+                tensor = np.expand_dims(vector, axis=(0, 1))
 
-            tensor = np.transpose(tensor, (2, 0, 1))
-            self.tensors.append(tensor)
+                tensor = np.transpose(tensor, (2, 0, 1))
+                self.tensors.append(tensor)
         self.flipped = False
         # self.orthogonality_center = 0
 
