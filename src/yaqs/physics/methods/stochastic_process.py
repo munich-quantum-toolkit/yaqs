@@ -7,8 +7,6 @@ from yaqs.general.data_structures.noise_model import NoiseModel
 from yaqs.general.operations.operations import scalar_product
 
 
-
-
 def calculate_stochastic_factor(state: MPS) -> float:
     """
     Calculate the stochastic factor for the given state.
