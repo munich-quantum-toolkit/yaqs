@@ -5,13 +5,28 @@ import pytest
 from yaqs.general.data_structures.MPO import MPO
 from yaqs.general.data_structures.MPS import MPS
 from yaqs.general.data_structures.simulation_parameters import Observable
+from yaqs.general.libraries.tensor_library import TensorLibrary
+
+
+I = getattr(TensorLibrary, 'id').matrix
+X = getattr(TensorLibrary, 'x').matrix
+Y = getattr(TensorLibrary, 'y').matrix
+Z = getattr(TensorLibrary, 'z').matrix
+
+
+def untranspose_block(mpo_tensor):
+    """
+    MPO tensors are stored as (sigma, sigma', row, col).
+    This function reverses that transpose to get (row, col, sigma, sigma').
+    That way, we can interpret row x col as a block matrix of operators.
+    """
+    return np.transpose(mpo_tensor, (2, 3, 0, 1))
 
 ################################################
-# Tests for the MPS class
+# Tests for the MPO class
 ################################################
-
 def test_init_Ising():
-    """Test that init_Ising creates the correct number and shape of tensors."""
+    """Test that init_Ising creates the correct number, shape, and values."""
     mpo = MPO()
     length = 4
     pdim = 2
@@ -24,24 +39,66 @@ def test_init_Ising():
     assert mpo.physical_dimension == pdim
     assert len(mpo.tensors) == length
 
-    # Check shapes of each tensor:
-    # After transpose, each tensor is (pdim, pdim, bond_in, bond_out).
-    # For a length-4 chain:
-    #   - The left boundary has shape (pdim, pdim, 1, 3)
-    #   - The middle sites have shape (pdim, pdim, 3, 3)
-    #   - The right boundary has shape (pdim, pdim, 3, 1)
+    # Expected sign factors
+    minus_J = -J    # -1.0
+    minus_g = -g    # -0.5
 
-    for i, tensor in enumerate(mpo.tensors):
-        if i == 0:  # left boundary
-            assert tensor.shape == (pdim, pdim, 1, 3)
-        elif i == length - 1:  # right boundary
-            assert tensor.shape == (pdim, pdim, 3, 1)
-        else:  # inner
-            assert tensor.shape == (pdim, pdim, 3, 3)
+    #
+    # Check left boundary: shape (2,2,1,3)
+    # After untranspose => shape (1,3,2,2)
+    # The 1x3 block should contain: [I, -J*Z, -g*X]
+    #
+    left_block = untranspose_block(mpo.tensors[0])  # (1,3,2,2)
+    assert left_block.shape == (1, 3, pdim, pdim)
+
+    # Extract each operator block
+    block_I   = left_block[0, 0]  # (2,2)
+    block_JZ  = left_block[0, 1]  # (2,2)
+    block_gX  = left_block[0, 2]  # (2,2)
+
+    assert np.allclose(block_I, I)
+    assert np.allclose(block_JZ, minus_J * Z)
+    assert np.allclose(block_gX, minus_g * X)
+
+    #
+    # Check inner site: shape (2,2,3,3)
+    # W = [[ I,     -J Z,  -g X ],
+    #      [ 0,       0,     Z  ],
+    #      [ 0,       0,     I  ]]
+    #
+    if length > 2:
+        inner_block = untranspose_block(mpo.tensors[1])  # (3,3,2,2)
+        assert inner_block.shape == (3, 3, pdim, pdim)
+
+        # row=0, col=0 => I
+        assert np.allclose(inner_block[0,0], I)
+        # row=0, col=1 => -J Z
+        assert np.allclose(inner_block[0,1], minus_J * Z)
+        # row=0, col=2 => -g X
+        assert np.allclose(inner_block[0,2], minus_g * X)
+        # row=1, col=2 => Z
+        assert np.allclose(inner_block[1,2], Z)
+        # row=2, col=2 => I
+        assert np.allclose(inner_block[2,2], I)
+
+    #
+    # Check right boundary: shape (2,2,3,1)
+    # This is the last column, i.e. [ -gX, Z, I ]^T
+    #
+    right_block = untranspose_block(mpo.tensors[-1])  # (3,1,2,2)
+    assert right_block.shape == (3, 1, pdim, pdim)
+
+    block_gX  = right_block[0, 0]
+    block_Z   = right_block[1, 0]
+    block_I   = right_block[2, 0]
+
+    assert np.allclose(block_gX, minus_g * X)
+    assert np.allclose(block_Z, Z)
+    assert np.allclose(block_I, I)
 
 
 def test_init_Heisenberg():
-    """Test that init_Heisenberg creates the correct number and shape of tensors."""
+    """Test that init_Heisenberg creates the correct number, shape, and values."""
     mpo = MPO()
     length = 5
     pdim = 2
@@ -53,12 +110,37 @@ def test_init_Heisenberg():
     assert mpo.physical_dimension == pdim
     assert len(mpo.tensors) == length
 
-    # After transpose, each tensor is (pdim, pdim, bond_in, bond_out).
-    # For Heisenberg with a 5x5 internal block, the boundary shapes differ:
-    #   - Left boundary: (pdim, pdim, 1, 5)
-    #   - Inner: (pdim, pdim, 5, 5)
-    #   - Right boundary: (pdim, pdim, 5, 1)
+    # The internal block is 5x5. Let's do a quick check on the left boundary:
+    # shape (2,2,1,5) => untransposed shape (1,5,2,2)
+    # That row should contain: [I, -JxX, -JyY, -JzZ, -hZ]
+    left_block = untranspose_block(mpo.tensors[0])
+    assert left_block.shape == (1, 5, pdim, pdim)
 
+    # Check each operator
+    block_I   = left_block[0,0]
+    block_JxX = left_block[0,1]
+    block_JyY = left_block[0,2]
+    block_JzZ = left_block[0,3]
+    block_hZ  = left_block[0,4]
+
+    # For a 2x2 system, Y = i * X * Z or typically [[0, -1j],[1j, 0]], 
+    # but let's just do a magnitude check unless your code expects a real Y. 
+    # We'll just check the sign factors.
+    # Negative signs come from the code: inner[0,1] = -Jx*X, etc.
+    minus_Jx = -Jx
+    minus_Jy = -Jy
+    minus_Jz = -Jz
+    minus_h  = -h
+
+    assert np.allclose(block_I, I)
+    assert np.allclose(block_JxX, minus_Jx * X)
+    assert np.allclose(block_JyY, minus_Jy * Y)
+    assert block_JyY.shape == (2,2)
+
+    assert np.allclose(block_JzZ, minus_Jz * Z)
+    assert np.allclose(block_hZ,  minus_h  * Z)
+
+    # Similarly, check shapes of inner and right boundary as you did before:
     for i, tensor in enumerate(mpo.tensors):
         if i == 0:  # left boundary
             assert tensor.shape == (pdim, pdim, 1, 5)
@@ -69,7 +151,7 @@ def test_init_Heisenberg():
 
 
 def test_init_identity():
-    """Test init_identity builds uniform tensors for the specified length."""
+    """Test init_identity builds uniform tensors for the specified length and checks actual values."""
     mpo = MPO()
     length = 3
     pdim = 2
@@ -80,11 +162,62 @@ def test_init_identity():
     assert mpo.physical_dimension == pdim
     assert len(mpo.tensors) == length
 
-    # Each tensor for identity is shape (2,2) with 2D expansions,
-    # but note that we do not transpose here in the code. The method
-    # uses `np.expand_dims(M, (2,3))`, so each final shape is (2,2,1,1).
     for tensor in mpo.tensors:
         assert tensor.shape == (2, 2, 1, 1)
+        assert np.allclose(np.squeeze(tensor), I)
+
+
+def test_init_custom_Hamiltonian():
+    """Test that a custom Hamiltonian can be initialized, verifying shape and partial values."""
+    length = 4
+    pdim = 2
+
+    # Create dummy boundary and inner with shapes that match the length
+    left_bound = np.random.rand(1, 2, pdim, pdim)
+    inner = np.random.rand(2, 2, pdim, pdim)
+    right_bound = np.random.rand(2, 1, pdim, pdim)
+
+    mpo = MPO()
+    mpo.init_custom_Hamiltonian(length, left_bound, inner, right_bound)
+
+    assert mpo.length == length
+    assert len(mpo.tensors) == length
+
+    # Just check shapes
+    assert mpo.tensors[0].shape == (1, 2, pdim, pdim)
+    for i in range(1, length - 1):
+        assert mpo.tensors[i].shape == (2, 2, pdim, pdim)
+    assert mpo.tensors[-1].shape == (2, 1, pdim, pdim)
+
+    # Optionally, check that the numeric values match our inputs.
+    # There's no transpose in `init_custom_Hamiltonian`, so we can do a direct comparison:
+    assert np.allclose(mpo.tensors[0], left_bound)
+    for i in range(1, length - 1):
+        assert np.allclose(mpo.tensors[i], inner)
+    assert np.allclose(mpo.tensors[-1], right_bound)
+
+
+def test_init_custom():
+    """Test init_custom with a user-provided list of tensors, checking shapes and values."""
+    length = 3
+    pdim = 2
+    tensors = [
+        np.random.rand(pdim, pdim, 1, 2),   # left
+        np.random.rand(pdim, pdim, 2, 2),   # middle
+        np.random.rand(pdim, pdim, 2, 1)    # right
+    ]
+
+    mpo = MPO()
+    mpo.init_custom(tensors)
+
+    assert mpo.length == length
+    assert mpo.physical_dimension == pdim
+    assert len(mpo.tensors) == length
+
+    for original, created in zip(tensors, mpo.tensors):
+        assert original.shape == created.shape
+        assert np.allclose(original, created)
+
 
 
 def test_init_custom_Hamiltonian():
@@ -104,35 +237,10 @@ def test_init_custom_Hamiltonian():
     assert mpo.length == length
     assert len(mpo.tensors) == length
 
-    # After init, no transpose is done explicitly in init_custom_Hamiltonian.
-    # If you need a transpose like in the other inits, you might do that externally
-    # or within the method. We'll assume shapes remain as-is for a direct test.
     assert mpo.tensors[0].shape == (1, 2, pdim, pdim)
     for i in range(1, length - 1):
         assert mpo.tensors[i].shape == (2, 2, pdim, pdim)
     assert mpo.tensors[-1].shape == (2, 1, pdim, pdim)
-
-
-def test_init_custom():
-    """Test init_custom with a user-provided list of tensors."""
-    length = 3
-    pdim = 2
-    tensors = [
-        np.random.rand(pdim, pdim, 1, 2),   # left
-        np.random.rand(pdim, pdim, 2, 2),   # middle
-        np.random.rand(pdim, pdim, 2, 1)    # right
-    ]
-
-    mpo = MPO()
-    mpo.init_custom(tensors)
-
-    assert mpo.length == length
-    assert mpo.physical_dimension == pdim
-    assert len(mpo.tensors) == length
-
-    for original, created in zip(tensors, mpo.tensors):
-        assert np.allclose(original, created)
-
 
 def test_convert_to_MPS():
     """Test converting an MPO to MPS."""
@@ -192,8 +300,7 @@ def test_rotate():
     for orig, rotated in zip(original_tensors, mpo.tensors):
         # rotate does transpose (1, 0, 2, 3), so check that
         assert rotated.shape == (orig.shape[1], orig.shape[0], orig.shape[2], orig.shape[3])
-        # If we wanted to test exact values, we could check each element:
-        # np.allclose(rotated, np.transpose(orig, (1,0,2,3)))
+        np.allclose(rotated, np.transpose(orig, (1,0,2,3)))
 
     # Rotate back with conjugation=True
     # This will take the conj() and then transpose(1,0,2,3) again.
@@ -234,16 +341,9 @@ def test_mps_initialization(state):
     assert len(mps.tensors) == length
     assert all(d == pdim for d in mps.physical_dimensions)
 
-    # For a freshly initialized MPS, each tensor is shape (pdim, 1, 1) 
-    # if we have no entanglement (i.e., just a single site 'ket').
-    # But if we specify length=4, we might expect the shape to be 
-    # (pdim, bond_in, bond_out). For the default code, bond_in=1, bond_out=1
-    # for each site. 
     for tensor in mps.tensors:
         assert tensor.ndim == 3
         assert tensor.shape[0] == pdim
-        # Usually for a "product state" MPS, the middle dims are all (1,1) 
-        # except if there's some code that introduces entanglement. 
         assert tensor.shape[1] == 1
         assert tensor.shape[2] == 1
 
@@ -381,11 +481,17 @@ def test_normalize():
     """
     length = 4
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim]*length, state='ones')
+    # Random MPS
+    t1 = np.random.rand(pdim, 1, 3)
+    t2 = np.random.rand(pdim, 3, 3)
+    t3 = np.random.rand(pdim, 3, 2)
+    t4 = np.random.rand(pdim, 2, 1)
+    mps = MPS(length, [t1, t2, t3, t4], [pdim]*length)
 
     # Normalizing an all-'1' initial state:
     mps.normalize(form='B')
 
+    assert np.isclose(mps.norm(), 1)
     for tensor in mps.tensors:
         assert tensor.ndim == 3
 
@@ -399,7 +505,7 @@ def test_measure():
     val = mps.measure(obs)
 
     assert np.isclose(val, 1)
-    
+
 
 def test_norm():
     length = 3
