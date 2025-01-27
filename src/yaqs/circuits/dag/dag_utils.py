@@ -1,6 +1,7 @@
 import numpy as np
 
 from qiskit._accelerate.circuit import DAGCircuit
+from qiskit.converters import dag_to_circuit
 from qiskit.dagcircuit.dagnode import DAGOpNode
 
 from yaqs.general.libraries.tensor_library import TensorLibrary
@@ -163,12 +164,11 @@ def select_starting_point(N: int, dag: DAGCircuit):
     odd = False
 
     if 'first_layer' in locals():
-        from qiskit.converters import dag_to_circuit
         layer_circuit = dag_to_circuit(first_layer['graph'])
-        for i, gate in enumerate(layer_circuit.data):
+        for gate in layer_circuit.data:
             # If there's a two-qubit gate at an odd position in the list, switch
             if gate.operation.num_qubits == 2:
-                if i % 2 != 0:
+                if gate.qubits[0]._index % 2 != 0:
                     odd = True
                 break
 
