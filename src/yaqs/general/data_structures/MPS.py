@@ -9,19 +9,20 @@ from yaqs.general.operations.operations import local_expval, scalar_product
 
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
-    def __init__(self, length: int, tensors: list=[], physical_dimensions: list=[], state: str='zeros'):
-        if tensors:
+    def __init__(self, length: int, tensors: list = None, physical_dimensions: list = None, state: str = 'zeros'):
+        if tensors is not None:
             assert len(tensors) == length
             self.tensors = tensors
         else:
             self.tensors = []
         self.length = length
         self.physical_dimensions = physical_dimensions
-        if not physical_dimensions:
+        if physical_dimensions is None:
             # Default case is the qubit (2-level) case
+            self.physical_dimensions = []
             for _ in range(length):
                 self.physical_dimensions.append(2)
-        assert len(physical_dimensions) == length
+        assert len(self.physical_dimensions) == length
 
         # Create d-level |0> state
         if not tensors:
