@@ -189,8 +189,6 @@ def test_init_custom_Hamiltonian():
         assert mpo.tensors[i].shape == (2, 2, pdim, pdim)
     assert mpo.tensors[-1].shape == (2, 1, pdim, pdim)
 
-    # Optionally, check that the numeric values match our inputs.
-    # There's no transpose in `init_custom_Hamiltonian`, so we can do a direct comparison:
     assert np.allclose(mpo.tensors[0], left_bound)
     for i in range(1, length - 1):
         assert np.allclose(mpo.tensors[i], inner)
@@ -218,29 +216,6 @@ def test_init_custom():
         assert original.shape == created.shape
         assert np.allclose(original, created)
 
-
-
-def test_init_custom_Hamiltonian():
-    """Test that a custom Hamiltonian can be initialized."""
-    length = 4
-    pdim = 2
-
-    # Create dummy boundary and inner with shapes that match the length
-    # Suppose each site has a 2D bond dimension just as an example
-    left_bound = np.random.rand(1, 2, pdim, pdim)
-    inner = np.random.rand(2, 2, pdim, pdim)
-    right_bound = np.random.rand(2, 1, pdim, pdim)
-
-    mpo = MPO()
-    mpo.init_custom_Hamiltonian(length, left_bound, inner, right_bound)
-
-    assert mpo.length == length
-    assert len(mpo.tensors) == length
-
-    assert mpo.tensors[0].shape == (1, 2, pdim, pdim)
-    for i in range(1, length - 1):
-        assert mpo.tensors[i].shape == (2, 2, pdim, pdim)
-    assert mpo.tensors[-1].shape == (2, 1, pdim, pdim)
 
 def test_convert_to_MPS():
     """Test converting an MPO to MPS."""
