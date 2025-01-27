@@ -2,7 +2,7 @@ from qiskit.circuit.quantumcircuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 import time
 
-from yaqs.general.data_structures.MPO import MPO
+from yaqs.general.data_structures.networks import MPO
 from yaqs.circuits.equivalence_checking.mpo_utils import iterate
 
 

@@ -1,20 +1,16 @@
 import numpy as np
 
-from yaqs.general.data_structures.MPS import MPS
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.general.data_structures.networks import MPS
+from yaqs.general.libraries.gate_library import GateLibrary
 from yaqs.general.operations.operations import scalar_product
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from yaqs.general.data_structures.MPS import MPS
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
 class MPO:
     def init_Ising(self, length: int, physical_dimension: int, J: float, g: float):
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = getattr(TensorLibrary, "x")().matrix
-        Z = getattr(TensorLibrary, "z")().matrix
+        X = getattr(GateLibrary, "x")().matrix
+        Z = getattr(GateLibrary, "z")().matrix
 
         # The MPO has a 3x3 block structure at each site:
         # W = [[ I,     -J Z,  -g X ],
@@ -54,9 +50,9 @@ class MPO:
     def init_Heisenberg(self, length: int, physical_dimension: int, Jx: float, Jy: float, Jz: float, h: float):
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = getattr(TensorLibrary, "x")().matrix
-        Y = getattr(TensorLibrary, "y")().matrix
-        Z = getattr(TensorLibrary, "z")().matrix
+        X = getattr(GateLibrary, "x")().matrix
+        Y = getattr(GateLibrary, "y")().matrix
+        Z = getattr(GateLibrary, "z")().matrix
 
         # Left boundary: shape (1,5, d, d)
         # [I, Jx*X, Jy*Y, Jz*Z, h*Z]

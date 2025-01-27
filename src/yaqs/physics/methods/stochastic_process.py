@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.data_structures.MPS import MPS
+from yaqs.general.data_structures.networks import MPS
 from yaqs.general.data_structures.noise_model import NoiseModel
 from yaqs.general.operations.operations import scalar_product
 
@@ -82,10 +82,10 @@ def stochastic_process(state: MPS, noise_model: NoiseModel, dt: float) -> MPS:
         MPS: The updated state after performing the stochastic process.
     """
     dp = calculate_stochastic_factor(state)
-    if np.random.rand() >= dp:
+    if np.random.rand() >= dp or all(gamma == 0 for gamma in noise_model.strengths):
         # No jump
         # Replaces normalization since state should be in
-        # mixed canonical form at site 0
+        # mixed canonical form at site 0 from TDVP
         state.shift_orthogonality_center_left(0)
         # state.normalize('B')
         return state
