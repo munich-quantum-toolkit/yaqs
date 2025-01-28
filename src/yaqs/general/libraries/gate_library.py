@@ -247,6 +247,12 @@ class CX:
         self.generator = (np.pi / 4) * (np.kron(np.array([[1, 0], [0, -1]]), np.array([[0, 1], [1, 0]])))
 
         if site1 < site0:  # Adjust for reverse control/target
+            # Swap control and target by applying a permutation matrix
+            P = np.array([[1, 0, 0, 0],
+                          [0, 0, 1, 0],
+                          [0, 1, 0, 0],
+                          [0, 0, 0, 1]])
+            self.generator = P @ self.generator @ P.T
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
@@ -265,6 +271,12 @@ class CZ:
         self.generator = (np.pi / 4) * np.kron(np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]]))
 
         if site1 < site0:  # Adjust for reverse control/target
+            # Swap control and target by applying a permutation matrix
+            P = np.array([[1, 0, 0, 0],
+                          [0, 0, 1, 0],
+                          [0, 1, 0, 0],
+                          [0, 0, 0, 1]])
+            self.generator = P @ self.generator @ P.T
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
@@ -288,6 +300,12 @@ class CPhase:
             self.mpo = _extend_gate(self.tensor, self.sites)
         else:
             if site1 < site0:  # Adjust for reverse control/target
+                # Swap control and target by applying a permutation matrix
+                P = np.array([[1, 0, 0, 0],
+                            [0, 0, 1, 0],
+                            [0, 1, 0, 0],
+                            [0, 0, 0, 1]])
+                self.generator = P @ self.generator @ P.T
                 self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
@@ -373,6 +391,27 @@ class Rzz:
         self.sites = [site0, site1]
 
 
+class U2:
+    name = 'u2'
+    interaction = 1
+
+    def set_params(self, params):
+        # U2 gate has parameters phi and lambda
+        self.phi = params[0]
+        self.lam = params[1]
+        self.matrix = np.array([
+            [1, -np.exp(1j * self.lam)],
+            [np.exp(1j * self.phi), np.exp(1j * (self.phi + self.lam))]
+        ]) / np.sqrt(2)
+        self.tensor = self.matrix
+        # Generator: Derived from the U2 unitary matrix
+        self.generator = (1 / np.sqrt(2)) * np.array([
+            [0, -np.exp(-1j * self.lam)],
+            [np.exp(-1j * self.phi), 0]
+        ])
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
 
 
 class CCX:
@@ -401,28 +440,6 @@ class CCX:
 
         self.interaction = np.abs(site0 - site2)+1
         self.tensor = _extend_gate(self.tensor, self.sites)
-
-class U2:
-    name = 'u2'
-    interaction = 1
-
-    def set_params(self, params):
-        # U2 gate has parameters phi and lambda
-        self.phi = params[0]
-        self.lam = params[1]
-        self.matrix = np.array([
-            [1, -np.exp(1j * self.lam)],
-            [np.exp(1j * self.phi), np.exp(1j * (self.phi + self.lam))]
-        ]) / np.sqrt(2)
-        self.tensor = self.matrix
-        # Generator: Derived from the U2 unitary matrix
-        self.generator = (1 / np.sqrt(2)) * np.array([
-            [0, -np.exp(-1j * self.lam)],
-            [np.exp(-1j * self.phi), 0]
-        ])
-
-    def set_sites(self, site0: int):
-        self.sites = [site0]
 
 
 class GateLibrary:
