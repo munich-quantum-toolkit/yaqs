@@ -70,7 +70,6 @@ def _extend_gate(tensor: np.ndarray, sites: list):
     mpo = yaqs.general.data_structures.networks.MPO()
     mpo.init_custom(mpo_tensors)
     return mpo
-
 class X:
     name = 'x'
     matrix = np.array([[0, 1],
@@ -78,6 +77,9 @@ class X:
     interaction = 1
 
     tensor = matrix
+    # Generator: (π/2) * σ_x
+    generator = (np.pi / 2) * np.array([[0, -1],
+                                        [-1, 0]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -85,12 +87,14 @@ class X:
 
 class Y:
     name = 'y'
-
     matrix = np.array([[0, -1j],
                        [1j, 0]])
     interaction = 1
 
     tensor = matrix
+    # Generator: (π/2) * σ_y
+    generator = (np.pi / 2) * np.array([[0, -1j],
+                                        [1j, 0]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -98,25 +102,14 @@ class Y:
 
 class Z:
     name = 'z'
-
     matrix = np.array([[1, 0],
                        [0, -1]])
     interaction = 1
 
     tensor = matrix
-
-    def set_sites(self, site0: int):
-        self.sites = [site0]
-
-
-class SX:
-    name = 'sx'
-
-    matrix = 1/2*np.array([[1+1j, 1-1j],
-                       [1-1j, 1+1j]])
-    interaction = 1
-
-    tensor = matrix
+    # Generator: (π/2) * σ_z
+    generator = (np.pi / 2) * np.array([[1, 0],
+                                        [0, -1]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -124,12 +117,14 @@ class SX:
 
 class H:
     name = 'h'
-
-    matrix = np.array([[1/np.sqrt(2), 1/np.sqrt(2)],
-                       [1/np.sqrt(2), -1/np.sqrt(2)]])
+    matrix = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)],
+                       [1 / np.sqrt(2), -1 / np.sqrt(2)]])
     interaction = 1
 
     tensor = matrix
+    # Generator: (π/2) * 1/2(σ_x + σ_z)
+    generator = (np.pi / np.sqrt(2)) * np.array([[0.5, 0.5],
+                                                 [0.5, -0.5]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -137,59 +132,45 @@ class H:
 
 class I:
     name = 'id'
-
     matrix = np.array([[1, 0],
                        [0, 1]])
     interaction = 1
 
     tensor = matrix
+    # Generator: 0 matrix
+    generator = np.zeros((2, 2))
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
-class U2:
-    name = 'u2'
-
+class SX:
+    name = 'sx'
+    matrix = 0.5 * np.array([[1 + 1j, 1 - 1j],
+                             [1 - 1j, 1 + 1j]])
     interaction = 1
 
-    def set_params(self, params):
-        self.phi = params[0]
-        self.lam = params[1]
-        self.matrix = np.array([[1, -(np.cos(self.lam)+1j*np.sin(self.lam))],
-                                [np.cos(self.phi)+1j*np.sin(self.phi), np.cos(self.phi+self.lam)+1j*np.sin(self.phi+self.lam)]])
-        self.tensor = self.matrix
+    tensor = matrix
+    # Generator: (π/4) * σ_x
+    generator = (np.pi / 4) * np.array([[0, 1],
+                                        [1, 0]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
-
-
-class Phase:
-    name = 'p'
-
-    interaction = 1
-
-    def set_params(self, params):
-        self.theta = params[0]
-        self.matrix = np.array([[1, 0],
-                                [0, np.cos(self.theta)+1j*np.sin(self.theta)]])
-        self.tensor = self.matrix
-
-    def set_sites(self, site0: int):
-        self.sites = [site0]
-
 
 
 class Rx:
     name = 'rx'
-
     interaction = 1
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta/2), -1j*np.sin(self.theta/2)],
-                                [-1j*np.sin(self.theta/2), np.cos(self.theta/2)]])
+        self.matrix = np.array([[np.cos(self.theta / 2), -1j * np.sin(self.theta / 2)],
+                                [-1j * np.sin(self.theta / 2), np.cos(self.theta / 2)]])
         self.tensor = self.matrix
+        # Generator: (θ/2) * σ_x
+        self.generator = (self.theta / 2) * np.array([[0, -1j],
+                                                      [-1j, 0]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -197,14 +178,16 @@ class Rx:
 
 class Ry:
     name = 'ry'
-
     interaction = 1
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta/2), -np.sin(self.theta/2)],
-                                [np.sin(self.theta/2), np.cos(self.theta/2)]])
+        self.matrix = np.array([[np.cos(self.theta / 2), -np.sin(self.theta / 2)],
+                                [np.sin(self.theta / 2), np.cos(self.theta / 2)]])
         self.tensor = self.matrix
+        # Generator: (θ/2) * σ_y
+        self.generator = (self.theta / 2) * np.array([[0, -1],
+                                                      [1, 0]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -212,14 +195,38 @@ class Ry:
 
 class Rz:
     name = 'rz'
-
     interaction = 1
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta/2)-1j*np.sin(self.theta/2), 0],
-                                [0, np.cos(self.theta/2)+1j*np.sin(self.theta/2)]])
+        self.matrix = np.array([[np.exp(-1j * self.theta / 2), 0],
+                                [0, np.exp(1j * self.theta / 2)]])
         self.tensor = self.matrix
+        # Generator: (θ/2) * σ_z
+        self.generator = (self.theta / 2) * np.array([[-1j, 0],
+                                                      [0, 1j]])
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
+class Phase:
+    name = 'p'
+    interaction = 1
+
+    def set_params(self, params):
+        # Phase gate has one parameter theta
+        self.theta = params[0]
+        self.matrix = np.array([
+            [1, 0],
+            [0, np.exp(1j * self.theta)]
+        ])
+        self.tensor = self.matrix
+        # Generator: (θ/2) * σ_z
+        self.generator = (self.theta / 2) * np.array([
+            [1, 0],
+            [0, -1]
+        ])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -227,28 +234,24 @@ class Rz:
 
 class CX:
     name = 'cx'
-
     matrix = np.array([[1, 0, 0, 0],
                        [0, 1, 0, 0],
                        [0, 0, 0, 1],
                        [0, 0, 1, 0]])
+    interaction = 2
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.interaction = np.abs(site0 - site1)+1
+        # Generator: (π/4) * (σ_z ⊗ σ_x)
+        self.generator = (np.pi / 4) * (np.kron(np.array([[1, 0], [0, -1]]), np.array([[0, 1], [1, 0]])))
 
-        if self.interaction > 2:
-            self.mpo = _extend_gate(self.tensor, self.sites)
-        else:
-            # If control is above target
-            if site1 < site0:
-                self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
+        if site1 < site0:  # Adjust for reverse control/target
+            self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
 class CZ:
     name = 'cz'
-
     matrix = np.array([[1, 0, 0, 0],
                        [0, 1, 0, 0],
                        [0, 0, 1, 0],
@@ -258,13 +261,11 @@ class CZ:
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.interaction = np.abs(site0 - site1)+1
-        if self.interaction > 2:
-            self.mpo = _extend_gate(self.tensor, self.sites)
-        else:
-            # If control is above target
-            if site1 < site0:
-                self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
+        # Generator: (π/4) * (σ_z ⊗ σ_z)
+        self.generator = (np.pi / 4) * np.kron(np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]]))
+
+        if site1 < site0:  # Adjust for reverse control/target
+            self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
 class CPhase:
@@ -272,41 +273,44 @@ class CPhase:
 
     def set_params(self, params):
         self.theta = params[0]
-
         self.matrix = np.array([[1, 0, 0, 0],
                                 [0, 1, 0, 0],
                                 [0, 0, 1, 0],
-                                [0, 0, 0, np.cos(self.theta)+1j*np.sin(self.theta)]])
-
+                                [0, 0, 0, np.exp(1j * self.theta)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        # Generator: (θ/2) * (σ_z ⊗ P), where P = diag(1, 0)
+        self.generator = (self.theta / 2) * np.kron(np.array([[1, 0], [0, -1]]),
+                                                    np.array([[1, 0], [0, 0]]))
 
     def set_sites(self, site0: int, site1: int):
-        assert self.theta, 'Theta must be set first'
         self.sites = [site0, site1]
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.interaction = np.abs(site0 - site1)+1
         if self.interaction > 2:
             self.mpo = _extend_gate(self.tensor, self.sites)
         else:
-            # If control is above target
-            if site1 < site0:
+            if site1 < site0:  # Adjust for reverse control/target
                 self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
+
 
 class SWAP:
     name = 'swap'
-
     matrix = np.array([[1, 0, 0, 0],
                        [0, 0, 1, 0],
                        [0, 1, 0, 0],
                        [0, 0, 0, 1]])
     interaction = 2
 
+    def __init__(self):
+        # Generator: (π/4) * (I ⊗ I + σ_x ⊗ σ_x + σ_y ⊗ σ_y + σ_z ⊗ σ_z)
+        self.generator = (np.pi / 4) * (
+            np.kron(np.eye(2), np.eye(2)) + # I ⊗ I
+            np.kron(np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])) +  # σ_x ⊗ σ_x
+            np.kron(np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])) +  # σ_y ⊗ σ_y
+            np.kron(np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]]))  # σ_z ⊗ σ_z
+        )
+
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.interaction = np.abs(site0 - site1)+1
-        if self.interaction > 2:
-            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 class Rxx:
@@ -314,21 +318,19 @@ class Rxx:
 
     def set_params(self, params):
         self.theta = params[0]
-
-        self.matrix = np.array([[np.cos(self.theta/2), 0, 0, -1j*np.sin(self.theta/2)],
-                                [0, np.cos(self.theta/2), -1j*np.sin(self.theta/2), 0],
-                                [0, -1j*np.sin(self.theta/2), np.cos(self.theta/2), 0],
-                                [-1j*np.sin(self.theta/2), 0, 0, np.cos(self.theta/2)]])
-
+        self.matrix = np.array([[np.cos(self.theta / 2), 0, 0, -1j * np.sin(self.theta / 2)],
+                                [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
+                                [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
+                                [-1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        # Generator: (θ/2) * (σ_x ⊗ σ_x)
+        self.generator = (self.theta / 2) * np.array([[0, 0, 0, -1j],
+                                                      [0, 0, -1j, 0],
+                                                      [0, -1j, 0, 0],
+                                                      [-1j, 0, 0, 0]])
 
     def set_sites(self, site0: int, site1: int):
-        assert self.theta, 'Theta must be set first'
         self.sites = [site0, site1]
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.interaction = np.abs(site0 - site1)+1
-        if self.interaction > 2:
-            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 class Ryy:
@@ -336,21 +338,19 @@ class Ryy:
 
     def set_params(self, params):
         self.theta = params[0]
-
-        self.matrix = np.array([[np.cos(self.theta/2), 0, 0, 1j*np.sin(self.theta/2)],
-                                [0, np.cos(self.theta/2), -1j*np.sin(self.theta/2), 0],
-                                [0, -1j*np.sin(self.theta/2), np.cos(self.theta/2), 0],
-                                [1j*np.sin(self.theta/2), 0, 0, np.cos(self.theta/2)]])
-
+        self.matrix = np.array([[np.cos(self.theta / 2), 0, 0, 1j * np.sin(self.theta / 2)],
+                                [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
+                                [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
+                                [1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        # Generator: (θ/2) * (σ_y ⊗ σ_y)
+        self.generator = (self.theta / 2) * np.array([[0, 0, 0, 1j],
+                                                      [0, 0, -1j, 0],
+                                                      [0, -1j, 0, 0],
+                                                      [1j, 0, 0, 0]])
 
     def set_sites(self, site0: int, site1: int):
-        assert self.theta, 'Theta must be set first'
         self.sites = [site0, site1]
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.interaction = np.abs(site0 - site1)+1
-        if self.interaction > 2:
-            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 class Rzz:
@@ -358,21 +358,19 @@ class Rzz:
 
     def set_params(self, params):
         self.theta = params[0]
-
-        self.matrix = np.array([[np.cos(self.theta/2)-1j*np.sin(self.theta/2), 0, 0, 0],
-                                [0, np.cos(self.theta/2)+1j*np.sin(self.theta/2), 0, 0],
-                                [0, 0, np.cos(self.theta/2)+1j*np.sin(self.theta/2), 0],
-                                [0, 0, 0, np.cos(self.theta/2)-1j*np.sin(self.theta/2)]])
-
+        self.matrix = np.array([[np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2), 0, 0, 0],
+                                [0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0, 0],
+                                [0, 0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0],
+                                [0, 0, 0, np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        # Generator: (θ/2) * (σ_z ⊗ σ_z)
+        self.generator = (self.theta / 2) * np.array([[1, 0, 0, 0],
+                                                      [0, -1, 0, 0],
+                                                      [0, 0, -1, 0],
+                                                      [0, 0, 0, 1]])
 
     def set_sites(self, site0: int, site1: int):
-        assert self.theta, 'Theta must be set first'
         self.sites = [site0, site1]
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.interaction = np.abs(site0 - site1)+1
-        if self.interaction > 2:
-            self.mpo = _extend_gate(self.tensor, self.sites)
 
 
 
@@ -403,6 +401,28 @@ class CCX:
 
         self.interaction = np.abs(site0 - site2)+1
         self.tensor = _extend_gate(self.tensor, self.sites)
+
+class U2:
+    name = 'u2'
+    interaction = 1
+
+    def set_params(self, params):
+        # U2 gate has parameters phi and lambda
+        self.phi = params[0]
+        self.lam = params[1]
+        self.matrix = np.array([
+            [1, -np.exp(1j * self.lam)],
+            [np.exp(1j * self.phi), np.exp(1j * (self.phi + self.lam))]
+        ]) / np.sqrt(2)
+        self.tensor = self.matrix
+        # Generator: Derived from the U2 unitary matrix
+        self.generator = (1 / np.sqrt(2)) * np.array([
+            [0, -np.exp(-1j * self.lam)],
+            [np.exp(-1j * self.phi), 0]
+        ])
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
 
 
 class GateLibrary:
