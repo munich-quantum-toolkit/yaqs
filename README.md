@@ -4,6 +4,33 @@
 # YAQS
 YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
 
+[![PyPI](https://img.shields.io/pypi/v/mqt.bench?logo=pypi&style=flat-square)](https://pypi.org/project/mqt.yaqs/)
+![OS](https://img.shields.io/badge/os-linux%20%7C%20macos%20%7C%20windows-blue?style=flat-square)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![codecov](https://img.shields.io/codecov/c/github/cda-tum/mqt-bench?style=flat-square&logo=codecov)](https://codecov.io/gh/cda-tum/mqt-yaqs)
+
+<p align="center">
+  <a href="https://mqt.readthedocs.io">
+   <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/mqt_light.png" width="60%">
+     <img src="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/mqt_dark.png" width="60%">
+   </picture>
+  </a>
+</p>
+
+# MQT YAQS: A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
+YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
+
+YAQS is part of the [_Munich Quantum Toolkit_ (_MQT_)](https://mqt.readthedocs.io) developed by the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the [Technical University of Munich](https://www.tum.de/) and is hosted at [https://www.cda.cit.tum.de/mqt-yaqs/](https://www.cda.cit.tum.de/mqt-yaqs/).
+
+<p align="center">
+  <a href="https://mqt.readthedocs.io/projects/bench">
+  <img width=30% src="https://img.shields.io/badge/documentation-blue?style=for-the-badge&logo=read%20the%20docs" alt="Documentation" />
+  </a>
+</p>
+
+If you have any questions, feel free to create a [discussion](https://github.com/cda-tum/mqt-yaqs/discussions) or an [issue](https://github.com/cda-tum/mqt-yaqs/issues) on [GitHub](https://github.com/cda-tum/mqt-yaqs).
+
 ## Features
 - **Simulation of Open Quantum Systems**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM)
 - **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method ([Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946))
@@ -12,7 +39,7 @@ YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused
 - **WIP: Noisy Quantum Circuit Simulation**: Investigate the effect of noise on large quantum circuits
 - **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
 
-## Installation
+## Getting Started
 
 1. Clone this repository:
 ```bash
@@ -46,14 +73,43 @@ Fork the repository and clone your fork.
 Create a new branch for your changes.
 Commit and push your work, then open a Pull Request.
 
-## Questions, Comments, Thoughts?
-If you have anything you want to share or collaboration ideas, feel free to reach out!
-
-Email: [aaron.sander@tum.de](mailto:aaron.sander@tum.de)
-
-LinkedIn: [https://www.linkedin.com/in/aaron-sander/](https://www.linkedin.com/in/aaron-sander/)
-
 ## Citations
-If you use this code in your research, please consider citing the relevant papers:
+In case you are using MQT YAQS in your work, we would be thankful if you referred to it by citing the relevant publications:
 
-[Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946)
+```bibtex
+@misc{sander2024_equivalencechecking,
+      title={Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator}, 
+      author={Aaron Sander and Lukas Burgholzer and Robert Wille},
+      year={2024},
+      eprint={2410.10946},
+      archivePrefix={arXiv},
+      primaryClass={quant-ph},
+      url={https://arxiv.org/abs/2410.10946}, 
+}
+```
+
+## Acknowledgements
+
+This project received funding from the European Research Council (ERC) under the European
+Union's Horizon 2020 research and innovation program (grant agreement No. 101001318), was
+part of the Munich Quantum Valley, which is supported by the Bavarian state government with
+funds from the Hightech Agenda Bayern Plus, and has been supported by the BMWK on the basis
+of a decision by the German Bundestag through project QuaST, as well as by the BMK, BMDW,
+and the State of Upper Austria in the frame of the COMET program (managed by the FFG).
+
+<p align="center">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/tum_dark.svg" width="28%">
+<img src="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/tum_light.svg" width="28%" alt="TUM Logo">
+</picture>
+<picture>
+<img src="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/logo-bavaria.svg" width="16%" alt="Coat of Arms of Bavaria">
+</picture>
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/erc_dark.svg" width="24%">
+<img src="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/erc_light.svg" width="24%" alt="ERC Logo">
+</picture>
+<picture>
+<img src="https://raw.githubusercontent.com/cda-tum/mqt/main/docs/_static/logo-mqv.svg" width="28%" alt="MQV Logo">
+</picture>
+</p>
