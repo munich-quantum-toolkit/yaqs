@@ -326,6 +326,7 @@ class MPO:
         for i, tensor in enumerate(self.tensors):
             # left, right, sigma, sigma'
             self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
+        assert self.check_if_valid_MPO(), "MPO initialized wrong"
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
@@ -334,6 +335,7 @@ class MPO:
         for i, tensor in enumerate(self.tensors):
             # left, right, sigma, sigma'
             self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
+        assert self.check_if_valid_MPO(), "MPO initialized wrong"
         self.length = len(self.tensors)
         self.physical_dimension = tensors[0].shape[0]
 
@@ -353,6 +355,7 @@ class MPO:
         for tensor in self.tensors[1::]:
             assert tensor.shape[2] == right_bond
             right_bond = tensor.shape[3]
+        return True
 
     def check_if_identity(self, fidelity: float):
         identity_MPO = MPO()
