@@ -29,18 +29,35 @@ class MPS:
             for i, d in enumerate(self.physical_dimensions):
                 vector = np.zeros(d)
                 if state == 'zeros':
+                    # |0>
                     vector[0] = 1
                 elif state == 'ones':
+                    # |1>
                     vector[1] = 1
-                elif state == 'x':
-                    vector[0] = 1/np.sqrt(2)
-                    vector[1] = 1/np.sqrt(2)
+                elif state == 'x+':
+                    # |+> = (|0> + |1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = 1 / np.sqrt(2)
+                elif state == 'x-':
+                    # |-> = (|0> - |1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = -1 / np.sqrt(2)
+                elif state == 'y+':
+                    # |+i> = (|0> + i|1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = 1j / np.sqrt(2)
+                elif state == 'y-':
+                    # |-i> = (|0> - i|1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = -1j / np.sqrt(2)
                 elif state == 'Neel':
+                    # |010101...>
                     if i % 2:
                         vector[0] = 1
                     else:
                         vector[1] = 1
                 elif state == 'wall':
+                    # |000111>
                     if i < length // 2:
                         vector[0] = 1
                     else:
@@ -152,7 +169,8 @@ class MPS:
 
     def measure(self, observable: 'Observable'):
         assert observable.site in range(0, self.length), "State is shorter than selected site for expectation value."
-        # Copying done to stop the state from messing up its own canonical form
+        # NOTE: This function assumes the state is in site canonical form at the site of the expecation value.
+        #       Asserting or setting it directly in this function is slow and should be avoided.
         return local_expval(copy.deepcopy(self), getattr(TensorLibrary, observable.name)().matrix, observable.site)
 
     def norm(self):
