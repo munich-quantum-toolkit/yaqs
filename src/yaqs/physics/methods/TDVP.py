@@ -232,7 +232,7 @@ def _local_hamiltonian_step(L, R, W, A, dt, numiter: int):
     """
     return expm_krylov(
         lambda x: _apply_local_hamiltonian(L, R, W, x.reshape(A.shape)).reshape(-1),
-            A.reshape(-1), -dt, numiter).reshape(A.shape)
+            A.reshape(-1), dt, numiter).reshape(A.shape)
 
 
 def _local_bond_step(L, R, C, dt, numiter: int):
