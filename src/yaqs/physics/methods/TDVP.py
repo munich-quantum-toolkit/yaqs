@@ -241,7 +241,7 @@ def _local_bond_step(L, R, C, dt, numiter: int):
     """
     return expm_krylov(
         lambda x: _apply_local_bond_contraction(L, R, x.reshape(C.shape)).reshape(-1),
-            C.reshape(-1), -dt, numiter).reshape(C.shape)
+            C.reshape(-1), dt, numiter).reshape(C.shape)
 
 
 def single_site_TDVP(state: MPS, H: MPO,  dt, numsteps: int, numiter_lanczos: int = 25):
