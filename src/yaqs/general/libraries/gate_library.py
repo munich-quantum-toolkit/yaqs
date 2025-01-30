@@ -244,7 +244,7 @@ class CX:
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (σ_z ⊗ σ_x)
-        self.generator = [(np.pi / 4)*np.array([[1, 0], [0, -1]]), np.array([[0, 1], [1, 0]])]
+        self.generator = [(np.pi / 4)*np.array([[1, 0], [0, -1]]), (np.pi / 4)*np.array([[0, 1], [1, 0]])]
 
         if site1 < site0:  # Adjust for reverse control/target
             self.generator.reverse()
@@ -263,7 +263,7 @@ class CZ:
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (σ_z ⊗ σ_z)
-        self.generator = [(np.pi / 4)*np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
+        self.generator = [(np.pi / 4)*np.array([[1, 0], [0, -1]]), (np.pi / 4)*np.array([[1, 0], [0, -1]])]
 
         if site1 < site0:  # Adjust for reverse control/target
             self.generator.reverse()
@@ -282,7 +282,7 @@ class CPhase:
                                 [0, 0, 0, np.exp(1j * self.theta)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (σ_z ⊗ P), where P = diag(1, 0)
-        self.generator = [(self.theta / 2)*np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
+        self.generator = [(self.theta / 2)*np.array([[1, 0], [0, -1]]), (self.theta/2)*np.array([[1, 0], [0, 0]])]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
@@ -327,7 +327,7 @@ class Rxx:
                                 [-1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (σ_x ⊗ σ_x)
-        self.generator = [(self.theta / 4)*np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])]
+        self.generator = [(self.theta/2)*np.array([[0, 1], [1, 0]]), (self.theta/2)*np.array([[0, 1], [1, 0]])]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
@@ -345,7 +345,7 @@ class Ryy:
                                 [1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (σ_y ⊗ σ_y)
-        self.generator = [(self.theta / 4)*np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
+        self.generator = [(self.theta / 2)*np.array([[0, -1j], [1j, 0]]), (self.theta/2)*np.array([[0, -1j], [1j, 0]])]
 
 
     def set_sites(self, site0: int, site1: int):
@@ -364,7 +364,7 @@ class Rzz:
                                 [0, 0, 0, np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (σ_z ⊗ σ_z)
-        self.generator = [(self.theta / 4)*np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
+        self.generator = [(self.theta / 2)*np.array([[1, 0], [0, -1]]), (self.theta/2)*np.array([[1, 0], [0, -1]])]
 
 
     def set_sites(self, site0: int, site1: int):
