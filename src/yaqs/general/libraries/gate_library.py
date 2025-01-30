@@ -244,7 +244,7 @@ class CX:
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (σ_z ⊗ σ_x)
-        self.generator = [(np.pi / 4)*np.array([[1, 0], [0, -1]], np.array([[0, 1], [1, 0]]))]
+        self.generator = [(np.pi / 4)*np.array([[1, 0], [0, -1]]), np.array([[0, 1], [1, 0]])]
 
         if site1 < site0:  # Adjust for reverse control/target
             self.generator.reverse()
