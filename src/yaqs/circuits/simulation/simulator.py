@@ -2,12 +2,14 @@ import concurrent.futures
 import copy
 import multiprocessing
 import numpy as np
+import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
 from yaqs.general.data_structures.networks import MPO
 from yaqs.general.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
-from yaqs.circuits.dag.dag_utils import get_temporal_zone, select_starting_point
+from yaqs.general.libraries.gate_library import GateLibrary
+from yaqs.circuits.dag.dag_utils import get_restricted_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
 from yaqs.circuits.equivalence_checking.mpo_utils import apply_layer, apply_restricted_layer
 from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
 from yaqs.physics.methods.dissipation import apply_dissipation
@@ -21,6 +23,90 @@ if TYPE_CHECKING:
     from yaqs.general.data_structures.noise_model import NoiseModel
 
 
+def apply_single_qubit_gates(state, tensor_circuit, qubits):
+    for gate in tensor_circuit:
+        if gate.interaction == 1:
+            assert gate.sites[0] in qubits, \
+                    "Single-qubit gate must be on one of the sites."
+        elif gate.interaction == 2:
+            break
+        state.tensors[gate.sites[0]] = oe.contract('ab, bcd->acd', gate.tensor, state.tensors[gate.sites[0]])
+        tensor_circuit.pop(0)
+
+
+def construct_generator_MPO(two_qubit_gates, length):
+    tensors = []
+    
+    site_idx = 0  # Keeps track of the current site being processed
+    while site_idx < length:
+        # Check if this site is part of a two-qubit gate
+        if two_qubit_gates and site_idx in two_qubit_gates[0].sites:
+            gate = two_qubit_gates[0]  # The first gate in the list
+            
+            if gate.interaction == 2:  # Two-qubit gate
+                if gate.name != 'swap':
+                    if site_idx == gate.sites[0]:  # First qubit in the gate
+                        if site_idx == 0:
+                            W = np.zeros((1, 2, 2, 2), dtype=complex)
+                            W[0, 0] = np.eye(2)
+                            W[0, 1] = gate.generator[0]  # Correctly handle θ scaling later
+                        elif site_idx == length-1:
+                            W = np.zeros((2, 1, 2, 2), dtype=complex)
+                            W[0, 0] = gate.generator[0]  # Corrected insertion
+                            W[1, 0] = np.eye(2)
+                        else:
+                            W = np.zeros((2, 2, 2, 2), dtype=complex)
+                            W[0, 0] = np.eye(2)
+                            W[0, 1] = np.zeros((2, 2))  # Ensures correct propagation
+                            W[1, 0] = gate.generator[0]
+                            W[1, 1] = np.eye(2)
+                    
+                    elif site_idx == gate.sites[1]:  # Second qubit in the gate
+                        if site_idx == 0:
+                            W = np.zeros((1, 2, 2, 2), dtype=complex)
+                            W[0, 0] = np.eye(2)
+                            W[0, 1] = gate.generator[1]
+                        elif site_idx == length-1:
+                            W = np.zeros((2, 1, 2, 2), dtype=complex)
+                            W[0, 0] = gate.generator[1]
+                            W[1, 0] = np.eye(2)
+                        else:
+                            W = np.zeros((2, 2, 2, 2), dtype=complex)
+                            W[0, 0] = np.eye(2)
+                            W[0, 1] = gate.generator[1]
+                            W[1, 0] = np.zeros((2, 2))
+                            W[1, 1] = np.eye(2)
+                        two_qubit_gates.pop(0)
+
+        else:  # Identity case
+            W = np.zeros((2, 2, 2, 2), dtype=complex)
+            W[0, 0] = np.eye(2)
+            W[0, 1] = np.zeros((2, 2))
+            W[1, 0] = np.zeros((2, 2))
+            W[1, 1] = np.eye(2)
+
+        tensors.append(W)
+        site_idx += 1  # Move to the next site
+
+    mpo = MPO()
+    mpo.init_custom(tensors)
+    return mpo
+
+
+def iterate(state, dag, iterator):
+    two_qubit_gates = []
+    for n in iterator:
+        temporal_zone = get_restricted_temporal_zone(dag, [n, n+1])
+        tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
+        apply_single_qubit_gates(state, tensor_circuit, [n, n+1])
+        if tensor_circuit:
+            two_qubit_gates.append(tensor_circuit[-1])
+    if two_qubit_gates:
+        return construct_generator_MPO(two_qubit_gates, state.length)
+    else:
+        return None
+
+
 def run_trajectory(args):
     i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
@@ -28,24 +114,14 @@ def run_trajectory(args):
     if isinstance(sim_params, StrongSimParams):
         results = np.zeros((len(sim_params.observables), 1))
 
-
     dag = circuit_to_dag(circuit)
 
     # Decides whether to start with even or odd qubits
-    first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
-    mpo = MPO()
     while dag.op_nodes():
-        if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-            mpo.init_identity(circuit.num_qubits)
-            apply_layer(mpo, None, dag, first_iterator, second_iterator, sim_params.threshold)
-            dynamic_TDVP(state, mpo, sim_params)
-            apply_dissipation(state, noise_model, dt=0)
-            state = stochastic_process(state, noise_model, dt=0)
-        else:
-            for iterator in [first_iterator, second_iterator]:
-                mpo.init_identity(circuit.num_qubits)
-                # apply_layer(mpo, dag, None, first_iterator, second_iterator, sim_params.threshold)
-                apply_restricted_layer(mpo, dag, None, iterator, sim_params.threshold)
+        first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
+        for iterator in [first_iterator, second_iterator]:
+            mpo = iterate(state, dag, iterator)
+            if mpo:
                 dynamic_TDVP(state, mpo, sim_params)
                 apply_dissipation(state, noise_model, dt=1)
                 state = stochastic_process(state, noise_model, dt=1)
