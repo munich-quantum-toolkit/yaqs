@@ -346,6 +346,20 @@ class MPO:
         
         return MPS(self.length, converted_tensors)
 
+    def convert_to_matrix(self):
+
+        for i, tensor in enumerate(self.tensors):
+            if i == 0:
+                mat = tensor
+            else:
+                mat = np.einsum('abcd, efdg->aebfcg', mat, tensor)
+                mat = np.reshape(mat, (mat.shape[0]*mat.shape[1], mat.shape[2]*mat.shape[3], mat.shape[4], mat.shape[5]))
+
+        # Final left and right bonds should be 1
+        mat = np.squeeze(mat, axis=(2, 3))
+        # mat = np.reshape(mat, mat.size)
+        return mat
+
     def write_tensor_shapes(self):
         for tensor in self.tensors:
             print(tensor.shape)
