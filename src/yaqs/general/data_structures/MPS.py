@@ -27,7 +27,7 @@ class MPS:
         # Create d-level |0> state
         if not tensors:
             for i, d in enumerate(self.physical_dimensions):
-                vector = np.zeros(d)
+                vector = np.zeros(d, dtype=complex)
                 if state == 'zeros':
                     # |0>
                     vector[0] = 1
