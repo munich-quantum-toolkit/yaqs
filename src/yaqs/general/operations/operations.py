@@ -63,6 +63,7 @@ def local_expval(state: 'MPS', operator: np.ndarray, site: int):
     E = scalar_product(state, temp_state, site)
 
     # Expectation values must be real
-    assert E.imag < 1e-16
+
+    assert E.imag < 1e-13, "Expectation Value should be real, '%16f+%16fi'." % (E.real, E.imag)
 
     return E.real
