@@ -11,45 +11,67 @@ if TYPE_CHECKING:
 
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
-    def __init__(self, length: int, tensors: list=[], physical_dimensions: list=[], state: str='zeros'):
-        self.tensors = tensors
+    def __init__(self, length: int, tensors: list = None, physical_dimensions: list = None, state: str = 'zeros'):
+        if tensors is not None:
+            assert len(tensors) == length
+            self.tensors = tensors
+        else:
+            self.tensors = []
         self.length = length
         self.physical_dimensions = physical_dimensions
-        if not physical_dimensions:
+        if physical_dimensions is None:
             # Default case is the qubit (2-level) case
+            self.physical_dimensions = []
             for _ in range(length):
                 self.physical_dimensions.append(2)
-        assert len(physical_dimensions) == length
+        assert len(self.physical_dimensions) == length
 
         # Create d-level |0> state
-        for i, d in enumerate(physical_dimensions):
-            vector = np.zeros(d)
-            if state == 'zeros':
-                vector[0] = 1
-            elif state == 'ones':
-                vector[1] = 1
-            elif state == 'x':
-                vector[0] = 1/np.sqrt(2)
-                vector[1] = 1/np.sqrt(2)
-            elif state == 'Neel':
-                if i % 2:
+        if not tensors:
+            for i, d in enumerate(self.physical_dimensions):
+                vector = np.zeros(d, dtype=complex)
+                if state == 'zeros':
+                    # |0>
                     vector[0] = 1
-                else:
+                elif state == 'ones':
+                    # |1>
                     vector[1] = 1
-            elif state == 'wall':
-                if i < length // 2:
-                    vector[0] = 1
+                elif state == 'x+':
+                    # |+> = (|0> + |1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = 1 / np.sqrt(2)
+                elif state == 'x-':
+                    # |-> = (|0> - |1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = -1 / np.sqrt(2)
+                elif state == 'y+':
+                    # |+i> = (|0> + i|1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = 1j / np.sqrt(2)
+                elif state == 'y-':
+                    # |-i> = (|0> - i|1>)/sqrt(2)
+                    vector[0] = 1 / np.sqrt(2)
+                    vector[1] = -1j / np.sqrt(2)
+                elif state == 'Neel':
+                    # |010101...>
+                    if i % 2:
+                        vector[0] = 1
+                    else:
+                        vector[1] = 1
+                elif state == 'wall':
+                    # |000111>
+                    if i < length // 2:
+                        vector[0] = 1
+                    else:
+                        vector[1] = 1
                 else:
-                    vector[1] = 1
-            else:
-                raise ValueError("Invalid state string")
+                    raise ValueError("Invalid state string")
 
-            tensor = np.expand_dims(vector, axis=(0, 1))
+                tensor = np.expand_dims(vector, axis=(0, 1))
 
-            tensor = np.transpose(tensor, (2, 0, 1))
-            self.tensors.append(tensor)
+                tensor = np.transpose(tensor, (2, 0, 1))
+                self.tensors.append(tensor)
         self.flipped = False
-        # self.orthogonality_center = 0
 
     def write_max_bond_dim(self) -> int:
         global_max = 0
