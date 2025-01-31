@@ -34,59 +34,65 @@ def apply_single_qubit_gates(state, tensor_circuit, qubits):
         tensor_circuit.pop(0)
 
 
-def construct_generator_MPO(two_qubit_gates, length):
+def construct_generator_MPO(gate, length):
     tensors = []
-    
-    site_idx = 0  # Keeps track of the current site being processed
-    while site_idx < length:
-        # Check if this site is part of a two-qubit gate
-        if two_qubit_gates and site_idx in two_qubit_gates[0].sites:
-            gate = two_qubit_gates[0]  # The first gate in the list
-            
-            if gate.interaction == 2:  # Two-qubit gate
-                if gate.name != 'swap':
-                    if site_idx == gate.sites[0]:  # First qubit in the gate
-                        if site_idx == 0:
-                            W = np.zeros((1, 2, 2, 2), dtype=complex)
-                            W[0, 0] = np.eye(2)
-                            W[0, 1] = gate.generator[0]  # Correctly handle θ scaling later
-                        elif site_idx == length-1:
-                            W = np.zeros((2, 1, 2, 2), dtype=complex)
-                            W[0, 0] = gate.generator[0]  # Corrected insertion
-                            W[1, 0] = np.eye(2)
-                        else:
-                            W = np.zeros((2, 2, 2, 2), dtype=complex)
-                            W[0, 0] = np.eye(2)
-                            W[0, 1] = np.zeros((2, 2))  # Ensures correct propagation
-                            W[1, 0] = gate.generator[0]
-                            W[1, 1] = np.eye(2)
-                    
-                    elif site_idx == gate.sites[1]:  # Second qubit in the gate
-                        if site_idx == 0:
-                            W = np.zeros((1, 2, 2, 2), dtype=complex)
-                            W[0, 0] = np.eye(2)
-                            W[0, 1] = gate.generator[1]
-                        elif site_idx == length-1:
-                            W = np.zeros((2, 1, 2, 2), dtype=complex)
-                            W[0, 0] = gate.generator[1]
-                            W[1, 0] = np.eye(2)
-                        else:
-                            W = np.zeros((2, 2, 2, 2), dtype=complex)
-                            W[0, 0] = np.eye(2)
-                            W[0, 1] = gate.generator[1]
-                            W[1, 0] = np.zeros((2, 2))
-                            W[1, 1] = np.eye(2)
-                        two_qubit_gates.pop(0)
 
-        else:  # Identity case
-            W = np.zeros((2, 2, 2, 2), dtype=complex)
+    site_idx = 0  # Keeps track of the current site being processed
+
+
+
+    first_site = min(gate.sites)
+    last_site = max(gate.sites)
+    if gate.sites[0] < gate.sites[1]:
+        first_gen = 0
+        second_gen = 1
+    else:
+        first_gen = 1
+        second_gen = 0
+
+    first_site = gate.sites[first_gen]
+    last_site = gate.sites[second_gen]
+    for site in range(length):
+        if site == first_site:
+            W = np.zeros((1, 1, 2, 2), dtype=complex)
+            W[0, 0] = gate.generator[first_gen]
+        elif site == last_site:
+            W = np.zeros((1, 1, 2, 2), dtype=complex)
+            W[0, 0] = gate.generator[second_gen]
+        elif site > first_site and site < last_site:
+            W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = np.eye(2)
-            W[0, 1] = np.zeros((2, 2))
-            W[1, 0] = np.zeros((2, 2))
-            W[1, 1] = np.eye(2)
 
         tensors.append(W)
-        site_idx += 1  # Move to the next site
+
+
+    # site_idx = 0  # Keeps track of the current site being processed
+    # while site_idx < length:
+    #     # Check if this site is part of a two-qubit gate
+    #     if two_qubit_gates and site_idx in two_qubit_gates[0].sites:
+    #         gate = two_qubit_gates[0]  # The first gate in the list
+    #         print(gate)
+    #         if site_idx == gate.sites[0]:  # First qubit in the gate
+    #             print("0")
+    #             W = np.zeros((1, 1, 2, 2), dtype=complex)
+    #             W[0, 0] = gate.generator[0]  # Correctly handle θ scaling later
+
+    #         elif site_idx == gate.sites[1]:  # Second qubit in the gate
+    #             print("1")
+    #             W = np.zeros((1, 1, 2, 2), dtype=complex)
+    #             W[0, 0] = gate.generator[1]
+    #             two_qubit_gates.pop(0)
+
+    #     else:  # Identity case
+    #         print("I")
+    #         W = np.zeros((1, 1, 2, 2), dtype=complex)
+    #         W[0, 0] = np.eye(2)
+    #         # W[0, 1] = np.zeros((2, 2))
+    #         # W[1, 0] = np.zeros((2, 2))
+    #         # W[1, 1] = np.eye(2)
+
+    #     tensors.append(W)
+    #     site_idx += 1  # Move to the next site
 
     mpo = MPO()
     mpo.init_custom(tensors)
@@ -102,7 +108,7 @@ def iterate(state, dag, iterator):
         if tensor_circuit:
             two_qubit_gates.append(tensor_circuit[-1])
     if two_qubit_gates:
-        return construct_generator_MPO(two_qubit_gates, state.length)
+        return two_qubit_gates
     else:
         return None
 
@@ -120,8 +126,12 @@ def run_trajectory(args):
     while dag.op_nodes():
         first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
         for iterator in [first_iterator, second_iterator]:
-            mpo = iterate(state, dag, iterator)
-            if mpo:
+            two_qubit_gates = iterate(state, dag, iterator)
+            # mpo = iterate(state, dag, iterator)
+            if two_qubit_gates:
+                # TODO: Make sure gates are ordered to speed up computation
+                for gate in two_qubit_gates:
+                    mpo = construct_generator_MPO(gate, state.length)
                 dynamic_TDVP(state, mpo, sim_params)
                 apply_dissipation(state, noise_model, dt=1)
                 state = stochastic_process(state, noise_model, dt=1)
