@@ -304,12 +304,14 @@ class SWAP:
 
     def __init__(self):
         # Generator: (π/4) * (I ⊗ I + X ⊗ X + Y ⊗ Y + Z ⊗ Z)
-        self.generator = (np.pi / 4) * (
-            np.kron(np.eye(2), np.eye(2)) + # I ⊗ I
-            np.kron(np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])) +  # X ⊗ X
-            np.kron(np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])) +  # Y ⊗ Y
-            np.kron(np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]]))  # Z ⊗ Z
-        )
+        # self.generator = (np.pi / 4) * (
+        #     np.kron(np.eye(2), np.eye(2)) + # I ⊗ I
+        #     np.kron(np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])) +  # X ⊗ X
+        #     np.kron(np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])) +  # Y ⊗ Y
+        #     np.kron(np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]]))  # Z ⊗ Z
+        # )
+        self.generator = [[(np.pi / 4)*np.eye(2), np.pi/4*np.array([[0, 1], [1, 0]]), np.pi/4*np.array([[0, -1j], [1j, 0]]), np.pi/4*np.array([[1, 0], [0, -1]])],
+                          [np.eye(2), np.array([[0, 1], [1, 0]]), np.array([[0, -1j], [1j, 0]]), np.array([[1, 0], [0, -1]])]]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
