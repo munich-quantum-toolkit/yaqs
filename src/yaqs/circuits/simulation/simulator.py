@@ -3,10 +3,10 @@ import copy
 import multiprocessing
 import numpy as np
 import opt_einsum as oe
-from qiskit.converters import circuit_to_dag
+from qiskit.converters import circuit_to_dag, dag_to_circuit
 from tqdm import tqdm
 
-from yaqs.general.data_structures.networks import MPO
+from yaqs.general.data_structures.networks import MPO, MPS
 from yaqs.general.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
 from yaqs.general.libraries.gate_library import GateLibrary
 from yaqs.circuits.dag.dag_utils import get_restricted_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 def apply_single_qubit_gates(state, tensor_circuit, qubits):
-    for gate in tensor_circuit:
+    for gate in copy.deepcopy(tensor_circuit):
         if gate.interaction == 1:
             assert gate.sites[0] in qubits, \
                     "Single-qubit gate must be on one of the sites."
@@ -56,14 +56,16 @@ def construct_generator_MPO(gate, length):
         if site == first_site:
             W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = gate.generator[first_gen]
+            tensors.append(W)
         elif site == last_site:
             W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = gate.generator[second_gen]
-        elif site > first_site and site < last_site:
+            tensors.append(W)
+            # break
+        else: #  site > first_site and site < last_site:
             W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = np.eye(2)
-
-        tensors.append(W)
+            tensors.append(W)
 
 
     # site_idx = 0  # Keeps track of the current site being processed
@@ -96,7 +98,7 @@ def construct_generator_MPO(gate, length):
 
     mpo = MPO()
     mpo.init_custom(tensors)
-    return mpo
+    return mpo, first_site, last_site
 
 
 def iterate(state, dag, iterator):
@@ -127,14 +129,20 @@ def run_trajectory(args):
         first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
         for iterator in [first_iterator, second_iterator]:
             two_qubit_gates = iterate(state, dag, iterator)
-            # mpo = iterate(state, dag, iterator)
             if two_qubit_gates:
                 # TODO: Make sure gates are ordered to speed up computation
                 for gate in two_qubit_gates:
-                    mpo = construct_generator_MPO(gate, state.length)
-                dynamic_TDVP(state, mpo, sim_params)
-                apply_dissipation(state, noise_model, dt=1)
-                state = stochastic_process(state, noise_model, dt=1)
+                    mpo, _, _ = construct_generator_MPO(gate, state.length)
+                    dynamic_TDVP(state, mpo, sim_params)
+                    # mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
+                    # for i in range(first_site):
+                    #     state.shift_orthogonality_center_right(i)
+                    # short_state = MPS(length=last_site-first_site+1, tensors=state.tensors[first_site:last_site+1])
+                    # dynamic_TDVP(short_state, mpo, sim_params)
+                    # for i in range(first_site, last_site+1):
+                    #     state.tensors[i] = short_state.tensors[i-first_site]
+                    apply_dissipation(state, noise_model, dt=1)
+                    state = stochastic_process(state, noise_model, dt=1)
 
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
