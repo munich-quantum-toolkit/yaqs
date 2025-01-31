@@ -13,7 +13,7 @@ YAQS is part of the [_Munich Quantum Toolkit_ (_MQT_)](https://mqt.readthedocs.i
 If you have any questions, feel free to create a [discussion](https://github.com/cda-tum/mqt-yaqs/discussions) or an [issue](https://github.com/cda-tum/mqt-yaqs/issues) on [GitHub](https://github.com/cda-tum/mqt-yaqs).
 
 ## Features
-- **Simulation of Open Quantum Systems**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM)
+- **Simulation of Open Quantum Systems**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM) ([Large-scale stochastic simulation of open quantum systems](https://arxiv.org/abs/2501.17913v1))
 - **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method ([Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946))
 
 ## Upcoming Features (Check back soon)
@@ -58,6 +58,15 @@ Commit and push your work, then open a Pull Request.
 In case you are using MQT YAQS in your work, we would be thankful if you referred to it by citing the relevant publications:
 
 ```bibtex
+@misc{sander2025_TJM,
+      title={Large-scale stochastic simulation of open quantum systems}, 
+      author={Aaron Sander and Maximilian Fröhlich and Martin Eigel and Jens Eisert and Patrick Gelß and Michael Hintermüller and Richard M. Milbradt and Robert Wille and Christian B. Mendl},
+      year={2025},
+      eprint={2501.17913},
+      archivePrefix={arXiv},
+      primaryClass={quant-ph},
+      url={https://arxiv.org/abs/2501.17913}, 
+}
 @misc{sander2024_equivalencechecking,
       title={Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator}, 
       author={Aaron Sander and Lukas Burgholzer and Robert Wille},
