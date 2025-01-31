@@ -343,8 +343,8 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
 
     # number of lattice sites
     L = H.length
-    assert L == state.length
-    assert L >= 2
+    assert L == state.length, "State and Hamiltonian not equal length"
+    assert L >= 2, "Hamiltonian is too short for 2TDVP."
 
     # right-normalize input matrix product state
     # state.normalize(form='B')
