@@ -21,10 +21,11 @@ class Observable:
             self.times = sim_params.times
         else:
             self.times = sim_params.T
+        
 
 class PhysicsSimParams:
     def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, order: int=1):
-        self.observables = observables
+        self.observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.T = T
         self.dt = dt
         self.times = np.arange(0, T+dt, dt)
