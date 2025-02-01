@@ -28,17 +28,17 @@ noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
 T = 5
 dt = 0.1
 sample_timesteps = True
-N = 1000
+N = 100
 max_bond_dim = 4
 threshold = 1e-6
 order = 2
 
-measurements = []
-for i in range(L):
-    measurements.append(Observable('x',i))
-    measurements.append(Observable('y',i))
-    measurements.append(Observable('z',i))
-# measurements = [Observable('x', site) for site in range(L)] + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
+# measurements = []
+# for i in range(L):
+#     measurements.append(Observable('x',i))
+#     measurements.append(Observable('y',i))
+#     measurements.append(Observable('z',i))
+measurements = [Observable('x', site) for site in range(L)] + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
 sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
 
@@ -85,12 +85,12 @@ if __name__ == "__main__":
     sy_list = [qt.tensor([sy if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
     sz_list = [qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
 
-    obs_list = []
-    for i in range(len(sx_list)):
-        obs_list.append(sx_list[i])
-        obs_list.append(sy_list[i])
-        obs_list.append(sz_list[i])
-    # obs_list = [sx_list + sy_list + sz_list] 
+    # obs_list = []
+    # for i in range(len(sx_list)):
+    #     obs_list.append(sx_list[i])
+    #     obs_list.append(sy_list[i])
+    #     obs_list.append(sz_list[i])
+    obs_list = sx_list + sy_list + sz_list
 
     # Exact Lindblad solution
     result_lindblad = qt.mesolve(H, psi0, t, c_ops, obs_list, progress_bar=True)
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     t = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
 
     tjm_results = []
-    for observable in sim_params.observables:
+    for observable in sim_params.original_observables:
         tjm_results.append(observable.results)
 
     qutip_results = []
