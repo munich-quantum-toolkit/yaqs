@@ -157,7 +157,7 @@ def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: N
         observable.initialize(sim_params)
 
     # Guarantee one trajectory if no noise model
-    if not noise_model:
+    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
         sim_params.order = 1
 
