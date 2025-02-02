@@ -15,7 +15,7 @@ d = 2
 J = 1
 g = 0.5
 H_0 = MPO()
-H_0.init_Ising(L, d, J, g)
+H_0.init_Ising(L,d,J,g)
 
 # Define the initial state
 state = MPS(L, state='zeros')
@@ -66,6 +66,9 @@ if __name__ == "__main__":
     for i in range(L):
         H += -g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
 
+
+
+
     # Construct collapse operators
     c_ops = []
 
@@ -80,7 +83,7 @@ if __name__ == "__main__":
     # Initial state
     psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
 
-    # Define measurement operators
+ 
     sx_list = [qt.tensor([sx if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
     sy_list = [qt.tensor([sy if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
     sz_list = [qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
@@ -97,25 +100,28 @@ if __name__ == "__main__":
 
 
 
-
     # Plotting the difference between QuTiP and TJM results
     plt.figure(figsize=(10, 8))
 
     t = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
 
     tjm_results = []
-    for observable in sim_params.original_observables:
+    for observable in sim_params.observables:
         tjm_results.append(observable.results)
 
     qutip_results = []
     for i in range(len(obs_list)):
         qutip_results.append(result_lindblad.expect[i]) 
 
+    # Plot differences with proper labels
     for j in range(len(obs_list)):
+        #plt.plot(t, qutip_results[j], label=f'Qutip Obs {j}')
         difference = qutip_results[j] - tjm_results[j]  # Compute difference
-        plt.plot(t, qutip_results[j], label=f'Qutip Obs {j}')
-        plt.plot(t, tjm_results[j], label=f'TJM Obs {j}')
-        plt.plot(t, difference, label=f'Diff Obs {j}')  # Plot difference
+        # Get the observable name and site from the original observables list
+        observable = sim_params.observables[j]
+        label = f'difference:{observable.name}{observable.site}'  # Format: e.g., "x0", "y1", "z2"
+        plt.plot(t, difference, linestyle='-', label=label)  # Plot difference with proper label
+        #plt.plot(t,tjm_results[j], linestyle='--',label=f'TJM Obs {j}')
 
     plt.xlabel('Time')
     plt.ylabel('Difference (QuTiP - TJM)')

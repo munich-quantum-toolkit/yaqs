@@ -68,10 +68,10 @@ def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimPara
     apply_dissipation(psi, noise_model, sim_params.dt/2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
     if sim_params.sample_timesteps:
-        for obs_index, observable in enumerate(sim_params.observables):
+        for obs_index, observable in enumerate(sim_params.sorted_observables):
             results[obs_index, j] = copy.deepcopy(psi).measure(observable)
     else:
-        for obs_index, observable in enumerate(sim_params.observables):
+        for obs_index, observable in enumerate(sim_params.sorted_observables):
             results[obs_index, 0] = copy.deepcopy(psi).measure(observable)
 
 
@@ -90,12 +90,12 @@ def run_trajectory_second_order(args):
     # Create deep copies of the shared inputs to avoid race conditions
     state = copy.deepcopy(initial_state)
     if sim_params.sample_timesteps:
-        results = np.zeros((len(sim_params.observables), len(sim_params.times)))
+        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
     else:
-        results = np.zeros((len(sim_params.observables), 1))
+        results = np.zeros((len(sim_params.sorted_observables), 1))
 
     if sim_params.sample_timesteps:
-        for obs_index, observable in enumerate(sim_params.observables):
+        for obs_index, observable in enumerate(sim_params.sorted_observables):
             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     phi = initialize(state, noise_model, sim_params)
@@ -116,12 +116,12 @@ def run_trajectory_first_order(args):
     state = copy.deepcopy(initial_state)
 
     if sim_params.sample_timesteps:
-        results = np.zeros((len(sim_params.observables), len(sim_params.times)))
+        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
     else:
-        results = np.zeros((len(sim_params.observables), 1))
+        results = np.zeros((len(sim_params.sorted_observables), 1))
 
     if sim_params.sample_timesteps:
-        for obs_index, observable in enumerate(sim_params.observables):
+        for obs_index, observable in enumerate(sim_params.sorted_observables):
             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
@@ -130,10 +130,10 @@ def run_trajectory_first_order(args):
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
         if sim_params.sample_timesteps:
-            for obs_index, observable in enumerate(sim_params.observables):
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, j] = copy.deepcopy(state).measure(observable)
         elif j == len(sim_params.times)-1:
-            for obs_index, observable in enumerate(sim_params.observables):
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     return results
@@ -156,6 +156,10 @@ def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: N
     for observable in sim_params.observables:
         observable.initialize(sim_params)
 
+    for observable in sim_params.sorted_observables:
+        observable.initialize(sim_params)
+
+
     # Guarantee one trajectory if no noise model
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
@@ -177,7 +181,7 @@ def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: N
                 i = futures[future]
                 try:
                     result = future.result()
-                    for obs_index, observable in enumerate(sim_params.observables):
+                    for obs_index, observable in enumerate(sim_params.sorted_observables):
                         observable.trajectories[i] = result[obs_index]
                 except Exception as e:
                         print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
@@ -185,7 +189,24 @@ def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: N
                 finally:
                     pbar.update(1)
 
-    # Save average value of trajectories
-    for observable in sim_params.observables:
+    # # Save average value of trajectories
+    # for observable in sim_params.sorted_observables:
+    #     observable.results = np.mean(observable.trajectories, axis=0)
+
+    # Restore the original order of results
+    # original_results = {}
+    # for obs_index, observable in enumerate(sim_params.sorted_observables):
+    #     original_results[observable] = observable.results
+
+    # for obs_index, observable in enumerate(sim_params.observables):
+    #     observable.results = original_results[observable]
+
+        # Save average value of trajectories for sorted observables
+    for observable in sim_params.sorted_observables:
         observable.results = np.mean(observable.trajectories, axis=0)
+
+    # Map results back to the original observables
+    for sorted_obs in sim_params.sorted_observables:
+        original_idx = sim_params.sorted_to_original_map[sorted_obs]
+        sim_params.observables[original_idx].results = sorted_obs.results
 
