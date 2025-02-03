@@ -352,11 +352,12 @@ class MPO:
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def init_custom(self, tensors: list[np.ndarray]):
+    def init_custom(self, tensors: list[np.ndarray], transpose: bool=True):
         self.tensors = tensors
-        for i, tensor in enumerate(self.tensors):
-            # left, right, sigma, sigma'
-            self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
+        if transpose:
+            for i, tensor in enumerate(self.tensors):
+                # left, right, sigma, sigma'
+                self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
         assert self.check_if_valid_MPO(), "MPO initialized wrong"
         self.length = len(self.tensors)
         self.physical_dimension = tensors[0].shape[0]
