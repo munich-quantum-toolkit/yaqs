@@ -99,15 +99,26 @@ def run_trajectory(args):
             if two_qubit_gates:
                 # TODO: Make sure gates are ordered to speed up computation
                 for gate in two_qubit_gates:
-                    mpo, _, _ = construct_generator_MPO(gate, state.length)
-                    dynamic_TDVP(state, mpo, sim_params)
-                    # mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
-                    # for i in range(first_site):
-                    #     state.shift_orthogonality_center_right(i)
-                    # short_state = MPS(length=last_site-first_site+1, tensors=state.tensors[first_site:last_site+1])
-                    # dynamic_TDVP(short_state, mpo, sim_params)
-                    # for i in range(first_site, last_site+1):
-                    #     state.tensors[i] = short_state.tensors[i-first_site]
+                    mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
+                    if sim_params.window_size is not None:
+                        # TODO: Does not handle boundary effects
+                        window = [first_site-sim_params.window_size, last_site+sim_params.window_size]
+                        if window[0] < 0:
+                            window[0] = 0
+                        if window[1] > state.length-1:
+                            window[1] = state.length-1
+
+                        for i in range(window[0]):
+                            state.shift_orthogonality_center_right(i)
+                        short_mpo = MPO()
+                        short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
+                        short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
+                        dynamic_TDVP(short_state, short_mpo, sim_params)
+                        for i in range(window[0], window[1]):
+                            state.tensors[i] = short_state.tensors[i-window[0]]
+                    else:
+                        dynamic_TDVP(state, mpo, sim_params)
+
                     apply_dissipation(state, noise_model, dt=1)
                     state = stochastic_process(state, noise_model, dt=1)
 
