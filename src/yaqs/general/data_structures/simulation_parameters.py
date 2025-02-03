@@ -41,11 +41,12 @@ class PhysicsSimParams:
 
 
 class WeakSimParams:
-    def __init__(self, shots: int, max_bond_dim: int=2, threshold: float=1e-6):
+    def __init__(self, shots: int, max_bond_dim: int=2, threshold: float=1e-6, window_size: int=None):
         self.measurements = shots*[None]
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
+        self.window_size = window_size
 
     def aggregate_measurements(self):
         self.results = {}
@@ -62,8 +63,9 @@ class WeakSimParams:
 
 
 class StrongSimParams:
-    def __init__(self, observables: list[Observable], N: int=1000, max_bond_dim: int=2, threshold: float=1e-6):
+    def __init__(self, observables: list[Observable], N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, window_size: int=None):
         self.observables = observables
         self.N = N
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
+        self.window_size = window_size
