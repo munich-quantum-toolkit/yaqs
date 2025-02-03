@@ -112,9 +112,11 @@ def run_trajectory(args):
                             state.shift_orthogonality_center_right(i)
                         short_mpo = MPO()
                         short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
+                        assert window[1]-window[0]+1 > 1, "MPS cannot be length 1"
                         short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
                         dynamic_TDVP(short_state, short_mpo, sim_params)
                         for i in range(window[0], window[1]):
+                            assert i-window[0] >= 0, window[0]
                             state.tensors[i] = short_state.tensors[i-window[0]]
                     else:
                         dynamic_TDVP(state, mpo, sim_params)
