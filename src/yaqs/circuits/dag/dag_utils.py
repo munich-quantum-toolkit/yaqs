@@ -131,7 +131,7 @@ def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int]):
                     dag.remove_op_node(node)
 
                 # Check if the gate is a two-qubit gate and include it before stopping
-                elif qubit_set >= qubits_to_check:
+                elif qubit_set == qubits_to_check:
                     if node.op.name in ['measure', 'barrier']:
                         dag.remove_op_node(node)
                         continue
@@ -139,6 +139,12 @@ def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int]):
                         new_dag.apply_operation_back(node.op, node.qargs)
                         dag.remove_op_node(node)
                     return new_dag
+                else:
+                    if node.op.name in ['measure', 'barrier']:
+                        dag.remove_op_node(node)
+                        continue
+                    for item in qubit_set & qubits_to_check:
+                        qubits_to_check.remove(item)
 
                 # Remove overlapping qubits from the zone for partial overlap
                 # else:
