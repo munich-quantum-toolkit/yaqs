@@ -4,7 +4,7 @@ import opt_einsum as oe
 from yaqs.general.data_structures.networks import MPO, MPS
 from yaqs.general.operations.matrix_exponential import expm_krylov
 
-from yaqs.general.data_structures.simulation_parameters import WeakSimParams
+from yaqs.general.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
     """
@@ -277,6 +277,10 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     BL = [None for _ in range(L)]
     BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
 
+
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        sim_params.dt = 1
+
     # sweep from left to right
     for i in range(L - 1):
         # evolve psi.A[i] forward in time by half a time step
@@ -355,7 +359,7 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     BL = [None for _ in range(L)]
     BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
 
-    if isinstance(sim_params, WeakSimParams):
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
 
     # sweep from left to right
