@@ -149,6 +149,12 @@ def _compute_right_operator_blocks(psi: MPS, op: MPO):
     BR = [None for _ in range(L)]
     # initialize rightmost dummy block
     BR[L-1] = np.array([[[1]]], dtype=complex)
+    right_chi = psi.tensors[L-1].shape[2]
+    right_D   = op.tensors[L-1].shape[3]
+    BR[L-1] = np.zeros((right_chi, right_D, right_chi))
+    for i in range(right_chi):
+        for a in range(right_D):
+            BR[L-1][i,a,i] = 1
     for i in reversed(range(L-1)):
         BR[i] = _contraction_operator_step_right(psi.tensors[i+1], psi.tensors[i+1], op.tensors[i+1], BR[i+1])
     return BR
@@ -275,9 +281,13 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     # initialize leftmost block by 1x1x1 identity
     BR = _compute_right_operator_blocks(state, H)
     BL = [None for _ in range(L)]
-    BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
-
-
+    # BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
+    left_chi = state.tensors[0].shape[1]
+    left_D   = H.tensors[0].shape[2]
+    BL[0] = np.zeros((left_chi, left_D, left_chi), dtype=BR[0].dtype)
+    for i in range(left_chi):
+        for a in range(left_D):
+            BL[0][i,a,i] = 1
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
 
@@ -357,7 +367,13 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     # initialize leftmost block by 1x1x1 identity
     BR = _compute_right_operator_blocks(state, H)
     BL = [None for _ in range(L)]
-    BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
+    # BL[0] = np.array([[[1]]], dtype=BR[0].dtype)
+    left_chi = state.tensors[0].shape[1]
+    left_D   = H.tensors[0].shape[2]
+    BL[0] = np.zeros((left_chi, left_D, left_chi), dtype=BR[0].dtype)
+    for i in range(left_chi):
+        for a in range(left_D):
+            BL[0][i,a,i] = 1
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
