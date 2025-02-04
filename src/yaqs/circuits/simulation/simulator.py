@@ -101,12 +101,19 @@ def run_trajectory(args):
                 for gate in two_qubit_gates:
                     mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
                     if sim_params.window_size is not None:
-                        # TODO: Does not handle boundary effects
-                        window = [first_site-sim_params.window_size, last_site+sim_params.window_size]
+                        window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
+                        
                         if window[0] < 0:
                             window[0] = 0
-                        if window[1] > state.length-1:
+                            # shift = -window[0]
+                            # window[0] += shift
+                            # window[1] = min(state.length - 1, window[1] + shift)  # Prevent overflow
+
+                        if window[1] > state.length - 1:
                             window[1] = state.length-1
+                            # shift = window[1] - (state.length - 1)
+                            # window[1] -= shift
+                            # window[0] = max(0, window[0] - shift)  # Prevent underflow
 
                         for i in range(window[0]):
                             state.shift_orthogonality_center_right(i)
@@ -115,7 +122,7 @@ def run_trajectory(args):
                         assert window[1]-window[0]+1 > 1, "MPS cannot be length 1"
                         short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
                         dynamic_TDVP(short_state, short_mpo, sim_params)
-                        for i in range(window[0], window[1]):
+                        for i in range(window[0], window[1]+1):
                             assert i-window[0] >= 0, window[0]
                             state.tensors[i] = short_state.tensors[i-window[0]]
                     else:
