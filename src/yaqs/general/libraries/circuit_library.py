@@ -60,8 +60,8 @@ def create_Heisenberg_circuit(model, dt, timesteps):
         if model['L'] % 2 != 0 and model['L'] != 1:
             circ.rzz(theta=theta_zz, qubit1=model['L']-2, qubit2=model['L']-1)
 
-        if model['boundary'] == 'periodic' and model['L'] != 2:
-            circ.rzz(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
+        # if model['boundary'] == 'periodic' and model['L'] != 2:
+        #     circ.rzz(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
 
         # XX application
         for site in range(model['L'] // 2):
@@ -73,8 +73,8 @@ def create_Heisenberg_circuit(model, dt, timesteps):
         if model['L'] % 2 != 0 and model['L'] != 1:
             circ.rxx(theta=theta_xx, qubit1=model['L']-2, qubit2=model['L']-1)
 
-        if model['boundary'] == 'periodic' and model['L'] != 2:
-            circ.rxx(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
+        # if model['boundary'] == 'periodic' and model['L'] != 2:
+        #     circ.rxx(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
 
         # YY application
         for site in range(model['L'] // 2):
@@ -86,8 +86,8 @@ def create_Heisenberg_circuit(model, dt, timesteps):
         if model['L'] % 2 != 0 and model['L'] != 1:
             circ.ryy(theta=theta_yy, qubit1=model['L']-2, qubit2=model['L']-1)
 
-        if model['boundary'] == 'periodic' and model['L'] != 2:
-            circ.ryy(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
+        # if model['boundary'] == 'periodic' and model['L'] != 2:
+        #     circ.ryy(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
 
     # print(circ.draw())
     return circ
