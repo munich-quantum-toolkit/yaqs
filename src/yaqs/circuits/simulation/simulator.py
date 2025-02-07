@@ -30,9 +30,17 @@ def apply_single_qubit_gates(state, tensor_circuit, qubits):
                     "Single-qubit gate must be on one of the sites."
         elif gate.interaction == 2:
             break
+        print(gate.name, gate.sites)
         state.tensors[gate.sites[0]] = oe.contract('ab, bcd->acd', gate.tensor, state.tensors[gate.sites[0]])
         tensor_circuit.pop(0)
 
+def apply_single_qubit_gate(state, gate):
+    # if gate.interaction == 1:
+    #     assert gate.sites[0] in qubits, \
+    #             "Single-qubit gate must be on one of the sites."
+    # elif gate.interaction == 2:
+    #     break
+    state.tensors[gate.sites[0]] = oe.contract('ab, bcd->acd', gate.tensor, state.tensors[gate.sites[0]])
 
 def construct_generator_MPO(gate, length):
     tensors = []
@@ -67,19 +75,35 @@ def construct_generator_MPO(gate, length):
     mpo.init_custom(tensors)
     return mpo, first_site, last_site
 
+def iterate(state, dag, pending_queue):
+    """
+    Sweeps sequentially over zones defined by adjacent qubits [n, n+1] for n in range(0, state.length-1).
 
-def iterate(state, dag):
+    For each zone:
+      • Build the temporal zone using get_restricted_temporal_zone (which uses pending_queue).
+      • Convert the zone to a tensor circuit and apply any single-qubit gates.
+      • If the tensor circuit is nonempty, record its final two-qubit gate.
+
+    Returns a list of final tensor gates produced in this sweep (or None if none).
+    """
     two_qubit_gates = []
-    for n in range(0, state.length-1):
-        temporal_zone = get_restricted_temporal_zone(dag, [n, n+1])
+    n = 0
+    while n < state.length - 1:
+        # Process zone defined by qubits [n, n+1]
+        temporal_zone, lr_gate, full_gate_applied = get_restricted_temporal_zone(dag, [n, n+1], pending_queue)
         tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
+        # print(dag_to_circuit(temporal_zone))
         apply_single_qubit_gates(state, tensor_circuit, [n, n+1])
+        # Only record a gate if the tensor_circuit is nonempty.
         if tensor_circuit:
             two_qubit_gates.append(tensor_circuit[-1])
-    if two_qubit_gates:
-        return two_qubit_gates
-    else:
-        return None
+        # If a full two-qubit gate (nearest-neighbor) was applied in this zone,
+        # then skip the next overlapping zone.
+        if full_gate_applied:
+            n += 2
+        else:
+            n += 1
+    return two_qubit_gates if two_qubit_gates else None
 
 
 def run_trajectory(args):
@@ -89,46 +113,67 @@ def run_trajectory(args):
     if isinstance(sim_params, StrongSimParams):
         results = np.zeros((len(sim_params.observables), 1))
 
+    # Convert the circuit to a DAG representation.
     dag = circuit_to_dag(circuit)
 
-    # Decides whether to start with even or odd qubits
+    # Process gates one by one in topological order.
     while dag.op_nodes():
-        two_qubit_gates = iterate(state, dag)
-        if two_qubit_gates:
-            # TODO: Make sure gates are ordered to speed up computation
-            for gate in two_qubit_gates:
-                mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
-                if sim_params.window_size is not None:
-                    window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
-                    
-                    if window[0] < 0:
-                        window[0] = 0
-                        # shift = -window[0]
-                        # window[0] += shift
-                        # window[1] = min(state.length - 1, window[1] + shift)  # Prevent overflow
+        # Get the next available node in topological order.
+        node = next(iter(dag.topological_op_nodes()))
+        
+        # Skip (and remove) measurement and barrier nodes.
+        if node.op.name in ['measure', 'barrier']:
+            dag.remove_op_node(node)
+            continue
+        else:
+            gate = convert_dag_to_tensor_algorithm(node)[0]
+        # --- Process Single-Qubit Gates ---
+        if len(node.qargs) == 1:
+            # Contract the single-qubit gate immediately into the MPS.
+            apply_single_qubit_gate(state, gate)
+            dag.remove_op_node(node)
 
-                    if window[1] > state.length - 1:
-                        window[1] = state.length-1
-                        # shift = window[1] - (state.length - 1)
-                        # window[1] -= shift
-                        # window[0] = max(0, window[0] - shift)  # Prevent underflow
+        # --- Process Two-Qubit Gates ---
+        elif len(node.qargs) == 2:
+            # Construct the corresponding MPO for this two-qubit gate.
+            mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
+            if sim_params.window_size is not None:
+                # Define a window for a local update.
+                window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
+                if window[0] < 0:
+                    window[0] = 0
+                if window[1] > state.length - 1:
+                    window[1] = state.length - 1
 
-                    for i in range(window[0]):
-                        state.shift_orthogonality_center_right(i)
-                    short_mpo = MPO()
-                    short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
-                    assert window[1]-window[0]+1 > 1, "MPS cannot be length 1"
-                    short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
-                    dynamic_TDVP(short_state, short_mpo, sim_params)
-                    for i in range(window[0], window[1]+1):
-                        assert i-window[0] >= 0, window[0]
-                        state.tensors[i] = short_state.tensors[i-window[0]]
-                else:
-                    dynamic_TDVP(state, mpo, sim_params)
+                # Shift the orthogonality center for sites before the window.
+                for i in range(window[0]):
+                    state.shift_orthogonality_center_right(i)
 
-                apply_dissipation(state, noise_model, dt=1)
-                state = stochastic_process(state, noise_model, dt=1)
+                # Create a shortened MPO and state corresponding to the window.
+                short_mpo = MPO()
+                short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
+                assert window[1]-window[0]+1 > 1, "MPS cannot be length 1"
+                short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
+                dynamic_TDVP(short_state, short_mpo, sim_params)
+                # Replace the updated window back into the full state.
+                for i in range(window[0], window[1]+1):
+                    state.tensors[i] = short_state.tensors[i-window[0]]
+            else:
+                # Perform a TDVP update on the full state.
+                dynamic_TDVP(state, mpo, sim_params)
 
+            dag.remove_op_node(node)
+
+            # After applying the two-qubit gate, update with dissipation and stochastic processes.
+            apply_dissipation(state, noise_model, dt=1)
+            state = stochastic_process(state, noise_model, dt=1)
+
+        # --- Process Other Gates ---
+        else:
+            # If a node acts on more than 2 qubits, you can extend this branch.
+            dag.remove_op_node(node)
+
+    # --- Final Measurement ---
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             return measure(state, sim_params.shots)
@@ -138,6 +183,65 @@ def run_trajectory(args):
         for obs_index, observable in enumerate(sim_params.observables):
             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
         return results
+
+
+# def run_trajectory(args):
+#     i, initial_state, noise_model, sim_params, circuit = args
+#     state = copy.deepcopy(initial_state)
+
+#     if isinstance(sim_params, StrongSimParams):
+#         results = np.zeros((len(sim_params.observables), 1))
+
+#     dag = circuit_to_dag(circuit)
+#     pending_queue = []
+#     # Decides whether to start with even or odd qubits
+#     while dag.op_nodes():
+#         two_qubit_gates = iterate(state, dag, pending_queue)
+#         if two_qubit_gates:
+#             # TODO: Make sure gates are ordered to speed up computation
+#             for gate in two_qubit_gates:
+#                 print(gate.name, gate.sites)
+#                 mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
+#                 if sim_params.window_size is not None:
+#                     window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
+                    
+#                     if window[0] < 0:
+#                         window[0] = 0
+#                         # shift = -window[0]
+#                         # window[0] += shift
+#                         # window[1] = min(state.length - 1, window[1] + shift)  # Prevent overflow
+
+#                     if window[1] > state.length - 1:
+#                         window[1] = state.length-1
+#                         # shift = window[1] - (state.length - 1)
+#                         # window[1] -= shift
+#                         # window[0] = max(0, window[0] - shift)  # Prevent underflow
+
+#                     for i in range(window[0]):
+#                         state.shift_orthogonality_center_right(i)
+#                     short_mpo = MPO()
+#                     short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
+#                     assert window[1]-window[0]+1 > 1, "MPS cannot be length 1"
+#                     short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
+#                     dynamic_TDVP(short_state, short_mpo, sim_params)
+#                     for i in range(window[0], window[1]+1):
+#                         assert i-window[0] >= 0, window[0]
+#                         state.tensors[i] = short_state.tensors[i-window[0]]
+#                 else:
+#                     dynamic_TDVP(state, mpo, sim_params)
+
+#                 apply_dissipation(state, noise_model, dt=1)
+#                 state = stochastic_process(state, noise_model, dt=1)
+
+#     if isinstance(sim_params, WeakSimParams):
+#         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
+#             return measure(state, sim_params.shots)
+#         else:
+#             return measure(state, shots=1)
+#     elif isinstance(sim_params, StrongSimParams):
+#         for obs_index, observable in enumerate(sim_params.observables):
+#             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+#         return results
 
 
 def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params, noise_model: 'NoiseModel'=None):
