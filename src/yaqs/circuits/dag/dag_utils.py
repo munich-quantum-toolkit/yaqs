@@ -133,9 +133,11 @@ def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int], pending_que
             – If that gate is not already in pending_queue, add it (and do not apply it yet)
             – Otherwise, remove it from the queue and apply it.
     
-    Returns a tuple: (new_dag, lr_gate)
+    Returns a triple: (new_dag, lr_gate, full_gate_applied)
       • new_dag is the restricted (accumulated) DAG for the zone.
       • lr_gate is the long-range gate that was just released (if any), or None.
+      • full_gate_applied is True if a nearest-neighbor two-qubit gate that covers the zone
+        was applied, and False otherwise.
     """
     new_dag = dag.copy_empty_like()
     layers = list(dag.multigraph_layers())
@@ -143,6 +145,11 @@ def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int], pending_que
     qubits_to_check = {dag.qubits[q] for q in range(min(qubits), max(qubits) + 1)}
     lr_gate = None
     stop_zone = False  # flag to indicate that we should stop processing further layers
+    full_gate_applied = False  # flag to indicate a full (nearest-neighbor) two-qubit gate was applied
+    # for pending_gate in pending_queue:
+    #     overlapping = qubits_to_check & set(pending_gate.qargs)
+    #     if overlapping:
+    #         qubits_to_check.difference_update(overlapping)
 
     for layer in layers:
         for node in layer:
@@ -156,24 +163,35 @@ def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int], pending_que
 
             node_qubits = set(node.qargs)
 
-            # If the gate is entirely contained in the zone, add it.
+            # (A) If the gate is entirely contained in the zone, apply it.
             if node_qubits < qubits_to_check:
                 new_dag.apply_operation_back(node.op, node.qargs)
                 dag.remove_op_node(node)
-            # If the gate exactly covers the zone (i.e. a two-qubit gate that fully entangles the zone)
+            # (B) If the gate exactly covers the zone (i.e. a two-qubit gate that fully entangles the zone)
             elif node_qubits == qubits_to_check:
                 new_dag.apply_operation_back(node.op, node.qargs)
                 dag.remove_op_node(node)
-                # Mark that we have reached a full-entangling gate and break out
+                # full_gate_applied = True
                 stop_zone = True
                 break
-            # If the gate touches part of the zone (long-range gate)
+            # (C) If the gate touches part of the zone
             elif node_qubits & qubits_to_check:
-                if not any(same_gate(node, pending_node) for pending_node in pending_queue):
+                # To prevent adding more gates at this qubit
+                for item in node_qubits & qubits_to_check:
+                    qubits_to_check.remove(item)
+                index0 = dag.qubits.index(node.qargs[0])
+                index1 = dag.qubits.index(node.qargs[1])
+
+                # Overlap only
+                if abs(index0 - index1) == 1:
+                    continue
+                # Long-range not in queue
+                elif not any(same_gate(node, pending_node) for pending_node in pending_queue):
                     # First occurrence: add it to the pending queue and stop processing further.
                     pending_queue.append(node)
                     stop_zone = True
                     break
+                # Long range that should be applied now
                 else:
                     # Second occurrence: remove from pending and apply it.
                     for i, pending_node in enumerate(pending_queue):
@@ -187,11 +205,11 @@ def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int], pending_que
                     break
             # Otherwise, ignore operations that do not affect the zone.
         if stop_zone:
-            # Once a stopping gate (full two-qubit or long-range gate) is encountered,
-            # we do not process later layers.
             break
 
-    return new_dag, lr_gate
+    if qubits_to_check == dag.qubits[min(qubits)]:
+        full_gate_applied = True
+    return new_dag, lr_gate, full_gate_applied
 
 
 def check_longest_gate(dag: DAGCircuit):
