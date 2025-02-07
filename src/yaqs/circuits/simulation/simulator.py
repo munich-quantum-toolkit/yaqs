@@ -68,9 +68,9 @@ def construct_generator_MPO(gate, length):
     return mpo, first_site, last_site
 
 
-def iterate(state, dag, iterator):
+def iterate(state, dag):
     two_qubit_gates = []
-    for n in iterator:
+    for n in range(0, state.length-1):
         temporal_zone = get_restricted_temporal_zone(dag, [n, n+1])
         tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
         apply_single_qubit_gates(state, tensor_circuit, [n, n+1])
@@ -93,43 +93,41 @@ def run_trajectory(args):
 
     # Decides whether to start with even or odd qubits
     while dag.op_nodes():
-        first_iterator, second_iterator = select_starting_point(initial_state.length, dag)
-        for iterator in [first_iterator, second_iterator]:
-            two_qubit_gates = iterate(state, dag, iterator)
-            if two_qubit_gates:
-                # TODO: Make sure gates are ordered to speed up computation
-                for gate in two_qubit_gates:
-                    mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
-                    if sim_params.window_size is not None:
-                        window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
-                        
-                        if window[0] < 0:
-                            window[0] = 0
-                            # shift = -window[0]
-                            # window[0] += shift
-                            # window[1] = min(state.length - 1, window[1] + shift)  # Prevent overflow
+        two_qubit_gates = iterate(state, dag)
+        if two_qubit_gates:
+            # TODO: Make sure gates are ordered to speed up computation
+            for gate in two_qubit_gates:
+                mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
+                if sim_params.window_size is not None:
+                    window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
+                    
+                    if window[0] < 0:
+                        window[0] = 0
+                        # shift = -window[0]
+                        # window[0] += shift
+                        # window[1] = min(state.length - 1, window[1] + shift)  # Prevent overflow
 
-                        if window[1] > state.length - 1:
-                            window[1] = state.length-1
-                            # shift = window[1] - (state.length - 1)
-                            # window[1] -= shift
-                            # window[0] = max(0, window[0] - shift)  # Prevent underflow
+                    if window[1] > state.length - 1:
+                        window[1] = state.length-1
+                        # shift = window[1] - (state.length - 1)
+                        # window[1] -= shift
+                        # window[0] = max(0, window[0] - shift)  # Prevent underflow
 
-                        for i in range(window[0]):
-                            state.shift_orthogonality_center_right(i)
-                        short_mpo = MPO()
-                        short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
-                        assert window[1]-window[0]+1 > 1, "MPS cannot be length 1"
-                        short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
-                        dynamic_TDVP(short_state, short_mpo, sim_params)
-                        for i in range(window[0], window[1]+1):
-                            assert i-window[0] >= 0, window[0]
-                            state.tensors[i] = short_state.tensors[i-window[0]]
-                    else:
-                        dynamic_TDVP(state, mpo, sim_params)
+                    for i in range(window[0]):
+                        state.shift_orthogonality_center_right(i)
+                    short_mpo = MPO()
+                    short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
+                    assert window[1]-window[0]+1 > 1, "MPS cannot be length 1"
+                    short_state = MPS(length=window[1]-window[0]+1, tensors=state.tensors[window[0]:window[1]+1])
+                    dynamic_TDVP(short_state, short_mpo, sim_params)
+                    for i in range(window[0], window[1]+1):
+                        assert i-window[0] >= 0, window[0]
+                        state.tensors[i] = short_state.tensors[i-window[0]]
+                else:
+                    dynamic_TDVP(state, mpo, sim_params)
 
-                    apply_dissipation(state, noise_model, dt=1)
-                    state = stochastic_process(state, noise_model, dt=1)
+                apply_dissipation(state, noise_model, dt=1)
+                state = stochastic_process(state, noise_model, dt=1)
 
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
