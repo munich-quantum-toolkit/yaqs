@@ -247,7 +247,7 @@ class CX:
         self.generator = [(np.pi / 4)*np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
 
         if site1 < site0:  # Adjust for reverse control/target
-            self.generator.reverse()
+            # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
@@ -266,7 +266,7 @@ class CZ:
         self.generator = [(np.pi / 4)*np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
 
         if site1 < site0:  # Adjust for reverse control/target
-            self.generator.reverse()
+            # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
@@ -290,7 +290,7 @@ class CPhase:
             self.mpo = _extend_gate(self.tensor, self.sites)
         else:
             if site1 < site0:  # Adjust for reverse control/target
-                self.generator.reverse()
+                # self.generator.reverse()
                 self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
