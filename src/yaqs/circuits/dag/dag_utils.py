@@ -110,55 +110,88 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
     return new_dag
 
 
-def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int]):
+def same_gate(node1, node2):
+    """
+    Returns True if node1 and node2 are considered the same gate.
+    Here we compare the operation name and the set of qubits.
+    (You can adjust this if you need to consider parameters, etc.)
+    """
+    return (node1.op.name == node2.op.name) and (set(node1.qargs) == set(node2.qargs))
+
+
+
+def get_restricted_temporal_zone(dag: DAGCircuit, qubits: list[int], pending_queue: list):
+    """
+    Constructs a temporal zone for the given adjacent qubits (provided as indices).
+
+    For each layer in the DAG:
+      • If an operation acts entirely on the zone (i.e. its qubits are a subset of the zone),
+        the operation is applied immediately.
+      • If an operation exactly covers the zone (a full two-qubit gate), it is applied and
+        then processing of the zone is stopped.
+      • If an operation touches only part of the zone (i.e. a long-range gate), then:
+            – If that gate is not already in pending_queue, add it (and do not apply it yet)
+            – Otherwise, remove it from the queue and apply it.
+    
+    Returns a tuple: (new_dag, lr_gate)
+      • new_dag is the restricted (accumulated) DAG for the zone.
+      • lr_gate is the long-range gate that was just released (if any), or None.
+    """
     new_dag = dag.copy_empty_like()
     layers = list(dag.multigraph_layers())
-    qubits_to_check = set()
-    for qubit in range(min(qubits), max(qubits) + 1):
-        qubits_to_check.add(dag.qubits[qubit])
+    # Build the set of qubit objects for the zone.
+    qubits_to_check = {dag.qubits[q] for q in range(min(qubits), max(qubits) + 1)}
+    lr_gate = None
+    stop_zone = False  # flag to indicate that we should stop processing further layers
 
     for layer in layers:
         for node in layer:
-            if isinstance(node, DAGOpNode):
-                qubit_set = set(node.qargs)
+            if not isinstance(node, DAGOpNode):
+                continue
 
-                # Gate is entirely within the temporal zone
-                if qubit_set < qubits_to_check:
-                    if node.op.name in ['measure', 'barrier']:
-                        dag.remove_op_node(node)
-                        continue
+            # Remove measure and barrier nodes immediately.
+            if node.op.name in ['measure', 'barrier']:
+                dag.remove_op_node(node)
+                continue
+
+            node_qubits = set(node.qargs)
+
+            # If the gate is entirely contained in the zone, add it.
+            if node_qubits < qubits_to_check:
+                new_dag.apply_operation_back(node.op, node.qargs)
+                dag.remove_op_node(node)
+            # If the gate exactly covers the zone (i.e. a two-qubit gate that fully entangles the zone)
+            elif node_qubits == qubits_to_check:
+                new_dag.apply_operation_back(node.op, node.qargs)
+                dag.remove_op_node(node)
+                # Mark that we have reached a full-entangling gate and break out
+                stop_zone = True
+                break
+            # If the gate touches part of the zone (long-range gate)
+            elif node_qubits & qubits_to_check:
+                if not any(same_gate(node, pending_node) for pending_node in pending_queue):
+                    # First occurrence: add it to the pending queue and stop processing further.
+                    pending_queue.append(node)
+                    stop_zone = True
+                    break
+                else:
+                    # Second occurrence: remove from pending and apply it.
+                    for i, pending_node in enumerate(pending_queue):
+                        if same_gate(node, pending_node):
+                            pending_queue.pop(i)
+                            break
                     new_dag.apply_operation_back(node.op, node.qargs)
                     dag.remove_op_node(node)
-
-                # Check if the gate is a two-qubit gate and include it before stopping
-                elif qubit_set == qubits_to_check:
-                    if node.op.name in ['measure', 'barrier']:
-                        dag.remove_op_node(node)
-                        continue
-                    else:
-                        new_dag.apply_operation_back(node.op, node.qargs)
-                        dag.remove_op_node(node)
-                    return new_dag
-                else:
-                    if node.op.name in ['measure', 'barrier']:
-                        dag.remove_op_node(node)
-                        continue
-                    for item in qubit_set & qubits_to_check:
-                        qubits_to_check.remove(item)
-
-                # Remove overlapping qubits from the zone for partial overlap
-                # else:
-                #     if node.op.name in ['measure', 'barrier']:
-                #         dag.remove_op_node(node)
-                #         continue
-                #     for item in qubit_set & qubits_to_check:
-                #         qubits_to_check.remove(item)
-
-        # Once no qubits remain in the zone, stop
-        if len(qubits_to_check) == 0:
+                    lr_gate = node
+                    stop_zone = True
+                    break
+            # Otherwise, ignore operations that do not affect the zone.
+        if stop_zone:
+            # Once a stopping gate (full two-qubit or long-range gate) is encountered,
+            # we do not process later layers.
             break
 
-    return new_dag
+    return new_dag, lr_gate
 
 
 def check_longest_gate(dag: DAGCircuit):
