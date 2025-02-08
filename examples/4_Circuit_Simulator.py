@@ -2,10 +2,10 @@ import numpy as np
 import qiskit.circuit
 import matplotlib.pyplot as plt
 
+from yaqs.circuits.simulation import simulator
 from yaqs.core.data_structures.networks import MPS
 from yaqs.core.data_structures.noise_model import NoiseModel
 from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
-from yaqs.circuits.simulation import simulator
 
 from yaqs.core.libraries.circuit_library import create_Ising_circuit
 
