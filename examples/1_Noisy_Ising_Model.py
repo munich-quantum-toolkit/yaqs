@@ -5,7 +5,7 @@ import qutip as qt
 from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.data_structures.noise_model import NoiseModel
 from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from yaqs.core.methods import TJM
+from yaqs.physics import PhysicsTJM
 
 
 # Define the system Hamiltonian
@@ -37,7 +37,7 @@ sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond
 fig, ax = plt.subplots(2, 1)
 if __name__ == "__main__":
     ########## TJM Example #################
-    TJM.run(state, H_0, sim_params, noise_model)
+    PhysicsTJM.run(state, H_0, sim_params, noise_model)
 
     heatmap = []
     for observable in sim_params.observables:

@@ -110,6 +110,7 @@ def run_trajectory_second_order(args):
 
     return results
 
+
 def run_trajectory_first_order(args):
     i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
