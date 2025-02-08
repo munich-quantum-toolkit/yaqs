@@ -1,5 +1,5 @@
 from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.physics.methods.TDVP import single_site_TDVP, two_site_TDVP
+from yaqs.core.methods.TDVP import single_site_TDVP, two_site_TDVP
 
 
 def dynamic_TDVP(state: MPS, H: MPO, sim_params):

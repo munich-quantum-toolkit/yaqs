@@ -7,9 +7,9 @@ from tqdm import tqdm
 from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.data_structures.noise_model import NoiseModel
 from yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
-from yaqs.physics.methods.dissipation import apply_dissipation
-from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
-from yaqs.physics.methods.stochastic_process import stochastic_process
+from yaqs.core.methods.dissipation import apply_dissipation
+from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
+from yaqs.core.methods.stochastic_process import stochastic_process
 
 
 def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:

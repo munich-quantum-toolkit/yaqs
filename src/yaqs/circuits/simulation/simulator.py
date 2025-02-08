@@ -9,9 +9,9 @@ from tqdm import tqdm
 from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
 from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
-from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
-from yaqs.physics.methods.dissipation import apply_dissipation
-from yaqs.physics.methods.stochastic_process import stochastic_process
+from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
+from yaqs.core.methods.dissipation import apply_dissipation
+from yaqs.core.methods.stochastic_process import stochastic_process
 from yaqs.core.operations.operations import measure
 
 from typing import TYPE_CHECKING
