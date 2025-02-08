@@ -15,8 +15,6 @@ from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from yaqs.core.data_structures.networks import MPS
-    from yaqs.core.data_structures.noise_model import NoiseModel
-    from qiskit.circuit.quantumcircuit import QuantumCircuit
     from qiskit.dagcircuit.dagnode import DAGOpNode
     from qiskit._accelerate.circuit import DAGCircuit
 
