@@ -1,5 +1,3 @@
-import numpy as np
-
 from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.dagcircuit.dagnode import DAGOpNode
 
