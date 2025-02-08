@@ -74,7 +74,7 @@ def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimPara
             results[obs_index, 0] = copy.deepcopy(psi).measure(observable)
 
 
-def run_trajectory_second_order(args):
+def PhysicsTJM_2(args):
     """
     Run a single trajectory of the TJM.
 
@@ -111,7 +111,7 @@ def run_trajectory_second_order(args):
     return results
 
 
-def run_trajectory_first_order(args):
+def PhysicsTJM_1(args):
     i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
 
