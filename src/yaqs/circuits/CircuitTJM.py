@@ -1,18 +1,16 @@
-import concurrent.futures
 import copy
-import multiprocessing
 import numpy as np
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
-from tqdm import tqdm
 
-from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
 from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
 from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
 from yaqs.core.methods.dissipation import apply_dissipation
 from yaqs.core.methods.stochastic_process import stochastic_process
-from yaqs.core.operations.operations import measure
+from yaqs.core.methods.operations import measure
+from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
+
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -131,7 +129,7 @@ def apply_two_qubit_gate(state: 'MPS', node: 'DAGOpNode', sim_params):
         dynamic_TDVP(state, mpo, sim_params)
 
 
-def run_trajectory(args):
+def CircuitTJM(args):
     i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
 
@@ -168,67 +166,3 @@ def run_trajectory(args):
         for obs_index, observable in enumerate(sim_params.observables):
             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
         return results
-
-
-def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params, noise_model: 'NoiseModel'=None):
-     # Circuit simulation pre-processing:
-    assert initial_state.length == circuit.num_qubits, "State and circuit qubit counts do not match."
-    
-    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-        sim_params.N = 1
-    else:
-        # For WeakSimParams, treat shots as trajectories and then reset shots to 1.
-        if isinstance(sim_params, WeakSimParams):
-            sim_params.N = sim_params.shots
-            sim_params.shots = 1
-    
-    # Use the single-trajectory function for circuit simulations.
-    run_traj_fn = run_trajectory
-
-    _run_simulation_common(initial_state, circuit, sim_params, noise_model, run_traj_fn)
-
-    # assert initial_state.length == circuit.num_qubits
-
-    # # Guarantee one trajectory if no noise model
-    # if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-    #     sim_params.N = 1
-    # else:
-    #     if isinstance(sim_params, WeakSimParams):
-    #         # Shots themselves become the trajectories
-    #         sim_params.N = sim_params.shots
-    #         sim_params.shots = 1
-
-    # # Reset any previous results
-    # if isinstance(sim_params, StrongSimParams):
-    #     for observable in sim_params.observables:
-    #         observable.initialize(sim_params)
-
-    # # State must start in B form
-    # initial_state.normalize('B')
-
-    # args = [(i, initial_state, noise_model, sim_params, circuit) for i in range(sim_params.N)]
-    # max_workers = max(1, multiprocessing.cpu_count() - 1)
-    # with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-    #     futures = {executor.submit(run_trajectory, arg): arg[0] for arg in args}
-
-    #     with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
-    #         for future in concurrent.futures.as_completed(futures):
-    #             i = futures[future]
-    #             try:
-    #                 result = future.result()
-    #                 if isinstance(sim_params, WeakSimParams):
-    #                     sim_params.measurements[i] = result   
-    #                 elif isinstance(sim_params, StrongSimParams):                     
-    #                     for obs_index, observable in enumerate(sim_params.observables):
-    #                         observable.trajectories[i] = result[obs_index]
-    #             except Exception as e:
-    #                     print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
-    #                     # Retry could be done here
-    #             finally:
-    #                 pbar.update(1)
-
-    # if isinstance(sim_params, WeakSimParams):
-    #     sim_params.aggregate_measurements()
-    # elif isinstance(sim_params, StrongSimParams):                     
-    #     # Save average value of trajectories
-    #     sim_params.aggregate_trajectories()
