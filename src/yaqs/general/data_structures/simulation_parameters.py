@@ -27,6 +27,7 @@ class Observable:
             self.trajectories = np.empty((sim_params.N, 1), dtype=float)
             self.results = np.empty(1, dtype=float)
 
+
 class PhysicsSimParams:
     def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, order: int=1):
         self.observables = observables
@@ -38,6 +39,10 @@ class PhysicsSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
+
+    def aggregate_trajectories(self):
+        for observable in self.observables:
+            observable.results = np.mean(observable.trajectories, axis=0)
 
 
 class WeakSimParams:
@@ -69,3 +74,7 @@ class StrongSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
+
+    def aggregate_trajectories(self):
+            for observable in self.observables:
+                observable.results = np.mean(observable.trajectories, axis=0)

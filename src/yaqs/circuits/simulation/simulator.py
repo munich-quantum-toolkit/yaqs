@@ -215,5 +215,4 @@ def run(initial_state: 'MPS', circuit: 'QuantumCircuit', sim_params, noise_model
         sim_params.aggregate_measurements()
     elif isinstance(sim_params, StrongSimParams):                     
         # Save average value of trajectories
-        for observable in sim_params.observables:
-            observable.results = np.mean(observable.trajectories, axis=0)
+        sim_params.aggregate_trajectories()

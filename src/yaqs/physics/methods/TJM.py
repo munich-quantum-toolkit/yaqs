@@ -184,6 +184,4 @@ def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: N
                 finally:
                     pbar.update(1)
 
-    # Save average value of trajectories
-    for observable in sim_params.observables:
-        observable.results = np.mean(observable.trajectories, axis=0)
+    sim_params.aggregate_trajectories()
