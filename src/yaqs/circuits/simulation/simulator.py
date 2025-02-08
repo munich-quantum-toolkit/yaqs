@@ -115,7 +115,7 @@ def apply_window(state: 'MPS', mpo: 'MPO', first_site: int, last_site: int, sim_
     return short_state, short_mpo, window
 
 
-def apply_two_qubit_gate(state, node, sim_params):
+def apply_two_qubit_gate(state: 'MPS', node: 'DAGOpNode', sim_params):
     gate = convert_dag_to_tensor_algorithm(node)[0]
 
     # Construct the MPO for the two-qubit gate.
