@@ -3,14 +3,12 @@ import copy
 import multiprocessing
 import numpy as np
 import opt_einsum as oe
-from qiskit.converters import circuit_to_dag, dag_to_circuit
+from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
+from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
 from yaqs.general.data_structures.networks import MPO, MPS
 from yaqs.general.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
-from yaqs.general.libraries.gate_library import GateLibrary
-from yaqs.circuits.dag.dag_utils import get_restricted_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
-from yaqs.circuits.equivalence_checking.mpo_utils import apply_layer, apply_restricted_layer
 from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
 from yaqs.physics.methods.dissipation import apply_dissipation
 from yaqs.physics.methods.stochastic_process import stochastic_process
@@ -21,6 +19,7 @@ if TYPE_CHECKING:
     from yaqs.general.data_structures.networks import MPS
     from yaqs.general.data_structures.noise_model import NoiseModel
     from qiskit.circuit.quantumcircuit import QuantumCircuit
+    from qiskit.dagcircuit.dagnode import DAGOpNode
     from qiskit._accelerate.circuit import DAGCircuit
 
 
@@ -56,12 +55,12 @@ def process_layer(dag: 'DAGCircuit'):
     return single_qubit_nodes, even_nodes, odd_nodes
 
 
-def apply_single_qubit_gate(state, node):
+def apply_single_qubit_gate(state: 'MPS', node: 'DAGOpNode'):
     gate = convert_dag_to_tensor_algorithm(node)[0]
     state.tensors[gate.sites[0]] = oe.contract('ab, bcd->acd', gate.tensor, state.tensors[gate.sites[0]])
 
 
-def construct_generator_MPO(gate, length):
+def construct_generator_MPO(gate, length: int):
     tensors = []
 
     first_site = min(gate.sites)
@@ -95,7 +94,7 @@ def construct_generator_MPO(gate, length):
     return mpo, first_site, last_site
 
 
-def apply_window(state, mpo, first_site, last_site, sim_params):
+def apply_window(state: 'MPS', mpo: 'MPO', first_site: int, last_site: int, sim_params):
     # Define a window for a local update.
     window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
     if window[0] < 0:
