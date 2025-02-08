@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.linalg import eigh_tridiagonal, expm
+from scipy.linalg import eigh_tridiagonal
 
 
 def _lanczos_iteration(Afunc, vstart, numiter):
