@@ -7,7 +7,7 @@ from qiskit.circuit.library.n_local import TwoLocal
 from yaqs.core.data_structures.networks import MPS
 from yaqs.core.data_structures.noise_model import NoiseModel
 from yaqs.core.data_structures.simulation_parameters import WeakSimParams
-from yaqs.circuits.simulation import simulator
+from yaqs.circuits import CircuitTJM
 
 
 # Define the circuit
@@ -36,7 +36,7 @@ window_size = 0
 sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
 
 if __name__ == "__main__":
-    simulator.run(state, circuit, sim_params, noise_model)
+    CircuitTJM.run(state, circuit, sim_params, noise_model)
 
     plt.bar(sim_params.results.keys(), sim_params.results.values())
     plt.xlabel("Bitstring")

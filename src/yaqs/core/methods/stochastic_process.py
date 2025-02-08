@@ -4,9 +4,7 @@ import opt_einsum as oe
 
 from yaqs.core.data_structures.networks import MPS
 from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.operations.operations import scalar_product
-
-
+from yaqs.core.methods.operations import scalar_product
 
 
 def calculate_stochastic_factor(state: MPS) -> float:

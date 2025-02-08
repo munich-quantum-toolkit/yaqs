@@ -3,7 +3,7 @@ import numpy as np
 import opt_einsum as oe
 
 from yaqs.core.libraries.gate_library import GateLibrary
-from yaqs.core.operations.operations import local_expval, scalar_product
+from yaqs.core.methods.operations import local_expval, scalar_product
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:

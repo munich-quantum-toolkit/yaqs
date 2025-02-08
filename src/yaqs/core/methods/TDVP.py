@@ -2,7 +2,7 @@ import numpy as np
 import opt_einsum as oe
 
 from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.operations.matrix_exponential import expm_krylov
+from yaqs.core.methods.matrix_exponential import expm_krylov
 
 from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
 

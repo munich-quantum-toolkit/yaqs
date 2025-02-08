@@ -2,7 +2,7 @@ import numpy as np
 import qiskit.circuit
 import matplotlib.pyplot as plt
 
-from yaqs.circuits.simulation import simulator
+from yaqs.circuits import CircuitTJM
 from yaqs.core.data_structures.networks import MPS
 from yaqs.core.data_structures.noise_model import NoiseModel
 from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         # Define the noise model
         sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
         noise_model = NoiseModel(['relaxation'], [gamma])
-        simulator.run(state, circuit, sim_params, noise_model)
+        CircuitTJM.run(state, circuit, sim_params, noise_model)
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results
 
