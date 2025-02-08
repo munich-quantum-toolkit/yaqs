@@ -4,8 +4,8 @@ from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.converters import dag_to_circuit
 
 from yaqs.circuits.dag.dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, get_restricted_temporal_zone, select_starting_point
-from yaqs.general.data_structures.networks import MPO
-from yaqs.general.libraries.gate_library import GateLibrary
+from yaqs.core.data_structures.networks import MPO
+from yaqs.core.libraries.gate_library import GateLibrary
 
 
 def decompose_theta(theta: np.ndarray, threshold: float):

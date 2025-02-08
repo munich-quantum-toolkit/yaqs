@@ -1,6 +1,6 @@
 import numpy as np
 
-from yaqs.general.libraries.gate_library import GateLibrary
+from yaqs.core.libraries.gate_library import GateLibrary
 
 
 class Observable:

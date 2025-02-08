@@ -2,12 +2,12 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.libraries.gate_library import GateLibrary
-from yaqs.general.operations.operations import local_expval, scalar_product
+from yaqs.core.libraries.gate_library import GateLibrary
+from yaqs.core.operations.operations import local_expval, scalar_product
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.general.data_structures.simulation_parameters import Observable
+    from yaqs.core.data_structures.simulation_parameters import Observable
 
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:

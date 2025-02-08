@@ -5,9 +5,9 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library.n_local import TwoLocal
 
 from yaqs.circuits.simulation import simulator
-from yaqs.general.data_structures.networks import MPS
-from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.data_structures.simulation_parameters import WeakSimParams
+from yaqs.core.data_structures.networks import MPS
+from yaqs.core.data_structures.noise_model import NoiseModel
+from yaqs.core.data_structures.simulation_parameters import WeakSimParams
 
 
 # Define the circuit

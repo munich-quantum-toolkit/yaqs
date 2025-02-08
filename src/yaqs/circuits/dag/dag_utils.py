@@ -3,7 +3,7 @@ import numpy as np
 from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.dagcircuit.dagnode import DAGOpNode
 
-from yaqs.general.libraries.gate_library import GateLibrary
+from yaqs.core.libraries.gate_library import GateLibrary
 
 
 def convert_dag_to_tensor_algorithm(dag: DAGCircuit):

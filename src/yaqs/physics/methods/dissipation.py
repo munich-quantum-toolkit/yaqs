@@ -2,8 +2,8 @@ import numpy as np
 import opt_einsum as oe
 from scipy.linalg import expm
 
-from yaqs.general.data_structures.networks import MPS
-from yaqs.general.data_structures.noise_model import NoiseModel
+from yaqs.core.data_structures.networks import MPS
+from yaqs.core.data_structures.noise_model import NoiseModel
 
 
 # TODO: Assumes noise is same at all sites

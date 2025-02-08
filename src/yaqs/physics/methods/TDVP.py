@@ -1,10 +1,10 @@
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.data_structures.networks import MPO, MPS
-from yaqs.general.operations.matrix_exponential import expm_krylov
+from yaqs.core.data_structures.networks import MPO, MPS
+from yaqs.core.operations.matrix_exponential import expm_krylov
 
-from yaqs.general.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
     """

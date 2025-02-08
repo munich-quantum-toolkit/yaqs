@@ -1,4 +1,4 @@
-from yaqs.general.data_structures.networks import MPO, MPS
+from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.physics.methods.TDVP import single_site_TDVP, two_site_TDVP
 
 

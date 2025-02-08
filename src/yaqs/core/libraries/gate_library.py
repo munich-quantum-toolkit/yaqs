@@ -1,6 +1,6 @@
 import numpy as np
 
-import yaqs.general.data_structures.networks
+import yaqs.core.data_structures.networks
 
 
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
@@ -67,7 +67,7 @@ def _extend_gate(tensor: np.ndarray, sites: list):
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[2])
 
-    mpo = yaqs.general.data_structures.networks.MPO()
+    mpo = yaqs.core.data_structures.networks.MPO()
     mpo.init_custom(mpo_tensors)
     return mpo
 

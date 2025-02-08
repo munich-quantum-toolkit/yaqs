@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import qutip as qt
 
-from yaqs.general.data_structures.networks import MPO, MPS
-from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from yaqs.core.data_structures.networks import MPO, MPS
+from yaqs.core.data_structures.noise_model import NoiseModel
+from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 from yaqs.physics.methods import TJM
 
 
