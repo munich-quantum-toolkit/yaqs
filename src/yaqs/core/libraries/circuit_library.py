@@ -1,4 +1,4 @@
-import qiskit.circuit
+from qiskit.circuit import QuantumCircuit
 
 
 def create_Ising_circuit(model, dt, timesteps):
@@ -11,7 +11,7 @@ def create_Ising_circuit(model, dt, timesteps):
     # Angle on ZZ rotation
     beta = -2*dt*model['J']
 
-    circ = qiskit.circuit.QuantumCircuit(model['L'])
+    circ = QuantumCircuit(model['L'])
     for _ in range(timesteps):
         for site in range(model['L']):
             circ.rx(theta=alpha, qubit=site)
@@ -44,7 +44,7 @@ def create_Heisenberg_circuit(model, dt, timesteps):
     theta_zz = -2*dt*model['Jz']
     theta_z = -2*dt*model['h']
 
-    circ = qiskit.circuit.QuantumCircuit(model['L'])
+    circ = QuantumCircuit(model['L'])
     for _ in range(timesteps):
         # Z application
         for site in range(model['L']):
