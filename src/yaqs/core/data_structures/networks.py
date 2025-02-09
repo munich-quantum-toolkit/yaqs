@@ -117,7 +117,7 @@ class MPS:
         old_dims = tensor.shape
         matricized_tensor = np.reshape(tensor, (tensor.shape[0]*tensor.shape[1], tensor.shape[2]))
         Q, R = np.linalg.qr(matricized_tensor)
-        Q = np.reshape(Q, (old_dims[0], old_dims[1], old_dims[2]))
+        Q = np.reshape(Q, (old_dims[0], old_dims[1], -1))
         self.tensors[current_orthogonality_center] = Q
 
         # If normalizing, we just throw away the R
@@ -371,7 +371,6 @@ class MPO:
         return MPS(self.length, converted_tensors)
 
     def convert_to_matrix(self):
-
         for i, tensor in enumerate(self.tensors):
             if i == 0:
                 mat = tensor

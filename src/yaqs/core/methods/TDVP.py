@@ -29,10 +29,8 @@ def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0) -> tuple[np.nd
 
     A0 = A0[:, :len(sigma)]
     A1 = A1[:len(sigma), :]
-    A0.shape = (s[0], s[1], len(sigma))
-    A1.shape = (len(sigma), s[2], s[3])
-    # A0 = A0.reshape((s[0], s[1], len(sigma)))
-    # A1 = A1.reshape((len(sigma), s[2], s[3]))
+    A0 = A0.reshape((s[0], s[1], len(sigma)))
+    A1 = A1.reshape((len(sigma), s[2], s[3]))
 
     # # use broadcasting to distribute singular values
     if svd_distr == 'left':
