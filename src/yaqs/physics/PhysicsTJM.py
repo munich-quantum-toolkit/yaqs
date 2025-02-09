@@ -1,18 +1,18 @@
-import concurrent.futures
 import copy
-import multiprocessing
 import numpy as np
-from tqdm import tqdm
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
 from yaqs.core.methods.dissipation import apply_dissipation
 from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
 from yaqs.core.methods.stochastic_process import stochastic_process
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.core.data_structures.networks import MPO, MPS
+    from yaqs.core.data_structures.noise_model import NoiseModel
+    from yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
 
-def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
+
+def initialize(state: 'MPS', noise_model: 'NoiseModel', sim_params: 'PhysicsSimParams') -> 'MPS':
     """
     Initialize the sampling MPS for second-order Trotterization.
     Corresponds to F0 in the TJM paper.
@@ -29,7 +29,7 @@ def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
+def step_through(state: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'PhysicsSimParams') -> 'MPS':
     """
     Perform a single time step of the TJM of the system state.
     Corresponds to Fj in the TJM paper.
@@ -48,7 +48,7 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: Physic
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams, results: np.ndarray, j: int) -> MPS:
+def sample(phi: 'MPS', H: 'MPO', noise_model: 'NoiseModel', sim_params: 'PhysicsSimParams', results: np.ndarray, j: int) -> 'MPS':
     """
     Sample the quantum state and measure an observable from the sampling MPS.
     Corresponds to Fn in the TJM paper.
@@ -137,52 +137,3 @@ def PhysicsTJM_1(args):
                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     return results
-
-
-def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: NoiseModel=None):
-    """
-    Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
-
-    Args:
-        initial_state (MPS): Initial state of the system.
-        H (MPO): System Hamiltonian.
-        sim_params (SimulationParams): Parameters needed to define all variables of the simulation.
-        noise_model (NoiseModel): Noise model to apply to the system.
-
-    Returns:
-        None: Observables in SimulationParams are updated directly.
-    """
-    # Reset any previous results
-    for observable in sim_params.observables:
-        observable.initialize(sim_params)
-
-    # Guarantee one trajectory if no noise model
-    if not noise_model:
-        sim_params.N = 1
-        sim_params.order = 1
-
-    # State must start in B form
-    initial_state.normalize('B')
-    args = [(i, initial_state, noise_model, sim_params, H) for i in range(sim_params.N)]
-
-    max_workers = max(1, multiprocessing.cpu_count() - 1)
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        if sim_params.order == 2:
-            futures = {executor.submit(run_trajectory_second_order, arg): arg[0] for arg in args}
-        elif sim_params.order == 1:
-            futures = {executor.submit(run_trajectory_first_order, arg): arg[0] for arg in args}
-
-        with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
-            for future in concurrent.futures.as_completed(futures):
-                i = futures[future]
-                try:
-                    result = future.result()
-                    for obs_index, observable in enumerate(sim_params.observables):
-                        observable.trajectories[i] = result[obs_index]
-                except Exception as e:
-                        print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
-                        # Retry could be done here
-                finally:
-                    pbar.update(1)
-
-    sim_params.aggregate_trajectories()
