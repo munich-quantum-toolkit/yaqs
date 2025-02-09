@@ -1,8 +1,11 @@
-from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.methods.TDVP import single_site_TDVP, two_site_TDVP
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.core.data_structures.networks import MPO, MPS
 
-def dynamic_TDVP(state: MPS, H: MPO, sim_params):
+
+def dynamic_TDVP(state: 'MPS', H: 'MPO', sim_params):
     """
     Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 

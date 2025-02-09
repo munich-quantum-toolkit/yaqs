@@ -2,12 +2,15 @@ import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.core.data_structures.networks import MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
 from yaqs.core.methods.operations import scalar_product
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.core.data_structures.networks import MPS
+    from yaqs.core.data_structures.noise_model import NoiseModel
 
-def calculate_stochastic_factor(state: MPS) -> float:
+
+def calculate_stochastic_factor(state: 'MPS') -> float:
     """
     Calculate the stochastic factor for the given state.
 
@@ -23,7 +26,7 @@ def calculate_stochastic_factor(state: MPS) -> float:
     return 1 - scalar_product(state, state, 0)
 
 
-def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: float) -> dict:
+def create_probability_distribution(state: 'MPS', noise_model: 'NoiseModel', dt: float) -> dict:
     """
     Create a probability distribution for potential quantum jumps in the system.
 
@@ -44,7 +47,6 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
 
     # Dissipative sweep should always result in a mixed canonical form at site L
     for site, _ in enumerate(state.tensors):
-        # state.set_canonical_form(site)
         if site != 0 and site != state.length:
             state.shift_orthogonality_center_right(site-1)
 
@@ -63,7 +65,7 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
     return jump_dict
 
 
-def stochastic_process(state: MPS, noise_model: NoiseModel, dt: float) -> MPS:
+def stochastic_process(state: 'MPS', noise_model: 'NoiseModel', dt: float) -> 'MPS':
     """
     Perform a stochastic process on the given state.
 
