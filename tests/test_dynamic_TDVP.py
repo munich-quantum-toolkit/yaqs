@@ -46,10 +46,10 @@ def test_dynamic_tdvp_two_site(mock_single, mock_two_site, mock_mps, mock_mpo, m
     dynamic_TDVP(mock_mps, mock_mpo, mock_sim_params)
 
     # two_site_TDVP should be called
-    mock_two_site.assert_called_once_with(mock_mps, mock_mpo, mock_sim_params.dt, 
-                                          threshold=mock_sim_params.threshold, numsteps=1)
+    mock_two_site.assert_called_once_with(mock_mps, mock_mpo, mock_sim_params)
     # single_site_TDVP should not be called
     mock_single.assert_not_called()
+
 
 @patch("yaqs.core.methods.dynamic_TDVP.two_site_TDVP")
 @patch("yaqs.core.methods.dynamic_TDVP.single_site_TDVP")
@@ -66,6 +66,6 @@ def test_dynamic_tdvp_single_site(mock_single, mock_two_site, mock_mps, mock_mpo
     dynamic_TDVP(mock_mps, mock_mpo, mock_sim_params)
 
     # single_site_TDVP should be called
-    mock_single.assert_called_once_with(mock_mps, mock_mpo, mock_sim_params.dt, numsteps=1)
+    mock_single.assert_called_once_with(mock_mps, mock_mpo, mock_sim_params)
     # two_site_TDVP should not be called
     mock_two_site.assert_not_called()
