@@ -1,10 +1,14 @@
-from qiskit._accelerate.circuit import DAGCircuit
-from qiskit.dagcircuit.dagnode import DAGOpNode
+from qiskit._accelerate.circuit import DAGOpNode
+from qiskit.converters import dag_to_circuit
 
 from yaqs.core.libraries.gate_library import GateLibrary
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from qiskit._accelerate.circuit import DAGCircuit
 
-def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
+
+def convert_dag_to_tensor_algorithm(dag: 'DAGCircuit'):
     """
     Converts a DAGCircuit into a list of gate objects from the TensorLibrary.
 
@@ -61,7 +65,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
     return algorithm
 
 
-def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
+def get_temporal_zone(dag: 'DAGCircuit', qubits: list[int]):
     """
     Extracts the temporal zone from a DAGCircuit for the specified qubits.
     The temporal zone is the subset of operations acting only on these qubits
@@ -108,7 +112,7 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
     return new_dag
 
 
-def check_longest_gate(dag: DAGCircuit):
+def check_longest_gate(dag: 'DAGCircuit'):
     """
     Checks the maximum 'distance' between qubits in any multi-qubit gate
     present in the first layer of the DAGCircuit.
@@ -137,7 +141,7 @@ def check_longest_gate(dag: DAGCircuit):
     return largest_distance
 
 
-def select_starting_point(N: int, dag: DAGCircuit):
+def select_starting_point(N: int, dag: 'DAGCircuit'):
     """
     Determines which set of neighboring qubits (even-even or odd-odd) to start with
     based on the arrangement of gates in the first layer of the DAG.
@@ -161,7 +165,6 @@ def select_starting_point(N: int, dag: DAGCircuit):
     odd = False
 
     if 'first_layer' in locals():
-        from qiskit.converters import dag_to_circuit
         layer_circuit = dag_to_circuit(first_layer['graph'])
         for i, gate in enumerate(layer_circuit.data):
             # If there's a two-qubit gate at an odd position in the list, switch
