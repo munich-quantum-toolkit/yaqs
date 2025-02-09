@@ -1,3 +1,4 @@
+from __future__ import annotations
 import copy
 import numpy as np
 import opt_einsum as oe
@@ -168,7 +169,7 @@ class MPS:
         if form == 'B':
             self.flip_network()
 
-    def measure(self, observable: 'Observable'):
+    def measure(self, observable: Observable):
         assert observable.site in range(0, self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
         return local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import concurrent.futures
 import copy
 import multiprocessing
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from yaqs.core.data_structures.networks import MPS
 
 
-def scalar_product(A: 'MPS', B: 'MPS', site: int=-1):
+def scalar_product(A: MPS, B: 'MPS', site: int=-1) -> complex:
     """ Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
@@ -45,7 +46,7 @@ def scalar_product(A: 'MPS', B: 'MPS', site: int=-1):
     return result
 
 
-def local_expval(state: 'MPS', operator: np.ndarray, site: int):
+def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
     """ Expectation value for a given MPS-MPO-MPS network
 
     Args:
@@ -69,7 +70,7 @@ def local_expval(state: 'MPS', operator: np.ndarray, site: int):
     return E.real
 
 
-def measure_single_shot(state):
+def measure_single_shot(state) -> int:
     """
     Performs a single-shot measurement of the MPS state.
     Args:
@@ -95,7 +96,7 @@ def measure_single_shot(state):
     return sum(c << i for i, c in enumerate(bitstring))
 
 
-def measure(state: 'MPS', shots: int):
+def measure(state: MPS, shots: int) -> dict:
     """
     Measures an MPS state for a given number of shots.
     

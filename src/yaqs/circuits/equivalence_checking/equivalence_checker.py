@@ -1,3 +1,4 @@
+from __future__ import annotations
 from qiskit.converters import circuit_to_dag
 import time
 
@@ -9,7 +10,7 @@ if TYPE_CHECKING:
     from qiskit.circuit.quantumcircuit import QuantumCircuit
 
 
-def run(circuit1: 'QuantumCircuit', circuit2: 'QuantumCircuit', threshold: float=1e-13, fidelity: float=1-1e-13):
+def run(circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float=1e-13, fidelity: float=1-1e-13) -> dict:
     """
     Checks the equivalence of two quantum circuits using an MPO-based algorithm.
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import copy
 import numpy as np
 import opt_einsum as oe
@@ -12,12 +13,12 @@ from yaqs.core.methods.operations import measure
 from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
 
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from qiskit._accelerate.circuit import DAGCircuit, DAGOpNode
 
 
-def process_layer(dag: 'DAGCircuit'):
+def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
     # Extract the current layer
     current_layer = dag.front_layer()
 
@@ -49,12 +50,12 @@ def process_layer(dag: 'DAGCircuit'):
     return single_qubit_nodes, even_nodes, odd_nodes
 
 
-def apply_single_qubit_gate(state: 'MPS', node: 'DAGOpNode'):
+def apply_single_qubit_gate(state: MPS, node: DAGOpNode):
     gate = convert_dag_to_tensor_algorithm(node)[0]
     state.tensors[gate.sites[0]] = oe.contract('ab, bcd->acd', gate.tensor, state.tensors[gate.sites[0]])
 
 
-def construct_generator_MPO(gate, length: int):
+def construct_generator_MPO(gate, length: int) -> MPO | int | int:
     tensors = []
 
     first_site = min(gate.sites)
@@ -88,7 +89,7 @@ def construct_generator_MPO(gate, length: int):
     return mpo, first_site, last_site
 
 
-def apply_window(state: 'MPS', mpo: 'MPO', first_site: int, last_site: int, sim_params):
+def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, sim_params) -> tuple[MPS, MPO, list[int]]:
     # Define a window for a local update.
     window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
     if window[0] < 0:
@@ -109,7 +110,7 @@ def apply_window(state: 'MPS', mpo: 'MPO', first_site: int, last_site: int, sim_
     return short_state, short_mpo, window
 
 
-def apply_two_qubit_gate(state: 'MPS', node: 'DAGOpNode', sim_params):
+def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params):
     gate = convert_dag_to_tensor_algorithm(node)[0]
 
     # Construct the MPO for the two-qubit gate.

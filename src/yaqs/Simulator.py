@@ -1,3 +1,4 @@
+from __future__ import annotations
 import concurrent.futures
 import multiprocessing
 from qiskit.circuit import QuantumCircuit
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
     from yaqs.core.data_structures.noise_model import NoiseModel
 
 
-def run(initial_state: 'MPS', operator, sim_params, noise_model: 'NoiseModel'=None):
+def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None):
     """
     Common simulation routine used by both circuit and Hamiltonian simulations.
     It normalizes the state, prepares trajectory arguments, runs the trajectories
