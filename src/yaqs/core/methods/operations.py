@@ -4,7 +4,7 @@ import copy
 import multiprocessing
 import numpy as np
 import opt_einsum as oe
-import tqdm
+from tqdm import tqdm
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
