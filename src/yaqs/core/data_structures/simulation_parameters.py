@@ -10,16 +10,21 @@ class Observable:
         self.results = None
         self.trajectories = None
 
-    def initialize(self, sim_params: 'PhysicsSimParams'):
-        if sim_params.sample_timesteps:
-            self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
-        else:
+    def initialize(self, sim_params):
+        if type(sim_params) == PhysicsSimParams:
+            if sim_params.sample_timesteps:
+                self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
+                self.times = sim_params.times
+            else:
+                self.trajectories = np.empty((sim_params.N, 1), dtype=float)
+                self.times = sim_params.T
+            self.results = np.empty(len(sim_params.times), dtype=float)
+        elif type(sim_params) == WeakSimParams:
             self.trajectories = np.empty((sim_params.N, 1), dtype=float)
-        self.results = np.empty(len(sim_params.times), dtype=float)
-        if sim_params.sample_timesteps:
-            self.times = sim_params.times
-        else:
-            self.times = sim_params.T
+            self.results = np.empty(1, dtype=float)
+        elif type(sim_params) == StrongSimParams:
+            self.trajectories = np.empty((sim_params.N, 1), dtype=float)
+            self.results = np.empty(1, dtype=float)
 
 
 class PhysicsSimParams:
