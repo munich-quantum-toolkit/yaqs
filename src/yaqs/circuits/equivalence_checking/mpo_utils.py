@@ -1,14 +1,18 @@
+from __future__ import annotations
 import numpy as np
 import opt_einsum as oe
-from qiskit._accelerate.circuit import DAGCircuit
 from qiskit.converters import dag_to_circuit
 
-from yaqs.circuits.dag.dag_utils import check_longest_gate, get_temporal_zone, select_starting_point, convert_dag_to_tensor_algorithm
-from yaqs.general.data_structures.MPO import MPO
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.circuits.dag.dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from qiskit._accelerate.circuit import DAGCircuit
+    from yaqs.core.data_structures.networks import MPO
+    from yaqs.core.libraries.gate_library import GateLibrary
 
 
-def decompose_theta(theta: np.ndarray, threshold: float):
+def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray]:
     """
     Performs an SVD-based decomposition of the tensor `theta`, truncating
     singular values below a specified threshold, and then reshapes the result
@@ -42,7 +46,7 @@ def decompose_theta(theta: np.ndarray, threshold: float):
     return U, M
 
 
-def apply_gate(gate: TensorLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False):
+def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool=False) -> np.ndarray:
     """
     Applies a single- or two-qubit gate (or multi-qubit gate) from a TensorLibrary object
     to the local tensor `theta`.
@@ -90,7 +94,6 @@ def apply_gate(gate: TensorLibrary, theta: np.ndarray, site0: int, site1: int, c
                 theta = oe.contract('ijkl, klmnop->ijmnop', np.conj(gate.tensor), theta)
             else:
                 theta = oe.contract('ijkl, klmnop->ijmnop', gate.tensor, theta)
-
         if conjugate:
             theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
@@ -123,7 +126,7 @@ def apply_gate(gate: TensorLibrary, theta: np.ndarray, site0: int, site1: int, c
     return theta
 
 
-def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False):
+def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool=False) -> np.ndarray:
     """
     Applies the temporal zone of `dag` to a local tensor `theta`.
 
@@ -163,15 +166,22 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
     theta = oe.contract('abcd, efdg->aecbfg', mpo.tensors[n], mpo.tensors[n + 1])
 
     # Apply G gates
-    theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
+    if dag1:
+        theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
     # Apply G' gates
-    theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
+    if dag2:
+        # Used to create MPO during circuit simulation
+        # Dag1 comes from left, Dag2 comes from right
+        if dag1 == None:
+            theta = apply_temporal_zone(theta, dag2, qubits, conjugate=False)
+        else:
+            theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
 
     # Decompose back
     mpo.tensors[n], mpo.tensors[n + 1] = decompose_theta(theta, threshold)
 
 
-def apply_layer(mpo: MPO, circuit1_dag, circuit2_dag, first_iterator, second_iterator, threshold: float):
+def apply_layer(mpo: MPO, circuit1_dag: DAGCircuit, circuit2_dag: DAGCircuit, first_iterator, second_iterator, threshold: float):
     """
     Applies all gates for the current layer in two sweeps:
     one using `first_iterator` and another using `second_iterator`.
@@ -191,7 +201,7 @@ def apply_layer(mpo: MPO, circuit1_dag, circuit2_dag, first_iterator, second_ite
         update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n+1], threshold)
 
 
-def apply_long_range_layer(mpo: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', conjugate: bool, threshold: float):
+def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjugate: bool, threshold: float):
     """
     Detects and applies a 'long-range' gate in the first layer of `dag1` (or `dag2`).
     The logic here is partial/placeholder; you must fill in or adjust for your use case.
@@ -313,7 +323,7 @@ def apply_long_range_layer(mpo: 'MPO', dag1: 'DAGCircuit', dag2: 'DAGCircuit', c
     assert not any(type(tensor) == np.ndarray for tensor in gate_MPO.tensors)
 
 
-def iterate(mpo: MPO, dag1, dag2, threshold: float):
+def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float):
     """
     Iteratively applies gates from `dag1` and `dag2` layer by layer
     until no gates remain in either DAGCircuit.
