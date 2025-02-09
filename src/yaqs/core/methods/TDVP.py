@@ -1,10 +1,14 @@
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.methods.matrix_exponential import expm_krylov
 
 from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.core.data_structures.networks import MPO, MPS
+
 
 def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
     """
@@ -17,13 +21,10 @@ def _split_mps_tensor(A: np.ndarray, svd_distr: str, threshold=0):
     s = A.shape
 
     A0, sigma, A1 = np.linalg.svd(A.reshape((s[0]*s[1], s[2]*s[3])), full_matrices=False)
-    # sigma = sigma[sigma > threshold]
+    sigma = sigma[sigma > threshold]
 
     A0 = A0[:, 0:len(sigma)]
     A1 = A1[0:len(sigma), :]
-    # A0, A1 = np.linalg.qr(A.reshape((s[0]*s[1], s[2]*s[3])))
-    # A0 = np.reshape(A0, (s[0], s[1], A0.shape[1]))
-    # A1 = np.reshape(A1, (A1.shape[0], s[2], s[3]))
 
     A0.shape = (s[0], s[1], len(sigma))
     A1.shape = (len(sigma), s[2], s[3])
@@ -140,7 +141,7 @@ def _contraction_operator_step_left(A: np.ndarray, B: np.ndarray, W: np.ndarray,
     return Lnext
 
 
-def _compute_right_operator_blocks(psi: MPS, op: MPO):
+def _compute_right_operator_blocks(psi: 'MPS', op: 'MPO'):
     """
     Compute all partial contractions from the right.
     """
@@ -199,7 +200,7 @@ def _apply_local_hamiltonian(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.
     return T
 
 
-def _apply_local_bond_contraction(L, R, C):
+def _apply_local_bond_contraction(L: np.ndarray, R: np.ndarray, C: np.ndarray):
     r"""
     Apply "zero-site" bond contraction.
 
@@ -231,7 +232,8 @@ def _apply_local_bond_contraction(L, R, C):
     T = np.tensordot(L, T, axes=((0, 1), (0, 1)))
     return T
 
-def _local_hamiltonian_step(L, R, W, A, dt, numiter: int):
+
+def _local_hamiltonian_step(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray, dt: float, numiter: int):
     """
     Local time step effected by Hamiltonian, based on a Lanczos iteration.
     """
@@ -240,7 +242,7 @@ def _local_hamiltonian_step(L, R, W, A, dt, numiter: int):
             A.reshape(-1), dt, numiter).reshape(A.shape)
 
 
-def _local_bond_step(L, R, C, dt, numiter: int):
+def _local_bond_step(L: np.ndarray, R: np.ndarray, C: np.ndarray, dt: float, numiter: int):
     """
     Local "zero-site" bond step, based on a Lanczos iteration.
     """
@@ -249,7 +251,7 @@ def _local_bond_step(L, R, C, dt, numiter: int):
             C.reshape(-1), dt, numiter).reshape(C.shape)
 
 
-def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
+def single_site_TDVP(state: 'MPS', H: 'MPO', sim_params, numiter_lanczos: int=25):
     """
     Symmetric single-site TDVP integration.
     `psi` is overwritten in-place with the time-evolved state.
@@ -333,7 +335,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         state.tensors[i-1] = _local_hamiltonian_step(BL[i-1], BR[i-1], H.tensors[i-1], state.tensors[i-1], 0.5*sim_params.dt, numiter_lanczos)
 
 
-def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
+def two_site_TDVP(state: 'MPS', H: 'MPO', sim_params, numiter_lanczos: int=25):
     """
     Symmetric two-site TDVP integration.
     `psi` is overwritten in-place with the time-evolved state.
