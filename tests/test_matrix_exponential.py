@@ -3,7 +3,7 @@ import numpy as np
 from numpy.linalg import norm
 from scipy.linalg import expm
 
-from yaqs.general.operations.matrix_exponential import (
+from yaqs.core.methods.matrix_exponential import (
     _lanczos_iteration,
     expm_krylov
 )

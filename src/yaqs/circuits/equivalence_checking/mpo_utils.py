@@ -48,11 +48,11 @@ def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np
 
 def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool=False) -> np.ndarray:
     """
-    Applies a single- or two-qubit gate (or multi-qubit gate) from a TensorLibrary object
+    Applies a single- or two-qubit gate (or multi-qubit gate) from a GateLibrary object
     to the local tensor `theta`.
 
     Args:
-        gate: A TensorLibrary gate object, containing a .tensor and .interaction attributes.
+        gate: A GateLibrary gate object, containing a .tensor and .interaction attributes.
         theta: The local tensor to update.
         site0: The first qubit (site) index.
         site1: The second qubit (site) index.

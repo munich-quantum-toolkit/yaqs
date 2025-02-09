@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
     """
-    Converts a DAGCircuit into a list of gate objects from the TensorLibrary.
+    Converts a DAGCircuit into a list of gate objects from the GateLibrary.
 
     Args:
         dag: The DAGCircuit (or a single DAGOpNode) representing a quantum operation.

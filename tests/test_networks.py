@@ -2,16 +2,15 @@ import copy
 import numpy as np
 import pytest
 
-from yaqs.general.data_structures.MPO import MPO
-from yaqs.general.data_structures.MPS import MPS
-from yaqs.general.data_structures.simulation_parameters import Observable
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.core.data_structures.networks import MPO, MPS
+from yaqs.core.data_structures.simulation_parameters import Observable
+from yaqs.core.libraries.gate_library import GateLibrary
 
 
-I = getattr(TensorLibrary, 'id').matrix
-X = getattr(TensorLibrary, 'x').matrix
-Y = getattr(TensorLibrary, 'y').matrix
-Z = getattr(TensorLibrary, 'z').matrix
+I = getattr(GateLibrary, 'id').matrix
+X = getattr(GateLibrary, 'x').matrix
+Y = getattr(GateLibrary, 'y').matrix
+Z = getattr(GateLibrary, 'z').matrix
 
 
 def untranspose_block(mpo_tensor):
@@ -184,15 +183,15 @@ def test_init_custom_Hamiltonian():
     assert len(mpo.tensors) == length
 
     # Just check shapes
-    assert mpo.tensors[0].shape == (1, 2, pdim, pdim)
+    assert mpo.tensors[0].shape == (pdim, pdim, 1, 2)
     for i in range(1, length - 1):
-        assert mpo.tensors[i].shape == (2, 2, pdim, pdim)
-    assert mpo.tensors[-1].shape == (2, 1, pdim, pdim)
+        assert mpo.tensors[i].shape == (pdim, pdim, 2, 2)
+    assert mpo.tensors[-1].shape == (pdim, pdim, 2, 1)
 
-    assert np.allclose(mpo.tensors[0], left_bound)
+    assert np.allclose(mpo.tensors[0], np.transpose(left_bound, (2, 3, 0, 1)))
     for i in range(1, length - 1):
-        assert np.allclose(mpo.tensors[i], inner)
-    assert np.allclose(mpo.tensors[-1], right_bound)
+        assert np.allclose(mpo.tensors[i], np.transpose(inner, (2, 3, 0, 1)))
+    assert np.allclose(mpo.tensors[-1], np.transpose(right_bound, (2, 3, 0, 1)))
 
 
 def test_init_custom():
@@ -200,9 +199,9 @@ def test_init_custom():
     length = 3
     pdim = 2
     tensors = [
-        np.random.rand(pdim, pdim, 1, 2),   # left
-        np.random.rand(pdim, pdim, 2, 2),   # middle
-        np.random.rand(pdim, pdim, 2, 1)    # right
+        np.random.rand(1, 2, pdim, pdim),   # left
+        np.random.rand(2, 2, pdim, pdim),   # middle
+        np.random.rand(2, 1, pdim, pdim)    # right
     ]
 
     mpo = MPO()
@@ -302,7 +301,7 @@ def test_check_if_identity():
 ################################################
 
 
-@pytest.mark.parametrize("state", ["zeros", "ones", "x", "Neel", "wall"])
+@pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall"])
 def test_mps_initialization(state):
     """
     Test that MPS initializes a chain of a given length with correct
@@ -474,7 +473,7 @@ def test_normalize():
 def test_measure():
     length = 2
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim]*length, state='x')
+    mps = MPS(length=length, physical_dimensions=[pdim]*length, state='x+')
 
     obs = Observable(site=0, name="x")
     val = mps.measure(obs)

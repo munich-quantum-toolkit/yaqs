@@ -1,6 +1,9 @@
+import pytest
+
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
+
 
 def test_convert_dag_to_tensor_algorithm_single_qubit_gate():
     from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
@@ -31,7 +34,7 @@ def test_convert_dag_to_tensor_algorithm_two_qubit_gate():
 
 
 def test_convert_dag_to_tensor_algorithm_single_dagopnode():
-    from qiskit.dagcircuit.dagnode import DAGOpNode
+    from qiskit._accelerate.circuit import DAGOpNode
     from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
 
     qc = QuantumCircuit(1)

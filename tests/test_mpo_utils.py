@@ -9,8 +9,8 @@ from yaqs.circuits.equivalence_checking.mpo_utils import (
     update_MPO,
     apply_layer
 )
-from yaqs.general.data_structures.MPO import MPO
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.core.data_structures.networks import MPO
+from yaqs.core.libraries.gate_library import GateLibrary
 
 
 ##############################################################################
@@ -78,9 +78,9 @@ def test_apply_gate(interaction, conjugate):
 
     if interaction == 1:
         # Single-qubit gate (2x2)
-        gate_mock.tensor = getattr(TensorLibrary, "x")().tensor
+        gate_mock.tensor = getattr(GateLibrary, "x")().tensor
     else:
-        gate_mock = getattr(TensorLibrary, "cx")()
+        gate_mock = getattr(GateLibrary, "cx")()
         gate_mock.set_sites(0, 1)
 
     # For simplicity, we'll just use a 6D tensor (2-qubit nearest neighbor scenario).
@@ -118,7 +118,7 @@ def test_apply_temporal_zone_one_gate(mock_convert, mock_get_zone):
     gate_mock.interaction = 1
     gate_mock.sites = [0]
     gate_mock.name = "X"
-    gate_mock.tensor = TensorLibrary.x().matrix
+    gate_mock.tensor = GateLibrary.x().matrix
     mock_convert.return_value = [gate_mock]
 
     theta = random_theta_6d()

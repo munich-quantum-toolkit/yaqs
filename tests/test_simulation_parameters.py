@@ -1,8 +1,8 @@
 import pytest
 import numpy as np
 
-from yaqs.general.libraries.tensor_library import TensorLibrary
-from yaqs.general.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from yaqs.core.libraries.gate_library import GateLibrary
+from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
 ###############################################
 # Tests for Observable class
@@ -22,7 +22,7 @@ def test_observable_creation_invalid():
     name = 'FakeName'
     with pytest.raises(AttributeError) as exc_info:
         Observable(name, 0)
-    # The default message is typically "type object 'TensorLibrary' has no attribute 'FakeName'"
+    # The default message is typically "type object 'GateLibrary' has no attribute 'FakeName'"
     assert "has no attribute" in str(exc_info.value)
 
 ##############################################################################
