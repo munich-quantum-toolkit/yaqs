@@ -17,12 +17,6 @@ def run(initial_state: 'MPS', operator, sim_params, noise_model: 'NoiseModel'=No
     Common simulation routine used by both circuit and Hamiltonian simulations.
     It normalizes the state, prepares trajectory arguments, runs the trajectories
     in parallel, and aggregates the results.
-    
-    The aggregation logic distinguishes between the circuit simulation types:
-      - For QuantumCircuit simulations using WeakSimParams, each trajectory’s result
-        is stored in sim_params.measurements and later aggregated via sim_params.aggregate_measurements().
-      - Otherwise (for StrongSimParams or Hamiltonian simulations), each observable’s
-        trajectory is stored and then averaged.
     """
     # For Hamiltonian simulations and for circuit simulations with StrongSimParams,
     # initialize observables. For WeakSimParams in the circuit case, no initialization needed.
