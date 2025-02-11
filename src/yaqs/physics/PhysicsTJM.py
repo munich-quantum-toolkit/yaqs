@@ -68,11 +68,23 @@ def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimPara
     apply_dissipation(psi, noise_model, sim_params.dt/2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
     if sim_params.sample_timesteps:
-        for obs_index, observable in enumerate(sim_params.sorted_observables):
-            results[obs_index, j] = copy.deepcopy(psi).measure(observable)
+        temp_state = copy.deepcopy(psi)
+        last_site = 0
+        for obs_index, observable in enumerate(sim_params.observables):
+            if observable.site > last_site:
+                for site in range(last_site, observable.site):
+                    temp_state.shift_orthogonality_center_right(site)
+                last_site = observable.site
+            results[obs_index, j] = temp_state.measure(observable)
     else:
-        for obs_index, observable in enumerate(sim_params.sorted_observables):
-            results[obs_index, 0] = copy.deepcopy(psi).measure(observable)
+        temp_state = copy.deepcopy(psi)
+        last_site = 0
+        for obs_index, observable in enumerate(sim_params.observables):
+            if observable.site > last_site:
+                for site in range(last_site, observable.site):
+                    temp_state.shift_orthogonality_center_right(site)
+                last_site = observable.site
+            results[obs_index, 0] = temp_state.measure(observable)
 
 
 def PhysicsTJM_2(args):
@@ -131,8 +143,14 @@ def PhysicsTJM_1(args):
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
         if sim_params.sample_timesteps:
-            for obs_index, observable in enumerate(sim_params.sorted_observables):
-                results[obs_index, j] = copy.deepcopy(state).measure(observable)
+            temp_state = copy.deepcopy(state)
+            last_site = 0
+            for obs_index, observable in enumerate(sim_params.observables):
+                if observable.site > last_site:
+                    for site in range(last_site, observable.site):
+                        temp_state.shift_orthogonality_center_right(site)
+                    last_site = observable.site
+                results[obs_index, j] = temp_state.measure(observable)
         elif j == len(sim_params.times)-1:
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)

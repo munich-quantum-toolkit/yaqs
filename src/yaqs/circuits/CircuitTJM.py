@@ -160,6 +160,12 @@ def CircuitTJM(args):
             # Each shot is an individual trajectory
             return measure(state, shots=1)
     elif isinstance(sim_params, StrongSimParams):
+        temp_state = copy.deepcopy(state)
+        last_site = 0
         for obs_index, observable in enumerate(sim_params.observables):
-            results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+            if observable.site > last_site:
+                for site in range(last_site, observable.site):
+                    temp_state.shift_orthogonality_center_right(site)
+                last_site = observable.site
+            results[obs_index, 0] = temp_state.measure(observable)
         return results
