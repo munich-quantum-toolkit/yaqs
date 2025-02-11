@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -22,10 +22,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-cov
+          pip install -r requirements.txt  # Ensure all dependencies are installed
+          pip install pytest pytest-cov  # Explicitly install pytest and pytest-cov
 
       - name: Run tests with coverage
-        run: pytest --cov=your_package --cov-report=xml
+        run: pytest --cov=yaqs --cov-report=xml  # Ensure `yaqs` is the correct package name
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
