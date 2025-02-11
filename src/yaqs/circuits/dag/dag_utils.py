@@ -1,15 +1,18 @@
-import numpy as np
-
-from qiskit._accelerate.circuit import DAGCircuit
+from __future__ import annotations
+from qiskit._accelerate.circuit import DAGOpNode
 from qiskit.converters import dag_to_circuit
-from qiskit.dagcircuit.dagnode import DAGOpNode
 
-from yaqs.general.libraries.tensor_library import TensorLibrary
+from yaqs.core.libraries.gate_library import GateLibrary
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from qiskit._accelerate.circuit import DAGCircuit
+    import numpy as np
 
 
-def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
+def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
     """
-    Converts a DAGCircuit into a list of gate objects from the TensorLibrary.
+    Converts a DAGCircuit into a list of gate objects from the GateLibrary.
 
     Args:
         dag: The DAGCircuit (or a single DAGOpNode) representing a quantum operation.
@@ -24,7 +27,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
         gate = dag
         name = gate.op.name
 
-        attr = getattr(TensorLibrary, name)
+        attr = getattr(GateLibrary, name)
         gate_object = attr()
         if gate.op.params:
             gate_object.set_params(gate.op.params)
@@ -45,7 +48,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
             if name in ['measure', 'barrier']:
                 continue
 
-            attr = getattr(TensorLibrary, name)
+            attr = getattr(GateLibrary, name)
             gate_object = attr()
 
             if gate.op.params:
@@ -64,7 +67,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit):
     return algorithm
 
 
-def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
+def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
     """
     Extracts the temporal zone from a DAGCircuit for the specified qubits.
     The temporal zone is the subset of operations acting only on these qubits
@@ -111,7 +114,7 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]):
     return new_dag
 
 
-def check_longest_gate(dag: DAGCircuit):
+def check_longest_gate(dag: DAGCircuit) -> int:
     """
     Checks the maximum 'distance' between qubits in any multi-qubit gate
     present in the first layer of the DAGCircuit.
@@ -140,7 +143,7 @@ def check_longest_gate(dag: DAGCircuit):
     return largest_distance
 
 
-def select_starting_point(N: int, dag: DAGCircuit):
+def select_starting_point(N: int, dag: DAGCircuit) -> range:
     """
     Determines which set of neighboring qubits (even-even or odd-odd) to start with
     based on the arrangement of gates in the first layer of the DAG.

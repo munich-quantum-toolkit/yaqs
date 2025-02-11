@@ -1,7 +1,7 @@
 import numpy as np
 
-from yaqs.general.operations.operations import scalar_product, local_expval
-from yaqs.general.data_structures.MPS import MPS
+from yaqs.core.methods.operations import scalar_product, local_expval
+from yaqs.core.data_structures.networks import MPS
 
 ##############################################################################
 # Tests for scalar_product
@@ -38,7 +38,7 @@ def test_scalar_product_partial_site():
     result = oe.contract('ijk, ijk', A_copy.tensors[site], B_copy.tensors[site])
     We'll test site=0 for a 2-site MPS, comparing it to direct np.dot on that site.
     """
-    psi_mps = MPS(length=3, state='x')
+    psi_mps = MPS(length=3, state='x+')
 
     site = 0
     partial_val = scalar_product(psi_mps, psi_mps, site=site)
@@ -81,7 +81,7 @@ def test_local_expval_x_on_plus_state():
 
     # single-qubit MPS => |+>
     plus = [1/np.sqrt(2), 1/np.sqrt(2)]
-    psi_mps = MPS(length=3, state='x')
+    psi_mps = MPS(length=3, state='x+')
 
     val = local_expval(psi_mps, X, site=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)

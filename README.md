@@ -1,7 +1,7 @@
-[![PyPI](https://img.shields.io/pypi/v/mqt.bench?logo=pypi&style=flat-square)](https://pypi.org/project/mqt.yaqs/)
+[![PyPI](https://img.shields.io/pypi/v/mqt.yaqs?logo=pypi&style=flat-square)](https://pypi.org/project/mqt.yaqs/)
 ![OS](https://img.shields.io/badge/os-linux%20%7C%20macos%20%7C%20windows-blue?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![codecov](https://img.shields.io/codecov/c/github/cda-tum/mqt-bench?style=flat-square&logo=codecov)](https://codecov.io/gh/cda-tum/mqt-yaqs)
+[![codecov](https://img.shields.io/codecov/c/github/cda-tum/mqt-yaqs?style=flat-square&logo=codecov)](https://codecov.io/gh/cda-tum/mqt-yaqs)
 
 ![Banner](images/banner.jpeg)
 
@@ -15,9 +15,9 @@ If you have any questions, feel free to create a [discussion](https://github.com
 ## Features
 - **Simulation of Open Quantum Systems**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM) ([Large-scale stochastic simulation of open quantum systems](https://arxiv.org/abs/2501.17913v1))
 - **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method ([Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946))
+- **Noisy Quantum Circuit Simulation**: Investigate the effect of noise on large quantum circuits
 
 ## Upcoming Features (Check back soon)
-- **WIP: Noisy Quantum Circuit Simulation**: Investigate the effect of noise on large quantum circuits
 - **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
 
 ## Getting Started

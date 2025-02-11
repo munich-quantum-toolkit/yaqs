@@ -48,6 +48,7 @@ def _lanczos_iteration(Afunc, vstart, numiter):
     alpha[j] = np.vdot(w, V[j]).real
     return (alpha, beta, V.T)
 
+
 def expm_krylov(Afunc, v, dt, numiter):
     """
     Compute Krylov subspace approximation of the matrix exponential

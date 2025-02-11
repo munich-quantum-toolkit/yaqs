@@ -1,10 +1,14 @@
+from __future__ import annotations
 import copy
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.general.data_structures.MPS import MPS
-from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.operations.operations import scalar_product
+from yaqs.core.methods.operations import scalar_product
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.core.data_structures.networks import MPS
+    from yaqs.core.data_structures.noise_model import NoiseModel
 
 
 def calculate_stochastic_factor(state: MPS) -> float:
@@ -44,7 +48,6 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
 
     # Dissipative sweep should always result in a mixed canonical form at site L
     for site, _ in enumerate(state.tensors):
-        # state.set_canonical_form(site)
         if site != 0 and site != state.length:
             state.shift_orthogonality_center_right(site-1)
 

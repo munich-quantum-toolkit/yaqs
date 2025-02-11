@@ -1,16 +1,16 @@
-import concurrent.futures
+from __future__ import annotations
 import copy
-import multiprocessing
 import numpy as np
-from tqdm import tqdm
 
-from yaqs.general.data_structures.MPO import MPO
-from yaqs.general.data_structures.MPS import MPS
-from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.data_structures.simulation_parameters import PhysicsSimParams
-from yaqs.physics.methods.dissipation import apply_dissipation
-from yaqs.physics.methods.dynamic_TDVP import dynamic_TDVP
-from yaqs.physics.methods.stochastic_process import stochastic_process
+from yaqs.core.methods.dissipation import apply_dissipation
+from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
+from yaqs.core.methods.stochastic_process import stochastic_process
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from yaqs.core.data_structures.networks import MPO, MPS
+    from yaqs.core.data_structures.noise_model import NoiseModel
+    from yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
 
 
 def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
@@ -75,7 +75,7 @@ def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimPara
             results[obs_index, 0] = copy.deepcopy(psi).measure(observable)
 
 
-def run_trajectory_second_order(args):
+def PhysicsTJM_2(args):
     """
     Run a single trajectory of the TJM.
 
@@ -111,7 +111,8 @@ def run_trajectory_second_order(args):
 
     return results
 
-def run_trajectory_first_order(args):
+
+def PhysicsTJM_1(args):
     i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
 
@@ -137,76 +138,3 @@ def run_trajectory_first_order(args):
                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     return results
-
-
-def run(initial_state: MPS, H: MPO, sim_params: PhysicsSimParams, noise_model: NoiseModel=None):
-    """
-    Perform the Tensor Jump Method (TJM) to simulate the noisy evolution of a quantum system.
-
-    Args:
-        initial_state (MPS): Initial state of the system.
-        H (MPO): System Hamiltonian.
-        sim_params (SimulationParams): Parameters needed to define all variables of the simulation.
-        noise_model (NoiseModel): Noise model to apply to the system.
-
-    Returns:
-        None: Observables in SimulationParams are updated directly.
-    """
-    # Reset any previous results
-    for observable in sim_params.observables:
-        observable.initialize(sim_params)
-
-    for observable in sim_params.sorted_observables:
-        observable.initialize(sim_params)
-
-
-    # Guarantee one trajectory if no noise model
-    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-        sim_params.N = 1
-        sim_params.order = 1
-
-    # State must start in B form
-    initial_state.normalize('B')
-    args = [(i, initial_state, noise_model, sim_params, H) for i in range(sim_params.N)]
-
-    max_workers = max(1, multiprocessing.cpu_count() - 1)
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        if sim_params.order == 2:
-            futures = {executor.submit(run_trajectory_second_order, arg): arg[0] for arg in args}
-        elif sim_params.order == 1:
-            futures = {executor.submit(run_trajectory_first_order, arg): arg[0] for arg in args}
-
-        with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
-            for future in concurrent.futures.as_completed(futures):
-                i = futures[future]
-                try:
-                    result = future.result()
-                    for obs_index, observable in enumerate(sim_params.sorted_observables):
-                        observable.trajectories[i] = result[obs_index]
-                except Exception as e:
-                        print(f"\nTrajectory {i} failed with exception: {e}. Retrying...")
-                        # Retry could be done here
-                finally:
-                    pbar.update(1)
-
-    # # Save average value of trajectories
-    # for observable in sim_params.sorted_observables:
-    #     observable.results = np.mean(observable.trajectories, axis=0)
-
-    # Restore the original order of results
-    # original_results = {}
-    # for obs_index, observable in enumerate(sim_params.sorted_observables):
-    #     original_results[observable] = observable.results
-
-    # for obs_index, observable in enumerate(sim_params.observables):
-    #     observable.results = original_results[observable]
-
-        # Save average value of trajectories for sorted observables
-    for observable in sim_params.sorted_observables:
-        observable.results = np.mean(observable.trajectories, axis=0)
-
-    # Map results back to the original observables
-    for sorted_obs in sim_params.sorted_observables:
-        original_idx = sim_params.sorted_to_original_map[sorted_obs]
-        sim_params.observables[original_idx].results = sorted_obs.results
-

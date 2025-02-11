@@ -1,15 +1,15 @@
 import copy
 import numpy as np
-import qiskit.circuit
-import qiskit.compiler
+from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library.n_local import TwoLocal
+import qiskit.compiler
 
 from yaqs.circuits.equivalence_checking import equivalence_checker
 
 # Define the initial circuit
 num_qubits = 5
 depth = num_qubits
-circuit = qiskit.circuit.QuantumCircuit(num_qubits)
+circuit = QuantumCircuit(num_qubits)
 
 # Example: Two-Local Circuit
 twolocal = TwoLocal(num_qubits, ['rx'], ['rzz'], entanglement='linear', reps=depth).decompose()        
