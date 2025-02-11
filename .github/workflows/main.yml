@@ -26,7 +26,7 @@ jobs:
           pip install pytest pytest-cov  # Explicitly install pytest and pytest-cov
 
       - name: Run tests with coverage
-        run: pytest --cov=yaqs --cov-report=xml  # Ensure `yaqs` is the correct package name
+        run: pytest --cov=yaqs --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
