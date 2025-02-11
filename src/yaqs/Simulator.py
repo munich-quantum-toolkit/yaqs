@@ -22,7 +22,7 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None):
     # For Hamiltonian simulations and for circuit simulations with StrongSimParams,
     # initialize observables. For WeakSimParams in the circuit case, no initialization needed.
     if isinstance(operator, MPO) or isinstance(sim_params, StrongSimParams):
-        for observable in sim_params.observables:
+        for observable in sim_params.sorted_observables:
             observable.initialize(sim_params)
 
     if isinstance(operator, QuantumCircuit):
@@ -54,7 +54,7 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None):
                     if isinstance(operator, QuantumCircuit) and isinstance(sim_params, WeakSimParams):
                         sim_params.measurements[i] = result
                     else:
-                        for obs_index, observable in enumerate(sim_params.observables):
+                        for obs_index, observable in enumerate(sim_params.sorted_observables):
                             observable.trajectories[i] = result[obs_index]
                 except Exception as e:
                     print(f"\nTrajectory {i} failed with exception: {e}.")
