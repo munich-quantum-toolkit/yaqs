@@ -30,6 +30,7 @@ class Observable:
 class PhysicsSimParams:
     def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, order: int=1):
         self.observables = observables
+        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.T = T
         self.dt = dt
         self.times = np.arange(0, T+dt, dt)
@@ -77,6 +78,7 @@ class WeakSimParams:
 class StrongSimParams:
     def __init__(self, observables: list[Observable], N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, window_size: int=None):
         self.observables = observables
+        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.N = N
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
