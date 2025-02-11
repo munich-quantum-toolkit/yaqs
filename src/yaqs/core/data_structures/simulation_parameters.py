@@ -87,5 +87,5 @@ class StrongSimParams:
         self.backend = CircuitTJM
 
     def aggregate_trajectories(self):
-            for observable in self.observables:
-                observable.results = np.mean(observable.trajectories, axis=0)
+        for observable in self.observables:
+            observable.results = np.mean(observable.trajectories, axis=0)
