@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import patch
 
 from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
 from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
 

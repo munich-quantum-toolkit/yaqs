@@ -37,11 +37,7 @@ def test_apply_dissipation_site_canonical_0():
     apply_dissipation(state, noise_model, dt)
 
     # 4) Now check that MPS is site-canonical at site 0.
-    #    We'll assume state.check_canonical_form() => returns 0 or [0].
     canonical_site = state.check_canonical_form()
-    # If your code returns a list with a single site [0], do:
-    #   assert canonical_site == [0]
-    # If it returns an int site, do:
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, "
         f"but got canonical site: {canonical_site}"
