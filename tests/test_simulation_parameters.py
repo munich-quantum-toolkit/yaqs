@@ -1,12 +1,7 @@
 import pytest
 import numpy as np
 
-from yaqs.core.libraries.gate_library import GateLibrary
 from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-
-###############################################
-# Tests for Observable class
-##############################################################################
 
 def test_observable_creation_valid():
     name = 'x'
@@ -24,10 +19,6 @@ def test_observable_creation_invalid():
         Observable(name, 0)
     # The default message is typically "type object 'GateLibrary' has no attribute 'FakeName'"
     assert "has no attribute" in str(exc_info.value)
-
-##############################################################################
-# Tests for PhysicsSimParams
-##############################################################################
 
 def test_physics_simparams_basic():
     obs_list = [Observable('x', 0)]
@@ -61,10 +52,6 @@ def test_physics_simparams_defaults():
     assert params.max_bond_dim == 2
     assert params.threshold == 1e-6
     assert params.order == 1
-
-##############################################################################
-# Tests for Observable.initialize()
-##############################################################################
 
 def test_observable_initialize_with_sample_timesteps():
     """
