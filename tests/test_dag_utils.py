@@ -33,6 +33,20 @@ def test_convert_dag_to_tensor_algorithm_two_qubit_gate():
     assert gate.sites == [0, 1], "Gate should act on qubits 0 and 1."
 
 
+def test_convert_dag_to_tensor_algorithm_two_qubit_gate_flipped():
+    from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
+
+    qc = QuantumCircuit(2)
+    qc.cx(1, 0)
+    dag = circuit_to_dag(qc)
+
+    gates = convert_dag_to_tensor_algorithm(dag)
+    assert len(gates) == 1, "Should have one 2-qubit gate (CX)."
+    gate = gates[0]
+    assert gate.name.lower() in ["cx", "cnot"], "Gate name should match CX/CNOT."
+    assert gate.sites == [1, 0], "Gate should act on qubits 0 and 1."
+
+
 def test_convert_dag_to_tensor_algorithm_single_dagopnode():
     from qiskit._accelerate.circuit import DAGOpNode
     from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
