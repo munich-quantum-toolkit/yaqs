@@ -1,8 +1,5 @@
 import numpy as np
 
-import yaqs.core.data_structures.networks
-
-
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     assert tensor.shape == (2, 2, 2, 2)
 
@@ -67,8 +64,9 @@ def _extend_gate(tensor: np.ndarray, sites: list):
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[2])
 
-    mpo = yaqs.core.data_structures.networks.MPO()
-    mpo.init_custom(mpo_tensors)
+    from yaqs.core.data_structures.networks import MPO
+    mpo = MPO()
+    mpo.init_custom(mpo_tensors, transpose=False)
     return mpo
 
 
@@ -245,7 +243,7 @@ class CX:
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-X)
         self.generator = [(np.pi / 4)*np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
-
+        self.mpo = _extend_gate(self.tensor, self.sites)
         if site1 < site0:  # Adjust for reverse control/target
             # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
