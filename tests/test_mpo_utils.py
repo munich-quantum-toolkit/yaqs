@@ -1,16 +1,8 @@
 import pytest
-import numpy as np
-from unittest.mock import MagicMock, patch
 
-from yaqs.circuits.equivalence_checking.mpo_utils import (
-    decompose_theta,
-    apply_gate,
-    apply_temporal_zone,
-    update_MPO,
-    apply_layer
-)
-from yaqs.core.data_structures.networks import MPO
-from yaqs.core.libraries.gate_library import GateLibrary
+import copy
+import numpy as np
+
 
 
 ##############################################################################
@@ -52,6 +44,7 @@ def approximate_reconstruction(U, M, original, atol=1e-10):
 
 def test_decompose_theta():
     """Test SVD-based decomposition of a 6D tensor."""
+    from yaqs.circuits.equivalence_checking.mpo_utils import decompose_theta
     theta = random_theta_6d()
     threshold = 1e-5
 
@@ -71,22 +64,22 @@ def test_apply_gate(interaction, conjugate):
     Test applying single- or two-qubit gates to a 6D (or 8D) tensor,
     with or without conjugation.
     """
-    gate_mock = MagicMock()
-    gate_mock.interaction = interaction
-    gate_mock.name = "X" if interaction == 1 else "CNOT"
-    gate_mock.sites = [0, 1] if interaction == 2 else [0]
+    from yaqs.core.libraries.gate_library import GateLibrary
+    from yaqs.circuits.equivalence_checking.mpo_utils import apply_gate
 
     if interaction == 1:
-        # Single-qubit gate (2x2)
-        gate_mock.tensor = getattr(GateLibrary, "x")().tensor
+        attr = getattr(GateLibrary, 'x')
+        gate = attr()
+        gate.set_sites(0)
     else:
-        gate_mock = getattr(GateLibrary, "cx")()
-        gate_mock.set_sites(0, 1)
+        attr = getattr(GateLibrary, "rzz")
+        gate = attr()
+        gate.set_params([np.pi/2])
+        gate.set_sites(0, 1)
 
-    # For simplicity, we'll just use a 6D tensor (2-qubit nearest neighbor scenario).
     theta = random_theta_6d()
 
-    updated = apply_gate(gate_mock, theta, site0=0, site1=1, conjugate=conjugate)
+    updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
     assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
 
 
@@ -94,61 +87,89 @@ def test_apply_temporal_zone_no_op_nodes():
     """
     If the DAG has no op_nodes, apply_temporal_zone should return theta unchanged.
     """
-    dag_mock = MagicMock()
-    dag_mock.op_nodes.return_value = []  # No gates
+    from qiskit.circuit import QuantumCircuit
+    from qiskit.converters import circuit_to_dag
+    from yaqs.circuits.equivalence_checking.mpo_utils import apply_temporal_zone
+    circuit = QuantumCircuit()
+    dag = circuit_to_dag(circuit)
+
     theta = random_theta_6d()
     qubits = [0, 1]
 
-    updated = apply_temporal_zone(theta, dag_mock, qubits, conjugate=False)
+    updated = apply_temporal_zone(theta, dag, qubits, conjugate=False)
     assert np.allclose(updated, theta), "If no gates, theta should be unchanged."
 
 
-@patch("yaqs.circuits.equivalence_checking.mpo_utils.get_temporal_zone")
-@patch("yaqs.circuits.equivalence_checking.mpo_utils.convert_dag_to_tensor_algorithm")
-def test_apply_temporal_zone_one_gate(mock_convert, mock_get_zone):
+def test_apply_temporal_zone_single_qubit_gates():
     """
     If the DAG has one gate in the 'temporal zone', it should be applied.
     """
-    dag_mock = MagicMock()
-    dag_mock.op_nodes.return_value = ["some_node"]  # So the code sees we have gates
-
-    mock_get_zone.return_value = MagicMock()  # Just a placeholder zone
-    # Return a single gate from convert_dag_to_tensor_algorithm
-    gate_mock = MagicMock()
-    gate_mock.interaction = 1
-    gate_mock.sites = [0]
-    gate_mock.name = "X"
-    gate_mock.tensor = GateLibrary.x().matrix
-    mock_convert.return_value = [gate_mock]
+    from qiskit.converters import circuit_to_dag
+    from yaqs.circuits.equivalence_checking.mpo_utils import apply_temporal_zone
+    from yaqs.core.libraries.circuit_library import create_Ising_circuit
+    model = {'name': 'Ising', 'L': 5, 'J': 0, 'g': 1}
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
-    updated = apply_temporal_zone(theta, dag_mock, [0,1], conjugate=False)
+    updated = apply_temporal_zone(theta, dag, [0,1], conjugate=False)
 
-    # shape should remain the same
     assert updated.shape == theta.shape
-    # We could also check that apply_gate was effectively used,
-    # but since we didn't patch 'apply_gate', no direct check is possible here.
 
 
-@patch("yaqs.circuits.equivalence_checking.mpo_utils.apply_temporal_zone", side_effect=lambda t, *_, **__: t)
-def test_update_MPO_basic(mock_apply_temporal_zone):
+def test_apply_temporal_zone_two_qubit_gates():
+    """
+    If the DAG has one gate in the 'temporal zone', it should be applied.
+    """
+    from qiskit.converters import circuit_to_dag
+    from yaqs.circuits.equivalence_checking.mpo_utils import apply_temporal_zone
+    from yaqs.core.libraries.circuit_library import create_Ising_circuit
+    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 0}
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    dag = circuit_to_dag(circuit)
+
+    theta = random_theta_6d()
+    updated = apply_temporal_zone(theta, dag, [0,1], conjugate=False)
+
+    assert updated.shape == theta.shape
+
+
+def test_apply_temporal_zone_mixed_qubit_gates():
+    """
+    If the DAG has one gate in the 'temporal zone', it should be applied.
+    """
+    from qiskit.converters import circuit_to_dag
+    from yaqs.circuits.equivalence_checking.mpo_utils import apply_temporal_zone
+    from yaqs.core.libraries.circuit_library import create_Ising_circuit
+    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 1}
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    dag = circuit_to_dag(circuit)
+
+    theta = random_theta_6d()
+    updated = apply_temporal_zone(theta, dag, [0,1], conjugate=False)
+
+    assert updated.shape == theta.shape
+
+
+def test_update_MPO():
     """
     Test update_MPO with a small 2-qubit MPO. We'll intercept apply_temporal_zone calls.
     """
+    from qiskit.converters import circuit_to_dag
+    from yaqs.core.data_structures.networks import MPO
+    from yaqs.core.libraries.circuit_library import create_Ising_circuit
+    from yaqs.circuits.equivalence_checking.mpo_utils import update_MPO
     mpo = MPO()
     length = 2
-    pdim = 2
-    mpo.init_identity(length, pdim)
-
-    dag1 = MagicMock()
-    dag2 = MagicMock()
-    qubits = [0,1]
+    mpo.init_identity(length)
+    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 1}
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    dag1 = circuit_to_dag(circuit)
+    dag2 = copy.deepcopy(dag1)
+    qubits = [0, 1]
     threshold = 1e-5
 
     update_MPO(mpo, dag1, dag2, qubits, threshold)
-
-    # Called twice: once for circuit1 (conjugate=False), once for circuit2 (conjugate=True)
-    assert mock_apply_temporal_zone.call_count == 2
 
     # Check final shapes
     for site_tensor in mpo.tensors:
@@ -156,23 +177,43 @@ def test_update_MPO_basic(mock_apply_temporal_zone):
         assert site_tensor.ndim == 4
 
 
-@patch("yaqs.circuits.equivalence_checking.mpo_utils.update_MPO")
-def test_apply_layer(mock_update_mpo):
+def test_apply_layer():
     """
     Basic test for apply_layer. We'll confirm update_MPO is called for first and second iterators.
     """
+    from qiskit.converters import circuit_to_dag
+    from yaqs.core.data_structures.networks import MPO
+    from yaqs.core.libraries.circuit_library import create_Ising_circuit
+    from yaqs.circuits.equivalence_checking.mpo_utils import apply_layer, select_starting_point
     mpo = MPO()
-    mpo.init_identity(4, physical_dimension=2)
-
-    circuit1_dag = MagicMock()
-    circuit2_dag = MagicMock()
-    # Example: even then odd layering
-    first_iterator = range(0, 3, 2)   # e.g. n = 0, 2 => [0,1], [2,3]
-    second_iterator = range(1, 3, 2)  # e.g. n = 1 => [1,2]
+    length = 3
+    mpo.init_identity(length)
+    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 1}
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    dag1 = circuit_to_dag(circuit)
+    dag2 = copy.deepcopy(dag1)
     threshold = 1e-5
 
-    apply_layer(mpo, circuit1_dag, circuit2_dag, first_iterator, second_iterator, threshold)
+    first_iterator, second_iterator = select_starting_point(length, dag1)
+    apply_layer(mpo, dag1, dag2, first_iterator, second_iterator, threshold)
 
-    # We expect update_MPO calls for each n in both iterators
-    assert mock_update_mpo.call_count == (len(list(first_iterator)) + len(list(second_iterator)))
+    assert mpo.check_if_identity(1-1e-13)
 
+
+def test_apply_long_range_layer():
+    from qiskit.circuit import QuantumCircuit
+    from qiskit.converters import circuit_to_dag
+    from yaqs.core.data_structures.networks import MPO
+    from yaqs.circuits.equivalence_checking.mpo_utils import apply_long_range_layer, select_starting_point
+    mpo = MPO()
+    num_qubits = 3
+    mpo.init_identity(num_qubits)
+    circuit = QuantumCircuit(num_qubits)
+    circuit.cx(0, 2)
+    dag1 = circuit_to_dag(circuit)
+    dag2 = copy.deepcopy(dag1)
+    threshold = 1e-12
+    apply_long_range_layer(mpo, dag1, dag2, conjugate=False, threshold=threshold)
+    apply_long_range_layer(mpo, dag1, dag2, conjugate=True, threshold=threshold)
+
+    assert mpo.check_if_identity(1-1e-6)
