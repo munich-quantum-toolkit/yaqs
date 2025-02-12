@@ -5,27 +5,27 @@ from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
 from yaqs.core.methods.TDVP import (
-    _split_mps_tensor,
-    _merge_mps_tensor_pair,
-    _merge_mpo_tensor_pair,
-    _contraction_operator_step_right,
-    _contraction_operator_step_left,
-    _compute_right_operator_blocks,
-    _apply_local_hamiltonian,
-    _apply_local_bond_contraction,
-    _local_hamiltonian_step,
-    _local_bond_step,
+    split_mps_tensor,
+    merge_mps_tensors,
+    merge_mpo_tensors,
+    update_right_environment,
+    update_left_environment,
+    initialize_right_environments,
+    project_site,
+    project_bond,
+    update_site,
+    update_bond,
     single_site_TDVP,
     two_site_TDVP,
 )
 
-def test_split_mps_tensor_left_right_sqrt():
+def testsplit_mps_tensor_left_right_sqrt():
     # Create an input tensor A with shape (d0*d1, D0, D2).
     # Let d0 = d1 = 2 so that A.shape[0]=4, and choose D0=3, D2=5.
     A = np.random.randn(4, 3, 5)
     # For each svd_distr option, run the splitting and then reconstruct A.
     for distr in ['left', 'right', 'sqrt']:
-        A0, A1 = _split_mps_tensor(A, svd_distr=distr, threshold=1e-8)
+        A0, A1 = split_mps_tensor(A, svd_distribution=distr, threshold=1e-8)
         # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5),
         # where r is the effective rank.
         assert A0.ndim == 3
@@ -42,36 +42,36 @@ def test_split_mps_tensor_left_right_sqrt():
         # Up to SVD sign and ordering ambiguities, the reconstruction should be close.
         np.testing.assert_allclose(A, A_recon, atol=1e-6)
 
-def test_split_mps_tensor_invalid_shape():
+def testsplit_mps_tensor_invalid_shape():
     # If A.shape[0] is not divisible by 2, the function should raise a ValueError.
     A = np.random.randn(3, 3, 5)
     with pytest.raises(ValueError):
-        _split_mps_tensor(A, svd_distr='left')
+        split_mps_tensor(A, svd_distribution='left')
 
-def test_merge_mps_tensor_pair():
+def testmerge_mps_tensors():
     # Let A0 have shape (2, 3, 4) and A1 have shape (5, 4, 7).
-    # In _merge_mps_tensor_pair the arrays are interpreted with label tuples
+    # In merge_mps_tensors the arrays are interpreted with label tuples
     # (0,2,3) for A0 and (1,3,4) for A1, so contraction is over the third axis of A0 and
     # the second axis of A1.
     A0 = np.random.randn(2, 3, 4)
     A1 = np.random.randn(5, 4, 7)
-    merged = _merge_mps_tensor_pair(A0, A1)
+    merged = merge_mps_tensors(A0, A1)
     # Expected shape: first two axes merged from A0[0] and A1[0]:
     # output shape = ((2*5), 3, 7) i.e. (10, 3, 7)
     assert merged.shape == (10, 3, 7)
 
-def test_merge_mpo_tensor_pair():
+def testmerge_mpo_tensors():
     # Let A0 be a 4D array with shape (2, 3, 4, 5) and
     # A1 be a 4D array with shape (7, 8, 5, 9).
     # The contract call uses label tuples (0,2,4,6) and (1,3,6,5) and contracts label 6.
     A0 = np.random.randn(2, 3, 4, 5)
     A1 = np.random.randn(7, 8, 5, 9)
-    merged = _merge_mpo_tensor_pair(A0, A1)
+    merged = merge_mpo_tensors(A0, A1)
     # Expected shape: merge first two axes of the result, where result (before reshape)
     # should have shape (2,7,3,8,4,9), then merged to (2*7, 3*8, 4,9) = (14,24,4,9).
     assert merged.shape == (14, 24, 4, 9)
 
-def test_contraction_operator_step_right():
+def testupdate_right_environment():
     # Choose shapes as described in the function.
     A = np.random.randn(2, 3, 4)
     # R: contract A's last axis (size 4) with R's first axis.
@@ -83,11 +83,11 @@ def test_contraction_operator_step_right():
     # After the previous steps, T becomes shape (3,8,7,6); we contract with B.conj() axes ((2,3),(0,2)).
     # So let B be of shape (7, 9, 6).
     B = np.random.randn(7, 9, 6)
-    Rnext = _contraction_operator_step_right(A, B, W, R)
+    Rnext = update_right_environment(A, B, W, R)
     # Expected shape: (3,8,9) (from the discussion above).
     assert Rnext.shape == (3, 8, 9)
 
-def test_contraction_operator_step_left():
+def testupdate_left_environment():
     # Set up dummy arrays with shapes so that the contraction is valid.
     # Let A be shape (3,4,10)
     A = np.random.randn(3, 4, 10)
@@ -97,12 +97,12 @@ def test_contraction_operator_step_left():
     L_arr = np.random.randn(4, 5, 6)
     # Let W be shape (7,3,5,9) so that we contract axes ((0,2),(2,1)) with T later.
     W = np.random.randn(7, 3, 5, 9)
-    Rnext = _contraction_operator_step_left(A, B, W, L_arr)
+    Rnext = update_left_environment(A, B, W, L_arr)
     # The expected shape from our reasoning is (10,9,8) (A's remaining axis 2 becomes output along with leftover dims from T).
     # We check that the result is 3-dimensional.
     assert Rnext.ndim == 3
 
-def test_apply_local_hamiltonian():
+def testproject_site():
     # Let A: shape (2,3,4); R: shape (4,5,6) as before.
     A = np.random.randn(2, 3, 4)
     R = np.random.randn(4, 5, 6)
@@ -110,22 +110,22 @@ def test_apply_local_hamiltonian():
     W = np.random.randn(7, 2, 8, 5)
     # Let L be shape (3,8,9) so that tensordot works.
     L_arr = np.random.randn(3, 8, 9)
-    out = _apply_local_hamiltonian(L_arr, R, W, A)
+    out = project_site(L_arr, R, W, A)
     # The function transposes the final result so we expect a 3D array.
     assert out.ndim == 3
 
-def test_apply_local_bond_contraction():
+def testproject_bond():
     # Let C: shape (2,3)
     C = np.random.randn(2, 3)
     # Let R: shape (3,4,5)
     R = np.random.randn(3, 4, 5)
     # Let L: shape (2,4,6)
     L_arr = np.random.randn(2, 4, 6)
-    out = _apply_local_bond_contraction(L_arr, R, C)
+    out = project_bond(L_arr, R, C)
     # Expected output shape: contraction gives shape (6,5)
     assert out.shape == (6, 5)
 
-def test_local_hamiltonian_step():
+def testupdate_site():
     # We choose an MPS tensor A with shape (d0, d0, d1) where d0=2, d1=4.
     # (The requirement here is that the first two dimensions are equal,
     # so that after the contraction chain the operator is square.)
@@ -147,11 +147,11 @@ def test_local_hamiltonian_step():
     L_arr = np.random.randn(2, 1, 2)  # shape: (2,1,2)
     dt = 0.05
     numiter = 10
-    out = _local_hamiltonian_step(L_arr, R, W, A, dt, numiter)
+    out = update_site(L_arr, R, W, A, dt, numiter)
     # The operator should be square, so out.shape should equal A.shape.
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
 
-def test_local_bond_step():
+def testupdate_bond():
     # For the bond step we want the operator to be square.
     # Let C be a matrix of shape (p, q). We choose C to be square.
     C = np.random.randn(2, 2)  # total elements: 4
@@ -163,7 +163,7 @@ def test_local_bond_step():
     L_arr = np.random.randn(2, 2, 2)  # shape: (2,2,2)
     dt = 0.05
     numiter = 10
-    out = _local_bond_step(L_arr, R, C, dt, numiter)
+    out = update_bond(L_arr, R, C, dt, numiter)
     # The output shape should equal the input shape.
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
