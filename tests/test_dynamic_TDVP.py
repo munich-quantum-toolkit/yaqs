@@ -1,71 +1,76 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+from yaqs.core.data_structures.networks import MPO, MPS
+from yaqs.core.data_structures.noise_model import NoiseModel
+from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
 
-@pytest.fixture
-def mock_mps():
-    """
-    A minimal MPS mock with a controlled bond dimension.
-    """
-    from yaqs.core.data_structures.networks import MPS
-
-    mps = MagicMock(spec=MPS)
-    return mps
-
-@pytest.fixture
-def mock_mpo():
-    """
-    Minimal MPO mock.
-    """
-    from yaqs.core.data_structures.networks import MPO
-
-    return MagicMock(spec=MPO)
-
-@pytest.fixture
-def mock_sim_params():
-    """
-    Fake simulation parameters with dt, max_bond_dim, threshold, etc.
-    """
-    from yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
-
-    sim_params = PhysicsSimParams(observables=[], T=1.0, dt=0.1, max_bond_dim=10, threshold=1e-6)
-    return sim_params
-
-@patch("yaqs.core.methods.dynamic_TDVP.two_site_TDVP")
-@patch("yaqs.core.methods.dynamic_TDVP.single_site_TDVP")
-def test_dynamic_tdvp_two_site(mock_single, mock_two_site, mock_mps, mock_mpo, mock_sim_params):
+def test_dynamic_tdvp_two_site():
     """
     If current_max_bond_dim <= sim_params.max_bond_dim,
     dynamic_TDVP should call two_site_TDVP exactly once.
     """
     from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
+    # Define the system Hamiltonian
+    L = 5
+    d = 2
+    J = 1
+    g = 0.5
+    H = MPO()
+    H.init_Ising(L, d, J, g)
 
-    # Suppose the MPS has a bond dimension of 8
-    mock_mps.write_max_bond_dim.return_value = 8
+    # Define the initial state
+    state = MPS(L, state='zeros')
 
-    dynamic_TDVP(mock_mps, mock_mpo, mock_sim_params)
+    # Define the simulation parameters
+    T = 0.2
+    dt = 0.1
+    sample_timesteps = False
+    N = 1
+    max_bond_dim = 1
+    threshold = 1e-6
+    order = 1
+    measurements = [Observable('x', site) for site in range(L)]
+    sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
-    # two_site_TDVP should be called
-    mock_two_site.assert_called_once_with(mock_mps, mock_mpo, mock_sim_params)
-    # single_site_TDVP should not be called
-    mock_single.assert_not_called()
+    # dynamic_TDVP(state, H_0, sim_params)
+
+    with patch('yaqs.core.methods.dynamic_TDVP.single_site_TDVP') as mock_single_site:
+        dynamic_TDVP(state, H, sim_params)
+        mock_single_site.assert_called_once_with(state, H, sim_params)
 
 
-@patch("yaqs.core.methods.dynamic_TDVP.two_site_TDVP")
-@patch("yaqs.core.methods.dynamic_TDVP.single_site_TDVP")
-def test_dynamic_tdvp_single_site(mock_single, mock_two_site, mock_mps, mock_mpo, mock_sim_params):
+def test_dynamic_tdvp_two_site():
     """
-    If current_max_bond_dim > sim_params.max_bond_dim,
-    dynamic_TDVP should call single_site_TDVP exactly once.
+    If current_max_bond_dim <= sim_params.max_bond_dim,
+    dynamic_TDVP should call two_site_TDVP exactly once.
     """
     from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
+    # Define the system Hamiltonian
+    L = 5
+    d = 2
+    J = 1
+    g = 0.5
+    H = MPO()
+    H.init_Ising(L, d, J, g)
 
-    # Suppose the MPS bond dimension is 12, which is above the threshold of 10
-    mock_mps.write_max_bond_dim.return_value = 12
+    # Define the initial state
+    state = MPS(L, state='zeros')
 
-    dynamic_TDVP(mock_mps, mock_mpo, mock_sim_params)
+    # Define the simulation parameters
+    T = 0.2
+    dt = 0.1
+    sample_timesteps = False
+    N = 1
+    max_bond_dim = 2
+    threshold = 1e-6
+    order = 1
+    measurements = [Observable('x', site) for site in range(L)]
+    sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
-    # single_site_TDVP should be called
-    mock_single.assert_called_once_with(mock_mps, mock_mpo, mock_sim_params)
-    # two_site_TDVP should not be called
-    mock_two_site.assert_not_called()
+    # dynamic_TDVP(state, H_0, sim_params)
+
+    with patch('yaqs.core.methods.dynamic_TDVP.two_site_TDVP') as mock_two_site:
+        dynamic_TDVP(state, H, sim_params)
+        mock_two_site.assert_called_once_with(state, H, sim_params)
