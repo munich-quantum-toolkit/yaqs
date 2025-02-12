@@ -215,15 +215,14 @@ class MPS:
 
         print("A Form:", A_truth)
         print("B Form:", B_truth)
-        if all(A_truth):
-            print("MPS is left (A) canonical.")
-            print("MPS is site canonical at site % d" % (self.length-1))
-            return [self.length-1]
-
         if all(B_truth):
             print("MPS is right (B) canonical.")
             print("MPS is site canonical at site 0")
             return [0]
+        if all(A_truth):
+            print("MPS is left (A) canonical.")
+            print("MPS is site canonical at site % d" % (self.length-1))
+            return [self.length-1]
 
         if not (all(A_truth) and all(B_truth)):
             sites = []
