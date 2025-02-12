@@ -78,14 +78,14 @@ def test_strong_simulation():
     assert len(sim_params.observables[0].results == 1), "Results was not initialized for StrongimParams."
 
 
-def test_weak_simulation_no_noise():
+def test_weak_simulation_noise():
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
     model = {'name': 'Ising', 'L': num_qubits, 'J': 1, 'g': 0.5}
-    circuit = create_Ising_circuit(model, dt=0.1, timesteps=10)
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     circuit.measure_all()
-    shots = 10
+    shots = 1024
     max_bond_dim = 4
     threshold = 1e-6
     window_size = 0
@@ -103,14 +103,14 @@ def test_weak_simulation_no_noise():
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
 
 
-def test_weak_simulation_noise():
+def test_weak_simulation_no_noise():
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
     model = {'name': 'Ising', 'L': num_qubits, 'J': 1, 'g': 0.5}
-    circuit = create_Ising_circuit(model, dt=0.1, timesteps=10)
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     circuit.measure_all()
-    shots = 10
+    shots = 1024
     max_bond_dim = 4
     threshold = 1e-6
     window_size = 0
