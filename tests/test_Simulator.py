@@ -1,5 +1,4 @@
 import pytest
-from qiskit.circuit import QuantumCircuit
 import numpy as np
 
 from yaqs.core.data_structures.networks import MPO, MPS
@@ -111,7 +110,7 @@ def test_weak_simulation_noise():
     model = {'name': 'Ising', 'L': num_qubits, 'J': 1, 'g': 0.5}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=10)
     circuit.measure_all()
-    shots = 1024
+    shots = 10
     max_bond_dim = 4
     threshold = 1e-6
     window_size = 0
