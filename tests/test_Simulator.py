@@ -79,7 +79,32 @@ def test_strong_simulation():
     assert len(sim_params.observables[0].results == 1), "Results was not initialized for StrongimParams."
 
 
-def test_weak_simulation():
+def test_weak_simulation_no_noise():
+    num_qubits = 5
+    initial_state = MPS(num_qubits)
+
+    model = {'name': 'Ising', 'L': num_qubits, 'J': 1, 'g': 0.5}
+    circuit = create_Ising_circuit(model, dt=0.1, timesteps=10)
+    circuit.measure_all()
+    shots = 10
+    max_bond_dim = 4
+    threshold = 1e-6
+    window_size = 0
+    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
+
+    gamma = 1e-3
+    noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
+
+    Simulator.run(initial_state, circuit, sim_params, noise_model)
+
+    assert sim_params.N == shots, "sim_params.N should be number of shots."
+    for measurement in sim_params.measurements:
+        assert isinstance(measurement, dict)
+
+    assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
+
+
+def test_weak_simulation_noise():
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
@@ -106,6 +131,7 @@ def test_weak_simulation():
     assert sim_params.results[1] == second_max_value or sim_params.results[16] == second_max_value, "Bitstrings 1, 16 do not have the second highest value."
 
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
+
 
 def test_mismatch():
     num_qubits = 5
