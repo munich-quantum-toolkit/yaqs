@@ -1,5 +1,6 @@
 from __future__ import annotations
 import concurrent.futures
+import copy
 import multiprocessing
 from qiskit.circuit import QuantumCircuit
 from tqdm import tqdm
@@ -21,7 +22,8 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
     """
     if isinstance(operator, QuantumCircuit):
         assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
-    
+        operator = copy.deepcopy(operator.reverse_bits())
+
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
     else:
