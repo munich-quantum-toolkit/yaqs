@@ -24,8 +24,8 @@ If you have any questions, feel free to create a [discussion](https://github.com
 
 1. Clone this repository:
 ```bash
-   git clone https://github.com/aaronleesander/YAQS.git
-   cd yaqs
+   git clone https://github.com/cda-tum/mqt-yaqs.git
+   cd mqt-yaqs
 ```
 
 2. Create and activate a virtual environment:
