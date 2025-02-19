@@ -371,6 +371,7 @@ class Rzz:
         self.sites = [site0, site1]
 
 class Custom: 
+    
     self.name = 'custom'
     self.matrix = None
 
