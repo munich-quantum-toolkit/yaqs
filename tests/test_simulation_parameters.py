@@ -21,7 +21,7 @@ def test_observable_creation_invalid():
     assert "has no attribute" in str(exc_info.value)
 
 def test_custom_observable():
-    matrix = random.rand(2,2)
+    matrix = np.random.rand(2,2)
     site = 0
     obs = Observable('custom', site, matrix)
     assert obs.name == 'custom'
@@ -30,6 +30,8 @@ def test_custom_observable():
         Observable('x', site, matrix)
     with pytest.raises(AssertionError):
         Observable('custom', site)
+
+
 
 def test_physics_simparams_basic():
     obs_list = [Observable('x', 0)]

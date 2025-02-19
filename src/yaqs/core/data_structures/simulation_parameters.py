@@ -4,9 +4,9 @@ from yaqs.core.libraries.gate_library import GateLibrary
 
 class Observable:
     def __init__(self, name: str, site: int, matrix: np.ndarray=None):
-        assert getattr(GateLibrary, name), "Selected observable to measure does not exist."
-        if matrix is not None:
-            assert name == 'custom'
+        if name != 'custom':
+            assert getattr(GateLibrary, name)
+        assert (matrix is None and name != 'custom') or (matrix is not None and name == 'custom')
         self.name = name
         self.site = site
         self.results = None

@@ -372,18 +372,23 @@ class Rzz:
 
 class Custom: 
     
-    self.name = 'custom'
-    self.matrix = None
-
-    def initialize(name, matrix, sites):
-        assert matrix.shape == (2,2) or matrix.shape == (4,4)
-
-        self.name = name
+    def __init__(self, matrix, sites):
+        self.name = 'custom'
         self.matrix = matrix
-        self.sites = sites
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        assert matrix.shape == (2,2) or matrix.shape == (4,4)
+        if matrix.shape == (4,4):
+            self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        if matrix.shape == (2,2):
+            self.tensor = self.matrix
 
 
+    def set_sites(self, site0: int, site1: int = None):
+        if site1 != None: 
+            self.sites = [site0, site1]
+        else: 
+            self.sites = [site0]
+        
+        
 # class U2:
 #     name = 'u2'
 #     interaction = 1
