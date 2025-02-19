@@ -239,3 +239,21 @@ def test_gate_cphase_reverse():
     expected = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
     assert_allclose(gate.tensor, expected)
+
+def test_custom_gate_1qubit():
+    matrix0 = np.random.rand(2, 2)
+    custom_gate0 = Custom(custom0, matrix0)
+    expected = np.reshape(gate.matrix, (2, 2, 2, 2))
+    assert_allclose(gate.tensor, expected)
+
+def test_custom_gate_2qubit():
+    matrix1 = np.random.rand(4, 4)
+    custom_gate1 = Custom(custom1, matrix1)
+    expected = np.reshape(gate.matrix, (2, 2, 2, 2))
+    assert_allclose(gate.tensor, expected)
+    
+def test_custom_gate_wrong():
+    matrix2 = np.random.rand(5, 5)
+    with pytest.raises(AssertionError):
+        Custom(custom2, matrix2)
+  
