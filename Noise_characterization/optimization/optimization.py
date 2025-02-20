@@ -1,0 +1,194 @@
+import numpy as np
+
+def trapezoidal(y, x):
+
+    integral = np.zeros(len(y))
+
+    integral[0] = 0
+
+    for i in range(1,len(y)):
+        integral[i] = integral[i-1] + 0.5*(x[i] - x[i-1])*(y[i] + y[i-1])
+
+    return integral
+
+
+
+
+def loss_function(sim_params, ref_traj):
+    """
+    Calculates the squared distance between corresponding entries of QuTiP and TJM expectation values.
+
+    Args:
+        noise_params (list): Noise parameters for the TJM simulation.
+        qt_exp_vals (list of arrays): QuTiP expectation values for each site.
+
+    Returns:
+        float: The total squared loss.
+    """
+    
+    # Run the TJM simulation with the given noise parameters
+
+    start_time = time.time()
+    t, exp_vals_traj, d_On_d_gk = qutip_traj(sim_params)  
+    end_time = time.time()
+    tjm_time = end_time - start_time
+    # print(f"TJM time -> {tjm_time:.4f}")
+    
+    # Initialize loss
+    loss = 0.0
+    
+    # Ensure both lists have the same structure
+    if len(ref_traj) != len(exp_vals_traj):
+        raise ValueError("Mismatch in the number of sites between qt_exp_vals and tjm_exp_vals.")
+
+    # Compute squared distance for each site
+    for ref_vals, tjm_vals in zip(ref_traj, exp_vals_traj):
+        loss += np.sum((np.array(ref_vals) - np.array(tjm_vals)) ** 2)
+    
+
+    n_jump = len(d_On_d_gk)
+    n_obs = len(d_On_d_gk[0])
+    n_t = len(d_On_d_gk[0][0])
+
+    n_gr = n_jump//2
+
+
+    dJ_d_gr = 0
+    dJ_d_gd = 0
+
+
+    for i in range(n_obs):
+        for j in range(n_t):
+            # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
+            for k in range(n_gr):
+                # The initial half of the jump operators are relaxation operators
+                dJ_d_gr += 2*(exp_vals_traj[i][j] - ref_traj[i][j]) * d_On_d_gk[k][i][j]
+                # The second half of the jump operators are dephasing operators
+                dJ_d_gd += 2*(exp_vals_traj[i][j] - ref_traj[i][j]) * d_On_d_gk[n_gr + k][i][j]
+
+
+
+
+    return loss, exp_vals_traj, np.array([dJ_d_gr, dJ_d_gd])
+
+
+
+
+def gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iterations=100, tolerance=1e-10):
+    """
+    Performs gradient descent to minimize the loss function.
+
+    Args:
+        sim_params (SimulationParameters): Initial simulation parameters.
+        ref_traj (list): Reference trajectory for comparison.
+        learning_rate (float): Learning rate for gradient descent.
+        max_iterations (int): Maximum number of iterations.
+        tolerance (float): Tolerance for convergence.
+
+    Returns:
+        SimulationParameters: Optimized simulation parameters.
+        list: Loss history.
+    """
+    loss_history = []
+
+    gr_history = []
+    gd_history = []
+
+    gr_history.append(sim_params.gamma_rel)
+    gd_history.append(sim_params.gamma_deph)
+
+
+
+    dJ_dgr_history = []
+    dJ_dgd_history = []
+
+
+    for iteration in range(max_iterations):
+        # Calculate loss and gradients
+        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj)
+        loss_history.append(loss)
+
+        # Check for convergence
+        if loss < tolerance:
+            print(f"Converged after {iteration} iterations.")
+            break        
+        sim_params.gamma_rel -= learning_rate * dJ_dg[0]
+        sim_params.gamma_deph -= learning_rate * dJ_dg[1]
+
+
+        dJ_dgr_history.append(dJ_dg[0])
+
+        dJ_dgd_history.append(dJ_dg[1])
+ 
+
+
+
+        gr_history.append(sim_params.gamma_rel)
+        gd_history.append(sim_params.gamma_deph)
+        
+
+        print(f"!!!!!!! Iteration {iteration}: Loss = {loss}")
+
+    return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
+
+
+
+
+# --- ADAM GRADIENT DESCENT (Modified) ---
+def ADAM_gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iterations=100, tolerance=1e-6):
+    """
+    Performs Adam gradient descent to minimize the loss function.
+    
+    Changes made:
+    - Added state variables m and v for the first and second moments.
+    - Introduced hyperparameters beta1, beta2, and epsilon.
+    - Updated parameters using the Adam update rule with bias correction.
+    """
+    loss_history = []
+    gr_history = []
+    gd_history = []
+    dJ_dgr_history = []
+    dJ_dgd_history = []
+
+    gr_history.append(sim_params.gamma_rel)
+    gd_history.append(sim_params.gamma_deph)
+
+    # Adam hyperparameters and initialization (NEW)
+    beta1 = 0.9
+    beta2 = 0.999
+    epsilon = 1e-8
+    m = np.array([0.0, 0.0])  # First moment (for [gamma_rel, gamma_deph])
+    v = np.array([0.0, 0.0])  # Second moment (for [gamma_rel, gamma_deph])
+
+    for iteration in range(max_iterations):
+        # Calculate loss and gradients (unchanged)
+        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj)
+        loss_history.append(loss)
+
+        if loss < tolerance:
+            print(f"Converged after {iteration} iterations.")
+            break
+        
+        # Adam update steps (NEW)
+        m = beta1 * m + (1 - beta1) * dJ_dg
+        v = beta2 * v + (1 - beta2) * (dJ_dg ** 2)
+        m_hat = m / (1 - beta1 ** (iteration + 1))
+        v_hat = v / (1 - beta2 ** (iteration + 1))
+        update = learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+        
+        # Update simulation parameters with Adam update (NEW)
+        sim_params.gamma_rel -= update[0]
+        sim_params.gamma_deph -= update[1]
+
+        # Log gradient updates
+        dJ_dgr_history.append(dJ_dg[0])
+        dJ_dgd_history.append(dJ_dg[1])
+        
+        gr_history.append(sim_params.gamma_rel)
+        gd_history.append(sim_params.gamma_deph)
+        
+        print(f"!!!!!!! Iteration {iteration}: Loss = {loss}")
+
+    return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
+
+
