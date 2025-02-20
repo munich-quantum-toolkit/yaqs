@@ -369,9 +369,10 @@ class Rzz:
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
 
+
 class Custom: 
+    name = 'custom'
     def __init__(self, matrix):
-        self.name = 'custom'
         self.matrix = matrix
         assert matrix.shape == (2, 2) or matrix.shape == (4, 4)
         if matrix.shape == (4, 4):
