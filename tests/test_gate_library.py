@@ -257,4 +257,3 @@ def test_custom_gate_wrong():
     matrix = np.random.rand(5, 5)
     with pytest.raises(AssertionError):
         GateLibrary.custom(matrix, 0)
-  
