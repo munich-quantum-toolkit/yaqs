@@ -7,6 +7,7 @@ from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsS
 from yaqs import Simulator
 from dataclasses import dataclass
 
+from yaqs.noise_char.optimization import trapezoidal
 
 
 

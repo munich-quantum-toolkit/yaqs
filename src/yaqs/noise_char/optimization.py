@@ -1,4 +1,7 @@
 import numpy as np
+import time 
+
+from scipy.optimize import minimize
 
 def trapezoidal(y, x):
 
@@ -14,22 +17,28 @@ def trapezoidal(y, x):
 
 
 
-def loss_function(sim_params, ref_traj):
+def loss_function(sim_params, ref_traj, traj_der):
     """
-    Calculates the squared distance between corresponding entries of QuTiP and TJM expectation values.
-
-    Args:
-        noise_params (list): Noise parameters for the TJM simulation.
-        qt_exp_vals (list of arrays): QuTiP expectation values for each site.
-
+    Compute the loss function and its gradients for the given simulation parameters.
+    Parameters:
+    sim_params (dict): Dictionary containing the simulation parameters.
+    ref_traj (list): List of reference trajectories for comparison.
+    traj_der (function): Function that runs the simulation and returns the time, 
+                         expected values trajectory, and derivatives of the observables 
+                         with respect to the noise parameters.
     Returns:
-        float: The total squared loss.
+    tuple: A tuple containing:
+        - loss (float): The computed loss value.
+        - exp_vals_traj (list): The expected values trajectory from the TJM simulation.
+        - gradients (numpy.ndarray): Array containing the gradients of the loss with respect 
+                                     to gamma_relaxation and gamma_dephasing.
     """
+    
     
     # Run the TJM simulation with the given noise parameters
 
     start_time = time.time()
-    t, exp_vals_traj, d_On_d_gk = qutip_traj(sim_params)  
+    t, exp_vals_traj, d_On_d_gk = traj_der(sim_params)  
     end_time = time.time()
     tjm_time = end_time - start_time
     # print(f"TJM time -> {tjm_time:.4f}")
@@ -74,13 +83,16 @@ def loss_function(sim_params, ref_traj):
 
 
 
-def gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iterations=100, tolerance=1e-10):
+def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8):
     """
     Performs gradient descent to minimize the loss function.
 
     Args:
         sim_params (SimulationParameters): Initial simulation parameters.
         ref_traj (list): Reference trajectory for comparison.
+        traj_der (function): Function that runs the simulation and returns the time, 
+                         expected values trajectory, and derivatives of the observables 
+                         with respect to the noise parameters.
         learning_rate (float): Learning rate for gradient descent.
         max_iterations (int): Maximum number of iterations.
         tolerance (float): Tolerance for convergence.
@@ -105,7 +117,7 @@ def gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iterations=10
 
     for iteration in range(max_iterations):
         # Calculate loss and gradients
-        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj)
+        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
         loss_history.append(loss)
 
         # Check for convergence
@@ -135,8 +147,26 @@ def gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iterations=10
 
 
 # --- ADAM GRADIENT DESCENT (Modified) ---
-def ADAM_gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iterations=100, tolerance=1e-6):
+def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8):
     """
+    Parameters:
+    sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
+    ref_traj (array-like): Reference trajectory data.
+    traj_der (function): Function that runs the simulation and returns the time, 
+                         expected values trajectory, and derivatives of the observables 
+                         with respect to the noise parameters.
+    learning_rate (float, optional): Learning rate for the Adam optimizer. Default is 0.01.
+    max_iterations (int, optional): Maximum number of iterations for the optimization. Default is 100.
+    tolerance (float, optional): Tolerance for the convergence criterion. Default is 1e-6.
+    Returns:
+    tuple: A tuple containing:
+        - loss_history (list): History of loss values during optimization.
+        - gr_history (list): History of gamma_rel values during optimization.
+        - gd_history (list): History of gamma_deph values during optimization.
+        - dJ_dgr_history (list): History of gradients with respect to gamma_rel.
+        - dJ_dgd_history (list): History of gradients with respect to gamma_deph.
+    
+
     Performs Adam gradient descent to minimize the loss function.
     
     Changes made:
@@ -162,7 +192,7 @@ def ADAM_gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iteratio
 
     for iteration in range(max_iterations):
         # Calculate loss and gradients (unchanged)
-        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj)
+        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
         loss_history.append(loss)
 
         if loss < tolerance:
@@ -190,5 +220,8 @@ def ADAM_gradient_descent(sim_params, ref_traj, learning_rate=0.01, max_iteratio
         print(f"!!!!!!! Iteration {iteration}: Loss = {loss}")
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
+
+
+
 
 
