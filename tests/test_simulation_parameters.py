@@ -20,6 +20,17 @@ def test_observable_creation_invalid():
     # The default message is typically "type object 'GateLibrary' has no attribute 'FakeName'"
     assert "has no attribute" in str(exc_info.value)
 
+def test_custom_observable():
+    matrix = np.random.rand(2,2)
+    site = 0
+    obs = Observable('custom', site, matrix)
+    assert obs.name == 'custom'
+    assert obs.site == site
+    with pytest.raises(AssertionError):
+        Observable('x', site, matrix)
+    with pytest.raises(AssertionError):
+        Observable('custom', site)
+
 def test_physics_simparams_basic():
     obs_list = [Observable('x', 0)]
     T = 1.0
