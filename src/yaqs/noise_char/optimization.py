@@ -257,45 +257,49 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
     gd_history.append(sim_params.gamma_deph)
 
     # Initial parameters
-    params = np.array([sim_params.gamma_rel, sim_params.gamma_deph])
-    n_params = len(params)
+    params_old = np.array([sim_params.gamma_rel, sim_params.gamma_deph])
+    n_params = len(params_old)
 
     # Initial inverse Hessian approximation
     H_inv = np.eye(n_params)
 
+    I = np.eye(n_params)
+
+
+    # Calculate first loss and gradients
+    loss, exp_vals_traj, grad_old = loss_function(sim_params, ref_traj, traj_der)
+    loss_history.append(loss)
+
+
+
     for iteration in range(max_iterations):
-        # Calculate loss and gradients
-        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
+
+        # Store current parameters and gradients
+        # params_old = params.copy()
+        # grad_old = dJ_dg.copy()
+
+        # Update parameters
+        params_new = params_old - learning_rate * H_inv.dot(grad_old)
+
+        # Update simulation parameters
+        sim_params.gamma_rel, sim_params.gamma_deph = params_new
+
+        # Calculate new loss and gradients
+        loss, exp_vals_traj, grad_new = loss_function(sim_params, ref_traj, traj_der)
         loss_history.append(loss)
 
         if loss < tolerance:
             print(f"Converged after {iteration} iterations.")
             break
 
-        # Store current parameters and gradients
-        params_old = params.copy()
-        grad_old = dJ_dg.copy()
-
-        # Update parameters
-        params -= learning_rate * H_inv.dot(dJ_dg)
-
-        # Update simulation parameters
-        sim_params.gamma_rel, sim_params.gamma_deph = params
-
-        # Calculate new loss and gradients
-        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
-        loss_history.append(loss)
-
-        # Store new gradients
-        grad_new = dJ_dg.copy()
 
         # Compute differences
-        s = params - params_old
+        s = params_new - params_old
         y = grad_new - grad_old
 
         # Update inverse Hessian approximation using BFGS formula
         rho = 1.0 / (y.dot(s))
-        I = np.eye(n_params)
+
         H_inv = (I - rho * np.outer(s, y)).dot(H_inv).dot(I - rho * np.outer(y, s)) + rho * np.outer(s, s)
 
         # Log history
@@ -303,6 +307,10 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
         dJ_dgd_history.append(grad_new[1])
         gr_history.append(sim_params.gamma_rel)
         gd_history.append(sim_params.gamma_deph)
+
+
+        params_old = params_new
+        grad_old = grad_new
 
         print(f"Iteration {iteration}: Loss = {loss}")
 
