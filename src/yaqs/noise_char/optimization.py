@@ -225,3 +225,85 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
 
 
 
+
+def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8):
+    """
+    Parameters:
+    sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
+    ref_traj (array-like): Reference trajectory data.
+    traj_der (function): Function that runs the simulation and returns the time, 
+                         expected values trajectory, and derivatives of the observables 
+                         with respect to the noise parameters.
+    learning_rate (float, optional): Learning rate for the BFGS optimizer. Default is 0.01.
+    max_iterations (int, optional): Maximum number of iterations for the optimization. Default is 200.
+    tolerance (float, optional): Tolerance for the convergence criterion. Default is 1e-8.
+    Returns:
+    tuple: A tuple containing:
+        - loss_history (list): History of loss values during optimization.
+        - gr_history (list): History of gamma_rel values during optimization.
+        - gd_history (list): History of gamma_deph values during optimization.
+        - dJ_dgr_history (list): History of gradients with respect to gamma_rel.
+        - dJ_dgd_history (list): History of gradients with respect to gamma_deph.
+    
+    Performs BFGS optimization to minimize the loss function.
+    """
+    loss_history = []
+    gr_history = []
+    gd_history = []
+    dJ_dgr_history = []
+    dJ_dgd_history = []
+
+    gr_history.append(sim_params.gamma_rel)
+    gd_history.append(sim_params.gamma_deph)
+
+    # Initial parameters
+    params = np.array([sim_params.gamma_rel, sim_params.gamma_deph])
+    n_params = len(params)
+
+    # Initial inverse Hessian approximation
+    H_inv = np.eye(n_params)
+
+    for iteration in range(max_iterations):
+        # Calculate loss and gradients
+        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
+        loss_history.append(loss)
+
+        if loss < tolerance:
+            print(f"Converged after {iteration} iterations.")
+            break
+
+        # Store current parameters and gradients
+        params_old = params.copy()
+        grad_old = dJ_dg.copy()
+
+        # Update parameters
+        params -= learning_rate * H_inv.dot(dJ_dg)
+
+        # Update simulation parameters
+        sim_params.gamma_rel, sim_params.gamma_deph = params
+
+        # Calculate new loss and gradients
+        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
+        loss_history.append(loss)
+
+        # Store new gradients
+        grad_new = dJ_dg.copy()
+
+        # Compute differences
+        s = params - params_old
+        y = grad_new - grad_old
+
+        # Update inverse Hessian approximation using BFGS formula
+        rho = 1.0 / (y.dot(s))
+        I = np.eye(n_params)
+        H_inv = (I - rho * np.outer(s, y)).dot(H_inv).dot(I - rho * np.outer(y, s)) + rho * np.outer(s, s)
+
+        # Log history
+        dJ_dgr_history.append(grad_new[0])
+        dJ_dgd_history.append(grad_new[1])
+        gr_history.append(sim_params.gamma_rel)
+        gd_history.append(sim_params.gamma_deph)
+
+        print(f"Iteration {iteration}: Loss = {loss}")
+
+    return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
