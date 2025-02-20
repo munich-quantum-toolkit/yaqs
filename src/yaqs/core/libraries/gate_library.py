@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     assert tensor.shape == (2, 2, 2, 2)
 
@@ -371,8 +372,7 @@ class Rzz:
         self.sites = [site0, site1]
 
 class Custom: 
-    
-    def __init__(self, matrix, sites):
+    def __init__(self, matrix):
         self.name = 'custom'
         self.matrix = matrix
         assert matrix.shape == (2,2) or matrix.shape == (4,4)

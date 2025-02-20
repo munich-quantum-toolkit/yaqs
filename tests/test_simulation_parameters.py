@@ -31,8 +31,6 @@ def test_custom_observable():
     with pytest.raises(AssertionError):
         Observable('custom', site)
 
-
-
 def test_physics_simparams_basic():
     obs_list = [Observable('x', 0)]
     T = 1.0
