@@ -3,13 +3,8 @@ import numpy as np
 from yaqs.core.libraries.gate_library import GateLibrary
 
 class Observable:
-    def __init__(self, name: str, site: int, matrix: np.ndarray=None):
+    def __init__(self, name: str, site: int):
         assert getattr(GateLibrary, name)
-        assert (matrix is None and name != 'custom') or (matrix is not None and name == 'custom')
-        if name == 'custom':
-            self.matrix = matrix
-        else:
-            self.matrix = None
         self.name = name
         self.site = site
         self.results = None
