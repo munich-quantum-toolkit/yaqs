@@ -172,7 +172,10 @@ class MPS:
     def measure(self, observable: Observable):
         assert observable.site in range(0, self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        return local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)
+        if observable.name == 'custom':
+            return local_expval(copy.deepcopy(self), observable.matrix, observable.site)
+        else:
+            return local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)
 
     def norm(self):
         return scalar_product(self, self)
