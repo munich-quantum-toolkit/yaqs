@@ -131,6 +131,8 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                         else:
                             for obs_index, observable in enumerate(sim_params.sorted_observables):
                                 observable.trajectories[i] = result[obs_index]
+                                #for process in noise_model.processes:
+                                    # CONTINUE HERE 
                     except Exception as e:
                         print(f"\nTrajectory {i} failed with exception: {e}.")
                     finally:
@@ -152,110 +154,6 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
     else:
         sim_params.aggregate_trajectories()
         aggregate_expvals(sim_params, noise_model.processes)
-
-
-
-
-
-# def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):
-#     """
-#     Common simulation routine used by both circuit and Hamiltonian simulations.
-#     It normalizes the state, prepares trajectory arguments, runs the trajectories
-#     in parallel, and aggregates the results.
-#     """
-#     if isinstance(operator, QuantumCircuit):
-#         assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
-#         operator = copy.deepcopy(operator.reverse_bits())
-
-#     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-#         sim_params.N = 1
-#     else:
-#         if isinstance(sim_params, WeakSimParams):
-#             sim_params.N = sim_params.shots
-#             sim_params.shots = 1
-
-#     # For Hamiltonian simulations and for circuit simulations with StrongSimParams,
-#     # initialize observables. For WeakSimParams in the circuit case, no initialization needed.
-#     if isinstance(operator, MPO) or isinstance(sim_params, StrongSimParams):
-
-#         unique_obs = set(obs.name for obs in sim_params.observables)
-    
-#         # Create a nested dictionary in sim_params to store the A_kn matrices.
-#         # Outer keys are noise process names, inner keys are observable types.
-#         sim_params.A_kn = {process: {} for process in noise_model.processes}
-#         # Loop over noise processes and their jump operators together.
-#         for process, jump_op in zip(noise_model.processes, noise_model.jump_operators):
-#             for obs_name in unique_obs:
-
-#                 observable = next(obs for obs in sim_params.observables if obs.name == obs_name)
-#                 obs_operator = getattr(GateLibrary, obs_name).matrix
-
-#                 # print('jump_op:', jump_op)
-#                 # print('observable operator:', obs_operator)
-#                 sim_params.A_kn[process][obs_name] = calc_A_kn(jump_op, obs_operator)
-#                 # print('A_kn:',sim_params.A_kn[process][obs_name])
-
-
-#         for observable in sim_params.sorted_observables:
-#             observable.initialize(sim_params)
-
-#             for process in noise_model.processes:
-#             # Create an attribute name, e.g., A_kn_relaxation for process "relaxation"
-#                 attr_name = f"expval_A_kn_{process}"
-#             # Initialize with a zero array: dimensions [number of trajectories, number of timesteps]
-#                 setattr(observable, attr_name, np.zeros((sim_params.N, len(sim_params.times)), dtype=complex))
-
-
-
-#     # Normalize the state to the B form
-#     initial_state.normalize('B')
-
-#     # Prepare arguments for each trajectory
-#     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    
-#     if parallel:
-#         max_workers = max(1, multiprocessing.cpu_count() - 1)
-#         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-#             futures = {executor.submit(PhysicsTJM_1_analytical_gradient, arg): arg[0] for arg in args}
-#             with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
-#                 for future in concurrent.futures.as_completed(futures):
-#                     i = futures[future]
-#                     try:
-#                         result = future.result()
-#                         if isinstance(operator, QuantumCircuit) and isinstance(sim_params, WeakSimParams):
-#                             sim_params.measurements[i] = result
-#                         else:
-#                             for obs_index, observable in enumerate(sim_params.sorted_observables):
-#                                 observable.trajectories[i] = result[obs_index]
-#                                  # Now also store the expval_A_kn values for each process:
-#                                 for process in noise_model.processes:
-#                                     # The observable attribute expval_A_kn_{process} was initialized as a 2D array.
-#                                     # Fill row i with this trajectory’s computed values.
-#                                     getattr(observable, f"expval_A_kn_{process}")[i, :] = expvals_A_kn[observable.name][process]
-                                    
-#                                     # print('inside run expval_A_kn:', getattr(observable, f"expval_A_kn_{process}")[i, :])
-
-#                     except Exception as e:
-#                         print(f"\nTrajectory {i} failed with exception: {e}.")
-#                     finally:
-#                         pbar.update(1)
-#     else:
-#         for i, arg in enumerate(args):
-#             try:
-#                 result = PhysicsTJM_1_analytical_gradient(arg)
-#                 if isinstance(operator, QuantumCircuit) and isinstance(sim_params, WeakSimParams):
-#                     sim_params.measurements[i] = result
-#                 else:
-#                     for obs_index, observable in enumerate(sim_params.sorted_observables):
-#                         observable.trajectories[i] = result[obs_index]
-#             except Exception as e:
-#                 print(f"Trajectory {i} failed with exception: {e}.")
-    
-#     if isinstance(operator, QuantumCircuit) and isinstance(sim_params, WeakSimParams):
-#         sim_params.aggregate_measurements()
-#     else:
-#         sim_params.aggregate_trajectories()
-#         aggregate_expvals(sim_params, noise_model.processes)
 
 
 
@@ -322,8 +220,8 @@ def PhysicsTJM_1_analytical_gradient(args):
                     A_kn_op = sim_params.A_kn[process][observable.name]
                     # Compute the local expectation value for A_kn
                     measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
-                    if measurement_Akn > 1e-6:
-                        print('non-zero:', measurement_Akn)
+                    # if measurement_Akn > 1e-6:
+                    print('measurement_Akn', measurement_Akn)
                     # Store it in the corresponding numpy array at trajectory index i and time index 0
                     getattr(observable, attr_name)[i, j] = measurement_Akn
         elif j == len(sim_params.times)-1:
@@ -336,85 +234,14 @@ def PhysicsTJM_1_analytical_gradient(args):
                     A_kn_op = sim_params.A_kn[process][observable.name]
                     # Compute the local expectation value for A_kn
                     measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
-                    if measurement_Akn > 1:
-                        print('non-zero:', measurement_Akn)
+                    # if measurement_Akn > 1e-6:
+                    print('measurement_Akn', measurement_Akn)
                     # Store it in the corresponding numpy array at trajectory index i and time index 0
                     getattr(observable, attr_name)[i, 0] = measurement_Akn
 
     return results
 
 
-
-
-# def PhysicsTJM_1_analytical_gradient(args):
-#     i, initial_state, noise_model, sim_params, H = args
-#     state = copy.deepcopy(initial_state)
-
-#     if sim_params.sample_timesteps:
-#         results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
-#     else:
-#         results = np.zeros((len(sim_params.sorted_observables), 1))
-
-#         # Create a local dictionary to hold the A_kn values for this trajectory.
-#     expvals_A_kn = {obs.name: {} for obs in sim_params.sorted_observables}
-#     for obs in sim_params.sorted_observables:
-#         for process in noise_model.processes:
-#             expvals_A_kn[obs.name][process] = np.zeros(len(sim_params.times), dtype=complex)
-
-
-#     if sim_params.sample_timesteps:
-#         # Time index 0:
-#         for obs_index, observable in enumerate(sim_params.sorted_observables):
-#             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
-#             for process in noise_model.processes:
-#                 A_kn_op = sim_params.A_kn[process][observable.name]
-#                 measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
-#                 # if measurement_Akn > 1e-6:
-#                 #     print('non-zero')
-#                 # Store it in the corresponding numpy array at trajectory index i and time index 0
-#                 expvals_A_kn[observable.name][process][0] = measurement_Akn
-
-#     # Time index > 0:
-#     for j, _ in enumerate(sim_params.times[1:], start=1):
-#         dynamic_TDVP(state, H, sim_params)
-#         if noise_model:
-#             apply_dissipation(state, noise_model, sim_params.dt)
-#             state = stochastic_process(state, noise_model, sim_params.dt)
-#         if sim_params.sample_timesteps:
-#             temp_state = copy.deepcopy(state)
-#             last_site = 0
-#             for obs_index, observable in enumerate(sim_params.sorted_observables):
-#                 if observable.site > last_site:
-#                     for site in range(last_site, observable.site):
-#                         temp_state.shift_orthogonality_center_right(site)
-#                     last_site = observable.site
-#                 results[obs_index, j] = temp_state.measure(observable)
-#                 for process in noise_model.processes:
-#                     A_kn_op = sim_params.A_kn[process][observable.name]
-#                     # Compute the local expectation value for A_kn
-#                     measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
-#                     # if measurement_Akn > 1e-6:
-#                     #     print('non-zero:', measurement_Akn)
-#                     # Store it in the corresponding numpy array at trajectory index i and time index 0
-#                     expvals_A_kn[observable.name][process][j] = measurement_Akn
-#         elif j == len(sim_params.times)-1:
-#             for obs_index, observable in enumerate(sim_params.sorted_observables):
-#                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)
-#                 for process in noise_model.processes:
-#                     A_kn_op = sim_params.A_kn[process][observable.name]
-#                     measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
-#                     # if measurement_Akn > 1:
-#                     #     print('non-zero:', measurement_Akn)
-#                     expvals_A_kn[observable.name][process][0] = measurement_Akn
-#     #print('in TJM expvals_A_kn:', expvals_A_kn)
-#     # for observable in sim_params.sorted_observables:
-#     #     for process in noise_model.processes: 
-#     #         for j in sim_params.times:
-#     #             if expvals_A_kn[observable.name][process][j] >1e-3:
-#     #                 continue
-#                     #print(f'in PhysicsTJM, observable {observable.name}, site {observable.site}, process {process}, timestep {j} expval A_kn:', expvals_A_kn[observable.name][process][j])
-
-#     return results, expvals_A_kn
 
 
 
