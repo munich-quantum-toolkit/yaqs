@@ -4,7 +4,7 @@ from yaqs.core.libraries.gate_library import GateLibrary
 
 class Observable:
     def __init__(self, name: str, site: int):
-        assert getattr(GateLibrary, name), "Selected observable to measure does not exist."
+        assert getattr(GateLibrary, name)
         self.name = name
         self.site = site
         self.results = None

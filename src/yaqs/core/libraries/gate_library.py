@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     assert tensor.shape == (2, 2, 2, 2)
 
@@ -347,7 +348,6 @@ class Ryy:
         # Generator: (θ/2) * (Y ⊗ Y)
         self.generator = [(self.theta / 2)*np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
 
-
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
 
@@ -366,10 +366,8 @@ class Rzz:
         # Generator: (θ/2) * (Z ⊗ Z)
         self.generator = [(self.theta / 2)*np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
 
-
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
-
 
 # class U2:
 #     name = 'u2'

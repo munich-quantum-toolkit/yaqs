@@ -61,13 +61,7 @@ def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
     # This loop assumes the MPS is in canonical form at the given site
     temp_state = copy.deepcopy(state)
     temp_state.tensors[site] = oe.contract('ab, bcd->acd', operator, temp_state.tensors[site])
-    E = scalar_product(state, temp_state, site)
-
-    # Expectation values must be real
-
-    assert E.imag < 1e-13, "Expectation Value should be real, '%16f+%16fi'." % (E.real, E.imag)
-
-    return E.real
+    return scalar_product(state, temp_state, site)
 
 
 def measure_single_shot(state) -> int:
