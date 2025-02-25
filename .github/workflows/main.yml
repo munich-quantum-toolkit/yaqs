@@ -1,35 +1,33 @@
-name: Codecov Coverage
+name: Run Tests
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+on: [push, pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt  # Ensure all dependencies are installed
-          pip install pytest pytest-cov  # Explicitly install pytest and pytest-cov
+          python -m pip install --upgrade pip
+          pip install -e .  # Install yaqs in editable mode
+          pip install -r requirements.txt  # If you have additional dependencies
+          pip install pytest pytest-cov  # Ensure pytest and coverage are installed
 
       - name: Run tests with coverage
-        run: pytest --cov=yaqs --cov-report=xml
+        run: |
+          pytest --cov=yaqs --cov-report=xml --cov-report=term
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Upload coverage to Codecov (optional)
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
+          file: ./coverage.xml
