@@ -151,7 +151,6 @@ if __name__ == "__main__":
     print(params_default.gamma_deph)
 
 
-
     ## Run both simulations with the same set of parameters
     t, qutip_results=qutip_traj(params_default)
 
