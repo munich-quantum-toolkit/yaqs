@@ -145,7 +145,7 @@ def PhysicsTJM_1(args):
         if sim_params.sample_timesteps:
             temp_state = copy.deepcopy(state)
             last_site = 0
-            for obs_index, observable in enumerate(sim_params.observables):
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
                 if observable.site > last_site:
                     for site in range(last_site, observable.site):
                         temp_state.shift_orthogonality_center_right(site)
