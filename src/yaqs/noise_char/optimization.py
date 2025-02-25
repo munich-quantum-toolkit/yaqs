@@ -281,6 +281,10 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
         # Update parameters
         params_new = params_old - learning_rate * H_inv.dot(grad_old)
 
+        for i in range(n_params):
+            if params_new[i] < 0:
+                params_new[i] = 0
+
         # Update simulation parameters
         sim_params.gamma_rel, sim_params.gamma_deph = params_new
 
