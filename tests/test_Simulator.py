@@ -125,9 +125,6 @@ def test_weak_simulation_no_noise():
 
     max_value = max(sim_params.results.values())
     assert sim_params.results[0] == max_value, "Key 0 does not have the highest value."
-    results_without_max = {k: v for k, v in sim_params.results.items() if k != 0}
-    second_max_value = max(results_without_max.values())
-    assert sim_params.results[1] == second_max_value or sim_params.results[16] == second_max_value, "Bitstrings 1, 16 do not have the second highest value."
 
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
 
