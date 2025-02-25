@@ -78,7 +78,6 @@ def construct_generator_MPO(gate, length: int) -> MPO | int | int:
             W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = gate.generator[second_gen]
             tensors.append(W)
-            # break
         else:
             W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = np.eye(2)
