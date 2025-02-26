@@ -4,7 +4,7 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library.n_local import TwoLocal
 import qiskit.compiler
 
-from yaqs.circuits.equivalence_checking import equivalence_checker
+from yaqs.circuits import equivalence_checker
 
 # Define the initial circuit
 num_qubits = 5
