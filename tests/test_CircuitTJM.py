@@ -22,7 +22,7 @@ def test_process_layer():
     qc.measure(0, 0)
     qc.barrier(1)
     qc.x(qc.qubits[2])
-    qc.cx(4, 5)
+    qc.cx(5, 4)
     qc.cx(7, 8)
     
     # Convert the circuit to a DAG.
@@ -53,6 +53,17 @@ def test_process_layer():
         q1 = node.qargs[1]._index
         assert min(q0, q1) % 2 == 1, f"Node with qubits {q0, q1} not in odd group."
 
+def test_process_layer_unsupported_gate():
+    # Create a QuantumCircuit with 9 qubits and 9 classical bits.
+    qc = QuantumCircuit(3)
+    qc.ccx(0, 1, 2)
+    
+    # Convert the circuit to a DAG.
+    dag = circuit_to_dag(qc)
+    
+    # Call process_layer on the DAG.
+    with pytest.raises(Exception):
+        process_layer(dag)
 
 def test_apply_single_qubit_gate():
     from yaqs.core.libraries.gate_library import GateLibrary
@@ -118,10 +129,6 @@ def test_apply_window():
     assert short_mpo.length == 4
 
 def test_apply_two_qubit_gate_with_window():
-    """
-    Test applying a two-qubit gate. We build a circuit with 5 qubits and add a CX gate on qubits 1 and 2.
-    Then we attach a dummy gate (with generator data) to the corresponding DAG node.
-    """
     length = 4
     mps0 = MPS(length, state='random')
     mps0.normalize()
@@ -159,3 +166,42 @@ def test_apply_two_qubit_gate_with_window():
     apply_two_qubit_gate(mps1, node, sim_params)
     for i, tensor in enumerate(mps1.tensors):
         np.testing.assert_allclose(tensor, mps0.tensors[i])
+
+def test_CircuitTJM_strong():
+    length = 4
+    mps0 = MPS(length, state='random')
+    mps0.normalize()
+
+    qc = QuantumCircuit(length)
+    qc.cx(1, 3)
+
+    from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+    N = 1
+    max_bond_dim = 4
+    threshold = 1e-12
+    window_size = 0
+    observable = Observable('z', 0)
+    sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
+    args = 0, mps0, None, sim_params, qc
+    CircuitTJM(args)
+
+def test_CircuitTJM_weak():
+    length = 4
+    mps0 = MPS(length, state='random')
+    mps0.normalize()
+
+    qc = QuantumCircuit(length)
+    qc.cx(1, 3)
+    dag = circuit_to_dag(qc)
+
+    cx_nodes = [node for node in dag.front_layer() if node.op.name.lower() == 'cx']
+
+    from yaqs.core.data_structures.simulation_parameters import WeakSimParams
+    N = 1
+    max_bond_dim = 4
+    threshold = 1e-12
+    window_size = 0
+    shots = 10
+    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
+    args = 0, mps0, None, sim_params, qc
+    CircuitTJM(args)
