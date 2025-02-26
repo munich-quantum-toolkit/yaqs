@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
     def __init__(self, length: int, tensors: list = None, physical_dimensions: list = None, state: str = 'zeros'):
+        self.flipped = False
         if tensors is not None:
             assert len(tensors) == length
             self.tensors = tensors
@@ -65,6 +66,9 @@ class MPS:
                         vector[0] = 1
                     else:
                         vector[1] = 1
+                elif state == 'random':
+                    vector[0] = np.random.rand()
+                    vector[1] = 1 - vector[0]
                 else:
                     raise ValueError("Invalid state string")
 
@@ -72,7 +76,9 @@ class MPS:
 
                 tensor = np.transpose(tensor, (2, 0, 1))
                 self.tensors.append(tensor)
-        self.flipped = False
+
+            if state == 'random':
+                self.normalize()
 
     def write_max_bond_dim(self) -> int:
         global_max = 0
