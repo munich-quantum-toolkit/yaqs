@@ -259,7 +259,8 @@ class MPS:
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
 class MPO:
-    def init_Ising(self, length: int, physical_dimension: int, J: float, g: float):
+    def init_Ising(self, length: int, J: float, g: float):
+        physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
         X = getattr(GateLibrary, "x")().matrix
@@ -300,7 +301,8 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-    def init_Heisenberg(self, length: int, physical_dimension: int, Jx: float, Jy: float, Jz: float, h: float):
+    def init_Heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float):
+        physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
         X = getattr(GateLibrary, "x")().matrix

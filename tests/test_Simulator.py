@@ -17,7 +17,7 @@ def test_physics_simulation():
     initial_state = MPS(length, state='zeros')
 
     H = MPO()  # operator is an instance of MPO
-    H.init_Ising(length, physical_dimension=2, J=1, g=0.5)
+    H.init_Ising(length, J=1, g=0.5)
     T = 1
     dt = 0.1
     sample_timesteps = False

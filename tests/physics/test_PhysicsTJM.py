@@ -9,11 +9,10 @@ from yaqs.physics.PhysicsTJM import initialize, step_through, sample, PhysicsTJM
 
 def test_initialize():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel(['relaxation'], [0.1])
     measurements = [Observable('x', site) for site in range(L)]
@@ -26,11 +25,10 @@ def test_initialize():
 
 def test_step_through():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel(['relaxation'], [0.1])
     measurements = [Observable('x', site) for site in range(L)]
@@ -45,11 +43,10 @@ def test_step_through():
 
 def test_PhysicsTJM_2():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable('z', site) for site in range(L)]
@@ -61,11 +58,10 @@ def test_PhysicsTJM_2():
 
 def test_PhysicsTJM_2_sample_timesteps():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable('z', site) for site in range(L)]
@@ -77,11 +73,10 @@ def test_PhysicsTJM_2_sample_timesteps():
 
 def test_PhysicsTJM_1():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable('z', site) for site in range(L)]
@@ -93,11 +88,10 @@ def test_PhysicsTJM_1():
 
 def test_PhysicsTJM_1_sample_timesteps():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable('z', site) for site in range(L)]

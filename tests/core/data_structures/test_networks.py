@@ -28,14 +28,13 @@ def test_init_Ising():
     """Test that init_Ising creates the correct number, shape, and values."""
     mpo = MPO()
     length = 4
-    pdim = 2
     J = 1.0
     g = 0.5
 
-    mpo.init_Ising(length, pdim, J, g)
+    mpo.init_Ising(length, J, g)
 
     assert mpo.length == length
-    assert mpo.physical_dimension == pdim
+    assert mpo.physical_dimension == 2
     assert len(mpo.tensors) == length
 
     # Expected sign factors
@@ -48,7 +47,7 @@ def test_init_Ising():
     # The 1x3 block should contain: [I, -J*Z, -g*X]
     #
     left_block = untranspose_block(mpo.tensors[0])  # (1,3,2,2)
-    assert left_block.shape == (1, 3, pdim, pdim)
+    assert left_block.shape == (1, 3, 2, 2)
 
     # Extract each operator block
     block_I   = left_block[0, 0]  # (2,2)
@@ -67,7 +66,7 @@ def test_init_Ising():
     #
     if length > 2:
         inner_block = untranspose_block(mpo.tensors[1])  # (3,3,2,2)
-        assert inner_block.shape == (3, 3, pdim, pdim)
+        assert inner_block.shape == (3, 3, 2, 2)
 
         # row=0, col=0 => I
         assert np.allclose(inner_block[0,0], I)
@@ -85,7 +84,7 @@ def test_init_Ising():
     # This is the last column, i.e. [ -gX, Z, I ]^T
     #
     right_block = untranspose_block(mpo.tensors[-1])  # (3,1,2,2)
-    assert right_block.shape == (3, 1, pdim, pdim)
+    assert right_block.shape == (3, 1, 2, 2)
 
     block_gX  = right_block[0, 0]
     block_Z   = right_block[1, 0]
@@ -100,20 +99,19 @@ def test_init_Heisenberg():
     """Test that init_Heisenberg creates the correct number, shape, and values."""
     mpo = MPO()
     length = 5
-    pdim = 2
     Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
 
-    mpo.init_Heisenberg(length, pdim, Jx, Jy, Jz, h)
+    mpo.init_Heisenberg(length, Jx, Jy, Jz, h)
 
     assert mpo.length == length
-    assert mpo.physical_dimension == pdim
+    assert mpo.physical_dimension == 2
     assert len(mpo.tensors) == length
 
     # The internal block is 5x5. Let's do a quick check on the left boundary:
     # shape (2,2,1,5) => untransposed shape (1,5,2,2)
     # That row should contain: [I, -JxX, -JyY, -JzZ, -hZ]
     left_block = untranspose_block(mpo.tensors[0])
-    assert left_block.shape == (1, 5, pdim, pdim)
+    assert left_block.shape == (1, 5, 2, 2)
 
     # Check each operator
     block_I   = left_block[0,0]
@@ -142,11 +140,11 @@ def test_init_Heisenberg():
     # Similarly, check shapes of inner and right boundary as you did before:
     for i, tensor in enumerate(mpo.tensors):
         if i == 0:  # left boundary
-            assert tensor.shape == (pdim, pdim, 1, 5)
+            assert tensor.shape == (2, 2, 1, 5)
         elif i == length - 1:  # right boundary
-            assert tensor.shape == (pdim, pdim, 5, 1)
+            assert tensor.shape == (2, 2, 5, 1)
         else:  # inner
-            assert tensor.shape == (pdim, pdim, 5, 5)
+            assert tensor.shape == (2, 2, 5, 5)
 
 
 def test_init_identity():
@@ -220,11 +218,10 @@ def test_convert_to_MPS():
     """Test converting an MPO to MPS."""
     mpo = MPO()
     length = 3
-    pdim = 2
     J, g = 1.0, 0.5
 
     # Initialize a small Ising MPO
-    mpo.init_Ising(length, pdim, J, g)
+    mpo.init_Ising(length, J, g)
 
     # Convert to MPS
     mps = mpo.convert_to_MPS()
@@ -249,10 +246,9 @@ def test_check_if_valid_MPO():
     """Test that a valid MPO passes the check_if_valid_MPO method without error."""
     mpo = MPO()
     length = 4
-    pdim = 2
     J, g = 1.0, 0.5
 
-    mpo.init_Ising(length, pdim, J, g)
+    mpo.init_Ising(length, J, g)
 
     # Should not raise an AssertionError
     mpo.check_if_valid_MPO()
@@ -262,10 +258,9 @@ def test_rotate():
     """Test the rotate method and ensure shapes remain consistent."""
     mpo = MPO()
     length = 3
-    pdim = 2
     J, g = 1.0, 0.5
 
-    mpo.init_Ising(length, pdim, J, g)
+    mpo.init_Ising(length, J, g)
     original_tensors = [t.copy() for t in mpo.tensors]
 
     # Rotate without conjugation
@@ -281,7 +276,7 @@ def test_rotate():
     mpo.rotate(conjugate=True)
     # Now each tensor should have shape (pdim, pdim, bond_in, bond_out) again.
     for tensor in mpo.tensors:
-        assert tensor.shape == (pdim, pdim, tensor.shape[2], tensor.shape[3])
+        assert tensor.shape == (2, 2, tensor.shape[2], tensor.shape[3])
 
 
 def test_check_if_identity():

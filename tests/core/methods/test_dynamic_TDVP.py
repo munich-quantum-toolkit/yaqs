@@ -13,11 +13,10 @@ def test_dynamic_tdvp_one_site():
     from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
     # Define the system Hamiltonian
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
 
     # Define the initial state
     state = MPS(L, state='zeros')
@@ -48,11 +47,10 @@ def test_dynamic_tdvp_two_site():
     from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
     # Define the system Hamiltonian
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
 
     # Define the initial state
     state = MPS(L, state='zeros')
