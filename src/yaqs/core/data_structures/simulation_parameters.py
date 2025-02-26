@@ -11,6 +11,7 @@ class Observable:
         self.trajectories = None
 
     def initialize(self, sim_params):
+        self.results = None
         if type(sim_params) == PhysicsSimParams:
             if sim_params.sample_timesteps:
                 self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
