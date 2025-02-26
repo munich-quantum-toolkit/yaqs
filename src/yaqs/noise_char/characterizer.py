@@ -61,7 +61,7 @@ sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond
 
 
 
-def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):
+def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=False):
     """
     Common simulation routine used by both circuit and Hamiltonian simulations.
     It normalizes the state, prepares trajectory arguments, runs the trajectories
@@ -81,6 +81,9 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
     # For Hamiltonian simulations and for circuit simulations with StrongSimParams,
     # initialize observables. For WeakSimParams in the circuit case, no initialization needed.
     if isinstance(operator, MPO) or isinstance(sim_params, StrongSimParams):
+    
+        for observable in sim_params.sorted_observables:
+            observable.initialize(sim_params)
 
         unique_obs = set(obs.name for obs in sim_params.observables)
     
@@ -93,8 +96,8 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                 observable = next(obs for obs in sim_params.observables if obs.name == obs_name)
                 obs_operator = getattr(GateLibrary, obs_name).matrix
                 sim_params.A_kn[process][obs_name] = calc_A_kn(jump_op, obs_operator)
-        expvals_Master = {obs.name: {process: np.zeros((sim_params.N, len(sim_params.times)), dtype=complex) for process in noise_model.processes} for obs in sim_params.sorted_observables}
-
+        sim_params.expvals_Master = {obs.name: {process: np.zeros((sim_params.N, len(sim_params.times)), dtype=complex) for process in noise_model.processes} for obs in sim_params.sorted_observables}
+        print('expvals_Master:', sim_params.expvals_Master)
 
     # Normalize the state to the B form
     initial_state.normalize('B')
@@ -119,8 +122,8 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                         else:
                             for obs_index, observable in enumerate(sim_params.sorted_observables):
                                 observable.trajectories[i] = result[obs_index]
-                                #for process in noise_model.processes:
-                                    # CONTINUE HERE 
+                                for process in noise_model.processes:
+                                    sim_params.expvals_Master[observable.name][process][i,:] = expvals[observable.name][process][:]
                     except Exception as e:
                         print(f"\nTrajectory {i} failed with exception: {e}.")
                     finally:
@@ -128,12 +131,15 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
     else:
         for i, arg in enumerate(args):
             try:
-                result = PhysicsTJM_1_analytical_gradient(arg)
+                result, expvals = PhysicsTJM_1_analytical_gradient(arg)
                 if isinstance(operator, QuantumCircuit) and isinstance(sim_params, WeakSimParams):
                     sim_params.measurements[i] = result
                 else:
                     for obs_index, observable in enumerate(sim_params.sorted_observables):
                         observable.trajectories[i] = result[obs_index]
+                        for process in noise_model.processes:
+                            sim_params.expvals_Master[observable.name][process][i,:] = expvals[observable.name][process][:]
+                        # here we also have to update sim_params.expvals_Master
             except Exception as e:
                 print(f"Trajectory {i} failed with exception: {e}.")
     
@@ -142,6 +148,8 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
     else:
         sim_params.aggregate_trajectories()
         # here we have to average the expvals_master over the trajectories
+        sim_params.avg_expvals = {obs_name: {process: np.mean(sim_params.expvals_Master[obs_name][process], axis=0) for process in sim_params.expvals_Master[obs_name]} for obs_name in sim_params.expvals_Master}
+
 
 
 
@@ -246,17 +254,15 @@ if __name__ == "__main__":
     ax1.set_title('Observables Expectation Values')
     ax1.legend()
 
-    # Second subplot: Plot the A_kn averages over trajectories
-    for observable in sim_params.observables:
-        for process in noise_model.processes:
-            attr_name = f"expval_A_kn_{process}"
-            if hasattr(observable, attr_name):
-                expval_avg = getattr(observable, attr_name)
-                ax2.plot(sim_params.times, expval_avg, label=f"{observable.name} ({process})")
+    # Second subplot: Plot the averaged A_kn expectation values over trajectories
+    for obs_name, process_dict in sim_params.avg_expvals.items():
+        for process, avg_exp in process_dict.items():
+            ax2.plot(sim_params.times, avg_exp, label=f"{obs_name} ({process})")
     ax2.set_xlabel("Time")
     ax2.set_ylabel("A_kn Expectation Value")
     ax2.set_title("A_kn Averages over Trajectories")
     ax2.legend()
+
 
     plt.tight_layout()
     plt.show()
