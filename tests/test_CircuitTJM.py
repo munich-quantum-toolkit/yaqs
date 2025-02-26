@@ -95,6 +95,7 @@ def test_apply_window():
     length = 5
     tensors = [np.full((2, 1, 1), i, dtype=complex) for i in range(5)]
     mps = MPS(length, tensors)
+    mps.normalize()
 
     from yaqs.core.libraries.gate_library import GateLibrary
     gate = getattr(GateLibrary, 'cx')()
@@ -115,3 +116,46 @@ def test_apply_window():
     # The short state should have tensors corresponding to indices 1 through 4.
     assert short_state.length == 4
     assert short_mpo.length == 4
+
+def test_apply_two_qubit_gate_with_window():
+    """
+    Test applying a two-qubit gate. We build a circuit with 5 qubits and add a CX gate on qubits 1 and 2.
+    Then we attach a dummy gate (with generator data) to the corresponding DAG node.
+    """
+    length = 4
+    mps0 = MPS(length, state='random')
+    mps0.normalize()
+
+    qc = QuantumCircuit(length)
+    qc.cx(1, 2)
+    dag = circuit_to_dag(qc)
+
+    cx_nodes = [node for node in dag.front_layer() if node.op.name.lower() == 'cx']
+    assert cx_nodes, "No CX gate found in the front layer."
+    node = cx_nodes[0]
+
+    from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+    N = 1
+    max_bond_dim = 4
+    threshold = 1e-12
+    window_size = 0
+    observable = Observable('z', 0)
+    sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
+    orig_tensors = copy.deepcopy(mps0.tensors)
+    apply_two_qubit_gate(mps0, node, sim_params)
+    # Check that at least one tensor has changed.
+    for i, tensor in enumerate(mps0.tensors):
+        if i in [0, 3]:
+            np.testing.assert_allclose(tensor, orig_tensors[i])
+        else:
+            with pytest.raises(AssertionError):
+                np.testing.assert_allclose(tensor, orig_tensors[i])
+
+    # Test again with a window size.
+    mps1 = MPS(length, copy.deepcopy(orig_tensors))
+    window_size = 1
+    sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
+    orig_tensors = copy.deepcopy(mps1.tensors)
+    apply_two_qubit_gate(mps1, node, sim_params)
+    for i, tensor in enumerate(mps1.tensors):
+        np.testing.assert_allclose(tensor, mps0.tensors[i])
