@@ -10,7 +10,7 @@ from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
 from yaqs.core.methods.dissipation import apply_dissipation
 from yaqs.core.methods.stochastic_process import stochastic_process
 from yaqs.core.methods.operations import measure
-from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
+from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
 
 
 from typing import TYPE_CHECKING, Union

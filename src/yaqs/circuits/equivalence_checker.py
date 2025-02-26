@@ -3,7 +3,7 @@ from qiskit.converters import circuit_to_dag
 import time
 
 from yaqs.core.data_structures.networks import MPO
-from yaqs.circuits.equivalence_checking.mpo_utils import iterate
+from yaqs.circuits.utils.mpo_utils import iterate
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
