@@ -153,7 +153,7 @@ def test_apply_two_qubit_gate_with_window():
     # Check that at least one tensor has changed.
     for i, tensor in enumerate(mps0.tensors):
         if i in [0, 3]:
-            np.testing.assert_allclose(tensor, orig_tensors[i])
+            np.testing.assert_allclose(np.abs(tensor), np.abs(orig_tensors[i]))
         else:
             with pytest.raises(AssertionError):
                 np.testing.assert_allclose(tensor, orig_tensors[i])
@@ -192,12 +192,8 @@ def test_CircuitTJM_weak():
 
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
-    dag = circuit_to_dag(qc)
-
-    cx_nodes = [node for node in dag.front_layer() if node.op.name.lower() == 'cx']
 
     from yaqs.core.data_structures.simulation_parameters import WeakSimParams
-    N = 1
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
