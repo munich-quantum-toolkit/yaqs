@@ -218,14 +218,28 @@ class Phase:
     def set_params(self, params):
         # Phase gate has one parameter theta
         self.theta = params[0]
-        self.matrix = np.array([
-            [1, 0],
-            [0, np.exp(1j * self.theta)]
-        ])
+        self.matrix = np.array([[1, 0],
+                                [0, np.exp(1j * self.theta)]
+                                ])
         self.tensor = self.matrix
         # Generator: (θ/2) * Z
         self.generator = (self.theta / 2) * np.array([[1, 0],
                                                       [0, -1]])
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
+class U3:
+    name = 'u'
+    interaction = 1
+
+    def set_params(self, params):
+        self.theta, self.phi, self.lam = params
+        self.matrix = np.array([[np.cos(self.theta/2), -np.exp(1j*self.lam)*np.sin(self.theta/2)],
+                                [np.exp(1j*self.phi)*np.sin(self.theta/2), np.exp(1j*(self.phi+self.lam))*np.cos(self.theta/2)]
+                                ])
+        self.tensor = self.matrix
 
     def set_sites(self, site0: int):
         self.sites = [site0]
@@ -430,6 +444,7 @@ class GateLibrary:
     rx = Rx
     ry = Ry
     rz = Rz
+    u = U3
     cx = CX
     cz = CZ
     swap = SWAP
