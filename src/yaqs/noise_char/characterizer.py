@@ -38,10 +38,6 @@ from yaqs.core.data_structures.simulation_parameters import StrongSimParams, Wea
 
 
 
-
-
-
-
 def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):
     """
     Common simulation routine used by both circuit and Hamiltonian simulations.
@@ -64,25 +60,23 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
         for observable in sim_params.sorted_observables:
             observable.initialize(sim_params)
 
+        # initialize A_kn operators
         unique_obs = set(obs.name for obs in sim_params.observables)
-    
-
         sim_params.A_kn = {process: {} for process in noise_model.processes}
         for process, jump_op in zip(noise_model.processes, noise_model.jump_operators):
             for obs_name in unique_obs:
                 observable = next(obs for obs in sim_params.observables if obs.name == obs_name)
                 obs_operator = getattr(GateLibrary, obs_name).matrix
                 sim_params.A_kn[process][obs_name] = calc_A_kn(jump_op, obs_operator)
-        
 
-                # sim_params.A_kn[process][obs_name] = np.array([[0, -1j],[1j, 0]], dtype=complex)
+        #initialize Master dictionary to store A_kn exp values
         sim_params.expvals_Master = {(obs.name, obs.site): {process: np.zeros((sim_params.N, len(sim_params.times)), dtype=complex) for process in noise_model.processes} for obs in sim_params.sorted_observables}
 
 
-    # Normalize the state to the B form
+   
     initial_state.normalize('B')
 
-    # Prepare arguments for each trajectory
+    
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
     
     if parallel:
@@ -93,6 +87,7 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
                     try:
+                        # output is now tjm average , A_kn expvals
                         result, expvals = future.result()
                         
                         if result is None or expvals is None:
@@ -103,6 +98,8 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                         else:
                             for obs_index, observable in enumerate(sim_params.sorted_observables):
                                 observable.trajectories[i] = result[obs_index]
+
+                                # put A_kn expectation values into Master dictionary
                                 for process in noise_model.processes:
                                     sim_params.expvals_Master[(observable.name, observable.site)][process][i,:] = expvals[(observable.name, observable.site)][process][:]
                     except Exception as e:
@@ -121,6 +118,8 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                 else:
                     for obs_index, observable in enumerate(sim_params.sorted_observables):
                         observable.trajectories[i] = result[obs_index]
+
+                        # put A_kn expectation values into Master dictionary
                         for process in noise_model.processes:
                             sim_params.expvals_Master[(observable.name, observable.site)][process][i,:] = expvals[(observable.name, observable.site)][process][:]
                         
@@ -132,13 +131,13 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
     else:
         sim_params.aggregate_trajectories()
      
-
+        # Optional: check how many A_kn trajectories are equal
         print("Checking for duplicate trajectories in sim_params.expvals_Master:")
         for key, proc_dict in sim_params.expvals_Master.items():
             obs_name, obs_site = key
             for process, arr in proc_dict.items():
                 N = arr.shape[0]
-                # Get unique rows using np.unique along axis 0.
+    
                 unique_rows = np.unique(arr, axis=0)
                 num_unique = unique_rows.shape[0]
 
@@ -146,26 +145,14 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                 print(f"  Total trajectories: {N}")
                 print(f"  Unique trajectories (by np.unique): {num_unique}")
 
-                # # Find and print duplicate trajectory pairs.
-                # duplicate_pairs = []
-                # for i in range(N):
-                #     for j in range(i + 1, N):
-                #         if np.allclose(arr[i], arr[j]):
-                #             duplicate_pairs.append((i, j))
-                # if duplicate_pairs:
-                #     print("  Duplicate trajectory pairs found:")
-                #     for pair in duplicate_pairs:
-                #         print(f"    Trajectory {pair[0]} and Trajectory {pair[1]} are identical.")
-                # else:
-                #     print("  No duplicate trajectories found.")
 
-
+        # Average A_kn means over trajectories and store in extra dictionary
         sim_params.avg_expvals = {key: {process: np.mean(arr, axis=0) for process, arr in proc_dict.items()} for key, proc_dict in sim_params.expvals_Master.items()}
 
 
 
 
-
+# calculate A_kn operators
 def calc_A_kn(L,obs):
     A_kn = L.conj().T @ obs @ L - 0.5 * obs @ L.conj().T @ L -0.5 * L.conj().T @ L @ obs
     return A_kn
@@ -181,20 +168,14 @@ def PhysicsTJM_1_analytical_gradient(args):
     else:
         results = np.zeros((len(sim_params.sorted_observables), 1))
     
-
+    # initialize dictionary to store A_kn exp values of a single trajectory
     expvals = {(obs.name, obs.site): {process: np.zeros((len(sim_params.times)), dtype=complex) for process in noise_model.processes} for obs in sim_params.sorted_observables}
-
-    # # Check if expvals in PhysivsTJM_1_analytical_gradient() is initialized correctly
-    # for key, proc_dict in expvals.items():
-    #     print("Observable (name, site):", key)
-    #     for process, arr in proc_dict.items():
-    #         print("  Process:", process)
-    #         print("    Array shape:", arr.shape)
-    #         print("    Values:\n", arr)
 
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.sorted_observables):
             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+
+            # measure A_kn exp values at time 0
             for process in noise_model.processes:
                 A_kn_op = sim_params.A_kn[process][observable.name]
                 measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
@@ -216,26 +197,26 @@ def PhysicsTJM_1_analytical_gradient(args):
                         temp_state.shift_orthogonality_center_right(site)
                     last_site = observable.site
                 results[obs_index, j] = temp_state.measure(observable)
+
+                #measure A_kn exp values at time j
                 for process in noise_model.processes:
                     A_kn_op = sim_params.A_kn[process][observable.name]
                     measurement_Akn = local_expval(temp_state, A_kn_op, observable.site).real
                     expvals[(observable.name, observable.site)][process][j] = measurement_Akn
+
         elif j == len(sim_params.times)-1:
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+
+
+                #measure A_kn exp values at time T
                 for process in noise_model.processes:
                     A_kn_op = sim_params.A_kn[process][observable.name]
                     measurement_Akn = local_expval(temp_state, A_kn_op, observable.site).real
                     expvals[(observable.name, observable.site)][process][0] = measurement_Akn
- 
-    # if results is None or expvals is None:
-    #     raise ValueError("Results or expvals is None.")
+                    
+    # also return A_kn exp values
     return results, expvals
-
-
-
-
-
 
 
 
@@ -245,7 +226,7 @@ def PhysicsTJM_1_analytical_gradient(args):
 
 if __name__ == "__main__":
 
-        # Define the system Hamiltonian
+       
     L = 4
     d = 2
     J = 1
@@ -259,7 +240,7 @@ if __name__ == "__main__":
     # Define the noise model
     gamma = 0.1
     noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
-    # noise_model = NoiseModel(['relaxation'], [gamma])
+   
 
     # Define the simulation parameters
     T = 5
@@ -269,7 +250,7 @@ if __name__ == "__main__":
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
-    measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] # + [Observable('z', site) for site in range(L)]
+    measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)]  + [Observable('z', site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
 
@@ -284,13 +265,13 @@ if __name__ == "__main__":
     qt_params.g = g
     qt_params.gamma_rel = gamma
     qt_params.gamma_deph = gamma
-    qt_params.observables = ['x','y']
+    qt_params.observables = ['x','y', 'z']
 
     t, qt_ref_traj,dO, qt_A_kn_exp_vals=qutip_traj(qt_params)
 
 
-    n_jump=len(qt_A_kn_exp_vals)
-    n_obs=len(qt_A_kn_exp_vals[0])
+
+
     ########## TJM Example #################
     run(state, H_0, sim_params, noise_model)
 
@@ -300,24 +281,12 @@ if __name__ == "__main__":
 
 
 
-    #     # Print structure of sim_params.avg_expvals (a dictionary)
-    # print("Structure of sim_params.avg_expvals:")
-    # for key, proc_dict in sim_params.avg_expvals.items():
-    #     print(f"Key (Observable, site): {key}")
-    #     for process, avg_arr in proc_dict.items():
-    #         print(f"    Process: {process}, array shape: {avg_arr.shape}, type: {type(avg_arr)}")
-            
-    # # Print structure of qt_A_kn_exp_vals (a list of lists)
-    # print("\nStructure of qt_A_kn_exp_vals:")
-    # print(f"Total sites (outer list length): {len(qt_A_kn_exp_vals)}")
-    # for site_idx, sublist in enumerate(qt_A_kn_exp_vals):
-    #     print(f"Site {site_idx}: {len(sublist)} A_kn arrays")
-    #     for j, arr in enumerate(sublist):
-    #         print(f"    Array {j} shape: {np.shape(arr)}")
+
+    '''Restructure Qutip A_kn means into same structure as TJM A_kn means:'''
 
     n_sites = len(qt_A_kn_exp_vals)
     n_types = len(qt_params.observables)
-    n_noise = len(noise_model.processes)  # typically 2
+    n_noise = len(noise_model.processes)  
     n_Akn_per_site = n_noise * n_types
 
     # Create a new dictionary to hold the Qutip data in the same structure as sim_params.avg_expvals.
@@ -340,6 +309,14 @@ if __name__ == "__main__":
         for process, arr in proc_dict.items():
             print(f"    Process: {process}, array shape: {np.shape(arr)}")
 
+    '''Structure of TJM and Qutip A_kn means is equal now.'''
+
+
+
+
+
+    # PLOTTING 1) QUTIP + TJM Simulation 2) TJM A_kn means 3) Qutip A_kn means
+
     fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(12, 10))
 
     # First subplot: Plot tjm_results
@@ -349,7 +326,7 @@ if __name__ == "__main__":
     ax1.set_xlabel('Time')
     ax1.set_ylabel('Expectation Value')
     ax1.set_title('Observables Expectation Values')
-   # ax1.legend()
+
 
     # Second subplot: Plot averaged A_kn expectation values over trajectories
     for key, process_dict in sim_params.avg_expvals.items():
@@ -362,16 +339,12 @@ if __name__ == "__main__":
     ax2.set_xlabel("Time")
     ax2.set_ylabel("A_kn Expectation Value")
     ax2.set_title("A_kn Averages TJM")
-   # ax2.legend()
 
-    # Assume qt_A_kn_exp_vals has been reshaped into a list of L lists, each with 6 arrays.
+
+
     n_sites = len(qt_A_kn_exp_vals)
-    n_Akn_per_site = len(qt_A_kn_exp_vals[0])  # should be 6 if ordering is as described
+    n_Akn_per_site = len(qt_A_kn_exp_vals[0])  
     observable_labels = qt_params.observables
-
-    print('n_sites:', n_sites)
-    print(' n_Akn_per_site:',  n_Akn_per_site)
-
 
     # Third subplot: Plot Qutip A_kn expectation values using the new dictionary format.
     for key, process_dict in qt_avg_dict.items():
@@ -384,31 +357,9 @@ if __name__ == "__main__":
     ax3.set_xlabel("Time")
     ax3.set_ylabel("A_kn Expectation Value")
     ax3.set_title("A_kn_expvals Qutip")
-    # ax3.legend()
 
 
-    # for site in range(n_sites):
-    #     for idx in range(n_Akn_per_site):
-    #         # Determine observable type: index mod number of types.
-    #         obs_type = observable_labels[idx % len(observable_labels)]
-    #         # Determine jump type: assume first half are relaxation, second half dephasing.
-    #         jump_type = "relaxation" if idx < (n_Akn_per_site // 2) else "dephasing"
-    #         if jump_type == "relaxation":
-                
-    #             print(',qt_A_kn_exp_vals site {site}, relaxation',qt_A_kn_exp_vals[site][idx])
-                    
-    #             ax3.plot(t, qt_A_kn_exp_vals[site][idx],
-    #                     label=f"Site {site}, {obs_type}, {jump_type}")
-    #         else:
-    #             print('plot dephasing Qutip')
-    #             print('we plot this now:',qt_A_kn_exp_vals[site][idx])
-    #             ax3.plot(t, qt_A_kn_exp_vals[site][idx], linestyle='--',
-    #     label=f"Site {site}, {obs_type}, {jump_type}")
 
-    # ax3.set_xlabel("Time")
-    # ax3.set_ylabel("A_kn Expectation Value")
-    # ax3.set_title("A_kn_expvals Qutip")
-    # ax3.legend()
 
     # Gather handles and labels for each original subplot
     handles1, labels1 = ax1.get_legend_handles_labels()
