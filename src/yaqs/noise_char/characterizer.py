@@ -28,40 +28,21 @@ import multiprocessing
 from qiskit.circuit import QuantumCircuit
 from tqdm import tqdm
 
+from yaqs.noise_char.optimization import *
+from yaqs.noise_char.propagation import *
+
 from yaqs.core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
 
 
-# Define the system Hamiltonian
-L = 4
-d = 2
-J = 1
-g = 0.5
-H_0 = MPO()
-H_0.init_Ising(L, d, J, g)
-
-# Define the initial state
-state = MPS(L, state='zeros')
-
-# Define the noise model
-gamma = 0.1
-noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
-# noise_model = NoiseModel(['relaxation'], [gamma])
-
-# Define the simulation parameters
-T = 2
-dt = 0.1
-sample_timesteps = True
-N = 100
-max_bond_dim = 4
-threshold = 1e-6
-order = 1
-measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
-sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
 
 
-def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=False):
+
+
+
+
+def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):
     """
     Common simulation routine used by both circuit and Hamiltonian simulations.
     It normalizes the state, prepares trajectory arguments, runs the trajectories
@@ -150,6 +131,34 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
         sim_params.aggregate_measurements()
     else:
         sim_params.aggregate_trajectories()
+     
+
+        print("Checking for duplicate trajectories in sim_params.expvals_Master:")
+        for key, proc_dict in sim_params.expvals_Master.items():
+            obs_name, obs_site = key
+            for process, arr in proc_dict.items():
+                N = arr.shape[0]
+                # Get unique rows using np.unique along axis 0.
+                unique_rows = np.unique(arr, axis=0)
+                num_unique = unique_rows.shape[0]
+
+                print(f"\nObservable: {obs_name} (site {obs_site}), Process: {process}")
+                print(f"  Total trajectories: {N}")
+                print(f"  Unique trajectories (by np.unique): {num_unique}")
+
+                # # Find and print duplicate trajectory pairs.
+                # duplicate_pairs = []
+                # for i in range(N):
+                #     for j in range(i + 1, N):
+                #         if np.allclose(arr[i], arr[j]):
+                #             duplicate_pairs.append((i, j))
+                # if duplicate_pairs:
+                #     print("  Duplicate trajectory pairs found:")
+                #     for pair in duplicate_pairs:
+                #         print(f"    Trajectory {pair[0]} and Trajectory {pair[1]} are identical.")
+                # else:
+                #     print("  No duplicate trajectories found.")
+
 
         sim_params.avg_expvals = {key: {process: np.mean(arr, axis=0) for process, arr in proc_dict.items()} for key, proc_dict in sim_params.expvals_Master.items()}
 
@@ -235,6 +244,52 @@ def PhysicsTJM_1_analytical_gradient(args):
 
 
 if __name__ == "__main__":
+
+        # Define the system Hamiltonian
+    L = 2
+    d = 2
+    J = 1
+    g = 0.5
+    H_0 = MPO()
+    H_0.init_Ising(L, d, J, g)
+
+    # Define the initial state
+    state = MPS(L, state='zeros')
+
+    # Define the noise model
+    gamma = 0.1
+    noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
+    # noise_model = NoiseModel(['relaxation'], [gamma])
+
+    # Define the simulation parameters
+    T = 5
+    dt = 0.1
+    sample_timesteps = True
+    N = 100
+    max_bond_dim = 4
+    threshold = 1e-6
+    order = 1
+    measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
+    sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
+
+
+    '''QUTIP calculation of A_kn_exp_vals'''
+
+    qt_params = SimulationParameters()
+
+    qt_params.T = T
+    qt_params.dt = dt
+    qt_params.L = L
+    qt_params.J = J
+    qt_params.g = g
+    qt_params.gamma_rel = gamma
+    qt_params.gamma_deph = gamma
+
+    t, qt_ref_traj,dO, qt_A_kn_exp_vals=qutip_traj(qt_params)
+
+
+    n_jump=len(qt_A_kn_exp_vals)
+    n_obs=len(qt_A_kn_exp_vals[0])
     ########## TJM Example #################
     run(state, H_0, sim_params, noise_model)
 
@@ -242,47 +297,74 @@ if __name__ == "__main__":
     for observable in sim_params.observables:
         tjm_results.append(observable.results)
 
-    # # Check if sim_params.A_kn is initialized correctly
-    # for process, obs_dict in sim_params.A_kn.items():
-    #     print("Process:", process)
-    #     for obs_name, matrix in obs_dict.items():
-    #         print("  Observable:", obs_name)
-    #         print("    A_kn matrix:\n", matrix)
-    
-    # # Check if sim_params.expvals_Master in run() is initialized correctly
-    # for key, proc_dict in sim_params.expvals_Master.items():
-    #     print("Observable (name, site):", key)
-    #     for process, arr in proc_dict.items():
-    #         print("  Process:", process)
-    #         print("    Array shape:", arr.shape)
-    #         print("    Values:\n", arr)
+    fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(12, 10))
 
-
-
-    
-
-
-
-    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 10))
-
-    # First subplot: Plot the tjm_results
-    for i in range(len(tjm_results)):
-        ax1.plot(sim_params.times, tjm_results[i], label=f'obs {i}')
+    # First subplot: Plot tjm_results
+    for i, result in enumerate(tjm_results):
+        ax1.plot(sim_params.times, result, label=f'obs {i}')
     ax1.set_xlabel('Time')
     ax1.set_ylabel('Expectation Value')
     ax1.set_title('Observables Expectation Values')
-    ax1.legend()
+   # ax1.legend()
 
-    # Second subplot: Plot the averaged A_kn expectation values over trajectories
+    # Second subplot: Plot averaged A_kn expectation values over trajectories
     for key, process_dict in sim_params.avg_expvals.items():
         obs_name, obs_site = key
         for process, avg_exp in process_dict.items():
-            ax2.plot(sim_params.times, avg_exp, label=f"{obs_name} (site {obs_site}, {process})")
+            if process == 'relaxation':
+                ax2.plot(sim_params.times, avg_exp, label=f"{obs_name} (site {obs_site}, {process})")
+            else: 
+                ax2.plot(sim_params.times, avg_exp, linestyle ='--', label=f"{obs_name} (site {obs_site}, {process})")
     ax2.set_xlabel("Time")
     ax2.set_ylabel("A_kn Expectation Value")
-    ax2.set_title("A_kn Averages over Trajectories")
-    ax2.legend()
+    ax2.set_title("A_kn Averages TJM")
+   # ax2.legend()
 
+    # Assume qt_A_kn_exp_vals has been reshaped into a list of L lists, each with 6 arrays.
+    n_sites = len(qt_A_kn_exp_vals)
+    n_Akn_per_site = len(qt_A_kn_exp_vals[0])  # should be 6 if ordering is as described
+    observable_labels = ['x', 'y', 'z']
+
+    for site in range(n_sites):
+        for idx in range(n_Akn_per_site):
+            # Determine observable type: index mod number of types.
+            obs_type = observable_labels[idx % len(observable_labels)]
+            # Determine jump type: assume first half are relaxation, second half dephasing.
+            jump_type = "relaxation" if idx < (n_Akn_per_site // 2) else "dephasing"
+            if jump_type == "relaxation":
+                    
+                ax3.plot(t, qt_A_kn_exp_vals[site][idx],
+                        label=f"Site {site}, {obs_type}, {jump_type}")
+            else:
+                ax3.plot(t, qt_A_kn_exp_vals[site][idx], linestyle='--',
+        label=f"Site {site}, {obs_type}, {jump_type}")
+
+    ax3.set_xlabel("Time")
+    ax3.set_ylabel("A_kn Expectation Value")
+    ax3.set_title("A_kn_expvals Qutip")
+    # ax3.legend()
+
+    # Gather handles and labels for each original subplot
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    handles3, labels3 = ax3.get_legend_handles_labels()
+
+    # Create a new figure with 1 row and 3 columns
+    fig_legend, axs = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
+
+    # Set a title or label for each legend column if desired:
+    axs[0].set_title("Obs Expectation")
+    axs[1].set_title("A_kn Averages TJM")
+    axs[2].set_title("A_kn_expvals Qutip")
+
+    # Display each legend in its own axis
+    axs[0].legend(handles1, labels1, loc='center')
+    axs[1].legend(handles2, labels2, loc='center')
+    axs[2].legend(handles3, labels3, loc='center')
+
+    # Turn off the axes (no ticks, spines, etc.)
+    for ax in axs:
+        ax.axis('off')
 
     plt.tight_layout()
     plt.show()

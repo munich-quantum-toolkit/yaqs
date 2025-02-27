@@ -67,6 +67,8 @@ def qutip_traj(sim_params_class: SimulationParameters):
         c_ops.append(np.sqrt(gamma_deph) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
         gammas.append(gamma_deph)
 
+    #c_ops = [rel0, rel1, rel2,... rel(L-1), deph0, deph1,..., deph(L-1)]
+
     # Initial state
     psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
 
@@ -75,15 +77,45 @@ def qutip_traj(sim_params_class: SimulationParameters):
     sy_list = [qt.tensor([sy if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
     sz_list = [qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
 
+
+    # obs_list = [x0, x1, x2,..., x(L-1), y0, y1,..., y(L-1), z0, z1,..., z(L-1)]
     obs_list = sx_list  + sy_list + sz_list
 
 
-    # Create new set of observables by multiplying every operator in obs_list with every operator in c_ops
-    A_kn_list= []
-    for i,c_op in enumerate(c_ops):
-        for obs in obs_list:
-            A_kn_list.append(  (1/gammas[i]) * (c_op.dag()*obs*c_op  -  0.5*obs*c_op.dag()*c_op  -  0.5*c_op.dag()*c_op*obs)   )
 
+
+    A_kn_list = []
+      # number of sites
+
+    for site in range(L):
+        # For each site, get the two collapse operators and their corresponding gamma values.
+        c_op_rel = c_ops[site]             # relaxation collapse operator for this site
+        gamma_rel = gammas[site]
+        c_op_deph = c_ops[site + L]         # dephasing collapse operator for this site
+        gamma_deph = gammas[site + L]
+
+        # For each observable type (x, y, z), find the corresponding operator from obs_list.
+        # We assume obs_list is ordered: [sx_0, sx_1, ..., sx_{L-1}, sy_0, ..., sy_{L-1}, sz_0, ..., sz_{L-1}]
+        obs_x = obs_list[site]
+        obs_y = obs_list[site + L]
+        obs_z = obs_list[site + 2*L]
+
+        # Compute A_kn for relaxation on this site for each observable type.
+        for obs in (obs_x, obs_y, obs_z):
+            A_kn = (1 / gamma_rel) * (c_op_rel.dag() * obs * c_op_rel -
+                                    0.5 * obs * c_op_rel.dag() * c_op_rel -
+                                    0.5 * c_op_rel.dag() * c_op_rel * obs)
+            A_kn_list.append(A_kn)
+
+        # Compute A_kn for dephasing on this site for each observable type.
+        for obs in (obs_x, obs_y, obs_z):
+            A_kn = (1 / gamma_deph) * (c_op_deph.dag() * obs * c_op_deph -
+                                    0.5 * obs * c_op_deph.dag() * c_op_deph -
+                                    0.5 * c_op_deph.dag() * c_op_deph * obs)
+            A_kn_list.append(A_kn)
+
+
+    # A_kn_list = [x0rel0,y0rel0,z0rel0,x0deph0,y0deph0,z0deph0,x1rel1,y1rel1,...,z(L-1)deph(L-1)]
 
 
     new_obs_list = obs_list + A_kn_list
@@ -107,14 +139,35 @@ def qutip_traj(sim_params_class: SimulationParameters):
     original_exp_vals = exp_vals[:n_obs]
     new_exp_vals = exp_vals[n_obs:]
 
-    # Reshape new_exp_vals to be a list of lists with dimensions n_jump times n_obs
-    A_kn_exp_vals = [new_exp_vals[i * n_obs:(i + 1) * n_obs] for i in range(n_jump)]
     
-    # Compute the integral of the new expectation values to obtain the derivatives
-    d_On_d_gk = [ [trapezoidal(A_kn_exp_vals[i][j],t)  for j in range(n_obs)] for i in range(n_jump) ]
+    n_types = len(obs_list) // L   # number of observable types, e.g. 3 for x,y,z
+    n_noise = 2  # since you have relaxation and dephasing
+    n_Akn_per_site = n_noise * n_types    # e.g., 2*3 = 6
+
+    # new_exp_vals (for the A_kn part) should have length = L * n_Akn_per_site.
+    # Reshape it into a list of L blocks, each containing n_Akn_per_site arrays.
+    A_kn_exp_vals = [ new_exp_vals[site * n_Akn_per_site : (site + 1) * n_Akn_per_site]
+                    for site in range(L) ]
+
+    # Compute the derivative for each expectation value using trapezoidal integration.
+    d_On_d_gk = [ [ trapezoidal(A_kn_exp_vals[site][j], t) 
+                    for j in range(n_Akn_per_site) ]
+                for site in range(L) ]
 
 
-    return t, original_exp_vals, d_On_d_gk
+
+    n_obs = len(obs_list)      # still 3L
+    n_sites = sim_params_class.L  # number of sites
+    # new_exp_vals now has length = 6 * L (since A_kn_list now has 6 elements xireli,yireli,zireli,xidephi,yidephi,zidephi for site i)
+
+    # Reshape new_exp_vals into a list of L lists, each containing 6 entries.
+    A_kn_exp_vals = [ new_exp_vals[site * 6 : (site + 1) * 6] for site in range(n_sites) ]
+
+    # Then compute the derivative for each of these 6 expectation values per site:
+    d_On_d_gk = [ [ trapezoidal(A_kn_exp_vals[site][j], t) for j in range(6) ] for site in range(n_sites) ]
+
+
+    return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
     
 
 

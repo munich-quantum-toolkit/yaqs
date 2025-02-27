@@ -38,7 +38,7 @@ def loss_function(sim_params, ref_traj, traj_der):
     # Run the TJM simulation with the given noise parameters
 
     start_time = time.time()
-    t, exp_vals_traj, d_On_d_gk = traj_der(sim_params)  
+    t, exp_vals_traj, d_On_d_gk, A_kn_exp_vals = traj_der(sim_params)  
     end_time = time.time()
     tjm_time = end_time - start_time
     # print(f"TJM time -> {tjm_time:.4f}")
