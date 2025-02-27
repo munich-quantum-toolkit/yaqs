@@ -246,7 +246,7 @@ def PhysicsTJM_1_analytical_gradient(args):
 if __name__ == "__main__":
 
         # Define the system Hamiltonian
-    L = 3
+    L = 4
     d = 2
     J = 1
     g = 0.5
@@ -269,7 +269,7 @@ if __name__ == "__main__":
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
-    measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
+    measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] # + [Observable('z', site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
 
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     qt_params.g = g
     qt_params.gamma_rel = gamma
     qt_params.gamma_deph = gamma
-    qt_params.observables = ['x','y','z']
+    qt_params.observables = ['x','y']
 
     t, qt_ref_traj,dO, qt_A_kn_exp_vals=qutip_traj(qt_params)
 
@@ -297,6 +297,48 @@ if __name__ == "__main__":
     tjm_results = []
     for observable in sim_params.observables:
         tjm_results.append(observable.results)
+
+
+
+    #     # Print structure of sim_params.avg_expvals (a dictionary)
+    # print("Structure of sim_params.avg_expvals:")
+    # for key, proc_dict in sim_params.avg_expvals.items():
+    #     print(f"Key (Observable, site): {key}")
+    #     for process, avg_arr in proc_dict.items():
+    #         print(f"    Process: {process}, array shape: {avg_arr.shape}, type: {type(avg_arr)}")
+            
+    # # Print structure of qt_A_kn_exp_vals (a list of lists)
+    # print("\nStructure of qt_A_kn_exp_vals:")
+    # print(f"Total sites (outer list length): {len(qt_A_kn_exp_vals)}")
+    # for site_idx, sublist in enumerate(qt_A_kn_exp_vals):
+    #     print(f"Site {site_idx}: {len(sublist)} A_kn arrays")
+    #     for j, arr in enumerate(sublist):
+    #         print(f"    Array {j} shape: {np.shape(arr)}")
+
+    n_sites = len(qt_A_kn_exp_vals)
+    n_types = len(qt_params.observables)
+    n_noise = len(noise_model.processes)  # typically 2
+    n_Akn_per_site = n_noise * n_types
+
+    # Create a new dictionary to hold the Qutip data in the same structure as sim_params.avg_expvals.
+    qt_avg_dict = {}
+
+    for site in range(n_sites):
+        for type_index in range(n_types):
+            key = (qt_params.observables[type_index], site)
+            qt_avg_dict[key] = {}
+            for noise_index in range(n_noise):
+                process = noise_model.processes[noise_index]
+                # Calculate the index within the sublist for the given noise process and observable type.
+                idx = noise_index * n_types + type_index
+                qt_avg_dict[key][process] = qt_A_kn_exp_vals[site][idx]
+
+    # Print out the structure for inspection.
+    print("Structure of qt_avg_dict:")
+    for key, proc_dict in qt_avg_dict.items():
+        print(f"Key (Observable, site): {key}")
+        for process, arr in proc_dict.items():
+            print(f"    Process: {process}, array shape: {np.shape(arr)}")
 
     fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(12, 10))
 
@@ -331,29 +373,41 @@ if __name__ == "__main__":
     print(' n_Akn_per_site:',  n_Akn_per_site)
 
 
-
-
-    for site in range(n_sites):
-        for idx in range(n_Akn_per_site):
-            # Determine observable type: index mod number of types.
-            obs_type = observable_labels[idx % len(observable_labels)]
-            # Determine jump type: assume first half are relaxation, second half dephasing.
-            jump_type = "relaxation" if idx < (n_Akn_per_site // 2) else "dephasing"
-            if jump_type == "relaxation":
-                print('plot relaxation Qutip')
-                print('we plot this now:',qt_A_kn_exp_vals[site][idx])
-                    
-                ax3.plot(t, qt_A_kn_exp_vals[site][idx],
-                        label=f"Site {site}, {obs_type}, {jump_type}")
+    # Third subplot: Plot Qutip A_kn expectation values using the new dictionary format.
+    for key, process_dict in qt_avg_dict.items():
+        obs_name, obs_site = key
+        for process, arr in process_dict.items():
+            if process == 'relaxation':
+                ax3.plot(t, arr, label=f"{obs_name} (site {obs_site}, {process})")
             else:
-                print('plot dephasing Qutip')
-                print('we plot this now:',qt_A_kn_exp_vals[site][idx])
-                ax3.plot(t, qt_A_kn_exp_vals[site][idx], linestyle='--',
-        label=f"Site {site}, {obs_type}, {jump_type}")
-
+                ax3.plot(t, arr, linestyle='--', label=f"{obs_name} (site {obs_site}, {process})")
     ax3.set_xlabel("Time")
     ax3.set_ylabel("A_kn Expectation Value")
     ax3.set_title("A_kn_expvals Qutip")
+    # ax3.legend()
+
+
+    # for site in range(n_sites):
+    #     for idx in range(n_Akn_per_site):
+    #         # Determine observable type: index mod number of types.
+    #         obs_type = observable_labels[idx % len(observable_labels)]
+    #         # Determine jump type: assume first half are relaxation, second half dephasing.
+    #         jump_type = "relaxation" if idx < (n_Akn_per_site // 2) else "dephasing"
+    #         if jump_type == "relaxation":
+                
+    #             print(',qt_A_kn_exp_vals site {site}, relaxation',qt_A_kn_exp_vals[site][idx])
+                    
+    #             ax3.plot(t, qt_A_kn_exp_vals[site][idx],
+    #                     label=f"Site {site}, {obs_type}, {jump_type}")
+    #         else:
+    #             print('plot dephasing Qutip')
+    #             print('we plot this now:',qt_A_kn_exp_vals[site][idx])
+    #             ax3.plot(t, qt_A_kn_exp_vals[site][idx], linestyle='--',
+    #     label=f"Site {site}, {obs_type}, {jump_type}")
+
+    # ax3.set_xlabel("Time")
+    # ax3.set_ylabel("A_kn Expectation Value")
+    # ax3.set_title("A_kn_expvals Qutip")
     # ax3.legend()
 
     # Gather handles and labels for each original subplot
