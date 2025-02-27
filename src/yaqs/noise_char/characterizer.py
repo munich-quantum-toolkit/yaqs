@@ -218,14 +218,14 @@ def PhysicsTJM_1_analytical_gradient(args):
                 results[obs_index, j] = temp_state.measure(observable)
                 for process in noise_model.processes:
                     A_kn_op = sim_params.A_kn[process][observable.name]
-                    measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
+                    measurement_Akn = local_expval(temp_state, A_kn_op, observable.site).real
                     expvals[(observable.name, observable.site)][process][j] = measurement_Akn
         elif j == len(sim_params.times)-1:
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)
                 for process in noise_model.processes:
                     A_kn_op = sim_params.A_kn[process][observable.name]
-                    measurement_Akn = local_expval(copy.deepcopy(state), A_kn_op, observable.site).real
+                    measurement_Akn = local_expval(temp_state, A_kn_op, observable.site).real
                     expvals[(observable.name, observable.site)][process][0] = measurement_Akn
  
     # if results is None or expvals is None:
@@ -246,7 +246,7 @@ def PhysicsTJM_1_analytical_gradient(args):
 if __name__ == "__main__":
 
         # Define the system Hamiltonian
-    L = 2
+    L = 3
     d = 2
     J = 1
     g = 0.5
@@ -284,6 +284,7 @@ if __name__ == "__main__":
     qt_params.g = g
     qt_params.gamma_rel = gamma
     qt_params.gamma_deph = gamma
+    qt_params.observables = ['x','y','z']
 
     t, qt_ref_traj,dO, qt_A_kn_exp_vals=qutip_traj(qt_params)
 
@@ -302,6 +303,7 @@ if __name__ == "__main__":
     # First subplot: Plot tjm_results
     for i, result in enumerate(tjm_results):
         ax1.plot(sim_params.times, result, label=f'obs {i}')
+        ax1.plot(sim_params.times, qt_ref_traj[i], label=f'qt obs{i}')
     ax1.set_xlabel('Time')
     ax1.set_ylabel('Expectation Value')
     ax1.set_title('Observables Expectation Values')
@@ -323,7 +325,13 @@ if __name__ == "__main__":
     # Assume qt_A_kn_exp_vals has been reshaped into a list of L lists, each with 6 arrays.
     n_sites = len(qt_A_kn_exp_vals)
     n_Akn_per_site = len(qt_A_kn_exp_vals[0])  # should be 6 if ordering is as described
-    observable_labels = ['x', 'y', 'z']
+    observable_labels = qt_params.observables
+
+    print('n_sites:', n_sites)
+    print(' n_Akn_per_site:',  n_Akn_per_site)
+
+
+
 
     for site in range(n_sites):
         for idx in range(n_Akn_per_site):
@@ -332,10 +340,14 @@ if __name__ == "__main__":
             # Determine jump type: assume first half are relaxation, second half dephasing.
             jump_type = "relaxation" if idx < (n_Akn_per_site // 2) else "dephasing"
             if jump_type == "relaxation":
+                print('plot relaxation Qutip')
+                print('we plot this now:',qt_A_kn_exp_vals[site][idx])
                     
                 ax3.plot(t, qt_A_kn_exp_vals[site][idx],
                         label=f"Site {site}, {obs_type}, {jump_type}")
             else:
+                print('plot dephasing Qutip')
+                print('we plot this now:',qt_A_kn_exp_vals[site][idx])
                 ax3.plot(t, qt_A_kn_exp_vals[site][idx], linestyle='--',
         label=f"Site {site}, {obs_type}, {jump_type}")
 

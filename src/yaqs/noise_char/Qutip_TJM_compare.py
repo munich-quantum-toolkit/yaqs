@@ -17,7 +17,7 @@ from dataclasses import dataclass
 class SimulationParameters:
     T: float = 1
     dt: float = 0.1
-    L: int = 4
+    L: int = 2
     J: float = 1
     g: float = 0.5
     gamma_rel: float = 0.1
@@ -89,7 +89,7 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 
 
-def tjm(sim_params_class: SimulationParameters, N=1000):
+def tjm(sim_params_class: SimulationParameters, N=100):
 
     T = sim_params_class.T
     dt = sim_params_class.dt
@@ -245,8 +245,8 @@ if __name__ == "__main__":
     plt.figure(figsize=(10,8))
     for i in range(len(tjm_results)):
         plt.plot(t, qutip_results[i], label=f'exp val qutip obs {i}')
-        plt.plot(t, tjm_results[i], label=f'exp val tjm obs {i}')
-        plt.plot(t, qutip_results[i]-tjm_results[i], label = f'observable {i}')
+        # plt.plot(t, tjm_results[i], label=f'exp val tjm obs {i}')
+        # plt.plot(t, qutip_results[i]-tjm_results[i], label = f'observable {i}')
     plt.xlabel('times')
     plt.ylabel('expectation value')
     plt.legend()
