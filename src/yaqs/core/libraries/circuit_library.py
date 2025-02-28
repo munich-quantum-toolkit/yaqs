@@ -96,16 +96,16 @@ def create_Heisenberg_circuit(model, dt, timesteps):
 def create_1D_Fermi_Hubbard_circuit(model, dt, timesteps):
     'H = -1/2 mu (I-Z) + 1/4 u (I-Z) (I-Z) - 1/2 t (XX + YY)'
 
-    assert model['name'] == '1D_Fermi-Hubbard'
+    assert model['name'] == '1D_Fermi_Hubbard'
 
-    mu = -2*dt*model['mu']
-    u = -2*dt*model['u']
-    t = -2*dt*model['t']
+    mu = model['mu']
+    u = model['u']
+    t = model['t']
     n = model['num_trotter_steps']
 
     spin_up = QuantumRegister(model['L'], '↑')
     spin_down = QuantumRegister(model['L'], '↓')
-    circ = QuantumCircuit(spin_down, spin_up)
+    circ = QuantumCircuit(spin_up, spin_down)
 
     def H_1():
         """Add the time evolution of the chemical potential term"""
@@ -122,7 +122,7 @@ def create_1D_Fermi_Hubbard_circuit(model, dt, timesteps):
 
     def H_3():
         """Add the time evolution of the kinetic hopping term"""
-        theta = 4*dt*t/n
+        theta = -dt*t/n
         for j in range(model['L']-1):
             if j % 2 == 0:
                 circ.rxx(theta=theta, qubit1=spin_up[j+1], qubit2=spin_up[j])
@@ -142,6 +142,6 @@ def create_1D_Fermi_Hubbard_circuit(model, dt, timesteps):
         H_3()
         H_2()
         H_1()
-
+    
     return circ
     
