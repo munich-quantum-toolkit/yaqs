@@ -136,7 +136,7 @@ def create_1D_Fermi_Hubbard_circuit(model, dt, timesteps):
                 circ.rxx(theta=theta, qubit1=spin_down[j+1], qubit2=spin_down[j])
                 circ.ryy(theta=theta, qubit1=spin_down[j+1], qubit2=spin_down[j])
 
-    for _ in range(n):
+    for _ in range(n*timesteps):
         H_1()
         H_2()
         H_3()
