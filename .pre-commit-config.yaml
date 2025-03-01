@@ -54,6 +54,17 @@ repos:
         args: ["--fix", "--show-fixes"]
       - id: ruff-format
 
+  # Static type checking using mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev:  v1.15.0
+    hooks:
+      - id:    mypy
+        files: ^(src/mqt|tests|examples|noxfile.py)
+        args: [ ]
+        additional_dependencies:
+          - nox
+          - pytest
+
   # Catch common capitalization mistakes
   - repo: local
     hooks:
