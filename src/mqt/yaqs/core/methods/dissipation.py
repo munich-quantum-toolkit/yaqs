@@ -6,12 +6,12 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 import opt_einsum as oe
 from scipy.linalg import expm
-
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
@@ -21,9 +21,8 @@ if TYPE_CHECKING:
 # TODO: Assumes noise is same at all sites
 #       Could be sped-up by pre-calculating exponential somewhere else
 #       Likely not a problem since it's only exponentiating small matrices
-def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float):
-    """
-    Apply dissipation to the system state using the given noise model and time step.
+def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float) -> None:
+    """Apply dissipation to the system state using the given noise model and time step.
 
     This function modifies the state tensors by applying a dissipative operator that is calculated
     from the noise model's jump operators and strengths.

@@ -5,12 +5,13 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 from qiskit.circuit import QuantumCircuit
 
 
 def create_Ising_circuit(model, dt, timesteps):
-    "H = J ZZ + g X"
-
+    """H = J ZZ + g X."""
     assert model["name"] == "Ising"
 
     # Angle on X rotation
@@ -45,8 +46,7 @@ def create_Ising_circuit(model, dt, timesteps):
 
 
 def create_Heisenberg_circuit(model, dt, timesteps):
-    "H = Jx XX + Jy YY + Jz ZZ + h Z"
-
+    """H = Jx XX + Jy YY + Jz ZZ + h Z."""
     assert model["name"] == "Heisenberg"
 
     theta_xx = -2 * dt * model["Jx"]

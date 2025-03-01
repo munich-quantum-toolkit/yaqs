@@ -5,11 +5,14 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import pytest
+
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
-def test_noise_model_creation():
+def test_noise_model_creation() -> None:
     processes = ["relaxation", "dephasing"]
     strengths = [0.1, 0.05]
 
@@ -22,7 +25,7 @@ def test_noise_model_creation():
     assert model.jump_operators[0].shape == (2, 2), "First jump operator should be 2x2 for 'dephasing'."
 
 
-def test_noise_model_assertion():
+def test_noise_model_assertion() -> None:
     """If processes and strengths differ in length, an AssertionError should be raised."""
     processes = ["relaxation", "dephasing"]
     strengths = [0.1]
@@ -30,7 +33,7 @@ def test_noise_model_assertion():
         _ = NoiseModel(processes, strengths)
 
 
-def test_noise_model_empty():
+def test_noise_model_empty() -> None:
     """Check that NoiseModel handles an empty process list without error."""
     model = NoiseModel([], [])
     assert model.processes == []

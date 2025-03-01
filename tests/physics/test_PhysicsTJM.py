@@ -5,16 +5,17 @@
 #
 # Licensed under the MIT License
 
-import pytest
+from __future__ import annotations
+
 from unittest.mock import patch
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs.physics.PhysicsTJM import initialize, step_through, sample, PhysicsTJM_2, PhysicsTJM_1
+from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_1, PhysicsTJM_2, initialize, step_through
 
 
-def test_initialize():
+def test_initialize() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -35,7 +36,7 @@ def test_initialize():
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt)
 
 
-def test_step_through():
+def test_step_through() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -58,7 +59,7 @@ def test_step_through():
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt)
 
 
-def test_PhysicsTJM_2():
+def test_PhysicsTJM_2() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -76,7 +77,7 @@ def test_PhysicsTJM_2():
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
-def test_PhysicsTJM_2_sample_timesteps():
+def test_PhysicsTJM_2_sample_timesteps() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -94,7 +95,7 @@ def test_PhysicsTJM_2_sample_timesteps():
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 
-def test_PhysicsTJM_1():
+def test_PhysicsTJM_1() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -112,7 +113,7 @@ def test_PhysicsTJM_1():
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
-def test_PhysicsTJM_1_sample_timesteps():
+def test_PhysicsTJM_1_sample_timesteps() -> None:
     L = 5
     J = 1
     g = 0.5

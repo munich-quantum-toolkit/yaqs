@@ -5,18 +5,19 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import copy
+
 import matplotlib.pyplot as plt
 import numpy as np
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library.n_local import TwoLocal
 
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
-
-from mqt.yaqs import Simulator
-
 
 # Define the circuit
 num_qubits = 10

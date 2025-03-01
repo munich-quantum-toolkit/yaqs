@@ -5,21 +5,27 @@
 #
 # Licensed under the MIT License
 
-import pytest
+from __future__ import annotations
 
 import copy
-import numpy as np
 
-from mqt.yaqs.circuits.utils.mpo_utils import decompose_theta
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.circuits.utils.mpo_utils import apply_gate, apply_layer
-from mqt.yaqs.circuits.utils.mpo_utils import apply_temporal_zone, apply_long_range_layer
-from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
-from mqt.yaqs.circuits.utils.mpo_utils import update_MPO
+import numpy as np
+import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
-from mqt.yaqs.core.data_structures.networks import MPO
+
 from mqt.yaqs.circuits.utils.dag_utils import select_starting_point
+from mqt.yaqs.circuits.utils.mpo_utils import (
+    apply_gate,
+    apply_layer,
+    apply_long_range_layer,
+    apply_temporal_zone,
+    decompose_theta,
+    update_MPO,
+)
+from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 ##############################################################################
 # Helper Functions
@@ -36,9 +42,8 @@ def random_theta_8d():
     return np.random.rand(2, 2, 2, 2, 2, 2, 2, 2)
 
 
-def approximate_reconstruction(U, M, original, atol=1e-10):
-    """
-    Check if U * diag(S) * V reconstructs 'original' (up to a tolerance).
+def approximate_reconstruction(U, M, original, atol=1e-10) -> None:
+    """Check if U * diag(S) * V reconstructs 'original' (up to a tolerance).
     Re-applies the reshaping/transpose logic used in decompose_theta.
     """
     dims = original.shape
@@ -62,7 +67,7 @@ def approximate_reconstruction(U, M, original, atol=1e-10):
 ##############################################################################
 
 
-def test_decompose_theta():
+def test_decompose_theta() -> None:
     """Test SVD-based decomposition of a 6D tensor."""
     theta = random_theta_6d()
     threshold = 1e-5
@@ -77,18 +82,17 @@ def test_decompose_theta():
     approximate_reconstruction(U, M, theta, atol=1e-5)
 
 
-@pytest.mark.parametrize("interaction,conjugate", [(1, False), (1, True), (2, False), (2, True)])
-def test_apply_gate(interaction, conjugate):
-    """
-    Test applying single- or two-qubit gates to a 6D (or 8D) tensor,
+@pytest.mark.parametrize(("interaction", "conjugate"), [(1, False), (1, True), (2, False), (2, True)])
+def test_apply_gate(interaction, conjugate) -> None:
+    """Test applying single- or two-qubit gates to a 6D (or 8D) tensor,
     with or without conjugation.
     """
     if interaction == 1:
-        attr = getattr(GateLibrary, "x")
+        attr = GateLibrary.x
         gate = attr()
         gate.set_sites(0)
     else:
-        attr = getattr(GateLibrary, "rzz")
+        attr = GateLibrary.rzz
         gate = attr()
         gate.set_params([np.pi / 2])
         gate.set_sites(0, 1)
@@ -99,10 +103,8 @@ def test_apply_gate(interaction, conjugate):
     assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
 
 
-def test_apply_temporal_zone_no_op_nodes():
-    """
-    If the DAG has no op_nodes, apply_temporal_zone should return theta unchanged.
-    """
+def test_apply_temporal_zone_no_op_nodes() -> None:
+    """If the DAG has no op_nodes, apply_temporal_zone should return theta unchanged."""
     circuit = QuantumCircuit()
     dag = circuit_to_dag(circuit)
 
@@ -113,10 +115,8 @@ def test_apply_temporal_zone_no_op_nodes():
     assert np.allclose(updated, theta), "If no gates, theta should be unchanged."
 
 
-def test_apply_temporal_zone_single_qubit_gates():
-    """
-    If the DAG has one gate in the 'temporal zone', it should be applied.
-    """
+def test_apply_temporal_zone_single_qubit_gates() -> None:
+    """If the DAG has one gate in the 'temporal zone', it should be applied."""
     model = {"name": "Ising", "L": 5, "J": 0, "g": 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
@@ -127,10 +127,8 @@ def test_apply_temporal_zone_single_qubit_gates():
     assert updated.shape == theta.shape
 
 
-def test_apply_temporal_zone_two_qubit_gates():
-    """
-    If the DAG has one gate in the 'temporal zone', it should be applied.
-    """
+def test_apply_temporal_zone_two_qubit_gates() -> None:
+    """If the DAG has one gate in the 'temporal zone', it should be applied."""
     model = {"name": "Ising", "L": 5, "J": 1, "g": 0}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
@@ -141,10 +139,8 @@ def test_apply_temporal_zone_two_qubit_gates():
     assert updated.shape == theta.shape
 
 
-def test_apply_temporal_zone_mixed_qubit_gates():
-    """
-    If the DAG has one gate in the 'temporal zone', it should be applied.
-    """
+def test_apply_temporal_zone_mixed_qubit_gates() -> None:
+    """If the DAG has one gate in the 'temporal zone', it should be applied."""
     model = {"name": "Ising", "L": 5, "J": 1, "g": 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
@@ -155,10 +151,8 @@ def test_apply_temporal_zone_mixed_qubit_gates():
     assert updated.shape == theta.shape
 
 
-def test_update_MPO():
-    """
-    Test update_MPO with a small 2-qubit MPO. We'll intercept apply_temporal_zone calls.
-    """
+def test_update_MPO() -> None:
+    """Test update_MPO with a small 2-qubit MPO. We'll intercept apply_temporal_zone calls."""
     mpo = MPO()
     length = 2
     mpo.init_identity(length)
@@ -177,10 +171,8 @@ def test_update_MPO():
         assert site_tensor.ndim == 4
 
 
-def test_apply_layer():
-    """
-    Basic test for apply_layer. We'll confirm update_MPO is called for first and second iterators.
-    """
+def test_apply_layer() -> None:
+    """Basic test for apply_layer. We'll confirm update_MPO is called for first and second iterators."""
     mpo = MPO()
     length = 3
     mpo.init_identity(length)
@@ -196,7 +188,7 @@ def test_apply_layer():
     assert mpo.check_if_identity(1 - 1e-13)
 
 
-def test_apply_long_range_layer():
+def test_apply_long_range_layer() -> None:
     mpo = MPO()
     num_qubits = 3
     mpo.init_identity(num_qubits)

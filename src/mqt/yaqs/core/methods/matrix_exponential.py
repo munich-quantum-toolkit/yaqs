@@ -5,13 +5,14 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import numpy as np
 from scipy.linalg import eigh_tridiagonal
 
 
 def _lanczos_iteration(Afunc, vstart, numiter):
-    """
-    Perform a "matrix free" Lanczos iteration.
+    """Perform a "matrix free" Lanczos iteration.
 
     Args:
         Afunc:      "matrix free" linear transformation of a given vector
@@ -27,7 +28,7 @@ def _lanczos_iteration(Afunc, vstart, numiter):
     # normalize starting vector
     nrmv = np.linalg.norm(vstart)
     assert nrmv > 0
-    vstart = vstart / nrmv
+    vstart /= nrmv
 
     alpha = np.zeros(numiter)
     beta = np.zeros(numiter - 1)
@@ -57,8 +58,7 @@ def _lanczos_iteration(Afunc, vstart, numiter):
 
 
 def expm_krylov(Afunc, v, dt, numiter):
-    """
-    Compute Krylov subspace approximation of the matrix exponential
+    """Compute Krylov subspace approximation of the matrix exponential
     applied to input vector: `expm(dt*A)*v`.
 
     Reference:

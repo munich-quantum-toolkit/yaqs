@@ -5,29 +5,29 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-
 from mqt.yaqs.core.methods.TDVP import (
-    split_mps_tensor,
-    merge_mps_tensors,
     merge_mpo_tensors,
-    update_right_environment,
-    update_left_environment,
-    initialize_right_environments,
-    project_site,
+    merge_mps_tensors,
     project_bond,
-    update_site,
-    update_bond,
+    project_site,
     single_site_TDVP,
+    split_mps_tensor,
     two_site_TDVP,
+    update_bond,
+    update_left_environment,
+    update_right_environment,
+    update_site,
 )
 
 
-def testsplit_mps_tensor_left_right_sqrt():
+def testsplit_mps_tensor_left_right_sqrt() -> None:
     # Create an input tensor A with shape (d0*d1, D0, D2).
     # Let d0 = d1 = 2 so that A.shape[0]=4, and choose D0=3, D2=5.
     A = np.random.randn(4, 3, 5)
@@ -51,14 +51,14 @@ def testsplit_mps_tensor_left_right_sqrt():
         np.testing.assert_allclose(A, A_recon, atol=1e-6)
 
 
-def testsplit_mps_tensor_invalid_shape():
+def testsplit_mps_tensor_invalid_shape() -> None:
     # If A.shape[0] is not divisible by 2, the function should raise a ValueError.
     A = np.random.randn(3, 3, 5)
     with pytest.raises(ValueError):
         split_mps_tensor(A, svd_distribution="left")
 
 
-def testmerge_mps_tensors():
+def testmerge_mps_tensors() -> None:
     # Let A0 have shape (2, 3, 4) and A1 have shape (5, 4, 7).
     # In merge_mps_tensors the arrays are interpreted with label tuples
     # (0,2,3) for A0 and (1,3,4) for A1, so contraction is over the third axis of A0 and
@@ -71,7 +71,7 @@ def testmerge_mps_tensors():
     assert merged.shape == (10, 3, 7)
 
 
-def testmerge_mpo_tensors():
+def testmerge_mpo_tensors() -> None:
     # Let A0 be a 4D array with shape (2, 3, 4, 5) and
     # A1 be a 4D array with shape (7, 8, 5, 9).
     # The contract call uses label tuples (0,2,4,6) and (1,3,6,5) and contracts label 6.
@@ -83,7 +83,7 @@ def testmerge_mpo_tensors():
     assert merged.shape == (14, 24, 4, 9)
 
 
-def testupdate_right_environment():
+def testupdate_right_environment() -> None:
     # Choose shapes as described in the function.
     A = np.random.randn(2, 3, 4)
     # R: contract A's last axis (size 4) with R's first axis.
@@ -100,7 +100,7 @@ def testupdate_right_environment():
     assert Rnext.shape == (3, 8, 9)
 
 
-def testupdate_left_environment():
+def testupdate_left_environment() -> None:
     # Set up dummy arrays with shapes so that the contraction is valid.
     # Let A be shape (3,4,10)
     A = np.random.randn(3, 4, 10)
@@ -116,7 +116,7 @@ def testupdate_left_environment():
     assert Rnext.ndim == 3
 
 
-def testproject_site():
+def testproject_site() -> None:
     # Let A: shape (2,3,4); R: shape (4,5,6) as before.
     A = np.random.randn(2, 3, 4)
     R = np.random.randn(4, 5, 6)
@@ -129,7 +129,7 @@ def testproject_site():
     assert out.ndim == 3
 
 
-def testproject_bond():
+def testproject_bond() -> None:
     # Let C: shape (2,3)
     C = np.random.randn(2, 3)
     # Let R: shape (3,4,5)
@@ -141,7 +141,7 @@ def testproject_bond():
     assert out.shape == (6, 5)
 
 
-def testupdate_site():
+def testupdate_site() -> None:
     # We choose an MPS tensor A with shape (d0, d0, d1) where d0=2, d1=4.
     # (The requirement here is that the first two dimensions are equal,
     # so that after the contraction chain the operator is square.)
@@ -168,7 +168,7 @@ def testupdate_site():
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
 
 
-def testupdate_bond():
+def testupdate_bond() -> None:
     # For the bond step we want the operator to be square.
     # Let C be a matrix of shape (p, q). We choose C to be square.
     C = np.random.randn(2, 2)  # total elements: 4
@@ -185,7 +185,7 @@ def testupdate_bond():
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
 
-def test_single_site_TDVP():
+def test_single_site_TDVP() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -208,7 +208,7 @@ def test_single_site_TDVP():
     )
 
 
-def test_two_site_TDVP():
+def test_two_site_TDVP() -> None:
     L = 5
     J = 1
     g = 0.5

@@ -5,7 +5,8 @@
 #
 # Licensed under the MIT License
 
-import pytest
+from __future__ import annotations
+
 import numpy as np
 from numpy.linalg import norm
 from scipy.linalg import expm
@@ -17,9 +18,8 @@ from mqt.yaqs.core.methods.matrix_exponential import _lanczos_iteration, expm_kr
 ##############################################################################
 
 
-def test_lanczos_iteration_small():
-    """
-    Check that _lanczos_iteration produces correct shapes and orthonormal vectors
+def test_lanczos_iteration_small() -> None:
+    """Check that _lanczos_iteration produces correct shapes and orthonormal vectors
     for a small 2x2 Hermitian matrix.
     """
     A = np.array([[2.0, 1.0], [1.0, 3.0]])
@@ -44,9 +44,8 @@ def test_lanczos_iteration_small():
     np.testing.assert_allclose(norm(V[:, 1]), 1.0, atol=1e-12)
 
 
-def test_lanczos_early_termination():
-    """
-    If beta[j] is nearly zero, the code should return early with truncated alpha, beta, V.
+def test_lanczos_early_termination() -> None:
+    """If beta[j] is nearly zero, the code should return early with truncated alpha, beta, V.
     Create a diagonal matrix so that if vstart is one of the eigenvectors,
     the iteration can terminate early.
     """
@@ -72,9 +71,8 @@ def test_lanczos_early_termination():
 ##############################################################################
 
 
-def test_expm_krylov_2x2_exact():
-    """
-    For a 2x2 Hermitian matrix, if numiter=2 (full dimension),
+def test_expm_krylov_2x2_exact() -> None:
+    """For a 2x2 Hermitian matrix, if numiter=2 (full dimension),
     expm_krylov should match the direct matrix exponential exactly.
     """
     A = np.array([[2.0, 1.0], [1.0, 3.0]])
@@ -97,9 +95,8 @@ def test_expm_krylov_2x2_exact():
     )
 
 
-def test_expm_krylov_smaller_subspace():
-    """
-    If numiter < dimension, the result might be approximate. We'll allow
+def test_expm_krylov_smaller_subspace() -> None:
+    """If numiter < dimension, the result might be approximate. We'll allow
     some tolerance, but it shouldn't be too far off for small dt.
     """
     A = np.array([[2.0, 1.0], [1.0, 3.0]])

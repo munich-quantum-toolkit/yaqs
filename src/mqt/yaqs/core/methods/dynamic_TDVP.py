@@ -6,17 +6,17 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
-from .TDVP import single_site_TDVP, two_site_TDVP
 
 from typing import TYPE_CHECKING
+
+from .TDVP import single_site_TDVP, two_site_TDVP
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS
 
 
-def dynamic_TDVP(state: MPS, H: MPO, sim_params):
-    """
-    Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
+def dynamic_TDVP(state: MPS, H: MPO, sim_params) -> None:
+    """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 
     Depending on the current bond dimension of the state, this function either performs a two-site TDVP (2TDVP) or a single-site TDVP (1TDVP) to evolve the state.
 

@@ -5,13 +5,15 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import pytest
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit, create_Heisenberg_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_Heisenberg_circuit, create_Ising_circuit
 
 
-def test_create_Ising_circuit_valid_even():
+def test_create_Ising_circuit_valid_even() -> None:
     # Use an even number of qubits.
     model = {"name": "Ising", "L": 4, "g": 0.5, "J": 1.0}
     dt = 0.1
@@ -31,7 +33,7 @@ def test_create_Ising_circuit_valid_even():
     assert rzz_count == 3 * timesteps
 
 
-def test_create_Ising_circuit_valid_odd():
+def test_create_Ising_circuit_valid_odd() -> None:
     # Use an odd number of qubits.
     model = {"name": "Ising", "L": 5, "g": 0.5, "J": 1.0}
     dt = 0.1
@@ -55,7 +57,7 @@ def test_create_Ising_circuit_valid_odd():
     assert rzz_count == 4
 
 
-def test_create_Ising_circuit_invalid_model():
+def test_create_Ising_circuit_invalid_model() -> None:
     # If the model name is not "Ising", an assertion error should occur.
     model = {"name": "Heisenberg", "L": 4, "g": 0.5, "J": 1.0}
     dt = 0.1
@@ -64,7 +66,7 @@ def test_create_Ising_circuit_invalid_model():
         create_Ising_circuit(model, dt, timesteps)
 
 
-def test_create_Heisenberg_circuit_valid_even():
+def test_create_Heisenberg_circuit_valid_even() -> None:
     # Use an even number of qubits.
     model = {"name": "Heisenberg", "L": 4, "Jx": 1.0, "Jy": 1.0, "Jz": 1.0, "h": 0.5}
     dt = 0.1
@@ -80,7 +82,7 @@ def test_create_Heisenberg_circuit_valid_even():
         assert gate in op_names
 
 
-def test_create_Heisenberg_circuit_valid_odd():
+def test_create_Heisenberg_circuit_valid_odd() -> None:
     # Use an odd number of qubits.
     model = {"name": "Heisenberg", "L": 5, "Jx": 1.0, "Jy": 1.0, "Jz": 1.0, "h": 0.5}
     dt = 0.1
@@ -95,7 +97,7 @@ def test_create_Heisenberg_circuit_valid_odd():
         assert gate in op_names
 
 
-def test_create_Heisenberg_circuit_invalid_model():
+def test_create_Heisenberg_circuit_invalid_model() -> None:
     # If the model name is not "Heisenberg", an assertion error should occur.
     model = {"name": "Ising", "L": 4, "Jx": 1.0, "Jy": 1.0, "Jz": 1.0, "h": 0.5}
     dt = 0.1

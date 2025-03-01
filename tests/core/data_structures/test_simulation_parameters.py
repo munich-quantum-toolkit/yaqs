@@ -5,13 +5,15 @@
 #
 # Licensed under the MIT License
 
-import pytest
+from __future__ import annotations
+
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
 
-def test_observable_creation_valid():
+def test_observable_creation_valid() -> None:
     name = "x"
     site = 0
     obs = Observable(name, site)
@@ -22,7 +24,7 @@ def test_observable_creation_valid():
     assert obs.trajectories is None
 
 
-def test_observable_creation_invalid():
+def test_observable_creation_invalid() -> None:
     name = "FakeName"
     with pytest.raises(AttributeError) as exc_info:
         Observable(name, 0)
@@ -30,7 +32,7 @@ def test_observable_creation_invalid():
     assert "has no attribute" in str(exc_info.value)
 
 
-def test_physics_simparams_basic():
+def test_physics_simparams_basic() -> None:
     obs_list = [Observable("x", 0)]
     T = 1.0
     dt = 0.2
@@ -45,10 +47,8 @@ def test_physics_simparams_basic():
     assert params.N == 50
 
 
-def test_physics_simparams_defaults():
-    """
-    Test default arguments and typical usage.
-    """
+def test_physics_simparams_defaults() -> None:
+    """Test default arguments and typical usage."""
     obs_list = []
     T = 2.0
     params = PhysicsSimParams(obs_list, T)
@@ -65,10 +65,8 @@ def test_physics_simparams_defaults():
     assert params.order == 1
 
 
-def test_observable_initialize_with_sample_timesteps():
-    """
-    Check shape of 'results' and 'trajectories' when sample_timesteps = True.
-    """
+def test_observable_initialize_with_sample_timesteps() -> None:
+    """Check shape of 'results' and 'trajectories' when sample_timesteps = True."""
     obs = Observable("x", 1)
     sim_params = PhysicsSimParams([obs], T=1.0, dt=0.5, sample_timesteps=True, N=10)
     # sim_params.times => [0.0, 0.5, 1.0]
@@ -79,10 +77,8 @@ def test_observable_initialize_with_sample_timesteps():
     assert obs.trajectories.shape == (sim_params.N, 3), "trajectories => (N, len(times))."
 
 
-def test_observable_initialize_without_sample_timesteps():
-    """
-    Check shape of 'results' and 'trajectories' when sample_timesteps = False.
-    """
+def test_observable_initialize_without_sample_timesteps() -> None:
+    """Check shape of 'results' and 'trajectories' when sample_timesteps = False."""
     obs = Observable("x", 0)
     sim_params = PhysicsSimParams([obs], T=1.0, dt=0.25, sample_timesteps=False, N=5)
     # times => [0.0, 0.25, 0.5, 0.75, 1.0]

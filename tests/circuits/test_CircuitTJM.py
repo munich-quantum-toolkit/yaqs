@@ -5,27 +5,29 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import copy
+
 import numpy as np
 import pytest
-
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
-from mqt.yaqs.core.data_structures.networks import MPS
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
 from mqt.yaqs.circuits.CircuitTJM import (
-    process_layer,
-    apply_single_qubit_gate,
-    construct_generator_MPO,
-    apply_window,
-    apply_two_qubit_gate,
     CircuitTJM,
+    apply_single_qubit_gate,
+    apply_two_qubit_gate,
+    apply_window,
+    construct_generator_MPO,
+    process_layer,
 )
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 
-def test_process_layer():
+def test_process_layer() -> None:
     # Create a QuantumCircuit with 9 qubits and 9 classical bits.
     qc = QuantumCircuit(9, 9)
     qc.measure(0, 0)
@@ -42,7 +44,7 @@ def test_process_layer():
 
     # After processing, the measurement and barrier nodes should have been removed.
     for node in dag.op_nodes():
-        assert node.op.name not in ["measure", "barrier"], f"Unexpected node {node.op.name} in the DAG op nodes."
+        assert node.op.name not in {"measure", "barrier"}, f"Unexpected node {node.op.name} in the DAG op nodes."
 
     # Verify that the single-qubit gate is in the single-qubit group.
     single_names = [node.op.name.lower() for node in single]
@@ -62,7 +64,7 @@ def test_process_layer():
         assert min(q0, q1) % 2 == 1, f"Node with qubits {q0, q1} not in odd group."
 
 
-def test_process_layer_unsupported_gate():
+def test_process_layer_unsupported_gate() -> None:
     # Create a QuantumCircuit with 9 qubits and 9 classical bits.
     qc = QuantumCircuit(3)
     qc.ccx(0, 1, 2)
@@ -75,7 +77,7 @@ def test_process_layer_unsupported_gate():
         process_layer(dag)
 
 
-def test_apply_single_qubit_gate():
+def test_apply_single_qubit_gate() -> None:
     mps = MPS(length=1)
     tensor = mps.tensors[0]
 
@@ -87,18 +89,18 @@ def test_apply_single_qubit_gate():
 
     apply_single_qubit_gate(mps, node)
 
-    gate_tensor = getattr(GateLibrary, "x").tensor
+    gate_tensor = GateLibrary.x.tensor
     expected = np.einsum("ab,bcd->acd", gate_tensor, tensor)
     np.testing.assert_allclose(mps.tensors[0], expected)
 
 
-def test_construct_generator_MPO():
-    gate = getattr(GateLibrary, "cx")()
+def test_construct_generator_MPO() -> None:
+    gate = GateLibrary.cx()
     gate.set_sites(1, 3)
     length = 5
     mpo, first_site, last_site = construct_generator_MPO(gate, length)
-    for tensor in mpo.tensors:
-        print(tensor)
+    for _tensor in mpo.tensors:
+        pass
     # The first and last sites should be 1 and 3.
     assert first_site == 1
     assert last_site == 3
@@ -107,18 +109,18 @@ def test_construct_generator_MPO():
     np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
     # All other tensors should be the identity.
     for i in range(length):
-        if i not in [1, 3]:
+        if i not in {1, 3}:
             np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
 
 
-def test_apply_window():
+def test_apply_window() -> None:
     # Create dummy MPS and MPO objects with 5 tensors.
     length = 5
     tensors = [np.full((2, 1, 1), i, dtype=complex) for i in range(5)]
     mps = MPS(length, tensors)
     mps.normalize()
 
-    gate = getattr(GateLibrary, "cx")()
+    gate = GateLibrary.cx()
     gate.set_sites(1, 2)
     mpo, first_site, last_site = construct_generator_MPO(gate, length)
 
@@ -137,7 +139,7 @@ def test_apply_window():
     assert short_mpo.length == 4
 
 
-def test_apply_two_qubit_gate_with_window():
+def test_apply_two_qubit_gate_with_window() -> None:
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()
@@ -160,7 +162,7 @@ def test_apply_two_qubit_gate_with_window():
     apply_two_qubit_gate(mps0, node, sim_params)
     # Check that at least one tensor has changed.
     for i, tensor in enumerate(mps0.tensors):
-        if i in [0, 3]:
+        if i in {0, 3}:
             np.testing.assert_allclose(np.abs(tensor), np.abs(orig_tensors[i]))
         else:
             with pytest.raises(AssertionError):
@@ -176,7 +178,7 @@ def test_apply_two_qubit_gate_with_window():
         np.testing.assert_allclose(tensor, mps0.tensors[i])
 
 
-def test_CircuitTJM_strong():
+def test_CircuitTJM_strong() -> None:
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()
@@ -194,7 +196,7 @@ def test_CircuitTJM_strong():
     CircuitTJM(args)
 
 
-def test_CircuitTJM_weak():
+def test_CircuitTJM_weak() -> None:
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()

@@ -5,7 +5,8 @@
 #
 # Licensed under the MIT License
 
-import pytest
+from __future__ import annotations
+
 from unittest.mock import patch
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
@@ -13,9 +14,8 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Phys
 from mqt.yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
 
 
-def test_dynamic_tdvp_one_site():
-    """
-    If current_max_bond_dim <= sim_params.max_bond_dim,
+def test_dynamic_tdvp_one_site() -> None:
+    """If current_max_bond_dim <= sim_params.max_bond_dim,
     dynamic_TDVP should call two_site_TDVP exactly once.
     """
     # Define the system Hamiltonian
@@ -46,9 +46,8 @@ def test_dynamic_tdvp_one_site():
         mock_single_site.assert_called_once_with(state, H, sim_params)
 
 
-def test_dynamic_tdvp_two_site():
-    """
-    If current_max_bond_dim <= sim_params.max_bond_dim,
+def test_dynamic_tdvp_two_site() -> None:
+    """If current_max_bond_dim <= sim_params.max_bond_dim,
     dynamic_TDVP should call two_site_TDVP exactly once.
     """
     # Define the system Hamiltonian

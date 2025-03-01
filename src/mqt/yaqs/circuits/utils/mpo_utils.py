@@ -6,23 +6,24 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit
+
     from ...core.data_structures.networks import MPO
     from ...core.libraries.gate_library import GateLibrary
 
 
 def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Performs an SVD-based decomposition of the tensor `theta`, truncating
+    """Performs an SVD-based decomposition of the tensor `theta`, truncating
     singular values below a specified threshold, and then reshapes the result
     into two rank-4 tensors.
 
@@ -55,8 +56,7 @@ def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np
 
 
 def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False) -> np.ndarray:
-    """
-    Applies a single- or two-qubit gate (or multi-qubit gate) from a GateLibrary object
+    """Applies a single- or two-qubit gate (or multi-qubit gate) from a GateLibrary object
     to the local tensor `theta`.
 
     Args:
@@ -70,12 +70,12 @@ def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, con
         The updated local tensor after applying the gate.
     """
     # Check gate site usage
-    assert gate.interaction in [1, 2], "Gate interaction must be 1 or 2."
+    assert gate.interaction in {1, 2}, "Gate interaction must be 1 or 2."
 
     if gate.interaction == 1:
-        assert gate.sites[0] in [site0, site1], "Single-qubit gate must be on one of the sites."
+        assert gate.sites[0] in {site0, site1}, "Single-qubit gate must be on one of the sites."
     elif gate.interaction == 2:
-        assert gate.sites[0] in [site0, site1] and gate.sites[1] in [site0, site1], (
+        assert gate.sites[0] in {site0, site1} and gate.sites[1] in {site0, site1}, (
             "Two-qubit gate must be on the correct pair of sites."
         )
 
@@ -135,8 +135,7 @@ def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, con
 
 
 def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False) -> np.ndarray:
-    """
-    Applies the temporal zone of `dag` to a local tensor `theta`.
+    """Applies the temporal zone of `dag` to a local tensor `theta`.
 
     Args:
         theta: The local tensor to which gates will be applied.
@@ -157,9 +156,8 @@ def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], c
     return theta
 
 
-def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float):
-    """
-    Applies the gates from `dag1` and `dag2` on the specified `qubits` in `mpo`,
+def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float) -> None:
+    """Applies the gates from `dag1` and `dag2` on the specified `qubits` in `mpo`,
     first with gates from `dag1`, then gates from `dag2`.
 
     Args:
@@ -180,7 +178,7 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
     if dag2:
         # Used to create MPO during circuit simulation
         # Dag1 comes from left, Dag2 comes from right
-        if dag1 == None:
+        if dag1 is None:
             theta = apply_temporal_zone(theta, dag2, qubits, conjugate=False)
         else:
             theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
@@ -191,9 +189,8 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
 
 def apply_layer(
     mpo: MPO, circuit1_dag: DAGCircuit, circuit2_dag: DAGCircuit, first_iterator, second_iterator, threshold: float
-):
-    """
-    Applies all gates for the current layer in two sweeps:
+) -> None:
+    """Applies all gates for the current layer in two sweeps:
     one using `first_iterator` and another using `second_iterator`.
 
     Args:
@@ -211,9 +208,8 @@ def apply_layer(
         update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
 
 
-def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjugate: bool, threshold: float):
-    """
-    Detects and applies a 'long-range' gate in the first layer of `dag1` (or `dag2`).
+def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjugate: bool, threshold: float) -> None:
+    """Detects and applies a 'long-range' gate in the first layer of `dag1` (or `dag2`).
     The logic here is partial/placeholder; you must fill in or adjust for your use case.
 
     Args:
@@ -225,10 +221,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjuga
     """
     # TODO: MPO on both sides
     # Identify gate and its position
-    if not conjugate:
-        dag_to_search = dag1
-    else:
-        dag_to_search = dag2
+    dag_to_search = dag1 if not conjugate else dag2
 
     for layer in dag_to_search.layers():
         first_layer = layer
@@ -276,10 +269,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjuga
 
     assert gate_MPO.length <= mpo.length
     # MPO_2 must be the larger MPO
-    if gate_MPO.length == mpo.length:
-        sites = range(0, mpo.length)
-    else:
-        sites = range(location, location + distance)
+    sites = range(mpo.length) if gate_MPO.length == mpo.length else range(location, location + distance)
 
     # TODO: Only contract first site with gate, then just SVD across chain to second gate tensor
     for site_gate_MPO, overall_site in enumerate(sites):
@@ -343,9 +333,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjuga
     assert not any(type(tensor) == np.ndarray for tensor in gate_MPO.tensors)
 
 
-def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float):
-    """
-    Iteratively applies gates from `dag1` and `dag2` layer by layer
+def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> None:
+    """Iteratively applies gates from `dag1` and `dag2` layer by layer
     until no gates remain in either DAGCircuit.
 
     Args:
@@ -365,7 +354,7 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float):
         largest_distance1 = check_longest_gate(dag1)
         largest_distance2 = check_longest_gate(dag2)
         # If all gates are nearest-neighbor (distance <= 2), apply standard layer
-        if largest_distance1 in [1, 2] and largest_distance2 in [1, 2]:
+        if largest_distance1 in {1, 2} and largest_distance2 in {1, 2}:
             apply_layer(mpo, dag1, dag2, first_iterator, second_iterator, threshold)
         else:
             # Handle a gate that is longer than 2 sites

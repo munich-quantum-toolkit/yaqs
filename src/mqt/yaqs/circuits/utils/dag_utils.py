@@ -6,21 +6,21 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
-from qiskit.dagcircuit import DAGOpNode
-from qiskit.converters import dag_to_circuit
-
-from ...core.libraries.gate_library import GateLibrary
 
 from typing import TYPE_CHECKING
 
+from qiskit.converters import dag_to_circuit
+from qiskit.dagcircuit import DAGOpNode
+
+from ...core.libraries.gate_library import GateLibrary
+
 if TYPE_CHECKING:
-    from qiskit.dagcircuit import DAGCircuit
     import numpy as np
+    from qiskit.dagcircuit import DAGCircuit
 
 
 def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
-    """
-    Converts a DAGCircuit into a list of gate objects from the GateLibrary.
+    """Converts a DAGCircuit into a list of gate objects from the GateLibrary.
 
     Args:
         dag: The DAGCircuit (or a single DAGOpNode) representing a quantum operation.
@@ -44,8 +44,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
         if len(gate.qargs) == 2:
             sites.append(gate.qargs[1]._index)
         if len(gate.qargs) == 3:
-            sites.append(gate.qargs[1]._index)
-            sites.append(gate.qargs[2]._index)
+            sites.extend((gate.qargs[1]._index, gate.qargs[2]._index))
 
         gate_object.set_sites(*sites)
         algorithm.append(gate_object)
@@ -53,7 +52,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
         # Multi-node DAG
         for gate in dag.op_nodes():
             name = gate.op.name
-            if name in ["measure", "barrier"]:
+            if name in {"measure", "barrier"}:
                 continue
 
             attr = getattr(GateLibrary, name)
@@ -76,8 +75,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
 
 
 def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
-    """
-    Extracts the temporal zone from a DAGCircuit for the specified qubits.
+    """Extracts the temporal zone from a DAGCircuit for the specified qubits.
     The temporal zone is the subset of operations acting only on these qubits
     until they no longer participate in further gates.
 
@@ -92,8 +90,7 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
     new_dag = dag.copy_empty_like()
     layers = list(dag.multigraph_layers())
     qubits_to_check = set()
-    for qubit in range(min(qubits), max(qubits) + 1):
-        qubits_to_check.add(dag.qubits[qubit])
+    qubits_to_check.update(dag.qubits[qubit] for qubit in range(min(qubits), max(qubits) + 1))
 
     for layer in layers:
         for node in layer:
@@ -102,14 +99,14 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
 
                 # Gate is entirely within cone
                 if qubit_set <= qubits_to_check:
-                    if node.op.name in ["measure", "barrier"]:
+                    if node.op.name in {"measure", "barrier"}:
                         dag.remove_op_node(node)
                         continue
                     new_dag.apply_operation_back(node.op, node.qargs)
                     dag.remove_op_node(node)
                 else:
                     # If there is partial overlap, remove those qubits from the cone
-                    if node.op.name in ["measure", "barrier"]:
+                    if node.op.name in {"measure", "barrier"}:
                         dag.remove_op_node(node)
                         continue
                     for item in qubit_set & qubits_to_check:
@@ -123,8 +120,7 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
 
 
 def check_longest_gate(dag: DAGCircuit) -> int:
-    """
-    Checks the maximum 'distance' between qubits in any multi-qubit gate
+    """Checks the maximum 'distance' between qubits in any multi-qubit gate
     present in the first layer of the DAGCircuit.
 
     Args:
@@ -146,15 +142,13 @@ def check_longest_gate(dag: DAGCircuit) -> int:
         for gate in layer_circuit.data:
             if gate.operation.num_qubits > 1:
                 distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1
-                if distance > largest_distance:
-                    largest_distance = distance
+                largest_distance = max(largest_distance, distance)
 
     return largest_distance
 
 
 def select_starting_point(N: int, dag: DAGCircuit) -> range:
-    """
-    Determines which set of neighboring qubits (even-even or odd-odd) to start with
+    """Determines which set of neighboring qubits (even-even or odd-odd) to start with
     based on the arrangement of gates in the first layer of the DAG.
 
     Args:

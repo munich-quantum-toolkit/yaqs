@@ -5,31 +5,36 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import copy
 import time
-import numpy as np
+from typing import TYPE_CHECKING
+
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.ticker import MaxNLocator
-from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
-from qiskit.circuit import QuantumCircuit
+from qiskit.quantum_info import Operator, Pauli, Statevector
 from qiskit_aer import AerSimulator
-from qiskit.quantum_info import Statevector, Operator, Pauli
 
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
-from mqt.yaqs import Simulator
+from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+
+if TYPE_CHECKING:
+    from qiskit.circuit import QuantumCircuit
 
 
 def run(
     input_ircuit: QuantumCircuit,
     style: str = "dots",
-    max_bond_dims=[2, 4, 8, 16, 32],
-    window_sizes=[0, 1, 2, 3, 4],
-    thresholds=[1e-3, 1e-6, 1e-9, 1e-12, 1e-16],
-):
-    """
-    Benchmark an arbitrary quantum circuit by comparing a Qiskit exact simulation
+    max_bond_dims=None,
+    window_sizes=None,
+    thresholds=None,
+) -> None:
+    """Benchmark an arbitrary quantum circuit by comparing a Qiskit exact simulation
     with approximate simulations using various simulation parameters.
 
     Parameters:
@@ -45,8 +50,13 @@ def run(
     that are stacked along the bond dimension axis. The face color of each plane encodes the absolute
     error (left) or runtime (right).
     """
-
     # Create a deep copy for the exact simulation and prepare it.
+    if thresholds is None:
+        thresholds = [0.001, 1e-06, 1e-09, 1e-12, 1e-16]
+    if window_sizes is None:
+        window_sizes = [0, 1, 2, 3, 4]
+    if max_bond_dims is None:
+        max_bond_dims = [2, 4, 8, 16, 32]
     circuit_exact = copy.deepcopy(input_ircuit)
     circuit_exact.reverse_bits()
     circuit_exact.save_statevector()  # Instruct the simulator to save the statevector.
@@ -167,7 +177,7 @@ def run(
 
         # Fill the dictionaries with the simulation results.
         k = 0
-        for i, w in enumerate(used_windows):
+        for i in range(len(used_windows)):
             for bd in used_bond_dims:
                 for j, _ in enumerate(thresholds):
                     error_dict[bd][i, j] = errors[k]
@@ -190,7 +200,7 @@ def run(
             # Create a plane at x = bond_dim.
             X_plane = np.full(Y.shape, bd)
             facecolors = cmap_err(norm_err(error_dict[bd]))
-            surf = ax1.plot_surface(
+            ax1.plot_surface(
                 X_plane,
                 Y,
                 Z,
@@ -234,7 +244,7 @@ def run(
         for bd in used_bond_dims:
             X_plane = np.full(Y.shape, bd)
             facecolors_rt = cmap_rt(norm_rt(runtime_dict[bd]))
-            surf2 = ax2.plot_surface(
+            ax2.plot_surface(
                 X_plane,
                 Y,
                 Z,

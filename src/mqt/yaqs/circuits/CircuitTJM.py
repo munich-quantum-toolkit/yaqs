@@ -6,20 +6,20 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
+
 import copy
+from typing import TYPE_CHECKING
+
 import numpy as np
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO, MPS
-from ..core.methods.dynamic_TDVP import dynamic_TDVP
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.stochastic_process import stochastic_process
+from ..core.methods.dynamic_TDVP import dynamic_TDVP
 from ..core.methods.operations import measure
+from ..core.methods.stochastic_process import stochastic_process
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
-
-
-from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
@@ -37,7 +37,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     # Separate the current layer into single-qubit and two-qubit gates.
     for node in current_layer:
         # Remove measurement and barrier nodes.
-        if node.op.name in ["measure", "barrier"]:
+        if node.op.name in {"measure", "barrier"}:
             dag.remove_op_node(node)
             continue
 
@@ -52,17 +52,18 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
                 odd_nodes.append(node)
         else:
             # TODO: Multi-qubit gates
-            raise Exception("Only single- and two-qubit gates are currently supported.")
+            msg = "Only single- and two-qubit gates are currently supported."
+            raise Exception(msg)
 
     return single_qubit_nodes, even_nodes, odd_nodes
 
 
-def apply_single_qubit_gate(state: MPS, node: DAGOpNode):
+def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
     gate = convert_dag_to_tensor_algorithm(node)[0]
     state.tensors[gate.sites[0]] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[gate.sites[0]])
 
 
-def construct_generator_MPO(gate, length: int) -> MPO | int | int:
+def construct_generator_MPO(gate, length: int) -> MPO | int:
     tensors = []
 
     first_site = min(gate.sites)
@@ -98,10 +99,8 @@ def construct_generator_MPO(gate, length: int) -> MPO | int | int:
 def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, sim_params) -> tuple[MPS, MPO, list[int]]:
     # Define a window for a local update.
     window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
-    if window[0] < 0:
-        window[0] = 0
-    if window[1] > state.length - 1:
-        window[1] = state.length - 1
+    window[0] = max(window[0], 0)
+    window[1] = min(window[1], state.length - 1)
 
     # Shift the orthogonality center for sites before the window.
     for i in range(window[0]):
@@ -115,7 +114,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, sim_para
     return short_state, short_mpo, window
 
 
-def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params):
+def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params) -> None:
     gate = convert_dag_to_tensor_algorithm(node)[0]
 
     # Construct the MPO for the two-qubit gate.
@@ -132,9 +131,9 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params):
 
 
 def CircuitTJM(args):
-    from ..core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+    from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
-    i, initial_state, noise_model, sim_params, circuit = args
+    _i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
 
     if isinstance(sim_params, StrongSimParams):
@@ -162,10 +161,9 @@ def CircuitTJM(args):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             # All shots can be done at once in noise-free model
             return measure(state, sim_params.shots)
-        else:
-            # Each shot is an individual trajectory
-            return measure(state, shots=1)
-    elif isinstance(sim_params, StrongSimParams):
+        # Each shot is an individual trajectory
+        return measure(state, shots=1)
+    if isinstance(sim_params, StrongSimParams):
         temp_state = copy.deepcopy(state)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
@@ -175,3 +173,4 @@ def CircuitTJM(args):
                 last_site = observable.site
             results[obs_index, 0] = temp_state.measure(observable)
         return results
+    return None

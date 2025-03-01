@@ -6,20 +6,20 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 import opt_einsum as oe
 
 from .matrix_exponential import expm_krylov
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS
 
 
 def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float = 0) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
+    """Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
 
     The input tensor is assumed to have a composite physical index of dimension d0*d1 and virtual dimensions D0 and D2,
     i.e. its shape is (d0*d1, D0, D2). The function reshapes and splits it into two tensors:
@@ -42,7 +42,8 @@ def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float
     """
     # Check that the physical dimension can be equally split
     if tensor.shape[0] % 2 != 0:
-        raise ValueError("The first dimension of the tensor must be divisible by 2.")
+        msg = "The first dimension of the tensor must be divisible by 2."
+        raise ValueError(msg)
 
     # Reshape the tensor from (d0*d1, D0, D2) to (d0, d1, D0, D2) and then transpose to bring
     # the left virtual dimension next to the first physical index:
@@ -77,17 +78,18 @@ def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float
     # Distribute the singular values according to the chosen option
     if svd_distribution == "left":
         # Multiply the left tensor by sigma (broadcasting over the singular value dimension)
-        A0 = A0 * sigma
+        A0 *= sigma
     elif svd_distribution == "right":
         # Multiply the right tensor by sigma. We add extra dimensions for proper broadcasting.
-        A1 = A1 * sigma[:, None, None]
+        A1 *= sigma[:, None, None]
     elif svd_distribution == "sqrt":
         # Multiply both tensors by the square root of the singular values.
         sqrt_sigma = np.sqrt(sigma)
-        A0 = A0 * sqrt_sigma
-        A1 = A1 * sqrt_sigma[:, None, None]
+        A0 *= sqrt_sigma
+        A1 *= sqrt_sigma[:, None, None]
     else:
-        raise ValueError('svd_distribution parameter must be "left", "right", or "sqrt".')
+        msg = 'svd_distribution parameter must be "left", "right", or "sqrt".'
+        raise ValueError(msg)
 
     # Adjust the ordering of indices in A1 so that the physical dimension comes first:
     # Change from (num_sv, d1, D2) to (d1, num_sv, D2)
@@ -97,8 +99,7 @@ def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float
 
 
 def merge_mps_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
-    """
-    Merge two neighboring MPS tensors into one.
+    """Merge two neighboring MPS tensors into one.
 
     The tensors A0 and A1 are contracted using opt_einsum. The contraction pattern is chosen so that
     the resulting tensor has its two physical dimensions still separated and later can be reshaped back if needed.
@@ -118,13 +119,11 @@ def merge_mps_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
     merged_tensor = oe.contract("abc,dce->adbe", A0, A1)
     # Combine the two physical dimensions into one by reshaping:
     merged_shape = merged_tensor.shape
-    merged_tensor = merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
-    return merged_tensor
+    return merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
 
 
 def merge_mpo_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
-    """
-    Merge two neighboring MPO tensors into one.
+    """Merge two neighboring MPO tensors into one.
 
     The contraction is performed over the appropriate bond indices, and then the resulting tensor
     is reshaped to combine the physical indices from the two tensors.
@@ -140,13 +139,11 @@ def merge_mpo_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
     merged_tensor = oe.contract("acei,bdif->abcdef", A0, A1, optimize=True)
     # Reshape to combine the original physical indices:
     s = merged_tensor.shape
-    merged_tensor = merged_tensor.reshape((s[0] * s[1], s[2] * s[3], s[4], s[5]))
-    return merged_tensor
+    return merged_tensor.reshape((s[0] * s[1], s[2] * s[3], s[4], s[5]))
 
 
 def update_right_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, R: np.ndarray) -> np.ndarray:
-    r"""
-    Perform a contraction step from right to left with an operator inserted.
+    r"""Perform a contraction step from right to left with an operator inserted.
 
     The network structure (indices shown for contracted bonds) is illustrated below:
 
@@ -193,13 +190,11 @@ def update_right_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, R: np.
     # interchange levels 0 <-> 2 in T
     T = T.transpose((2, 1, 0, 3))
     # multiply with conjugated B tensor
-    Rnext = np.tensordot(T, B.conj(), axes=((2, 3), (0, 2)))
-    return Rnext
+    return np.tensordot(T, B.conj(), axes=((2, 3), (0, 2)))
 
 
 def update_left_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, L: np.ndarray) -> np.ndarray:
-    r"""
-    Perform a contraction step from left to right with an operator inserted.
+    r"""Perform a contraction step from left to right with an operator inserted.
 
     The network structure is illustrated below:
 
@@ -239,13 +234,11 @@ def update_left_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, L: np.n
     # Step 2: Contract with the MPO tensor W.
     T = np.tensordot(W, T, axes=((0, 2), (2, 1)))
     # Step 3: Contract the resulting tensor with tensor A.
-    Lnext = np.tensordot(A, T, axes=((0, 1), (0, 2)))
-    return Lnext
+    return np.tensordot(A, T, axes=((0, 1), (0, 2)))
 
 
 def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
-    """
-    Compute the right operator blocks (partial contractions) for the given MPS and MPO.
+    """Compute the right operator blocks (partial contractions) for the given MPS and MPO.
 
     Starting from the rightmost site, an identity operator is constructed and then
     the network is contracted site-by-site moving to the left.
@@ -259,7 +252,8 @@ def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
     """
     num_sites = psi.length
     if num_sites != op.length:
-        raise ValueError("The lengths of the state and the operator must match.")
+        msg = "The lengths of the state and the operator must match."
+        raise ValueError(msg)
 
     # Initialize the list to store right operator blocks.
     right_blocks = [None for _ in range(num_sites)]
@@ -283,8 +277,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
 
 
 def project_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray) -> np.ndarray:
-    r"""
-    Apply the local Hamiltonian operator on a tensor A.
+    r"""Apply the local Hamiltonian operator on a tensor A.
 
     The operation contracts the tensor network composed of the left operator block L,
     the MPO tensor W, the tensor A, and the right operator block R.
@@ -311,13 +304,11 @@ def project_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray) -> 
     # Contract with the left operator block L.
     T = np.tensordot(T, L, axes=((2, 1), (0, 1)))
     # Permute indices to obtain the correct output order.
-    T = T.transpose((0, 2, 1))
-    return T
+    return T.transpose((0, 2, 1))
 
 
 def project_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray) -> np.ndarray:
-    r"""
-    Apply the "zero-site" bond contraction between two operator blocks L and R using a bond tensor C.
+    r"""Apply the "zero-site" bond contraction between two operator blocks L and R using a bond tensor C.
 
     The contraction sequence is:
       1. Contract C with the right operator block R.
@@ -334,13 +325,11 @@ def project_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray) -> np.ndarray:
     # Contract bond tensor C with R.
     T = np.tensordot(C, R, axes=1)
     # Contract with the left operator block L.
-    T = np.tensordot(L, T, axes=((0, 1), (0, 1)))
-    return T
+    return np.tensordot(L, T, axes=((0, 1), (0, 1)))
 
 
 def update_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray, dt: float, numiter: int) -> np.ndarray:
-    """
-    Evolve the local MPS tensor A forward in time using the local Hamiltonian.
+    """Evolve the local MPS tensor A forward in time using the local Hamiltonian.
 
     This function applies a Lanczos-based exponential of the local Hamiltonian on tensor A.
     The effective operator is defined via a lambda function wrapping project_site.
@@ -363,8 +352,7 @@ def update_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray, dt: 
 
 
 def update_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray, dt: float, numiter: int) -> np.ndarray:
-    """
-    Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
+    """Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
 
     Args:
         L: Left operator block.
@@ -381,9 +369,8 @@ def update_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray, dt: float, numiter:
     return evolved_C_flat.reshape(C.shape)
 
 
-def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
-    """
-    Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
+def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25) -> None:
+    """Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
 
     The state (MPS) is evolved in time (in-place) by sequentially updating each site tensor.
     The evolution is split into left-to-right and right-to-left sweeps. In each sweep,
@@ -403,11 +390,12 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         "Unifying time evolution and optimization with matrix product states",
         Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
     """
-    from ..data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+    from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
     num_sites = H.length
     if num_sites != state.length:
-        raise ValueError("The state and Hamiltonian must have the same number of sites.")
+        msg = "The state and Hamiltonian must have the same number of sites."
+        raise ValueError(msg)
 
     # Compute the right operator blocks for the entire chain.
     right_blocks = initialize_right_environments(state, H)
@@ -496,9 +484,8 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         )
 
 
-def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
-    """
-    Perform symmetric two-site TDVP integration.
+def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25) -> None:
+    """Perform symmetric two-site TDVP integration.
 
     This function evolves the MPS by updating two neighboring sites simultaneously.
     The evolution includes merging the two site tensors, applying the local Hamiltonian,
@@ -519,13 +506,15 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
         "Unifying time evolution and optimization with matrix product states",
         Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
     """
-    from ..data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+    from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
     num_sites = H.length
     if num_sites != state.length:
-        raise ValueError("State and Hamiltonian must have the same number of sites")
+        msg = "State and Hamiltonian must have the same number of sites"
+        raise ValueError(msg)
     if num_sites < 2:
-        raise ValueError("Hamiltonian is too short for a two-site update (2TDVP).")
+        msg = "Hamiltonian is too short for a two-site update (2TDVP)."
+        raise ValueError(msg)
 
     # Compute the right operator blocks.
     right_blocks = initialize_right_environments(state, H)

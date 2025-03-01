@@ -5,19 +5,22 @@
 #
 # Licensed under the MIT License
 
-import pytest
+from __future__ import annotations
 
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
-from mqt.yaqs.circuits.utils.dag_utils import check_longest_gate
-from mqt.yaqs.circuits.utils.dag_utils import get_temporal_zone
-from mqt.yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
-from mqt.yaqs.circuits.utils.dag_utils import select_starting_point
+
+from mqt.yaqs.circuits.utils.dag_utils import (
+    check_longest_gate,
+    convert_dag_to_tensor_algorithm,
+    get_temporal_zone,
+    select_starting_point,
+)
 
 
-def test_convert_dag_to_tensor_algorithm_single_qubit_gate():
+def test_convert_dag_to_tensor_algorithm_single_qubit_gate() -> None:
     qc = QuantumCircuit(1)
     qc.x(0)
     dag = circuit_to_dag(qc)
@@ -29,7 +32,7 @@ def test_convert_dag_to_tensor_algorithm_single_qubit_gate():
     assert gate.sites == [0], "Gate should act on qubit 0."
 
 
-def test_convert_dag_to_tensor_algorithm_two_qubit_gate():
+def test_convert_dag_to_tensor_algorithm_two_qubit_gate() -> None:
     qc = QuantumCircuit(2)
     qc.cx(0, 1)
     dag = circuit_to_dag(qc)
@@ -37,11 +40,11 @@ def test_convert_dag_to_tensor_algorithm_two_qubit_gate():
     gates = convert_dag_to_tensor_algorithm(dag)
     assert len(gates) == 1, "Should have one 2-qubit gate (CX)."
     gate = gates[0]
-    assert gate.name.lower() in ["cx", "cnot"], "Gate name should match CX/CNOT."
+    assert gate.name.lower() in {"cx", "cnot"}, "Gate name should match CX/CNOT."
     assert gate.sites == [0, 1], "Gate should act on qubits 0 and 1."
 
 
-def test_convert_dag_to_tensor_algorithm_two_qubit_gate_flipped():
+def test_convert_dag_to_tensor_algorithm_two_qubit_gate_flipped() -> None:
     qc = QuantumCircuit(2)
     qc.cx(1, 0)
     dag = circuit_to_dag(qc)
@@ -49,11 +52,11 @@ def test_convert_dag_to_tensor_algorithm_two_qubit_gate_flipped():
     gates = convert_dag_to_tensor_algorithm(dag)
     assert len(gates) == 1, "Should have one 2-qubit gate (CX)."
     gate = gates[0]
-    assert gate.name.lower() in ["cx", "cnot"], "Gate name should match CX/CNOT."
+    assert gate.name.lower() in {"cx", "cnot"}, "Gate name should match CX/CNOT."
     assert gate.sites == [1, 0], "Gate should act on qubits 0 and 1."
 
 
-def test_convert_dag_to_tensor_algorithm_single_dagopnode():
+def test_convert_dag_to_tensor_algorithm_single_dagopnode() -> None:
     qc = QuantumCircuit(1)
     qc.rx(np.pi / 4, 0)
     dag = circuit_to_dag(qc)
@@ -68,7 +71,7 @@ def test_convert_dag_to_tensor_algorithm_single_dagopnode():
     assert gate.sites == [0], "Gate acts on qubit 0."
 
 
-def test_convert_dag_to_tensor_algorithm_ignores_measure_barrier():
+def test_convert_dag_to_tensor_algorithm_ignores_measure_barrier() -> None:
     qc = QuantumCircuit(2)
     qc.x(0)
     qc.barrier()
@@ -81,7 +84,7 @@ def test_convert_dag_to_tensor_algorithm_ignores_measure_barrier():
     assert gate.name.lower() == "x"
 
 
-def test_get_temporal_zone_simple():
+def test_get_temporal_zone_simple() -> None:
     qc = QuantumCircuit(3)
     qc.x(0)
     qc.x(1)
@@ -93,7 +96,7 @@ def test_get_temporal_zone_simple():
     assert len(new_nodes) == 2, "Should only have the 2 single-qubit gates in the zone."
 
 
-def test_check_longest_gate():
+def test_check_longest_gate() -> None:
     qc = QuantumCircuit(3)
     qc.cx(0, 2)
     qc.cx(0, 1)
@@ -103,7 +106,7 @@ def test_check_longest_gate():
     assert dist == 3, f"Longest distance should be 3, got {dist}"
 
 
-def test_select_starting_point_even_odd():
+def test_select_starting_point_even_odd() -> None:
     N = 4
     qc = QuantumCircuit(N)
     qc.cx(0, 1)
@@ -114,7 +117,7 @@ def test_select_starting_point_even_odd():
     assert second_iter == range(1, 3, 2), "Then the odd qubit pairs."
 
 
-def test_select_starting_point_odd():
+def test_select_starting_point_odd() -> None:
     N = 4
     qc = QuantumCircuit(N)
     qc.cx(1, 2)

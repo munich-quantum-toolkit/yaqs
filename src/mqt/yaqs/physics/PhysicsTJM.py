@@ -6,14 +6,15 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
+
 import copy
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.dynamic_TDVP import dynamic_TDVP
 from ..core.methods.stochastic_process import stochastic_process
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..core.data_structures.networks import MPO, MPS
@@ -22,8 +23,7 @@ if TYPE_CHECKING:
 
 
 def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
-    """
-    Initialize the sampling MPS for second-order Trotterization.
+    """Initialize the sampling MPS for second-order Trotterization.
     Corresponds to F0 in the TJM paper.
 
     Args:
@@ -39,8 +39,7 @@ def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams
 
 
 def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
-    """
-    Perform a single time step of the TJM of the system state.
+    """Perform a single time step of the TJM of the system state.
     Corresponds to Fj in the TJM paper.
 
     Args:
@@ -58,8 +57,7 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: Physic
 
 
 def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams, results: np.ndarray, j: int) -> MPS:
-    """
-    Sample the quantum state and measure an observable from the sampling MPS.
+    """Sample the quantum state and measure an observable from the sampling MPS.
     Corresponds to Fn in the TJM paper.
 
     Args:
@@ -96,8 +94,7 @@ def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimPara
 
 
 def PhysicsTJM_2(args):
-    """
-    Run a single trajectory of the TJM.
+    """Run a single trajectory of the TJM.
 
     Args:
         args (tuple): Tuple containing index, initial state, noise model, simulation parameters, observables, sites, and Hamiltonian.
@@ -105,7 +102,7 @@ def PhysicsTJM_2(args):
     Returns:
         list: Expectation values for the trajectory over time.
     """
-    i, initial_state, noise_model, sim_params, H = args
+    _i, initial_state, noise_model, sim_params, H = args
 
     # Create deep copies of the shared inputs to avoid race conditions
     state = copy.deepcopy(initial_state)
@@ -124,16 +121,14 @@ def PhysicsTJM_2(args):
 
     for j, _ in enumerate(sim_params.times[2:], start=2):
         phi = step_through(phi, H, noise_model, sim_params)
-        if sim_params.sample_timesteps:
-            sample(phi, H, noise_model, sim_params, results, j)
-        elif j == len(sim_params.times) - 1:
+        if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
             sample(phi, H, noise_model, sim_params, results, j)
 
     return results
 
 
 def PhysicsTJM_1(args):
-    i, initial_state, noise_model, sim_params, H = args
+    _i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
 
     if sim_params.sample_timesteps:

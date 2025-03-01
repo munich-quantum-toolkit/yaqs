@@ -5,15 +5,17 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import pytest
 from qiskit import QuantumCircuit
+
 from mqt.yaqs.circuits.equivalence_checker import run
 
 
-@pytest.mark.parametrize("threshold,fidelity", [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
-def test_identity_vs_identity(threshold, fidelity):
-    """
-    Two empty (no-gate) circuits on the same number of qubits
+@pytest.mark.parametrize(("threshold", "fidelity"), [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
+def test_identity_vs_identity(threshold, fidelity) -> None:
+    """Two empty (no-gate) circuits on the same number of qubits
     should be equivalent.
     """
     num_qubits = 2
@@ -57,9 +59,8 @@ def test_identity_vs_identity(threshold, fidelity):
 # #     assert result['equivalent'] is False, "Different single-qubit gates (H vs X) are not equivalent."
 
 
-def test_two_qubit_equivalence():
-    """
-    Two-qubit circuits that implement the same logical operation
+def test_two_qubit_equivalence() -> None:
+    """Two-qubit circuits that implement the same logical operation
     should be equivalent. Here we create a simple entangling circuit
     in two different ways but ensuring the final unitary is the same.
     """
@@ -77,9 +78,8 @@ def test_two_qubit_equivalence():
     assert result["equivalent"] is True, "Identical 2-qubit circuits must be equivalent."
 
 
-def test_two_qubit_non_equivalence():
-    """
-    Two-qubit circuits that differ by an extra gate
+def test_two_qubit_non_equivalence() -> None:
+    """Two-qubit circuits that differ by an extra gate
     or a different gate location are not equivalent.
     """
     qc1 = QuantumCircuit(2)
@@ -95,9 +95,8 @@ def test_two_qubit_non_equivalence():
     assert result["equivalent"] is False, "Extra gate should break equivalence."
 
 
-def test_long_range_equivalence():
-    """
-    Two-qubit circuits that differ by an extra gate
+def test_long_range_equivalence() -> None:
+    """Two-qubit circuits that differ by an extra gate
     or a different gate location are not equivalent.
     """
     qc1 = QuantumCircuit(3)
@@ -112,9 +111,8 @@ def test_long_range_equivalence():
     assert result["equivalent"] is True, "Long-range test not equivalent."
 
 
-def test_long_range_non_equivalence():
-    """
-    Two-qubit circuits that differ by an extra gate
+def test_long_range_non_equivalence() -> None:
+    """Two-qubit circuits that differ by an extra gate
     or a different gate location are not equivalent.
     """
     qc1 = QuantumCircuit(3)

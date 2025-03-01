@@ -5,7 +5,10 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import copy
+
 import numpy as np
 import pytest
 
@@ -13,16 +16,14 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
-
-I = getattr(GateLibrary, "id").matrix
-X = getattr(GateLibrary, "x").matrix
-Y = getattr(GateLibrary, "y").matrix
-Z = getattr(GateLibrary, "z").matrix
+I = GateLibrary.id.matrix
+X = GateLibrary.x.matrix
+Y = GateLibrary.y.matrix
+Z = GateLibrary.z.matrix
 
 
 def untranspose_block(mpo_tensor):
-    """
-    MPO tensors are stored as (sigma, sigma', row, col).
+    """MPO tensors are stored as (sigma, sigma', row, col).
     This function reverses that transpose to get (row, col, sigma, sigma').
     That way, we can interpret row x col as a block matrix of operators.
     """
@@ -32,7 +33,7 @@ def untranspose_block(mpo_tensor):
 ################################################
 # Tests for the MPO class
 ################################################
-def test_init_Ising():
+def test_init_Ising() -> None:
     """Test that init_Ising creates the correct number, shape, and values."""
     mpo = MPO()
     length = 4
@@ -103,7 +104,7 @@ def test_init_Ising():
     assert np.allclose(block_I, I)
 
 
-def test_init_Heisenberg():
+def test_init_Heisenberg() -> None:
     """Test that init_Heisenberg creates the correct number, shape, and values."""
     mpo = MPO()
     length = 5
@@ -155,7 +156,7 @@ def test_init_Heisenberg():
             assert tensor.shape == (2, 2, 5, 5)
 
 
-def test_init_identity():
+def test_init_identity() -> None:
     """Test init_identity builds uniform tensors for the specified length and checks actual values."""
     mpo = MPO()
     length = 3
@@ -172,7 +173,7 @@ def test_init_identity():
         assert np.allclose(np.squeeze(tensor), I)
 
 
-def test_init_custom_Hamiltonian():
+def test_init_custom_Hamiltonian() -> None:
     """Test that a custom Hamiltonian can be initialized, verifying shape and partial values."""
     length = 4
     pdim = 2
@@ -200,7 +201,7 @@ def test_init_custom_Hamiltonian():
     assert np.allclose(mpo.tensors[-1], np.transpose(right_bound, (2, 3, 0, 1)))
 
 
-def test_init_custom():
+def test_init_custom() -> None:
     """Test init_custom with a user-provided list of tensors, checking shapes and values."""
     length = 3
     pdim = 2
@@ -222,7 +223,7 @@ def test_init_custom():
         assert np.allclose(original, created)
 
 
-def test_convert_to_MPS():
+def test_convert_to_MPS() -> None:
     """Test converting an MPO to MPS."""
     mpo = MPO()
     length = 3
@@ -250,7 +251,7 @@ def test_convert_to_MPS():
         assert tensor.shape == (pdim2, bond_in, bond_out)
 
 
-def test_check_if_valid_MPO():
+def test_check_if_valid_MPO() -> None:
     """Test that a valid MPO passes the check_if_valid_MPO method without error."""
     mpo = MPO()
     length = 4
@@ -262,7 +263,7 @@ def test_check_if_valid_MPO():
     mpo.check_if_valid_MPO()
 
 
-def test_rotate():
+def test_rotate() -> None:
     """Test the rotate method and ensure shapes remain consistent."""
     mpo = MPO()
     length = 3
@@ -287,7 +288,7 @@ def test_rotate():
         assert tensor.shape == (2, 2, tensor.shape[2], tensor.shape[3])
 
 
-def test_check_if_identity():
+def test_check_if_identity() -> None:
     mpo = MPO()
     length = 3
     pdim = 2
@@ -305,9 +306,8 @@ def test_check_if_identity():
 
 
 @pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall"])
-def test_mps_initialization(state):
-    """
-    Test that MPS initializes a chain of a given length with correct
+def test_mps_initialization(state) -> None:
+    """Test that MPS initializes a chain of a given length with correct
     shapes and the specified default state.
     """
     length = 4
@@ -325,10 +325,8 @@ def test_mps_initialization(state):
         assert tensor.shape[2] == 1
 
 
-def test_mps_custom_tensors():
-    """
-    Test providing custom tensors at initialization (bypassing the default state creation).
-    """
+def test_mps_custom_tensors() -> None:
+    """Test providing custom tensors at initialization (bypassing the default state creation)."""
     length = 3
     pdim = 2
     # Create random rank-3 tensors: shape = (pdim, bond_in, bond_out).
@@ -344,10 +342,8 @@ def test_mps_custom_tensors():
         assert np.allclose(tensor, tensors[i])
 
 
-def test_write_max_bond_dim():
-    """
-    Test that write_max_bond_dim returns the maximum bond dimension over all tensors.
-    """
+def test_write_max_bond_dim() -> None:
+    """Test that write_max_bond_dim returns the maximum bond dimension over all tensors."""
     length = 3
     pdim = 2
     # Construct an MPS with different bond dims
@@ -360,10 +356,8 @@ def test_write_max_bond_dim():
     assert max_bond == 5  # The largest dimension among (1,4,5,5,2) is 5.
 
 
-def test_flip_network():
-    """
-    Test flipping the MPS bond dimensions and reversing site order.
-    """
+def test_flip_network() -> None:
+    """Test flipping the MPS bond dimensions and reversing site order."""
     length = 3
     pdim = 2
     # shape = (pdim, bond_in, bond_out)
@@ -392,9 +386,8 @@ def test_flip_network():
         assert np.allclose(orig, now)
 
 
-def test_shift_orthogonality_center_right():
-    """
-    Test shifting the orthogonality center to the right by one site.
+def test_shift_orthogonality_center_right() -> None:
+    """Test shifting the orthogonality center to the right by one site.
     This mainly checks that the operation runs without error and preserves shapes.
     """
     length = 4
@@ -414,9 +407,8 @@ def test_shift_orthogonality_center_right():
         assert tensor.ndim == 3
 
 
-def test_shift_orthogonality_center_left():
-    """
-    Test shifting the orthogonality center to the left.
+def test_shift_orthogonality_center_left() -> None:
+    """Test shifting the orthogonality center to the left.
     We just check for shape consistency and no errors.
     """
     length = 4
@@ -435,9 +427,8 @@ def test_shift_orthogonality_center_left():
         assert tensor.ndim == 3
 
 
-def test_set_canonical_form():
-    """
-    Test the set_canonical_form method doesn't raise errors
+def test_set_canonical_form() -> None:
+    """Test the set_canonical_form method doesn't raise errors
     and retains correct shapes for an MPS.
     """
     length = 4
@@ -452,10 +443,8 @@ def test_set_canonical_form():
         assert tensor.ndim == 3
 
 
-def test_normalize():
-    """
-    Test that calling normalize does not throw errors and keeps MPS rank-3.
-    """
+def test_normalize() -> None:
+    """Test that calling normalize does not throw errors and keeps MPS rank-3."""
     length = 4
     pdim = 2
     # Random MPS
@@ -473,7 +462,7 @@ def test_normalize():
         assert tensor.ndim == 3
 
 
-def test_measure():
+def test_measure() -> None:
     length = 2
     pdim = 2
     mps = MPS(length=length, physical_dimensions=[pdim] * length, state="x+")
@@ -484,7 +473,7 @@ def test_measure():
     assert np.isclose(val, 1)
 
 
-def test_norm():
+def test_norm() -> None:
     length = 3
     pdim = 2
     mps = MPS(length=length, physical_dimensions=[pdim] * length, state="zeros")
@@ -494,9 +483,8 @@ def test_norm():
     assert val == 1
 
 
-def test_check_if_valid_MPS():
-    """
-    Test that an MPS with consistent bond dimensions passes check_if_valid_MPS
+def test_check_if_valid_MPS() -> None:
+    """Test that an MPS with consistent bond dimensions passes check_if_valid_MPS
     without errors.
     """
     length = 3
@@ -511,9 +499,8 @@ def test_check_if_valid_MPS():
     mps.check_if_valid_MPS()
 
 
-def test_check_canonical_form():
-    """
-    Check that check_canonical_form runs and prints out
+def test_check_canonical_form() -> None:
+    """Check that check_canonical_form runs and prints out
     some form of canonical info. By default, our random
     MPS is likely not in a canonical form, so we just
     ensure it doesn't crash.

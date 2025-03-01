@@ -6,13 +6,14 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
-from qiskit.converters import circuit_to_dag
+
 import time
+from typing import TYPE_CHECKING
+
+from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO
 from .utils.mpo_utils import iterate
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
@@ -21,8 +22,7 @@ if TYPE_CHECKING:
 def run(
     circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float = 1e-13, fidelity: float = 1 - 1e-13
 ) -> dict:
-    """
-    Checks the equivalence of two quantum circuits using an MPO-based algorithm.
+    """Checks the equivalence of two quantum circuits using an MPO-based algorithm.
 
     Args:
         circuit1: The first quantum circuit.

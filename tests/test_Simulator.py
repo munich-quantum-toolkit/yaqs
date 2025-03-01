@@ -5,9 +5,12 @@
 #
 # Licensed under the MIT License
 
-import pytest
-import numpy as np
+from __future__ import annotations
 
+import numpy as np
+import pytest
+
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import (
@@ -17,12 +20,10 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     WeakSimParams,
 )
 from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
-from mqt.yaqs import Simulator
 
 
-def test_physics_simulation():
-    """
-    Test the branch for Hamiltonian simulation or circuit simulation with StrongSimParams.
+def test_physics_simulation() -> None:
+    """Test the branch for Hamiltonian simulation or circuit simulation with StrongSimParams.
     Here we use a DummyMPO operator and a DummyStrongSimParams.
     """
     length = 5
@@ -57,7 +58,7 @@ def test_physics_simulation():
     assert len(sim_params.observables[0].results == 1), "Results was not initialized for PhysicsSimParams."
 
 
-def test_strong_simulation():
+def test_strong_simulation() -> None:
     num_qubits = 5
     state = MPS(num_qubits, state="zeros")
 
@@ -90,7 +91,7 @@ def test_strong_simulation():
     assert len(sim_params.observables[0].results == 1), "Results was not initialized for StrongimParams."
 
 
-def test_weak_simulation_noise():
+def test_weak_simulation_noise() -> None:
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
@@ -108,14 +109,14 @@ def test_weak_simulation_noise():
 
     Simulator.run(initial_state, circuit, sim_params, noise_model)
 
-    assert sim_params.N == shots, "sim_params.N should be number of shots."
+    assert shots == sim_params.N, "sim_params.N should be number of shots."
     for measurement in sim_params.measurements:
         assert isinstance(measurement, dict)
 
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
 
 
-def test_weak_simulation_no_noise():
+def test_weak_simulation_no_noise() -> None:
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
@@ -133,7 +134,7 @@ def test_weak_simulation_no_noise():
     Simulator.run(initial_state, circuit, sim_params, noise_model)
 
     assert sim_params.N == 1, "sim_params.N should be 1 when noise model strengths are all zero."
-    assert isinstance(sim_params.measurements[0], dict) and sim_params.measurements[1] == None, (
+    assert isinstance(sim_params.measurements[0], dict) and sim_params.measurements[1] is None, (
         "There should be only one measurement when noise model strengths are zero."
     )
 
@@ -143,7 +144,7 @@ def test_weak_simulation_no_noise():
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
 
 
-def test_mismatch():
+def test_mismatch() -> None:
     num_qubits = 5
     initial_state = MPS(num_qubits)
 

@@ -5,13 +5,15 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import numpy as np
 
 from ...circuits.CircuitTJM import CircuitTJM
 
 
 class Observable:
-    def __init__(self, name: str, site: int):
+    def __init__(self, name: str, site: int) -> None:
         from ..libraries.gate_library import GateLibrary
 
         assert getattr(GateLibrary, name)
@@ -20,7 +22,7 @@ class Observable:
         self.results = None
         self.trajectories = None
 
-    def initialize(self, sim_params):
+    def initialize(self, sim_params) -> None:
         self.results = None
         if type(sim_params) == PhysicsSimParams:
             if sim_params.sample_timesteps:
@@ -30,10 +32,7 @@ class Observable:
                 self.trajectories = np.empty((sim_params.N, 1), dtype=float)
                 self.times = sim_params.T
             self.results = np.empty(len(sim_params.times), dtype=float)
-        elif type(sim_params) == WeakSimParams:
-            self.trajectories = np.empty((sim_params.N, 1), dtype=float)
-            self.results = np.empty(1, dtype=float)
-        elif type(sim_params) == StrongSimParams:
+        elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
             self.trajectories = np.empty((sim_params.N, 1), dtype=float)
             self.results = np.empty(1, dtype=float)
 
@@ -49,7 +48,7 @@ class PhysicsSimParams:
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
         order: int = 1,
-    ):
+    ) -> None:
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.T = T
@@ -69,13 +68,15 @@ class PhysicsSimParams:
 
             self.backend = PhysicsTJM_2
 
-    def aggregate_trajectories(self):
+    def aggregate_trajectories(self) -> None:
         for observable in self.observables:
             observable.results = np.mean(observable.trajectories, axis=0)
 
 
 class WeakSimParams:
-    def __init__(self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int = None):
+    def __init__(
+        self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
+    ) -> None:
         self.measurements = shots * [None]
         self.shots = shots
         self.max_bond_dim = max_bond_dim
@@ -83,7 +84,7 @@ class WeakSimParams:
         self.window_size = window_size
         self.backend = CircuitTJM
 
-    def aggregate_measurements(self):
+    def aggregate_measurements(self) -> None:
         self.results = {}
         # Noise-free simulation stores shots in first element
         if None in self.measurements:
@@ -104,8 +105,8 @@ class StrongSimParams:
         N: int = 1000,
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
-        window_size: int = None,
-    ):
+        window_size: int | None = None,
+    ) -> None:
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.N = N
@@ -114,6 +115,6 @@ class StrongSimParams:
         self.window_size = window_size
         self.backend = CircuitTJM
 
-    def aggregate_trajectories(self):
+    def aggregate_trajectories(self) -> None:
         for observable in self.observables:
             observable.results = np.mean(observable.trajectories, axis=0)

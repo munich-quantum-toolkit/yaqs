@@ -6,20 +6,21 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
+
 import concurrent.futures
 import copy
 import multiprocessing
+from typing import TYPE_CHECKING
+
 import numpy as np
 import opt_einsum as oe
 from tqdm import tqdm
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
 
 
-def scalar_product(A: MPS, B: "MPS", site: int = -1) -> complex:
+def scalar_product(A: MPS, B: MPS, site: int = -1) -> complex:
     """Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
@@ -39,10 +40,7 @@ def scalar_product(A: MPS, B: "MPS", site: int = -1) -> complex:
     if site == -1:
         for site in range(A.length):
             tensor = oe.contract("abc, ade->bdce", A_copy.tensors[site], B_copy.tensors[site])
-            if site == 0:
-                result = tensor
-            else:
-                result = oe.contract("abcd, cdef->abef", result, tensor)
+            result = tensor if site == 0 else oe.contract("abcd, cdef->abef", result, tensor)
         result = np.squeeze(result)
 
     # Used for ignoring other tensors if MPS is in canonical form
@@ -54,7 +52,7 @@ def scalar_product(A: MPS, B: "MPS", site: int = -1) -> complex:
 
 
 def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
-    """Expectation value for a given MPS-MPO-MPS network
+    """Expectation value for a given MPS-MPO-MPS network.
 
     Args:
         A: MPS
@@ -73,10 +71,11 @@ def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
 
 
 def measure_single_shot(state) -> int:
-    """
-    Performs a single-shot measurement of the MPS state.
+    """Performs a single-shot measurement of the MPS state.
+
     Args:
         state ('MPS'): The MPS state to measure.
+
     Returns:
         int: The observed basis state as an integer.
     """
@@ -102,8 +101,7 @@ def measure_single_shot(state) -> int:
 
 
 def measure(state: MPS, shots: int) -> dict:
-    """
-    Measures an MPS state for a given number of shots.
+    """Measures an MPS state for a given number of shots.
 
     Args:
         state ('MPS'): The MPS state to measure.
@@ -112,7 +110,6 @@ def measure(state: MPS, shots: int) -> dict:
     Returns:
         dict: A dictionary mapping basis states to their observed counts.
     """
-
     if shots > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -123,13 +120,12 @@ def measure(state: MPS, shots: int) -> dict:
                     try:
                         result = future.result()
                         results[result] = results.get(result, 0) + 1
-                    except Exception as e:
-                        print(f"Shot measurement failed with exception: {e}.")
+                    except Exception:
+                        pass
                     finally:
                         pbar.update(1)
         return results
-    else:
-        results = {}
-        basis_state = measure_single_shot(state)
-        results[basis_state] = results.get(basis_state, 0) + 1
-        return results
+    results = {}
+    basis_state = measure_single_shot(state)
+    results[basis_state] = results.get(basis_state, 0) + 1
+    return results

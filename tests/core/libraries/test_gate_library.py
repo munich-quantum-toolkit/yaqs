@@ -5,16 +5,17 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from mqt.yaqs.core.libraries.gate_library import _split_tensor, _extend_gate, GateLibrary
-
 from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, _extend_gate, _split_tensor
 
 
-def test_split_tensor_valid_shape():
+def test_split_tensor_valid_shape() -> None:
     # Create a simple tensor of shape (2,2,2,2).
     # Here we use a tensor with values 0..15.
     tensor = np.arange(16, dtype=float).reshape(2, 2, 2, 2)
@@ -37,14 +38,14 @@ def test_split_tensor_valid_shape():
     assert t2.shape[1] == 2
 
 
-def test_split_tensor_invalid_shape():
+def test_split_tensor_invalid_shape() -> None:
     # A tensor that does not have shape (2,2,2,2) should trigger the assertion.
     tensor = np.zeros((2, 2, 2))
     with pytest.raises(AssertionError):
         _split_tensor(tensor)
 
 
-def test_extend_gate_no_identity():
+def test_extend_gate_no_identity() -> None:
     # Use a simple tensor. For example, use the 4x4 identity reshaped to (2,2,2,2).
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     # Choose sites such that |site0 - site1| == 1 so no identity tensor is added.
@@ -56,7 +57,7 @@ def test_extend_gate_no_identity():
     assert len(mpo.tensors) == 2
 
 
-def test_extend_gate_with_identity():
+def test_extend_gate_with_identity() -> None:
     # Use a simple tensor.
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     # Use sites with a gap (difference 2 → one identity tensor inserted).
@@ -79,7 +80,7 @@ def test_extend_gate_with_identity():
         assert_array_equal(identity_tensor[:, :, i, i], np.eye(2))
 
 
-def test_extend_gate_reverse_order():
+def test_extend_gate_reverse_order() -> None:
     # Check that if sites are provided in reverse order, the MPO tensors are reversed
     # and each tensor is transposed on its last two indices.
     tensor = np.eye(4).reshape(2, 2, 2, 2)
@@ -92,7 +93,7 @@ def test_extend_gate_reverse_order():
         assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))
 
 
-def test_gate_x():
+def test_gate_x() -> None:
     gate = GateLibrary.x()
     gate.set_sites(0)
     assert gate.sites == [0]
@@ -100,7 +101,7 @@ def test_gate_x():
     assert_array_equal(gate.tensor, gate.matrix)
 
 
-def test_gate_y():
+def test_gate_y() -> None:
     gate = GateLibrary.y()
     gate.set_sites(0)
     assert gate.sites == [0]
@@ -108,7 +109,7 @@ def test_gate_y():
     assert_array_equal(gate.tensor, gate.matrix)
 
 
-def test_gate_z():
+def test_gate_z() -> None:
     gate = GateLibrary.z()
     gate.set_sites(0)
     assert gate.sites == [0]
@@ -116,28 +117,28 @@ def test_gate_z():
     assert_array_equal(gate.tensor, gate.matrix)
 
 
-def test_gate_id():
+def test_gate_id() -> None:
     gate = GateLibrary.id()
     gate.set_sites(0)
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
 
-def test_gate_sx():
+def test_gate_sx() -> None:
     gate = GateLibrary.sx()
     gate.set_sites(0)
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
 
-def test_gate_h():
+def test_gate_h() -> None:
     gate = GateLibrary.h()
     gate.set_sites(0)
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
 
-def test_gate_phase():
+def test_gate_phase() -> None:
     gate = GateLibrary.p()
     theta = np.pi / 3
     gate.set_params([theta])
@@ -149,7 +150,7 @@ def test_gate_phase():
     assert_array_equal(gate.tensor, gate.matrix)
 
 
-def test_gate_rx():
+def test_gate_rx() -> None:
     gate = GateLibrary.rx()
     theta = np.pi / 2
     gate.set_params([theta])
@@ -158,7 +159,7 @@ def test_gate_rx():
     assert_allclose(gate.tensor, expected)
 
 
-def test_gate_ry():
+def test_gate_ry() -> None:
     gate = GateLibrary.ry()
     theta = np.pi / 3
     gate.set_params([theta])
@@ -169,7 +170,7 @@ def test_gate_ry():
     assert_allclose(gate.tensor, expected)
 
 
-def test_gate_rz():
+def test_gate_rz() -> None:
     gate = GateLibrary.rz()
     theta = np.pi / 4
     gate.set_params([theta])
@@ -180,7 +181,7 @@ def test_gate_rz():
     assert_allclose(gate.tensor, expected)
 
 
-def test_gate_cx():
+def test_gate_cx() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     assert gate.sites == [0, 1]
@@ -193,7 +194,7 @@ def test_gate_cx():
     assert len(gate.mpo.tensors) >= 2
 
 
-def test_gate_cz():
+def test_gate_cz() -> None:
     # Forward order
     gate = GateLibrary.cz()
     gate.set_sites(0, 1)
@@ -206,7 +207,7 @@ def test_gate_cz():
     np.testing.assert_allclose(gate_rev.tensor, expected)
 
 
-def test_gate_swap():
+def test_gate_swap() -> None:
     gate = GateLibrary.swap()
     gate.set_sites(2, 3)
     assert gate.sites == [2, 3]
@@ -215,7 +216,7 @@ def test_gate_swap():
     assert_array_equal(gate.tensor, expected)
 
 
-def test_gate_rxx():
+def test_gate_rxx() -> None:
     gate = GateLibrary.rxx()
     theta = np.pi / 3
     gate.set_params([theta])
@@ -224,7 +225,7 @@ def test_gate_rxx():
     assert_allclose(gate.tensor, expected)
 
 
-def test_gate_ryy():
+def test_gate_ryy() -> None:
     gate = GateLibrary.ryy()
     theta = np.pi / 4
     gate.set_params([theta])
@@ -233,7 +234,7 @@ def test_gate_ryy():
     assert_allclose(gate.tensor, expected)
 
 
-def test_gate_rzz():
+def test_gate_rzz() -> None:
     gate = GateLibrary.rzz()
     theta = np.pi / 6
     gate.set_params([theta])
@@ -242,7 +243,7 @@ def test_gate_rzz():
     assert_allclose(gate.tensor, expected)
 
 
-def test_gate_cphase_forward():
+def test_gate_cphase_forward() -> None:
     gate = GateLibrary.cp()
     theta = np.pi / 2
     gate.set_params([theta])
@@ -251,7 +252,7 @@ def test_gate_cphase_forward():
     assert_array_equal(gate.tensor, expected)
 
 
-def test_gate_cphase_reverse():
+def test_gate_cphase_reverse() -> None:
     gate = GateLibrary.cp()
     theta = np.pi / 2
     gate.set_params([theta])

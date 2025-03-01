@@ -5,11 +5,14 @@
 #
 # Licensed under the MIT License
 
+from __future__ import annotations
+
 import copy
+
 import numpy as np
+import qiskit.compiler
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library.n_local import TwoLocal
-import qiskit.compiler
 
 from mqt.yaqs.circuits import equivalence_checker
 
@@ -33,4 +36,3 @@ transpiled_circuit = qiskit.compiler.transpile(circuit, basis_gates=basis_gates,
 threshold = 1e-6
 fidelity = 1 - 1e-13
 result = equivalence_checker.run(circuit, transpiled_circuit, threshold, fidelity)
-print(result)

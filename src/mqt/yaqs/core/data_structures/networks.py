@@ -6,14 +6,15 @@
 # Licensed under the MIT License
 
 from __future__ import annotations
+
 import copy
+from typing import TYPE_CHECKING
+
 import numpy as np
 import opt_einsum as oe
 
 from ..libraries.gate_library import GateLibrary
 from ..methods.operations import local_expval, scalar_product
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .simulation_parameters import Observable
@@ -21,7 +22,9 @@ if TYPE_CHECKING:
 
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
-    def __init__(self, length: int, tensors: list = None, physical_dimensions: list = None, state: str = "zeros"):
+    def __init__(
+        self, length: int, tensors: list | None = None, physical_dimensions: list | None = None, state: str = "zeros"
+    ) -> None:
         self.flipped = False
         if tensors is not None:
             assert len(tensors) == length
@@ -79,7 +82,8 @@ class MPS:
                     vector[0] = np.random.rand()
                     vector[1] = 1 - vector[0]
                 else:
-                    raise ValueError("Invalid state string")
+                    msg = "Invalid state string"
+                    raise ValueError(msg)
 
                 tensor = np.expand_dims(vector, axis=(0, 1))
 
@@ -93,14 +97,13 @@ class MPS:
         global_max = 0
         for tensor in self.tensors:
             local_max = max(tensor.shape[0], tensor.shape[2])
-            if local_max > global_max:
-                global_max = local_max
+            global_max = max(global_max, local_max)
 
         return global_max
 
-    def flip_network(self):
+    def flip_network(self) -> None:
         """Flips the bond dimensions in the network so that we can do operations
-            from right to left
+            from right to left.
 
         Args:
             MPS: list of rank-3 tensors
@@ -118,8 +121,8 @@ class MPS:
         self.flipped = not self.flipped
         # self.orthogonality_center = self.length+1-self.orthogonality_center
 
-    def shift_orthogonality_center_right(self, current_orthogonality_center):
-        """Left and right normalizes an MPS around a selected site
+    def shift_orthogonality_center_right(self, current_orthogonality_center) -> None:
+        """Left and right normalizes an MPS around a selected site.
 
         Args:
             MPS: list of rank-3 tensors with a physical dimension d^2
@@ -127,7 +130,6 @@ class MPS:
         Returns:
             new_MPS: list of rank-3 tensors at each site
         """
-
         tensor = self.tensors[current_orthogonality_center]
         old_dims = tensor.shape
         matricized_tensor = np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2]))
@@ -141,8 +143,8 @@ class MPS:
                 "ij, ajc->aic", R, self.tensors[current_orthogonality_center + 1]
             )
 
-    def shift_orthogonality_center_left(self, current_orthogonality_center):
-        """Left and right normalizes an MPS around a selected site
+    def shift_orthogonality_center_left(self, current_orthogonality_center) -> None:
+        """Left and right normalizes an MPS around a selected site.
 
         Args:
             MPS: list of rank-3 tensors with a physical dimension d^2
@@ -156,16 +158,16 @@ class MPS:
 
     # TODO: Needs to be adjusted based on current orthogonality center
     #       Rather than sweeping the full chain
-    def set_canonical_form(self, orthogonality_center: int):
+    def set_canonical_form(self, orthogonality_center: int) -> None:
         """Left and right normalizes an MPS around a selected site
         Args:
             MPS: list of rank-3 tensors with a physical dimension d^2
             selected_site: site of matrix M around which we normalize
         Returns:
-            new_MPS: list of rank-3 tensors at each site
+            new_MPS: list of rank-3 tensors at each site.
         """
 
-        def sweep_decomposition(orthogonality_center: int):
+        def sweep_decomposition(orthogonality_center: int) -> None:
             for site, _ in enumerate(self.tensors):
                 if site == orthogonality_center:
                     break
@@ -177,7 +179,7 @@ class MPS:
         sweep_decomposition(flipped_orthogonality_center)
         self.flip_network()
 
-    def normalize(self, form: str = "B"):
+    def normalize(self, form: str = "B") -> None:
         if form == "B":
             self.flip_network()
 
@@ -188,27 +190,27 @@ class MPS:
             self.flip_network()
 
     def measure(self, observable: Observable):
-        assert observable.site in range(0, self.length), "State is shorter than selected site for expectation value."
+        assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
         E = local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)
-        assert E.imag < 1e-13, "Measurement should be real, '%16f+%16fi'." % (E.real, E.imag)
+        assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
         return E.real
 
     def norm(self):
         return scalar_product(self, self)
 
-    def write_tensor_shapes(self):
-        for tensor in self.tensors:
-            print(tensor.shape)
+    def write_tensor_shapes(self) -> None:
+        for _tensor in self.tensors:
+            pass
 
-    def check_if_valid_MPS(self):
+    def check_if_valid_MPS(self) -> None:
         right_bond = self.tensors[0].shape[2]
         for tensor in self.tensors[1::]:
             assert tensor.shape[1] == right_bond
             right_bond = tensor.shape[2]
 
     def check_canonical_form(self):
-        """Checks what canonical form an MPS is in if any
+        """Checks what canonical form an MPS is in if any.
 
         Args:
             MPS: list of rank-3 tensors with a physical dimension d^2
@@ -223,25 +225,19 @@ class MPS:
         epsilon = 1e-12
         for i in range(len(A)):
             M = oe.contract("ijk, ijl->kl", A[i], B[i])
-            M[M < epsilon] = 0
+            M[epsilon > M] = 0
             test_identity = np.eye(M.shape[0], dtype=complex)
             A_truth.append(np.allclose(M, test_identity))
 
         for i in range(len(A)):
             M = oe.contract("ijk, ibk->jb", B[i], A[i])
-            M[M < epsilon] = 0
+            M[epsilon > M] = 0
             test_identity = np.eye(M.shape[0], dtype=complex)
             B_truth.append(np.allclose(M, test_identity))
 
-        print("A Form:", A_truth)
-        print("B Form:", B_truth)
         if all(B_truth):
-            print("MPS is right (B) canonical.")
-            print("MPS is site canonical at site 0")
             return [0]
         if all(A_truth):
-            print("MPS is left (A) canonical.")
-            print("MPS is site canonical at site % d" % (self.length - 1))
             return [self.length - 1]
 
         if not (all(A_truth) and all(B_truth)):
@@ -262,21 +258,22 @@ class MPS:
                 for i, value in enumerate(A_truth):
                     if not value:
                         return [i - 1, i]
-                    # if A_truth[i]:
-                    #     form.append('A')
-                    # elif B_truth[i]:
-                    #     form.append('B')
-                # print("The MPS has the form: ", form)
+        return None
+        # if A_truth[i]:
+        #     form.append('A')
+        # elif B_truth[i]:
+        #     form.append('B')
+        # print("The MPS has the form: ", form)
 
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
 class MPO:
-    def init_Ising(self, length: int, J: float, g: float):
+    def init_Ising(self, length: int, J: float, g: float) -> None:
         physical_dimension = 2
-        zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
+        np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = getattr(GateLibrary, "x")().matrix
-        Z = getattr(GateLibrary, "z")().matrix
+        X = GateLibrary.x().matrix
+        Z = GateLibrary.z().matrix
 
         # The MPO has a 3x3 block structure at each site:
         # W = [[ I,     -J Z,  -g X ],
@@ -311,13 +308,13 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-    def init_Heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float):
+    def init_Heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:
         physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = getattr(GateLibrary, "x")().matrix
-        Y = getattr(GateLibrary, "y")().matrix
-        Z = getattr(GateLibrary, "z")().matrix
+        X = GateLibrary.x().matrix
+        Y = GateLibrary.y().matrix
+        Z = GateLibrary.z().matrix
 
         # Left boundary: shape (1,5, d, d)
         # [I, Jx*X, Jy*Y, Jz*Z, h*Z]
@@ -353,7 +350,7 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-    def init_identity(self, length: int, physical_dimension: int = 2):
+    def init_identity(self, length: int, physical_dimension: int = 2) -> None:
         M = np.eye(2)
         M = np.expand_dims(M, (2, 3))
         self.length = length
@@ -363,7 +360,9 @@ class MPO:
         for _ in range(length):
             self.tensors.append(M)
 
-    def init_custom_Hamiltonian(self, length: int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray):
+    def init_custom_Hamiltonian(
+        self, length: int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray
+    ) -> None:
         self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
         for i, tensor in enumerate(self.tensors):
             # left, right, sigma, sigma'
@@ -372,7 +371,7 @@ class MPO:
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def init_custom(self, tensors: list[np.ndarray], transpose: bool = True):
+    def init_custom(self, tensors: list[np.ndarray], transpose: bool = True) -> None:
         self.tensors = tensors
         if transpose:
             for i, tensor in enumerate(self.tensors):
@@ -383,11 +382,10 @@ class MPO:
         self.physical_dimension = tensors[0].shape[0]
 
     def convert_to_MPS(self):
-        converted_tensors = []
-        for tensor in self.tensors:
-            converted_tensors.append(
-                np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
-            )
+        converted_tensors = [
+            np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
+            for tensor in self.tensors
+        ]
 
         return MPS(self.length, converted_tensors)
 
@@ -402,22 +400,21 @@ class MPO:
                 )
 
         # Final left and right bonds should be 1
-        mat = np.squeeze(mat, axis=(2, 3))
+        return np.squeeze(mat, axis=(2, 3))
         # mat = np.reshape(mat, mat.size)
-        return mat
 
-    def write_tensor_shapes(self):
-        for tensor in self.tensors:
-            print(tensor.shape)
+    def write_tensor_shapes(self) -> None:
+        for _tensor in self.tensors:
+            pass
 
-    def check_if_valid_MPO(self):
+    def check_if_valid_MPO(self) -> bool:
         right_bond = self.tensors[0].shape[3]
         for tensor in self.tensors[1::]:
             assert tensor.shape[2] == right_bond
             right_bond = tensor.shape[3]
         return True
 
-    def check_if_identity(self, fidelity: float):
+    def check_if_identity(self, fidelity: float) -> bool:
         identity_MPO = MPO()
         identity_MPO.init_identity(self.length)
 
@@ -426,12 +423,9 @@ class MPO:
         trace = scalar_product(MPS, identity_MPS)
 
         # Checks if trace is not a singular values for partial trace
-        if trace.size != 1 or np.round(np.abs(trace), 1) / 2**self.length < fidelity:
-            return False
-        else:
-            return True
+        return not (trace.size != 1 or np.round(np.abs(trace), 1) / 2**self.length < fidelity)
 
-    def rotate(self, conjugate: bool = False):
+    def rotate(self, conjugate: bool = False) -> None:
         for i, tensor in enumerate(self.tensors):
             if conjugate:
                 tensor = np.conj(tensor)
