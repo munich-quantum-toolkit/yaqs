@@ -17,4 +17,4 @@ dependencies = [
   "tqdm"
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
