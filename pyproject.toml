@@ -73,6 +73,8 @@ addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
 filterwarnings = [
     "error",
+    # Qiskit 1.3 deprecations
+    'ignore:.*``qiskit.dagcircuit.dagcircuit.DAGCircuit.*`` is deprecated as of qiskit 1.3.0.*:DeprecationWarning:',
 ]
 log_cli_level = "info"
 testpaths = ["tests"]
