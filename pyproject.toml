@@ -102,7 +102,7 @@ explicit_package_bases = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["qiskit.*", "matplotlib.*"]
+module = ["qiskit.*", "matplotlib.*", "qiskit_aer.*", "opt_einsum.*"]
 ignore_missing_imports = true
 
 
