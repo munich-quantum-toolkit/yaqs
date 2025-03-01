@@ -1,23 +1,20 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
-name = "yaqs"
-version = "0.1.0"
-description = "Quantum simulation library designed primarily for simulation of open quantum systems, noisy quantum circuits, and noisy quantum hardware"
+name = "mqt-yaqs"
+description = "A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware"
+license = "MIT"
 authors = [
   { name="Aaron Sander", email = "aaron.sander@tum.de" },
 ]
-dependencies = [
-  "numpy",
-  "scipy",
-  "qiskit",
-  "opt_einsum",
-  "tqdm"
+maintainers = [
+  { name="Lukas Burgholzer", email = "burgholzer@me.com" },
 ]
 readme = "README.md"
 requires-python = ">=3.9"
+dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -35,4 +32,37 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
     "Typing :: Typed",
+]
+keywords = ["MQT", "quantum-computing", "quantum-simulation", "tensor-networks"]
+
+dependencies = [
+    "numpy>=2.1; python_version >= '3.13'",
+    "numpy>=1.26; python_version >= '3.12'",
+    "numpy>=1.24; python_version >= '3.11'",
+    "numpy>=1.22.4",
+    "scipy>=1.13.1",
+    "scipy>=1.14.1; python_version >= '3.13'",
+    "qiskit>=1.0.0",
+    "qiskit>=1.3.0; python_version >= '3.13'",
+    "opt-einsum>=3.4.0",
+    "tqdm>=4.67.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/cda-tum/mqt-yaqs"
+Documentation = "https://mqt.readthedocs.io/projects/yaqs"
+Issues = "https://github.com/cda-tum/mqt-yaqs/issues"
+Discussions = "https://github.com/cda-tum/mqt-yaqs/discussions"
+
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mqt"]
+
+[dependency-groups]
+test = [
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
 ]
