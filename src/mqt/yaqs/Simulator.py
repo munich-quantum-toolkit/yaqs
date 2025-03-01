@@ -5,13 +5,13 @@ import multiprocessing
 from qiskit.circuit import QuantumCircuit
 from tqdm import tqdm
 
-from yaqs.core.data_structures.networks import MPO
-from yaqs.core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from .core.data_structures.networks import MPO
+from .core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.core.data_structures.networks import MPS
-    from yaqs.core.data_structures.noise_model import NoiseModel
+    from .core.data_structures.networks import MPS
+    from .core.data_structures.noise_model import NoiseModel
 
 
 def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):

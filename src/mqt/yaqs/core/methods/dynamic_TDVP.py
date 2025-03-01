@@ -1,9 +1,9 @@
 from __future__ import annotations
-from yaqs.core.methods.TDVP import single_site_TDVP, two_site_TDVP
+from .TDVP import single_site_TDVP, two_site_TDVP
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.core.data_structures.networks import MPO, MPS
+    from ..data_structures.networks import MPO, MPS
 
 
 def dynamic_TDVP(state: MPS, H: MPO, sim_params):

@@ -1,7 +1,7 @@
 import pytest
 from qiskit.circuit import QuantumCircuit
 
-from yaqs.core.libraries.circuit_library import create_Ising_circuit, create_Heisenberg_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit, create_Heisenberg_circuit
 
 
 def test_create_Ising_circuit_valid_even():

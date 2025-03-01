@@ -1,12 +1,12 @@
 from __future__ import annotations
-from qiskit._accelerate.circuit import DAGOpNode
+from qiskit.dagcircuit import DAGOpNode
 from qiskit.converters import dag_to_circuit
 
-from yaqs.core.libraries.gate_library import GateLibrary
+from ...core.libraries.gate_library import GateLibrary
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from qiskit._accelerate.circuit import DAGCircuit
+    from qiskit.dagcircuit import DAGCircuit
     import numpy as np
 
 

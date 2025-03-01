@@ -2,12 +2,12 @@ import numpy as np
 import qiskit.circuit
 import matplotlib.pyplot as plt
 
-from yaqs.core.data_structures.networks import MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
-from yaqs.core.libraries.circuit_library import create_Ising_circuit
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
 
-from yaqs import Simulator
+from mqt.yaqs import Simulator
 
 # Define the circuit
 num_qubits = 10

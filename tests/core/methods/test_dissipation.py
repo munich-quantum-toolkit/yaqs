@@ -1,16 +1,15 @@
 import pytest
 import numpy as np
 
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.methods.dissipation import apply_dissipation
 
 def test_apply_dissipation_site_canonical_0():
     """
     Check that after calling apply_dissipation, the MPS is site-canonical at site 0.
     This relies on the code's logic to shift orthogonality left after each site.
     """
-    from yaqs.core.data_structures.noise_model import NoiseModel
-    from yaqs.core.data_structures.networks import MPS
-    from yaqs.core.methods.dissipation import apply_dissipation
-
     # 1) Create a small MPS of length 3 (for example),
     #    with random or simple product tensors.
     length = 3

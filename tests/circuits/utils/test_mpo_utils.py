@@ -3,6 +3,17 @@ import pytest
 import copy
 import numpy as np
 
+from mqt.yaqs.circuits.utils.mpo_utils import decompose_theta
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.circuits.utils.mpo_utils import apply_gate, apply_layer
+from mqt.yaqs.circuits.utils.mpo_utils import apply_temporal_zone, apply_long_range_layer
+from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+from mqt.yaqs.circuits.utils.mpo_utils import update_MPO
+from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
+from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.circuits.utils.dag_utils import select_starting_point
+
 ##############################################################################
 # Helper Functions
 ##############################################################################
@@ -42,7 +53,6 @@ def approximate_reconstruction(U, M, original, atol=1e-10):
 
 def test_decompose_theta():
     """Test SVD-based decomposition of a 6D tensor."""
-    from yaqs.circuits.utils.mpo_utils import decompose_theta
     theta = random_theta_6d()
     threshold = 1e-5
 
@@ -62,9 +72,6 @@ def test_apply_gate(interaction, conjugate):
     Test applying single- or two-qubit gates to a 6D (or 8D) tensor,
     with or without conjugation.
     """
-    from yaqs.core.libraries.gate_library import GateLibrary
-    from yaqs.circuits.utils.mpo_utils import apply_gate
-
     if interaction == 1:
         attr = getattr(GateLibrary, 'x')
         gate = attr()
@@ -85,9 +92,6 @@ def test_apply_temporal_zone_no_op_nodes():
     """
     If the DAG has no op_nodes, apply_temporal_zone should return theta unchanged.
     """
-    from qiskit.circuit import QuantumCircuit
-    from qiskit.converters import circuit_to_dag
-    from yaqs.circuits.utils.mpo_utils import apply_temporal_zone
     circuit = QuantumCircuit()
     dag = circuit_to_dag(circuit)
 
@@ -102,9 +106,6 @@ def test_apply_temporal_zone_single_qubit_gates():
     """
     If the DAG has one gate in the 'temporal zone', it should be applied.
     """
-    from qiskit.converters import circuit_to_dag
-    from yaqs.circuits.utils.mpo_utils import apply_temporal_zone
-    from yaqs.core.libraries.circuit_library import create_Ising_circuit
     model = {'name': 'Ising', 'L': 5, 'J': 0, 'g': 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
@@ -119,9 +120,6 @@ def test_apply_temporal_zone_two_qubit_gates():
     """
     If the DAG has one gate in the 'temporal zone', it should be applied.
     """
-    from qiskit.converters import circuit_to_dag
-    from yaqs.circuits.utils.mpo_utils import apply_temporal_zone
-    from yaqs.core.libraries.circuit_library import create_Ising_circuit
     model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 0}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
@@ -136,9 +134,6 @@ def test_apply_temporal_zone_mixed_qubit_gates():
     """
     If the DAG has one gate in the 'temporal zone', it should be applied.
     """
-    from qiskit.converters import circuit_to_dag
-    from yaqs.circuits.utils.mpo_utils import apply_temporal_zone
-    from yaqs.core.libraries.circuit_library import create_Ising_circuit
     model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
@@ -153,10 +148,6 @@ def test_update_MPO():
     """
     Test update_MPO with a small 2-qubit MPO. We'll intercept apply_temporal_zone calls.
     """
-    from qiskit.converters import circuit_to_dag
-    from yaqs.core.data_structures.networks import MPO
-    from yaqs.core.libraries.circuit_library import create_Ising_circuit
-    from yaqs.circuits.utils.mpo_utils import update_MPO
     mpo = MPO()
     length = 2
     mpo.init_identity(length)
@@ -179,10 +170,6 @@ def test_apply_layer():
     """
     Basic test for apply_layer. We'll confirm update_MPO is called for first and second iterators.
     """
-    from qiskit.converters import circuit_to_dag
-    from yaqs.core.data_structures.networks import MPO
-    from yaqs.core.libraries.circuit_library import create_Ising_circuit
-    from yaqs.circuits.utils.mpo_utils import apply_layer, select_starting_point
     mpo = MPO()
     length = 3
     mpo.init_identity(length)
@@ -199,10 +186,6 @@ def test_apply_layer():
 
 
 def test_apply_long_range_layer():
-    from qiskit.circuit import QuantumCircuit
-    from qiskit.converters import circuit_to_dag
-    from yaqs.core.data_structures.networks import MPO
-    from yaqs.circuits.utils.mpo_utils import apply_long_range_layer, select_starting_point
     mpo = MPO()
     num_qubits = 3
     mpo.init_identity(num_qubits)

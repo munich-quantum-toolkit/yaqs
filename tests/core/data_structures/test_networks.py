@@ -2,9 +2,9 @@ import copy
 import numpy as np
 import pytest
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.simulation_parameters import Observable
-from yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 
 I = getattr(GateLibrary, 'id').matrix

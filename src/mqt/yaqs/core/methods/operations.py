@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.core.data_structures.networks import MPS
+    from ..data_structures.networks import MPS
 
 
 def scalar_product(A: MPS, B: 'MPS', site: int=-1) -> complex:

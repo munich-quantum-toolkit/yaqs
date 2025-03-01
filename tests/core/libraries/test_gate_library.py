@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from yaqs.core.libraries.gate_library import _split_tensor, _extend_gate, GateLibrary
+from mqt.yaqs.core.libraries.gate_library import _split_tensor, _extend_gate, GateLibrary
 
-from yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.networks import MPO
 
 def test_split_tensor_valid_shape():
     # Create a simple tensor of shape (2,2,2,2).

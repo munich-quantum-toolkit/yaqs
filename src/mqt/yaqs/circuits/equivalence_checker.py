@@ -2,12 +2,12 @@ from __future__ import annotations
 from qiskit.converters import circuit_to_dag
 import time
 
-from yaqs.core.data_structures.networks import MPO
-from yaqs.circuits.utils.mpo_utils import iterate
+from ..core.data_structures.networks import MPO
+from .utils.mpo_utils import iterate
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from qiskit.circuit.quantumcircuit import QuantumCircuit
+    from qiskit.circuit import QuantumCircuit
 
 
 def run(circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float=1e-13, fidelity: float=1-1e-13) -> dict:

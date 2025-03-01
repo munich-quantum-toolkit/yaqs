@@ -2,15 +2,15 @@ from __future__ import annotations
 import copy
 import numpy as np
 
-from yaqs.core.methods.dissipation import apply_dissipation
-from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
-from yaqs.core.methods.stochastic_process import stochastic_process
+from ..core.methods.dissipation import apply_dissipation
+from ..core.methods.dynamic_TDVP import dynamic_TDVP
+from ..core.methods.stochastic_process import stochastic_process
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.core.data_structures.networks import MPO, MPS
-    from yaqs.core.data_structures.noise_model import NoiseModel
-    from yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
+    from ..core.data_structures.networks import MPO, MPS
+    from ..core.data_structures.noise_model import NoiseModel
+    from ..core.data_structures.simulation_parameters import PhysicsSimParams
 
 
 def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:

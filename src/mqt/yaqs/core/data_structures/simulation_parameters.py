@@ -1,9 +1,10 @@
 import numpy as np
 
-from yaqs.core.libraries.gate_library import GateLibrary
+from ...circuits.CircuitTJM import CircuitTJM
 
 class Observable:
     def __init__(self, name: str, site: int):
+        from ..libraries.gate_library import GateLibrary
         assert getattr(GateLibrary, name)
         self.name = name
         self.site = site
@@ -41,10 +42,10 @@ class PhysicsSimParams:
         self.threshold = threshold
         self.order = order
         if self.order == 1:
-            from yaqs.physics.PhysicsTJM import PhysicsTJM_1
+            from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_1
             self.backend = PhysicsTJM_1
         else:
-            from yaqs.physics.PhysicsTJM import PhysicsTJM_2
+            from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_2
             self.backend = PhysicsTJM_2
 
     def aggregate_trajectories(self):
@@ -59,7 +60,6 @@ class WeakSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
-        from yaqs.circuits.CircuitTJM import CircuitTJM
         self.backend = CircuitTJM
 
     def aggregate_measurements(self):
@@ -84,7 +84,6 @@ class StrongSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
-        from yaqs.circuits.CircuitTJM import CircuitTJM
         self.backend = CircuitTJM
 
     def aggregate_trajectories(self):

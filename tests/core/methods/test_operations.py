@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from yaqs.core.methods.operations import scalar_product, local_expval, measure, measure_single_shot
-from yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.methods.operations import scalar_product, local_expval, measure, measure_single_shot
+from mqt.yaqs.core.data_structures.networks import MPS
 
 
 def test_scalar_product_same_state():

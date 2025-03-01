@@ -3,11 +3,13 @@ import pytest
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
-
+from qiskit.dagcircuit import DAGOpNode
+from mqt.yaqs.circuits.utils.dag_utils import check_longest_gate
+from mqt.yaqs.circuits.utils.dag_utils import get_temporal_zone
+from mqt.yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
+from mqt.yaqs.circuits.utils.dag_utils import select_starting_point
 
 def test_convert_dag_to_tensor_algorithm_single_qubit_gate():
-    from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
-
     qc = QuantumCircuit(1)
     qc.x(0)
     dag = circuit_to_dag(qc)
@@ -20,8 +22,6 @@ def test_convert_dag_to_tensor_algorithm_single_qubit_gate():
 
 
 def test_convert_dag_to_tensor_algorithm_two_qubit_gate():
-    from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
-
     qc = QuantumCircuit(2)
     qc.cx(0, 1)
     dag = circuit_to_dag(qc)
@@ -34,8 +34,6 @@ def test_convert_dag_to_tensor_algorithm_two_qubit_gate():
 
 
 def test_convert_dag_to_tensor_algorithm_two_qubit_gate_flipped():
-    from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
-
     qc = QuantumCircuit(2)
     qc.cx(1, 0)
     dag = circuit_to_dag(qc)
@@ -48,9 +46,6 @@ def test_convert_dag_to_tensor_algorithm_two_qubit_gate_flipped():
 
 
 def test_convert_dag_to_tensor_algorithm_single_dagopnode():
-    from qiskit._accelerate.circuit import DAGOpNode
-    from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
-
     qc = QuantumCircuit(1)
     qc.rx(np.pi/4, 0)
     dag = circuit_to_dag(qc)
@@ -66,8 +61,6 @@ def test_convert_dag_to_tensor_algorithm_single_dagopnode():
 
 
 def test_convert_dag_to_tensor_algorithm_ignores_measure_barrier():
-    from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
-
     qc = QuantumCircuit(2)
     qc.x(0)
     qc.barrier()
@@ -81,7 +74,7 @@ def test_convert_dag_to_tensor_algorithm_ignores_measure_barrier():
 
 
 def test_get_temporal_zone_simple():
-    from yaqs.circuits.utils.dag_utils import get_temporal_zone
+
 
     qc = QuantumCircuit(3)
     qc.x(0)
@@ -95,8 +88,6 @@ def test_get_temporal_zone_simple():
 
 
 def test_check_longest_gate():
-    from yaqs.circuits.utils.dag_utils import check_longest_gate
-
     qc = QuantumCircuit(3)
     qc.cx(0, 2)
     qc.cx(0, 1)
@@ -107,8 +98,6 @@ def test_check_longest_gate():
 
 
 def test_select_starting_point_even_odd():
-    from yaqs.circuits.utils.dag_utils import select_starting_point
-
     N = 4
     qc = QuantumCircuit(N)
     qc.cx(0, 1)
@@ -120,8 +109,6 @@ def test_select_starting_point_even_odd():
 
 
 def test_select_starting_point_odd():
-    from yaqs.circuits.utils.dag_utils import select_starting_point
-
     N = 4
     qc = QuantumCircuit(N)
     qc.cx(1, 2)

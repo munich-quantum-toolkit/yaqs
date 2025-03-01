@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
-from yaqs.core.methods.TDVP import (
+from mqt.yaqs.core.methods.TDVP import (
     split_mps_tensor,
     merge_mps_tensors,
     merge_mpo_tensors,

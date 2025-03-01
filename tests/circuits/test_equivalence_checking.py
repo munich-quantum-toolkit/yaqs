@@ -1,6 +1,6 @@
 import pytest
 from qiskit import QuantumCircuit
-from yaqs.circuits.equivalence_checker import run
+from mqt.yaqs.circuits.equivalence_checker import run
 
 
 @pytest.mark.parametrize("threshold,fidelity", [(1e-13, 1-1e-13), (1e-1, 1-1e-3)])

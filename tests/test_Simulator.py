@@ -1,11 +1,11 @@
 import pytest
 import numpy as np
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams, StrongSimParams, WeakSimParams
-from yaqs.core.libraries.circuit_library import create_Ising_circuit
-from yaqs import Simulator
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams, StrongSimParams, WeakSimParams
+from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+from mqt.yaqs import Simulator
 
 
 def test_physics_simulation():

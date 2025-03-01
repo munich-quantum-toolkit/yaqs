@@ -2,12 +2,11 @@ from __future__ import annotations
 import numpy as np
 import opt_einsum as oe
 
-from yaqs.core.methods.matrix_exponential import expm_krylov
-from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+from .matrix_exponential import expm_krylov
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.core.data_structures.networks import MPO, MPS
+    from ..data_structures.networks import MPO, MPS
 
 
 def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float=0) -> tuple[np.ndarray, np.ndarray]:
@@ -398,6 +397,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         "Unifying time evolution and optimization with matrix product states",
         Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
     """
+    from ..data_structures.simulation_parameters import WeakSimParams, StrongSimParams
     num_sites = H.length
     if num_sites != state.length:
         raise ValueError("The state and Hamiltonian must have the same number of sites.")
@@ -499,6 +499,7 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         "Unifying time evolution and optimization with matrix product states",
         Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
     """
+    from ..data_structures.simulation_parameters import WeakSimParams, StrongSimParams
     num_sites = H.length
     if num_sites != state.length:
         raise ValueError("State and Hamiltonian must have the same number of sites")

@@ -6,8 +6,8 @@ from scipy.linalg import expm
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from yaqs.core.data_structures.networks import MPS
-    from yaqs.core.data_structures.noise_model import NoiseModel
+    from ..data_structures.networks import MPS
+    from ..data_structures.noise_model import NoiseModel
 
 # TODO: Assumes noise is same at all sites
 #       Could be sped-up by pre-calculating exponential somewhere else

@@ -4,18 +4,17 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
-from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
-from yaqs.core.methods.dissipation import apply_dissipation
-from yaqs.core.methods.stochastic_process import stochastic_process
-from yaqs.core.methods.operations import measure
-from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
+from ..core.data_structures.networks import MPO, MPS
+from ..core.methods.dynamic_TDVP import dynamic_TDVP
+from ..core.methods.dissipation import apply_dissipation
+from ..core.methods.stochastic_process import stochastic_process
+from ..core.methods.operations import measure
+from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 
 from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
-    from qiskit._accelerate.circuit import DAGCircuit, DAGOpNode
+    from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
 
 def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
@@ -126,6 +125,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params):
 
 
 def CircuitTJM(args):
+    from ..core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
     i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
 

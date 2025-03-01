@@ -1,5 +1,5 @@
 import pytest
-from yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
 def test_noise_model_creation():

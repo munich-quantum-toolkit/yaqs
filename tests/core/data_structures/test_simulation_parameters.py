@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
 def test_observable_creation_valid():
     name = 'x'

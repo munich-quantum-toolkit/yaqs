@@ -5,9 +5,10 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
-from yaqs.core.data_structures.networks import MPS
-
-from yaqs.circuits.CircuitTJM import (
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
+from mqt.yaqs.circuits.CircuitTJM import (
     process_layer,
     apply_single_qubit_gate,
     construct_generator_MPO,
@@ -66,7 +67,7 @@ def test_process_layer_unsupported_gate():
         process_layer(dag)
 
 def test_apply_single_qubit_gate():
-    from yaqs.core.libraries.gate_library import GateLibrary
+
     mps = MPS(length=1)
     tensor = mps.tensors[0]
 
@@ -83,7 +84,6 @@ def test_apply_single_qubit_gate():
     np.testing.assert_allclose(mps.tensors[0], expected)
 
 def test_construct_generator_MPO():
-    from yaqs.core.libraries.gate_library import GateLibrary
     gate = getattr(GateLibrary, 'cx')()
     gate.set_sites(1, 3)
     length = 5
@@ -108,12 +108,10 @@ def test_apply_window():
     mps = MPS(length, tensors)
     mps.normalize()
 
-    from yaqs.core.libraries.gate_library import GateLibrary
     gate = getattr(GateLibrary, 'cx')()
     gate.set_sites(1, 2)
     mpo, first_site, last_site = construct_generator_MPO(gate, length)
 
-    from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
     N = 1
     max_bond_dim = 4
     threshold = 1e-12
@@ -141,7 +139,6 @@ def test_apply_two_qubit_gate_with_window():
     assert cx_nodes, "No CX gate found in the front layer."
     node = cx_nodes[0]
 
-    from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
     N = 1
     max_bond_dim = 4
     threshold = 1e-12
@@ -175,7 +172,6 @@ def test_CircuitTJM_strong():
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
-    from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
     N = 1
     max_bond_dim = 4
     threshold = 1e-12
@@ -193,7 +189,6 @@ def test_CircuitTJM_weak():
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
-    from yaqs.core.data_structures.simulation_parameters import WeakSimParams
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0

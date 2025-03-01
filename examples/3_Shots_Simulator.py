@@ -4,11 +4,11 @@ import numpy as np
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library.n_local import TwoLocal
 
-from yaqs.core.data_structures.networks import MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import WeakSimParams
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
 
-from yaqs import Simulator
+from mqt.yaqs import Simulator
 
 
 # Define the circuit

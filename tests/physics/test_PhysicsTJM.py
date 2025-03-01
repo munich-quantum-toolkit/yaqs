@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import patch
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from yaqs.physics.PhysicsTJM import initialize, step_through, sample, PhysicsTJM_2, PhysicsTJM_1
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.physics.PhysicsTJM import initialize, step_through, sample, PhysicsTJM_2, PhysicsTJM_1
 
 
 def test_initialize():
@@ -17,8 +17,8 @@ def test_initialize():
     noise_model = NoiseModel(['relaxation'], [0.1])
     measurements = [Observable('x', site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.2, sample_timesteps=False, N=1, max_bond_dim=2, threshold=1e-6, order=1)
-    with patch('yaqs.physics.PhysicsTJM.apply_dissipation') as mock_dissipation, \
-         patch('yaqs.physics.PhysicsTJM.stochastic_process') as mock_stochastic_process:
+    with patch('mqt.yaqs.physics.PhysicsTJM.apply_dissipation') as mock_dissipation, \
+         patch('mqt.yaqs.physics.PhysicsTJM.stochastic_process') as mock_stochastic_process:
         initialize(state, noise_model, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt/2)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt)
@@ -33,9 +33,9 @@ def test_step_through():
     noise_model = NoiseModel(['relaxation'], [0.1])
     measurements = [Observable('x', site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.2, sample_timesteps=False, N=1, max_bond_dim=2, threshold=1e-6, order=1)
-    with patch('yaqs.physics.PhysicsTJM.dynamic_TDVP') as mock_dynamic_TDVP, \
-         patch('yaqs.physics.PhysicsTJM.apply_dissipation') as mock_dissipation, \
-         patch('yaqs.physics.PhysicsTJM.stochastic_process') as mock_stochastic_process:
+    with patch('mqt.yaqs.physics.PhysicsTJM.dynamic_TDVP') as mock_dynamic_TDVP, \
+         patch('mqt.yaqs.physics.PhysicsTJM.apply_dissipation') as mock_dissipation, \
+         patch('mqt.yaqs.physics.PhysicsTJM.stochastic_process') as mock_stochastic_process:
         step_through(state, H, noise_model, sim_params)
         mock_dynamic_TDVP(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt)
