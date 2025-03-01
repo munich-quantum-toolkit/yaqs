@@ -112,6 +112,10 @@ default.extend-ignore-re = [
 wille = "wille"
 
 
+[tool.repo-review]
+ignore = ["GH200"]
+
+
 [tool.ruff]
 line-length = 120
 preview = true
