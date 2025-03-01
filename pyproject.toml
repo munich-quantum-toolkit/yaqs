@@ -87,6 +87,22 @@ report.exclude_also = [
 ]
 
 
+[tool.mypy]
+files = ["src/mqt", "tests", "examples", "noxfile.py"]
+mypy_path = ["$MYPY_CONFIG_FILE_DIR/src"]
+python_version = "3.9"
+warn_unused_configs = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+strict = true
+disallow_untyped_defs = false
+explicit_package_bases = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["qiskit.*", "matplotlib.*"]
+ignore_missing_imports = true
+
+
 [tool.ruff]
 line-length = 120
 preview = true
