@@ -16,7 +16,7 @@ def test_create_Ising_circuit_valid_even():
     assert circ.num_qubits == model['L']
     
     # Count the gates by name.
-    op_names = [instr.name for instr, _, _ in circ.data]
+    op_names = [instr.operation.name for instr in circ.data]
     rx_count = op_names.count("rx")
     rzz_count = op_names.count("rzz")
 
@@ -39,7 +39,7 @@ def test_create_Ising_circuit_valid_odd():
     #   - The odd-site loop: range(1, 5//2) → 1 iteration → 2 CX and 1 RZ.
     #   - The extra clause (since 5 is odd and not 1) adds 2 CX and 1 RZ.
     # Total: 5 rx, (4+2+2)=8 CX, and (2+1+1)=4 RZ.
-    op_names = [instr.name for instr, _, _ in circ.data]
+    op_names = [instr.operation.name for instr in circ.data]
     rx_count = op_names.count("rx")
     rzz_count = op_names.count("rzz")
 
@@ -67,7 +67,7 @@ def test_create_Heisenberg_circuit_valid_even():
     assert circ.num_qubits == model['L']
     
     # Check that the circuit contains the expected types of gates.
-    op_names = [instr.name for instr, _, _ in circ.data]
+    op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
         assert gate in op_names
 
@@ -81,7 +81,7 @@ def test_create_Heisenberg_circuit_valid_odd():
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == model['L']
     
-    op_names = [instr.name for instr, _, _ in circ.data]
+    op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
         assert gate in op_names
 
