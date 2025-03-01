@@ -78,3 +78,14 @@ filterwarnings = [
 ]
 log_cli_level = "info"
 testpaths = ["tests"]
+
+[tool.coverage]
+run.source = ["mqt.yaqs"]
+report.exclude_also = [
+    '\.\.\.',
+    'if TYPE_CHECKING:',
+    'raise AssertionError',
+    'raise NotImplementedError',
+    'def __dir__()',  # Ignore __dir__ method that exists mainly for better IDE support
+    '@overload'  # Overloads are only for static typing
+]
