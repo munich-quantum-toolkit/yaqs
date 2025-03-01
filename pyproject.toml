@@ -103,6 +103,15 @@ module = ["qiskit.*", "matplotlib.*"]
 ignore_missing_imports = true
 
 
+[tool.typos]
+default.extend-ignore-re = [
+    "(?Rm)^.*(#|//)\\s*spellchecker:disable-line$",  # ignore line
+    "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on" # ignore block
+]
+[tool.typos.default.extend-words]
+wille = "wille"
+
+
 [tool.ruff]
 line-length = 120
 preview = true
