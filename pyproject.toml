@@ -61,11 +61,6 @@ source = "vcs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mqt"]
 
-[dependency-groups]
-test = [
-    "pytest>=8.3.4",
-    "pytest-cov>=6.0.0",
-]
 
 [tool.pytest.ini_options]
 minversion = "7.2"
@@ -79,6 +74,7 @@ filterwarnings = [
 log_cli_level = "info"
 testpaths = ["tests"]
 
+
 [tool.coverage]
 run.source = ["mqt.yaqs"]
 report.exclude_also = [
@@ -88,4 +84,30 @@ report.exclude_also = [
     'raise NotImplementedError',
     'def __dir__()',  # Ignore __dir__ method that exists mainly for better IDE support
     '@overload'  # Overloads are only for static typing
+]
+
+
+[tool.uv]
+required-version = ">=0.5.20"
+
+[dependency-groups]
+docs = [
+    "furo>=2024.8.6",
+    "myst-nb>=1.1.2",
+    "sphinx-autoapi>=3.3.3",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.6.1",
+    "sphinxcontrib-bibtex>=2.6.3",
+    "sphinxcontrib-svg2pdfconverter>=1.2.3",
+    "sphinxext-opengraph>=0.9.1",
+    "qiskit[visualization]>=1.0.0",
+    "sphinx>=7.4.7,<8.2",  # due to https://github.com/missinglinkelectronics/sphinxcontrib-svg2pdfconverter/issues/26
+]
+test = [
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+]
+dev = [
+    {include-group = "docs"},
+    {include-group = "test"},
 ]
