@@ -66,3 +66,13 @@ test = [
     "pytest>=8.3.4",
     "pytest-cov>=6.0.0",
 ]
+
+[tool.pytest.ini_options]
+minversion = "7.2"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = [
+    "error",
+]
+log_cli_level = "info"
+testpaths = ["tests"]
