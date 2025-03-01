@@ -64,7 +64,7 @@ def expm_krylov(Afunc, v, dt, numiter):
     Reference:
         M. Hochbruck and C. Lubich
         On Krylov subspace approximations to the matrix exponential operator
-        SIAM J. Numer. Anal. 34, 1911 (1997)
+        SIAM Journal on Numerical Analysis 34, 1911 (1997)
     """
     alpha, beta, V = _lanczos_iteration(Afunc, v, numiter)
     # diagonalize Hessenberg matrix

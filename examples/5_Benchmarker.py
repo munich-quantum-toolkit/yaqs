@@ -85,11 +85,11 @@ def run(
         for bond_dim in max_bond_dims:
             if bond_dim > 2 ** (num_qubits // 2):
                 break
-            for thr in thresholds:
+            for threshold in thresholds:
                 # Create a fresh copy of the circuit for each simulation.
                 circuit_copy = copy.deepcopy(input_ircuit)
                 measurements = [Observable("z", num_qubits // 2)]
-                sim_params = StrongSimParams(measurements, N, bond_dim, threshold=thr, window_size=window)
+                sim_params = StrongSimParams(measurements, N, bond_dim, threshold=threshold, window_size=window)
 
                 start_time = time.time()
                 Simulator.run(state, circuit_copy, sim_params, noise_model)
@@ -101,7 +101,7 @@ def run(
                 # Record the simulation parameters and results.
                 bond_list.append(bond_dim)
                 window_list.append(window)
-                threshold_list.append(thr)
+                threshold_list.append(threshold)
                 errors.append(error)
                 runtimes.append(runtime)
 
@@ -169,7 +169,7 @@ def run(
         k = 0
         for i, w in enumerate(used_windows):
             for bd in used_bond_dims:
-                for j, _  in enumerate(thresholds):
+                for j, _ in enumerate(thresholds):
                     error_dict[bd][i, j] = errors[k]
                     runtime_dict[bd][i, j] = runtimes[k]
                     k += 1

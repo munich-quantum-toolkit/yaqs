@@ -87,6 +87,12 @@ repos:
       - id: prettier
         types_or: [yaml, markdown, html, css, scss, javascript, json]
 
+  # Check for spelling
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.30.0
+    hooks:
+      - id: typos
+
   # Check best practices for scientific Python code
   - repo: https://github.com/scientific-python/cookie
     rev: 2024.08.19

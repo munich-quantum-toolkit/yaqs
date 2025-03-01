@@ -110,6 +110,7 @@ default.extend-ignore-re = [
 ]
 [tool.typos.default.extend-words]
 wille = "wille"
+aer = "aer"
 
 
 [tool.repo-review]
