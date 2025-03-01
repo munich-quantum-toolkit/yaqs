@@ -140,10 +140,10 @@ def testupdate_site():
     #   T2 = tensordot(W, T1, axes=((1,3),(0,2))) → shape (2,1,2,4)
     #   T3 = T2.transpose((2,1,0,3)) → shape (2,1,2,4) (here the permutation reorders axes)
     # Then we contract T3 with L along axes ((2,1),(0,1)).
-    # To contract T3’s axes (axis2, axis1) = (2,1) we need L with shape (2,1,r).
-    # Then T4 will have shape (remaining T3 axes: (axis0, axis3)) plus L’s remaining axis, i.e. (2,4,r).
+    # To contract T3's axes (axis2, axis1) = (2,1) we need L with shape (2,1,r).
+    # Then T4 will have shape (remaining T3 axes: (axis0, axis3)) plus L's remaining axis, i.e. (2,4,r).
     # Finally, a transpose (here, (0,2,1)) gives shape (2, r, 4).
-    # We want the final shape to equal A’s shape (2,2,4), so we set r=2.
+    # We want the final shape to equal A's shape (2,2,4), so we set r=2.
     L_arr = np.random.randn(2, 1, 2)  # shape: (2,1,2)
     dt = 0.05
     numiter = 10

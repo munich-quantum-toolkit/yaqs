@@ -31,7 +31,7 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float):
         # Calculate the dissipation operator A
         A = sum(noise_model.strengths[i] * np.conj(jump_operator).T @ jump_operator
                 for i, jump_operator in enumerate(noise_model.jump_operators))
-        
+
         # Compute the dissipative operator by exponentiating the matrix A
         dissipative_operator = expm(-0.5 * dt * A)
 

@@ -10,11 +10,11 @@ def test_create_Ising_circuit_valid_even():
     dt = 0.1
     timesteps = 1
     circ = create_Ising_circuit(model, dt, timesteps)
-    
+
     # Check that the output is a QuantumCircuit with the right number of qubits.
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == model['L']
-    
+
     # Count the gates by name.
     op_names = [instr.operation.name for instr in circ.data]
     rx_count = op_names.count("rx")
@@ -29,10 +29,10 @@ def test_create_Ising_circuit_valid_odd():
     dt = 0.1
     timesteps = 1
     circ = create_Ising_circuit(model, dt, timesteps)
-    
+
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == model['L']
-    
+
     # For L=5:
     #   - The rx loop adds 5 gates.
     #   - The even-site loop: 5//2 = 2 iterations → 2*2 = 4 CX and 2 RZ.
@@ -62,10 +62,10 @@ def test_create_Heisenberg_circuit_valid_even():
     dt = 0.1
     timesteps = 1
     circ = create_Heisenberg_circuit(model, dt, timesteps)
-    
+
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == model['L']
-    
+
     # Check that the circuit contains the expected types of gates.
     op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
@@ -77,10 +77,10 @@ def test_create_Heisenberg_circuit_valid_odd():
     dt = 0.1
     timesteps = 1
     circ = create_Heisenberg_circuit(model, dt, timesteps)
-    
+
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == model['L']
-    
+
     op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
         assert gate in op_names

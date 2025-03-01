@@ -120,8 +120,8 @@ def test_init_Heisenberg():
     block_JzZ = left_block[0,3]
     block_hZ  = left_block[0,4]
 
-    # For a 2x2 system, Y = i * X * Z or typically [[0, -1j],[1j, 0]], 
-    # but let's just do a magnitude check unless your code expects a real Y. 
+    # For a 2x2 system, Y = i * X * Z or typically [[0, -1j],[1j, 0]],
+    # but let's just do a magnitude check unless your code expects a real Y.
     # We'll just check the sign factors.
     # Negative signs come from the code: inner[0,1] = -Jx*X, etc.
     minus_Jx = -Jx
@@ -429,7 +429,7 @@ def test_shift_orthogonality_center_left():
 
 def test_set_canonical_form():
     """
-    Test the set_canonical_form method doesn't raise errors 
+    Test the set_canonical_form method doesn't raise errors
     and retains correct shapes for an MPS.
     """
     length = 4
@@ -505,9 +505,9 @@ def test_check_if_valid_MPS():
 
 def test_check_canonical_form():
     """
-    Check that check_canonical_form runs and prints out 
-    some form of canonical info. By default, our random 
-    MPS is likely not in a canonical form, so we just 
+    Check that check_canonical_form runs and prints out
+    some form of canonical info. By default, our random
+    MPS is likely not in a canonical form, so we just
     ensure it doesn't crash.
     """
     length = 3

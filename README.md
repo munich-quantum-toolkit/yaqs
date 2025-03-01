@@ -59,27 +59,27 @@ In case you are using MQT YAQS in your work, we would be thankful if you referre
 
 ```bibtex
 @misc{sander2025_TJM,
-      title={Large-scale stochastic simulation of open quantum systems}, 
+      title={Large-scale stochastic simulation of open quantum systems},
       author={Aaron Sander and Maximilian Fröhlich and Martin Eigel and Jens Eisert and Patrick Gelß and Michael Hintermüller and Richard M. Milbradt and Robert Wille and Christian B. Mendl},
       year={2025},
       eprint={2501.17913},
       archivePrefix={arXiv},
       primaryClass={quant-ph},
-      url={https://arxiv.org/abs/2501.17913}, 
+      url={https://arxiv.org/abs/2501.17913},
 }
 @misc{sander2024_equivalencechecking,
-      title={Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator}, 
+      title={Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator},
       author={Aaron Sander and Lukas Burgholzer and Robert Wille},
       year={2024},
       eprint={2410.10946},
       archivePrefix={arXiv},
       primaryClass={quant-ph},
-      url={https://arxiv.org/abs/2410.10946}, 
+      url={https://arxiv.org/abs/2410.10946},
 }
 ```
 
 ## Acknowledgements
-This work received funding from the European Research Council (ERC) under the European Union’s Horizon 2020 research and innovation program (grant agreement No. 101001318) and Millenion, grant agreement
+This work received funding from the European Research Council (ERC) under the European Union's Horizon 2020 research and innovation program (grant agreement No. 101001318) and Millenion, grant agreement
 No. 101114305). This work was part of the Munich Quantum Valley, which is supported by the Bavarian state government with funds from the Hightech Agenda Bayern Plus, and has been supported by the BMWK on the basis of a decision by the German Bundestag through project QuaST, as well as by the BMK, BMDW, and the State of Upper Austria in the frame of the COMET program (managed by the FFG).
 
 <p align="center">

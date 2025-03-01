@@ -42,7 +42,7 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
 
     # Prepare arguments for each trajectory
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    
+
     if parallel:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -72,7 +72,7 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
                         observable.trajectories[i] = result[obs_index]
             except Exception as e:
                 print(f"Trajectory {i} failed with exception: {e}.")
-    
+
     if isinstance(operator, QuantumCircuit) and isinstance(sim_params, WeakSimParams):
         sim_params.aggregate_measurements()
     else:

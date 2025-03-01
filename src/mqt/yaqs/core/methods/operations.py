@@ -93,11 +93,11 @@ def measure_single_shot(state) -> int:
 def measure(state: MPS, shots: int) -> dict:
     """
     Measures an MPS state for a given number of shots.
-    
+
     Args:
         state ('MPS'): The MPS state to measure.
         shots (int): Number of measurements (shots) to perform.
-        
+
     Returns:
         dict: A dictionary mapping basis states to their observed counts.
     """

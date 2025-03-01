@@ -25,13 +25,13 @@ def test_process_layer():
     qc.x(qc.qubits[2])
     qc.cx(5, 4)
     qc.cx(7, 8)
-    
+
     # Convert the circuit to a DAG.
     dag = circuit_to_dag(qc)
-    
+
     # Call process_layer on the DAG.
     single, even, odd = process_layer(dag)
-    
+
     # After processing, the measurement and barrier nodes should have been removed.
     for node in dag.op_nodes():
         assert node.op.name not in ['measure', 'barrier'], \
@@ -40,14 +40,14 @@ def test_process_layer():
     # Verify that the single-qubit gate is in the single-qubit group.
     single_names = [node.op.name.lower() for node in single]
     assert any("x" in name for name in single_names), "X gate not found in single group."
-    
+
     # Verify the grouping of two-qubit gates.
     # For each node in the even group, the lower qubit index should be even.
     for node in even:
         q0 = node.qargs[0]._index
         q1 = node.qargs[1]._index
         assert min(q0, q1) % 2 == 0, f"Node with qubits {q0, q1} not in even group."
-    
+
     # For each node in the odd group, the lower qubit index should be odd.
     for node in odd:
         q0 = node.qargs[0]._index
@@ -58,10 +58,10 @@ def test_process_layer_unsupported_gate():
     # Create a QuantumCircuit with 9 qubits and 9 classical bits.
     qc = QuantumCircuit(3)
     qc.ccx(0, 1, 2)
-    
+
     # Convert the circuit to a DAG.
     dag = circuit_to_dag(qc)
-    
+
     # Call process_layer on the DAG.
     with pytest.raises(Exception):
         process_layer(dag)
@@ -76,7 +76,7 @@ def test_apply_single_qubit_gate():
 
     dag = circuit_to_dag(qc)
     node = dag.front_layer()[0]
-    
+
     apply_single_qubit_gate(mps, node)
 
     gate_tensor = getattr(GateLibrary, 'x').tensor
@@ -120,7 +120,7 @@ def test_apply_window():
     sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
 
     short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, sim_params)
-    
+
     assert window == [0, 3]
     # The short state should have tensors corresponding to indices 1 through 4.
     assert short_state.length == 4

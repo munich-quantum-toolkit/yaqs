@@ -12,7 +12,7 @@ depth = num_qubits
 circuit = QuantumCircuit(num_qubits)
 
 # Example: Two-Local Circuit
-twolocal = TwoLocal(num_qubits, ['rx'], ['rzz'], entanglement='linear', reps=depth).decompose()        
+twolocal = TwoLocal(num_qubits, ['rx'], ['rzz'], entanglement='linear', reps=depth).decompose()
 num_pars = len(twolocal.parameters)
 values = np.random.uniform(low=-np.pi, high=np.pi, size=num_pars)
 circuit = copy.deepcopy(twolocal).assign_parameters(values)

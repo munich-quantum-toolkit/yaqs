@@ -42,7 +42,7 @@ def test_lanczos_iteration_small():
 def test_lanczos_early_termination():
     """
     If beta[j] is nearly zero, the code should return early with truncated alpha, beta, V.
-    Create a diagonal matrix so that if vstart is one of the eigenvectors, 
+    Create a diagonal matrix so that if vstart is one of the eigenvectors,
     the iteration can terminate early.
     """
     A = np.diag([1.0, 2.0])

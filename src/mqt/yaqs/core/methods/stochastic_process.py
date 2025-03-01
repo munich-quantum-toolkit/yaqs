@@ -60,7 +60,7 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
             jump_dict['jumps'].append(jump_operator)
             jump_dict['strengths'].append(noise_model.strengths[j])
             jump_dict['sites'].append(site)
-    
+
     # Normalize the probabilities
     jump_dict['probabilities'] = (dp_m_list / np.sum(dp_m_list)).astype(float)
     return jump_dict

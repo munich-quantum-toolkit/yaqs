@@ -17,7 +17,7 @@ def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float
     i.e. its shape is (d0*d1, D0, D2). The function reshapes and splits it into two tensors:
       - A left tensor of shape (d0, D0, D1)
       - A right tensor of shape (d1, D1, D2)
-    
+
     The parameter `svd_distribution` determines how the singular values are distributed between the left and right tensors.
     It can be:
         - 'left'  : Multiply the left tensor by the singular values.
@@ -253,7 +253,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
 
     # Initialize the list to store right operator blocks.
     right_blocks = [None for _ in range(num_sites)]
-    
+
     # Set up the rightmost operator block as an identity-like tensor.
     right_virtual_dim = psi.tensors[num_sites - 1].shape[2]
     mpo_right_dim = op.tensors[num_sites - 1].shape[3]
@@ -265,7 +265,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
 
     # Propagate the contraction from right to left.
     for site in reversed(range(num_sites - 1)):
-        # Use the next site’s tensors and operator block for the contraction step.
+        # Use the next site's tensors and operator block for the contraction step.
         right_blocks[site] = update_right_environment(psi.tensors[site + 1], psi.tensors[site + 1], op.tensors[site + 1], right_blocks[site + 1])
     return right_blocks
 

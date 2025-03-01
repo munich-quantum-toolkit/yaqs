@@ -248,7 +248,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjuga
                                 gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
                                 gate_MPO.rotate(conjugate=True)
                                 # Remove from dag
-                                dag2.remove_op_node(node) 
+                                dag2.remove_op_node(node)
                                 break
                     break
 
@@ -313,7 +313,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjuga
 
             tensor1 = np.transpose(mpo.tensors[overall_site-1], (0, 2, 1, 3))
             theta = oe.contract('abcd, edfg->aebcfg', tensor1, theta)
-            
+
             theta = apply_temporal_zone(theta, dag1, [overall_site-1, overall_site], conjugate=False)
             theta = apply_temporal_zone(theta, dag2, [overall_site-1, overall_site], conjugate=True)
 

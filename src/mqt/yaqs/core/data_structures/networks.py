@@ -168,7 +168,7 @@ class MPS:
     def normalize(self, form: str='B'):
         if form == 'B':
             self.flip_network()
-        
+
         self.set_canonical_form(orthogonality_center=self.length-1)
         self.shift_orthogonality_center_right(self.length-1)
 
@@ -376,7 +376,7 @@ class MPO:
         converted_tensors = []
         for tensor in self.tensors:
             converted_tensors.append(np.reshape(tensor, (tensor.shape[0]*tensor.shape[1], tensor.shape[2], tensor.shape[3])))
-        
+
         return MPS(self.length, converted_tensors)
 
     def convert_to_matrix(self):
@@ -410,7 +410,7 @@ class MPO:
         identity_MPS = identity_MPO.convert_to_MPS()
         MPS = self.convert_to_MPS()
         trace = scalar_product(MPS, identity_MPS)
-        
+
         # Checks if trace is not a singular values for partial trace
         if trace.size != 1 or np.round(np.abs(trace), 1) / 2**self.length < fidelity:
             return False

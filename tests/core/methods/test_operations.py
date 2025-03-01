@@ -40,7 +40,7 @@ def test_scalar_product_partial_site():
 
 def test_local_expval_z_on_zero_state():
     """
-    Expectation value of Z on |0> is +1. 
+    Expectation value of Z on |0> is +1.
     For a product state of all |0>, local_expval => +1 (real).
     """
     # Pauli-Z in computational basis
@@ -60,7 +60,7 @@ def test_local_expval_z_on_zero_state():
 
 def test_local_expval_x_on_plus_state():
     """
-    |+> = 1/sqrt(2)(|0> + |1>), 
+    |+> = 1/sqrt(2)(|0> + |1>),
     Expectation value of X on |+> is +1.
     We'll do a single-site MPS for simplicity.
     """

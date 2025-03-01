@@ -45,7 +45,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         else:
             # TODO: Multi-qubit gates
             raise Exception("Only single- and two-qubit gates are currently supported.")
-        
+
     return single_qubit_nodes, even_nodes, odd_nodes
 
 

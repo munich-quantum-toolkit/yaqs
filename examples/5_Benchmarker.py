@@ -32,7 +32,7 @@ def run(input_ircuit: QuantumCircuit,
     The function runs the circuit with a Qiskit AerSimulator to obtain the exact expectation
     value of a Pauli Z measurement on the middle qubit, and then simulates the same circuit using
     yaqs's Simulator over a grid of simulation parameters. It then groups the results by bond
-    dimension and plots 3D “planes” in the window/threshold space (with –log₁₀(threshold) as one axis)
+    dimension and plots 3D "planes" in the window/threshold space (with –log₁₀(threshold) as one axis)
     that are stacked along the bond dimension axis. The face color of each plane encodes the absolute
     error (left) or runtime (right).
     """
