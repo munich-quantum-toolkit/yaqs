@@ -2,9 +2,11 @@ import numpy as np
 
 from ...circuits.CircuitTJM import CircuitTJM
 
+
 class Observable:
     def __init__(self, name: str, site: int):
         from ..libraries.gate_library import GateLibrary
+
         assert getattr(GateLibrary, name)
         self.name = name
         self.site = site
@@ -30,12 +32,22 @@ class Observable:
 
 
 class PhysicsSimParams:
-    def __init__(self, observables: list[Observable], T: float, dt: float=0.1, sample_timesteps: bool=True, N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, order: int=1):
+    def __init__(
+        self,
+        observables: list[Observable],
+        T: float,
+        dt: float = 0.1,
+        sample_timesteps: bool = True,
+        N: int = 1000,
+        max_bond_dim: int = 2,
+        threshold: float = 1e-6,
+        order: int = 1,
+    ):
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.T = T
         self.dt = dt
-        self.times = np.arange(0, T+dt, dt)
+        self.times = np.arange(0, T + dt, dt)
         self.sample_timesteps = sample_timesteps
         self.N = N
         self.max_bond_dim = max_bond_dim
@@ -43,9 +55,11 @@ class PhysicsSimParams:
         self.order = order
         if self.order == 1:
             from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_1
+
             self.backend = PhysicsTJM_1
         else:
             from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_2
+
             self.backend = PhysicsTJM_2
 
     def aggregate_trajectories(self):
@@ -54,8 +68,8 @@ class PhysicsSimParams:
 
 
 class WeakSimParams:
-    def __init__(self, shots: int, max_bond_dim: int=2, threshold: float=1e-6, window_size: int=None):
-        self.measurements = shots*[None]
+    def __init__(self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int = None):
+        self.measurements = shots * [None]
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
@@ -77,7 +91,14 @@ class WeakSimParams:
 
 
 class StrongSimParams:
-    def __init__(self, observables: list[Observable], N: int=1000, max_bond_dim: int=2, threshold: float=1e-6, window_size: int=None):
+    def __init__(
+        self,
+        observables: list[Observable],
+        N: int = 1000,
+        max_bond_dim: int = 2,
+        threshold: float = 1e-6,
+        window_size: int = None,
+    ):
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.N = N

@@ -5,6 +5,7 @@ from qiskit.converters import dag_to_circuit
 from ...core.libraries.gate_library import GateLibrary
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit
     import numpy as np
@@ -45,7 +46,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
         # Multi-node DAG
         for gate in dag.op_nodes():
             name = gate.op.name
-            if name in ['measure', 'barrier']:
+            if name in ["measure", "barrier"]:
                 continue
 
             attr = getattr(GateLibrary, name)
@@ -84,7 +85,7 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
     new_dag = dag.copy_empty_like()
     layers = list(dag.multigraph_layers())
     qubits_to_check = set()
-    for qubit in range(min(qubits), max(qubits)+1):
+    for qubit in range(min(qubits), max(qubits) + 1):
         qubits_to_check.add(dag.qubits[qubit])
 
     for layer in layers:
@@ -94,14 +95,14 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
 
                 # Gate is entirely within cone
                 if qubit_set <= qubits_to_check:
-                    if node.op.name in ['measure', 'barrier']:
+                    if node.op.name in ["measure", "barrier"]:
                         dag.remove_op_node(node)
                         continue
                     new_dag.apply_operation_back(node.op, node.qargs)
                     dag.remove_op_node(node)
                 else:
                     # If there is partial overlap, remove those qubits from the cone
-                    if node.op.name in ['measure', 'barrier']:
+                    if node.op.name in ["measure", "barrier"]:
                         dag.remove_op_node(node)
                         continue
                     for item in qubit_set & qubits_to_check:
@@ -131,9 +132,10 @@ def check_longest_gate(dag: DAGCircuit) -> int:
         first_layer = layer
         break
 
-    if 'first_layer' in locals():
+    if "first_layer" in locals():
         from qiskit.converters import dag_to_circuit
-        layer_circuit = dag_to_circuit(first_layer['graph'])
+
+        layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
             if gate.operation.num_qubits > 1:
                 distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1
@@ -162,12 +164,12 @@ def select_starting_point(N: int, dag: DAGCircuit) -> range:
         first_layer = layer
         break
 
-    first_iterator = range(0, N-1, 2)
-    second_iterator = range(1, N-1, 2)
+    first_iterator = range(0, N - 1, 2)
+    second_iterator = range(1, N - 1, 2)
     odd = False
 
-    if 'first_layer' in locals():
-        layer_circuit = dag_to_circuit(first_layer['graph'])
+    if "first_layer" in locals():
+        layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
             # If there's a two-qubit gate at an odd position in the list, switch
             if gate.operation.num_qubits == 2:
@@ -176,7 +178,7 @@ def select_starting_point(N: int, dag: DAGCircuit) -> range:
                 break
 
         if odd:
-            first_iterator = range(1, N-1, 2)
-            second_iterator = range(0, N-1, 2)
+            first_iterator = range(1, N - 1, 2)
+            second_iterator = range(0, N - 1, 2)
 
     return first_iterator, second_iterator

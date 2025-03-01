@@ -1,16 +1,17 @@
 import numpy as np
 
+
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     assert tensor.shape == (2, 2, 2, 2)
 
     # Splits two-qubit matrix
     matrix = np.transpose(tensor, (0, 2, 1, 3))
     dims = matrix.shape
-    matrix = np.reshape(matrix, (dims[0]*dims[1], dims[2]*dims[3]))
+    matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
     U, S_list, V = np.linalg.svd(matrix, full_matrices=False)
     S_list = S_list[S_list > 1e-6]
-    U = U[:, 0:len(S_list)]
-    V = V[0:len(S_list), :]
+    U = U[:, 0 : len(S_list)]
+    V = V[0 : len(S_list), :]
 
     tensor1 = U
     tensor2 = np.diag(S_list) @ V
@@ -31,11 +32,12 @@ def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
 
 def _extend_gate(tensor: np.ndarray, sites: list):
     from ..data_structures.networks import MPO
+
     tensors = _split_tensor(tensor)
     if len(tensors) == 2:
-    # Adds identity tensors between sites
+        # Adds identity tensors between sites
         mpo_tensors = [tensors[0]]
-        for _ in range(np.abs(sites[0]-sites[1])-1):
+        for _ in range(np.abs(sites[0] - sites[1]) - 1):
             previous_right_bond = mpo_tensors[-1].shape[3]
             identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
             for i in range(previous_right_bond):
@@ -50,14 +52,14 @@ def _extend_gate(tensor: np.ndarray, sites: list):
 
     elif len(tensors) == 3:
         mpo_tensors = [tensors[0]]
-        for _ in range(np.abs(sites[0]-sites[1])-1):
+        for _ in range(np.abs(sites[0] - sites[1]) - 1):
             previous_right_bond = mpo_tensors[-1].shape[3]
             identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
             for i in range(previous_right_bond):
                 identity_tensor[:, :, i, i] = np.identity(2)
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[1])
-        for _ in range(np.abs(sites[1]-sites[2])-1):
+        for _ in range(np.abs(sites[1] - sites[2]) - 1):
             previous_right_bond = mpo_tensors[-1].shape[3]
             identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
             for i in range(previous_right_bond):
@@ -71,69 +73,60 @@ def _extend_gate(tensor: np.ndarray, sites: list):
 
 
 class X:
-    name = 'x'
-    matrix = np.array([[0, 1],
-                       [1, 0]])
+    name = "x"
+    matrix = np.array([[0, 1], [1, 0]])
     interaction = 1
 
     tensor = matrix
     # Generator: (π/2) * X
-    generator = [(np.pi / 2) * np.array([[0, -1],
-                                        [-1, 0]])]
+    generator = [(np.pi / 2) * np.array([[0, -1], [-1, 0]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class Y:
-    name = 'y'
-    matrix = np.array([[0, -1j],
-                       [1j, 0]])
+    name = "y"
+    matrix = np.array([[0, -1j], [1j, 0]])
     interaction = 1
 
     tensor = matrix
     # Generator: (π/2) * Y
-    generator = [(np.pi / 2) * np.array([[0, -1j],
-                                        [1j, 0]])]
+    generator = [(np.pi / 2) * np.array([[0, -1j], [1j, 0]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class Z:
-    name = 'z'
-    matrix = np.array([[1, 0],
-                       [0, -1]])
+    name = "z"
+    matrix = np.array([[1, 0], [0, -1]])
     interaction = 1
 
     tensor = matrix
     # Generator: (π/2) * Z
-    generator = [(np.pi / 2) * np.array([[1, 0],
-                                        [0, -1]])]
+    generator = [(np.pi / 2) * np.array([[1, 0], [0, -1]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class H:
-    name = 'h'
-    matrix = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)],
-                       [1 / np.sqrt(2), -1 / np.sqrt(2)]])
+    name = "h"
+    matrix = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]])
     interaction = 1
 
     tensor = matrix
     # Generator: (π/2) * 1/2(X + Z)
-    generator = [(np.pi / np.sqrt(2)) * np.array([[0.5, 0.5],
-                                                 [0.5, -0.5]])]
+    generator = [(np.pi / np.sqrt(2)) * np.array([[0.5, 0.5], [0.5, -0.5]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class I:
-    name = 'id'
-    matrix = np.array([[1, 0],
-                       [0, 1]])
+    name = "id"
+    matrix = np.array([[1, 0], [0, 1]])
     interaction = 1
 
     tensor = matrix
@@ -145,99 +138,98 @@ class I:
 
 
 class SX:
-    name = 'sx'
-    matrix = 0.5 * np.array([[1 + 1j, 1 - 1j],
-                             [1 - 1j, 1 + 1j]])
+    name = "sx"
+    matrix = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]])
     interaction = 1
 
     tensor = matrix
     # Generator: (π/4) * X
-    generator = [(np.pi / 4) * np.array([[0, 1],
-                                        [1, 0]])]
+    generator = [(np.pi / 4) * np.array([[0, 1], [1, 0]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class Rx:
-    name = 'rx'
+    name = "rx"
     interaction = 1
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta / 2), -1j * np.sin(self.theta / 2)],
-                                [-1j * np.sin(self.theta / 2), np.cos(self.theta / 2)]])
+        self.matrix = np.array([
+            [np.cos(self.theta / 2), -1j * np.sin(self.theta / 2)],
+            [-1j * np.sin(self.theta / 2), np.cos(self.theta / 2)],
+        ])
         self.tensor = self.matrix
         # Generator: (θ/2) * X
-        self.generator = [(self.theta / 2) * np.array([[0, -1j],
-                                                      [-1j, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[0, -1j], [-1j, 0]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class Ry:
-    name = 'ry'
+    name = "ry"
     interaction = 1
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta / 2), -np.sin(self.theta / 2)],
-                                [np.sin(self.theta / 2), np.cos(self.theta / 2)]])
+        self.matrix = np.array([
+            [np.cos(self.theta / 2), -np.sin(self.theta / 2)],
+            [np.sin(self.theta / 2), np.cos(self.theta / 2)],
+        ])
         self.tensor = self.matrix
         # Generator: (θ/2) * Y
-        self.generator = [(self.theta / 2) * np.array([[0, -1],
-                                                      [1, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[0, -1], [1, 0]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class Rz:
-    name = 'rz'
+    name = "rz"
     interaction = 1
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.exp(-1j * self.theta / 2), 0],
-                                [0, np.exp(1j * self.theta / 2)]])
+        self.matrix = np.array([[np.exp(-1j * self.theta / 2), 0], [0, np.exp(1j * self.theta / 2)]])
         self.tensor = self.matrix
         # Generator: (θ/2) * Z
-        self.generator = [(self.theta / 2) * np.array([[-1j, 0],
-                                                      [0, 1j]])]
+        self.generator = [(self.theta / 2) * np.array([[-1j, 0], [0, 1j]])]
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class Phase:
-    name = 'p'
+    name = "p"
     interaction = 1
 
     def set_params(self, params):
         # Phase gate has one parameter theta
         self.theta = params[0]
-        self.matrix = np.array([[1, 0],
-                                [0, np.exp(1j * self.theta)]
-                                ])
+        self.matrix = np.array([[1, 0], [0, np.exp(1j * self.theta)]])
         self.tensor = self.matrix
         # Generator: (θ/2) * Z
-        self.generator = (self.theta / 2) * np.array([[1, 0],
-                                                      [0, -1]])
+        self.generator = (self.theta / 2) * np.array([[1, 0], [0, -1]])
 
     def set_sites(self, site0: int):
         self.sites = [site0]
 
 
 class U3:
-    name = 'u'
+    name = "u"
     interaction = 1
 
     def set_params(self, params):
         self.theta, self.phi, self.lam = params
-        self.matrix = np.array([[np.cos(self.theta/2), -np.exp(1j*self.lam)*np.sin(self.theta/2)],
-                                [np.exp(1j*self.phi)*np.sin(self.theta/2), np.exp(1j*(self.phi+self.lam))*np.cos(self.theta/2)]
-                                ])
+        self.matrix = np.array([
+            [np.cos(self.theta / 2), -np.exp(1j * self.lam) * np.sin(self.theta / 2)],
+            [
+                np.exp(1j * self.phi) * np.sin(self.theta / 2),
+                np.exp(1j * (self.phi + self.lam)) * np.cos(self.theta / 2),
+            ],
+        ])
         self.tensor = self.matrix
 
     def set_sites(self, site0: int):
@@ -245,18 +237,15 @@ class U3:
 
 
 class CX:
-    name = 'cx'
-    matrix = np.array([[1, 0, 0, 0],
-                       [0, 1, 0, 0],
-                       [0, 0, 0, 1],
-                       [0, 0, 1, 0]])
+    name = "cx"
+    matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
     interaction = 2
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-X)
-        self.generator = [(np.pi / 4)*np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
+        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
         self.mpo = _extend_gate(self.tensor, self.sites)
         if site1 < site0:  # Adjust for reverse control/target
             # self.generator.reverse()
@@ -264,18 +253,15 @@ class CX:
 
 
 class CZ:
-    name = 'cz'
-    matrix = np.array([[1, 0, 0, 0],
-                       [0, 1, 0, 0],
-                       [0, 0, 1, 0],
-                       [0, 0, 0, -1]])
+    name = "cz"
+    matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]])
     interaction = 2
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-Z)
-        self.generator = [(np.pi / 4)*np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
+        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
 
         if site1 < site0:  # Adjust for reverse control/target
             # self.generator.reverse()
@@ -283,18 +269,15 @@ class CZ:
 
 
 class CPhase:
-    name = 'cp'
+    name = "cp"
     interaction = 2
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[1, 0, 0, 0],
-                                [0, 1, 0, 0],
-                                [0, 0, 1, 0],
-                                [0, 0, 0, np.exp(1j * self.theta)]])
+        self.matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j * self.theta)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Z ⊗ P), where P = diag(1, 0)
-        self.generator = [(self.theta / 2)*np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
@@ -307,11 +290,8 @@ class CPhase:
 
 
 class SWAP:
-    name = 'swap'
-    matrix = np.array([[1, 0, 0, 0],
-                       [0, 0, 1, 0],
-                       [0, 1, 0, 0],
-                       [0, 0, 0, 1]])
+    name = "swap"
+    matrix = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
     interaction = 2
 
     def __init__(self):
@@ -322,8 +302,15 @@ class SWAP:
         #     np.kron(np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])) +  # Y ⊗ Y
         #     np.kron(np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]]))  # Z ⊗ Z
         # )
-        self.generator = [[(np.pi / 4)*np.eye(2), np.pi/4*np.array([[0, 1], [1, 0]]), np.pi/4*np.array([[0, -1j], [1j, 0]]), np.pi/4*np.array([[1, 0], [0, -1]])],
-                          [np.eye(2), np.array([[0, 1], [1, 0]]), np.array([[0, -1j], [1j, 0]]), np.array([[1, 0], [0, -1]])]]
+        self.generator = [
+            [
+                (np.pi / 4) * np.eye(2),
+                np.pi / 4 * np.array([[0, 1], [1, 0]]),
+                np.pi / 4 * np.array([[0, -1j], [1j, 0]]),
+                np.pi / 4 * np.array([[1, 0], [0, -1]]),
+            ],
+            [np.eye(2), np.array([[0, 1], [1, 0]]), np.array([[0, -1j], [1j, 0]]), np.array([[1, 0], [0, -1]])],
+        ]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
@@ -331,56 +318,64 @@ class SWAP:
 
 
 class Rxx:
-    name = 'rxx'
+    name = "rxx"
     interaction = 2
+
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta / 2), 0, 0, -1j * np.sin(self.theta / 2)],
-                                [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
-                                [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
-                                [-1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)]])
+        self.matrix = np.array([
+            [np.cos(self.theta / 2), 0, 0, -1j * np.sin(self.theta / 2)],
+            [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
+            [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
+            [-1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)],
+        ])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (X ⊗ X)
-        self.generator = [(self.theta/2)*np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
 
 
 class Ryy:
-    name = 'ryy'
+    name = "ryy"
     interaction = 2
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta / 2), 0, 0, 1j * np.sin(self.theta / 2)],
-                                [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
-                                [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
-                                [1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)]])
+        self.matrix = np.array([
+            [np.cos(self.theta / 2), 0, 0, 1j * np.sin(self.theta / 2)],
+            [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
+            [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
+            [1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)],
+        ])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Y ⊗ Y)
-        self.generator = [(self.theta / 2)*np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
 
 
 class Rzz:
-    name = 'rzz'
+    name = "rzz"
     interaction = 2
 
     def set_params(self, params):
         self.theta = params[0]
-        self.matrix = np.array([[np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2), 0, 0, 0],
-                                [0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0, 0],
-                                [0, 0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0],
-                                [0, 0, 0, np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2)]])
+        self.matrix = np.array([
+            [np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2), 0, 0, 0],
+            [0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0, 0],
+            [0, 0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0],
+            [0, 0, 0, np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2)],
+        ])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Z ⊗ Z)
-        self.generator = [(self.theta / 2)*np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
+        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
 
     def set_sites(self, site0: int, site1: int):
         self.sites = [site0, site1]
+
 
 # class U2:
 #     name = 'u2'

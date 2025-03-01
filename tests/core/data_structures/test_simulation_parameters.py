@@ -3,8 +3,9 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
+
 def test_observable_creation_valid():
-    name = 'x'
+    name = "x"
     site = 0
     obs = Observable(name, site)
 
@@ -13,15 +14,17 @@ def test_observable_creation_valid():
     assert obs.results is None
     assert obs.trajectories is None
 
+
 def test_observable_creation_invalid():
-    name = 'FakeName'
+    name = "FakeName"
     with pytest.raises(AttributeError) as exc_info:
         Observable(name, 0)
     # The default message is typically "type object 'GateLibrary' has no attribute 'FakeName'"
     assert "has no attribute" in str(exc_info.value)
 
+
 def test_physics_simparams_basic():
-    obs_list = [Observable('x', 0)]
+    obs_list = [Observable("x", 0)]
     T = 1.0
     dt = 0.2
     params = PhysicsSimParams(obs_list, T, dt=dt, sample_timesteps=True, N=50)
@@ -33,6 +36,7 @@ def test_physics_simparams_basic():
     assert np.allclose(params.times, expected_times), "Times array should match numpy.arange(0, T+dt, dt)."
     assert params.sample_timesteps is True
     assert params.N == 50
+
 
 def test_physics_simparams_defaults():
     """
@@ -53,11 +57,12 @@ def test_physics_simparams_defaults():
     assert params.threshold == 1e-6
     assert params.order == 1
 
+
 def test_observable_initialize_with_sample_timesteps():
     """
     Check shape of 'results' and 'trajectories' when sample_timesteps = True.
     """
-    obs = Observable('x', 1)
+    obs = Observable("x", 1)
     sim_params = PhysicsSimParams([obs], T=1.0, dt=0.5, sample_timesteps=True, N=10)
     # sim_params.times => [0.0, 0.5, 1.0]
     # length(sim_params.times) => 3
@@ -66,11 +71,12 @@ def test_observable_initialize_with_sample_timesteps():
     assert obs.results.shape == (3,), "results should match len(sim_params.times)."
     assert obs.trajectories.shape == (sim_params.N, 3), "trajectories => (N, len(times))."
 
+
 def test_observable_initialize_without_sample_timesteps():
     """
     Check shape of 'results' and 'trajectories' when sample_timesteps = False.
     """
-    obs = Observable('x', 0)
+    obs = Observable("x", 0)
     sim_params = PhysicsSimParams([obs], T=1.0, dt=0.25, sample_timesteps=False, N=5)
     # times => [0.0, 0.25, 0.5, 0.75, 1.0]
     # but if sample_timesteps=False, 'trajectories' => shape (N, 1)

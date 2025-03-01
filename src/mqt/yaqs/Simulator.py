@@ -9,12 +9,13 @@ from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
 
 
-def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):
+def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel = None, parallel: bool = True):
     """
     Common simulation routine used by both circuit and Hamiltonian simulations.
     It normalizes the state, prepares trajectory arguments, runs the trajectories
@@ -38,7 +39,7 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
             observable.initialize(sim_params)
 
     # Normalize the state to the B form
-    initial_state.normalize('B')
+    initial_state.normalize("B")
 
     # Prepare arguments for each trajectory
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]

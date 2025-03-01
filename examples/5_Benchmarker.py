@@ -14,11 +14,13 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 from mqt.yaqs import Simulator
 
 
-def run(input_ircuit: QuantumCircuit,
-        style: str = 'dots',
-        max_bond_dims=[2, 4, 8, 16, 32],
-        window_sizes=[0, 1, 2, 3, 4],
-        thresholds=[1e-3, 1e-6, 1e-9, 1e-12, 1e-16]):
+def run(
+    input_ircuit: QuantumCircuit,
+    style: str = "dots",
+    max_bond_dims=[2, 4, 8, 16, 32],
+    window_sizes=[0, 1, 2, 3, 4],
+    thresholds=[1e-3, 1e-6, 1e-9, 1e-12, 1e-16],
+):
     """
     Benchmark an arbitrary quantum circuit by comparing a Qiskit exact simulation
     with approximate simulations using various simulation parameters.
@@ -44,21 +46,21 @@ def run(input_ircuit: QuantumCircuit,
     num_qubits = circuit_exact.num_qubits
 
     # Run the exact simulation using Qiskit's AerSimulator.
-    simulator = AerSimulator(method='statevector')
+    simulator = AerSimulator(method="statevector")
     result = simulator.run(circuit_exact).result()
     qiskit_state = result.get_statevector(circuit_exact)
 
     # Construct an observable: Z on the middle qubit (I on others).
-    pauli_list = ['I'] * num_qubits
-    pauli_list[num_qubits // 2] = 'Z'
-    pauli_string = ''.join(pauli_list)
+    pauli_list = ["I"] * num_qubits
+    pauli_list[num_qubits // 2] = "Z"
+    pauli_string = "".join(pauli_list)
     op = Operator(Pauli(pauli_string).to_matrix())
 
     sv = Statevector(qiskit_state)
     exact_result = np.real(sv.expectation_value(op))
 
     # Set up the simulation state and noise model for yaqs.
-    state = MPS(num_qubits, state='zeros')
+    state = MPS(num_qubits, state="zeros")
     noise_model = None
     N = 1  # number of simulation samples
 
@@ -79,7 +81,7 @@ def run(input_ircuit: QuantumCircuit,
             for thr in thresholds:
                 # Create a fresh copy of the circuit for each simulation.
                 circuit_copy = copy.deepcopy(input_ircuit)
-                measurements = [Observable('z', num_qubits // 2)]
+                measurements = [Observable("z", num_qubits // 2)]
                 sim_params = StrongSimParams(measurements, N, bond_dim, threshold=thr, window_size=window)
 
                 start_time = time.time()
@@ -96,7 +98,7 @@ def run(input_ircuit: QuantumCircuit,
                 errors.append(error)
                 runtimes.append(runtime)
 
-    if style == 'dots':
+    if style == "dots":
         # Convert thresholds to -log10(threshold) for visualization.
         log_thresholds = [-np.log10(th) for th in threshold_list]
 
@@ -104,27 +106,29 @@ def run(input_ircuit: QuantumCircuit,
         fig = plt.figure(figsize=(16, 7))
 
         # 3D scatter plot for error.
-        ax1 = fig.add_subplot(121, projection='3d')
-        sc1 = ax1.scatter(bond_list, window_list, log_thresholds, c=errors, cmap='viridis', s=60, norm=LogNorm(vmin=1e-12, vmax=1e-2))
-        ax1.set_xlabel('Max Bond Dimension', fontsize=11)
-        ax1.set_ylabel('Window Size', fontsize=11)
-        ax1.set_zlabel('-log10(Threshold)', fontsize=11)
-        ax1.set_title('Error vs. Simulation Parameters', fontsize=14)
-        ax1.grid(True, linestyle='--', alpha=0.5)
+        ax1 = fig.add_subplot(121, projection="3d")
+        sc1 = ax1.scatter(
+            bond_list, window_list, log_thresholds, c=errors, cmap="viridis", s=60, norm=LogNorm(vmin=1e-12, vmax=1e-2)
+        )
+        ax1.set_xlabel("Max Bond Dimension", fontsize=11)
+        ax1.set_ylabel("Window Size", fontsize=11)
+        ax1.set_zlabel("-log10(Threshold)", fontsize=11)
+        ax1.set_title("Error vs. Simulation Parameters", fontsize=14)
+        ax1.grid(True, linestyle="--", alpha=0.5)
         cbar1 = fig.colorbar(sc1, ax=ax1, pad=0.1, aspect=20)
-        cbar1.set_label('Absolute Error (log scale)', fontsize=11)
+        cbar1.set_label("Absolute Error (log scale)", fontsize=11)
         cbar1.ax.tick_params(labelsize=10)
 
         # 3D scatter plot for runtime.
-        ax2 = fig.add_subplot(122, projection='3d')
-        sc2 = ax2.scatter(bond_list, window_list, log_thresholds, c=runtimes, cmap='magma', s=60)
-        ax2.set_xlabel('Max Bond Dimension', fontsize=11)
-        ax2.set_ylabel('Window Size', fontsize=11)
-        ax2.set_zlabel('-log10(Threshold)', fontsize=11)
-        ax2.set_title('Runtime vs. Simulation Parameters', fontsize=14)
-        ax2.grid(True, linestyle='--', alpha=0.5)
+        ax2 = fig.add_subplot(122, projection="3d")
+        sc2 = ax2.scatter(bond_list, window_list, log_thresholds, c=runtimes, cmap="magma", s=60)
+        ax2.set_xlabel("Max Bond Dimension", fontsize=11)
+        ax2.set_ylabel("Window Size", fontsize=11)
+        ax2.set_zlabel("-log10(Threshold)", fontsize=11)
+        ax2.set_title("Runtime vs. Simulation Parameters", fontsize=14)
+        ax2.grid(True, linestyle="--", alpha=0.5)
         cbar2 = fig.colorbar(sc2, ax=ax2, pad=0.1, aspect=20)
-        cbar2.set_label('Runtime (s)', fontsize=11)
+        cbar2.set_label("Runtime (s)", fontsize=11)
         cbar2.ax.tick_params(labelsize=10)
 
         ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
@@ -136,11 +140,11 @@ def run(input_ircuit: QuantumCircuit,
         ax2.zaxis.set_major_locator(MaxNLocator(integer=True))
 
         # Overall figure title and layout adjustments.
-        fig.suptitle('Performance Metrics Benchmark', fontsize=18, fontweight='bold')
+        fig.suptitle("Performance Metrics Benchmark", fontsize=18, fontweight="bold")
         plt.tight_layout(pad=4.0)
         plt.show()
 
-    elif style == 'planes':
+    elif style == "planes":
         # Convert thresholds to -log10(threshold) for visualization.
         log_thresholds = [-np.log10(th) for th in threshold_list]
         # === Group data by bond dimension ===
@@ -158,20 +162,20 @@ def run(input_ircuit: QuantumCircuit,
         k = 0
         for i, w in enumerate(used_windows):
             for bd in used_bond_dims:
-                for j, thr in enumerate(thresholds):
+                for j, _  in enumerate(thresholds):
                     error_dict[bd][i, j] = errors[k]
                     runtime_dict[bd][i, j] = runtimes[k]
                     k += 1
 
         # Create the 2D grid for the window and threshold plane.
         # Here, y-axis: window size, z-axis: -log10(threshold)
-        Y, Z = np.meshgrid(used_windows, [-np.log10(th) for th in thresholds], indexing='ij')
+        Y, Z = np.meshgrid(used_windows, [-np.log10(th) for th in thresholds], indexing="ij")
 
         # === Plotting ===
         fig = plt.figure(figsize=(16, 7))
 
         # --- Error Plot ---
-        ax1 = fig.add_subplot(121, projection='3d')
+        ax1 = fig.add_subplot(121, projection="3d")
         norm_err = LogNorm(vmin=1e-12, vmax=1e-2)
         cmap_err = plt.cm.viridis
 
@@ -179,15 +183,23 @@ def run(input_ircuit: QuantumCircuit,
             # Create a plane at x = bond_dim.
             X_plane = np.full(Y.shape, bd)
             facecolors = cmap_err(norm_err(error_dict[bd]))
-            surf = ax1.plot_surface(X_plane, Y, Z, rstride=1, cstride=1,
-                                    facecolors=facecolors,
-                                    shade=False, edgecolor='k',
-                                    linewidth=0.3, antialiased=True)
-        ax1.set_xlabel('Max Bond Dimension', fontsize=11)
-        ax1.set_ylabel('Window Size', fontsize=11)
-        ax1.set_zlabel('-log10(Threshold)', fontsize=11)
-        ax1.set_title('Error vs. Simulation Parameters', fontsize=14)
-        ax1.grid(True, linestyle='--', alpha=0.5)
+            surf = ax1.plot_surface(
+                X_plane,
+                Y,
+                Z,
+                rstride=1,
+                cstride=1,
+                facecolors=facecolors,
+                shade=False,
+                edgecolor="k",
+                linewidth=0.3,
+                antialiased=True,
+            )
+        ax1.set_xlabel("Max Bond Dimension", fontsize=11)
+        ax1.set_ylabel("Window Size", fontsize=11)
+        ax1.set_zlabel("-log10(Threshold)", fontsize=11)
+        ax1.set_title("Error vs. Simulation Parameters", fontsize=14)
+        ax1.grid(True, linestyle="--", alpha=0.5)
 
         # Set tick positions using the actual values:
         # x-axis (bond dimensions)
@@ -204,26 +216,34 @@ def run(input_ircuit: QuantumCircuit,
         mappable_err = plt.cm.ScalarMappable(norm=norm_err, cmap=cmap_err)
         mappable_err.set_array([])
         cbar1 = fig.colorbar(mappable_err, ax=ax1, pad=0.1, aspect=20)
-        cbar1.set_label('Absolute Error (log scale)', fontsize=11)
+        cbar1.set_label("Absolute Error (log scale)", fontsize=11)
         cbar1.ax.tick_params(labelsize=10)
 
         # --- Runtime Plot ---
-        ax2 = fig.add_subplot(122, projection='3d')
+        ax2 = fig.add_subplot(122, projection="3d")
         norm_rt = Normalize(vmin=min(runtimes), vmax=max(runtimes))
         cmap_rt = plt.cm.magma
 
         for bd in used_bond_dims:
             X_plane = np.full(Y.shape, bd)
             facecolors_rt = cmap_rt(norm_rt(runtime_dict[bd]))
-            surf2 = ax2.plot_surface(X_plane, Y, Z, rstride=1, cstride=1,
-                                     facecolors=facecolors_rt,
-                                     shade=False, edgecolor='k',
-                                     linewidth=0.3, antialiased=True)
-        ax2.set_xlabel('Max Bond Dimension', fontsize=11)
-        ax2.set_ylabel('Window Size', fontsize=11)
-        ax2.set_zlabel('-log10(Threshold)', fontsize=11)
-        ax2.set_title('Runtime vs. Simulation Parameters', fontsize=14)
-        ax2.grid(True, linestyle='--', alpha=0.5)
+            surf2 = ax2.plot_surface(
+                X_plane,
+                Y,
+                Z,
+                rstride=1,
+                cstride=1,
+                facecolors=facecolors_rt,
+                shade=False,
+                edgecolor="k",
+                linewidth=0.3,
+                antialiased=True,
+            )
+        ax2.set_xlabel("Max Bond Dimension", fontsize=11)
+        ax2.set_ylabel("Window Size", fontsize=11)
+        ax2.set_zlabel("-log10(Threshold)", fontsize=11)
+        ax2.set_title("Runtime vs. Simulation Parameters", fontsize=14)
+        ax2.grid(True, linestyle="--", alpha=0.5)
 
         # Set tick positions using the actual values:
         ax2.set_xticks(used_bond_dims)
@@ -236,16 +256,17 @@ def run(input_ircuit: QuantumCircuit,
         mappable_rt = plt.cm.ScalarMappable(norm=norm_rt, cmap=cmap_rt)
         mappable_rt.set_array([])
         cbar2 = fig.colorbar(mappable_rt, ax=ax2, pad=0.1, aspect=20)
-        cbar2.set_label('Runtime (s)', fontsize=11)
+        cbar2.set_label("Runtime (s)", fontsize=11)
         cbar2.ax.tick_params(labelsize=10)
 
-        fig.suptitle('Performance Metrics Benchmark', fontsize=18, fontweight='bold')
+        fig.suptitle("Performance Metrics Benchmark", fontsize=18, fontweight="bold")
         plt.tight_layout(pad=4.0)
         plt.show()
 
+
 if __name__ == "__main__":
     num_qubits = 10
-    model = {'name': 'Ising', 'L': num_qubits, 'J': 1, 'g': 0.5}
+    model = {"name": "Ising", "L": num_qubits, "J": 1, "g": 0.5}
     demo_circuit = create_Ising_circuit(model, dt=0.1, timesteps=10)
     # Run the benchmark on the demo circuit.
-    run(demo_circuit, style='dots')
+    run(demo_circuit, style="dots")

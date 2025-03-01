@@ -3,7 +3,7 @@ from qiskit import QuantumCircuit
 from mqt.yaqs.circuits.equivalence_checker import run
 
 
-@pytest.mark.parametrize("threshold,fidelity", [(1e-13, 1-1e-13), (1e-1, 1-1e-3)])
+@pytest.mark.parametrize("threshold,fidelity", [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
 def test_identity_vs_identity(threshold, fidelity):
     """
     Two empty (no-gate) circuits on the same number of qubits
@@ -14,8 +14,8 @@ def test_identity_vs_identity(threshold, fidelity):
     qc2 = QuantumCircuit(num_qubits)
 
     result = run(qc1, qc2, threshold=threshold, fidelity=fidelity)
-    assert result['equivalent'] is True, "Empty circuits (identities) should be equivalent."
-    assert result['elapsed_time'] >= 0
+    assert result["equivalent"] is True, "Empty circuits (identities) should be equivalent."
+    assert result["elapsed_time"] >= 0
 
 
 # # def test_single_qubit_equivalence():
@@ -66,8 +66,8 @@ def test_two_qubit_equivalence():
     qc2.h(0)
     qc2.cx(0, 1)
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1-1e-13)
-    assert result['equivalent'] is True, "Identical 2-qubit circuits must be equivalent."
+    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    assert result["equivalent"] is True, "Identical 2-qubit circuits must be equivalent."
 
 
 def test_two_qubit_non_equivalence():
@@ -84,8 +84,8 @@ def test_two_qubit_non_equivalence():
     qc2.cx(0, 1)
     qc2.x(1)  # An extra gate after entangling
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1-1e-13)
-    assert result['equivalent'] is False, "Extra gate should break equivalence."
+    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    assert result["equivalent"] is False, "Extra gate should break equivalence."
 
 
 def test_long_range_equivalence():
@@ -101,8 +101,8 @@ def test_long_range_equivalence():
     qc2.h(0)
     qc2.cx(0, 2)
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1-1e-13)
-    assert result['equivalent'] is True, "Long-range test not equivalent."
+    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    assert result["equivalent"] is True, "Long-range test not equivalent."
 
 
 def test_long_range_non_equivalence():
@@ -119,5 +119,5 @@ def test_long_range_non_equivalence():
     qc2.cx(0, 2)
     qc2.x(1)  # An extra gate after entangling
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1-1e-13)
-    assert result['equivalent'] is False, "Extra gate should break equivalence."
+    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    assert result["equivalent"] is False, "Extra gate should break equivalence."

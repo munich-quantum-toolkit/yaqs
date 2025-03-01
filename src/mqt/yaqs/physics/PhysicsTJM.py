@@ -7,6 +7,7 @@ from ..core.methods.dynamic_TDVP import dynamic_TDVP
 from ..core.methods.stochastic_process import stochastic_process
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ..core.data_structures.networks import MPO, MPS
     from ..core.data_structures.noise_model import NoiseModel
@@ -26,7 +27,7 @@ def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams
     Returns:
         MPS: The initialized sampling MPS Phi(0).
     """
-    apply_dissipation(state, noise_model, sim_params.dt/2)
+    apply_dissipation(state, noise_model, sim_params.dt / 2)
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
@@ -65,7 +66,7 @@ def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimPara
     """
     psi = copy.deepcopy(phi)
     dynamic_TDVP(psi, H, sim_params)
-    apply_dissipation(psi, noise_model, sim_params.dt/2)
+    apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
     if sim_params.sample_timesteps:
         temp_state = copy.deepcopy(psi)
@@ -118,7 +119,7 @@ def PhysicsTJM_2(args):
         phi = step_through(phi, H, noise_model, sim_params)
         if sim_params.sample_timesteps:
             sample(phi, H, noise_model, sim_params, results, j)
-        elif j == len(sim_params.times)-1:
+        elif j == len(sim_params.times) - 1:
             sample(phi, H, noise_model, sim_params, results, j)
 
     return results
@@ -151,7 +152,7 @@ def PhysicsTJM_1(args):
                         temp_state.shift_orthogonality_center_right(site)
                     last_site = observable.site
                 results[obs_index, j] = temp_state.measure(observable)
-        elif j == len(sim_params.times)-1:
+        elif j == len(sim_params.times) - 1:
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 

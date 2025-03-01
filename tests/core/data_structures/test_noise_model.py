@@ -12,7 +12,7 @@ def test_noise_model_creation():
     assert model.strengths == strengths
     assert len(model.jump_operators) == len(processes)
 
-    assert model.jump_operators[0].shape == (2,2), "First jump operator should be 2x2 for 'dephasing'."
+    assert model.jump_operators[0].shape == (2, 2), "First jump operator should be 2x2 for 'dephasing'."
 
 
 def test_noise_model_assertion():

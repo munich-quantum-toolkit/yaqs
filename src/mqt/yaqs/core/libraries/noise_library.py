@@ -1,5 +1,6 @@
 import numpy as np
 
+
 # TODO: Extend to d-levels
 class Excitation:
     d = 2
@@ -9,6 +10,7 @@ class Excitation:
             if row - col == 1:
                 matrix[row][col] = 1
 
+
 class Relaxation:
     d = 2
     matrix = np.zeros((d, d))
@@ -17,9 +19,10 @@ class Relaxation:
             if col - row == 1:
                 matrix[row][col] = 1
 
+
 class Dephasing:
-    matrix = np.array([[1, 0],
-                       [0, -1]])
+    matrix = np.array([[1, 0], [0, -1]])
+
 
 class NoiseLibrary:
     excitation = Excitation

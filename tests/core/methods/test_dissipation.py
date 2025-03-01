@@ -5,6 +5,7 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 
+
 def test_apply_dissipation_site_canonical_0():
     """
     Check that after calling apply_dissipation, the MPS is site-canonical at site 0.
@@ -24,7 +25,7 @@ def test_apply_dissipation_site_canonical_0():
         tensor = vec.reshape(pdim, 1, 1)
         tensors.append(tensor)
 
-    state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim]*length)
+    state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
 
     # 2) Create a minimal NoiseModel. Suppose we have 1 jump operator (like sigma_z or random).
     #    We set a small strength for a small dt test.
@@ -38,6 +39,5 @@ def test_apply_dissipation_site_canonical_0():
     # 4) Now check that MPS is site-canonical at site 0.
     canonical_site = state.check_canonical_form()
     assert canonical_site == 0, (
-        f"MPS should be site-canonical at site 0 after apply_dissipation, "
-        f"but got canonical site: {canonical_site}"
+        f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"
     )

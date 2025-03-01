@@ -7,10 +7,10 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 
-I = getattr(GateLibrary, 'id').matrix
-X = getattr(GateLibrary, 'x').matrix
-Y = getattr(GateLibrary, 'y').matrix
-Z = getattr(GateLibrary, 'z').matrix
+I = getattr(GateLibrary, "id").matrix
+X = getattr(GateLibrary, "x").matrix
+Y = getattr(GateLibrary, "y").matrix
+Z = getattr(GateLibrary, "z").matrix
 
 
 def untranspose_block(mpo_tensor):
@@ -20,6 +20,7 @@ def untranspose_block(mpo_tensor):
     That way, we can interpret row x col as a block matrix of operators.
     """
     return np.transpose(mpo_tensor, (2, 3, 0, 1))
+
 
 ################################################
 # Tests for the MPO class
@@ -38,8 +39,8 @@ def test_init_Ising():
     assert len(mpo.tensors) == length
 
     # Expected sign factors
-    minus_J = -J    # -1.0
-    minus_g = -g    # -0.5
+    minus_J = -J  # -1.0
+    minus_g = -g  # -0.5
 
     #
     # Check left boundary: shape (2,2,1,3)
@@ -50,9 +51,9 @@ def test_init_Ising():
     assert left_block.shape == (1, 3, 2, 2)
 
     # Extract each operator block
-    block_I   = left_block[0, 0]  # (2,2)
-    block_JZ  = left_block[0, 1]  # (2,2)
-    block_gX  = left_block[0, 2]  # (2,2)
+    block_I = left_block[0, 0]  # (2,2)
+    block_JZ = left_block[0, 1]  # (2,2)
+    block_gX = left_block[0, 2]  # (2,2)
 
     assert np.allclose(block_I, I)
     assert np.allclose(block_JZ, minus_J * Z)
@@ -69,15 +70,15 @@ def test_init_Ising():
         assert inner_block.shape == (3, 3, 2, 2)
 
         # row=0, col=0 => I
-        assert np.allclose(inner_block[0,0], I)
+        assert np.allclose(inner_block[0, 0], I)
         # row=0, col=1 => -J Z
-        assert np.allclose(inner_block[0,1], minus_J * Z)
+        assert np.allclose(inner_block[0, 1], minus_J * Z)
         # row=0, col=2 => -g X
-        assert np.allclose(inner_block[0,2], minus_g * X)
+        assert np.allclose(inner_block[0, 2], minus_g * X)
         # row=1, col=2 => Z
-        assert np.allclose(inner_block[1,2], Z)
+        assert np.allclose(inner_block[1, 2], Z)
         # row=2, col=2 => I
-        assert np.allclose(inner_block[2,2], I)
+        assert np.allclose(inner_block[2, 2], I)
 
     #
     # Check right boundary: shape (2,2,3,1)
@@ -86,9 +87,9 @@ def test_init_Ising():
     right_block = untranspose_block(mpo.tensors[-1])  # (3,1,2,2)
     assert right_block.shape == (3, 1, 2, 2)
 
-    block_gX  = right_block[0, 0]
-    block_Z   = right_block[1, 0]
-    block_I   = right_block[2, 0]
+    block_gX = right_block[0, 0]
+    block_Z = right_block[1, 0]
+    block_I = right_block[2, 0]
 
     assert np.allclose(block_gX, minus_g * X)
     assert np.allclose(block_Z, Z)
@@ -114,11 +115,11 @@ def test_init_Heisenberg():
     assert left_block.shape == (1, 5, 2, 2)
 
     # Check each operator
-    block_I   = left_block[0,0]
-    block_JxX = left_block[0,1]
-    block_JyY = left_block[0,2]
-    block_JzZ = left_block[0,3]
-    block_hZ  = left_block[0,4]
+    block_I = left_block[0, 0]
+    block_JxX = left_block[0, 1]
+    block_JyY = left_block[0, 2]
+    block_JzZ = left_block[0, 3]
+    block_hZ = left_block[0, 4]
 
     # For a 2x2 system, Y = i * X * Z or typically [[0, -1j],[1j, 0]],
     # but let's just do a magnitude check unless your code expects a real Y.
@@ -127,15 +128,15 @@ def test_init_Heisenberg():
     minus_Jx = -Jx
     minus_Jy = -Jy
     minus_Jz = -Jz
-    minus_h  = -h
+    minus_h = -h
 
     assert np.allclose(block_I, I)
     assert np.allclose(block_JxX, minus_Jx * X)
     assert np.allclose(block_JyY, minus_Jy * Y)
-    assert block_JyY.shape == (2,2)
+    assert block_JyY.shape == (2, 2)
 
     assert np.allclose(block_JzZ, minus_Jz * Z)
-    assert np.allclose(block_hZ,  minus_h  * Z)
+    assert np.allclose(block_hZ, minus_h * Z)
 
     # Similarly, check shapes of inner and right boundary as you did before:
     for i, tensor in enumerate(mpo.tensors):
@@ -197,9 +198,9 @@ def test_init_custom():
     length = 3
     pdim = 2
     tensors = [
-        np.random.rand(1, 2, pdim, pdim),   # left
-        np.random.rand(2, 2, pdim, pdim),   # middle
-        np.random.rand(2, 1, pdim, pdim)    # right
+        np.random.rand(1, 2, pdim, pdim),  # left
+        np.random.rand(2, 2, pdim, pdim),  # middle
+        np.random.rand(2, 1, pdim, pdim),  # right
     ]
 
     mpo = MPO()
@@ -269,7 +270,7 @@ def test_rotate():
     for orig, rotated in zip(original_tensors, mpo.tensors):
         # rotate does transpose (1, 0, 2, 3), so check that
         assert rotated.shape == (orig.shape[1], orig.shape[0], orig.shape[2], orig.shape[3])
-        np.allclose(rotated, np.transpose(orig, (1,0,2,3)))
+        np.allclose(rotated, np.transpose(orig, (1, 0, 2, 3)))
 
     # Rotate back with conjugation=True
     # This will take the conj() and then transpose(1,0,2,3) again.
@@ -304,7 +305,7 @@ def test_mps_initialization(state):
     """
     length = 4
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim]*length, state=state)
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state)
 
     assert mps.length == length
     assert len(mps.tensors) == length
@@ -329,7 +330,7 @@ def test_mps_custom_tensors():
     t3 = np.random.rand(pdim, 2, 1)
     tensors = [t1, t2, t3]
 
-    mps = MPS(length=length, tensors=tensors, physical_dimensions=[pdim]*length)
+    mps = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
     assert mps.length == length
     assert len(mps.tensors) == length
     for i, tensor in enumerate(mps.tensors):
@@ -346,7 +347,7 @@ def test_write_max_bond_dim():
     t1 = np.random.rand(pdim, 1, 4)
     t2 = np.random.rand(pdim, 4, 5)
     t3 = np.random.rand(pdim, 5, 2)
-    mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim]*length)
+    mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
 
     max_bond = mps.write_max_bond_dim()
     assert max_bond == 5  # The largest dimension among (1,4,5,5,2) is 5.
@@ -363,7 +364,7 @@ def test_flip_network():
     t2 = np.random.rand(pdim, 2, 2)
     t3 = np.random.rand(pdim, 2, 1)
     original_tensors = [t1, t2, t3]
-    mps = MPS(length, tensors=copy.deepcopy(original_tensors), physical_dimensions=[pdim]*length)
+    mps = MPS(length, tensors=copy.deepcopy(original_tensors), physical_dimensions=[pdim] * length)
 
     mps.flip_network()
     # After flip, the order of tensors is reversed, and each is transposed (0, 2, 1).
@@ -396,7 +397,7 @@ def test_shift_orthogonality_center_right():
     t2 = np.random.rand(pdim, 2, 3)
     t3 = np.random.rand(pdim, 3, 3)
     t4 = np.random.rand(pdim, 3, 1)
-    mps = MPS(length, tensors=[t1, t2, t3, t4], physical_dimensions=[pdim]*length)
+    mps = MPS(length, tensors=[t1, t2, t3, t4], physical_dimensions=[pdim] * length)
 
     # Shift orthogonality center from site 0 to site 1
     mps.shift_orthogonality_center_right(current_orthogonality_center=0)
@@ -418,7 +419,7 @@ def test_shift_orthogonality_center_left():
     t2 = np.random.rand(pdim, 3, 3)
     t3 = np.random.rand(pdim, 3, 2)
     t4 = np.random.rand(pdim, 2, 1)
-    mps = MPS(length, [t1, t2, t3, t4], [pdim]*length)
+    mps = MPS(length, [t1, t2, t3, t4], [pdim] * length)
 
     # Shift orthogonality center from site 3 to site 2
     mps.shift_orthogonality_center_left(current_orthogonality_center=3)
@@ -434,7 +435,7 @@ def test_set_canonical_form():
     """
     length = 4
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim]*length, state='zeros')
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, state="zeros")
 
     # By default, 'zeros' means each site is shape (2,1,1).
     # set_canonical_form should not break anything.
@@ -455,10 +456,10 @@ def test_normalize():
     t2 = np.random.rand(pdim, 3, 3)
     t3 = np.random.rand(pdim, 3, 2)
     t4 = np.random.rand(pdim, 2, 1)
-    mps = MPS(length, [t1, t2, t3, t4], [pdim]*length)
+    mps = MPS(length, [t1, t2, t3, t4], [pdim] * length)
 
     # Normalizing an all-'1' initial state:
-    mps.normalize(form='B')
+    mps.normalize(form="B")
 
     assert np.isclose(mps.norm(), 1)
     for tensor in mps.tensors:
@@ -468,7 +469,7 @@ def test_normalize():
 def test_measure():
     length = 2
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim]*length, state='x+')
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, state="x+")
 
     obs = Observable(site=0, name="x")
     val = mps.measure(obs)
@@ -479,7 +480,7 @@ def test_measure():
 def test_norm():
     length = 3
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim]*length, state='zeros')
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, state="zeros")
 
     val = mps.norm()
 
@@ -497,7 +498,7 @@ def test_check_if_valid_MPS():
     t1 = np.random.rand(pdim, 1, 2)
     t2 = np.random.rand(pdim, 2, 3)
     t3 = np.random.rand(pdim, 3, 1)
-    mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim]*length)
+    mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
 
     # Should not raise AssertionError
     mps.check_if_valid_MPS()
@@ -512,7 +513,7 @@ def test_check_canonical_form():
     """
     length = 3
     pdim = 2
-    mps = MPS(length, physical_dimensions=[pdim]*length, state='zeros')
+    mps = MPS(length, physical_dimensions=[pdim] * length, state="zeros")
     # This will just print debug info, we can ensure no exceptions occur.
     res = mps.check_canonical_form()
     # res might be None or a list of sites. We won't test equality here

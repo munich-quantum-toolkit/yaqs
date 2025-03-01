@@ -5,11 +5,12 @@ import opt_einsum as oe
 from .matrix_exponential import expm_krylov
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS
 
 
-def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float=0) -> tuple[np.ndarray, np.ndarray]:
+def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float = 0) -> tuple[np.ndarray, np.ndarray]:
     """
     Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
 
@@ -46,8 +47,10 @@ def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float
 
     # Merge the first two and last two indices so that we can perform an SVD:
     # The reshaped matrix has dimensions (d0*D0) x (d1*D2)
-    matrix_for_svd = tensor_transposed.reshape((shape_transposed[0] * shape_transposed[1],
-                                                 shape_transposed[2] * shape_transposed[3]))
+    matrix_for_svd = tensor_transposed.reshape((
+        shape_transposed[0] * shape_transposed[1],
+        shape_transposed[2] * shape_transposed[3],
+    ))
     U, sigma, Vh = np.linalg.svd(matrix_for_svd, full_matrices=False)
 
     # Truncate the singular values below the threshold
@@ -65,13 +68,13 @@ def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float
     A1 = Vh.reshape((num_sv, shape_transposed[2], shape_transposed[3]))
 
     # Distribute the singular values according to the chosen option
-    if svd_distribution == 'left':
+    if svd_distribution == "left":
         # Multiply the left tensor by sigma (broadcasting over the singular value dimension)
         A0 = A0 * sigma
-    elif svd_distribution == 'right':
+    elif svd_distribution == "right":
         # Multiply the right tensor by sigma. We add extra dimensions for proper broadcasting.
         A1 = A1 * sigma[:, None, None]
-    elif svd_distribution == 'sqrt':
+    elif svd_distribution == "sqrt":
         # Multiply both tensors by the square root of the singular values.
         sqrt_sigma = np.sqrt(sigma)
         A0 = A0 * sqrt_sigma
@@ -105,10 +108,10 @@ def merge_mps_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
     #   A0 indices: (physical_left, virtual_left, virtual_mid)
     #   A1 indices: (virtual_mid, physical_right, virtual_right)
     # The result has indices: (physical_left, physical_right, virtual_right)
-    merged_tensor = oe.contract('abc,dce->adbe', A0, A1)
+    merged_tensor = oe.contract("abc,dce->adbe", A0, A1)
     # Combine the two physical dimensions into one by reshaping:
     merged_shape = merged_tensor.shape
-    merged_tensor = merged_tensor.reshape((merged_shape[0]*merged_shape[1], merged_shape[2], merged_shape[3]))
+    merged_tensor = merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
     return merged_tensor
 
 
@@ -127,10 +130,10 @@ def merge_mpo_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
         A merged MPO tensor.
     """
     # Contract over the shared virtual bond (index 6 in A0 with index 6 in A1) as well as other matching indices.
-    merged_tensor = oe.contract('acei,bdif->abcdef', A0, A1, optimize=True)
+    merged_tensor = oe.contract("acei,bdif->abcdef", A0, A1, optimize=True)
     # Reshape to combine the original physical indices:
     s = merged_tensor.shape
-    merged_tensor = merged_tensor.reshape((s[0]*s[1], s[2]*s[3], s[4], s[5]))
+    merged_tensor = merged_tensor.reshape((s[0] * s[1], s[2] * s[3], s[4], s[5]))
     return merged_tensor
 
 
@@ -266,7 +269,9 @@ def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
     # Propagate the contraction from right to left.
     for site in reversed(range(num_sites - 1)):
         # Use the next site's tensors and operator block for the contraction step.
-        right_blocks[site] = update_right_environment(psi.tensors[site + 1], psi.tensors[site + 1], op.tensors[site + 1], right_blocks[site + 1])
+        right_blocks[site] = update_right_environment(
+            psi.tensors[site + 1], psi.tensors[site + 1], op.tensors[site + 1], right_blocks[site + 1]
+        )
     return right_blocks
 
 
@@ -346,10 +351,7 @@ def update_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray, dt: 
     """
     # Flatten A into a vector, apply the exponential via expm_krylov, and reshape back.
     A_flat = A.reshape(-1)
-    evolved_A_flat = expm_krylov(
-        lambda x: project_site(L, R, W, x.reshape(A.shape)).reshape(-1),
-        A_flat, dt, numiter
-    )
+    evolved_A_flat = expm_krylov(lambda x: project_site(L, R, W, x.reshape(A.shape)).reshape(-1), A_flat, dt, numiter)
     return evolved_A_flat.reshape(A.shape)
 
 
@@ -368,14 +370,11 @@ def update_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray, dt: float, numiter:
         The updated bond tensor after evolution.
     """
     C_flat = C.reshape(-1)
-    evolved_C_flat = expm_krylov(
-        lambda x: project_bond(L, R, x.reshape(C.shape)).reshape(-1),
-        C_flat, dt, numiter
-    )
+    evolved_C_flat = expm_krylov(lambda x: project_bond(L, R, x.reshape(C.shape)).reshape(-1), C_flat, dt, numiter)
     return evolved_C_flat.reshape(C.shape)
 
 
-def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
+def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     """
     Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
 
@@ -398,6 +397,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
     """
     from ..data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+
     num_sites = H.length
     if num_sites != state.length:
         raise ValueError("The state and Hamiltonian must have the same number of sites.")
@@ -422,7 +422,9 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
     # Left-to-right sweep: Update all sites except the last.
     for i in range(num_sites - 1):
         # Evolve the tensor at site i forward by half a time step.
-        state.tensors[i] = update_site(left_blocks[i], right_blocks[i], H.tensors[i], state.tensors[i], 0.5*sim_params.dt, numiter_lanczos)
+        state.tensors[i] = update_site(
+            left_blocks[i], right_blocks[i], H.tensors[i], state.tensors[i], 0.5 * sim_params.dt, numiter_lanczos
+        )
 
         # Left-orthonormalize the updated tensor via QR decomposition.
         tensor_shape = state.tensors[i].shape
@@ -434,7 +436,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         left_blocks[i + 1] = update_left_environment(state.tensors[i], state.tensors[i], H.tensors[i], left_blocks[i])
 
         # Evolve the bond tensor C backward by half a time step.
-        C = update_bond(left_blocks[i + 1], right_blocks[i], C, -0.5*sim_params.dt, numiter_lanczos)
+        C = update_bond(left_blocks[i + 1], right_blocks[i], C, -0.5 * sim_params.dt, numiter_lanczos)
 
         # Update the next site tensor by contracting it with the evolved bond tensor C.
         state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), C, (1, 3), (0, 1, 2))
@@ -445,7 +447,9 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
 
     # Evolve the last site tensor by a full time step.
     last = num_sites - 1
-    state.tensors[last] = update_site(left_blocks[last], right_blocks[last], H.tensors[last], state.tensors[last], sim_params.dt, numiter_lanczos)
+    state.tensors[last] = update_site(
+        left_blocks[last], right_blocks[last], H.tensors[last], state.tensors[last], sim_params.dt, numiter_lanczos
+    )
 
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -463,7 +467,9 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         state.tensors[i] = Q.reshape((tensor_shape[0], tensor_shape[1], Q.shape[1])).transpose((0, 2, 1))
 
         # Update the right operator block for the previous site.
-        right_blocks[i - 1] = update_right_environment(state.tensors[i], state.tensors[i], H.tensors[i], right_blocks[i])
+        right_blocks[i - 1] = update_right_environment(
+            state.tensors[i], state.tensors[i], H.tensors[i], right_blocks[i]
+        )
 
         # Evolve the bond tensor C backward by half a time step.
         C = C.transpose()  # Prepare bond tensor for contraction
@@ -473,10 +479,17 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), C, (3, 2), (0, 1, 2))
 
         # Evolve the previous site tensor forward by half a time step.
-        state.tensors[i - 1] = update_site(left_blocks[i - 1], right_blocks[i - 1], H.tensors[i - 1], state.tensors[i - 1], 0.5*sim_params.dt, numiter_lanczos)
+        state.tensors[i - 1] = update_site(
+            left_blocks[i - 1],
+            right_blocks[i - 1],
+            H.tensors[i - 1],
+            state.tensors[i - 1],
+            0.5 * sim_params.dt,
+            numiter_lanczos,
+        )
 
 
-def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
+def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25):
     """
     Perform symmetric two-site TDVP integration.
 
@@ -500,6 +513,7 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
     """
     from ..data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+
     num_sites = H.length
     if num_sites != state.length:
         raise ValueError("State and Hamiltonian must have the same number of sites")
@@ -529,35 +543,61 @@ def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         # Similarly, merge the corresponding MPO tensors.
         merged_mpo = merge_mpo_tensors(H.tensors[i], H.tensors[i + 1])
         # Evolve the merged tensor forward by half a time step.
-        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5*sim_params.dt, numiter_lanczos)
+        merged_tensor = update_site(
+            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+        )
         # Split the merged tensor back into two tensors.
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor( merged_tensor, 'right', threshold=sim_params.threshold)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+            merged_tensor, "right", threshold=sim_params.threshold
+        )
         # Update the left operator block for site i+1.
         left_blocks[i + 1] = update_left_environment(state.tensors[i], state.tensors[i], H.tensors[i], left_blocks[i])
         # Evolve the tensor at site i+1 backward by half a time step.
-        state.tensors[i + 1] = update_site(left_blocks[i + 1], right_blocks[i + 1], H.tensors[i + 1], state.tensors[i + 1], -0.5*sim_params.dt, numiter_lanczos)
+        state.tensors[i + 1] = update_site(
+            left_blocks[i + 1],
+            right_blocks[i + 1],
+            H.tensors[i + 1],
+            state.tensors[i + 1],
+            -0.5 * sim_params.dt,
+            numiter_lanczos,
+        )
 
     # Process the rightmost pair (sites L-2 and L-1)
     i = num_sites - 2
     merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
     merged_mpo = merge_mpo_tensors(H.tensors[i], H.tensors[i + 1])
     # Evolve the merged tensor forward by a full time step.
-    merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos)
+    merged_tensor = update_site(
+        left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos
+    )
     # Split the merged tensor using a 'left' distribution of singular values.
-    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, 'left', threshold=sim_params.threshold)
+    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", threshold=sim_params.threshold)
     # Update the right operator block for site i.
-    right_blocks[i] = update_right_environment(state.tensors[i + 1], state.tensors[i + 1], H.tensors[i + 1], right_blocks[i + 1])
+    right_blocks[i] = update_right_environment(
+        state.tensors[i + 1], state.tensors[i + 1], H.tensors[i + 1], right_blocks[i + 1]
+    )
 
     # Right-to-left sweep.
     for i in reversed(range(num_sites - 2)):
         # Evolve the tensor at site i+1 backward by half a time step.
-        state.tensors[i + 1] = update_site(left_blocks[i + 1], right_blocks[i + 1], H.tensors[i + 1], state.tensors[i + 1], -0.5*sim_params.dt, numiter_lanczos)
+        state.tensors[i + 1] = update_site(
+            left_blocks[i + 1],
+            right_blocks[i + 1],
+            H.tensors[i + 1],
+            state.tensors[i + 1],
+            -0.5 * sim_params.dt,
+            numiter_lanczos,
+        )
         # Merge the tensors at sites i and i+1.
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(H.tensors[i], H.tensors[i + 1])
         # Evolve the merged tensor forward by half a time step.
-        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos)
+        merged_tensor = update_site(
+            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+        )
         # Split the merged tensor using a 'left' distribution.
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, 'left', threshold=sim_params.threshold)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", threshold=sim_params.threshold)
         # Update the right operator block.
-        right_blocks[i] = update_right_environment(state.tensors[i + 1], state.tensors[i + 1], H.tensors[i + 1], right_blocks[i + 1])
+        right_blocks[i] = update_right_environment(
+            state.tensors[i + 1], state.tensors[i + 1], H.tensors[i + 1], right_blocks[i + 1]
+        )

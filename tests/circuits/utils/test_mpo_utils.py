@@ -18,13 +18,16 @@ from mqt.yaqs.circuits.utils.dag_utils import select_starting_point
 # Helper Functions
 ##############################################################################
 
+
 def random_theta_6d():
     """Create a random 6D tensor, e.g. for two-qubit local blocks."""
     return np.random.rand(2, 2, 2, 2, 2, 2)
 
+
 def random_theta_8d():
     """Create a random 8D tensor, e.g. for 'long-range' gates."""
     return np.random.rand(2, 2, 2, 2, 2, 2, 2, 2)
+
 
 def approximate_reconstruction(U, M, original, atol=1e-10):
     """
@@ -34,14 +37,14 @@ def approximate_reconstruction(U, M, original, atol=1e-10):
     dims = original.shape
     # Reorder original to the same permutation used in decompose_theta => (0,3,2,1,4,5)
     original_reordered = np.transpose(original, (0, 3, 2, 1, 4, 5))
-    original_mat = np.reshape(original_reordered, (dims[0]*dims[1]*dims[2], dims[3]*dims[4]*dims[5]))
+    original_mat = np.reshape(original_reordered, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
 
     # Rebuild from U and M
     rank = U.shape[-1]
     U_mat = np.reshape(U, (-1, rank))  # Flatten U
     # M is shape (dims[3], dims[4], rank, dims[5]), so reorder to (rank, dims[3], dims[4], dims[5])
     M_reordered = np.transpose(M, (2, 0, 1, 3))
-    M_mat = np.reshape(M_reordered, (rank, dims[3]*dims[4]*dims[5]))
+    M_mat = np.reshape(M_reordered, (rank, dims[3] * dims[4] * dims[5]))
 
     reconstruction = U_mat @ M_mat
     assert np.allclose(reconstruction, original_mat, atol=atol), "Decomposition does not reconstruct original"
@@ -50,6 +53,7 @@ def approximate_reconstruction(U, M, original, atol=1e-10):
 ##############################################################################
 # Tests
 ##############################################################################
+
 
 def test_decompose_theta():
     """Test SVD-based decomposition of a 6D tensor."""
@@ -73,13 +77,13 @@ def test_apply_gate(interaction, conjugate):
     with or without conjugation.
     """
     if interaction == 1:
-        attr = getattr(GateLibrary, 'x')
+        attr = getattr(GateLibrary, "x")
         gate = attr()
         gate.set_sites(0)
     else:
         attr = getattr(GateLibrary, "rzz")
         gate = attr()
-        gate.set_params([np.pi/2])
+        gate.set_params([np.pi / 2])
         gate.set_sites(0, 1)
 
     theta = random_theta_6d()
@@ -106,12 +110,12 @@ def test_apply_temporal_zone_single_qubit_gates():
     """
     If the DAG has one gate in the 'temporal zone', it should be applied.
     """
-    model = {'name': 'Ising', 'L': 5, 'J': 0, 'g': 1}
+    model = {"name": "Ising", "L": 5, "J": 0, "g": 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
-    updated = apply_temporal_zone(theta, dag, [0,1], conjugate=False)
+    updated = apply_temporal_zone(theta, dag, [0, 1], conjugate=False)
 
     assert updated.shape == theta.shape
 
@@ -120,12 +124,12 @@ def test_apply_temporal_zone_two_qubit_gates():
     """
     If the DAG has one gate in the 'temporal zone', it should be applied.
     """
-    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 0}
+    model = {"name": "Ising", "L": 5, "J": 1, "g": 0}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
-    updated = apply_temporal_zone(theta, dag, [0,1], conjugate=False)
+    updated = apply_temporal_zone(theta, dag, [0, 1], conjugate=False)
 
     assert updated.shape == theta.shape
 
@@ -134,12 +138,12 @@ def test_apply_temporal_zone_mixed_qubit_gates():
     """
     If the DAG has one gate in the 'temporal zone', it should be applied.
     """
-    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 1}
+    model = {"name": "Ising", "L": 5, "J": 1, "g": 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
-    updated = apply_temporal_zone(theta, dag, [0,1], conjugate=False)
+    updated = apply_temporal_zone(theta, dag, [0, 1], conjugate=False)
 
     assert updated.shape == theta.shape
 
@@ -151,7 +155,7 @@ def test_update_MPO():
     mpo = MPO()
     length = 2
     mpo.init_identity(length)
-    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 1}
+    model = {"name": "Ising", "L": 5, "J": 1, "g": 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -173,7 +177,7 @@ def test_apply_layer():
     mpo = MPO()
     length = 3
     mpo.init_identity(length)
-    model = {'name': 'Ising', 'L': 5, 'J': 1, 'g': 1}
+    model = {"name": "Ising", "L": 5, "J": 1, "g": 1}
     circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -182,7 +186,7 @@ def test_apply_layer():
     first_iterator, second_iterator = select_starting_point(length, dag1)
     apply_layer(mpo, dag1, dag2, first_iterator, second_iterator, threshold)
 
-    assert mpo.check_if_identity(1-1e-13)
+    assert mpo.check_if_identity(1 - 1e-13)
 
 
 def test_apply_long_range_layer():
@@ -197,4 +201,4 @@ def test_apply_long_range_layer():
     apply_long_range_layer(mpo, dag1, dag2, conjugate=False, threshold=threshold)
     apply_long_range_layer(mpo, dag1, dag2, conjugate=True, threshold=threshold)
 
-    assert mpo.check_if_identity(1-1e-6)
+    assert mpo.check_if_identity(1 - 1e-6)

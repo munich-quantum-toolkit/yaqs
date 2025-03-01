@@ -17,11 +17,11 @@ H_0 = MPO()
 H_0.init_Ising(L, J, g)
 
 # Define the initial state
-state = MPS(L, state='zeros')
+state = MPS(L, state="zeros")
 
 # Define the noise model
 gamma = 0.1
-noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
+noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
 # Define the simulation parameters
 T = 10
@@ -31,7 +31,7 @@ N = 100
 max_bond_dim = 4
 threshold = 1e-6
 order = 2
-measurements = [Observable('x', site) for site in range(L)]
+measurements = [Observable("x", site) for site in range(L)]
 sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
 fig, ax = plt.subplots(2, 1)
@@ -43,11 +43,11 @@ if __name__ == "__main__":
     for observable in sim_params.observables:
         heatmap.append(observable.results)
 
-    im = ax[0].imshow(heatmap, aspect='auto', extent=[0, T, L, 0], vmin=0, vmax=0.5)
-    ax[0].set_ylabel('Site')
+    im = ax[0].imshow(heatmap, aspect="auto", extent=[0, T, L, 0], vmin=0, vmax=0.5)
+    ax[0].set_ylabel("Site")
 
     # Centers site ticks
-    ax[0].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
+    ax[0].set_yticks([x - 0.5 for x in list(range(1, L + 1))], range(1, L + 1))
     #########################################
 
     # ######### QuTip Exact Solver ############
@@ -61,21 +61,21 @@ if __name__ == "__main__":
 
     # Construct the Ising Hamiltonian
     H = 0
-    for i in range(L-1):
-        H += -J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
+    for i in range(L - 1):
+        H += -J * qt.tensor([sz if n == i or n == i + 1 else qt.qeye(2) for n in range(L)])
     for i in range(L):
-        H += -g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
+        H += -g * qt.tensor([sx if n == i else qt.qeye(2) for n in range(L)])
 
     # Construct collapse operators
     c_ops = []
 
     # Relaxation operators
     for i in range(L):
-        c_ops.append(np.sqrt(gamma) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
+        c_ops.append(np.sqrt(gamma) * qt.tensor([qt.destroy(2) if n == i else qt.qeye(2) for n in range(L)]))
 
     # Dephasing operators
     for i in range(L):
-        c_ops.append(np.sqrt(gamma) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
+        c_ops.append(np.sqrt(gamma) * qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]))
 
     # Initial state
     psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
@@ -92,15 +92,15 @@ if __name__ == "__main__":
     # Error heatmap
     heatmap = np.array(heatmap)
     heatmap2 = np.array(heatmap2)
-    im2 = ax[1].imshow(heatmap2, aspect='auto', extent=[0, T, L, 0], vmin=0, vmax=0.5)
+    im2 = ax[1].imshow(heatmap2, aspect="auto", extent=[0, T, L, 0], vmin=0, vmax=0.5)
 
-    ax[1].set_yticks([x-0.5 for x in list(range(1,L+1))], range(1,L+1))
+    ax[1].set_yticks([x - 0.5 for x in list(range(1, L + 1))], range(1, L + 1))
 
     fig.subplots_adjust(top=0.95, right=0.88)
     cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.8])
     cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.ax.set_title('$\\langle X \\rangle$')
+    cbar.ax.set_title("$\\langle X \\rangle$")
 
-    ax[1].set_xlabel('t')
-    ax[1].set_ylabel('Site')
+    ax[1].set_xlabel("t")
+    ax[1].set_ylabel("Site")
     plt.show()

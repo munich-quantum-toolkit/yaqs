@@ -13,6 +13,7 @@ from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 
 from typing import TYPE_CHECKING, Union
+
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
@@ -29,7 +30,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     # Separate the current layer into single-qubit and two-qubit gates.
     for node in current_layer:
         # Remove measurement and barrier nodes.
-        if node.op.name in ['measure', 'barrier']:
+        if node.op.name in ["measure", "barrier"]:
             dag.remove_op_node(node)
             continue
 
@@ -51,7 +52,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode):
     gate = convert_dag_to_tensor_algorithm(node)[0]
-    state.tensors[gate.sites[0]] = oe.contract('ab, bcd->acd', gate.tensor, state.tensors[gate.sites[0]])
+    state.tensors[gate.sites[0]] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[gate.sites[0]])
 
 
 def construct_generator_MPO(gate, length: int) -> MPO | int | int:
@@ -100,10 +101,9 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, sim_para
         state.shift_orthogonality_center_right(i)
 
     short_mpo = MPO()
-    short_mpo.init_custom(mpo.tensors[window[0]:window[1]+1], transpose=False)
+    short_mpo.init_custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
     assert window[1] - window[0] + 1 > 1, "MPS cannot be length 1"
-    short_state = MPS(length=window[1] - window[0] + 1,
-                    tensors=state.tensors[window[0]:window[1]+1])
+    short_state = MPS(length=window[1] - window[0] + 1, tensors=state.tensors[window[0] : window[1] + 1])
 
     return short_state, short_mpo, window
 
@@ -126,6 +126,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params):
 
 def CircuitTJM(args):
     from ..core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+
     i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
 
@@ -149,7 +150,6 @@ def CircuitTJM(args):
                 apply_dissipation(state, noise_model, dt=1)
                 state = stochastic_process(state, noise_model, dt=1)
                 dag.remove_op_node(node)
-
 
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):

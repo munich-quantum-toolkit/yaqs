@@ -6,6 +6,7 @@ import opt_einsum as oe
 from .operations import scalar_product
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
@@ -43,26 +44,26 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
         dict: A dictionary containing jump operators, their strengths, corresponding sites, and the calculated probabilities.
     """
     # Ordered as [Jump 0 Site 0, Jump 1 Site 0, Jump 0 Site 1, Jump 1 Site 1...]
-    jump_dict = {'jumps': [], 'strengths': [], 'sites': [], 'probabilities': []}
+    jump_dict = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
     dp_m_list = []
 
     # Dissipative sweep should always result in a mixed canonical form at site L
     for site, _ in enumerate(state.tensors):
         if site != 0 and site != state.length:
-            state.shift_orthogonality_center_right(site-1)
+            state.shift_orthogonality_center_right(site - 1)
 
         for j, jump_operator in enumerate(noise_model.jump_operators):
             jumped_state = copy.deepcopy(state)
-            jumped_state.tensors[site] = oe.contract('ab, bcd->acd', jump_operator, state.tensors[site])
+            jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_operator, state.tensors[site])
 
             dp_m = dt * noise_model.strengths[j] * scalar_product(jumped_state, jumped_state, site)
             dp_m_list.append(dp_m.real)
-            jump_dict['jumps'].append(jump_operator)
-            jump_dict['strengths'].append(noise_model.strengths[j])
-            jump_dict['sites'].append(site)
+            jump_dict["jumps"].append(jump_operator)
+            jump_dict["strengths"].append(noise_model.strengths[j])
+            jump_dict["sites"].append(site)
 
     # Normalize the probabilities
-    jump_dict['probabilities'] = (dp_m_list / np.sum(dp_m_list)).astype(float)
+    jump_dict["probabilities"] = (dp_m_list / np.sum(dp_m_list)).astype(float)
     return jump_dict
 
 
@@ -93,9 +94,11 @@ def stochastic_process(state: MPS, noise_model: NoiseModel, dt: float) -> MPS:
     else:
         # Jump
         jump_dict = create_probability_distribution(state, noise_model, dt)
-        choices = list(range(len(jump_dict['probabilities'])))
-        choice = np.random.choice(choices, p=jump_dict['probabilities'])
-        jump_operator = jump_dict['jumps'][choice]
-        state.tensors[jump_dict['sites'][choice]] = oe.contract('ab, bcd->acd', jump_operator, state.tensors[jump_dict['sites'][choice]])
-        state.normalize('B')
+        choices = list(range(len(jump_dict["probabilities"])))
+        choice = np.random.choice(choices, p=jump_dict["probabilities"])
+        jump_operator = jump_dict["jumps"][choice]
+        state.tensors[jump_dict["sites"][choice]] = oe.contract(
+            "ab, bcd->acd", jump_operator, state.tensors[jump_dict["sites"][choice]]
+        )
+        state.normalize("B")
         return state

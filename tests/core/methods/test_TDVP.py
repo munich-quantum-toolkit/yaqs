@@ -19,12 +19,13 @@ from mqt.yaqs.core.methods.TDVP import (
     two_site_TDVP,
 )
 
+
 def testsplit_mps_tensor_left_right_sqrt():
     # Create an input tensor A with shape (d0*d1, D0, D2).
     # Let d0 = d1 = 2 so that A.shape[0]=4, and choose D0=3, D2=5.
     A = np.random.randn(4, 3, 5)
     # For each svd_distr option, run the splitting and then reconstruct A.
-    for distr in ['left', 'right', 'sqrt']:
+    for distr in ["left", "right", "sqrt"]:
         A0, A1 = split_mps_tensor(A, svd_distribution=distr, threshold=1e-8)
         # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5),
         # where r is the effective rank.
@@ -38,15 +39,17 @@ def testsplit_mps_tensor_left_right_sqrt():
         # A0 has indices: (d0, D0, r), A1_recon has indices: (r, d1, D2).
         # Form a tensor of shape (d0, d1, D0, D2) then reshape back to (4, 3, 5)
         A_recon = np.tensordot(A0, A1_recon, axes=(2, 0))  # shape (2, 3, 2, 5)
-        A_recon = A_recon.transpose((0,2,1,3)).reshape(4, 3, 5)
+        A_recon = A_recon.transpose((0, 2, 1, 3)).reshape(4, 3, 5)
         # Up to SVD sign and ordering ambiguities, the reconstruction should be close.
         np.testing.assert_allclose(A, A_recon, atol=1e-6)
+
 
 def testsplit_mps_tensor_invalid_shape():
     # If A.shape[0] is not divisible by 2, the function should raise a ValueError.
     A = np.random.randn(3, 3, 5)
     with pytest.raises(ValueError):
-        split_mps_tensor(A, svd_distribution='left')
+        split_mps_tensor(A, svd_distribution="left")
+
 
 def testmerge_mps_tensors():
     # Let A0 have shape (2, 3, 4) and A1 have shape (5, 4, 7).
@@ -60,6 +63,7 @@ def testmerge_mps_tensors():
     # output shape = ((2*5), 3, 7) i.e. (10, 3, 7)
     assert merged.shape == (10, 3, 7)
 
+
 def testmerge_mpo_tensors():
     # Let A0 be a 4D array with shape (2, 3, 4, 5) and
     # A1 be a 4D array with shape (7, 8, 5, 9).
@@ -70,6 +74,7 @@ def testmerge_mpo_tensors():
     # Expected shape: merge first two axes of the result, where result (before reshape)
     # should have shape (2,7,3,8,4,9), then merged to (2*7, 3*8, 4,9) = (14,24,4,9).
     assert merged.shape == (14, 24, 4, 9)
+
 
 def testupdate_right_environment():
     # Choose shapes as described in the function.
@@ -87,6 +92,7 @@ def testupdate_right_environment():
     # Expected shape: (3,8,9) (from the discussion above).
     assert Rnext.shape == (3, 8, 9)
 
+
 def testupdate_left_environment():
     # Set up dummy arrays with shapes so that the contraction is valid.
     # Let A be shape (3,4,10)
@@ -102,6 +108,7 @@ def testupdate_left_environment():
     # We check that the result is 3-dimensional.
     assert Rnext.ndim == 3
 
+
 def testproject_site():
     # Let A: shape (2,3,4); R: shape (4,5,6) as before.
     A = np.random.randn(2, 3, 4)
@@ -114,6 +121,7 @@ def testproject_site():
     # The function transposes the final result so we expect a 3D array.
     assert out.ndim == 3
 
+
 def testproject_bond():
     # Let C: shape (2,3)
     C = np.random.randn(2, 3)
@@ -125,15 +133,16 @@ def testproject_bond():
     # Expected output shape: contraction gives shape (6,5)
     assert out.shape == (6, 5)
 
+
 def testupdate_site():
     # We choose an MPS tensor A with shape (d0, d0, d1) where d0=2, d1=4.
     # (The requirement here is that the first two dimensions are equal,
     # so that after the contraction chain the operator is square.)
-    A = np.random.randn(2, 2, 4)   # total elements: 2*2*4 = 16
+    A = np.random.randn(2, 2, 4)  # total elements: 2*2*4 = 16
     # Choose R of shape (d1, X, d1) with d1=4 and X=1.
-    R = np.random.randn(4, 1, 4)     # shape: (4,1,4)
+    R = np.random.randn(4, 1, 4)  # shape: (4,1,4)
     # Choose W of shape (d0, d0, X, X) with d0=2 and X=1.
-    W = np.random.randn(2, 2, 1, 1)   # shape: (2,2,1,1)
+    W = np.random.randn(2, 2, 1, 1)  # shape: (2,2,1,1)
     # Choose L so that the contraction makes sense.
     # In our contraction chain, after:
     #   T1 = tensordot(A, R, axes=1)  → shape (2,2,1,4)
@@ -151,6 +160,7 @@ def testupdate_site():
     # The operator should be square, so out.shape should equal A.shape.
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
 
+
 def testupdate_bond():
     # For the bond step we want the operator to be square.
     # Let C be a matrix of shape (p, q). We choose C to be square.
@@ -167,6 +177,7 @@ def testupdate_bond():
     # The output shape should equal the input shape.
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
+
 def test_single_site_TDVP():
     L = 5
     J = 1
@@ -174,8 +185,10 @@ def test_single_site_TDVP():
     H = MPO()
     H.init_Ising(L, J, g)
     state = MPS(L)
-    measurements = [Observable('z', site) for site in range(L)]
-    sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1)
+    measurements = [Observable("z", site) for site in range(L)]
+    sim_params = PhysicsSimParams(
+        measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
+    )
     single_site_TDVP(state, H, sim_params, numiter_lanczos=5)
     # Check that state still has L tensors and that each tensor is a numpy array.
     assert state.length == L
@@ -184,9 +197,9 @@ def test_single_site_TDVP():
 
     canonical_site = state.check_canonical_form()[0]
     assert canonical_site == 0, (
-        f"MPS should be site-canonical at site 0 after single-site TDVP, "
-        f"but got canonical site: {canonical_site}"
+        f"MPS should be site-canonical at site 0 after single-site TDVP, but got canonical site: {canonical_site}"
     )
+
 
 def test_two_site_TDVP():
     L = 5
@@ -195,8 +208,10 @@ def test_two_site_TDVP():
     H = MPO()
     H.init_Ising(L, J, g)
     state = MPS(L)
-    measurements = [Observable('z', site) for site in range(L)]
-    sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1)
+    measurements = [Observable("z", site) for site in range(L)]
+    sim_params = PhysicsSimParams(
+        measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
+    )
     two_site_TDVP(state, H, sim_params, numiter_lanczos=5)
     # Check that state still has L tensors and that each tensor is a numpy array.
     assert state.length == L
@@ -205,6 +220,5 @@ def test_two_site_TDVP():
 
     canonical_site = state.check_canonical_form()[0]
     assert canonical_site == 0, (
-        f"MPS should be site-canonical at site 0 after two-site TDVP, "
-        f"but got canonical site: {canonical_site}"
+        f"MPS should be site-canonical at site 0 after two-site TDVP, but got canonical site: {canonical_site}"
     )

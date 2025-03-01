@@ -7,12 +7,13 @@ import opt_einsum as oe
 from tqdm import tqdm
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
 
 
-def scalar_product(A: MPS, B: 'MPS', site: int=-1) -> complex:
-    """ Calculates the scalar product of two Matrix Product States
+def scalar_product(A: MPS, B: "MPS", site: int = -1) -> complex:
+    """Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
     Args:
@@ -30,23 +31,23 @@ def scalar_product(A: MPS, B: 'MPS', site: int=-1) -> complex:
     # Contract all sites
     if site == -1:
         for site in range(A.length):
-            tensor = oe.contract('abc, ade->bdce', A_copy.tensors[site], B_copy.tensors[site])
+            tensor = oe.contract("abc, ade->bdce", A_copy.tensors[site], B_copy.tensors[site])
             if site == 0:
                 result = tensor
             else:
-                result = oe.contract('abcd, cdef->abef', result, tensor)
+                result = oe.contract("abcd, cdef->abef", result, tensor)
         result = np.squeeze(result)
 
     # Used for ignoring other tensors if MPS is in canonical form
     else:
         # Single site operators
-        result = oe.contract('ijk, ijk', A_copy.tensors[site], B_copy.tensors[site])
+        result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
 
     return result
 
 
 def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
-    """ Expectation value for a given MPS-MPO-MPS network
+    """Expectation value for a given MPS-MPO-MPS network
 
     Args:
         A: MPS
@@ -60,7 +61,7 @@ def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
 
     # This loop assumes the MPS is in canonical form at the given site
     temp_state = copy.deepcopy(state)
-    temp_state.tensors[site] = oe.contract('ab, bcd->acd', operator, temp_state.tensors[site])
+    temp_state.tensors[site] = oe.contract("ab, bcd->acd", operator, temp_state.tensors[site])
     return scalar_product(state, temp_state, site)
 
 
@@ -75,18 +76,21 @@ def measure_single_shot(state) -> int:
     temp_state = copy.deepcopy(state)
     bitstring = []
     for site, tensor in enumerate(temp_state.tensors):
-        reduced_density_matrix = oe.contract('abc, dbc->ad', tensor, np.conj(tensor))
+        reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
         probabilities = np.diag(reduced_density_matrix).real
         chosen_index = np.random.choice(len(probabilities), p=probabilities)
         bitstring.append(chosen_index)
         selected_state = np.zeros(len(probabilities))
         selected_state[chosen_index] = 1
         # Multiply state
-        tensor = oe.contract('a, acd->cd', selected_state, tensor)
+        tensor = oe.contract("a, acd->cd", selected_state, tensor)
         # Multiply site into next site
         if site != state.length - 1:
-            temp_state.tensors[site + 1] = 1 / np.sqrt(probabilities[chosen_index]) * oe.contract(
-                'ab, cbd->cad', tensor, temp_state.tensors[site + 1])
+            temp_state.tensors[site + 1] = (
+                1
+                / np.sqrt(probabilities[chosen_index])
+                * oe.contract("ab, cbd->cad", tensor, temp_state.tensors[site + 1])
+            )
     return sum(c << i for i, c in enumerate(bitstring))
 
 

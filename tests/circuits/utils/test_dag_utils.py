@@ -9,6 +9,7 @@ from mqt.yaqs.circuits.utils.dag_utils import get_temporal_zone
 from mqt.yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
 from mqt.yaqs.circuits.utils.dag_utils import select_starting_point
 
+
 def test_convert_dag_to_tensor_algorithm_single_qubit_gate():
     qc = QuantumCircuit(1)
     qc.x(0)
@@ -47,7 +48,7 @@ def test_convert_dag_to_tensor_algorithm_two_qubit_gate_flipped():
 
 def test_convert_dag_to_tensor_algorithm_single_dagopnode():
     qc = QuantumCircuit(1)
-    qc.rx(np.pi/4, 0)
+    qc.rx(np.pi / 4, 0)
     dag = circuit_to_dag(qc)
     node = dag.op_nodes()[0]
     assert isinstance(node, DAGOpNode)
@@ -56,7 +57,7 @@ def test_convert_dag_to_tensor_algorithm_single_dagopnode():
     assert len(gates) == 1
     gate = gates[0]
     assert gate.name.lower() == "rx", "Gate name should match 'rx'."
-    assert gate.theta == np.pi/4, "Check that gate captured the rotation parameter."
+    assert gate.theta == np.pi / 4, "Check that gate captured the rotation parameter."
     assert gate.sites == [0], "Gate acts on qubit 0."
 
 
@@ -74,8 +75,6 @@ def test_convert_dag_to_tensor_algorithm_ignores_measure_barrier():
 
 
 def test_get_temporal_zone_simple():
-
-
     qc = QuantumCircuit(3)
     qc.x(0)
     qc.x(1)

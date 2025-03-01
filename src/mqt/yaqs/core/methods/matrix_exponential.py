@@ -23,27 +23,27 @@ def _lanczos_iteration(Afunc, vstart, numiter):
     vstart = vstart / nrmv
 
     alpha = np.zeros(numiter)
-    beta  = np.zeros(numiter-1)
+    beta = np.zeros(numiter - 1)
 
     V = np.zeros((numiter, len(vstart)), dtype=complex)
     V[0] = vstart
 
-    for j in range(numiter-1):
+    for j in range(numiter - 1):
         w = Afunc(V[j])
         alpha[j] = np.vdot(w, V[j]).real
-        w -= alpha[j]*V[j] + (beta[j-1]*V[j-1] if j > 0 else 0)
+        w -= alpha[j] * V[j] + (beta[j - 1] * V[j - 1] if j > 0 else 0)
         beta[j] = np.linalg.norm(w)
-        if beta[j] < 100*len(vstart)*np.finfo(float).eps:
+        if beta[j] < 100 * len(vstart) * np.finfo(float).eps:
             # warnings.warn(
             #     f'beta[{j}] ~= 0 encountered during Lanczos iteration.',
             #     RuntimeWarning)
             # premature end of iteration
             numiter = j + 1
-            return (alpha[:numiter], beta[:numiter-1], V[:numiter, :].T)
-        V[j+1] = w / beta[j]
+            return (alpha[:numiter], beta[: numiter - 1], V[:numiter, :].T)
+        V[j + 1] = w / beta[j]
 
     # complete final iteration
-    j = numiter-1
+    j = numiter - 1
     w = Afunc(V[j])
     alpha[j] = np.vdot(w, V[j]).real
     return (alpha, beta, V.T)
@@ -66,5 +66,5 @@ def expm_krylov(Afunc, v, dt, numiter):
         w_hess, u_hess = eigh_tridiagonal(alpha, beta)
     except:
         # More stable implementation
-        w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver='stebz')
-    return V @ (u_hess @ (np.linalg.norm(v) * np.exp(-1j*dt*w_hess) * u_hess[0]))
+        w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stebz")
+    return V @ (u_hess @ (np.linalg.norm(v) * np.exp(-1j * dt * w_hess) * u_hess[0]))

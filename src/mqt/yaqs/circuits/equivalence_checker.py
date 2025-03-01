@@ -6,11 +6,14 @@ from ..core.data_structures.networks import MPO
 from .utils.mpo_utils import iterate
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
 
 
-def run(circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float=1e-13, fidelity: float=1-1e-13) -> dict:
+def run(
+    circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float = 1e-13, fidelity: float = 1 - 1e-13
+) -> dict:
     """
     Checks the equivalence of two quantum circuits using an MPO-based algorithm.
 
@@ -25,8 +28,7 @@ def run(circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float=1e-
             'equivalent': Boolean indicating if circuits are equivalent.
             'elapsed_time': Total runtime in seconds.
     """
-    assert circuit1.num_qubits == circuit2.num_qubits, \
-        "Circuits must have the same number of qubits."
+    assert circuit1.num_qubits == circuit2.num_qubits, "Circuits must have the same number of qubits."
 
     start_time = time.time()
     mpo = MPO()
@@ -37,4 +39,4 @@ def run(circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float=1e-
 
     iterate(mpo, circuit1_dag, circuit2_dag, threshold)
 
-    return {'equivalent': mpo.check_if_identity(fidelity), 'elapsed_time': time.time() - start_time}
+    return {"equivalent": mpo.check_if_identity(fidelity), "elapsed_time": time.time() - start_time}

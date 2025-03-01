@@ -16,7 +16,7 @@ num_qubits = 10
 circuit = QuantumCircuit(num_qubits)
 
 # Example: Two-Local Circuit
-twolocal = TwoLocal(num_qubits, ['rx'], ['rzz'], entanglement='linear', reps=num_qubits).decompose()
+twolocal = TwoLocal(num_qubits, ["rx"], ["rzz"], entanglement="linear", reps=num_qubits).decompose()
 num_pars = len(twolocal.parameters)
 values = np.random.uniform(low=-np.pi, high=np.pi, size=num_pars)
 circuit = copy.deepcopy(twolocal).assign_parameters(values)
@@ -24,10 +24,10 @@ circuit.measure_all()
 
 # Define the noise model
 gamma = 0.1
-noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
+noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
 # Define the initial state
-state = MPS(num_qubits, state='zeros')
+state = MPS(num_qubits, state="zeros")
 
 # Define the simulation parameters
 shots = 1024

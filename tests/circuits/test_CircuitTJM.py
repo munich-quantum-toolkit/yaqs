@@ -17,6 +17,7 @@ from mqt.yaqs.circuits.CircuitTJM import (
     CircuitTJM,
 )
 
+
 def test_process_layer():
     # Create a QuantumCircuit with 9 qubits and 9 classical bits.
     qc = QuantumCircuit(9, 9)
@@ -34,8 +35,7 @@ def test_process_layer():
 
     # After processing, the measurement and barrier nodes should have been removed.
     for node in dag.op_nodes():
-        assert node.op.name not in ['measure', 'barrier'], \
-            f"Unexpected node {node.op.name} in the DAG op nodes."
+        assert node.op.name not in ["measure", "barrier"], f"Unexpected node {node.op.name} in the DAG op nodes."
 
     # Verify that the single-qubit gate is in the single-qubit group.
     single_names = [node.op.name.lower() for node in single]
@@ -54,6 +54,7 @@ def test_process_layer():
         q1 = node.qargs[1]._index
         assert min(q0, q1) % 2 == 1, f"Node with qubits {q0, q1} not in odd group."
 
+
 def test_process_layer_unsupported_gate():
     # Create a QuantumCircuit with 9 qubits and 9 classical bits.
     qc = QuantumCircuit(3)
@@ -66,8 +67,8 @@ def test_process_layer_unsupported_gate():
     with pytest.raises(Exception):
         process_layer(dag)
 
-def test_apply_single_qubit_gate():
 
+def test_apply_single_qubit_gate():
     mps = MPS(length=1)
     tensor = mps.tensors[0]
 
@@ -79,12 +80,13 @@ def test_apply_single_qubit_gate():
 
     apply_single_qubit_gate(mps, node)
 
-    gate_tensor = getattr(GateLibrary, 'x').tensor
-    expected = np.einsum('ab,bcd->acd', gate_tensor, tensor)
+    gate_tensor = getattr(GateLibrary, "x").tensor
+    expected = np.einsum("ab,bcd->acd", gate_tensor, tensor)
     np.testing.assert_allclose(mps.tensors[0], expected)
 
+
 def test_construct_generator_MPO():
-    gate = getattr(GateLibrary, 'cx')()
+    gate = getattr(GateLibrary, "cx")()
     gate.set_sites(1, 3)
     length = 5
     mpo, first_site, last_site = construct_generator_MPO(gate, length)
@@ -101,6 +103,7 @@ def test_construct_generator_MPO():
         if i not in [1, 3]:
             np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
 
+
 def test_apply_window():
     # Create dummy MPS and MPO objects with 5 tensors.
     length = 5
@@ -108,7 +111,7 @@ def test_apply_window():
     mps = MPS(length, tensors)
     mps.normalize()
 
-    gate = getattr(GateLibrary, 'cx')()
+    gate = getattr(GateLibrary, "cx")()
     gate.set_sites(1, 2)
     mpo, first_site, last_site = construct_generator_MPO(gate, length)
 
@@ -116,7 +119,7 @@ def test_apply_window():
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 1
-    measurements = [Observable('z', 0)]
+    measurements = [Observable("z", 0)]
     sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
 
     short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, sim_params)
@@ -126,16 +129,17 @@ def test_apply_window():
     assert short_state.length == 4
     assert short_mpo.length == 4
 
+
 def test_apply_two_qubit_gate_with_window():
     length = 4
-    mps0 = MPS(length, state='random')
+    mps0 = MPS(length, state="random")
     mps0.normalize()
 
     qc = QuantumCircuit(length)
     qc.cx(1, 2)
     dag = circuit_to_dag(qc)
 
-    cx_nodes = [node for node in dag.front_layer() if node.op.name.lower() == 'cx']
+    cx_nodes = [node for node in dag.front_layer() if node.op.name.lower() == "cx"]
     assert cx_nodes, "No CX gate found in the front layer."
     node = cx_nodes[0]
 
@@ -143,7 +147,7 @@ def test_apply_two_qubit_gate_with_window():
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
-    observable = Observable('z', 0)
+    observable = Observable("z", 0)
     sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
     orig_tensors = copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
@@ -164,9 +168,10 @@ def test_apply_two_qubit_gate_with_window():
     for i, tensor in enumerate(mps1.tensors):
         np.testing.assert_allclose(tensor, mps0.tensors[i])
 
+
 def test_CircuitTJM_strong():
     length = 4
-    mps0 = MPS(length, state='random')
+    mps0 = MPS(length, state="random")
     mps0.normalize()
 
     qc = QuantumCircuit(length)
@@ -176,14 +181,15 @@ def test_CircuitTJM_strong():
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
-    observable = Observable('z', 0)
+    observable = Observable("z", 0)
     sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
     args = 0, mps0, None, sim_params, qc
     CircuitTJM(args)
 
+
 def test_CircuitTJM_weak():
     length = 4
-    mps0 = MPS(length, state='random')
+    mps0 = MPS(length, state="random")
     mps0.normalize()
 
     qc = QuantumCircuit(length)
