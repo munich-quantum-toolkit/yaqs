@@ -144,4 +144,190 @@ def create_1D_Fermi_Hubbard_circuit(model, dt, timesteps):
         H_1()
     
     return circ
+
+
+def lookup_qiskit_ordering(particle, spin) -> int:
+    """
+    Looks up the Qiskit mapping from a 2D lattice to a 1D qubit-line
+    
+    Parameters:
+        particle (int): The index of the particle in the physical lattice.
+        spin (int): 0 for spin up, 1 for spin down.
+    
+    Returns:
+        int: The index in the 1D qubit-line.
+    """
+    if spin == '↑':
+        spin = 0
+    elif spin == '↓':
+        spin = 1
+
+    if spin not in (0, 1):
+        raise ValueError("spin must be 0 or 1")
+    
+    return 2*particle + spin
+
+
+def add_long_range_interaction(circ, i, j, outer_op, t):
+    """
+    Add a long range interaction that is decomposed into two-qubit gates.
+    outer_op=X: X_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ X_j
+    outer_op=Y: Y_i ⊗ Z_{i+1} ⊗ ... ⊗ Y_{j-1} ⊗ X_j
+    """
+    import numpy as np
+    
+    if i >= j:
+        raise Exception("Assumption i < j violated.")
+    
+    alpha = 1
+    phi = 1*alpha*t
+    circ.rz(phi=phi, qubit=j)
+
+    for k in range(i, j):
+        # prepend the CNOT gate
+        aux_circ = QuantumCircuit(circ.num_qubits)
+        aux_circ.cx(control_qubit=k, target_qubit=j)
+        circ.compose(aux_circ, front=True, inplace=True)
+        # append the CNOT gate
+        circ.cx(control_qubit=k, target_qubit=j)
+    if outer_op == 'x' or outer_op == 'X':
+        theta = np.pi/2
+        # prepend the Ry gates
+        aux_circ = QuantumCircuit(circ.num_qubits)
+        aux_circ.ry(theta=theta, qubit=i)
+        aux_circ.ry(theta=theta, qubit=j)
+        circ.compose(aux_circ, front=True, inplace=True)
+        # append the same Ry gates with negative phase
+        circ.ry(theta=-theta, qubit=i)
+        circ.ry(theta=-theta, qubit=j)
+    elif outer_op == 'y' or outer_op == 'Y':
+        theta = np.pi/2
+        # prepend the Rx gates
+        aux_circ = QuantumCircuit(circ.num_qubits)
+        aux_circ.rx(theta=theta, qubit=i)
+        aux_circ.rx(theta=theta, qubit=j)
+        circ.compose(aux_circ, front=True, inplace=True)
+        # append the same Rx gates with negative phase
+        circ.rx(theta=-theta, qubit=i)
+        circ.rx(theta=-theta, qubit=j)
+    else:
+        raise Exception("Only Pauli X or Y matrices are supported as outer operator.")
+    
+
+def add_hopping_term(circ, i, j, t):
+    """
+    Adds a hopping operator of the form
+    exp(-i*(X_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ X_j + Y_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ Y_j))
+    to the circuit.
+    """
+    XX = QuantumCircuit(circ.num_qubits)
+    YY = QuantumCircuit(circ.num_qubits)
+    add_long_range_interaction(XX, i, j, 'X', t)
+    add_long_range_interaction(YY, i, j, 'Y', t)
+    circ.compose(XX, inplace=True)
+    circ.compose(YY, inplace=True)
+
+
+def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
+    'H = -1/2 mu (I-Z) + 1/4 u (I-Z) (I-Z) - 1/2 t (XX + YY)'
+
+    assert model['name'] == '2D_Fermi_Hubbard'
+
+    mu = model['mu']
+    u = model['u']
+    t = model['t']
+    n = model['num_trotter_steps']
+    L = model['Lx'] * model['Ly']
+    N = 2*L
+
+    #spin_up = QuantumRegister(model['L'], '↑')
+    #spin_down = QuantumRegister(model['L'], '↓')
+    #circ = QuantumCircuit(spin_up, spin_down)
+    circ = QuantumCircuit(N)
+
+    def H_3():
+        """Add the time evolution of the kinetic hopping term"""
+        def horizontal_odd():
+            for y in range(model['Ly']):
+                for x in range(model['Lx']-1):
+                    if x % 2 == 0:
+                        p1 = y*model['Lx'] + x
+                        p2 = p1 + 1
+                        print("particle (" + str(p1) + ", " + str(p2) + ")")
+                        q1_up = lookup_qiskit_ordering(p1, '↑')
+                        q2_up = lookup_qiskit_ordering(p2, '↑')
+                        q1_down = lookup_qiskit_ordering(p1, '↓')
+                        q2_down = lookup_qiskit_ordering(p2, '↓')
+                        add_hopping_term(circ, q1_up, q2_up, t)
+                        add_hopping_term(circ, q1_down, q2_down, t)
+                        print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
+                        print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
+                        print("--")
+
+        def horizontal_even():
+            for y in range(model['Ly']):
+                for x in range(model['Lx']-1):
+                    if x % 2 != 0:
+                        p1 = y*model['Lx'] + x
+                        p2 = p1 + 1
+                        print("particle (" + str(p1) + ", " + str(p2) + ")")
+                        q1_up = lookup_qiskit_ordering(p1, '↑')
+                        q2_up = lookup_qiskit_ordering(p2, '↑')
+                        q1_down = lookup_qiskit_ordering(p1, '↓')
+                        q2_down = lookup_qiskit_ordering(p2, '↓')
+                        add_hopping_term(circ, q1_up, q2_up, t)
+                        add_hopping_term(circ, q1_down, q2_down, t)
+                        print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
+                        print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
+                        print("--")
+
+        def vertical_odd():
+            for y in range(model['Ly']-1):
+                if y % 2 == 0:
+                    for x in range(model['Lx']):
+                        p1 = y*model['Lx'] + x
+                        p2 = p1 + model['Lx']
+                        print("particle (" + str(p1) + ", " + str(p2) + ")")
+                        q1_up = lookup_qiskit_ordering(p1, '↑')
+                        q2_up = lookup_qiskit_ordering(p2, '↑')
+                        q1_down = lookup_qiskit_ordering(p1, '↓')
+                        q2_down = lookup_qiskit_ordering(p2, '↓')
+                        add_hopping_term(circ, q1_up, q2_up, t)
+                        add_hopping_term(circ, q1_down, q2_down, t)
+                        print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
+                        print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
+                        print("--")  
+
+        def vertical_even():
+            for y in range(model['Ly']-1):
+                if y % 2 != 0:
+                    for x in range(model['Lx']):
+                        p1 = y*model['Lx'] + x
+                        p2 = p1 + model['Lx']
+                        print("particle (" + str(p1) + ", " + str(p2) + ")")
+                        q1_up = lookup_qiskit_ordering(p1, '↑')
+                        q2_up = lookup_qiskit_ordering(p2, '↑')
+                        q1_down = lookup_qiskit_ordering(p1, '↓')
+                        q2_down = lookup_qiskit_ordering(p2, '↓')
+                        add_hopping_term(circ, q1_up, q2_up, t)
+                        add_hopping_term(circ, q1_down, q2_down, t)
+                        print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
+                        print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
+                        print("--")
+        
+        for _ in range(n):
+            horizontal_odd()
+            horizontal_even()
+            vertical_odd()
+            vertical_even()
+
+    #for _ in range(n*timesteps):
+    #    H_1()
+    #    H_2()
+    #    H_3()
+    #    H_2()
+    #    H_1()
+    H_3()
+    
+    return circ
     
