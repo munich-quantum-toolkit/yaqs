@@ -214,7 +214,7 @@ def add_long_range_interaction(circ, i, j, outer_op, t):
         raise Exception("Only Pauli X or Y matrices are supported as outer operator.")
     
 
-def add_hopping_term(circ, i, j, t):
+def add_hopping_term(circ, i, j, alpha):
     """
     Adds a hopping operator of the form
     exp(-i*(X_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ X_j + Y_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ Y_j))
@@ -222,8 +222,8 @@ def add_hopping_term(circ, i, j, t):
     """
     XX = QuantumCircuit(circ.num_qubits)
     YY = QuantumCircuit(circ.num_qubits)
-    add_long_range_interaction(XX, i, j, 'X', t)
-    add_long_range_interaction(YY, i, j, 'Y', t)
+    add_long_range_interaction(XX, i, j, 'X', alpha)
+    add_long_range_interaction(YY, i, j, 'Y', alpha)
     circ.compose(XX, inplace=True)
     circ.compose(YY, inplace=True)
 
@@ -240,13 +240,29 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
     L = model['Lx'] * model['Ly']
     N = 2*L
 
-    #spin_up = QuantumRegister(model['L'], '↑')
-    #spin_down = QuantumRegister(model['L'], '↓')
-    #circ = QuantumCircuit(spin_up, spin_down)
     circ = QuantumCircuit(N)
+
+    def H_1():
+        """Add the time evolution of the chemical potential term"""
+        theta = -mu*dt/(2*n)
+        for j in range(L):
+            q_up = lookup_qiskit_ordering(j, '↑')
+            q_down = lookup_qiskit_ordering(j, '↓')
+            circ.p(theta=theta, qubit=q_up)
+            circ.p(theta=theta, qubit=q_down)
+
+    def H_2():
+        """Add the time evolution of the onsite interaction term"""
+        theta = -u*dt/(2*n)
+        for j in range(L):
+            q_up = lookup_qiskit_ordering(j, '↑')
+            q_down = lookup_qiskit_ordering(j, '↓')
+            circ.cp(theta=theta, control_qubit=q_up, target_qubit=q_down)
 
     def H_3():
         """Add the time evolution of the kinetic hopping term"""
+        alpha = t/n
+
         def horizontal_odd():
             for y in range(model['Ly']):
                 for x in range(model['Lx']-1):
@@ -258,8 +274,8 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
-                        add_hopping_term(circ, q1_up, q2_up, t)
-                        add_hopping_term(circ, q1_down, q2_down, t)
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
                         print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
                         print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
                         print("--")
@@ -275,8 +291,8 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
-                        add_hopping_term(circ, q1_up, q2_up, t)
-                        add_hopping_term(circ, q1_down, q2_down, t)
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
                         print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
                         print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
                         print("--")
@@ -292,8 +308,8 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
-                        add_hopping_term(circ, q1_up, q2_up, t)
-                        add_hopping_term(circ, q1_down, q2_down, t)
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
                         print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
                         print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
                         print("--")  
@@ -315,19 +331,18 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                         print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
                         print("--")
         
-        for _ in range(n):
-            horizontal_odd()
-            horizontal_even()
-            vertical_odd()
-            vertical_even()
+        #for _ in range(n):
+        horizontal_odd()
+        horizontal_even()
+        vertical_odd()
+        vertical_even()
 
-    #for _ in range(n*timesteps):
-    #    H_1()
-    #    H_2()
-    #    H_3()
-    #    H_2()
-    #    H_1()
-    H_3()
+    for _ in range(n*timesteps):
+        H_1()
+        H_2()
+        H_3()
+        H_2()
+        H_1()
     
     return circ
     
