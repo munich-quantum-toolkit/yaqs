@@ -34,19 +34,6 @@ from yaqs.noise_char.propagation import *
 from yaqs.core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
 
-
-
-
-''' In this file we implemented the calculation of the A_kn expectation values 
-    in the TJM which are necessary to calculate the analytical gradient
-    
-    For this we had to adjust the following functions from the repository: 
-    
-    qutip_traj from propagation.py
-    
-    run from PhysicsTJM.py
-    
-    PhysicsTJM_1 form PhysicsTJM.py'''
     
 def qutip_traj_char(sim_params_class: SimulationParameters):
 
@@ -307,7 +294,15 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
         # Average A_kn means over trajectories and store in extra dictionary
         sim_params.avg_expvals = {key: {process: np.mean(arr, axis=0) for process, arr in proc_dict.items()} for key, proc_dict in sim_params.expvals_Master.items()}
 
-
+        sim_params.d_On_d_gk = [
+    [
+        trapezoidal(sim_params.avg_expvals[(obs.name, obs.site)][process], sim_params.times)
+        for process in noise_model.processes
+        for obs in sim_params.sorted_observables if obs.site == site
+    ]
+    for site in range(sim_params.N)
+    ]
+   
 
 
 # calculate A_kn operators
@@ -372,7 +367,11 @@ def PhysicsTJM_1_analytical_gradient(args):
                     A_kn_op = sim_params.A_kn[process][observable.name]
                     measurement_Akn = local_expval(temp_state, A_kn_op, observable.site).real
                     expvals[(observable.name, observable.site)][process][0] = measurement_Akn
-                    
+
+
+
+
+
     # also return A_kn exp values
     return results, expvals
 
@@ -425,7 +424,9 @@ if __name__ == "__main__":
     qt_params.gamma_deph = gamma
     qt_params.observables = ['x','y', 'z']
 
-    t, qt_ref_traj,dO, qt_A_kn_exp_vals=qutip_traj_char(qt_params)
+    t, qt_ref_traj,  d_On_d_gk_qt, qt_A_kn_exp_vals=qutip_traj_char(qt_params)
+
+    
 
 
 
@@ -471,75 +472,99 @@ if __name__ == "__main__":
 
 
 
+    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 10))
 
+    # Plot the TJM data
+    for site in range(sim_params.N):
+        # Each inner list corresponds to the integrated values for one site.
+        indices = list(range(len(sim_params.d_On_d_gk[site])))
+        ax1.plot(indices, sim_params.d_On_d_gk[site], marker='o', label=f"Site {site}")
+    ax1.set_title("TJM d_On_d_gk")
+    ax1.set_xlabel("Observable/Process Index")
+    ax1.set_ylabel("Integrated Value")
+    ax1.legend()
 
-    # PLOTTING 1) QUTIP + TJM Simulation 2) TJM A_kn means 3) Qutip A_kn means
-
-    fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(12, 10))
-
-    # First subplot: Plot tjm_results
-    for i, result in enumerate(tjm_results):
-        ax1.plot(sim_params.times, result, label=f'obs {i}')
-        ax1.plot(sim_params.times, qt_ref_traj[i], label=f'qt obs{i}')
-    ax1.set_xlabel('Time')
-    ax1.set_ylabel('Expectation Value')
-    ax1.set_title('Observables Expectation Values')
-
-
-    # Second subplot: Plot averaged A_kn expectation values over trajectories
-    for key, process_dict in sim_params.avg_expvals.items():
-        obs_name, obs_site = key
-        for process, avg_exp in process_dict.items():
-            if process == 'relaxation':
-                ax2.plot(sim_params.times, avg_exp, label=f"{obs_name} (site {obs_site}, {process})")
-            else: 
-                ax2.plot(sim_params.times, avg_exp, linestyle ='--', label=f"{obs_name} (site {obs_site}, {process})")
-    ax2.set_xlabel("Time")
-    ax2.set_ylabel("A_kn Expectation Value")
-    ax2.set_title("A_kn Averages TJM")
-
-
-
-    n_sites = len(qt_A_kn_exp_vals)
-    n_Akn_per_site = len(qt_A_kn_exp_vals[0])  
-    observable_labels = qt_params.observables
-
-    # Third subplot: Plot Qutip A_kn expectation values using the new dictionary format.
-    for key, process_dict in qt_avg_dict.items():
-        obs_name, obs_site = key
-        for process, arr in process_dict.items():
-            if process == 'relaxation':
-                ax3.plot(t, arr, label=f"{obs_name} (site {obs_site}, {process})")
-            else:
-                ax3.plot(t, arr, linestyle='--', label=f"{obs_name} (site {obs_site}, {process})")
-    ax3.set_xlabel("Time")
-    ax3.set_ylabel("A_kn Expectation Value")
-    ax3.set_title("A_kn_expvals Qutip")
-
-
-
-
-    # Gather handles and labels for each original subplot
-    handles1, labels1 = ax1.get_legend_handles_labels()
-    handles2, labels2 = ax2.get_legend_handles_labels()
-    handles3, labels3 = ax3.get_legend_handles_labels()
-
-    # Create a new figure with 1 row and 3 columns
-    fig_legend, axs = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
-
-    # Set a title or label for each legend column if desired:
-    axs[0].set_title("Obs Expectation")
-    axs[1].set_title("A_kn Averages TJM")
-    axs[2].set_title("A_kn_expvals Qutip")
-
-    # Display each legend in its own axis
-    axs[0].legend(handles1, labels1, loc='center')
-    axs[1].legend(handles2, labels2, loc='center')
-    axs[2].legend(handles3, labels3, loc='center')
-
-    # Turn off the axes (no ticks, spines, etc.)
-    for ax in axs:
-        ax.axis('off')
+    # Plot the Qutip data
+    for site in range(sim_params.N):
+        indices = list(range(len(d_On_d_gk_qt[site])))
+        ax2.plot(indices, d_On_d_gk_qt[site], marker='o', label=f"Site {site}")
+    ax2.set_title("Qutip d_On_d_gk")
+    ax2.set_xlabel("Observable/Process Index")
+    ax2.set_ylabel("Integrated Value")
+    ax2.legend()
 
     plt.tight_layout()
     plt.show()
+
+
+
+    # # PLOTTING 1) QUTIP + TJM Simulation 2) TJM A_kn means 3) Qutip A_kn means
+
+    # fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(12, 10))
+
+    # # First subplot: Plot tjm_results
+    # for i, result in enumerate(tjm_results):
+    #     ax1.plot(sim_params.times, result, label=f'obs {i}')
+    #     ax1.plot(sim_params.times, qt_ref_traj[i], label=f'qt obs{i}')
+    # ax1.set_xlabel('Time')
+    # ax1.set_ylabel('Expectation Value')
+    # ax1.set_title('Observables Expectation Values')
+
+
+    # # Second subplot: Plot averaged A_kn expectation values over trajectories
+    # for key, process_dict in sim_params.avg_expvals.items():
+    #     obs_name, obs_site = key
+    #     for process, avg_exp in process_dict.items():
+    #         if process == 'relaxation':
+    #             ax2.plot(sim_params.times, avg_exp, label=f"{obs_name} (site {obs_site}, {process})")
+    #         else: 
+    #             ax2.plot(sim_params.times, avg_exp, linestyle ='--', label=f"{obs_name} (site {obs_site}, {process})")
+    # ax2.set_xlabel("Time")
+    # ax2.set_ylabel("A_kn Expectation Value")
+    # ax2.set_title("A_kn Averages TJM")
+
+
+
+    # n_sites = len(qt_A_kn_exp_vals)
+    # n_Akn_per_site = len(qt_A_kn_exp_vals[0])  
+    # observable_labels = qt_params.observables
+
+    # # Third subplot: Plot Qutip A_kn expectation values using the new dictionary format.
+    # for key, process_dict in qt_avg_dict.items():
+    #     obs_name, obs_site = key
+    #     for process, arr in process_dict.items():
+    #         if process == 'relaxation':
+    #             ax3.plot(t, arr, label=f"{obs_name} (site {obs_site}, {process})")
+    #         else:
+    #             ax3.plot(t, arr, linestyle='--', label=f"{obs_name} (site {obs_site}, {process})")
+    # ax3.set_xlabel("Time")
+    # ax3.set_ylabel("A_kn Expectation Value")
+    # ax3.set_title("A_kn_expvals Qutip")
+
+
+
+
+    # # Gather handles and labels for each original subplot
+    # handles1, labels1 = ax1.get_legend_handles_labels()
+    # handles2, labels2 = ax2.get_legend_handles_labels()
+    # handles3, labels3 = ax3.get_legend_handles_labels()
+
+    # # Create a new figure with 1 row and 3 columns
+    # fig_legend, axs = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
+
+    # # Set a title or label for each legend column if desired:
+    # axs[0].set_title("Obs Expectation")
+    # axs[1].set_title("A_kn Averages TJM")
+    # axs[2].set_title("A_kn_expvals Qutip")
+
+    # # Display each legend in its own axis
+    # axs[0].legend(handles1, labels1, loc='center')
+    # axs[1].legend(handles2, labels2, loc='center')
+    # axs[2].legend(handles3, labels3, loc='center')
+
+    # # Turn off the axes (no ticks, spines, etc.)
+    # for ax in axs:
+    #     ax.axis('off')
+
+    # plt.tight_layout()
+    # plt.show()
