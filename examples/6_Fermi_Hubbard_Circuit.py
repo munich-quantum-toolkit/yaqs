@@ -13,7 +13,7 @@ t = -1.0  # kinetic hopping
 v = 0.5   # chemical potential
 u = 2.0   # onsite interaction
 (x, y) = (2,2) # lattice dimensions
-dt = 1
+dt = 0.1
 timesteps = 1
 
 # Define the circuit

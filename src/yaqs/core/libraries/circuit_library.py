@@ -168,7 +168,7 @@ def lookup_qiskit_ordering(particle, spin) -> int:
     return 2*particle + spin
 
 
-def add_long_range_interaction(circ, i, j, outer_op, t):
+def add_long_range_interaction(circ, i, j, outer_op, alpha):
     """
     Add a long range interaction that is decomposed into two-qubit gates.
     outer_op=X: X_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ X_j
@@ -179,8 +179,7 @@ def add_long_range_interaction(circ, i, j, outer_op, t):
     if i >= j:
         raise Exception("Assumption i < j violated.")
     
-    alpha = 1
-    phi = 1*alpha*t
+    phi = 1*alpha
     circ.rz(phi=phi, qubit=j)
 
     for k in range(i, j):
@@ -261,7 +260,7 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
 
     def H_3():
         """Add the time evolution of the kinetic hopping term"""
-        alpha = t/n
+        alpha = t/n*dt
 
         def horizontal_odd():
             for y in range(model['Ly']):
@@ -325,8 +324,8 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
-                        add_hopping_term(circ, q1_up, q2_up, t)
-                        add_hopping_term(circ, q1_down, q2_down, t)
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
                         print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
                         print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
                         print("--")
@@ -337,12 +336,13 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
         vertical_odd()
         vertical_even()
 
-    for _ in range(n*timesteps):
-        H_1()
-        H_2()
-        H_3()
-        H_2()
-        H_1()
+    for _ in range(timesteps):
+        for _ in range(n):
+            H_1()
+            H_2()
+            H_3()
+            H_2()
+            H_1()
     
     return circ
     
