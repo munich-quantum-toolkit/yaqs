@@ -1,38 +1,46 @@
 from qiskit.circuit import QuantumCircuit
 
 
-def create_Ising_circuit(model, dt, timesteps):
+def create_Ising_circuit(model, dt, timesteps, order=1):
     'H = J ZZ + g X'
 
     assert model['name'] == 'Ising'
+    L = model['L']
+    circ = QuantumCircuit(L)
 
-    # Angle on X rotation
-    alpha = -2*dt*model['g']
-    # Angle on ZZ rotation
-    beta = -2*dt*model['J']
-
-    circ = QuantumCircuit(model['L'])
     for _ in range(timesteps):
-        for site in range(model['L']):
-            circ.rx(theta=alpha, qubit=site)
+        if order == 1:
+            # First-order Trotterization: full X rotation then ZZ interactions.
+            for site in range(L):
+                circ.rx(theta=-2*dt*model['g'], qubit=site)
+            # Even bonds:
+            for site in range(L//2):
+                circ.rzz(-2*dt*model['J'], qubit1=2*site, qubit2=2*site+1)
+            # Odd bonds:
+            for site in range(1, L//2):
+                circ.rzz(-2*dt*model['J'], qubit1=2*site-1, qubit2=2*site)
+            if L % 2 != 0 and L != 1:
+                circ.rzz(-2*dt*model['J'], qubit1=L-2, qubit2=L-1)
 
-        for site in range(model['L'] // 2):
-            circ.rzz(beta, qubit1=2*site, qubit2=2*site+1)
-            # circ.cx(control_qubit=2*site, target_qubit=2*site+1)
-            # circ.rz(phi=beta, qubit=2*site+1)
-            # circ.cx(control_qubit=2*site, target_qubit=2*site+1)
+        elif order == 2:
+            # Second-order Trotterization: half-step X, then full ZZ, then half-step X.
+            half_alpha = -2*dt/2*model['g']
+            # First half-step for X rotations:
+            for site in range(L):
+                circ.rx(theta=half_alpha, qubit=site)
+            # Full-step ZZ interactions (same as before):
+            for site in range(L//2):
+                circ.rzz(-2*dt*model['J'], qubit1=2*site, qubit2=2*site+1)
+            for site in range(1, L//2):
+                circ.rzz(-2*dt*model['J'], qubit1=2*site - 1, qubit2=2*site)
+            if L % 2 != 0 and L != 1:
+                circ.rzz(-2*dt*model['J'], qubit1=L-2, qubit2=L-1)
+            # Second half-step for X rotations:
+            for site in range(L):
+                circ.rx(theta=half_alpha, qubit=site)
 
-        for site in range(1, model['L'] // 2):
-            circ.rzz(beta, qubit1=2*site-1, qubit2=2*site)
-            # circ.cx(control_qubit=2*site-1, target_qubit=2*site)
-            # circ.rz(phi=beta, qubit=2*site)
-            # circ.cx(control_qubit=2*site-1, target_qubit=2*site)
-
-        if model['L'] % 2 != 0 and model['L'] != 1:
-            circ.rzz(beta, qubit1=model['L']-2, qubit2=model['L']-1)
-            # circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
-            # circ.rz(phi=beta, qubit=model['L']-1)
-            # circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
+        else:
+            raise ValueError("Unsupported Trotterization order. Choose 1 or 2.")
 
     return circ
 
