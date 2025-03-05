@@ -10,7 +10,7 @@ from __future__ import annotations
 from qiskit.circuit import QuantumCircuit
 
 
-def create_Ising_circuit(model, dt, timesteps):
+def create_Ising_circuit(model: dict, dt: float, timesteps: int) -> QuantumCircuit:
     """H = J ZZ + g X."""
     assert model["name"] == "Ising"
 
@@ -45,7 +45,7 @@ def create_Ising_circuit(model, dt, timesteps):
     return circ
 
 
-def create_Heisenberg_circuit(model, dt, timesteps):
+def create_Heisenberg_circuit(model: dict, dt: float, timesteps: int) -> QuantumCircuit:
     """H = Jx XX + Jy YY + Jz ZZ + h Z."""
     assert model["name"] == "Heisenberg"
 
