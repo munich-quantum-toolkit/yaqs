@@ -13,9 +13,10 @@ from .TDVP import single_site_TDVP, two_site_TDVP
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS
+    from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 
-def dynamic_TDVP(state: MPS, H: MPO, sim_params) -> None:
+def dynamic_TDVP(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
     """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 
     Depending on the current bond dimension of the state, this function either performs a two-site TDVP (2TDVP) or a single-site TDVP (1TDVP) to evolve the state.
