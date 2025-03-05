@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..data_structures.networks import MPO
+
 
 def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     assert tensor.shape == (2, 2, 2, 2)
@@ -37,7 +41,7 @@ def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     return [tensor1, tensor2]
 
 
-def _extend_gate(tensor: np.ndarray, sites: list):
+def _extend_gate(tensor: np.ndarray, sites: list) -> MPO:
     from ..data_structures.networks import MPO
 
     tensors = _split_tensor(tensor)
