@@ -5,9 +5,16 @@ from scipy.optimize import minimize
 
 def trapezoidal(y, x):
 
-    integral = np.zeros(len(y))
+    len_x = len(x)
+    len_y = len(y)
+
+    integral = np.zeros(len_y)
 
     integral[0] = 0
+
+    if len_x != len_y:
+        raise ValueError("Mismatch in the number of elements between x and y. len(x) = {len_x} and len(y) = {len_y}")
+
 
     for i in range(1,len(y)):
         integral[i] = integral[i-1] + 0.5*(x[i] - x[i-1])*(y[i] + y[i-1])
