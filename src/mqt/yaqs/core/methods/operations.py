@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..data_structures.networks import MPS
 
 
-def scalar_product(A: MPS, B: MPS, site: int = None) -> np.ndarray:
+def scalar_product(A: MPS, B: MPS, site: int = None) -> NDArray[np.complex128]:
     """Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
@@ -49,7 +49,7 @@ def scalar_product(A: MPS, B: MPS, site: int = None) -> np.ndarray:
     return np.squeeze(result)
 
 
-def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> np.ndarray:
+def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> NDArray[np.complex128]:
     """Expectation value for a given MPS-MPO-MPS network.
 
     Args:
