@@ -112,7 +112,7 @@ def measure(state: MPS, shots: int) -> dict[int, int]:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             with tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar:
-                results = {}
+                results: dict[int, int] = {}
                 futures = [executor.submit(measure_single_shot, copy.deepcopy(state)) for _ in range(shots)]
                 for future in concurrent.futures.as_completed(futures):
                     try:
@@ -123,7 +123,7 @@ def measure(state: MPS, shots: int) -> dict[int, int]:
                     finally:
                         pbar.update(1)
         return results
-    results = {}
+    results: dict[int, int] = {}
     basis_state = measure_single_shot(state)
     results[basis_state] = results.get(basis_state, 0) + 1
     return results
