@@ -178,6 +178,7 @@ def test_apply_two_qubit_gate_with_window() -> None:
     for i, tensor in enumerate(mps1.tensors):
         assert np.allclose(tensor, mps0.tensors[i]) or np.allclose(tensor, -mps0.tensors[i])
 
+
 def test_CircuitTJM_strong() -> None:
     length = 4
     mps0 = MPS(length, state="random")
