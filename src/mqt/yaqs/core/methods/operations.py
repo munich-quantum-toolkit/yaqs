@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..data_structures.networks import MPS
 
 
-def scalar_product(A: MPS, B: MPS, site: int | None = None) -> np.ndarray:
+def scalar_product(A: MPS, B: MPS, site: int | None = None) -> NDArray[np.complex128]:
     """Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
@@ -45,7 +45,6 @@ def scalar_product(A: MPS, B: MPS, site: int | None = None) -> np.ndarray:
             result = tensor if site == 0 else oe.contract("abcd, cdef->abef", result, tensor)
     else:
         result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
-
     return np.squeeze(result)
 
 
@@ -108,11 +107,11 @@ def measure(state: MPS, shots: int) -> dict[int, int]:
     Returns:
         dict: A dictionary mapping basis states to their observed counts.
     """
+    results: dict[int, int] = {}
     if shots > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             with tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar:
-                results: dict[int, int] = {}
                 futures = [executor.submit(measure_single_shot, copy.deepcopy(state)) for _ in range(shots)]
                 for future in concurrent.futures.as_completed(futures):
                     try:
@@ -123,7 +122,6 @@ def measure(state: MPS, shots: int) -> dict[int, int]:
                     finally:
                         pbar.update(1)
         return results
-    results: dict[int, int] = {}
     basis_state = measure_single_shot(state)
     results[basis_state] = results.get(basis_state, 0) + 1
     return results
