@@ -16,10 +16,12 @@ from ...core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
     import numpy as np
+    from numpy.typing import NDArray
+    from qiskit.circuit import Qubit
     from qiskit.dagcircuit import DAGCircuit
 
 
-def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[np.ndarray]:
+def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[NDArray[np.complex128]]:
     """Converts a DAGCircuit into a list of gate objects from the GateLibrary.
 
     Args:
@@ -89,7 +91,7 @@ def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
     """
     new_dag = dag.copy_empty_like()
     layers = list(dag.multigraph_layers())
-    qubits_to_check = set()
+    qubits_to_check: set[Qubit] = set()
     qubits_to_check.update(dag.qubits[qubit] for qubit in range(min(qubits), max(qubits) + 1))
 
     for layer in layers:
@@ -147,7 +149,7 @@ def check_longest_gate(dag: DAGCircuit) -> int:
     return largest_distance
 
 
-def select_starting_point(N: int, dag: DAGCircuit) -> range:
+def select_starting_point(N: int, dag: DAGCircuit) -> tuple[range, range]:
     """Determines which set of neighboring qubits (even-even or odd-odd) to start with
     based on the arrangement of gates in the first layer of the DAG.
 
