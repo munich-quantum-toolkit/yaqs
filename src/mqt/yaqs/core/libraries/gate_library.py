@@ -12,12 +12,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
     from qiskit.circuit import Parameter
 
     from ..data_structures.networks import MPO
 
 
-def _split_tensor(tensor: np.ndarray[complex]) -> list[np.ndarray[complex]]:
+def _split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
     assert tensor.shape == (2, 2, 2, 2)
 
     # Splits two-qubit matrix
@@ -44,7 +45,7 @@ def _split_tensor(tensor: np.ndarray[complex]) -> list[np.ndarray[complex]]:
     return [tensor1, tensor2]
 
 
-def _extend_gate(tensor: np.ndarray[complex], sites: list[int]) -> MPO:
+def _extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
     from ..data_structures.networks import MPO
 
     tensors = _split_tensor(tensor)
@@ -257,7 +258,7 @@ class CX:
 
     def set_sites(self, site0: int, site1: int) -> None:
         self.sites = [site0, site1]
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-X)
         self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
         self.mpo = _extend_gate(self.tensor, self.sites)
@@ -273,7 +274,7 @@ class CZ:
 
     def set_sites(self, site0: int, site1: int) -> None:
         self.sites = [site0, site1]
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-Z)
         self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
 
@@ -289,7 +290,7 @@ class CPhase:
     def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j * self.theta)]])
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Z ⊗ P), where P = diag(1, 0)
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
 
@@ -327,7 +328,7 @@ class SWAP:
 
     def set_sites(self, site0: int, site1: int) -> None:
         self.sites = [site0, site1]
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
 
 
 class Rxx:
@@ -342,7 +343,7 @@ class Rxx:
             [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
             [-1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)],
         ])
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (X ⊗ X)
         self.generator = [(self.theta / 2) * np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])]
 
@@ -362,7 +363,7 @@ class Ryy:
             [0, -1j * np.sin(self.theta / 2), np.cos(self.theta / 2), 0],
             [1j * np.sin(self.theta / 2), 0, 0, np.cos(self.theta / 2)],
         ])
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Y ⊗ Y)
         self.generator = [(self.theta / 2) * np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
 
@@ -382,7 +383,7 @@ class Rzz:
             [0, 0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0],
             [0, 0, 0, np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2)],
         ])
-        self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+        self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Z ⊗ Z)
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
 
