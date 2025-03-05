@@ -13,6 +13,7 @@ import multiprocessing
 from typing import TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import NDArray
 import opt_einsum as oe
 from tqdm import tqdm
 
@@ -49,7 +50,7 @@ def scalar_product(A: MPS, B: MPS, site: int = -1) -> np.ndarray:
     return np.squeeze(result)
 
 
-def local_expval(state: MPS, operator: np.ndarray[complex], site: int) -> np.ndarray:
+def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> np.ndarray:
     """Expectation value for a given MPS-MPO-MPS network.
 
     Args:
