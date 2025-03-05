@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import pytest
 from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs.core.libraries.circuit_library import create_Heisenberg_circuit, create_Ising_circuit
