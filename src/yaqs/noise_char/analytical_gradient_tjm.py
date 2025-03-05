@@ -178,12 +178,13 @@ def qutip_traj_char(sim_params_class: SimulationParameters):
     # # Compute the integral of the new expectation values to obtain the derivatives
     # d_On_d_gk = [ [trapezoidal(A_kn_exp_vals[i][j],t)  for j in range(n_obs)] for i in range(n_jump) ]
 
-    return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
+    # return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
+    return t, original_exp_vals, d_On_d_gk
   
 
 
 
-def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):
+def run_char(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, parallel: bool=True):
     """
     Common simulation routine used by both circuit and Hamiltonian simulations.
     It normalizes the state, prepares trajectory arguments, runs the trajectories
@@ -276,23 +277,24 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
     else:
         sim_params.aggregate_trajectories()
      
-        # Optional: check how many A_kn trajectories are equal
-        print("Checking for duplicate trajectories in sim_params.expvals_Master:")
-        for key, proc_dict in sim_params.expvals_Master.items():
-            obs_name, obs_site = key
-            for process, arr in proc_dict.items():
-                N = arr.shape[0]
+        # # Optional: check how many A_kn trajectories are equal
+        # print("Checking for duplicate trajectories in sim_params.expvals_Master:")
+        # for key, proc_dict in sim_params.expvals_Master.items():
+        #     obs_name, obs_site = key
+        #     for process, arr in proc_dict.items():
+        #         N = arr.shape[0]
     
-                unique_rows = np.unique(arr, axis=0)
-                num_unique = unique_rows.shape[0]
+        #         unique_rows = np.unique(arr, axis=0)
+        #         num_unique = unique_rows.shape[0]
 
-                print(f"\nObservable: {obs_name} (site {obs_site}), Process: {process}")
-                print(f"  Total trajectories: {N}")
-                print(f"  Unique trajectories (by np.unique): {num_unique}")
+        #         print(f"\nObservable: {obs_name} (site {obs_site}), Process: {process}")
+        #         print(f"  Total trajectories: {N}")
+        #         print(f"  Unique trajectories (by np.unique): {num_unique}")
 
 
         # Average A_kn means over trajectories and store in extra dictionary
         sim_params.avg_expvals = {key: {process: np.mean(arr, axis=0) for process, arr in proc_dict.items()} for key, proc_dict in sim_params.expvals_Master.items()}
+        n_sites = max(obs.site for obs in sim_params.sorted_observables) + 1
 
         sim_params.d_On_d_gk = [
     [
@@ -300,8 +302,11 @@ def run(initial_state: MPS, operator, sim_params, noise_model: NoiseModel=None, 
         for process in noise_model.processes
         for obs in sim_params.sorted_observables if obs.site == site
     ]
-    for site in range(sim_params.N)
+    for site in range(n_sites)
     ]
+
+
+
    
 
 
@@ -368,10 +373,6 @@ def PhysicsTJM_1_analytical_gradient(args):
                     measurement_Akn = local_expval(temp_state, A_kn_op, observable.site).real
                     expvals[(observable.name, observable.site)][process][0] = measurement_Akn
 
-
-
-
-
     # also return A_kn exp values
     return results, expvals
 
@@ -403,7 +404,7 @@ if __name__ == "__main__":
     T = 5
     dt = 0.1
     sample_timesteps = True
-    N = 100
+    N = 500
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
@@ -411,7 +412,7 @@ if __name__ == "__main__":
     sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
 
 
-    '''QUTIP calculation of A_kn_exp_vals'''
+    '''QUTIP calculation'''
 
     qt_params = SimulationParameters()
 
@@ -424,15 +425,15 @@ if __name__ == "__main__":
     qt_params.gamma_deph = gamma
     qt_params.observables = ['x','y', 'z']
 
-    t, qt_ref_traj,  d_On_d_gk_qt, qt_A_kn_exp_vals=qutip_traj_char(qt_params)
+    t, qt_ref_traj,  d_On_d_gk_qt =qutip_traj_char(qt_params)
 
-    
+
 
 
 
 
     ########## TJM Example #################
-    run(state, H_0, sim_params, noise_model)
+    run_char(state, H_0, sim_params, noise_model)
 
     tjm_results = []
     for observable in sim_params.observables:
@@ -441,55 +442,69 @@ if __name__ == "__main__":
 
 
 
-    '''Restructure Qutip A_kn means into same structure as TJM A_kn means:'''
+    # '''Restructure Qutip A_kn means into same structure as TJM A_kn means:'''
 
-    n_sites = len(qt_A_kn_exp_vals)
-    n_types = len(qt_params.observables)
-    n_noise = len(noise_model.processes)  
-    n_Akn_per_site = n_noise * n_types
+    # n_sites = len(qt_A_kn_exp_vals)
+    # n_types = len(qt_params.observables)
+    # n_noise = len(noise_model.processes)  
+    # n_Akn_per_site = n_noise * n_types
 
-    # Create a new dictionary to hold the Qutip data in the same structure as sim_params.avg_expvals.
-    qt_avg_dict = {}
+    # # Create a new dictionary to hold the Qutip data in the same structure as sim_params.avg_expvals.
+    # qt_avg_dict = {}
 
-    for site in range(n_sites):
-        for type_index in range(n_types):
-            key = (qt_params.observables[type_index], site)
-            qt_avg_dict[key] = {}
-            for noise_index in range(n_noise):
-                process = noise_model.processes[noise_index]
-                # Calculate the index within the sublist for the given noise process and observable type.
-                idx = noise_index * n_types + type_index
-                qt_avg_dict[key][process] = qt_A_kn_exp_vals[site][idx]
+    # for site in range(n_sites):
+    #     for type_index in range(n_types):
+    #         key = (qt_params.observables[type_index], site)
+    #         qt_avg_dict[key] = {}
+    #         for noise_index in range(n_noise):
+    #             process = noise_model.processes[noise_index]
+    #             # Calculate the index within the sublist for the given noise process and observable type.
+    #             idx = noise_index * n_types + type_index
+    #             qt_avg_dict[key][process] = qt_A_kn_exp_vals[site][idx]
 
-    # Print out the structure for inspection.
-    print("Structure of qt_avg_dict:")
-    for key, proc_dict in qt_avg_dict.items():
-        print(f"Key (Observable, site): {key}")
-        for process, arr in proc_dict.items():
-            print(f"    Process: {process}, array shape: {np.shape(arr)}")
+    # # Print out the structure for inspection.
+    # print("Structure of qt_avg_dict:")
+    # for key, proc_dict in qt_avg_dict.items():
+    #     print(f"Key (Observable, site): {key}")
+    #     for process, arr in proc_dict.items():
+    #         print(f"    Process: {process}, array shape: {np.shape(arr)}")
 
-    '''Structure of TJM and Qutip A_kn means is equal now.'''
+    # '''Structure of TJM and Qutip A_kn means is equal now.'''
 
 
+    # Convert both to numpy arrays
+    array1 = np.array(sim_params.d_On_d_gk)
+    array2 = np.array(d_On_d_gk_qt)
+
+    # Use np.allclose to compare with a tolerance for floating point differences
+    if np.allclose(array1, array2, rtol=1e-2, atol=1e-2):
+        print("sim_params.d_On_d_gk and d_On_d_gk_qt are the same!")
+    else:
+        print("They are different.")
 
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 10))
 
-    # Plot the TJM data
-    for site in range(sim_params.N):
-        # Each inner list corresponds to the integrated values for one site.
-        indices = list(range(len(sim_params.d_On_d_gk[site])))
-        ax1.plot(indices, sim_params.d_On_d_gk[site], marker='o', label=f"Site {site}")
+    # Loop over sites (assuming L is the number of sites)
+    for site in range(L):
+        # Convert to NumPy arrays
+        arr_tjm = np.array(sim_params.d_On_d_gk[site])  # shape (6, 51)
+        arr_qt  = np.array(d_On_d_gk_qt[site])           # shape (6, 51)
+        
+        # x-axis: 51 points (0 to 50)
+        x = np.arange(51)
+        
+        # Plot each of the 6 trajectories separately
+        for obs_idx in range(6):
+            ax1.plot(x, arr_tjm[obs_idx, :], marker='o', label=f"Site {site}, Obs {obs_idx}")
+            ax2.plot(x, arr_qt[obs_idx, :], marker='o', label=f"Site {site}, Obs {obs_idx}")
+
     ax1.set_title("TJM d_On_d_gk")
-    ax1.set_xlabel("Observable/Process Index")
+    ax1.set_xlabel("Time index (0-50)")
     ax1.set_ylabel("Integrated Value")
     ax1.legend()
 
-    # Plot the Qutip data
-    for site in range(sim_params.N):
-        indices = list(range(len(d_On_d_gk_qt[site])))
-        ax2.plot(indices, d_On_d_gk_qt[site], marker='o', label=f"Site {site}")
     ax2.set_title("Qutip d_On_d_gk")
-    ax2.set_xlabel("Observable/Process Index")
+    ax2.set_xlabel("Time index (0-50)")
     ax2.set_ylabel("Integrated Value")
     ax2.legend()
 
@@ -498,7 +513,18 @@ if __name__ == "__main__":
 
 
 
-    # # PLOTTING 1) QUTIP + TJM Simulation 2) TJM A_kn means 3) Qutip A_kn means
+
+
+
+
+
+
+
+
+
+
+
+    '''PLOTTING 1) QUTIP + TJM Simulation 2) TJM A_kn means 3) Qutip A_kn means'''
 
     # fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(12, 10))
 
