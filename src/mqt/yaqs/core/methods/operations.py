@@ -13,11 +13,12 @@ import multiprocessing
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import NDArray
 import opt_einsum as oe
 from tqdm import tqdm
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from ..data_structures.networks import MPS
 
 
