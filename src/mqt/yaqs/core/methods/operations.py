@@ -51,7 +51,7 @@ def scalar_product(A: MPS, B: MPS, site: int = -1) -> np.ndarray:
     return result
 
 
-def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
+def local_expval(state: MPS, operator: np.ndarray, site: int) -> np.ndarray:
     """Expectation value for a given MPS-MPO-MPS network.
 
     Args:
@@ -70,7 +70,7 @@ def local_expval(state: MPS, operator: np.ndarray, site: int) -> float:
     return scalar_product(state, temp_state, site)
 
 
-def measure_single_shot(state) -> int:
+def measure_single_shot(state: MPS) -> int:
     """Performs a single-shot measurement of the MPS state.
 
     Args:
