@@ -199,8 +199,7 @@ class MPS:
     def norm(self, site=None):
         if site is not None:
             return scalar_product(self, self, site).real
-        else:
-            return scalar_product(self, self). real
+        return scalar_product(self, self).real
 
     def write_tensor_shapes(self) -> None:
         for _tensor in self.tensors:

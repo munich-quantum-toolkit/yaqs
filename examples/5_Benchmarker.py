@@ -5,8 +5,10 @@
 #
 # Licensed under the MIT License
 
-from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+from __future__ import annotations
+
 from mqt.yaqs.circuits import benchmarker
+from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
 
 if __name__ == "__main__":
     num_qubits = 10

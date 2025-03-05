@@ -1,3 +1,10 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 from __future__ import annotations
 
 import copy
@@ -17,6 +24,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
+
 
 def run(
     input_ircuit: QuantumCircuit,
