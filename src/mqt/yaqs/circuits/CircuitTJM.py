@@ -23,7 +23,8 @@ from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
-
+    from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+    from ..core.libraries.gate_library import BaseGate
 
 def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
     # Extract the current layer
@@ -63,7 +64,7 @@ def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
     state.tensors[gate.sites[0]] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[gate.sites[0]])
 
 
-def construct_generator_MPO(gate, length: int) -> MPO | int:
+def construct_generator_MPO(gate: BaseGate, length: int) -> MPO | int:
     tensors = []
 
     first_site = min(gate.sites)
@@ -96,7 +97,7 @@ def construct_generator_MPO(gate, length: int) -> MPO | int:
     return mpo, first_site, last_site
 
 
-def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, sim_params) -> tuple[MPS, MPO, list[int]]:
+def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, sim_params: StrongSimParams | WeakSimParams) -> tuple[MPS, MPO, list[int]]:
     # Define a window for a local update.
     window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
     window[0] = max(window[0], 0)
@@ -114,7 +115,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, sim_para
     return short_state, short_mpo, window
 
 
-def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params) -> None:
+def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> None:
     gate = convert_dag_to_tensor_algorithm(node)[0]
 
     # Construct the MPO for the two-qubit gate.

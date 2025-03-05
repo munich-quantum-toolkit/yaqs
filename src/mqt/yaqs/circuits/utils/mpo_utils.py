@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit
 
     from ...core.data_structures.networks import MPO
-    from ...core.libraries.gate_library import GateLibrary
+    from ...core.libraries.gate_library import BaseGate
 
 
 def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray]:
@@ -55,7 +55,7 @@ def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np
     return U, M
 
 
-def apply_gate(gate: GateLibrary, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False) -> np.ndarray:
+def apply_gate(gate: BaseGate, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False) -> np.ndarray:
     """Applies a single- or two-qubit gate (or multi-qubit gate) from a GateLibrary object
     to the local tensor `theta`.
 
