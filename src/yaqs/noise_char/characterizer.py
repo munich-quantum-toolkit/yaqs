@@ -48,150 +48,150 @@ from yaqs.core.data_structures.simulation_parameters import StrongSimParams, Wea
     
     PhysicsTJM_1 form PhysicsTJM.py'''
     
-def qutip_traj_char(sim_params_class: SimulationParameters):
+# def qutip_traj_char(sim_params_class: SimulationParameters):
 
-    T = sim_params_class.T
-    dt = sim_params_class.dt
-    L = sim_params_class.L
-    J = sim_params_class.J
-    g = sim_params_class.g
-    gamma_rel = sim_params_class.gamma_rel
-    gamma_deph = sim_params_class.gamma_deph
-
-
-    t = np.arange(0, T + dt, dt) 
-
-    '''QUTIP Initialization + Simulation'''
-
-    # Define Pauli matrices
-    sx = qt.sigmax()
-    sy = qt.sigmay()
-    sz = qt.sigmaz()
-
-    # Construct the Ising Hamiltonian
-    H = 0
-    for i in range(L-1):
-        H += -J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
-    for i in range(L):
-        H += -g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
+#     T = sim_params_class.T
+#     dt = sim_params_class.dt
+#     L = sim_params_class.L
+#     J = sim_params_class.J
+#     g = sim_params_class.g
+#     gamma_rel = sim_params_class.gamma_rel
+#     gamma_deph = sim_params_class.gamma_deph
 
 
+#     t = np.arange(0, T + dt, dt) 
 
-    # Construct collapse operators
-    c_ops = []
-    gammas = []
+#     '''QUTIP Initialization + Simulation'''
 
-    # Relaxation operators
-    for i in range(L):
-        c_ops.append(np.sqrt(gamma_rel) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
-        gammas.append(gamma_rel)
+#     # Define Pauli matrices
+#     sx = qt.sigmax()
+#     sy = qt.sigmay()
+#     sz = qt.sigmaz()
 
-    # Dephasing operators
-    for i in range(L):
-        c_ops.append(np.sqrt(gamma_deph) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
-        gammas.append(gamma_deph)
-
-    #c_ops = [rel0, rel1, rel2,... rel(L-1), deph0, deph1,..., deph(L-1)]
-
-    # Initial state
-    psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
+#     # Construct the Ising Hamiltonian
+#     H = 0
+#     for i in range(L-1):
+#         H += -J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
+#     for i in range(L):
+#         H += -g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
 
 
 
-    # Create obs_list based on the observables in sim_params_class.observables
-    obs_list = []
+#     # Construct collapse operators
+#     c_ops = []
+#     gammas = []
 
+#     # Relaxation operators
+#     for i in range(L):
+#         c_ops.append(np.sqrt(gamma_rel) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
+#         gammas.append(gamma_rel)
 
-    for obs_type in sim_params_class.observables:
-        if obs_type.lower() == 'x':
-            # For each site, create the measurement operator for 'x'
-            obs_list.extend([qt.tensor([sx if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)])
-        elif obs_type.lower() == 'y':
-            obs_list.extend([qt.tensor([sy if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)])
-        elif obs_type.lower() == 'z':
-            obs_list.extend([qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)])
+#     # Dephasing operators
+#     for i in range(L):
+#         c_ops.append(np.sqrt(gamma_deph) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
+#         gammas.append(gamma_deph)
 
+#     #c_ops = [rel0, rel1, rel2,... rel(L-1), deph0, deph1,..., deph(L-1)]
 
-    # # this is original version of A_kn_list initialization from propagation.py
-    # A_kn_list= []
-    # for i,c_op in enumerate(c_ops):
-    #     for obs in obs_list:
-    #         A_kn_list.append(  (1/gammas[i]) * (c_op.dag()*obs*c_op  -  0.5*obs*c_op.dag()*c_op  -  0.5*c_op.dag()*c_op*obs)   )
-
-
-
-    A_kn_list = []
-    n_types = len(sim_params_class.observables)  # number of observable types
-    for site in range(L):
-        # For each site, get the two collapse operators and their corresponding gamma values.
-        c_op_rel = c_ops[site]             # relaxation collapse operator for this site
-        gamma_rel = gammas[site]
-        c_op_deph = c_ops[site + L]         # dephasing collapse operator for this site
-        gamma_deph = gammas[site + L]
-
-        # For each observable type, get the corresponding operator from obs_list.
-        # The operator for the k-th observable type at this site is:
-        # obs_list[site + k*L]
-        for k in range(n_types):
-            obs_current = obs_list[site + k * L]
-            A_kn = (1 / gamma_rel) * (c_op_rel.dag() * obs_current * c_op_rel -
-                                    0.5 * obs_current * c_op_rel.dag() * c_op_rel -
-                                    0.5 * c_op_rel.dag() * c_op_rel * obs_current)
-            A_kn_list.append(A_kn)
-
-        for k in range(n_types):
-            obs_current = obs_list[site + k * L]
-            A_kn = (1 / gamma_deph) * (c_op_deph.dag() * obs_current * c_op_deph -
-                                    0.5 * obs_current * c_op_deph.dag() * c_op_deph -
-                                    0.5 * c_op_deph.dag() * c_op_deph * obs_current)
-            A_kn_list.append(A_kn)
-
-    # Form: A_kn_list = [x0rel0,y0rel0,z0rel0,x0deph0,y0deph0,z0deph0,x1rel1,y1rel1,...,z(L-1)deph(L-1)]
-
-
-    new_obs_list = obs_list + A_kn_list
-
-    # # Necessary in Original qutip_traj from propagation.py
-    # n_obs= len(obs_list)
-    # n_jump= len(c_ops)
-
-        # Exact Lindblad solution
-    result_lindblad = qt.mesolve(H, psi0, t, c_ops, new_obs_list, progress_bar=True)
-
-    exp_vals = []
-    for i in range(len(new_obs_list)):
-        exp_vals.append(result_lindblad.expect[i])
+#     # Initial state
+#     psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
 
 
 
-    # Separate original and new expectation values from result_lindblad.
-    n_obs = len(obs_list)  # number of measurement operators (should be L * n_types)
-    original_exp_vals = exp_vals[:n_obs]
-    new_exp_vals = exp_vals[n_obs:]  # these correspond to the A_kn operators
+#     # Create obs_list based on the observables in sim_params_class.observables
+#     obs_list = []
 
-    # Determine parameters:
-    n_types = len(sim_params_class.observables)    # e.g., 3 for ['x','y','z']
-    n_noise = 2  # since you have relaxation and dephasing
-    n_Akn_per_site = n_noise * n_types  # e.g., 2*3 = 6
 
-    # new_exp_vals should have a total length of L * n_Akn_per_site.
-    # Reshape it into a list of L lists, each containing n_Akn_per_site arrays.
-    A_kn_exp_vals = [new_exp_vals[site * n_Akn_per_site : (site + 1) * n_Akn_per_site]
-                    for site in range(sim_params_class.L)]
+#     for obs_type in sim_params_class.observables:
+#         if obs_type.lower() == 'x':
+#             # For each site, create the measurement operator for 'x'
+#             obs_list.extend([qt.tensor([sx if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)])
+#         elif obs_type.lower() == 'y':
+#             obs_list.extend([qt.tensor([sy if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)])
+#         elif obs_type.lower() == 'z':
+#             obs_list.extend([qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)])
 
-    # Compute the derivative for each A_kn expectation value using trapezoidal integration.
-    d_On_d_gk = [
-        [trapezoidal(A_kn_exp_vals[site][j], t) for j in range(n_Akn_per_site)]
-        for site in range(sim_params_class.L)
-    ]
 
-    # # Original reshape from propagation.py: Reshape new_exp_vals to be a list of lists with dimensions n_jump times n_obs
-    # A_kn_exp_vals = [new_exp_vals[i * n_obs:(i + 1) * n_obs] for i in range(n_jump)]
+#     # # this is original version of A_kn_list initialization from propagation.py
+#     # A_kn_list= []
+#     # for i,c_op in enumerate(c_ops):
+#     #     for obs in obs_list:
+#     #         A_kn_list.append(  (1/gammas[i]) * (c_op.dag()*obs*c_op  -  0.5*obs*c_op.dag()*c_op  -  0.5*c_op.dag()*c_op*obs)   )
 
-    # # Compute the integral of the new expectation values to obtain the derivatives
-    # d_On_d_gk = [ [trapezoidal(A_kn_exp_vals[i][j],t)  for j in range(n_obs)] for i in range(n_jump) ]
 
-    return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
+
+#     A_kn_list = []
+#     n_types = len(sim_params_class.observables)  # number of observable types
+#     for site in range(L):
+#         # For each site, get the two collapse operators and their corresponding gamma values.
+#         c_op_rel = c_ops[site]             # relaxation collapse operator for this site
+#         gamma_rel = gammas[site]
+#         c_op_deph = c_ops[site + L]         # dephasing collapse operator for this site
+#         gamma_deph = gammas[site + L]
+
+#         # For each observable type, get the corresponding operator from obs_list.
+#         # The operator for the k-th observable type at this site is:
+#         # obs_list[site + k*L]
+#         for k in range(n_types):
+#             obs_current = obs_list[site + k * L]
+#             A_kn = (1 / gamma_rel) * (c_op_rel.dag() * obs_current * c_op_rel -
+#                                     0.5 * obs_current * c_op_rel.dag() * c_op_rel -
+#                                     0.5 * c_op_rel.dag() * c_op_rel * obs_current)
+#             A_kn_list.append(A_kn)
+
+#         for k in range(n_types):
+#             obs_current = obs_list[site + k * L]
+#             A_kn = (1 / gamma_deph) * (c_op_deph.dag() * obs_current * c_op_deph -
+#                                     0.5 * obs_current * c_op_deph.dag() * c_op_deph -
+#                                     0.5 * c_op_deph.dag() * c_op_deph * obs_current)
+#             A_kn_list.append(A_kn)
+
+#     # Form: A_kn_list = [x0rel0,y0rel0,z0rel0,x0deph0,y0deph0,z0deph0,x1rel1,y1rel1,...,z(L-1)deph(L-1)]
+
+
+#     new_obs_list = obs_list + A_kn_list
+
+#     # # Necessary in Original qutip_traj from propagation.py
+#     # n_obs= len(obs_list)
+#     # n_jump= len(c_ops)
+
+#         # Exact Lindblad solution
+#     result_lindblad = qt.mesolve(H, psi0, t, c_ops, new_obs_list, progress_bar=True)
+
+#     exp_vals = []
+#     for i in range(len(new_obs_list)):
+#         exp_vals.append(result_lindblad.expect[i])
+
+
+
+#     # Separate original and new expectation values from result_lindblad.
+#     n_obs = len(obs_list)  # number of measurement operators (should be L * n_types)
+#     original_exp_vals = exp_vals[:n_obs]
+#     new_exp_vals = exp_vals[n_obs:]  # these correspond to the A_kn operators
+
+#     # Determine parameters:
+#     n_types = len(sim_params_class.observables)    # e.g., 3 for ['x','y','z']
+#     n_noise = 2  # since you have relaxation and dephasing
+#     n_Akn_per_site = n_noise * n_types  # e.g., 2*3 = 6
+
+#     # new_exp_vals should have a total length of L * n_Akn_per_site.
+#     # Reshape it into a list of L lists, each containing n_Akn_per_site arrays.
+#     A_kn_exp_vals = [new_exp_vals[site * n_Akn_per_site : (site + 1) * n_Akn_per_site]
+#                     for site in range(sim_params_class.L)]
+
+#     # Compute the derivative for each A_kn expectation value using trapezoidal integration.
+#     d_On_d_gk = [
+#         [trapezoidal(A_kn_exp_vals[site][j], t) for j in range(n_Akn_per_site)]
+#         for site in range(sim_params_class.L)
+#     ]
+
+#     # # Original reshape from propagation.py: Reshape new_exp_vals to be a list of lists with dimensions n_jump times n_obs
+#     # A_kn_exp_vals = [new_exp_vals[i * n_obs:(i + 1) * n_obs] for i in range(n_jump)]
+
+#     # # Compute the integral of the new expectation values to obtain the derivatives
+#     # d_On_d_gk = [ [trapezoidal(A_kn_exp_vals[i][j],t)  for j in range(n_obs)] for i in range(n_jump) ]
+
+#     return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
   
 
 

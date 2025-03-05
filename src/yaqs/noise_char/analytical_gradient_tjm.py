@@ -37,6 +37,8 @@ from yaqs.core.data_structures.simulation_parameters import StrongSimParams, Wea
     
 def qutip_traj_char(sim_params_class: SimulationParameters):
 
+    print('hello')
+
     T = sim_params_class.T
     dt = sim_params_class.dt
     L = sim_params_class.L
@@ -179,6 +181,7 @@ def qutip_traj_char(sim_params_class: SimulationParameters):
     # d_On_d_gk = [ [trapezoidal(A_kn_exp_vals[i][j],t)  for j in range(n_obs)] for i in range(n_jump) ]
 
     # return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
+    print('hello')
     return t, original_exp_vals, d_On_d_gk
   
 
@@ -404,7 +407,7 @@ if __name__ == "__main__":
     T = 5
     dt = 0.1
     sample_timesteps = True
-    N = 500
+    N = 100
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
@@ -428,10 +431,6 @@ if __name__ == "__main__":
     t, qt_ref_traj,  d_On_d_gk_qt =qutip_traj_char(qt_params)
 
 
-
-
-
-
     ########## TJM Example #################
     run_char(state, H_0, sim_params, noise_model)
 
@@ -441,46 +440,9 @@ if __name__ == "__main__":
 
 
 
-
-    # '''Restructure Qutip A_kn means into same structure as TJM A_kn means:'''
-
-    # n_sites = len(qt_A_kn_exp_vals)
-    # n_types = len(qt_params.observables)
-    # n_noise = len(noise_model.processes)  
-    # n_Akn_per_site = n_noise * n_types
-
-    # # Create a new dictionary to hold the Qutip data in the same structure as sim_params.avg_expvals.
-    # qt_avg_dict = {}
-
-    # for site in range(n_sites):
-    #     for type_index in range(n_types):
-    #         key = (qt_params.observables[type_index], site)
-    #         qt_avg_dict[key] = {}
-    #         for noise_index in range(n_noise):
-    #             process = noise_model.processes[noise_index]
-    #             # Calculate the index within the sublist for the given noise process and observable type.
-    #             idx = noise_index * n_types + type_index
-    #             qt_avg_dict[key][process] = qt_A_kn_exp_vals[site][idx]
-
-    # # Print out the structure for inspection.
-    # print("Structure of qt_avg_dict:")
-    # for key, proc_dict in qt_avg_dict.items():
-    #     print(f"Key (Observable, site): {key}")
-    #     for process, arr in proc_dict.items():
-    #         print(f"    Process: {process}, array shape: {np.shape(arr)}")
-
-    # '''Structure of TJM and Qutip A_kn means is equal now.'''
-
-
     # Convert both to numpy arrays
     array1 = np.array(sim_params.d_On_d_gk)
     array2 = np.array(d_On_d_gk_qt)
-
-    # Use np.allclose to compare with a tolerance for floating point differences
-    if np.allclose(array1, array2, rtol=1e-2, atol=1e-2):
-        print("sim_params.d_On_d_gk and d_On_d_gk_qt are the same!")
-    else:
-        print("They are different.")
 
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 10))
 
@@ -501,12 +463,12 @@ if __name__ == "__main__":
     ax1.set_title("TJM d_On_d_gk")
     ax1.set_xlabel("Time index (0-50)")
     ax1.set_ylabel("Integrated Value")
-    ax1.legend()
+    # ax1.legend()
 
     ax2.set_title("Qutip d_On_d_gk")
     ax2.set_xlabel("Time index (0-50)")
     ax2.set_ylabel("Integrated Value")
-    ax2.legend()
+    # ax2.legend()
 
     plt.tight_layout()
     plt.show()
