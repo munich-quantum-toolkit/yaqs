@@ -15,10 +15,14 @@ import opt_einsum as oe
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from ..data_structures.networks import MPO, MPS
 
 
-def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float = 0) -> tuple[np.ndarray, np.ndarray]:
+def split_mps_tensor(
+    tensor: NDArray[np.complex128], svd_distribution: str, threshold: float = 0
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
 
     The input tensor is assumed to have a composite physical index of dimension d0*d1 and virtual dimensions D0 and D2,
@@ -98,7 +102,7 @@ def split_mps_tensor(tensor: np.ndarray, svd_distribution: str, threshold: float
     return A0, A1
 
 
-def merge_mps_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
+def merge_mps_tensors(A0: NDArray[np.complex128], A1: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Merge two neighboring MPS tensors into one.
 
     The tensors A0 and A1 are contracted using opt_einsum. The contraction pattern is chosen so that
@@ -122,7 +126,7 @@ def merge_mps_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
     return merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
 
 
-def merge_mpo_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
+def merge_mpo_tensors(A0: NDArray[np.complex128], A1: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Merge two neighboring MPO tensors into one.
 
     The contraction is performed over the appropriate bond indices, and then the resulting tensor
@@ -142,7 +146,9 @@ def merge_mpo_tensors(A0: np.ndarray, A1: np.ndarray) -> np.ndarray:
     return merged_tensor.reshape((s[0] * s[1], s[2] * s[3], s[4], s[5]))
 
 
-def update_right_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, R: np.ndarray) -> np.ndarray:
+def update_right_environment(
+    A: NDArray[np.complex128], B: NDArray[np.complex128], W: NDArray[np.complex128], R: NDArray[np.complex128]
+) -> NDArray[np.complex128]:
     r"""Perform a contraction step from right to left with an operator inserted.
 
     The network structure (indices shown for contracted bonds) is illustrated below:
@@ -193,7 +199,9 @@ def update_right_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, R: np.
     return np.tensordot(T, B.conj(), axes=((2, 3), (0, 2)))
 
 
-def update_left_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, L: np.ndarray) -> np.ndarray:
+def update_left_environment(
+    A: NDArray[np.complex128], B: NDArray[np.complex128], W: NDArray[np.complex128], L: NDArray[np.complex128]
+) -> NDArray[np.complex128]:
     r"""Perform a contraction step from left to right with an operator inserted.
 
     The network structure is illustrated below:
@@ -237,7 +245,7 @@ def update_left_environment(A: np.ndarray, B: np.ndarray, W: np.ndarray, L: np.n
     return np.tensordot(A, T, axes=((0, 1), (0, 2)))
 
 
-def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
+def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
     """Compute the right operator blocks (partial contractions) for the given MPS and MPO.
 
     Starting from the rightmost site, an identity operator is constructed and then
@@ -276,7 +284,9 @@ def initialize_right_environments(psi: MPS, op: MPO) -> np.ndarray:
     return right_blocks
 
 
-def project_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray) -> np.ndarray:
+def project_site(
+    L: NDArray[np.complex128], R: NDArray[np.complex128], W: NDArray[np.complex128], A: NDArray[np.complex128]
+) -> NDArray[np.complex128]:
     r"""Apply the local Hamiltonian operator on a tensor A.
 
     The operation contracts the tensor network composed of the left operator block L,
@@ -307,7 +317,9 @@ def project_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray) -> 
     return T.transpose((0, 2, 1))
 
 
-def project_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray) -> np.ndarray:
+def project_bond(
+    L: NDArray[np.complex128], R: NDArray[np.complex128], C: NDArray[np.complex128]
+) -> NDArray[np.complex128]:
     r"""Apply the "zero-site" bond contraction between two operator blocks L and R using a bond tensor C.
 
     The contraction sequence is:
@@ -328,7 +340,14 @@ def project_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray) -> np.ndarray:
     return np.tensordot(L, T, axes=((0, 1), (0, 1)))
 
 
-def update_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray, dt: float, numiter: int) -> np.ndarray:
+def update_site(
+    L: NDArray[np.complex128],
+    R: NDArray[np.complex128],
+    W: NDArray[np.complex128],
+    A: NDArray[np.complex128],
+    dt: float,
+    numiter: int,
+) -> NDArray[np.complex128]:
     """Evolve the local MPS tensor A forward in time using the local Hamiltonian.
 
     This function applies a Lanczos-based exponential of the local Hamiltonian on tensor A.
@@ -351,7 +370,9 @@ def update_site(L: np.ndarray, R: np.ndarray, W: np.ndarray, A: np.ndarray, dt: 
     return evolved_A_flat.reshape(A.shape)
 
 
-def update_bond(L: np.ndarray, R: np.ndarray, C: np.ndarray, dt: float, numiter: int) -> np.ndarray:
+def update_bond(
+    L: NDArray[np.complex128], R: NDArray[np.complex128], C: NDArray[np.complex128], dt: float, numiter: int
+) -> NDArray[np.complex128]:
     """Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
 
     Args:
