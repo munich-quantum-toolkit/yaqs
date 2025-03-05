@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 def _lanczos_iteration(
-    Afunc: Callable[[NDArray[np.complex128], NDArray[np.complex128]], NDArray[np.complex128]],
+    Afunc: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vstart: NDArray[np.complex128],
     numiter: int,
 ) -> tuple[np.float64, np.float64, NDArray[np.complex128]]:
@@ -67,7 +67,7 @@ def _lanczos_iteration(
 
 
 def expm_krylov(
-    Afunc: Callable[[NDArray[np.complex128], NDArray[np.complex128]], NDArray[np.complex128]],
+    Afunc: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     v: NDArray[np.complex128],
     dt: float,
     numiter: int,
