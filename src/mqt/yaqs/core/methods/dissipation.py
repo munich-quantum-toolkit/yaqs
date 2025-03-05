@@ -47,7 +47,7 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float) -> None:
 
     # Apply the dissipative operator to each tensor in the MPS
     for i in reversed(range(state.length)):
-        if noise_model and any(gamma != 0 for gamma in noise_model.strengths):
+        if noise_model is not None and any(gamma != 0 for gamma in noise_model.strengths):
             state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_operator, state.tensors[i])
         # Prepares state for probability calculation, results in mixed canonical form at site 0
         # Shifting it during the sweep is faster than setting it at the end
