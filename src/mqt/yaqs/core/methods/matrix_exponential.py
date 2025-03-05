@@ -20,7 +20,7 @@ def _lanczos_iteration(
     Afunc: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vstart: NDArray[np.complex128],
     numiter: int,
-) -> tuple[np.float64, np.float64, NDArray[np.complex128]]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128]]:
     """Perform a "matrix free" Lanczos iteration.
 
     Args:
