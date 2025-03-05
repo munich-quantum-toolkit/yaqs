@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Type, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -89,13 +89,14 @@ def _extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
 
 class BaseGate:
     name: str
-    matrix: np.ndarray
+    matrix: NDArray[np.complex128]
     interaction: int
-    tensor: np.ndarray
-    generator: Union[np.ndarray, List[np.ndarray]]
+    tensor: NDArray[np.complex128]
+    generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
 
     def set_sites(self, *sites: int) -> None:
-        self.sites: List[int] = list(sites)
+        self.sites: list[int] = list(sites)
+
 
 class X(BaseGate):
     name = "x"
@@ -106,8 +107,8 @@ class X(BaseGate):
     # Generator: (π/2) * X
     generator = [(np.pi / 2) * np.array([[0, -1], [-1, 0]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Y(BaseGate):
@@ -119,8 +120,8 @@ class Y(BaseGate):
     # Generator: (π/2) * Y
     generator = [(np.pi / 2) * np.array([[0, -1j], [1j, 0]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Z(BaseGate):
@@ -132,8 +133,8 @@ class Z(BaseGate):
     # Generator: (π/2) * Z
     generator = [(np.pi / 2) * np.array([[1, 0], [0, -1]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class H(BaseGate):
@@ -145,8 +146,8 @@ class H(BaseGate):
     # Generator: (π/2) * 1/2(X + Z)
     generator = [(np.pi / np.sqrt(2)) * np.array([[0.5, 0.5], [0.5, -0.5]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class I(BaseGate):
@@ -158,8 +159,8 @@ class I(BaseGate):
     # Generator: 0 matrix
     generator = np.zeros((2, 2))
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class SX(BaseGate):
@@ -171,8 +172,8 @@ class SX(BaseGate):
     # Generator: (π/4) * X
     generator = [(np.pi / 4) * np.array([[0, 1], [1, 0]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Rx(BaseGate):
@@ -189,8 +190,8 @@ class Rx(BaseGate):
         # Generator: (θ/2) * X
         self.generator = [(self.theta / 2) * np.array([[0, -1j], [-1j, 0]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Ry(BaseGate):
@@ -207,8 +208,8 @@ class Ry(BaseGate):
         # Generator: (θ/2) * Y
         self.generator = [(self.theta / 2) * np.array([[0, -1], [1, 0]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Rz(BaseGate):
@@ -222,8 +223,8 @@ class Rz(BaseGate):
         # Generator: (θ/2) * Z
         self.generator = [(self.theta / 2) * np.array([[-1j, 0], [0, 1j]])]
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Phase(BaseGate):
@@ -238,8 +239,8 @@ class Phase(BaseGate):
         # Generator: (θ/2) * Z
         self.generator = (self.theta / 2) * np.array([[1, 0], [0, -1]])
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class U3(BaseGate):
@@ -257,8 +258,8 @@ class U3(BaseGate):
         ])
         self.tensor = self.matrix
 
-    def set_sites(self, site0: int) -> None:
-        self.sites = [site0]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class CX(BaseGate):
@@ -266,13 +267,13 @@ class CX(BaseGate):
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
     interaction = 2
 
-    def set_sites(self, site0: int, site1: int) -> None:
-        self.sites = [site0, site1]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-X)
         self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
         self.mpo = _extend_gate(self.tensor, self.sites)
-        if site1 < site0:  # Adjust for reverse control/target
+        if sites[1] < sites[0]:  # Adjust for reverse control/target
             # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
@@ -282,13 +283,13 @@ class CZ(BaseGate):
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]])
     interaction = 2
 
-    def set_sites(self, site0: int, site1: int) -> None:
-        self.sites = [site0, site1]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-Z)
         self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
 
-        if site1 < site0:  # Adjust for reverse control/target
+        if sites[1] < sites[0]:  # Adjust for reverse control/target
             # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
@@ -304,11 +305,11 @@ class CPhase(BaseGate):
         # Generator: (θ/2) * (Z ⊗ P), where P = diag(1, 0)
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
 
-    def set_sites(self, site0: int, site1: int) -> None:
-        self.sites = [site0, site1]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
         if self.interaction > 2:
             self.mpo = _extend_gate(self.tensor, self.sites)
-        elif site1 < site0:  # Adjust for reverse control/target
+        elif sites[1] < sites[0]:  # Adjust for reverse control/target
             # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
@@ -336,8 +337,8 @@ class SWAP(BaseGate):
             [np.eye(2), np.array([[0, 1], [1, 0]]), np.array([[0, -1j], [1j, 0]]), np.array([[1, 0], [0, -1]])],
         ]
 
-    def set_sites(self, site0: int, site1: int) -> None:
-        self.sites = [site0, site1]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
 
 
@@ -357,8 +358,8 @@ class Rxx(BaseGate):
         # Generator: (θ/2) * (X ⊗ X)
         self.generator = [(self.theta / 2) * np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])]
 
-    def set_sites(self, site0: int, site1: int) -> None:
-        self.sites = [site0, site1]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Ryy(BaseGate):
@@ -377,8 +378,8 @@ class Ryy(BaseGate):
         # Generator: (θ/2) * (Y ⊗ Y)
         self.generator = [(self.theta / 2) * np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
 
-    def set_sites(self, site0: int, site1: int) -> None:
-        self.sites = [site0, site1]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 class Rzz(BaseGate):
@@ -397,8 +398,8 @@ class Rzz(BaseGate):
         # Generator: (θ/2) * (Z ⊗ Z)
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
 
-    def set_sites(self, site0: int, site1: int) -> None:
-        self.sites = [site0, site1]
+    def set_sites(self, *sites: int) -> None:
+        self.sites = list(sites)
 
 
 # class U2:
