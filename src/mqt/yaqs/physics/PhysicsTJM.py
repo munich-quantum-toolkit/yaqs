@@ -17,6 +17,8 @@ from ..core.methods.dynamic_TDVP import dynamic_TDVP
 from ..core.methods.stochastic_process import stochastic_process
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from ..core.data_structures.networks import MPO, MPS
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import PhysicsSimParams
@@ -56,7 +58,9 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: Physic
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def sample(phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams, results: np.ndarray, j: int) -> MPS:
+def sample(
+    phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams, results: NDArray[np.float64], j: int
+) -> None:
     """Sample the quantum state and measure an observable from the sampling MPS.
     Corresponds to Fn in the TJM paper.
 
