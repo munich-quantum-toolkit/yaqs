@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..data_structures.networks import MPO
     from qiskit.circuit import Parameter
+
+    from ..data_structures.networks import MPO
 
 
 def _split_tensor(tensor: np.ndarray[complex]) -> list[np.ndarray[complex]]:
