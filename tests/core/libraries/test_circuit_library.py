@@ -15,33 +15,27 @@ from mqt.yaqs.core.libraries.circuit_library import create_Heisenberg_circuit, c
 
 def test_create_Ising_circuit_valid_even() -> None:
     # Use an even number of qubits.
-    model = {"name": "Ising", "L": 4, "g": 0.5, "J": 1.0}
-    dt = 0.1
-    timesteps = 1
-    circ = create_Ising_circuit(model, dt, timesteps)
+    circ = create_Ising_circuit(L=4, J=1, g=0.5, dt=0.1, timesteps=1)
 
     # Check that the output is a QuantumCircuit with the right number of qubits.
     assert isinstance(circ, QuantumCircuit)
-    assert circ.num_qubits == model["L"]
+    assert circ.num_qubits == 4
 
     # Count the gates by name.
     op_names = [instr.operation.name for instr in circ.data]
     rx_count = op_names.count("rx")
     rzz_count = op_names.count("rzz")
 
-    assert rx_count == 4 * timesteps
-    assert rzz_count == 3 * timesteps
+    assert rx_count == 4
+    assert rzz_count == 3
 
 
 def test_create_Ising_circuit_valid_odd() -> None:
     # Use an odd number of qubits.
-    model = {"name": "Ising", "L": 5, "g": 0.5, "J": 1.0}
-    dt = 0.1
-    timesteps = 1
-    circ = create_Ising_circuit(model, dt, timesteps)
+    circ = create_Ising_circuit(L=5, J=1, g=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
-    assert circ.num_qubits == model["L"]
+    assert circ.num_qubits == 5
 
     # For L=5:
     #   - The rx loop adds 5 gates.
@@ -57,24 +51,12 @@ def test_create_Ising_circuit_valid_odd() -> None:
     assert rzz_count == 4
 
 
-def test_create_Ising_circuit_invalid_model() -> None:
-    # If the model name is not "Ising", an assertion error should occur.
-    model = {"name": "Heisenberg", "L": 4, "g": 0.5, "J": 1.0}
-    dt = 0.1
-    timesteps = 1
-    with pytest.raises(AssertionError):
-        create_Ising_circuit(model, dt, timesteps)
-
-
 def test_create_Heisenberg_circuit_valid_even() -> None:
     # Use an even number of qubits.
-    model = {"name": "Heisenberg", "L": 4, "Jx": 1.0, "Jy": 1.0, "Jz": 1.0, "h": 0.5}
-    dt = 0.1
-    timesteps = 1
-    circ = create_Heisenberg_circuit(model, dt, timesteps)
+    circ = create_Heisenberg_circuit(L=4, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
-    assert circ.num_qubits == model["L"]
+    assert circ.num_qubits == 4
 
     # Check that the circuit contains the expected types of gates.
     op_names = [instr.operation.name for instr in circ.data]
@@ -84,23 +66,11 @@ def test_create_Heisenberg_circuit_valid_even() -> None:
 
 def test_create_Heisenberg_circuit_valid_odd() -> None:
     # Use an odd number of qubits.
-    model = {"name": "Heisenberg", "L": 5, "Jx": 1.0, "Jy": 1.0, "Jz": 1.0, "h": 0.5}
-    dt = 0.1
-    timesteps = 1
-    circ = create_Heisenberg_circuit(model, dt, timesteps)
+    circ = create_Heisenberg_circuit(L=5, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
-    assert circ.num_qubits == model["L"]
+    assert circ.num_qubits == 5
 
     op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
         assert gate in op_names
-
-
-def test_create_Heisenberg_circuit_invalid_model() -> None:
-    # If the model name is not "Heisenberg", an assertion error should occur.
-    model = {"name": "Ising", "L": 4, "Jx": 1.0, "Jy": 1.0, "Jz": 1.0, "h": 0.5}
-    dt = 0.1
-    timesteps = 1
-    with pytest.raises(AssertionError):
-        create_Heisenberg_circuit(model, dt, timesteps)

@@ -117,8 +117,7 @@ def test_apply_temporal_zone_no_op_nodes() -> None:
 
 def test_apply_temporal_zone_single_qubit_gates() -> None:
     """If the DAG has one gate in the 'temporal zone', it should be applied."""
-    model = {"name": "Ising", "L": 5, "J": 0, "g": 1}
-    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    circuit = create_Ising_circuit(L=5, J=0, g=1, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
@@ -129,8 +128,7 @@ def test_apply_temporal_zone_single_qubit_gates() -> None:
 
 def test_apply_temporal_zone_two_qubit_gates() -> None:
     """If the DAG has one gate in the 'temporal zone', it should be applied."""
-    model = {"name": "Ising", "L": 5, "J": 1, "g": 0}
-    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    circuit = create_Ising_circuit(L=5, J=1, g=0, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
@@ -141,8 +139,7 @@ def test_apply_temporal_zone_two_qubit_gates() -> None:
 
 def test_apply_temporal_zone_mixed_qubit_gates() -> None:
     """If the DAG has one gate in the 'temporal zone', it should be applied."""
-    model = {"name": "Ising", "L": 5, "J": 1, "g": 1}
-    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    circuit = create_Ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
@@ -156,8 +153,7 @@ def test_update_MPO() -> None:
     mpo = MPO()
     length = 2
     mpo.init_identity(length)
-    model = {"name": "Ising", "L": 5, "J": 1, "g": 1}
-    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    circuit = create_Ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
     qubits = [0, 1]
@@ -176,8 +172,7 @@ def test_apply_layer() -> None:
     mpo = MPO()
     length = 3
     mpo.init_identity(length)
-    model = {"name": "Ising", "L": 5, "J": 1, "g": 1}
-    circuit = create_Ising_circuit(model, dt=0.1, timesteps=1)
+    circuit = create_Ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
     threshold = 1e-5

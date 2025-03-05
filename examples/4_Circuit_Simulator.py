@@ -22,8 +22,7 @@ num_qubits = 10
 depth = num_qubits
 circuit = qiskit.circuit.QuantumCircuit(num_qubits)
 
-model = {"name": "Ising", "L": num_qubits, "J": 1, "g": 0.5}
-circuit = create_Ising_circuit(model, dt=0.1, timesteps=10)
+circuit = create_Ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
 circuit.measure_all()
 
 # Define the initial state
