@@ -41,17 +41,15 @@ def scalar_product(A: MPS, B: MPS, site: int = -1) -> np.ndarray:
         for site in range(A.length):
             tensor = oe.contract("abc, ade->bdce", A_copy.tensors[site], B_copy.tensors[site])
             result = tensor if site == 0 else oe.contract("abcd, cdef->abef", result, tensor)
-        result = np.squeeze(result)
 
     # Used for ignoring other tensors if MPS is in canonical form
     else:
         # Single site operators
         result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
+    return np.squeeze(result)
 
-    return result
 
-
-def local_expval(state: MPS, operator: np.ndarray, site: int) -> np.ndarray:
+def local_expval(state: MPS, operator: np.ndarray[complex], site: int) -> np.ndarray:
     """Expectation value for a given MPS-MPO-MPS network.
 
     Args:
@@ -100,7 +98,7 @@ def measure_single_shot(state: MPS) -> int:
     return sum(c << i for i, c in enumerate(bitstring))
 
 
-def measure(state: MPS, shots: int) -> dict:
+def measure(state: MPS, shots: int) -> dict[int, int]:
     """Measures an MPS state for a given number of shots.
 
     Args:
