@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..data_structures.networks import MPO, MPS
+    from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 
 def split_mps_tensor(
@@ -390,7 +391,9 @@ def update_bond(
     return evolved_C_flat.reshape(C.shape)
 
 
-def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25) -> None:
+def single_site_TDVP(
+    state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams, numiter_lanczos: int = 25
+) -> None:
     """Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
 
     The state (MPS) is evolved in time (in-place) by sequentially updating each site tensor.
@@ -505,7 +508,9 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25) 
         )
 
 
-def two_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int = 25) -> None:
+def two_site_TDVP(
+    state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams, numiter_lanczos: int = 25
+) -> None:
     """Perform symmetric two-site TDVP integration.
 
     This function evolves the MPS by updating two neighboring sites simultaneously.
