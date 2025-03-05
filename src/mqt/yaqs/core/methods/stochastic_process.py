@@ -32,7 +32,7 @@ def calculate_stochastic_factor(state: MPS) -> float:
     Returns:
         float: The calculated stochastic factor.
     """
-    return 1 - scalar_product(state, state, 0)
+    return 1 - state.norm(0)
 
 
 def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: float) -> dict:
