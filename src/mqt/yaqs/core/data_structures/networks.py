@@ -196,8 +196,11 @@ class MPS:
         assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
         return E.real
 
-    def norm(self):
-        return scalar_product(self, self)
+    def norm(self, site=None):
+        if site is not None:
+            return scalar_product(self, self, site).real
+        else:
+            return scalar_product(self, self). real
 
     def write_tensor_shapes(self) -> None:
         for _tensor in self.tensors:
