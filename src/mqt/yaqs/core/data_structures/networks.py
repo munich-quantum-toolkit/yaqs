@@ -202,8 +202,8 @@ class MPS:
         return scalar_product(self, self).real
 
     def write_tensor_shapes(self) -> None:
-        for tensor in self.tensors:
-            print(tensor.shape)
+        for _tensor in self.tensors:
+            pass
 
     def check_if_valid_MPS(self) -> None:
         right_bond = self.tensors[0].shape[2]
@@ -406,8 +406,8 @@ class MPO:
         # mat = np.reshape(mat, mat.size)
 
     def write_tensor_shapes(self) -> None:
-        for tensor in self.tensors:
-            print(tensor.shape)
+        for _tensor in self.tensors:
+            pass
 
     def check_if_valid_MPO(self) -> bool:
         right_bond = self.tensors[0].shape[3]
