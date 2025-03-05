@@ -12,7 +12,6 @@ from qiskit.circuit import QuantumCircuit
 
 def create_Ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) -> QuantumCircuit:
     """H = J ZZ + g X."""
-
     # Angle on X rotation
     alpha = -2 * dt * g
     # Angle on ZZ rotation
@@ -44,9 +43,10 @@ def create_Ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) 
     return circ
 
 
-def create_Heisenberg_circuit(L: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int) -> QuantumCircuit:
+def create_Heisenberg_circuit(
+    L: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int
+) -> QuantumCircuit:
     """H = Jx XX + Jy YY + Jz ZZ + h Z."""
-
     theta_xx = -2 * dt * Jx
     theta_yy = -2 * dt * Jy
     theta_zz = -2 * dt * Jz

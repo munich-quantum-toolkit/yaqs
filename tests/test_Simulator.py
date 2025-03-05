@@ -145,7 +145,7 @@ def test_mismatch() -> None:
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
-    circuit = create_Ising_circuit(L=num_qubits-1, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit = create_Ising_circuit(L=num_qubits - 1, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
