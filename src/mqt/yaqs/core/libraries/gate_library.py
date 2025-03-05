@@ -13,9 +13,10 @@ import numpy as np
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO
+    from qiskit.circuit import Parameter
 
 
-def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
+def _split_tensor(tensor: np.ndarray[complex]) -> list[np.ndarray[complex]]:
     assert tensor.shape == (2, 2, 2, 2)
 
     # Splits two-qubit matrix
@@ -42,7 +43,7 @@ def _split_tensor(tensor: np.ndarray) -> list[np.ndarray]:
     return [tensor1, tensor2]
 
 
-def _extend_gate(tensor: np.ndarray, sites: list) -> MPO:
+def _extend_gate(tensor: np.ndarray[complex], sites: list[int]) -> MPO:
     from ..data_structures.networks import MPO
 
     tensors = _split_tensor(tensor)
@@ -166,7 +167,7 @@ class Rx:
     name = "rx"
     interaction = 1
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([
             [np.cos(self.theta / 2), -1j * np.sin(self.theta / 2)],
@@ -184,7 +185,7 @@ class Ry:
     name = "ry"
     interaction = 1
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([
             [np.cos(self.theta / 2), -np.sin(self.theta / 2)],
@@ -202,7 +203,7 @@ class Rz:
     name = "rz"
     interaction = 1
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([[np.exp(-1j * self.theta / 2), 0], [0, np.exp(1j * self.theta / 2)]])
         self.tensor = self.matrix
@@ -217,7 +218,7 @@ class Phase:
     name = "p"
     interaction = 1
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         # Phase gate has one parameter theta
         self.theta = params[0]
         self.matrix = np.array([[1, 0], [0, np.exp(1j * self.theta)]])
@@ -233,7 +234,7 @@ class U3:
     name = "u"
     interaction = 1
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta, self.phi, self.lam = params
         self.matrix = np.array([
             [np.cos(self.theta / 2), -np.exp(1j * self.lam) * np.sin(self.theta / 2)],
@@ -284,7 +285,7 @@ class CPhase:
     name = "cp"
     interaction = 2
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j * self.theta)]])
         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
@@ -332,7 +333,7 @@ class Rxx:
     name = "rxx"
     interaction = 2
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([
             [np.cos(self.theta / 2), 0, 0, -1j * np.sin(self.theta / 2)],
@@ -352,7 +353,7 @@ class Ryy:
     name = "ryy"
     interaction = 2
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([
             [np.cos(self.theta / 2), 0, 0, 1j * np.sin(self.theta / 2)],
@@ -372,7 +373,7 @@ class Rzz:
     name = "rzz"
     interaction = 2
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
         self.matrix = np.array([
             [np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2), 0, 0, 0],
