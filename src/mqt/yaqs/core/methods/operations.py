@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..data_structures.networks import MPS
 
 
-def scalar_product(A: MPS, B: MPS, site: int = -1) -> np.ndarray:
+def scalar_product(A: MPS, B: MPS, site: int = None) -> np.ndarray:
     """Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
@@ -37,16 +37,14 @@ def scalar_product(A: MPS, B: MPS, site: int = -1) -> np.ndarray:
     for i, tensor in enumerate(A_copy.tensors):
         A_copy.tensors[i] = np.conj(tensor)
 
-    # Contract all sites
-    if site == -1:
+    result = np.array(np.inf)
+    if site == None:
         for site in range(A.length):
             tensor = oe.contract("abc, ade->bdce", A_copy.tensors[site], B_copy.tensors[site])
             result = tensor if site == 0 else oe.contract("abcd, cdef->abef", result, tensor)
-
-    # Used for ignoring other tensors if MPS is in canonical form
     else:
-        # Single site operators
         result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
+
     return np.squeeze(result)
 
 
