@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Dict, List, Type, Union, TYPE_CHECKING
 
 import numpy as np
 
@@ -87,7 +87,17 @@ def _extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
     return mpo
 
 
-class X:
+class BaseGate:
+    name: str
+    matrix: np.ndarray
+    interaction: int
+    tensor: np.ndarray
+    generator: Union[np.ndarray, List[np.ndarray]]
+
+    def set_sites(self, *sites: int) -> None:
+        self.sites: List[int] = list(sites)
+
+class X(BaseGate):
     name = "x"
     matrix = np.array([[0, 1], [1, 0]])
     interaction = 1
@@ -100,7 +110,7 @@ class X:
         self.sites = [site0]
 
 
-class Y:
+class Y(BaseGate):
     name = "y"
     matrix = np.array([[0, -1j], [1j, 0]])
     interaction = 1
@@ -113,7 +123,7 @@ class Y:
         self.sites = [site0]
 
 
-class Z:
+class Z(BaseGate):
     name = "z"
     matrix = np.array([[1, 0], [0, -1]])
     interaction = 1
@@ -126,7 +136,7 @@ class Z:
         self.sites = [site0]
 
 
-class H:
+class H(BaseGate):
     name = "h"
     matrix = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]])
     interaction = 1
@@ -139,7 +149,7 @@ class H:
         self.sites = [site0]
 
 
-class I:
+class I(BaseGate):
     name = "id"
     matrix = np.array([[1, 0], [0, 1]])
     interaction = 1
@@ -152,7 +162,7 @@ class I:
         self.sites = [site0]
 
 
-class SX:
+class SX(BaseGate):
     name = "sx"
     matrix = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]])
     interaction = 1
@@ -165,7 +175,7 @@ class SX:
         self.sites = [site0]
 
 
-class Rx:
+class Rx(BaseGate):
     name = "rx"
     interaction = 1
 
@@ -183,7 +193,7 @@ class Rx:
         self.sites = [site0]
 
 
-class Ry:
+class Ry(BaseGate):
     name = "ry"
     interaction = 1
 
@@ -201,7 +211,7 @@ class Ry:
         self.sites = [site0]
 
 
-class Rz:
+class Rz(BaseGate):
     name = "rz"
     interaction = 1
 
@@ -216,7 +226,7 @@ class Rz:
         self.sites = [site0]
 
 
-class Phase:
+class Phase(BaseGate):
     name = "p"
     interaction = 1
 
@@ -232,7 +242,7 @@ class Phase:
         self.sites = [site0]
 
 
-class U3:
+class U3(BaseGate):
     name = "u"
     interaction = 1
 
@@ -251,7 +261,7 @@ class U3:
         self.sites = [site0]
 
 
-class CX:
+class CX(BaseGate):
     name = "cx"
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
     interaction = 2
@@ -267,7 +277,7 @@ class CX:
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
-class CZ:
+class CZ(BaseGate):
     name = "cz"
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]])
     interaction = 2
@@ -283,7 +293,7 @@ class CZ:
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
-class CPhase:
+class CPhase(BaseGate):
     name = "cp"
     interaction = 2
 
@@ -303,7 +313,7 @@ class CPhase:
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
-class SWAP:
+class SWAP(BaseGate):
     name = "swap"
     matrix = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
     interaction = 2
@@ -331,7 +341,7 @@ class SWAP:
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
 
 
-class Rxx:
+class Rxx(BaseGate):
     name = "rxx"
     interaction = 2
 
@@ -351,7 +361,7 @@ class Rxx:
         self.sites = [site0, site1]
 
 
-class Ryy:
+class Ryy(BaseGate):
     name = "ryy"
     interaction = 2
 
@@ -371,7 +381,7 @@ class Ryy:
         self.sites = [site0, site1]
 
 
-class Rzz:
+class Rzz(BaseGate):
     name = "rzz"
     interaction = 2
 
