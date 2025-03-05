@@ -7,14 +7,20 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
-from numpy.typing import NDArray
 from scipy.linalg import eigh_tridiagonal
 
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
-def _lanczos_iteration(Afunc: Callable[[NDArray[np.complex128], NDArray[np.complex128]], NDArray[np.complex128]], vstart: NDArray[np.complex128], numiter: int) -> tuple[np.float64, np.float64, NDArray[np.complex128]]:
+
+def _lanczos_iteration(
+    Afunc: Callable[[NDArray[np.complex128], NDArray[np.complex128]], NDArray[np.complex128]],
+    vstart: NDArray[np.complex128],
+    numiter: int,
+) -> tuple[np.float64, np.float64, NDArray[np.complex128]]:
     """Perform a "matrix free" Lanczos iteration.
 
     Args:
@@ -60,7 +66,12 @@ def _lanczos_iteration(Afunc: Callable[[NDArray[np.complex128], NDArray[np.compl
     return (alpha, beta, V.T)
 
 
-def expm_krylov(Afunc: Callable[[NDArray[np.complex128], NDArray[np.complex128]], NDArray[np.complex128]], v: NDArray[np.complex128], dt: float, numiter: int) -> NDArray[np.complex128]:
+def expm_krylov(
+    Afunc: Callable[[NDArray[np.complex128], NDArray[np.complex128]], NDArray[np.complex128]],
+    v: NDArray[np.complex128],
+    dt: float,
+    numiter: int,
+) -> NDArray[np.complex128]:
     """Compute Krylov subspace approximation of the matrix exponential
     applied to input vector: `expm(dt*A)*v`.
 
