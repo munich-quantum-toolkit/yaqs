@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 # TODO: Assumes noise is same at all sites
 #       Could be sped-up by pre-calculating exponential somewhere else
 #       Likely not a problem since it's only exponentiating small matrices
-def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float) -> None:
+def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> None:
     """Apply dissipation to the system state using the given noise model and time step.
 
     This function modifies the state tensors by applying a dissipative operator that is calculated
