@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from ..data_structures.networks import MPS
 
 
-def scalar_product(A: MPS, B: MPS, site: int = -1) -> complex:
+def scalar_product(A: MPS, B: MPS, site: int = -1) -> np.ndarray:
     """Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
