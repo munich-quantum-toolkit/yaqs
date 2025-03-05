@@ -16,6 +16,8 @@ import opt_einsum as oe
 from .operations import scalar_product
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
 
@@ -35,7 +37,9 @@ def calculate_stochastic_factor(state: MPS) -> float:
     return 1 - state.norm(0)
 
 
-def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: float) -> dict[str, list]:
+def create_probability_distribution(
+    state: MPS, noise_model: NoiseModel, dt: float
+) -> dict[str, list[NDArray[np.complex128] | np.float64 | float | int]]:
     """Create a probability distribution for potential quantum jumps in the system.
 
     This function calculates the probability of each possible jump occurring, based on the noise model and time step.
@@ -50,7 +54,12 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
         dict: A dictionary containing jump operators, their strengths, corresponding sites, and the calculated probabilities.
     """
     # Ordered as [Jump 0 Site 0, Jump 1 Site 0, Jump 0 Site 1, Jump 1 Site 1...]
-    jump_dict = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
+    jump_dict: dict[str, list[NDArray[np.complex128] | np.float64 | float | int]] = {
+        "jumps": [],
+        "strengths": [],
+        "sites": [],
+        "probabilities": [],
+    }
     dp_m_list = []
 
     # Dissipative sweep should always result in a mixed canonical form at site L
@@ -69,7 +78,7 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
             jump_dict["sites"].append(site)
 
     # Normalize the probabilities
-    dp = np.sum(dp_m_list)
+    dp: np.float64 = np.sum(dp_m_list)
     jump_dict["probabilities"] = (dp_m_list / dp).astype(float)
     return jump_dict
 
