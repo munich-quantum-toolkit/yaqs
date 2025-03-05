@@ -74,6 +74,8 @@ class PhysicsSimParams:
 
 
 class WeakSimParams:
+    dt = 1
+
     def __init__(
         self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
     ) -> None:
@@ -99,6 +101,8 @@ class WeakSimParams:
 
 
 class StrongSimParams:
+    dt = 1
+
     def __init__(
         self,
         observables: list[Observable],
