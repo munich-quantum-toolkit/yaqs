@@ -35,7 +35,7 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float) -> None:
     Returns:
         None
     """
-    if noise_model and any(gamma != 0 for gamma in noise_model.strengths):
+    if noise_model is not None and any(gamma != 0 for gamma in noise_model.strengths):
         # Calculate the dissipation operator A
         A = sum(
             noise_model.strengths[i] * np.conj(jump_operator).T @ jump_operator
