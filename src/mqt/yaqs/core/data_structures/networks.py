@@ -251,28 +251,21 @@ class MPS:
 
         if not (all(A_truth) and all(B_truth)):
             sites = []
-            for truth_value in A_truth:
+            for i, truth_value in enumerate(A_truth):
                 if truth_value:
-                    sites.append(truth_value)
+                    sites.append(i)
                 else:
                     break
-            for truth_value in B_truth[len(sites) :]:
-                sites.append(truth_value)
 
+            for i, truth_value in enumerate(B_truth[len(sites) :], start=len(sites)):
+                sites.append(i)
             try:
                 return sites.index(False)
-                # print("MPS is site canonical at site % d." % sites.index(False))
             except:
-                # form = []
                 for i, value in enumerate(A_truth):
                     if not value:
                         return [i - 1, i]
         return None
-        # if A_truth[i]:
-        #     form.append('A')
-        # elif B_truth[i]:
-        #     form.append('B')
-        # print("The MPS has the form: ", form)
 
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
@@ -436,7 +429,7 @@ class MPO:
         trace = scalar_product(MPS, identity_MPS)
 
         # Checks if trace is not a singular values for partial trace
-        return not (trace.size != 1 or np.round(np.abs(trace), 1) / 2**self.length < fidelity)
+        return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
 
     def rotate(self, conjugate: bool = False) -> None:
         for i, tensor in enumerate(self.tensors):
