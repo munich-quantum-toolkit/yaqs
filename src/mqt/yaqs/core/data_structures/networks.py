@@ -189,21 +189,21 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def measure(self, observable: Observable):
+    def measure(self, observable: Observable) -> float:
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
         E = local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)
         assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
         return E.real
 
-    def norm(self, site=None):
+    def norm(self, site=None) -> float:
         if site is not None:
             return scalar_product(self, self, site).real
         return scalar_product(self, self).real
 
     def write_tensor_shapes(self) -> None:
-        for _tensor in self.tensors:
-            pass
+        for tensor in self.tensors:
+            print(tensor.shape)
 
     def check_if_valid_MPS(self) -> None:
         right_bond = self.tensors[0].shape[2]
@@ -406,8 +406,8 @@ class MPO:
         # mat = np.reshape(mat, mat.size)
 
     def write_tensor_shapes(self) -> None:
-        for _tensor in self.tensors:
-            pass
+        for tensor in self.tensors:
+            print(tensor.shape)
 
     def check_if_valid_MPO(self) -> bool:
         right_bond = self.tensors[0].shape[3]
