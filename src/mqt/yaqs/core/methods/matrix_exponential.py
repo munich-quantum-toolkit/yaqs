@@ -11,7 +11,7 @@ import numpy as np
 from scipy.linalg import eigh_tridiagonal
 
 
-def _lanczos_iteration(Afunc: np.ndarray, vstart: np.ndarray, numiter: int) -> tuple:
+def _lanczos_iteration(Afunc: np.ndarray[complex], vstart: np.ndarray[complex], numiter: int) -> tuple:
     """Perform a "matrix free" Lanczos iteration.
 
     Args:
@@ -57,7 +57,7 @@ def _lanczos_iteration(Afunc: np.ndarray, vstart: np.ndarray, numiter: int) -> t
     return (alpha, beta, V.T)
 
 
-def expm_krylov(Afunc: np.ndarray, v: np.ndarray, dt: float, numiter: int) -> np.ndarray:
+def expm_krylov(Afunc: np.ndarray[complex], v: np.ndarray[complex], dt: float, numiter: int) -> np.ndarray[complex]:
     """Compute Krylov subspace approximation of the matrix exponential
     applied to input vector: `expm(dt*A)*v`.
 
