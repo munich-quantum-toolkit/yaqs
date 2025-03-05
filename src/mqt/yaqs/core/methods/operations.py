@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..data_structures.networks import MPS
 
 
-def scalar_product(A: MPS, B: MPS, site: int | None = None) -> NDArray[np.complex128]:
+def scalar_product(A: MPS, B: MPS, site: int | None = None) -> np.complex128:
     """Calculates the scalar product of two Matrix Product States
         by contracting all positions vertically then horizontally.
 
@@ -45,10 +45,10 @@ def scalar_product(A: MPS, B: MPS, site: int | None = None) -> NDArray[np.comple
             result = tensor if site == 0 else oe.contract("abcd, cdef->abef", result, tensor)
     else:
         result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
-    return np.squeeze(result)
+    return np.complex128(np.squeeze(result))
 
 
-def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> NDArray[np.complex128]:
+def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> np.complex128:
     """Expectation value for a given MPS-MPO-MPS network.
 
     Args:

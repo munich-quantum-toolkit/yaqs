@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..data_structures.noise_model import NoiseModel
 
 
-def calculate_stochastic_factor(state: MPS) -> float:
+def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     """Calculate the stochastic factor for the given state.
 
     This factor is used to determine if a quantum jump will occur during the stochastic evolution.

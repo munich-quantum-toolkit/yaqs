@@ -17,13 +17,19 @@ from ..libraries.gate_library import GateLibrary
 from ..methods.operations import local_expval, scalar_product
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from .simulation_parameters import Observable
 
 
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
     def __init__(
-        self, length: int, tensors: list | None = None, physical_dimensions: list | None = None, state: str = "zeros"
+        self,
+        length: int,
+        tensors: list[NDArray[np.complex128]] | None = None,
+        physical_dimensions: list[int] | None = None,
+        state: str = "zeros",
     ) -> None:
         self.flipped = False
         if tensors is not None:
@@ -32,12 +38,13 @@ class MPS:
         else:
             self.tensors = []
         self.length = length
-        self.physical_dimensions = physical_dimensions
         if physical_dimensions is None:
             # Default case is the qubit (2-level) case
             self.physical_dimensions = []
-            for _ in range(length):
+            for _ in range(self.length):
                 self.physical_dimensions.append(2)
+        else:
+            self.physical_dimensions = physical_dimensions
         assert len(self.physical_dimensions) == length
 
         # Create d-level |0> state
@@ -121,7 +128,7 @@ class MPS:
         self.flipped = not self.flipped
         # self.orthogonality_center = self.length+1-self.orthogonality_center
 
-    def shift_orthogonality_center_right(self, current_orthogonality_center) -> None:
+    def shift_orthogonality_center_right(self, current_orthogonality_center: int) -> None:
         """Left and right normalizes an MPS around a selected site.
 
         Args:
@@ -143,7 +150,7 @@ class MPS:
                 "ij, ajc->aic", R, self.tensors[current_orthogonality_center + 1]
             )
 
-    def shift_orthogonality_center_left(self, current_orthogonality_center) -> None:
+    def shift_orthogonality_center_left(self, current_orthogonality_center: int) -> None:
         """Left and right normalizes an MPS around a selected site.
 
         Args:
@@ -189,14 +196,14 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def measure(self, observable: Observable) -> float:
+    def measure(self, observable: Observable) -> np.float64:
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
         E = local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)
         assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
         return E.real
 
-    def norm(self, site=None) -> float:
+    def norm(self, site: int | None = None) -> np.float64:
         if site is not None:
             return scalar_product(self, self, site).real
         return scalar_product(self, self).real
@@ -363,7 +370,11 @@ class MPO:
             self.tensors.append(M)
 
     def init_custom_Hamiltonian(
-        self, length: int, left_bound: np.ndarray, inner: np.ndarray, right_bound: np.ndarray
+        self,
+        length: int,
+        left_bound: NDArray[np.complex128],
+        inner: NDArray[np.complex128],
+        right_bound: NDArray[np.complex128],
     ) -> None:
         self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
         for i, tensor in enumerate(self.tensors):
@@ -373,7 +384,7 @@ class MPO:
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def init_custom(self, tensors: list[np.ndarray], transpose: bool = True) -> None:
+    def init_custom(self, tensors: list[NDArray[np.complex128]], transpose: bool = True) -> None:
         self.tensors = tensors
         if transpose:
             for i, tensor in enumerate(self.tensors):
@@ -383,7 +394,7 @@ class MPO:
         self.length = len(self.tensors)
         self.physical_dimension = tensors[0].shape[0]
 
-    def convert_to_MPS(self):
+    def convert_to_MPS(self) -> MPS:
         converted_tensors = [
             np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
             for tensor in self.tensors
@@ -391,7 +402,7 @@ class MPO:
 
         return MPS(self.length, converted_tensors)
 
-    def convert_to_matrix(self):
+    def convert_to_matrix(self) -> NDArray[np.complex128]:
         for i, tensor in enumerate(self.tensors):
             if i == 0:
                 mat = tensor
