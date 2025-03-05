@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import Optional, cast
+
 import numpy as np
 
 from ...circuits.CircuitTJM import CircuitTJM
@@ -22,7 +24,7 @@ class Observable:
         self.results = None
         self.trajectories = None
 
-    def initialize(self, sim_params) -> None:
+    def initialize(self, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
         self.results = None
         if type(sim_params) == PhysicsSimParams:
             if sim_params.sample_timesteps:
@@ -32,8 +34,11 @@ class Observable:
                 self.trajectories = np.empty((sim_params.N, 1), dtype=float)
                 self.times = sim_params.T
             self.results = np.empty(len(sim_params.times), dtype=float)
-        elif type(sim_params) == WeakSimParams or type(sim_params) == StrongSimParams:
-            self.trajectories = np.empty((sim_params.N, 1), dtype=float)
+        elif type(sim_params) == WeakSimParams:
+            self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
+            self.results = np.empty(1, dtype=float)
+        elif type(sim_params) == StrongSimParams:
+            self.trajectories = np.empty((sim_params.N, 1), dtype=np.complex128)
             self.results = np.empty(1, dtype=float)
 
 
@@ -79,7 +84,7 @@ class WeakSimParams:
     def __init__(
         self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
     ) -> None:
-        self.measurements = shots * [None]
+        self.measurements: list[dict[int, int] | None] = cast("list[Optional[dict[int, int]]]", shots * [None])
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
@@ -87,14 +92,15 @@ class WeakSimParams:
         self.backend = CircuitTJM
 
     def aggregate_measurements(self) -> None:
-        self.results = {}
+        self.results: dict[int, int] = {}
         # Noise-free simulation stores shots in first element
         if None in self.measurements:
+            assert self.measurements[0] is not None
             self.results = self.measurements[0]
             self.results = dict(sorted(self.results.items()))
 
         else:
-            for d in self.measurements:
+            for d in filter(None, self.measurements):
                 for key, value in d.items():
                     self.results[key] = self.results.get(key, 0) + value
             self.results = dict(sorted(self.results.items()))
