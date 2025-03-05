@@ -35,7 +35,7 @@ def calculate_stochastic_factor(state: MPS) -> float:
     return 1 - state.norm(0)
 
 
-def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: float) -> dict:
+def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: float) -> dict[str, list]:
     """Create a probability distribution for potential quantum jumps in the system.
 
     This function calculates the probability of each possible jump occurring, based on the noise model and time step.
@@ -69,7 +69,8 @@ def create_probability_distribution(state: MPS, noise_model: NoiseModel, dt: flo
             jump_dict["sites"].append(site)
 
     # Normalize the probabilities
-    jump_dict["probabilities"] = (dp_m_list / np.sum(dp_m_list)).astype(float)
+    dp = np.sum(dp_m_list)
+    jump_dict["probabilities"] = (dp_m_list / dp).astype(float)
     return jump_dict
 
 
