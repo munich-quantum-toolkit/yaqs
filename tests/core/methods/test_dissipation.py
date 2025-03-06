@@ -45,6 +45,6 @@ def test_apply_dissipation_site_canonical_0() -> None:
 
     # 4) Now check that MPS is site-canonical at site 0.
     canonical_site = state.check_canonical_form()
-    assert canonical_site == 0, (
+    assert canonical_site[0] == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"
     )

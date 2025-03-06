@@ -218,7 +218,7 @@ class MPS:
             assert tensor.shape[1] == right_bond
             right_bond = tensor.shape[2]
 
-    def check_canonical_form(self) -> list[int] | None:
+    def check_canonical_form(self) -> list[int]:
         """Checks what canonical form an MPS is in if any.
 
         Args:
@@ -265,7 +265,7 @@ class MPS:
                 for i, value in enumerate(A_truth):
                     if not value:
                         return [i - 1, i]
-        return None
+        return [-1]
 
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
