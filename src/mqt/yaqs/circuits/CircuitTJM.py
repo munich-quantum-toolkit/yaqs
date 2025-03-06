@@ -8,9 +8,10 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import NDArray
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
@@ -24,6 +25,7 @@ from .utils.dag_utils import convert_dag_to_tensor_algorithm
 if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
+    from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
     from ..core.libraries.gate_library import BaseGate
 
@@ -135,8 +137,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     else:
         dynamic_TDVP(state, mpo, sim_params)
 
-
-def CircuitTJM(args):
+def CircuitTJM(args: tuple[int, MPS, Optional[NoiseModel], StrongSimParams | WeakSimParams, MPO]) -> NDArray[np.float64]:
     from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
     _i, initial_state, noise_model, sim_params, circuit = args
@@ -179,4 +180,3 @@ def CircuitTJM(args):
                 last_site = observable.site
             results[obs_index, 0] = temp_state.measure(observable)
         return results
-    return None
