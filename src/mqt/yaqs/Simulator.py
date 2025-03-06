@@ -32,8 +32,9 @@ def _run_strong_sim(initial_state: MPS, operator: QuantumCircuit, sim_params: St
 
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
+
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    if parallel:
+    if parallel and sim_params.N > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
@@ -70,7 +71,7 @@ def _run_weak_sim(initial_state: MPS, operator: QuantumCircuit, sim_params: Weak
         sim_params.shots = 1
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    if parallel:
+    if parallel and sim_params.N > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
@@ -79,8 +80,7 @@ def _run_weak_sim(initial_state: MPS, operator: QuantumCircuit, sim_params: Weak
                     i = futures[future]
                     try:
                         result = future.result()
-                        if isinstance(operator, QuantumCircuit) and isinstance(sim_params, WeakSimParams):
-                            sim_params.measurements[i] = result
+                        sim_params.measurements[i] = result
                     except Exception:
                         pass
                     finally:
@@ -120,7 +120,7 @@ def _run_physics(initial_state: MPS, operator: MPO, sim_params: PhysicsSimParams
         observable.initialize(sim_params)
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    if parallel:
+    if parallel and sim_params.N > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
