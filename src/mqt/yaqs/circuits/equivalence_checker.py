@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 def run(
     circuit1: QuantumCircuit, circuit2: QuantumCircuit, threshold: float = 1e-13, fidelity: float = 1 - 1e-13
-) -> dict:
+) -> dict[str, bool | float]:
     """Checks the equivalence of two quantum circuits using an MPO-based algorithm.
 
     Args:
