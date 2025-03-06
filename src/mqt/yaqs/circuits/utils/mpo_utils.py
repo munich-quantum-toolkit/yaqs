@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import NDArray
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from ...core.libraries.gate_library import BaseGate
 
 
-def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray]:
+def decompose_theta(theta: NDArray[np.complex128], threshold: float) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Performs an SVD-based decomposition of the tensor `theta`, truncating
     singular values below a specified threshold, and then reshapes the result
     into two rank-4 tensors.
@@ -55,7 +56,7 @@ def decompose_theta(theta: np.ndarray, threshold: float) -> tuple[np.ndarray, np
     return U, M
 
 
-def apply_gate(gate: BaseGate, theta: np.ndarray, site0: int, site1: int, conjugate: bool = False) -> np.ndarray:
+def apply_gate(gate: BaseGate, theta: NDArray[np.complex128], site0: int, site1: int, conjugate: bool = False) -> NDArray[np.complex128]:
     """Applies a single- or two-qubit gate (or multi-qubit gate) from a GateLibrary object
     to the local tensor `theta`.
 
@@ -134,7 +135,7 @@ def apply_gate(gate: BaseGate, theta: np.ndarray, site0: int, site1: int, conjug
     return theta
 
 
-def apply_temporal_zone(theta: np.ndarray, dag: DAGCircuit, qubits: list[int], conjugate: bool = False) -> np.ndarray:
+def apply_temporal_zone(theta: NDArray[np.complex128], dag: DAGCircuit, qubits: list[int], conjugate: bool = False) -> NDArray[np.complex128]:
     """Applies the temporal zone of `dag` to a local tensor `theta`.
 
     Args:
@@ -188,7 +189,7 @@ def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
 
 
 def apply_layer(
-    mpo: MPO, circuit1_dag: DAGCircuit, circuit2_dag: DAGCircuit, first_iterator, second_iterator, threshold: float
+    mpo: MPO, circuit1_dag: DAGCircuit, circuit2_dag: DAGCircuit, first_iterator: range, second_iterator: range, threshold: float
 ) -> None:
     """Applies all gates for the current layer in two sweeps:
     one using `first_iterator` and another using `second_iterator`.
