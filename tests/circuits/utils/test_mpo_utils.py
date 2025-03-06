@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 
 import numpy as np
+from numpy.typing import NDArray
 import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
@@ -32,17 +33,17 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 ##############################################################################
 
 
-def random_theta_6d():
+def random_theta_6d() -> NDArray[np.float64]:
     """Create a random 6D tensor, e.g. for two-qubit local blocks."""
     return np.random.rand(2, 2, 2, 2, 2, 2)
 
 
-def random_theta_8d():
+def random_theta_8d() -> NDArray[np.float64]:
     """Create a random 8D tensor, e.g. for 'long-range' gates."""
     return np.random.rand(2, 2, 2, 2, 2, 2, 2, 2)
 
 
-def approximate_reconstruction(U, M, original, atol=1e-10) -> None:
+def approximate_reconstruction(U: NDArray[np.float64], M: NDArray[np.float64], original: NDArray[np.float64], atol: float=1e-10) -> None:
     """Check if U * diag(S) * V reconstructs 'original' (up to a tolerance).
     Re-applies the reshaping/transpose logic used in decompose_theta.
     """
@@ -82,26 +83,24 @@ def test_decompose_theta() -> None:
     approximate_reconstruction(U, M, theta, atol=1e-5)
 
 
-@pytest.mark.parametrize(("interaction", "conjugate"), [(1, False), (1, True), (2, False), (2, True)])
-def test_apply_gate(interaction, conjugate) -> None:
-    """Test applying single- or two-qubit gates to a 6D (or 8D) tensor,
-    with or without conjugation.
-    """
-    if interaction == 1:
-        attr = GateLibrary.x
-        gate = attr()
-        gate.set_sites(0)
-    else:
-        attr = GateLibrary.rzz
-        gate = attr()
-        gate.set_params([np.pi / 2])
-        gate.set_sites(0, 1)
-
+@pytest.mark.parametrize("conjugate", [False, True])
+def test_apply_single_qubit_gate(conjugate: bool) -> None:
+    """Test applying a single-qubit gate (e.g. X) to a tensor, with or without conjugation."""
+    gate = GateLibrary.x()  # Single-qubit gate
+    gate.set_sites(0)
     theta = random_theta_6d()
-
     updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
     assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
 
+@pytest.mark.parametrize("conjugate", [False, True])
+def test_apply_two_qubit_gate(conjugate: bool) -> None:
+    """Test applying a two-qubit gate (e.g. Rzz) to a tensor, with or without conjugation."""
+    gate = GateLibrary.rzz()  # Two-qubit gate
+    gate.set_params([np.pi / 2])
+    gate.set_sites(0, 1)
+    theta = random_theta_6d()
+    updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
+    assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
 
 def test_apply_temporal_zone_no_op_nodes() -> None:
     """If the DAG has no op_nodes, apply_temporal_zone should return theta unchanged."""
