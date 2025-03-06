@@ -26,7 +26,7 @@ Y = GateLibrary.y.matrix
 Z = GateLibrary.z.matrix
 
 
-def untranspose_block(mpo_tensor: NDArray[np.complex128]):
+def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """MPO tensors are stored as (sigma, sigma', row, col).
     This function reverses that transpose to get (row, col, sigma, sigma').
     That way, we can interpret row x col as a block matrix of operators.
