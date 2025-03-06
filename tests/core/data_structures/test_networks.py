@@ -310,7 +310,7 @@ def test_check_if_identity() -> None:
 
 
 @pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall"])
-def test_mps_initialization(state) -> None:
+def test_mps_initialization(state: str) -> None:
     """Test that MPS initializes a chain of a given length with correct
     shapes and the specified default state.
     """
