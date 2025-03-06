@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Optional, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 from ...circuits.CircuitTJM import CircuitTJM
 
@@ -21,25 +22,24 @@ class Observable:
         assert getattr(GateLibrary, name)
         self.name = name
         self.site = site
-        self.results = None
-        self.trajectories = None
+        self.results: Optional[NDArray[np.float64]] = None
+        self.trajectories: Optional[NDArray[np.float64]] = None
 
     def initialize(self, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
-        self.results = None
         if type(sim_params) == PhysicsSimParams:
             if sim_params.sample_timesteps:
-                self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=float)
+                self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=np.float64)
                 self.times = sim_params.times
             else:
-                self.trajectories = np.empty((sim_params.N, 1), dtype=float)
+                self.trajectories = np.empty((sim_params.N, 1), dtype=np.float64)
                 self.times = sim_params.T
-            self.results = np.empty(len(sim_params.times), dtype=float)
+            self.results = np.empty(len(sim_params.times), dtype=np.float64)
         elif type(sim_params) == WeakSimParams:
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
-            self.results = np.empty(1, dtype=float)
+            self.results = np.empty(1, dtype=np.float64)
         elif type(sim_params) == StrongSimParams:
             self.trajectories = np.empty((sim_params.N, 1), dtype=np.complex128)
-            self.results = np.empty(1, dtype=float)
+            self.results = np.empty(1, dtype=np.float64)
 
 
 class PhysicsSimParams:

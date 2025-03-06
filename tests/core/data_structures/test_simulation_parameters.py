@@ -49,7 +49,7 @@ def test_physics_simparams_basic() -> None:
 
 def test_physics_simparams_defaults() -> None:
     """Test default arguments and typical usage."""
-    obs_list = []
+    obs_list: list[Observable] = []
     T = 2.0
     params = PhysicsSimParams(obs_list, T)
 
