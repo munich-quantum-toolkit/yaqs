@@ -51,6 +51,7 @@ def _run_strong_sim(
                     try:
                         result = future.result()
                         for obs_index, observable in enumerate(sim_params.sorted_observables):
+                            assert observable.trajectories is not None, "Trajectories should have been initialized"
                             observable.trajectories[i] = result[obs_index]
                     except Exception:
                         pass
@@ -61,6 +62,7 @@ def _run_strong_sim(
             try:
                 result = backend(arg)
                 for obs_index, observable in enumerate(sim_params.sorted_observables):
+                    assert observable.trajectories is not None, "Trajectories should have been initialized"
                     observable.trajectories[i] = result[obs_index]
             except Exception:
                 pass
@@ -154,6 +156,7 @@ def _run_physics(
                     try:
                         result = future.result()
                         for obs_index, observable in enumerate(sim_params.sorted_observables):
+                            assert observable.trajectories is not None, "Trajectories should have been initialized"
                             observable.trajectories[i] = result[obs_index]
                     except Exception:
                         pass
@@ -164,6 +167,7 @@ def _run_physics(
             try:
                 result = backend(arg)
                 for obs_index, observable in enumerate(sim_params.sorted_observables):
+                    assert observable.trajectories is not None, "Trajectories should have been initialized"
                     observable.trajectories[i] = result[obs_index]
             except Exception:
                 pass
