@@ -7,10 +7,13 @@
 
 from __future__ import annotations
 
-from typing import cast, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, cast
 
 import numpy as np
-from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 
 class Observable:
     def __init__(self, name: str, site: int) -> None:
@@ -19,8 +22,8 @@ class Observable:
         assert getattr(GateLibrary, name)
         self.name = name
         self.site = site
-        self.results: Optional[NDArray[np.float64]] = None
-        self.trajectories: Optional[NDArray[np.float64]] = None
+        self.results: NDArray[np.float64] | None = None
+        self.trajectories: NDArray[np.float64] | None = None
 
     def initialize(self, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
         if type(sim_params) == PhysicsSimParams:
@@ -51,7 +54,6 @@ class PhysicsSimParams:
         threshold: float = 1e-6,
         order: int = 1,
     ) -> None:
-
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.T = T
@@ -69,7 +71,7 @@ class PhysicsSimParams:
 
 
 class WeakSimParams:
-    # Properties set as placeholders for code compatability
+    # Properties set as placeholders for code compatibility
     dt = 1
     N = 0
 
@@ -108,7 +110,6 @@ class StrongSimParams:
         threshold: float = 1e-6,
         window_size: int | None = None,
     ) -> None:
-
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.N = N

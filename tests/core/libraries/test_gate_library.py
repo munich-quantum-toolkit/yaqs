@@ -7,13 +7,17 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-from numpy.typing import NDArray
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, _extend_gate, _split_tensor
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def test_split_tensor_valid_shape() -> None:
