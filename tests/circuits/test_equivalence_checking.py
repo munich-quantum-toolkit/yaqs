@@ -14,7 +14,7 @@ from mqt.yaqs.circuits.equivalence_checker import run
 
 
 @pytest.mark.parametrize(("threshold", "fidelity"), [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
-def test_identity_vs_identity(threshold, fidelity) -> None:
+def test_identity_vs_identity(threshold: float, fidelity: float) -> None:
     """Two empty (no-gate) circuits on the same number of qubits
     should be equivalent.
     """
