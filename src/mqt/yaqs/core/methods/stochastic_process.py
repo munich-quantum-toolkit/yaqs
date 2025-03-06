@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
@@ -38,7 +38,7 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
 
 
 def create_probability_distribution(
-    state: MPS, noise_model: NoiseModel, dt: float
+    state: MPS, noise_model: Optional[NoiseModel], dt: float
 ) -> dict[str, list[NDArray[np.complex128] | np.float64 | float | int]]:
     """Create a probability distribution for potential quantum jumps in the system.
 
@@ -60,6 +60,9 @@ def create_probability_distribution(
         "sites": [],
         "probabilities": [],
     }
+    if noise_model is None:
+        return jump_dict
+
     dp_m_list = []
 
     # Dissipative sweep should always result in a mixed canonical form at site L
@@ -83,7 +86,7 @@ def create_probability_distribution(
     return jump_dict
 
 
-def stochastic_process(state: MPS, noise_model: NoiseModel, dt: float) -> MPS:
+def stochastic_process(state: MPS, noise_model: Optional[NoiseModel], dt: float) -> MPS:
     """Perform a stochastic process on the given state.
 
     This function determines whether a quantum jump occurs and applies the corresponding jump operator if necessary.
@@ -99,7 +102,7 @@ def stochastic_process(state: MPS, noise_model: NoiseModel, dt: float) -> MPS:
         MPS: The updated state after performing the stochastic process.
     """
     dp = calculate_stochastic_factor(state)
-    if np.random.rand() >= dp:
+    if noise_model is None or np.random.rand() >= dp:
         # No jump
         # Replaces normalization since state should be in
         # mixed canonical form at site 0

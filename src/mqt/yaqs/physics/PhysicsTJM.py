@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ..core.data_structures.simulation_parameters import PhysicsSimParams
 
 
-def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
+def initialize(state: MPS, noise_model: Optional[NoiseModel], sim_params: PhysicsSimParams) -> MPS:
     """Initialize the sampling MPS for second-order Trotterization.
     Corresponds to F0 in the TJM paper.
 
@@ -40,7 +40,7 @@ def initialize(state: MPS, noise_model: NoiseModel, sim_params: PhysicsSimParams
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams) -> MPS:
+def step_through(state: MPS, H: MPO, noise_model: Optional[NoiseModel], sim_params: PhysicsSimParams) -> MPS:
     """Perform a single time step of the TJM of the system state.
     Corresponds to Fj in the TJM paper.
 
@@ -59,7 +59,7 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel, sim_params: Physic
 
 
 def sample(
-    phi: MPS, H: MPO, noise_model: NoiseModel, sim_params: PhysicsSimParams, results: NDArray[np.float64], j: int
+    phi: MPS, H: MPO, noise_model: Optional[NoiseModel], sim_params: PhysicsSimParams, results: NDArray[np.float64], j: int
 ) -> None:
     """Sample the quantum state and measure an observable from the sampling MPS.
     Corresponds to Fn in the TJM paper.
@@ -97,7 +97,7 @@ def sample(
             results[obs_index, 0] = temp_state.measure(observable)
 
 
-def PhysicsTJM_2(args):
+def PhysicsTJM_2(args: tuple[int, MPS, Optional[NoiseModel], PhysicsSimParams, MPO]) -> NDArray[np.float64]:
     """Run a single trajectory of the TJM.
 
     Args:
@@ -131,7 +131,7 @@ def PhysicsTJM_2(args):
     return results
 
 
-def PhysicsTJM_1(args):
+def PhysicsTJM_1(args: tuple[int, MPS, Optional[NoiseModel], PhysicsSimParams, MPO]) -> NDArray[np.float64]:
     _i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
 
@@ -146,7 +146,7 @@ def PhysicsTJM_1(args):
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         dynamic_TDVP(state, H, sim_params)
-        if noise_model:
+        if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
         if sim_params.sample_timesteps:
