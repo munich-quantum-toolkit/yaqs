@@ -8,9 +8,9 @@
 from __future__ import annotations
 
 import copy
+from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import NDArray
 import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
@@ -28,6 +28,9 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 ##############################################################################
 # Helper Functions
 ##############################################################################
@@ -43,7 +46,9 @@ def random_theta_8d() -> NDArray[np.float64]:
     return np.random.rand(2, 2, 2, 2, 2, 2, 2, 2)
 
 
-def approximate_reconstruction(U: NDArray[np.float64], M: NDArray[np.float64], original: NDArray[np.float64], atol: float=1e-10) -> None:
+def approximate_reconstruction(
+    U: NDArray[np.float64], M: NDArray[np.float64], original: NDArray[np.float64], atol: float = 1e-10
+) -> None:
     """Check if U * diag(S) * V reconstructs 'original' (up to a tolerance).
     Re-applies the reshaping/transpose logic used in decompose_theta.
     """
@@ -92,6 +97,7 @@ def test_apply_single_qubit_gate(conjugate: bool) -> None:
     updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
     assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
 
+
 @pytest.mark.parametrize("conjugate", [False, True])
 def test_apply_two_qubit_gate(conjugate: bool) -> None:
     """Test applying a two-qubit gate (e.g. Rzz) to a tensor, with or without conjugation."""
@@ -101,6 +107,7 @@ def test_apply_two_qubit_gate(conjugate: bool) -> None:
     theta = random_theta_6d()
     updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
     assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
+
 
 def test_apply_temporal_zone_no_op_nodes() -> None:
     """If the DAG has no op_nodes, apply_temporal_zone should return theta unchanged."""

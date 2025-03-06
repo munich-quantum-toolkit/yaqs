@@ -29,9 +29,9 @@ if TYPE_CHECKING:
 def run(
     input_ircuit: QuantumCircuit,
     style: str = "dots",
-    max_bond_dims: list[int] | None=None,
-    window_sizes: list[int] | None=None,
-    thresholds: list[float] | None=None,
+    max_bond_dims: list[int] | None = None,
+    window_sizes: list[int] | None = None,
+    thresholds: list[float] | None = None,
 ) -> None:
     """Benchmark an arbitrary quantum circuit by comparing a Qiskit exact simulation
     with approximate simulations using various simulation parameters.

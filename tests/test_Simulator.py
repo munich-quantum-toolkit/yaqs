@@ -62,6 +62,7 @@ def test_physics_simulation() -> None:
         elif i == 4:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
+
 def test_strong_simulation() -> None:
     num_qubits = 5
     state = MPS(num_qubits, state="zeros")
@@ -97,6 +98,7 @@ def test_strong_simulation() -> None:
             assert np.isclose(observable.results[0], 0.87, atol=1e-1)
         elif i == 4:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+
 
 def test_weak_simulation_noise() -> None:
     num_qubits = 5

@@ -184,3 +184,4 @@ def CircuitTJM(
                 last_site = observable.site
             results[obs_index, 0] = temp_state.measure(observable)
         return results
+    return None
