@@ -11,6 +11,10 @@ import copy
 
 import numpy as np
 import pytest
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -22,7 +26,7 @@ Y = GateLibrary.y.matrix
 Z = GateLibrary.z.matrix
 
 
-def untranspose_block(mpo_tensor):
+def untranspose_block(mpo_tensor: NDArray[np.complex128]):
     """MPO tensors are stored as (sigma, sigma', row, col).
     This function reverses that transpose to get (row, col, sigma, sigma').
     That way, we can interpret row x col as a block matrix of operators.
