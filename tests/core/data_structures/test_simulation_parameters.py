@@ -73,6 +73,8 @@ def test_observable_initialize_with_sample_timesteps() -> None:
     # length(sim_params.times) => 3
 
     obs.initialize(sim_params)
+    assert obs.results is not None
+    assert obs.trajectories is not None
     assert obs.results.shape == (3,), "results should match len(sim_params.times)."
     assert obs.trajectories.shape == (sim_params.N, 3), "trajectories => (N, len(times))."
 
@@ -86,8 +88,9 @@ def test_observable_initialize_without_sample_timesteps() -> None:
     # and 'results' => shape(len(times))
 
     obs.initialize(sim_params)
+    assert obs.results is not None
+    assert obs.trajectories is not None
     assert obs.results.shape == (len(sim_params.times),)
-    # The code sets self.trajectories => shape (sim_params.N, 1) if not sampling all timesteps
     assert obs.trajectories.shape == (sim_params.N, 1)
 
     assert obs.times == 1.0, "If sample_timesteps=False, obs.times => float T"
