@@ -7,18 +7,10 @@
 
 from __future__ import annotations
 
-from typing import Callable, cast, Optional, TYPE_CHECKING
-if TYPE_CHECKING:
-    from .networks import MPS
-    from .noise_model import NoiseModel
-    from .networks import MPO
-    from qiskit.circuit import QuantumCircuit
+from typing import cast, Optional, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
-
-from ...circuits.CircuitTJM import CircuitTJM
-
 
 class Observable:
     def __init__(self, name: str, site: int) -> None:
@@ -70,14 +62,6 @@ class PhysicsSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
-        if self.order == 1:
-            from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_1
-
-            self.backend = PhysicsTJM_1
-        else:
-            from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_2
-
-            self.backend = PhysicsTJM_2
 
     def aggregate_trajectories(self) -> None:
         for observable in self.observables:
@@ -97,7 +81,6 @@ class WeakSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
-        self.backend = CircuitTJM
 
     def aggregate_measurements(self) -> None:
         self.results: dict[int, int] = {}
@@ -132,7 +115,6 @@ class StrongSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
-        self.backend = CircuitTJM
 
     def aggregate_trajectories(self) -> None:
         for observable in self.observables:
