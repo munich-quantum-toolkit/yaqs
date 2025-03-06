@@ -195,15 +195,6 @@ def loss_function_char(state, H_0, sim_params, noise_model, ref_traj, traj_der):
 
 if __name__ == '__main__':
 
-    # @dataclass
-    # class SimulationParameters:
-        # T: float = 1
-        # dt: float = 0.1
-        # L: int = 2
-        # J: float = 1
-        # g: float = 0.5
-        # gamma_rel: float = 0.1
-        # gamma_deph: float = 0.1
 
 
     L = 4
@@ -218,14 +209,14 @@ if __name__ == '__main__':
 
     # Define the noise model
     gamma = 0.1
-    noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
+    noise_model = NoiseModel(['relaxation', 'dephasing'], [0.2, 0.01])
    
 
     # Define the simulation parameters
     T = 5
     dt = 0.1
     sample_timesteps = True
-    N = 100
+    N = 500
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
