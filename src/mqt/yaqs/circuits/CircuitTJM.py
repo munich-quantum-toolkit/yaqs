@@ -23,6 +23,7 @@ from ..core.methods.stochastic_process import stochastic_process
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
+    from qiskit.circuit import QuantumCircuit
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from ..core.data_structures.noise_model import NoiseModel
@@ -137,7 +138,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     else:
         dynamic_TDVP(state, mpo, sim_params)
 
-def CircuitTJM(args: tuple[int, MPS, Optional[NoiseModel], StrongSimParams | WeakSimParams, MPO]) -> NDArray[np.float64]:
+def CircuitTJM(args: tuple[int, MPS, Optional[NoiseModel], StrongSimParams | WeakSimParams, QuantumCircuit]) -> NDArray[np.float64]:
     from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
     _i, initial_state, noise_model, sim_params, circuit = args

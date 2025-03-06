@@ -7,7 +7,12 @@
 
 from __future__ import annotations
 
-from typing import Optional, cast
+from typing import Callable, cast, Optional, TYPE_CHECKING
+if TYPE_CHECKING:
+    from .networks import MPS
+    from .noise_model import NoiseModel
+    from .networks import MPO
+    from qiskit.circuit import QuantumCircuit
 
 import numpy as np
 from numpy.typing import NDArray
@@ -54,6 +59,7 @@ class PhysicsSimParams:
         threshold: float = 1e-6,
         order: int = 1,
     ) -> None:
+
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.T = T
@@ -79,7 +85,9 @@ class PhysicsSimParams:
 
 
 class WeakSimParams:
+    # Properties set as placeholders for code compatability
     dt = 1
+    N = 0
 
     def __init__(
         self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
@@ -117,6 +125,7 @@ class StrongSimParams:
         threshold: float = 1e-6,
         window_size: int | None = None,
     ) -> None:
+
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.N = N
