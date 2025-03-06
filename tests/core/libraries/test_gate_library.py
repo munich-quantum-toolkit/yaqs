@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
@@ -248,7 +249,7 @@ def test_gate_cphase_forward() -> None:
     theta = np.pi / 2
     gate.set_params([theta])
     gate.set_sites(0, 1)  # Forward order (site0 < site1) so no transpose
-    expected = np.reshape(gate.matrix, (2, 2, 2, 2))
+    expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     assert_array_equal(gate.tensor, expected)
 
 
@@ -257,6 +258,6 @@ def test_gate_cphase_reverse() -> None:
     theta = np.pi / 2
     gate.set_params([theta])
     gate.set_sites(1, 0)  # Reverse order; tensor should be transposed on (1,0,3,2)
-    expected = np.reshape(gate.matrix, (2, 2, 2, 2))
+    expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
     assert_allclose(gate.tensor, expected)
