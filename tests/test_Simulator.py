@@ -46,17 +46,21 @@ def test_physics_simulation() -> None:
 
     Simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
 
-    assert np.isclose(sim_params.observables[0].results[0], 0.70, atol=1e-1)
-    assert np.isclose(sim_params.observables[1].results[0], 0.87, atol=1e-1)
-    assert np.isclose(sim_params.observables[2].results[0], 0.86, atol=1e-1)
-    assert np.isclose(sim_params.observables[3].results[0], 0.87, atol=1e-1)
-    assert np.isclose(sim_params.observables[4].results[0], 0.70, atol=1e-1)
-
-    assert len(sim_params.observables[0].trajectories) == N, "Trajectories was not initialized for PhysicsSimParams."
-
-    # Verify that aggregate_trajectories was called.
-    assert len(sim_params.observables[0].results == 1), "Results was not initialized for PhysicsSimParams."
-
+    for i, observable in enumerate(sim_params.observables):
+        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
+        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        if i == 0:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        elif i == 1:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 2:
+            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
+        elif i == 3:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 4:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
 def test_strong_simulation() -> None:
     num_qubits = 5
@@ -78,17 +82,21 @@ def test_strong_simulation() -> None:
 
     Simulator.run(state, circuit, sim_params, noise_model)
 
-    assert np.isclose(sim_params.observables[0].results[0], 0.70, atol=2e-1)
-    assert np.isclose(sim_params.observables[1].results[0], 0.87, atol=2e-1)
-    assert np.isclose(sim_params.observables[2].results[0], 0.86, atol=2e-1)
-    assert np.isclose(sim_params.observables[3].results[0], 0.87, atol=2e-1)
-    assert np.isclose(sim_params.observables[4].results[0], 0.70, atol=2e-1)
-
-    assert len(sim_params.observables[0].trajectories) == N, "Trajectories was not initialized for StrongimParams."
-
-    # Verify that aggregate_trajectories was called.
-    assert len(sim_params.observables[0].results == 1), "Results was not initialized for StrongimParams."
-
+    for i, observable in enumerate(sim_params.observables):
+        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
+        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        if i == 0:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        elif i == 1:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 2:
+            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
+        elif i == 3:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 4:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
 def test_weak_simulation_noise() -> None:
     num_qubits = 5
