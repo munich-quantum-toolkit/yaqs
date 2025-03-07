@@ -69,7 +69,7 @@ jobs:
     name: 📝 CodeQL
     needs: change-detection
     if: fromJSON(needs.change-detection.outputs.run-code-ql)
-    uses: cda-tum/mqt-workflows/.github/workflows/reusable-code-ql.yml@v1.7
+    uses: cda-tum/mqt-workflows/.github/workflows/reusable-code-ql-python.yml@v1.7
 
   cd:
     name: 🚀 CD
