@@ -169,11 +169,10 @@ def testupdate_bond():
 
 def test_single_site_TDVP():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     measurements = [Observable('z', site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1)
@@ -191,11 +190,10 @@ def test_single_site_TDVP():
 
 def test_two_site_TDVP():
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
     state = MPS(L)
     measurements = [Observable('z', site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1)

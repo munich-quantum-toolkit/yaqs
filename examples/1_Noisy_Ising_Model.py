@@ -11,11 +11,10 @@ from yaqs import Simulator
 
 # Define the system Hamiltonian
 L = 10
-d = 2
 J = 1
 g = 0.5
 H_0 = MPO()
-H_0.init_Ising(L, d, J, g)
+H_0.init_Ising(L, J, g)
 
 # Define the initial state
 state = MPS(L, state='zeros')

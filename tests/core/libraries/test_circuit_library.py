@@ -18,18 +18,10 @@ def test_create_Ising_circuit_valid_even():
     # Count the gates by name.
     op_names = [instr.name for instr, _, _ in circ.data]
     rx_count = op_names.count("rx")
-    cx_count = op_names.count("cx")
-    rz_count = op_names.count("rz")
-    
-    # In each timestep:
-    #   - There should be L rx gates.
-    #   - For the even-site loop: for L=4, we have 4//2 = 2 iterations,
-    #     each contributing two CX and one RZ (total 4 CX and 2 RZ).
-    #   - For the odd-site loop: range(1,4//2) gives 1 iteration, adding 2 CX and 1 RZ.
-    # Total per timestep: 4 rx, 6 CX, and 3 RZ.
+    rzz_count = op_names.count("rzz")
+
     assert rx_count == 4 * timesteps
-    assert cx_count == 6 * timesteps
-    assert rz_count == 3 * timesteps
+    assert rzz_count == 3 * timesteps
 
 def test_create_Ising_circuit_valid_odd():
     # Use an odd number of qubits.
@@ -49,12 +41,11 @@ def test_create_Ising_circuit_valid_odd():
     # Total: 5 rx, (4+2+2)=8 CX, and (2+1+1)=4 RZ.
     op_names = [instr.name for instr, _, _ in circ.data]
     rx_count = op_names.count("rx")
-    cx_count = op_names.count("cx")
-    rz_count = op_names.count("rz")
-    
+    rzz_count = op_names.count("rzz")
+
     assert rx_count == 5
-    assert cx_count == 8
-    assert rz_count == 4
+    assert rzz_count == 4
+
 
 def test_create_Ising_circuit_invalid_model():
     # If the model name is not "Ising", an assertion error should occur.

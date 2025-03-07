@@ -3,7 +3,7 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
-from yaqs.circuits.dag.dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
+from yaqs.circuits.utils.dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:

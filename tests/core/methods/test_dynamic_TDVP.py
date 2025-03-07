@@ -5,7 +5,7 @@ from yaqs.core.data_structures.networks import MPO, MPS
 from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
 
-def test_dynamic_tdvp_two_site():
+def test_dynamic_tdvp_one_site():
     """
     If current_max_bond_dim <= sim_params.max_bond_dim,
     dynamic_TDVP should call two_site_TDVP exactly once.
@@ -13,11 +13,10 @@ def test_dynamic_tdvp_two_site():
     from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
     # Define the system Hamiltonian
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
 
     # Define the initial state
     state = MPS(L, state='zeros')
@@ -27,7 +26,7 @@ def test_dynamic_tdvp_two_site():
     dt = 0.1
     sample_timesteps = False
     N = 1
-    max_bond_dim = 1
+    max_bond_dim = 0
     threshold = 1e-6
     order = 1
     measurements = [Observable('x', site) for site in range(L)]
@@ -48,11 +47,10 @@ def test_dynamic_tdvp_two_site():
     from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
     # Define the system Hamiltonian
     L = 5
-    d = 2
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, d, J, g)
+    H.init_Ising(L, J, g)
 
     # Define the initial state
     state = MPS(L, state='zeros')

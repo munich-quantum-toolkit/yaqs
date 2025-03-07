@@ -10,7 +10,7 @@ from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
 from yaqs.core.methods.dissipation import apply_dissipation
 from yaqs.core.methods.stochastic_process import stochastic_process
 from yaqs.core.methods.operations import measure
-from yaqs.circuits.dag.dag_utils import convert_dag_to_tensor_algorithm
+from yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
 
 
 from typing import TYPE_CHECKING, Union
@@ -78,7 +78,6 @@ def construct_generator_MPO(gate, length: int) -> MPO | int | int:
             W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = gate.generator[second_gen]
             tensors.append(W)
-            # break
         else:
             W = np.zeros((1, 1, 2, 2), dtype=complex)
             W[0, 0] = np.eye(2)

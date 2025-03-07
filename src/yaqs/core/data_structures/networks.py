@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 # Convention (sigma, chi_l-1, chi_l)
 class MPS:
     def __init__(self, length: int, tensors: list = None, physical_dimensions: list = None, state: str = 'zeros'):
+        self.flipped = False
         if tensors is not None:
             assert len(tensors) == length
             self.tensors = tensors
@@ -65,6 +66,9 @@ class MPS:
                         vector[0] = 1
                     else:
                         vector[1] = 1
+                elif state == 'random':
+                    vector[0] = np.random.rand()
+                    vector[1] = 1 - vector[0]
                 else:
                     raise ValueError("Invalid state string")
 
@@ -72,7 +76,9 @@ class MPS:
 
                 tensor = np.transpose(tensor, (2, 0, 1))
                 self.tensors.append(tensor)
-        self.flipped = False
+
+            if state == 'random':
+                self.normalize()
 
     def write_max_bond_dim(self) -> int:
         global_max = 0
@@ -279,10 +285,44 @@ class MPS:
         vec = vec.flatten()
         return vec
 
+    def convert_to_vector(self) -> np.ndarray:
+        """
+        Converts the MPS to a full state vector representation.
+
+        Returns:
+                A one-dimensional NumPy array of length \(\prod_{\ell=1}^L d_\ell\) 
+                representing the state vector.
+        """
+        # Start with the first tensor.
+        # Assume each tensor has shape (d, chi_left, chi_right) with chi_left=1 for the first tensor.
+        vec = self.tensors[0]  # shape: (d_1, 1, chi_1)
+
+        # Contract sequentially with the remaining tensors.
+        for i in range(1, self.length):
+            # Contract the last bond of vec with the middle index (left bond) of the next tensor.
+            vec = np.tensordot(vec, self.tensors[i], axes=([-1], [1]))
+            # After tensordot, if vec had shape (..., chi_i) and the new tensor has shape (d_{i+1}, chi_i, chi_{i+1}),
+            # then vec now has shape (..., d_{i+1}, chi_{i+1}).
+            # Reshape to merge all physical indices into one index.
+            new_shape = (-1, vec.shape[-1])
+            vec = np.reshape(vec, new_shape)
+
+        # At the end, the final bond dimension should be 1.
+        vec = np.squeeze(vec, axis=-1)
+        # Flatten the resulting multi-index into a one-dimensional state vector.
+        vec = vec.flatten()
+        return vec
+
+
+
+
+    
+
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
 class MPO:
-    def init_Ising(self, length: int, physical_dimension: int, J: float, g: float):
+    def init_Ising(self, length: int, J: float, g: float):
+        physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
         X = getattr(GateLibrary, "x")().matrix
@@ -323,7 +363,8 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-    def init_Heisenberg(self, length: int, physical_dimension: int, Jx: float, Jy: float, Jz: float, h: float):
+    def init_Heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float):
+        physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
         X = getattr(GateLibrary, "x")().matrix

@@ -417,7 +417,7 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
 
     # Adjust simulation time step if simulation parameters require a unit time step.
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 1
+        sim_params.dt = 2
 
     # Left-to-right sweep: Update all sites except the last.
     for i in range(num_sites - 1):
@@ -439,9 +439,17 @@ def single_site_TDVP(state: MPS, H: MPO, sim_params, numiter_lanczos: int=25):
         # Update the next site tensor by contracting it with the evolved bond tensor C.
         state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), C, (1, 3), (0, 1, 2))
 
+    # Guarantees unit time at final site for circuits
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        sim_params.dt = 1
+
     # Evolve the last site tensor by a full time step.
     last = num_sites - 1
     state.tensors[last] = update_site(left_blocks[last], right_blocks[last], H.tensors[last], state.tensors[last], sim_params.dt, numiter_lanczos)
+
+    # Only a single sweep is needed for circuits
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        return
 
     # Right-to-left sweep: Update all sites except the first.
     for i in reversed(range(1, num_sites)):

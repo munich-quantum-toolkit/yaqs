@@ -17,19 +17,22 @@ def create_Ising_circuit(model, dt, timesteps):
             circ.rx(theta=alpha, qubit=site)
 
         for site in range(model['L'] // 2):
-            circ.cx(control_qubit=2*site, target_qubit=2*site+1)
-            circ.rz(phi=beta, qubit=2*site+1)
-            circ.cx(control_qubit=2*site, target_qubit=2*site+1)
+            circ.rzz(beta, qubit1=2*site, qubit2=2*site+1)
+            # circ.cx(control_qubit=2*site, target_qubit=2*site+1)
+            # circ.rz(phi=beta, qubit=2*site+1)
+            # circ.cx(control_qubit=2*site, target_qubit=2*site+1)
 
         for site in range(1, model['L'] // 2):
-            circ.cx(control_qubit=2*site-1, target_qubit=2*site)
-            circ.rz(phi=beta, qubit=2*site)
-            circ.cx(control_qubit=2*site-1, target_qubit=2*site)
+            circ.rzz(beta, qubit1=2*site-1, qubit2=2*site)
+            # circ.cx(control_qubit=2*site-1, target_qubit=2*site)
+            # circ.rz(phi=beta, qubit=2*site)
+            # circ.cx(control_qubit=2*site-1, target_qubit=2*site)
 
         if model['L'] % 2 != 0 and model['L'] != 1:
-            circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
-            circ.rz(phi=beta, qubit=model['L']-1)
-            circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
+            circ.rzz(beta, qubit1=model['L']-2, qubit2=model['L']-1)
+            # circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
+            # circ.rz(phi=beta, qubit=model['L']-1)
+            # circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
 
     return circ
 
