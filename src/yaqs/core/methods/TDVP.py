@@ -3,7 +3,7 @@ import numpy as np
 import opt_einsum as oe
 
 from yaqs.core.methods.matrix_exponential import expm_krylov
-from yaqs.core.data_structures.simulation_parameters import WeakSimParams, StrongSimParams
+from yaqs.core.data_structures.simulation_parameters import PhysicsSimParams, WeakSimParams, StrongSimParams
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
