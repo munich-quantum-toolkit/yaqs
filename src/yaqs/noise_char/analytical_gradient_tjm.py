@@ -407,7 +407,7 @@ if __name__ == "__main__":
     T = 5
     dt = 0.1
     sample_timesteps = True
-    N = 100
+    N = 1000
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
@@ -458,7 +458,7 @@ if __name__ == "__main__":
         # Plot each of the 6 trajectories separately
         for obs_idx in range(6):
             ax1.plot(x, arr_tjm[obs_idx, :], marker='o', label=f"Site {site}, Obs {obs_idx}")
-            ax2.plot(x, arr_qt[obs_idx, :], marker='o', label=f"Site {site}, Obs {obs_idx}")
+            ax2.plot(x, arr_qt[obs_idx, :]-arr_tjm[obs_idx, :], marker='o', label=f"Site {site}, Obs {obs_idx}")
 
     ax1.set_title("TJM d_On_d_gk")
     ax1.set_xlabel("Time index (0-50)")

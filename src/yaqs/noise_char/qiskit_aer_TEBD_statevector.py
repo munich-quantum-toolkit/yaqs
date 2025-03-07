@@ -19,65 +19,75 @@ def expectation_value(rho, op):
     """Compute the expectation value of observable op given a density matrix rho."""
     return np.real(np.trace(rho.data @ op))
 
-
-
-
-
 def TEBD_evolve(initial_state, circuit, observables, max_bond=8, threshold=1e-10):
     """
-    Evolves an initial state through a circuit using TEBD and snapshots.
+    Evolves an initial state through a circuit using TEBD with built-in expectation value snapshots.
+    
+    Instead of saving full statevectors and computing expectation values in Python,
+    this version uses the AerSimulator's save_expectation_value instructions.
     
     Parameters:
       initial_state (array-like): The statevector for the initial state.
-      circuit (QuantumCircuit): A QuantumCircuit object (without snapshots).
+      circuit (QuantumCircuit): A Qiskit QuantumCircuit object (without snapshots).
       observables (dict): A dictionary of observables (name: 2x2 numpy array).
-      
+      max_bond (int): Maximum bond dimension for the MPS simulator.
+      threshold (float): Truncation threshold for the MPS simulator.
       
     Returns:
-      snapshot_labels (list): List of snapshot labels corresponding to time steps.
-      expectations (dict): Dictionary mapping snapshot labels to a dictionary of
-                           qubit expectation values for each observable.
+      snapshot_labels (list): List of snapshot labels (without observable suffixes).
+      expectations (dict): Dictionary mapping snapshot labels to per-qubit, per-observable expectation values.
                            Format: { snapshot_label: { qubit_index: {obs_name: value, ...}, ... }, ... }
     """
     n = circuit.num_qubits
     # Create a new circuit that will include initialization and snapshots.
     evolved_circuit = QuantumCircuit(n)
-    snapshot_labels = []
-    
-    # If an initial state is provided, initialize the qubits.
+    snapshot_labels = []  # List to keep time step labels
+    snapshot_counter = 0  # Unique counter for snapshots
+
+    # Initialize the circuit if an initial state is provided.
     if initial_state is not None:
         evolved_circuit.initialize(initial_state, range(n))
-    # Snapshot the initial state.
-    label = "t0"
-    evolved_circuit.save_statevector(label=label)
+    
+    # Save the initial snapshot with a unique label.
+    label = f"t{snapshot_counter}"
+    snapshot_counter += 1
+    for qubit in range(n):
+        for obs_name, op in observables.items():
+            evolved_circuit.save_expectation_value(op, [qubit], label=f"{label}_{obs_name}_{qubit}")
+
     snapshot_labels.append(label)
     
-    # Append every instruction from the input circuit and insert a snapshot after each.
-    for i, (instr, qargs, cargs) in enumerate(circuit.data):
+    # Append each instruction from the input circuit and add a snapshot after each.
+    for instr, qargs, cargs in circuit.data:
         evolved_circuit.append(instr, qargs, cargs)
-        label = f"t{i+1}"
-        evolved_circuit.save_statevector(label=label)
+        # Use the independent counter to generate a unique label.
+        label = f"t{snapshot_counter}"
+        snapshot_counter += 1
+        for qubit in range(n):
+            for obs_name, op in observables.items():
+                evolved_circuit.save_expectation_value(op, [qubit], label=f"{label}_{obs_name}_{qubit}")
+
         snapshot_labels.append(label)
     
-    # Transpile and simulate the circuit with the desired backend.
-    simulator = AerSimulator(method='matrix_product_state', matrix_product_state_max_bond_dimension = max_bond, matrix_product_state_truncation_threshold = threshold)
+    # Set up the simulator with the MPS backend and the desired options.
+    simulator = AerSimulator(method='matrix_product_state',
+                             matrix_product_state_max_bond_dimension=max_bond,
+                             matrix_product_state_truncation_threshold=threshold)
     evolved_circuit = transpile(evolved_circuit, simulator)
     result = simulator.run(evolved_circuit).result()
-    states_data = result.data(0)  # Dictionary mapping snapshot labels to statevectors.
-    
-    # Compute expectation values.
+    data = result.data(0)  # Dictionary containing keys like "t0_X", "t0_Y", etc.
+
+    # Reassemble the results into the nested dictionary format.
     expectations = {}
     for label in snapshot_labels:
-        state = states_data[label]
-        rho = qi.DensityMatrix(state)
         expectations[label] = {}
         for qubit in range(n):
-            # Trace out all qubits except the current one.
-            traced_out = [i for i in range(n) if i != qubit]
-            rho_reduced = qi.partial_trace(rho, traced_out)
             expectations[label][qubit] = {}
-            for obs_name, op in observables.items():
-                expectations[label][qubit][obs_name] = expectation_value(rho_reduced, op)
+            for obs_name in observables.keys():
+                key = f"{label}_{obs_name}_{qubit}"
+                expectations[label][qubit][obs_name] = data.get(key)
+
+    
     return snapshot_labels, expectations
 
 
