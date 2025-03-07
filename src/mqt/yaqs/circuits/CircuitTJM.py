@@ -174,7 +174,7 @@ def CircuitTJM(
             return measure(state, sim_params.shots)
         # Each shot is an individual trajectory
         return measure(state, shots=1)
-    elif isinstance(sim_params, StrongSimParams):
+    if isinstance(sim_params, StrongSimParams):
         temp_state = copy.deepcopy(state)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
@@ -184,5 +184,5 @@ def CircuitTJM(
                 last_site = observable.site
             results[obs_index, 0] = temp_state.measure(observable)
         return results
-    else:
-        raise TypeError(f"CircuitTJM does not work with: {type(sim_params)}")
+    msg = f"CircuitTJM does not work with: {type(sim_params)}"
+    raise TypeError(msg)
