@@ -20,8 +20,6 @@ from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
 # Define the circuit
 num_qubits = 10
 depth = num_qubits
-circuit = qiskit.circuit.QuantumCircuit(num_qubits)
-
 circuit = create_Ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
 circuit.measure_all()
 
