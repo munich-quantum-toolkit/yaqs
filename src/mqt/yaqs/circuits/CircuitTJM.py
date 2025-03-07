@@ -168,13 +168,15 @@ def CircuitTJM(
                 state = stochastic_process(state, noise_model, dt=1)
                 dag.remove_op_node(node)
 
-    if isinstance(sim_params, WeakSimParams):
+    if not isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        assert False, f"CircuitTJM does not support sim_params of type: {type(sim_params)}"
+    elif isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             # All shots can be done at once in noise-free model
             return measure(state, sim_params.shots)
         # Each shot is an individual trajectory
         return measure(state, shots=1)
-    if isinstance(sim_params, StrongSimParams):
+    elif isinstance(sim_params, StrongSimParams):
         temp_state = copy.deepcopy(state)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
@@ -184,5 +186,3 @@ def CircuitTJM(
                 last_site = observable.site
             results[obs_index, 0] = temp_state.measure(observable)
         return results
-    msg = f"CircuitTJM does not support sim_params of type: {type(sim_params)}"
-    raise AssertionError(msg)
