@@ -184,5 +184,5 @@ def CircuitTJM(
                 last_site = observable.site
             results[obs_index, 0] = temp_state.measure(observable)
         return results
-    else:
-        assert False, f"CircuitTJM does not support sim_params of type: {type(sim_params)}"
+    msg = f"CircuitTJM does not support sim_params of type: {type(sim_params)}"
+    raise AssertionError(msg)
