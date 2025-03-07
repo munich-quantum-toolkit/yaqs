@@ -48,24 +48,17 @@ def _run_strong_sim(
             with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
-                    try:
-                        result = future.result()
-                        for obs_index, observable in enumerate(sim_params.sorted_observables):
-                            assert observable.trajectories is not None, "Trajectories should have been initialized"
-                            observable.trajectories[i] = result[obs_index]
-                    except Exception:
-                        pass
-                    finally:
-                        pbar.update(1)
+                    result = future.result()
+                    for obs_index, observable in enumerate(sim_params.sorted_observables):
+                        assert observable.trajectories is not None, "Trajectories should have been initialized"
+                        observable.trajectories[i] = result[obs_index]
+                    pbar.update(1)
     else:
         for i, arg in enumerate(args):
-            try:
-                result = backend(arg)
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
-            except Exception:
-                pass
+            result = backend(arg)
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
+                assert observable.trajectories is not None, "Trajectories should have been initialized"
+                observable.trajectories[i] = result[obs_index]
     sim_params.aggregate_trajectories()
 
 
@@ -94,20 +87,13 @@ def _run_weak_sim(
             with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
-                    try:
-                        result = future.result()
-                        sim_params.measurements[i] = result
-                    except Exception:
-                        pass
-                    finally:
-                        pbar.update(1)
+                    result = future.result()
+                    sim_params.measurements[i] = result
+                    pbar.update(1)
     else:
         for i, arg in enumerate(args):
-            try:
-                result = backend(arg)
-                sim_params.measurements[i] = result
-            except Exception:
-                pass
+            result = backend(arg)
+            sim_params.measurements[i] = result
     sim_params.aggregate_measurements()
 
 
@@ -153,24 +139,17 @@ def _run_physics(
             with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
-                    try:
-                        result = future.result()
-                        for obs_index, observable in enumerate(sim_params.sorted_observables):
-                            assert observable.trajectories is not None, "Trajectories should have been initialized"
-                            observable.trajectories[i] = result[obs_index]
-                    except Exception:
-                        pass
-                    finally:
-                        pbar.update(1)
+                    result = future.result()
+                    for obs_index, observable in enumerate(sim_params.sorted_observables):
+                        assert observable.trajectories is not None, "Trajectories should have been initialized"
+                        observable.trajectories[i] = result[obs_index]
+                    pbar.update(1)
     else:
         for i, arg in enumerate(args):
-            try:
-                result = backend(arg)
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
-            except Exception:
-                pass
+            result = backend(arg)
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
+                assert observable.trajectories is not None, "Trajectories should have been initialized"
+                observable.trajectories[i] = result[obs_index]
     sim_params.aggregate_trajectories()
 
 
