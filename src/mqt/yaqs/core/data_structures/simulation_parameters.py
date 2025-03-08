@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Optional, cast
 
 import numpy as np
 
+from ..libraries.observables_library import ObservablesLibrary
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -63,9 +65,7 @@ class Observable:
         AssertionError
             If the provided `name` is not a valid attribute in the GateLibrary.
         """
-        from ..libraries.gate_library import GateLibrary
-
-        assert getattr(GateLibrary, name)
+        assert name in ObservablesLibrary
         self.name = name
         self.site = site
         self.results: NDArray[np.float64] | None = None
