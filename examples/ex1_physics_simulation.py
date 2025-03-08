@@ -49,7 +49,7 @@ max_bond_dim = 4
 threshold = 1e-6
 order = 2
 measurements = [Observable("x", site) for site in range(L)]
-sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
+sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
 
 fig, ax = plt.subplots(1, 1)
 if __name__ == "__main__":

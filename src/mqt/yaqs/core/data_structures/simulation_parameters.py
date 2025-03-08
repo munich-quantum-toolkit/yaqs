@@ -25,7 +25,9 @@ if TYPE_CHECKING:
 
 
 class Observable:
-    """A class to represent an observable in a quantum simulation.
+    """Observable class.
+
+    A class to represent an observable in a quantum simulation.
 
     Attributes:
     ----------
@@ -60,8 +62,6 @@ class Observable:
         Parameters:
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): The simulation parameters object
         which can be of type PhysicsSimParams, StrongSimParams, or WeakSimParams.
-
-        .
         """
         if type(sim_params) == PhysicsSimParams:
             if sim_params.sample_timesteps:
@@ -80,7 +80,9 @@ class Observable:
 
 
 class PhysicsSimParams:
-    """A class to represent the parameters for a physics simulation.
+    """Hamiltonian Simulation Parameters.
+
+    A class to represent the parameters for a physics simulation.
 
     Attributes:
     -----------
@@ -116,11 +118,12 @@ class PhysicsSimParams:
         observables: list[Observable],
         T: float,
         dt: float = 0.1,
-        sample_timesteps: bool = True,
         N: int = 1000,
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
         order: int = 1,
+        *,
+        sample_timesteps: bool = True,
     ) -> None:
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
@@ -134,13 +137,12 @@ class PhysicsSimParams:
         self.order = order
 
     def aggregate_trajectories(self) -> None:
-        """Aggregates the trajectories of each observable by computing the mean
+        """Aggregates trajectories for result.
+
+        Aggregates the trajectories of each observable by computing the mean
         across all trajectories and storing the result in the observable's results.
         This method iterates over all observables and updates their results
         attribute with the mean value of their trajectories along the specified axis.
-
-        Returns:
-            None.
         """
         for observable in self.observables:
             observable.results = np.mean(observable.trajectories, axis=0)
@@ -186,7 +188,9 @@ class WeakSimParams:
         self.window_size = window_size
 
     def aggregate_measurements(self) -> None:
-        """Aggregates measurement results from multiple simulations.
+        """Aggregates shots into final result.
+
+        Aggregates measurement results from multiple simulations.
         This method processes the `measurements` attribute, which is a list of dictionaries
         containing measurement results. If the first element of `measurements` is `None`,
         it assumes a noise-free simulation and directly uses the first element as the results.
@@ -194,9 +198,6 @@ class WeakSimParams:
         The aggregated results are stored in the `results` attribute, which is a dictionary
         mapping measurement outcomes to their respective counts. The results are sorted
         by the measurement outcomes.
-
-        Returns:
-            None.
         """
         self.results: dict[int, int] = {}
         # Noise-free simulation stores shots in first element
@@ -213,7 +214,9 @@ class WeakSimParams:
 
 
 class StrongSimParams:
-    """A class to represent the parameters for a strong simulation.
+    """Strong Circuit Simulation Parameters.
+
+    A class to represent the parameters for a strong simulation.
 
     Attributes:
     -----------
@@ -260,12 +263,11 @@ class StrongSimParams:
         self.window_size = window_size
 
     def aggregate_trajectories(self) -> None:
-        """Aggregates the trajectories of each observable by computing the mean across all trajectories.
+        """Aggregate trajectories for result.
+
+        Aggregates the trajectories of each observable by computing the mean across all trajectories.
         This method iterates over all observables and replaces their `results` attribute with the mean
         of their `trajectories` along the first axis.
-
-        Returns:
-            None.
         """
         for observable in self.observables:
             observable.results = np.mean(observable.trajectories, axis=0)

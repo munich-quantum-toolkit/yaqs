@@ -53,7 +53,7 @@ def test_physics_simulation() -> None:
     order = 2
 
     measurements = [Observable("z", site) for site in range(length)]
-    sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
+    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     gamma = 0.1
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
