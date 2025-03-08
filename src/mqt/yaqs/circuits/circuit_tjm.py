@@ -39,7 +39,9 @@ if TYPE_CHECKING:
 
 
 def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
-    """Processes the current layer of a DAGCircuit and categorizes nodes into single-qubit, even-indexed two-qubit,
+    """Process quantum circuit layer before applying to MPS.
+
+    Processes the current layer of a DAGCircuit and categorizes nodes into single-qubit, even-indexed two-qubit,
     and odd-indexed two-qubit gates.
 
     Args:
@@ -52,7 +54,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
             - odd_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is odd.
 
     Raises:
-        Exception: If a node with more than two qubits is encountered.
+        NotImplementedError: If a node with more than two qubits is encountered.
     """
     # Extract the current layer
     current_layer = dag.front_layer()

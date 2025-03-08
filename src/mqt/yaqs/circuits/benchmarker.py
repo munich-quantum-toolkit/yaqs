@@ -41,7 +41,9 @@ def run(
     window_sizes: list[int] | None = None,
     thresholds: list[float] | None = None,
 ) -> None:
-    """Benchmark an arbitrary quantum circuit by comparing a Qiskit exact simulation
+    """Circuit TJM Benchmarker.
+
+    Benchmark an arbitrary quantum circuit by comparing a Qiskit exact simulation
     with approximate simulations using various simulation parameters.
 
     Parameters:
@@ -53,7 +55,7 @@ def run(
     The function runs the circuit with a Qiskit Aersimulator to obtain the exact expectation
     value of a Pauli Z measurement on the middle qubit, and then simulates the same circuit using
     yaqs's simulator over a grid of simulation parameters. It then groups the results by bond
-    dimension and plots 3D "planes" in the window/threshold space (with –log₁₀(threshold) as one axis)
+    dimension and plots 3D "planes" in the window/threshold space (with -log₁₀(threshold) as one axis)
     that are stacked along the bond dimension axis. The face color of each plane encodes the absolute
     error (left) or runtime (right).
     """
@@ -138,7 +140,7 @@ def run(
         ax1.set_ylabel("Window Size", fontsize=11)
         ax1.set_zlabel("-log10(Threshold)", fontsize=11)
         ax1.set_title("Error vs. Simulation Parameters", fontsize=14)
-        ax1.grid(True, linestyle="--", alpha=0.5)
+        ax1.grid(visible=True, linestyle="--", alpha=0.5)
         cbar1 = fig.colorbar(sc1, ax=ax1, pad=0.1, aspect=20)
         cbar1.set_label("Absolute Error (log scale)", fontsize=11)
         cbar1.ax.tick_params(labelsize=10)
@@ -150,7 +152,7 @@ def run(
         ax2.set_ylabel("Window Size", fontsize=11)
         ax2.set_zlabel("-log10(Threshold)", fontsize=11)
         ax2.set_title("Runtime vs. Simulation Parameters", fontsize=14)
-        ax2.grid(True, linestyle="--", alpha=0.5)
+        ax2.grid(visible=True, linestyle="--", alpha=0.5)
         cbar2 = fig.colorbar(sc2, ax=ax2, pad=0.1, aspect=20)
         cbar2.set_label("Runtime (s)", fontsize=11)
         cbar2.ax.tick_params(labelsize=10)
@@ -223,7 +225,7 @@ def run(
         ax1.set_ylabel("Window Size", fontsize=11)
         ax1.set_zlabel("-log10(Threshold)", fontsize=11)
         ax1.set_title("Error vs. Simulation Parameters", fontsize=14)
-        ax1.grid(True, linestyle="--", alpha=0.5)
+        ax1.grid(visible=True, linestyle="--", alpha=0.5)
 
         # Set tick positions using the actual values:
         # x-axis (bond dimensions)
@@ -267,7 +269,7 @@ def run(
         ax2.set_ylabel("Window Size", fontsize=11)
         ax2.set_zlabel("-log10(Threshold)", fontsize=11)
         ax2.set_title("Runtime vs. Simulation Parameters", fontsize=14)
-        ax2.grid(True, linestyle="--", alpha=0.5)
+        ax2.grid(visible=True, linestyle="--", alpha=0.5)
 
         # Set tick positions using the actual values:
         ax2.set_xticks(used_bond_dims)

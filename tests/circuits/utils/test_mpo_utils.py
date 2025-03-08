@@ -12,7 +12,7 @@ It verifies the correct functionality of tensor operations including:
   - SVD-based splitting of MPS tensors (decompose_theta)
   - Gate application routines (apply_gate, apply_temporal_zone)
   - MPO tensor merging (merge_mps_tensors, merge_mpo_tensors)
-  - Environment updates for MPOs (update_MPO, update_right_environment, update_left_environment)
+  - Environment updates for MPOs (update_mpo, update_right_environment, update_left_environment)
   - Layer and long-range updates (apply_layer, apply_long_range_layer)
   - Generator MPO construction (construct_generator_mpo)
   - Grouping of DAG nodes (process_layer) and starting point selection (select_starting_point).
@@ -38,7 +38,7 @@ from mqt.yaqs.circuits.utils.mpo_utils import (
     apply_long_range_layer,
     apply_temporal_zone,
     decompose_theta,
-    update_MPO,
+    update_mpo,
 )
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
@@ -225,11 +225,11 @@ def test_apply_temporal_zone_mixed_qubit_gates() -> None:
     assert updated.shape == theta.shape
 
 
-def test_update_MPO() -> None:
-    """Test the update_MPO function on a small 2-qubit MPO.
+def test_update_mpo() -> None:
+    """Test the update_mpo function on a small 2-qubit MPO.
 
     This test initializes an identity MPO for 2 qubits, creates an Ising circuit,
-    and applies update_MPO. It then checks that each tensor in the updated MPO is a rank-4 tensor.
+    and applies update_mpo. It then checks that each tensor in the updated MPO is a rank-4 tensor.
     """
     mpo = MPO()
     length = 2
@@ -240,7 +240,7 @@ def test_update_MPO() -> None:
     qubits = [0, 1]
     threshold = 1e-5
 
-    update_MPO(mpo, dag1, dag2, qubits, threshold)
+    update_mpo(mpo, dag1, dag2, qubits, threshold)
 
     # Each MPO tensor should be a 4-dimensional tensor.
     for site_tensor in mpo.tensors:
@@ -248,7 +248,7 @@ def test_update_MPO() -> None:
 
 
 def test_apply_layer() -> None:
-    """Test the apply_layer function by confirming that update_MPO is applied over both iterators.
+    """Test the apply_layer function by confirming that update_mpo is applied over both iterators.
 
     This test initializes an identity MPO for 3 qubits and applies a layer update using two sweeps.
     It then checks if the final MPO is (approximately) the identity.

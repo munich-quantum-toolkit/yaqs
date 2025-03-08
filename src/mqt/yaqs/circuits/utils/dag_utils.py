@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module implements conversion and processing functions for quantum circuits using their DAG representations.
+"""Utility functions for DAG circuits.
+
+This module implements conversion and processing functions for quantum circuits using their DAG representations.
 It provides utilities to:
   - Convert a DAGCircuit into a list of gate objects from the GateLibrary.
   - Extract a temporal zone from a DAGCircuit for specified qubits.
