@@ -61,8 +61,7 @@ def _run_strong_sim(
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
 
-    Returns:
-        None
+
     """
     from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
 
@@ -118,8 +117,7 @@ def _run_weak_sim(
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
 
-    Returns:
-        None
+
     """
     from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
 
@@ -170,8 +168,7 @@ def _run_circuit(
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
 
-    Returns:
-        None
+
     """
     assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
     operator = copy.deepcopy(operator.reverse_bits())
@@ -198,8 +195,7 @@ def _run_physics(
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
 
-    Returns:
-        None
+
     """
     if sim_params.order == 1:
         from mqt.yaqs.physics.PhysicsTJM import physics_tjm_1
@@ -260,8 +256,7 @@ def run(
         noise_model (NoiseModel | None): The noise model to apply during simulation.
         parallel (bool, optional): Whether to run trajectories in parallel. Defaults to True.
 
-    Returns:
-        None
+
     """
     # State must start in B normalization
     initial_state.normalize("B")

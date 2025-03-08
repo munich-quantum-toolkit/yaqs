@@ -41,8 +41,7 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> 
             corresponding strengths. If None or if all strengths are zero, no dissipation is applied.
         dt (float): The time step for the evolution, used in the exponentiation of the dissipative operator.
 
-    Returns:
-        None
+
 
     Notes:
         - If no noise is present (i.e. `noise_model` is None or all noise strengths are zero),

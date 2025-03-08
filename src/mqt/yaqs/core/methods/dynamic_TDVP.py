@@ -38,8 +38,7 @@ def dynamic_TDVP(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimPar
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
             such as the maximum allowable bond dimension for the MPS.
 
-    Returns:
-        None
+
     """
     current_max_bond_dim = state.write_max_bond_dim()
     # state.normalize('B')

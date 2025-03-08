@@ -347,8 +347,7 @@ def single_site_TDVP(
             Simulation parameters containing the time step 'dt' (and possibly a threshold for SVD truncation).
         numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
 
-    Returns:
-        None. The state is updated in place.
+    . The state is updated in place.
 
     Reference:
         J. Haegeman, C. Lubich, I. Oseledets, B. Vandereycken, F. Verstraete,
@@ -441,8 +440,7 @@ def two_site_TDVP(
             Simulation parameters containing the time step 'dt' and SVD threshold.
         numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
 
-    Returns:
-        None. The state is updated in place.
+    . The state is updated in place.
 
     Reference:
         J. Haegeman, C. Lubich, I. Oseledets, B. Vandereycken, F. Verstraete,

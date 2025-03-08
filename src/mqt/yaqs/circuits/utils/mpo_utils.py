@@ -381,8 +381,7 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> N
         dag2 (DAGCircuit): The second circuit's DAGCircuit.
         threshold (float): The SVD truncation threshold used during decomposition.
 
-    Returns:
-        None
+
     """
     N = mpo.length
 

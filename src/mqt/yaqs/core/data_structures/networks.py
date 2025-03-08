@@ -450,8 +450,7 @@ class MPO:
         Jz (float): The coupling constant for the Z interaction.
         h (float): The magnetic field strength.
 
-        Returns:
-        None.
+        .
         """
         physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
@@ -500,8 +499,7 @@ class MPO:
         length (int): The number of identity matrices to initialize.
         physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
 
-        Returns:
-        None.
+        .
         """
         M = np.eye(2)
         M = np.expand_dims(M, (2, 3))

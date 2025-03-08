@@ -181,8 +181,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
         node (DAGOpNode): The node representing the two-qubit gate in the Directed Acyclic Graph (DAG).
         sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior of the algorithm.
 
-    Returns:
-        None.
+    .
     """
     gate = convert_dag_to_tensor_algorithm(node)[0]
 

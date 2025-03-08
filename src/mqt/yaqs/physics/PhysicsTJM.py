@@ -86,8 +86,7 @@ def sample(
         results (NDArray[np.float64]): An array to store the measured observable values.
         j (int): The time step or shot index at which the measurement is recorded.
 
-    Returns:
-        None
+
     """
     psi = copy.deepcopy(phi)
     dynamic_TDVP(psi, H, sim_params)

@@ -59,8 +59,7 @@ class Observable:
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): The simulation parameters object which can be of type
         PhysicsSimParams, StrongSimParams, or WeakSimParams.
 
-        Returns:
-        None.
+        .
         """
         if type(sim_params) == PhysicsSimParams:
             if sim_params.sample_timesteps:
