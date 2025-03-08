@@ -26,20 +26,20 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def _lanczos_iteration(
-    A_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
+def lanczos_iteration(
+    matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vstart: NDArray[np.complex128],
     numiter: int,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128]]:
     """Perform a matrix-free Lanczos iteration.
 
     This function generates an orthonormal basis for the Krylov subspace of the operator defined
-    by A_operator using the Lanczos algorithm. It computes the diagonal (alpha) and off-diagonal (beta)
+    by matrix_free_operator using the Lanczos algorithm. It computes the diagonal (alpha) and off-diagonal (beta)
     elements of the tridiagonal (Hessenberg) matrix associated with the iteration and returns the
     matrix whose columns are the Lanczos vectors.
 
     Args:
-        A_operator (Callable[[NDArray[np.complex128]], NDArray[np.complex128]]):
+        matrix_free_operator (Callable[[NDArray[np.complex128]], NDArray[np.complex128]]):
             A function that applies a linear transformation to a vector without explicitly constructing
             the matrix (i.e., matrix-free).
         vstart (NDArray[np.complex128]):
@@ -68,7 +68,7 @@ def _lanczos_iteration(
     V[0] = vstart
 
     for j in range(numiter - 1):
-        w = A_operator(V[j])
+        w = matrix_free_operator(V[j])
         alpha[j] = np.vdot(w, V[j]).real
         w -= alpha[j] * V[j] + (beta[j - 1] * V[j - 1] if j > 0 else 0)
         beta[j] = np.linalg.norm(w)
@@ -80,13 +80,13 @@ def _lanczos_iteration(
 
     # Complete final iteration
     j = numiter - 1
-    w = A_operator(V[j])
+    w = matrix_free_operator(V[j])
     alpha[j] = np.vdot(w, V[j]).real
     return (alpha, beta, V.T)
 
 
 def expm_krylov(
-    A_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
+    matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     v: NDArray[np.complex128],
     dt: float,
     numiter: int,
@@ -98,7 +98,7 @@ def expm_krylov(
     described by Hochbruck and Lubich.
 
     Args:
-        A_operator (Callable[[NDArray[np.complex128]], NDArray[np.complex128]]):
+        matrix_free_operator (Callable[[NDArray[np.complex128]], NDArray[np.complex128]]):
             A function implementing the matrix-free application of the linear operator A.
         v (NDArray[np.complex128]):
             The input vector to which the matrix exponential is applied.
@@ -111,7 +111,7 @@ def expm_krylov(
         NDArray[np.complex128]:
             The approximate result of applying exp(-1j * dt * A) to v.
     """
-    alpha, beta, V = _lanczos_iteration(A_operator, v, numiter)
+    alpha, beta, V = lanczos_iteration(matrix_free_operator, v, numiter)
     try:
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stemr")
     except np.linalg.LinAlgError:
