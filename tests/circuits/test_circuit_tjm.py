@@ -34,7 +34,7 @@ from mqt.yaqs.circuits.circuit_tjm import (
     apply_two_qubit_gate,
     apply_window,
     circuit_tjm,
-    construct_generator_MPO,
+    construct_generator_mpo,
     process_layer,
 )
 from mqt.yaqs.core.data_structures.networks import MPS
@@ -123,10 +123,10 @@ def test_apply_single_qubit_gate() -> None:
     np.testing.assert_allclose(mps.tensors[0], expected)
 
 
-def test_construct_generator_MPO() -> None:
+def test_construct_generator_mpo() -> None:
     """Test the construction of a generator MPO from a two-qubit gate.
 
-    This test retrieves a CX gate from the GateLibrary, sets its target sites, and uses construct_generator_MPO
+    This test retrieves a CX gate from the GateLibrary, sets its target sites, and uses construct_generator_mpo
     to obtain an MPO representation of the gate. It verifies that the first and last site indices match the expected
     values and that the generator MPO tensors at these sites correspond to the gate's generators. All other tensors
     should be the identity.
@@ -134,7 +134,7 @@ def test_construct_generator_MPO() -> None:
     gate = GateLibrary.cx()
     gate.set_sites(1, 3)
     length = 5
-    mpo, first_site, last_site = construct_generator_MPO(gate, length)
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
     for _tensor in mpo.tensors:
         pass
     assert first_site == 1
@@ -159,7 +159,7 @@ def test_apply_window() -> None:
 
     gate = GateLibrary.cx()
     gate.set_sites(1, 2)
-    mpo, first_site, last_site = construct_generator_MPO(gate, length)
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
 
     N = 1
     max_bond_dim = 4

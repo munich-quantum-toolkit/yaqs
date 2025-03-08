@@ -79,29 +79,28 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
             else:
                 odd_nodes.append(node)
         else:
-            # TODO(Aaron): Multi-qubit gates
-            msg = "Only single- and two-qubit gates are currently supported."
-            raise Exception(msg)
+            raise NotImplementedError
 
     return single_qubit_nodes, even_nodes, odd_nodes
 
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
-    """Apply a single-qubit gate to the given state.
+    """Apply single qubit gate.
+
+    This function applies a single-qubit gate to the MPS, used during circuit simulation.
 
     Parameters:
     state (MPS): The matrix product state (MPS) representing the quantum state.
     node (DAGOpNode): The directed acyclic graph (DAG) operation node representing the gate to be applied.
-
-    Returns:
-    None
     """
     gate = convert_dag_to_tensor_algorithm(node)[0]
     state.tensors[gate.sites[0]] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[gate.sites[0]])
 
 
-def construct_generator_MPO(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
-    """Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a
+def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
+    """Construct Generator MPO.
+
+    Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a
       specified length.
 
     Args:
@@ -146,7 +145,9 @@ def construct_generator_MPO(gate: BaseGate, length: int) -> tuple[MPO, int, int]
 def apply_window(
     state: MPS, mpo: MPO, first_site: int, last_site: int, sim_params: StrongSimParams | WeakSimParams
 ) -> tuple[MPS, MPO, list[int]]:
-    """Apply a window to the given MPS and MPO for a local update.
+    """Apply Window.
+
+    Apply a window to the given MPS and MPO for a local update.
 
     Args:
         state (MPS): The matrix product state (MPS) to be updated.
@@ -177,7 +178,9 @@ def apply_window(
 
 
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> None:
-    """Applies a two-qubit gate to the given Matrix Product State (MPS).
+    """Apply two-qubit gate.
+
+    Applies a two-qubit gate to the given Matrix Product State (MPS) with dynamic TDVP.
 
     Args:
         state (MPS): The Matrix Product State to which the gate will be applied.
@@ -190,7 +193,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     gate = convert_dag_to_tensor_algorithm(node)[0]
 
     # Construct the MPO for the two-qubit gate.
-    mpo, first_site, last_site = construct_generator_MPO(gate, state.length)
+    mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     if sim_params.window_size is not None:
         short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, sim_params)
@@ -205,7 +208,9 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 def circuit_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
 ) -> NDArray[np.float64]:
-    """Simulates a quantum circuit using the Tensor Jump Method.
+    """Circuit Tensor Jump Method.
+
+    Simulates a quantum circuit using the Tensor Jump Method.
 
     Args:
         args (tuple): A tuple containing the following elements:

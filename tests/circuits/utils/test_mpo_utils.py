@@ -14,7 +14,7 @@ It verifies the correct functionality of tensor operations including:
   - MPO tensor merging (merge_mps_tensors, merge_mpo_tensors)
   - Environment updates for MPOs (update_MPO, update_right_environment, update_left_environment)
   - Layer and long-range updates (apply_layer, apply_long_range_layer)
-  - Generator MPO construction (construct_generator_MPO)
+  - Generator MPO construction (construct_generator_mpo)
   - Grouping of DAG nodes (process_layer) and starting point selection (select_starting_point).
 
 These tests ensure that the tensor network manipulations and gate applications required
