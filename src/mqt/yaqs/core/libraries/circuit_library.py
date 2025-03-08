@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module provides functions for creating quantum circuits that simulate
+""" Library of useful quantum circuits
+
+This module provides functions for creating quantum circuits that simulate
 the dynamics of the Ising and Heisenberg models. The functions create_ising_circuit
 and create_Heisenberg_circuit construct Qiskit QuantumCircuit objects based on specified
 parameters such as the number of qubits, interaction strengths, time steps, and total simulation time.

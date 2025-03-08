@@ -215,8 +215,6 @@ class MPS:
         self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1)
         self.flip_network()
 
-    # TODO(Aaron): Needs to be adjusted based on current orthogonality center
-    #       Rather than sweeping the full chain
     def set_canonical_form(self, orthogonality_center: int) -> None:
         """Left and right normalizes an MPS around a selected site
         Args:

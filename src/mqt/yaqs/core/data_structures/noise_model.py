@@ -36,7 +36,6 @@ class NoiseModel:
         Initializes the NoiseModel with given processes and strengths.
     """
 
-    # TODO(Aaron): Currently assumes processes affect all sites equally
     def __init__(self, processes: list[str] | None = None, strengths: list[float] | None = None) -> None:
         if strengths is None:
             strengths = []

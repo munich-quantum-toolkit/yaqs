@@ -269,7 +269,6 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
         threshold (float): The SVD threshold for truncation.
         conjugate (bool): If True, apply the gate from dag2 in conjugated form; otherwise, from dag1.
     """
-    # TODO: Adjust logic as necessary for your specific use case.
     dag_to_search = dag1 if not conjugate else dag2
 
     for layer in dag_to_search.layers():

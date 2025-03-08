@@ -19,7 +19,6 @@ from __future__ import annotations
 import numpy as np
 
 
-# TODO(Aaron): Extend to d-levels
 class Excitation:
     """Class representing the excitation noise operator for a two-level system.
 
@@ -27,9 +26,6 @@ class Excitation:
         d (int): The dimension of the Hilbert space. Defaults to 2.
         matrix (np.ndarray): A 2x2 matrix representing the excitation operator.
             The matrix is constructed such that matrix[row, col] = 1 if row - col == 1, and 0 otherwise.
-
-    Todo:
-        Extend the implementation to d-level systems.
     """
 
     d = 2
@@ -47,9 +43,6 @@ class Relaxation:
         d (int): The dimension of the Hilbert space. Defaults to 2.
         matrix (np.ndarray): A 2x2 matrix representing the relaxation operator.
             The matrix is constructed such that matrix[row, col] = 1 if col - row == 1, and 0 otherwise.
-
-    Todo:
-        Extend the implementation to d-level systems.
     """
 
     d = 2

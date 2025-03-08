@@ -80,7 +80,6 @@ def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> np.
     Notes:
         A deep copy of the state is used to prevent modifications to the original MPS.
     """
-    # TODO(Aaron): Could be more memory-efficient by not copying state
     temp_state = copy.deepcopy(state)
     temp_state.tensors[site] = oe.contract("ab, bcd->acd", operator, temp_state.tensors[site])
     return scalar_product(state, temp_state, site)
