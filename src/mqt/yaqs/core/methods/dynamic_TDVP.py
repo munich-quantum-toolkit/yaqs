@@ -5,6 +5,14 @@
 #
 # Licensed under the MIT License
 
+"""This module implements dynamic time evolution of Matrix Product States (MPS)
+using the Time-Dependent Variational Principle (TDVP). The dynamic_TDVP function
+chooses between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP) evolution based
+on the current maximum bond dimension of the state relative to a specified maximum
+in the simulation parameters. This adaptive approach enables efficient evolution
+of the state under a Hamiltonian represented as a Matrix Product Operator (MPO).
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -5,6 +5,14 @@
 #
 # Licensed under the MIT License
 
+"""This module provides functions to manipulate tensor network representations of quantum operations.
+It includes routines for performing SVD-based decompositions (decompose_theta), applying gates to local tensors
+(apply_gate), extracting and applying temporal zones from DAGCircuits (apply_temporal_zone), and updating Matrix
+Product Operators (MPO) via layer-wise and long-range gate applications. These utilities facilitate the
+conversion of quantum circuits into tensor network algorithms for checking equivalence.
+"""
+
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

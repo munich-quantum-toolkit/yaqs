@@ -5,6 +5,21 @@
 #
 # Licensed under the MIT License
 
+"""This module implements the common simulation routine for both circuit-based and Hamiltonian (physics) simulations.
+It provides functions to run simulation trajectories in parallel using an MPS representation of the quantum state.
+Depending on the type of simulation parameters provided (WeakSimParams, StrongSimParams, or PhysicsSimParams),
+the simulation is dispatched to the appropriate backend:
+  - For circuit simulations, a QuantumCircuit is used and processed via the _run_circuit function.
+  - For physics simulations, an MPO is used to represent the Hamiltonian and processed via the _run_physics function.
+
+The module supports both strong and weak simulation schemes, including functionality for:
+  - Initializing the state (MPS) to a canonical form (B normalized).
+  - Running trajectories with noise (using a provided NoiseModel) and aggregating results.
+  - Parallel execution of trajectories using a ProcessPoolExecutor with progress reporting via tqdm.
+
+All simulation results (e.g., observables, measurements) are aggregated and returned as part of the simulation process.
+"""
+
 from __future__ import annotations
 
 import concurrent.futures

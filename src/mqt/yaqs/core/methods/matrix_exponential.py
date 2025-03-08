@@ -5,6 +5,12 @@
 #
 # Licensed under the MIT License
 
+"""This module implements matrix-free methods for approximating the action of a matrix exponential
+on a vector via Krylov subspace techniques. It provides an implementation of the Lanczos iteration
+to generate an orthonormal basis for the Krylov subspace, and uses this basis to compute an
+approximation of exp(-1j * dt * A) * v without explicitly constructing the matrix A.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable

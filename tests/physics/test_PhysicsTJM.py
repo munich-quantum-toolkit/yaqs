@@ -5,6 +5,25 @@
 #
 # Licensed under the MIT License
 
+"""This module provides unit tests for the physics simulation functions implemented in the
+PhysicsTJM module. It verifies that the initialization and time evolution routines for
+the Tensor Jump Method (TJM) work as expected in various configurations, including both
+first and second order evolution schemes, with and without timestep sampling.
+
+The tests cover:
+  - Initialization: Ensuring that a half time step of dissipation followed by a stochastic process
+    is correctly applied to the initial state.
+  - Step-through evolution: Verifying that dynamic_TDVP, apply_dissipation, and stochastic_process
+    are called with the proper arguments during a single time step.
+  - Physics simulation (order=2): Checking the shape of the results when running a second order evolution,
+    with and without sampling timesteps.
+  - Physics simulation (order=1): Checking the shape of the results when running a first order evolution,
+    with and without sampling timesteps.
+
+These tests ensure that the evolution functions correctly integrate the MPS state under the
+specified Hamiltonian and noise model, and that observable measurements are properly aggregated.
+"""
+
 from __future__ import annotations
 
 from unittest.mock import patch

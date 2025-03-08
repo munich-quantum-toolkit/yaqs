@@ -5,6 +5,14 @@
 #
 # Licensed under the MIT License
 
+"""This module provides tests for benchmarking an arbitrary quantum circuit using the Tensor Jump Method (TJM).
+The tests compare exact simulation results from Qiskit's AerSimulator with approximate simulations using various
+simulation parameters such as maximum bond dimension, window size, and SVD threshold. It verifies that the simulation
+metrics (absolute error and runtime) are computed correctly and that the generated 3D plots accurately represent the
+performance of the approximate simulation methods.
+"""
+
+
 from __future__ import annotations
 
 import copy

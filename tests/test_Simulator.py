@@ -5,6 +5,14 @@
 #
 # Licensed under the MIT License
 
+"""Unit tests for the Simulator module in YAQS.
+
+This module verifies the functionality of the Simulator by testing both physics (Hamiltonian)
+and circuit simulation branches. It includes tests for identity circuits, two-qubit operations,
+long-range gate handling, weak and strong simulation modes, and error cases such as mismatched
+qubit counts.
+"""
+
 from __future__ import annotations
 
 import numpy as np

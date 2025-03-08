@@ -5,12 +5,35 @@
 #
 # Licensed under the MIT License
 
+"""This module defines the NoiseModel class, which represents a noise model in a quantum system.
+It stores a list of noise processes and their corresponding strengths, and automatically retrieves
+the associated jump operator matrices from the NoiseLibrary. These jump operators are used to simulate
+the effects of noise in quantum simulations.
+"""
+
 from __future__ import annotations
 
 from ..libraries.noise_library import NoiseLibrary
 
 
 class NoiseModel:
+    """A class to represent a noise model in a quantum system.
+
+    Attributes.
+    ----------
+    processes : list of str
+        A list of noise processes affecting the system.
+    strengths : list of float
+        A list of strengths corresponding to each noise process.
+    jump_operators : list
+        A list of jump operators corresponding to each noise process.
+
+    Methods:
+    -------
+    __init__(processes: list[str] | None = None, strengths: list[float] | None = None) -> None
+        Initializes the NoiseModel with given processes and strengths.
+    """
+
     # TODO(Aaron): Currently assumes processes affect all sites equally
     def __init__(self, processes: list[str] | None = None, strengths: list[float] | None = None) -> None:
         if strengths is None:

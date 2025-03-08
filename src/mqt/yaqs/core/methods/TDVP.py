@@ -5,6 +5,17 @@
 #
 # Licensed under the MIT License
 
+"""This module implements functions for performing time evolution on Matrix Product States (MPS)
+using the Time-Dependent Variational Principle (TDVP). It provides utilities for:
+  - Splitting and merging MPS tensors via singular value decomposition (SVD).
+  - Updating local MPS tensors and bond tensors using Lanczos-based approximations of the matrix exponential.
+  - Constructing effective local operators through contractions with MPO tensors and environment blocks.
+  - Performing single-site and two-site TDVP integration schemes to evolve the MPS in time.
+
+These methods are designed for simulating the dynamics of quantum many-body systems and are based on
+techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

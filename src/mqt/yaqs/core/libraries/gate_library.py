@@ -5,6 +5,12 @@
 #
 # Licensed under the MIT License
 
+"""This module defines a collection of quantum gate classes used in quantum simulations.
+Each gate is implemented as a class derived from BaseGate and includes its matrix representation,
+tensor form, interactions, and generator(s). The module provides concrete implementations
+for standard gates. The GateLibrary class aggregates all these gate classes for easy access.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

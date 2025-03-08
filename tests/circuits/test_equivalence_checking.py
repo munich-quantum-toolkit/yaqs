@@ -5,6 +5,17 @@
 #
 # Licensed under the MIT License
 
+"""This module provides unit tests for the equivalence checker implemented in
+mqt.yaqs.circuits.equivalence_checker. It verifies the correctness of the
+MPO-based equivalence algorithm by comparing quantum circuits. Tests include
+checks for:
+  - Identity circuits (empty circuits) which should be equivalent.
+  - Two-qubit circuits that implement the same operation (e.g., Bell state preparation).
+  - Two-qubit circuits that differ by an extra gate, which should be non-equivalent.
+  - Long-range circuits, ensuring that circuits with identical long-range interactions
+    are equivalent, while those with additional gates are not.
+"""
+
 from __future__ import annotations
 
 import pytest

@@ -1,9 +1,21 @@
 # Copyright (c) 2025 Chair for Design Automation, TUM
+
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
+"""This module implements conversion and processing functions for quantum circuits using their DAG representations.
+It provides utilities to:
+  - Convert a DAGCircuit into a list of gate objects from the GateLibrary.
+  - Extract a temporal zone from a DAGCircuit for specified qubits.
+  - Determine the maximum distance (in terms of qubit indices) of multi-qubit gates.
+  - Select starting points for gate application based on a checkerboard pattern.
+
+These functions facilitate the manipulation and analysis of quantum circuit representations.
+"""
+
 
 from __future__ import annotations
 

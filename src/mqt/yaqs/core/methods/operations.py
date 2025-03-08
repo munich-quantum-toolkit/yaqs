@@ -5,6 +5,13 @@
 #
 # Licensed under the MIT License
 
+"""This module implements functions for computing expectation values and performing measurements
+on quantum states represented as Matrix Product States (MPS). It provides routines for calculating
+the scalar (inner) product between MPS objects, evaluating local expectation values of operators,
+and simulating projective measurements via single-shot and multi-shot strategies. Parallel execution
+of measurements is supported using a ProcessPoolExecutor with a progress bar via tqdm.
+"""
+
 from __future__ import annotations
 
 import concurrent.futures

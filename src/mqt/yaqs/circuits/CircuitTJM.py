@@ -5,6 +5,11 @@
 #
 # Licensed under the MIT License
 
+"""This module provides functions for simulating quantum circuits using the Tensor Jump Method (TJM). It includes
+utilities for converting quantum circuits to DAG representations, processing gate layers, applying gates to
+matrix product states (MPS) and constructing generator MPOs.
+"""
+
 from __future__ import annotations
 
 import copy

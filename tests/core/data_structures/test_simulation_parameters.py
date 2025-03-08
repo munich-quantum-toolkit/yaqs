@@ -5,6 +5,16 @@
 #
 # Licensed under the MIT License
 
+"""This module contains unit tests for the Observable and PhysicsSimParams classes used in
+quantum simulation. It verifies that:
+  - An Observable is correctly initialized with valid parameters and that invalid parameters
+    raise an appropriate error.
+  - PhysicsSimParams instances are created with the correct attributes (such as T, dt, times,
+    sample_timesteps, and N) both with explicit and default values.
+  - The Observable.initialize method properly sets up the results and trajectories arrays
+    depending on whether sample_timesteps is True or False.
+"""
+
 from __future__ import annotations
 
 import numpy as np

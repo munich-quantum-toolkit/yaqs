@@ -5,6 +5,12 @@
 #
 # Licensed under the MIT License
 
+"""This module implements stochastic processes for quantum systems represented as Matrix Product States (MPS).
+It provides functions to compute the stochastic factor, generate a probability distribution for quantum jumps
+based on a noise model, and perform a stochastic (quantum jump) process on the state. These tools are used
+to simulate noise-induced evolution in quantum many-body systems.
+"""
+
 from __future__ import annotations
 
 import copy

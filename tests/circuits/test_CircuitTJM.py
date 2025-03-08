@@ -5,6 +5,19 @@
 #
 # Licensed under the MIT License
 
+"""This module provides unit tests for the CircuitTJM functionality.
+The tests verify that various components of the CircuitTJM implementation work correctly,
+including:
+  - Grouping and processing of DAG layers for single-qubit and two-qubit gates.
+  - Application of single-qubit and two-qubit gates to a Matrix Product State (MPS).
+  - Construction of generator MPOs from gate operations.
+  - Extraction of local windows from MPS and MPO objects.
+  - Execution of circuit-based simulations in both strong and weak simulation regimes.
+
+These tests ensure that the implemented routines correctly simulate quantum circuits using
+the Tensor Jump Method.
+"""
+
 from __future__ import annotations
 
 import copy
