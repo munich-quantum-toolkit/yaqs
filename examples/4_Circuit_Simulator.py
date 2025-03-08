@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
-import qiskit.circuit
 
 from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.networks import MPS
