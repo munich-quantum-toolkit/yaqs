@@ -390,10 +390,9 @@ class MPS:
                 sites.append(i)
             if False in sites:
                 return [sites.index(False)]
-            else:
-                for i, value in enumerate(A_truth):
-                    if not value:
-                        return [i - 1, i]
+            for i, value in enumerate(A_truth):
+                if not value:
+                    return [i - 1, i]
         return [-1]
 
 

@@ -21,13 +21,17 @@ These tests ensure reliable numerical behavior and accuracy of Krylov-based algo
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from numpy.linalg import norm
 from scipy.linalg import expm
 
 from mqt.yaqs.core.methods.matrix_exponential import _lanczos_iteration, expm_krylov
 
-from numpy.typing import NDArray
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 
 def test_lanczos_iteration_small() -> None:
     """Check that _lanczos_iteration produces correct shapes and orthonormal vectors
