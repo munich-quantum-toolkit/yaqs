@@ -60,6 +60,9 @@ def split_mps_tensor(
     Returns:
         tuple[NDArray[np.complex128], NDArray[np.complex128]]:
             A tuple (A0, A1) of MPS tensors after splitting.
+
+    Raises:
+        ValueError: If physical dimension can not be split in half evenly.
     """
     # Check that the physical dimension can be equally split
     if tensor.shape[0] % 2 != 0:
@@ -216,6 +219,9 @@ def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
 
     Returns:
         NDArray[np.complex128]: A list (of length equal to the number of sites) containing the right operator blocks.
+
+    Raises:
+        ValueError: If state and operator length does not match.
     """
     num_sites = psi.length
     if num_sites != op.length:
@@ -350,12 +356,8 @@ def single_site_tdvp(
             Simulation parameters containing the time step 'dt' (and possibly a threshold for SVD truncation).
         numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
 
-    . The state is updated in place.
-
-    Reference:
-        J. Haegeman, C. Lubich, I. Oseledets, B. Vandereycken, F. Verstraete,
-        "Unifying time evolution and optimization with matrix product states",
-        Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
+    Raises:
+        ValueError: If Hamiltonian is invalid length.
     """
     from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
@@ -443,12 +445,8 @@ def two_site_tdvp(
             Simulation parameters containing the time step 'dt' and SVD threshold.
         numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
 
-    . The state is updated in place.
-
-    Reference:
-        J. Haegeman, C. Lubich, I. Oseledets, B. Vandereycken, F. Verstraete,
-        "Unifying time evolution and optimization with matrix product states",
-        Phys. Rev. B 94, 165116 (2016) (arXiv:1408.5056)
+    Raises:
+        ValueError: If Hamiltonian is invalid length.
     """
     from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
