@@ -165,5 +165,5 @@ def test_mismatch() -> None:
 
     noise_model = None
 
-    with pytest.raises(AssertionError, match="State and circuit qubit counts do not match."):
+    with pytest.raises(AssertionError, match=r"State and circuit qubit counts do not match."):
         Simulator.run(initial_state, circuit, sim_params, noise_model)
