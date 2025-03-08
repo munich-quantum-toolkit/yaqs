@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .TDVP import single_site_TDVP, two_site_TDVP
+from .tdvp import single_site_TDVP, two_site_TDVP
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS

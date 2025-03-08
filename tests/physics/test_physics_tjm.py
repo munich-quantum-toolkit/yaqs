@@ -31,7 +31,7 @@ from unittest.mock import patch
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs.physics.PhysicsTJM import initialize, physics_tjm_1, physics_tjm_2, step_through
+from mqt.yaqs.physics.physics_tjm import initialize, physics_tjm_1, physics_tjm_2, step_through
 
 
 def test_initialize() -> None:

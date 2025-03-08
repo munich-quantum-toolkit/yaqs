@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.dynamic_TDVP import dynamic_TDVP
+from ..core.methods.dynamic_tdvp import dynamic_TDVP
 from ..core.methods.stochastic_process import stochastic_process
 
 if TYPE_CHECKING:

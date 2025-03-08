@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
+from mqt.yaqs.core.methods.dynamic_tdvp import dynamic_TDVP
 
 
 def test_dynamic_tdvp_one_site() -> None:

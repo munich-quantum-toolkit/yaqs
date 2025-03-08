@@ -63,7 +63,7 @@ def _run_strong_sim(
 
 
     """
-    from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
+    from mqt.yaqs.circuits.circuit_tjm import circuit_tjm
 
     backend = circuit_tjm
 
@@ -119,7 +119,7 @@ def _run_weak_sim(
 
 
     """
-    from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
+    from mqt.yaqs.circuits.circuit_tjm import circuit_tjm
 
     backend = circuit_tjm
 
@@ -198,11 +198,11 @@ def _run_physics(
 
     """
     if sim_params.order == 1:
-        from mqt.yaqs.physics.PhysicsTJM import physics_tjm_1
+        from mqt.yaqs.physics.physics_tjm import physics_tjm_1
 
         backend = physics_tjm_1
     else:
-        from mqt.yaqs.physics.PhysicsTJM import physics_tjm_2
+        from mqt.yaqs.physics.physics_tjm import physics_tjm_2
 
         backend = physics_tjm_2
 

@@ -27,7 +27,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
-from mqt.yaqs.circuits.CircuitTJM import (
+from mqt.yaqs.circuits.circuit_tjm import (
     apply_single_qubit_gate,
     apply_two_qubit_gate,
     apply_window,

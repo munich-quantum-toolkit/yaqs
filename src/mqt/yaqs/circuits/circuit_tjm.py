@@ -21,7 +21,7 @@ from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO, MPS
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.dynamic_TDVP import dynamic_TDVP
+from ..core.methods.dynamic_tdvp import dynamic_TDVP
 from ..core.methods.operations import measure
 from ..core.methods.stochastic_process import stochastic_process
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
