@@ -5,6 +5,19 @@
 #
 # Licensed under the MIT License
 
+"""
+Example: Noisy Hamiltonian Simulation with YAQS
+
+This module demonstrates how to run a Hamiltonian simulation using the YAQS Simulator
+and visualize the results. In this example, an Ising Hamiltonian is initialized as an MPO, and an MPS
+state is prepared in the |0> state. A noise model is applied, and simulation parameters are defined
+for a physics simulation using the Tensor Jump Method (TJM). After running the simulation, the
+expectation values of the X observable are extracted and displayed as a heatmap.
+
+Usage:
+    Run this module as a script to execute the simulation and display the resulting heatmap.
+"""
+
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
@@ -41,7 +54,7 @@ sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond
 
 fig, ax = plt.subplots(1, 1)
 if __name__ == "__main__":
-    # TJM Example #################
+    # TJM Example
     Simulator.run(state, H_0, sim_params, noise_model)
 
     heatmap = [observable.results for observable in sim_params.observables]
