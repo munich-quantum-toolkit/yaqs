@@ -73,7 +73,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
             single_qubit_nodes.append(node)
         elif len(node.qargs) == 2:
             # Group two-qubit gates by even/odd based on the lower qubit index.
-            q0, q1 = node.qargs[0]._index, node.qargs[1]._index
+            q0, q1 = node.qargs[0]._index, node.qargs[1]._index  # noqa: SLF001
             if min(q0, q1) % 2 == 0:
                 even_nodes.append(node)
             else:

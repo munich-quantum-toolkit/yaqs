@@ -56,11 +56,11 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[NDArray[np.complex1
         if gate.op.params:
             gate_object.set_params(gate.op.params)
 
-        sites = [gate.qargs[0]._index]
+        sites = [gate.qargs[0]._index]  # noqa: SLF001
         if len(gate.qargs) == 2:
-            sites.append(gate.qargs[1]._index)
+            sites.append(gate.qargs[1]._index)  # noqa: SLF001
         if len(gate.qargs) == 3:
-            sites.extend((gate.qargs[1]._index, gate.qargs[2]._index))
+            sites.extend((gate.qargs[1]._index, gate.qargs[2]._index))  # noqa: SLF001
 
         gate_object.set_sites(*sites)
         algorithm.append(gate_object)
@@ -77,12 +77,12 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[NDArray[np.complex1
             if gate.op.params:
                 gate_object.set_params(gate.op.params)
 
-            sites = [gate.qargs[0]._index]
+            sites = [gate.qargs[0]._index]  # noqa: SLF001
             if len(gate.qargs) == 2:
-                sites.append(gate.qargs[1]._index)
+                sites.append(gate.qargs[1]._index)  # noqa: SLF001
             if len(gate.qargs) == 3:
-                sites.append(gate.qargs[1]._index)
-                sites.append(gate.qargs[2]._index)
+                sites.append(gate.qargs[1]._index)  # noqa: SLF001
+                sites.append(gate.qargs[2]._index)  # noqa: SLF001
 
             gate_object.set_sites(*sites)
             algorithm.append(gate_object)
@@ -160,7 +160,7 @@ def check_longest_gate(dag: DAGCircuit) -> int:
         layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
             if gate.operation.num_qubits > 1:
-                distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1
+                distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
                 largest_distance = max(largest_distance, distance)
 
     return largest_distance
@@ -197,7 +197,7 @@ def select_starting_point(N: int, dag: DAGCircuit) -> tuple[range, range]:
         for gate in layer_circuit.data:
             # If a two-qubit gate appears with an odd-indexed starting qubit, switch the ordering.
             if gate.operation.num_qubits == 2:
-                if gate.qubits[0]._index % 2 != 0:
+                if gate.qubits[0]._index % 2 != 0:  # noqa: SLF001
                     odd = True
                 break
 

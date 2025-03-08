@@ -279,16 +279,16 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
         layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
             if gate.operation.num_qubits > 1:
-                distance = np.abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1
+                distance = np.abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
                 if distance > 2:
-                    location = min(gate.qubits[0]._index, gate.qubits[-1]._index)
+                    location = min(gate.qubits[0]._index, gate.qubits[-1]._index)  # noqa: SLF001
                     if not conjugate:
                         for node in dag1.op_nodes():
                             if (
                                 node.name == gate.operation.name
                                 and len(node.qargs) >= 2
-                                and node.qargs[0]._index == gate.qubits[0]._index
-                                and node.qargs[1]._index == gate.qubits[1]._index
+                                and node.qargs[0]._index == gate.qubits[0]._index  # noqa: SLF001
+                                and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
                             ):
                                 gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
                                 dag1.remove_op_node(node)
@@ -298,8 +298,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                             if (
                                 node.name == gate.operation.name
                                 and len(node.qargs) >= 2
-                                and node.qargs[0]._index == gate.qubits[0]._index
-                                and node.qargs[1]._index == gate.qubits[1]._index
+                                and node.qargs[0]._index == gate.qubits[0]._index  # noqa: SLF001
+                                and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
                             ):
                                 gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
                                 gate_MPO.rotate(conjugate=True)
