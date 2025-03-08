@@ -128,7 +128,6 @@ unsafe-fixes = true
 
 [tool.ruff.lint]
 select = ["ALL"]
-extend-select = ["E402"]
 ignore = [
     "C90",     # <...> too complex
     "COM812",  # Conflicts with formatter
