@@ -197,8 +197,6 @@ def test_gate_phase() -> None:
     gate.set_params([theta])
     gate.set_sites(4)
     assert gate.sites == [4]
-    expected_gen = (theta / 2) * np.array([[1, 0], [0, -1]])
-    assert_allclose(gate.generator, expected_gen)
     assert_array_equal(gate.tensor, gate.matrix)
 
 
