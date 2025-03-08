@@ -12,7 +12,7 @@ from unittest.mock import patch
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_1, PhysicsTJM_2, initialize, step_through
+from mqt.yaqs.physics.PhysicsTJM import initialize, physics_tjm_1, physics_tjm_2, step_through
 
 
 def test_initialize() -> None:
@@ -59,7 +59,7 @@ def test_step_through() -> None:
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt)
 
 
-def test_PhysicsTJM_2() -> None:
+def test_physics_tjm_2() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -72,12 +72,12 @@ def test_PhysicsTJM_2() -> None:
         measurements, T=0.2, dt=0.1, sample_timesteps=False, N=1, max_bond_dim=4, threshold=1e-6, order=2
     )
     args = (0, state, noise_model, sim_params, H)
-    results = PhysicsTJM_2(args)
+    results = physics_tjm_2(args)
     # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
-def test_PhysicsTJM_2_sample_timesteps() -> None:
+def test_physics_tjm_2_sample_timesteps() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -90,12 +90,12 @@ def test_PhysicsTJM_2_sample_timesteps() -> None:
         measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=2
     )
     args = (0, state, noise_model, sim_params, H)
-    results = PhysicsTJM_2(args)
+    results = physics_tjm_2(args)
     # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 
-def test_PhysicsTJM_1() -> None:
+def test_physics_tjm_1() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -108,12 +108,12 @@ def test_PhysicsTJM_1() -> None:
         measurements, T=0.2, dt=0.1, sample_timesteps=False, N=1, max_bond_dim=4, threshold=1e-6, order=1
     )
     args = (0, state, noise_model, sim_params, H)
-    results = PhysicsTJM_1(args)
+    results = physics_tjm_1(args)
     # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
-def test_PhysicsTJM_1_sample_timesteps() -> None:
+def test_physics_tjm_1_sample_timesteps() -> None:
     L = 5
     J = 1
     g = 0.5
@@ -126,6 +126,6 @@ def test_PhysicsTJM_1_sample_timesteps() -> None:
         measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
     )
     args = (0, state, noise_model, sim_params, H)
-    results = PhysicsTJM_1(args)
+    results = physics_tjm_1(args)
     # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"

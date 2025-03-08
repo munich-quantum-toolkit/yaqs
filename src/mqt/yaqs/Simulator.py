@@ -31,9 +31,9 @@ def _run_strong_sim(
     *,
     parallel: bool,
 ) -> None:
-    from mqt.yaqs.circuits.CircuitTJM import CircuitTJM
+    from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
 
-    backend = CircuitTJM
+    backend = circuit_tjm
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
@@ -71,9 +71,9 @@ def _run_weak_sim(
     *,
     parallel: bool,
 ) -> None:
-    from mqt.yaqs.circuits.CircuitTJM import CircuitTJM
+    from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
 
-    backend = CircuitTJM
+    backend = circuit_tjm
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
@@ -120,13 +120,13 @@ def _run_physics(
     initial_state: MPS, operator: MPO, sim_params: PhysicsSimParams, noise_model: NoiseModel | None, *, parallel: bool
 ) -> None:
     if sim_params.order == 1:
-        from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_1
+        from mqt.yaqs.physics.PhysicsTJM import physics_tjm_1
 
-        backend = PhysicsTJM_1
+        backend = physics_tjm_1
     else:
-        from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_2
+        from mqt.yaqs.physics.PhysicsTJM import physics_tjm_2
 
-        backend = PhysicsTJM_2
+        backend = physics_tjm_2
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1

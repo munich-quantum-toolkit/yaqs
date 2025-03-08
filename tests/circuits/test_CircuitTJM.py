@@ -15,10 +15,10 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
 from mqt.yaqs.circuits.CircuitTJM import (
-    CircuitTJM,
     apply_single_qubit_gate,
     apply_two_qubit_gate,
     apply_window,
+    circuit_tjm,
     construct_generator_MPO,
     process_layer,
 )
@@ -179,7 +179,7 @@ def test_apply_two_qubit_gate_with_window() -> None:
         assert np.allclose(tensor, mps0.tensors[i]) or np.allclose(tensor, -mps0.tensors[i])
 
 
-def test_CircuitTJM_strong() -> None:
+def test_circuit_tjm_strong() -> None:
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()
@@ -194,10 +194,10 @@ def test_CircuitTJM_strong() -> None:
     observable = Observable("z", 0)
     sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
     args = 0, mps0, None, sim_params, qc
-    CircuitTJM(args)
+    circuit_tjm(args)
 
 
-def test_CircuitTJM_weak() -> None:
+def test_circuit_tjm_weak() -> None:
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()
@@ -211,4 +211,4 @@ def test_CircuitTJM_weak() -> None:
     shots = 10
     sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
     args = 0, mps0, None, sim_params, qc
-    CircuitTJM(args)
+    circuit_tjm(args)

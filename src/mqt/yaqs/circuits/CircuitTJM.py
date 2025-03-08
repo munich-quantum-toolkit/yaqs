@@ -139,7 +139,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
         dynamic_TDVP(state, mpo, sim_params)
 
 
-def CircuitTJM(
+def circuit_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
 ) -> NDArray[np.float64]:
     from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams

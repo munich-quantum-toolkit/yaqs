@@ -97,7 +97,7 @@ def sample(
             results[obs_index, 0] = temp_state.measure(observable)
 
 
-def PhysicsTJM_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
+def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
     """Run a single trajectory of the TJM.
 
     Args:
@@ -131,7 +131,7 @@ def PhysicsTJM_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]
     return results
 
 
-def PhysicsTJM_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
+def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
     _i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
 
