@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
 from __future__ import annotations
 
 """Yet Another Quantum Simulator (YAQS), a part of the Munich Quantum Toolkit (MQT),
