@@ -107,7 +107,7 @@ def split_mps_tensor(
         A0 *= sqrt_sigma
         A1 *= sqrt_sigma[:, None, None]
     else:
-        msg = 'svd_distribution parameter must be "left", "right", or "sqrt".'
+        msg = "svd_distribution parameter must be left, right, or sqrt."
         raise ValueError(msg)
 
     # Adjust the ordering of indices in A1 so that the physical dimension comes first:
