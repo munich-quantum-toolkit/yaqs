@@ -12,7 +12,7 @@ import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs.core.methods.TDVP import (
+from mqt.yaqs.core.methods.tdvp_temp import (
     merge_mpo_tensors,
     merge_mps_tensors,
     project_bond,
