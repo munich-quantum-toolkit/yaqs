@@ -449,8 +449,8 @@ class MPO:
 
         Args:
             length (int): The number of sites in the Ising chain.
-            J (float): The coupling constant for the Z interaction.
-            g (float): The coupling constant for the X interaction.
+            J (float): The coupling constant for the interaction.
+            g (float): The coupling constant for the field.
         """
         physical_dimension = 2
         np.zeros((physical_dimension, physical_dimension), dtype=complex)
