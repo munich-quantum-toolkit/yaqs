@@ -212,7 +212,6 @@ def test_apply_two_qubit_gate_with_window() -> None:
     mps1 = MPS(length, copy.deepcopy(orig_tensors))
     window_size = 1
     sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
-    orig_tensors = copy.deepcopy(mps1.tensors)
     apply_two_qubit_gate(mps1, node, sim_params)
 
     for i, tensor in enumerate(mps1.tensors):
