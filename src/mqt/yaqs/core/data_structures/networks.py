@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
-from ..libraries.gate_library import GateLibrary
+from ..libraries.observables_library import ObservablesLibrary
 from ..methods.operations import local_expval, scalar_product
 
 if TYPE_CHECKING:
@@ -305,7 +305,7 @@ class MPS:
         """
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        E = local_expval(copy.deepcopy(self), getattr(GateLibrary, observable.name)().matrix, observable.site)
+        E = local_expval(copy.deepcopy(self), ObservablesLibrary[observable.name], observable.site)
         assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
         return E.real
 
@@ -455,8 +455,8 @@ class MPO:
         physical_dimension = 2
         np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = GateLibrary.x().matrix
-        Z = GateLibrary.z().matrix
+        X = ObservablesLibrary["x"]
+        Z = ObservablesLibrary["z"]
 
         left_bound = np.array([identity, -J * Z, -g * X])[np.newaxis, :]
 
@@ -507,9 +507,9 @@ class MPO:
         physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = GateLibrary.x().matrix
-        Y = GateLibrary.y().matrix
-        Z = GateLibrary.z().matrix
+        X = ObservablesLibrary["x"]
+        Y = ObservablesLibrary["y"]
+        Z = ObservablesLibrary["z"]
 
         left_bound = np.array([identity, -Jx * X, -Jy * Y, -Jz * Z, -h * Z])[np.newaxis, :]
 

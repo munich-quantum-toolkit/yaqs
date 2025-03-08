@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .observables_library import ObservablesLibrary
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
     from qiskit.circuit import Parameter
@@ -167,7 +169,7 @@ class X(BaseGate):
     """
 
     name = "x"
-    matrix = np.array([[0, 1], [1, 0]])
+    matrix = ObservablesLibrary["x"]
     interaction = 1
 
     tensor = matrix
@@ -196,7 +198,7 @@ class Y(BaseGate):
     """
 
     name = "y"
-    matrix = np.array([[0, -1j], [1j, 0]])
+    matrix = ObservablesLibrary["y"]
     interaction = 1
 
     tensor = matrix
@@ -225,7 +227,7 @@ class Z(BaseGate):
     """
 
     name = "z"
-    matrix = np.array([[1, 0], [0, -1]])
+    matrix = ObservablesLibrary["z"]
     interaction = 1
 
     tensor = matrix
