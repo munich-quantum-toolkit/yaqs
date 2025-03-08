@@ -95,10 +95,10 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[1])
 
-    if sites[1] < sites[0]:
-        mpo_tensors.reverse()
-        for idx in range(len(mpo_tensors)):
-            mpo_tensors[idx] = np.transpose(mpo_tensors[idx], (0, 1, 3, 2))
+        if sites[1] < sites[0]:
+            mpo_tensors.reverse()
+            for idx in range(len(mpo_tensors)):
+                mpo_tensors[idx] = np.transpose(mpo_tensors[idx], (0, 1, 3, 2))
 
     elif len(tensors) == 3:
         mpo_tensors = [tensors[0]]
