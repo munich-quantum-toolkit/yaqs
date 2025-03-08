@@ -183,7 +183,8 @@ latex_documents = [
     (
         master_doc,
         "mqt_yaqs.tex",
-        r"MQT YAQS\\{\large A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware}",
+        r"MQT YAQS\\{\large A Tool for Simulating"
+        r"Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware}",
         r"Chair for Design Automation\\Technical University of Munich",
         "howto",
         False,
