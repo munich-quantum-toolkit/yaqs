@@ -194,9 +194,7 @@ def apply_temporal_zone(
     return theta
 
 
-def update_MPO(
-    mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float
-) -> None:
+def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float) -> None:
     """Update two neighboring MPO tensors by applying gates extracted from two DAGCircuits.
 
     The function first contracts the two neighboring MPO tensors to form a combined tensor.
@@ -256,9 +254,7 @@ def apply_layer(
         update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
 
 
-def apply_long_range_layer(
-    mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float, *, conjugate: bool
-) -> None:
+def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float, *, conjugate: bool) -> None:
     """Detect and apply a long-range gate from the first layer of a DAGCircuit to an MPO.
 
     This function searches for a gate in the specified DAGCircuit (dag1 if not conjugate, else dag2)

@@ -196,10 +196,7 @@ def test_gate_rx() -> None:
     theta = np.pi / 2
     gate.set_params([theta])
     gate.set_sites(1)
-    expected = np.array([
-        [np.cos(theta / 2), -1j * np.sin(theta / 2)],
-        [-1j * np.sin(theta / 2), np.cos(theta / 2)]
-    ])
+    expected = np.array([[np.cos(theta / 2), -1j * np.sin(theta / 2)], [-1j * np.sin(theta / 2), np.cos(theta / 2)]])
     assert_allclose(gate.tensor, expected)
 
 
@@ -213,10 +210,7 @@ def test_gate_ry() -> None:
     theta = np.pi / 3
     gate.set_params([theta])
     gate.set_sites(1)
-    expected = np.array([
-        [np.cos(theta / 2), -np.sin(theta / 2)],
-        [np.sin(theta / 2), np.cos(theta / 2)]
-    ])
+    expected = np.array([[np.cos(theta / 2), -np.sin(theta / 2)], [np.sin(theta / 2), np.cos(theta / 2)]])
     assert_allclose(gate.matrix, expected)
     assert_allclose(gate.tensor, expected)
 
@@ -231,10 +225,7 @@ def test_gate_rz() -> None:
     theta = np.pi / 4
     gate.set_params([theta])
     gate.set_sites(2)
-    expected = np.array([
-        [np.exp(-1j * theta / 2), 0],
-        [0, np.exp(1j * theta / 2)]
-    ])
+    expected = np.array([[np.exp(-1j * theta / 2), 0], [0, np.exp(1j * theta / 2)]])
     assert_allclose(gate.matrix, expected)
     assert_allclose(gate.tensor, expected)
 

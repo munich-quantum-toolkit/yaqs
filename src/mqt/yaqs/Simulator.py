@@ -203,9 +203,11 @@ def _run_physics(
     """
     if sim_params.order == 1:
         from mqt.yaqs.physics.PhysicsTJM import physics_tjm_1
+
         backend = physics_tjm_1
     else:
         from mqt.yaqs.physics.PhysicsTJM import physics_tjm_2
+
         backend = physics_tjm_2
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):

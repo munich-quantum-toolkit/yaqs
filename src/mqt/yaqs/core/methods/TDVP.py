@@ -304,9 +304,7 @@ def update_site(
         NDArray[np.complex128]: The updated MPS tensor after evolution.
     """
     A_flat = A.reshape(-1)
-    evolved_A_flat = expm_krylov(
-        lambda x: project_site(L, R, W, x.reshape(A.shape)).reshape(-1), A_flat, dt, numiter
-    )
+    evolved_A_flat = expm_krylov(lambda x: project_site(L, R, W, x.reshape(A.shape)).reshape(-1), A_flat, dt, numiter)
     return evolved_A_flat.reshape(A.shape)
 
 
@@ -329,9 +327,7 @@ def update_bond(
         NDArray[np.complex128]: The updated bond tensor after evolution.
     """
     C_flat = C.reshape(-1)
-    evolved_C_flat = expm_krylov(
-        lambda x: project_bond(L, R, x.reshape(C.shape)).reshape(-1), C_flat, dt, numiter
-    )
+    evolved_C_flat = expm_krylov(lambda x: project_bond(L, R, x.reshape(C.shape)).reshape(-1), C_flat, dt, numiter)
     return evolved_C_flat.reshape(C.shape)
 
 

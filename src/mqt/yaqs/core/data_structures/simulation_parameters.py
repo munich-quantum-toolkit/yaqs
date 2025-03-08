@@ -238,6 +238,7 @@ class StrongSimParams:
     aggregate_trajectories(self) -> None:
         Aggregates the trajectories of the observables by computing the mean across all trajectories.
     """
+
     # Properties set as placeholders for code compatibility
     dt = 1
 
