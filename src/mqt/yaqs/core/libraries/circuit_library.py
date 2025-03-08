@@ -21,7 +21,9 @@ from qiskit.circuit import QuantumCircuit
 
 
 def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) -> QuantumCircuit:
-    """Create a quantum circuit for simulating the Ising model.
+    """Ising Trotter circuit.
+
+    Create a quantum circuit for simulating the Ising model.
 
     Args:
         L (int): Number of qubits in the circuit.
@@ -45,21 +47,12 @@ def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) 
 
         for site in range(L // 2):
             circ.rzz(beta, qubit1=2 * site, qubit2=2 * site + 1)
-            # circ.cx(control_qubit=2*site, target_qubit=2*site+1)
-            # circ.rz(phi=beta, qubit=2*site+1)
-            # circ.cx(control_qubit=2*site, target_qubit=2*site+1)
 
         for site in range(1, L // 2):
             circ.rzz(beta, qubit1=2 * site - 1, qubit2=2 * site)
-            # circ.cx(control_qubit=2*site-1, target_qubit=2*site)
-            # circ.rz(phi=beta, qubit=2*site)
-            # circ.cx(control_qubit=2*site-1, target_qubit=2*site)
 
         if L % 2 != 0 and L != 1:
             circ.rzz(beta, qubit1=L - 2, qubit2=L - 1)
-            # circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
-            # circ.rz(phi=beta, qubit=model['L']-1)
-            # circ.cx(control_qubit=model['L']-2, target_qubit=model['L']-1)
 
     return circ
 
@@ -67,7 +60,9 @@ def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) 
 def create_heisenberg_circuit(
     L: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int
 ) -> QuantumCircuit:
-    """Create a quantum circuit for simulating the Heisenberg model.
+    """Heisenberg Trotter circuit.
+
+    Create a quantum circuit for simulating the Heisenberg model.
 
     Args:
         L (int): Number of qubits (sites) in the circuit.
@@ -102,9 +97,6 @@ def create_heisenberg_circuit(
         if L % 2 != 0 and L != 1:
             circ.rzz(theta=theta_zz, qubit1=L - 2, qubit2=L - 1)
 
-        # if model['boundary'] == 'periodic' and model['L'] != 2:
-        #     circ.rzz(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
-
         # XX application
         for site in range(L // 2):
             circ.rxx(theta=theta_xx, qubit1=2 * site, qubit2=2 * site + 1)
@@ -114,9 +106,6 @@ def create_heisenberg_circuit(
 
         if L % 2 != 0 and L != 1:
             circ.rxx(theta=theta_xx, qubit1=L - 2, qubit2=L - 1)
-
-        # if model['boundary'] == 'periodic' and model['L'] != 2:
-        #     circ.rxx(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
 
         # YY application
         for site in range(L // 2):
@@ -128,8 +117,4 @@ def create_heisenberg_circuit(
         if L % 2 != 0 and L != 1:
             circ.ryy(theta=theta_yy, qubit1=L - 2, qubit2=L - 1)
 
-        # if model['boundary'] == 'periodic' and model['L'] != 2:
-        #     circ.ryy(theta=theta_zz, qubit1=0, qubit2=model['L']-1)
-
-    # print(circ.draw())
     return circ

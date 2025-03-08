@@ -39,11 +39,8 @@ def dynamic_tdvp(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimPar
         H (MPO): The Matrix Product Operator representing the Hamiltonian of the system.
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
             such as the maximum allowable bond dimension for the MPS.
-
-
     """
     current_max_bond_dim = state.write_max_bond_dim()
-    # state.normalize('B')
     if current_max_bond_dim <= sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_tdvp(state, H, sim_params)
