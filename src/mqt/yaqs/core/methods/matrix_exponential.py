@@ -111,10 +111,9 @@ def expm_krylov(
     """
     alpha, beta, V = _lanczos_iteration(Afunc, v, numiter)
     try:
-        # Attempt a faster eigen-decomposition for the tridiagonal matrix.
-        w_hess, u_hess = eigh_tridiagonal(alpha, beta)
-    except Exception:
-        # Fall back to a more stable eigen-decomposition if needed.
+        w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stemr")
+    except np.linalg.LinAlgError:
+        # Fallback to stable but potentially slower solver
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stebz")
     # Construct the approximation: scale the exponential of the eigenvalues by the norm of v,
     # and project back to the full space via the Lanczos basis V.

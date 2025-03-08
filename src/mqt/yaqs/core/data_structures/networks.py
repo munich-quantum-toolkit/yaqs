@@ -388,9 +388,9 @@ class MPS:
 
             for i, _truth_value in enumerate(B_truth[len(sites) :], start=len(sites)):
                 sites.append(i)
-            try:
+            if False in sites:
                 return [sites.index(False)]
-            except:  # noqa: E722
+            else:
                 for i, value in enumerate(A_truth):
                     if not value:
                         return [i - 1, i]
