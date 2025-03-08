@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 
-# TODO: Extend to d-levels
+# TODO(Aaron): Extend to d-levels
 class Excitation:
     d = 2
     matrix = np.zeros((d, d))

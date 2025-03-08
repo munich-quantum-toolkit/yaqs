@@ -11,7 +11,7 @@ from ..libraries.noise_library import NoiseLibrary
 
 
 class NoiseModel:
-    # TODO: Currently assumes processes affect all sites equally
+    # TODO(Aaron): Currently assumes processes affect all sites equally
     def __init__(self, processes: list[str] | None = None, strengths: list[float] | None = None) -> None:
         if strengths is None:
             strengths = []

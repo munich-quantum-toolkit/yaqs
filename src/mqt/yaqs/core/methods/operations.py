@@ -59,7 +59,7 @@ def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> np.
     Returns:
         E.real: real portion of calculated expectation value
     """
-    # TODO: Could be more memory-efficient by not copying state
+    # TODO(Aaron): Could be more memory-efficient by not copying state
 
     # This loop assumes the MPS is in canonical form at the given site
     temp_state = copy.deepcopy(state)

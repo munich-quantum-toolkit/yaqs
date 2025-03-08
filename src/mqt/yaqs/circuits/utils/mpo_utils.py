@@ -231,7 +231,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjuga
         conjugate: Whether we apply the gate from `dag2` (if True) or from `dag1` (if False).
         threshold: SVD threshold for truncation.
     """
-    # TODO: MPO on both sides
+    # TODO(Aaron): MPO on both sides
     # Identify gate and its position
     dag_to_search = dag1 if not conjugate else dag2
 
@@ -283,12 +283,12 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjuga
     # MPO_2 must be the larger MPO
     sites = range(mpo.length) if gate_MPO.length == mpo.length else range(location, location + distance)
 
-    # TODO: Only contract first site with gate, then just SVD across chain to second gate tensor
+    # TODO(Aaron): Only contract first site with gate, then just SVD across chain to second gate tensor
     for site_gate_MPO, overall_site in enumerate(sites):
         # Even sites of gate MPO
         if site_gate_MPO != len(sites) - 1 and site_gate_MPO % 2 == 0:
-            # TODO: Could be sped up without putting all tensors together
-            # TODO: Remove all transposes from new index order
+            # TODO(Aaron): Could be sped up without putting all tensors together
+            # TODO(Aaron): Remove all transposes from new index order
             # sigma i, sigma i+1, upper bond gate, upper bond MPO, sigma' i, sigma' i+1, lower bond gate, lower bond MPO
             if not conjugate:
                 tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))

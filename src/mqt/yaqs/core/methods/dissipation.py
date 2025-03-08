@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from ..data_structures.noise_model import NoiseModel
 
 
-# TODO: Assumes noise is same at all sites
+# TODO(Aaron): Assumes noise is same at all sites
 #       Could be sped-up by pre-calculating exponential somewhere else
 #       Likely not a problem since it's only exponentiating small matrices
 def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> None:
