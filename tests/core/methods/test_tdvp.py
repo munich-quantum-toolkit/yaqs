@@ -195,7 +195,7 @@ def test_update_bond() -> None:
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
 
-def test_single_site_TDVP() -> None:
+def test_single_site_tdvp() -> None:
     """Test the single_site_TDVP function.
 
     This test initializes an Ising MPO and an MPS of length 5 (initialized to 'zeros'),
@@ -223,7 +223,7 @@ def test_single_site_TDVP() -> None:
     )
 
 
-def test_two_site_TDVP() -> None:
+def test_two_site_tdvp() -> None:
     """Test the two_site_TDVP function.
 
     This test initializes an Ising MPO and an MPS of length 5, sets up PhysicsSimParams,
