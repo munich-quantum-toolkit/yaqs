@@ -177,8 +177,11 @@ def test_weak_simulation_no_noise() -> None:
     simulator.run(initial_state, circuit, sim_params, noise_model)
 
     assert sim_params.N == 1, "sim_params.N should be 1 when noise model strengths are all zero."
-    assert isinstance(sim_params.measurements[0], dict) and sim_params.measurements[1] is None, (
-        "There should be only one measurement when noise model strengths are zero."
+    assert isinstance(sim_params.measurements[0], dict), (
+        "There should be only one measurement when noise model strengths are zero. 1"
+    )
+    assert sim_params.measurements[1] is None, (
+        "There should be only one measurement when noise model strengths are zero. 2"
     )
     max_value = max(sim_params.results.values())
     assert sim_params.results[0] == max_value, "Key 0 does not have the highest value."

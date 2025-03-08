@@ -97,7 +97,7 @@ def test_process_layer_unsupported_gate() -> None:
 
     dag = circuit_to_dag(qc)
 
-    with pytest.raises(Exception):
+    with pytest.raises(NotImplementedError):
         process_layer(dag)
 
 

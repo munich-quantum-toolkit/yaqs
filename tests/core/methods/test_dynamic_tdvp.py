@@ -30,7 +30,9 @@ from mqt.yaqs.core.methods.dynamic_tdvp import dynamic_tdvp
 
 
 def test_dynamic_tdvp_one_site() -> None:
-    """Test that dynamic_TDVP calls single_site_TDVP exactly once when the current maximum bond dimension
+    """Test dynamic TDVP, single site.
+
+    Test that dynamic_TDVP calls single_site_TDVP exactly once when the current maximum bond dimension
     exceeds sim_params.max_bond_dim.
 
     In this test, sim_params.max_bond_dim is set to 0 so that the current maximum bond dimension of the MPS,
@@ -66,7 +68,9 @@ def test_dynamic_tdvp_one_site() -> None:
 
 
 def test_dynamic_tdvp_two_site() -> None:
-    """Test that dynamic_TDVP calls two_site_TDVP exactly once when the current maximum bond dimension
+    """Test dynamic TDVP, two site.
+
+    Test that dynamic_TDVP calls two_site_TDVP exactly once when the current maximum bond dimension
     is less than or equal to sim_params.max_bond_dim.
 
     In this test, sim_params.max_bond_dim is set to 2, so if the current maximum bond dimension is ≤ 2,

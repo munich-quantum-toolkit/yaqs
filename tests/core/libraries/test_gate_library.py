@@ -8,7 +8,7 @@
 """Tests for the Gate Library utility functions and gates in the YAQS core.
 
 This module includes unit tests for:
-- Utility functions `_split_tensor` and `_extend_gate`, ensuring correct tensor operations for MPO construction.
+- Utility functions `split_tensor` and `extend_gate`, ensuring correct tensor operations for MPO construction.
 - Quantum gates provided by `GateLibrary`, verifying the correctness of tensors, matrices, and gate operations.
 
 Specifically, tests ensure:
@@ -30,22 +30,22 @@ import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
 from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, _extend_gate, _split_tensor
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, extend_gate, split_tensor
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def test_split_tensor_valid_shape() -> None:
-    """Test that _split_tensor correctly splits a tensor of shape (2,2,2,2) into two tensors.
+def testsplit_tensor_valid_shape() -> None:
+    """Test that split_tensor correctly splits a tensor of shape (2,2,2,2) into two tensors.
 
-    The test creates a tensor with values 0..15 reshaped to (2,2,2,2) and then applies _split_tensor.
+    The test creates a tensor with values 0..15 reshaped to (2,2,2,2) and then applies split_tensor.
     It verifies that the result is a list of two tensors, where the first tensor has a dummy dimension added
     (expected shape (2, 2, 1, r)) and the second tensor has shape (2, 2, r, 1).
     """
     # Create a simple tensor of shape (2,2,2,2) with values 0..15.
     tensor = np.arange(16, dtype=float).reshape(2, 2, 2, 2)
-    tensors = _split_tensor(tensor)
+    tensors = split_tensor(tensor)
     # Expect a list of two tensors.
     assert isinstance(tensors, list)
     assert len(tensors) == 2
@@ -62,31 +62,31 @@ def test_split_tensor_valid_shape() -> None:
     assert t2.shape[1] == 2
 
 
-def test_split_tensor_invalid_shape() -> None:
-    """Test that _split_tensor raises an AssertionError when the input tensor does not have shape (2,2,2,2).
+def testsplit_tensor_invalid_shape() -> None:
+    """Test that split_tensor raises an AssertionError when the input tensor does not have shape (2,2,2,2).
 
     The test creates a tensor of shape (2,2,2) and expects an assertion error.
     """
     tensor = np.zeros((2, 2, 2))
     with pytest.raises(AssertionError):
-        _split_tensor(tensor)
+        split_tensor(tensor)
 
 
-def test_extend_gate_no_identity() -> None:
-    """Test _extend_gate when no identity tensor is required.
+def testextend_gate_no_identity() -> None:
+    """Test extend_gate when no identity tensor is required.
 
     This test uses a simple tensor (4x4 identity reshaped to (2,2,2,2)) and sites such that the gap between sites is 1.
     It checks that the resulting MPO has exactly two tensors.
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     sites = [0, 1]  # No gap, so no identity tensor should be added.
-    mpo = _extend_gate(tensor, sites)
+    mpo = extend_gate(tensor, sites)
     assert isinstance(mpo, MPO)
     assert len(mpo.tensors) == 2
 
 
-def test_extend_gate_with_identity() -> None:
-    """Test _extend_gate when an identity tensor is required.
+def testextend_gate_with_identity() -> None:
+    """Test extend_gate when an identity tensor is required.
 
     This test uses a simple tensor (4x4 identity reshaped to (2,2,2,2)) with sites that have a gap (difference 2),
     which should insert one identity tensor. It verifies that the MPO contains three tensors and that the
@@ -94,7 +94,7 @@ def test_extend_gate_with_identity() -> None:
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     sites = [0, 2]  # Gap present, one identity tensor inserted.
-    mpo = _extend_gate(tensor, sites)
+    mpo = extend_gate(tensor, sites)
     assert isinstance(mpo, MPO)
     assert len(mpo.tensors) == 3
 
@@ -105,15 +105,15 @@ def test_extend_gate_with_identity() -> None:
         assert_array_equal(identity_tensor[:, :, i, i], np.eye(2))
 
 
-def test_extend_gate_reverse_order() -> None:
-    """Test that _extend_gate correctly handles reverse ordering of sites.
+def testextend_gate_reverse_order() -> None:
+    """Test that extend_gate correctly handles reverse ordering of sites.
 
-    This test applies _extend_gate with sites provided in reverse order, reverses the resulting MPO tensors,
+    This test applies extend_gate with sites provided in reverse order, reverses the resulting MPO tensors,
     and verifies that each tensor matches the transpose of the forward-order result on axes (0,1,3,2).
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
-    mpo_forward = _extend_gate(tensor, [0, 1])
-    mpo_reverse = _extend_gate(tensor, [1, 0])
+    mpo_forward = extend_gate(tensor, [0, 1])
+    mpo_reverse = extend_gate(tensor, [1, 0])
     mpo_reverse.tensors.reverse()
     for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors):
         assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))

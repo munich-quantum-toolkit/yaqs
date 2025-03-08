@@ -28,7 +28,7 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
-I = GateLibrary.id.matrix
+Id = GateLibrary.id.matrix
 X = GateLibrary.x.matrix
 Y = GateLibrary.y.matrix
 Z = GateLibrary.z.matrix
@@ -88,7 +88,7 @@ def test_init_ising() -> None:
     block_JZ = left_block[0, 1]
     block_gX = left_block[0, 2]
 
-    assert np.allclose(block_I, I)
+    assert np.allclose(block_I, Id)
     assert np.allclose(block_JZ, minus_J * Z)
     assert np.allclose(block_gX, minus_g * X)
 
@@ -96,11 +96,11 @@ def test_init_ising() -> None:
     if length > 2:
         inner_block = untranspose_block(mpo.tensors[1])
         assert inner_block.shape == (3, 3, 2, 2)
-        assert np.allclose(inner_block[0, 0], I)
+        assert np.allclose(inner_block[0, 0], Id)
         assert np.allclose(inner_block[0, 1], minus_J * Z)
         assert np.allclose(inner_block[0, 2], minus_g * X)
         assert np.allclose(inner_block[1, 2], Z)
-        assert np.allclose(inner_block[2, 2], I)
+        assert np.allclose(inner_block[2, 2], Id)
 
     # Check right boundary: shape (2,2,3,1) -> untransposed to (3,1,2,2)
     right_block = untranspose_block(mpo.tensors[-1])
@@ -112,7 +112,7 @@ def test_init_ising() -> None:
 
     assert np.allclose(block_gX, minus_g * X)
     assert np.allclose(block_Z, Z)
-    assert np.allclose(block_I, I)
+    assert np.allclose(block_I, Id)
 
 
 def test_init_heisenberg() -> None:
@@ -149,7 +149,7 @@ def test_init_heisenberg() -> None:
     minus_Jz = -Jz
     minus_h = -h
 
-    assert np.allclose(block_I, I)
+    assert np.allclose(block_I, Id)
     assert np.allclose(block_JxX, minus_Jx * X)
     assert np.allclose(block_JyY, minus_Jy * Y)
     assert block_JyY.shape == (2, 2)
@@ -183,7 +183,7 @@ def test_init_identity() -> None:
 
     for tensor in mpo.tensors:
         assert tensor.shape == (2, 2, 1, 1)
-        assert np.allclose(np.squeeze(tensor), I)
+        assert np.allclose(np.squeeze(tensor), Id)
 
 
 def test_init_custom_hamiltonian() -> None:

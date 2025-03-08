@@ -55,7 +55,9 @@ rng = np.random.default_rng()
 
 
 def random_theta_6d() -> NDArray[np.float64]:
-    """Create a random 6D tensor, e.g. for two-qubit local blocks.
+    """Helper function to create random 8D theta for nearest-neighbor gates in equivalence checking.
+
+    Create a random 6D tensor, e.g. for two-qubit local blocks.
 
     Returns:
         NDArray[np.float64]: A random 6-dimensional tensor of shape (2,2,2,2,2,2).
@@ -64,7 +66,7 @@ def random_theta_6d() -> NDArray[np.float64]:
 
 
 def random_theta_8d() -> NDArray[np.float64]:
-    """Create a random 8D tensor, e.g. for 'long-range' gates.
+    """Helper function to create random 8D theta for long-range gates in equivalence checking.
 
     Returns:
         NDArray[np.float64]: A random 8-dimensional tensor of shape (2,2,2,2,2,2,2,2).
@@ -76,7 +78,9 @@ def random_theta_8d() -> NDArray[np.float64]:
 def approximate_reconstruction(
     U: NDArray[np.float64], M: NDArray[np.float64], original: NDArray[np.float64], atol: float = 1e-10
 ) -> None:
-    """Check if the decomposition U * diag(S) * V (reconstructed from U and M)
+    """Helper function to reconstruct tensor.
+
+    Check if the decomposition U * diag(S) * V (reconstructed from U and M)
     approximates 'original' within a given tolerance.
 
     This function re-applies the reshaping/transpose logic used in decompose_theta,
@@ -87,9 +91,6 @@ def approximate_reconstruction(
         M (NDArray[np.float64]): The reshaped product of the singular values and right factor.
         original (NDArray[np.float64]): The original tensor before decomposition.
         atol (float, optional): Absolute tolerance for the reconstruction check. Defaults to 1e-10.
-
-    Raises:
-        AssertionError: If the reconstructed matrix does not match the original within the tolerance.
     """
     dims = original.shape
     # Reorder original to match the permutation used in decompose_theta: (0,3,2,1,4,5)
@@ -133,7 +134,7 @@ def test_decompose_theta() -> None:
 
 
 @pytest.mark.parametrize("conjugate", [False, True])
-def test_apply_single_qubit_gate(conjugate: bool) -> None:
+def test_apply_single_qubit_gate(*, conjugate: bool) -> None:
     """Test applying a single-qubit gate (X gate) to a tensor using apply_gate.
 
     The test creates a single-qubit gate from GateLibrary, sets its site,
@@ -150,7 +151,7 @@ def test_apply_single_qubit_gate(conjugate: bool) -> None:
 
 
 @pytest.mark.parametrize("conjugate", [False, True])
-def test_apply_two_qubit_gate(conjugate: bool) -> None:
+def test_apply_two_qubit_gate(*, conjugate: bool) -> None:
     """Test applying a two-qubit gate (Rzz gate) to a tensor using apply_gate.
 
     The test sets up a two-qubit gate with a rotation parameter, applies it to a random 6D tensor,

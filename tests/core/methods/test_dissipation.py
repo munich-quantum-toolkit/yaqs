@@ -15,6 +15,8 @@ from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 
+rng = np.random.default_rng()
+
 
 def test_apply_dissipation_site_canonical_0() -> None:
     """Test that apply_dissipation correctly shifts the MPS to be site-canonical at site 0.
@@ -30,7 +32,7 @@ def test_apply_dissipation_site_canonical_0() -> None:
     tensors = []
     for _ in range(length):
         # Create a random 2-element vector, normalize it, and reshape to (pdim, 1, 1)
-        vec = np.random.rand(pdim).astype(complex)
+        vec = rng.random(pdim).astype(complex)
         vec /= np.linalg.norm(vec)
         tensor = vec.reshape(pdim, 1, 1)
         tensors.append(tensor)

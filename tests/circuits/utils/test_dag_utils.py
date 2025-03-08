@@ -159,8 +159,7 @@ def test_check_longest_gate() -> None:
 
 
 def test_select_starting_point_even_odd() -> None:
-    """Test selecting starting points for gate application using a checkerboard pattern when the first gate
-       is on an even qubit.
+    """Test selecting starting points for gate application.
 
     This test creates a 4-qubit circuit with a CX gate starting at qubit 0.
     The function select_starting_point should return ranges corresponding to even-odd pairings:

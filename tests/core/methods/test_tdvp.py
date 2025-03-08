@@ -10,7 +10,8 @@
 This module contains unit tests for verifying various components of TDVP-based methods,
 including:
 
-- Tensor decomposition (splitting and merging) routines for Matrix Product States (MPS) and Matrix Product Operators (MPO).
+- Tensor decomposition (splitting and merging) routines for Matrix Product States (MPS)
+   and Matrix Product Operators (MPO).
 - Environment updates (left and right) and projection routines essential to efficient TDVP implementations.
 - Single-site and two-site TDVP algorithms for evolving quantum states under given Hamiltonians.
 
@@ -78,7 +79,7 @@ def test_split_mps_tensor_invalid_shape() -> None:
     This test creates a tensor A with shape (3, 3, 5) and expects the function to raise an error.
     """
     A = rng.random(size=(3, 3, 5))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"The first dimension of the tensor must be divisible by 2."):
         split_mps_tensor(A, svd_distribution="left")
 
 
