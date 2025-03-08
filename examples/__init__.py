@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"Examples for the usage of YAQS features."
+"""Examples for the usage of YAQS features."""
