@@ -25,7 +25,6 @@ from matplotlib.ticker import MaxNLocator
 from qiskit.quantum_info import Operator, Pauli, Statevector
 from qiskit_aer import Aersimulator
 
-from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 
