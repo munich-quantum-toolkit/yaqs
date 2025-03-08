@@ -5,6 +5,20 @@
 #
 # Licensed under the MIT License
 
+"""Tests for the quantum circuit generation functions in the YAQS circuit library.
+
+This module contains tests for verifying the correctness of quantum circuits generated
+by the functions `create_ising_circuit` and `create_Heisenberg_circuit` from the YAQS circuit library.
+
+The tests ensure:
+- Circuits have the correct number of qubits (both even and odd cases).
+- Circuits contain the expected quantum gates (e.g., rx, rz, rzz, rxx, ryy).
+- Gate counts match expected values based on circuit parameters (J, g, Jx, Jy, Jz, h, dt, timesteps).
+
+These tests help maintain consistency and correctness of circuit generation used
+in quantum simulations within the YAQS project.
+"""
+
 from __future__ import annotations
 
 from qiskit.circuit import QuantumCircuit

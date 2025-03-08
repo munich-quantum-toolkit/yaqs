@@ -5,6 +5,22 @@
 #
 # Licensed under the MIT License
 
+"""Tests for the Gate Library utility functions and gates in the YAQS core.
+
+This module includes unit tests for:
+- Utility functions `_split_tensor` and `_extend_gate`, ensuring correct tensor operations for MPO construction.
+- Quantum gates provided by `GateLibrary`, verifying the correctness of tensors, matrices, and gate operations.
+
+Specifically, tests ensure:
+- Tensors are correctly split and reshaped for MPO representations.
+- Identity tensors are correctly inserted between gates when necessary.
+- Gates have correctly set parameters, sites, and tensors.
+- Gate tensors match their expected unitary matrix representations.
+- Gates behave correctly when their sites are specified in reversed order.
+
+These tests validate the internal consistency of quantum gate representations used within the YAQS framework.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
