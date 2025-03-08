@@ -46,7 +46,8 @@ class MPS:
         flipped (bool): Indicates if the network has been flipped.
 
         Methods:
-        __init__(length: int, tensors: list[NDArray[np.complex128]] | None = None, physical_dimensions: list[int] | None = None, state: str = "zeros") -> None:
+        __init__(length: int, tensors: list[NDArray[np.complex128]] | None = None,
+                 physical_dimensions: list[int] | None = None, state: str = "zeros") -> None:
             Initializes the MPS with given length, tensors, physical dimensions, and initial state.
         write_max_bond_dim() -> int:
             Returns the maximum bond dimension in the MPS.
@@ -237,7 +238,8 @@ class MPS:
 
     def normalize(self, form: str = "B") -> None:
         """Normalize the network to a specified form.
-        This method normalizes the network to the specified form. By default, it normalizes to form "B" (right canonical).
+        This method normalizes the network to the specified form. By default, it normalizes
+        to form "B" (right canonical).
         The normalization process involves flipping the network, setting the canonical form with the
         orthogonality center at the last position, and shifting the orthogonality center to the rightmost position.
 
@@ -260,13 +262,15 @@ class MPS:
         """Measure the expectation value of a given observable.
 
         Parameters:
-        observable (Observable): The observable to measure. It must have a 'site' attribute indicating the site to measure and a 'name' attribute corresponding to a gate in the GateLibrary.
+        observable (Observable): The observable to measure. It must have a 'site' attribute indicating
+        the site to measure and a 'name' attribute corresponding to a gate in the GateLibrary.
 
         Returns:
         np.float64: The real part of the expectation value of the observable.
 
         Raises:
-        AssertionError: If the observable's site is out of range or if the imaginary part of the expectation value is not negligible.
+        AssertionError: If the observable's site is out of range or if the imaginary part of the expectation value
+                        is not negligible.
         """
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
@@ -278,7 +282,8 @@ class MPS:
         """Calculate the norm of the state.
 
         Parameters:
-        site (int | None): The specific site to calculate the norm from. If None, the norm is calculated for the entire network.
+        site (int | None): The specific site to calculate the norm from. If None, the norm is calculated for
+                           the entire network.
 
         Returns:
         np.float64: The norm of the state or the specified site.
@@ -371,7 +376,8 @@ class MPO:
         Initializes the MPO for the Heisenberg model with given parameters.
     init_identity(length: int, physical_dimension: int = 2) -> None
         Initializes the MPO as an identity operator.
-    init_custom_Hamiltonian(length: int, left_bound: NDArray[np.complex128], inner: NDArray[np.complex128], right_bound: NDArray[np.complex128]) -> None
+    init_custom_Hamiltonian(length: int, left_bound: NDArray[np.complex128],
+                            inner: NDArray[np.complex128], right_bound: NDArray[np.complex128]) -> None
         Initializes the MPO with custom Hamiltonian tensors.
     init_custom(tensors: list[NDArray[np.complex128]], transpose: bool = True) -> None
         Initializes the MPO with custom tensors.

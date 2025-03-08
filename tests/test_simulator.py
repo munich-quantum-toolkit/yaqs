@@ -126,8 +126,8 @@ def test_weak_simulation_noise() -> None:
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
     It sets up WeakSimParams with a specified number of shots, max bond dimension, threshold, and window size,
     and a noise model with small strengths. After running simulator.run, the test verifies that sim_params.N equals
-    the number of shots, that each measurement is a dictionary, and that the total number of shots recorded in sim_params.results
-    equals the expected number.
+    the number of shots, that each measurement is a dictionary, and that the total number of shots
+    recorded in sim_params.results equals the expected number.
     """
     num_qubits = 5
     initial_state = MPS(num_qubits)

@@ -39,7 +39,8 @@ def decompose_theta(
     The input tensor is first re-ordered and flattened into a matrix, then decomposed using SVD.
     Singular values below the threshold are discarded. The left singular vectors (U) are reshaped into a tensor
     with shape (dims[0], dims[1], dims[2], num_sv), and the product of the diagonal singular value matrix with
-    the right singular vectors (V) is reshaped and transposed into a tensor with shape (dims[3], dims[4], num_sv, dims[5]).
+    the right singular vectors (V) is reshaped and transposed into a tensor with shape
+    (dims[3], dims[4], num_sv, dims[5]).
 
     Args:
         theta (NDArray[np.complex128]): The high-rank tensor to decompose.

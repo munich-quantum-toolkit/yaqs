@@ -8,8 +8,8 @@
 """This module implements the Tensor Jump Method (TJM) for simulating the dynamics of quantum many-body systems.
 It provides functions for initializing the sampling state with noise (via dissipation and stochastic processes),
 evolving the state through single-site and two-site TDVP updates, and sampling observable measurements over time.
-The functions physics_tjm_2 and physics_tjm_1 correspond to second-order and first-order evolution schemes, respectively,
-and return trajectories of expectation values for further analysis.
+The functions physics_tjm_2 and physics_tjm_1 correspond to second-order and first-order evolution schemes,
+respectively, and return trajectories of expectation values for further analysis.
 """
 
 from __future__ import annotations

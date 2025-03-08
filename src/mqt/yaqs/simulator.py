@@ -252,7 +252,8 @@ def run(
         initial_state (MPS): The initial state of the system as an MPS. Must be B normalized.
         operator (MPO | QuantumCircuit): The operator representing the evolution; an MPO for physics simulations
             or a QuantumCircuit for circuit simulations.
-        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters specifying the simulation mode and settings.
+        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters specifying
+                                                                         the simulation mode and settings.
         noise_model (NoiseModel | None): The noise model to apply during simulation.
         parallel (bool, optional): Whether to run trajectories in parallel. Defaults to True.
 

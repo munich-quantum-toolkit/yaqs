@@ -43,7 +43,8 @@ def split_mps_tensor(
       - A right tensor of shape (d1, num_sv, D2)
     where num_sv is the number of singular values retained after truncation.
 
-    The parameter `svd_distribution` determines how the singular values are distributed between the left and right tensors.
+    The parameter `svd_distribution` determines how the singular values are distributed between
+    the left and right tensors.
     It can be:
         - "left"  : Multiply the left tensor by the singular values.
         - "right" : Multiply the right tensor by the singular values.

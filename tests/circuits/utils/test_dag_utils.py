@@ -143,8 +143,9 @@ def test_get_temporal_zone_simple() -> None:
 def test_check_longest_gate() -> None:
     """Test the computation of the longest gate distance in the first layer of a DAGCircuit.
 
-    This test creates a three-qubit circuit with two CX gates: one between qubits 0 and 2 and one between qubits 0 and 1.
-    The function check_longest_gate should return 3, indicating that the maximum distance between involved qubits is 3.
+    This test creates a three-qubit circuit with two CX gates: one between qubits 0 and 2 and one
+    between qubits 0 and 1. The function check_longest_gate should return 3, indicating that the maximum distance 
+    between involved qubits is 3.
     """
     qc = QuantumCircuit(3)
     qc.cx(0, 2)
@@ -156,7 +157,8 @@ def test_check_longest_gate() -> None:
 
 
 def test_select_starting_point_even_odd() -> None:
-    """Test selecting starting points for gate application using a checkerboard pattern when the first gate is on an even qubit.
+    """Test selecting starting points for gate application using a checkerboard pattern when the first gate
+       is on an even qubit.
 
     This test creates a 4-qubit circuit with a CX gate starting at qubit 0.
     The function select_starting_point should return ranges corresponding to even-odd pairings:

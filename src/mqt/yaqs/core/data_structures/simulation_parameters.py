@@ -56,8 +56,8 @@ class Observable:
     def initialize(self, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
         """Initialize the simulation parameters based on the type of simulation.
         Parameters:
-        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): The simulation parameters object which can be of type
-        PhysicsSimParams, StrongSimParams, or WeakSimParams.
+        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): The simulation parameters object
+        which can be of type PhysicsSimParams, StrongSimParams, or WeakSimParams.
 
         .
         """
@@ -232,7 +232,8 @@ class StrongSimParams:
 
     Methods:
     --------
-    __init__(self, observables: list[Observable], N: int = 1000, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None) -> None:
+    __init__(self, observables: list[Observable], N: int = 1000, max_bond_dim: int = 2,
+             threshold: float = 1e-6, window_size: int | None = None) -> None:
         Initializes the StrongSimParams with the given parameters.
     aggregate_trajectories(self) -> None:
         Aggregates the trajectories of the observables by computing the mean across all trajectories.

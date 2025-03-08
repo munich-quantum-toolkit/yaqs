@@ -99,7 +99,8 @@ def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
 
 
 def construct_generator_MPO(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
-    """Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a specified length.
+    """Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a
+      specified length.
 
     Args:
         gate (BaseGate): The gate containing the generator and the sites it acts on.
@@ -179,7 +180,8 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     Args:
         state (MPS): The Matrix Product State to which the gate will be applied.
         node (DAGOpNode): The node representing the two-qubit gate in the Directed Acyclic Graph (DAG).
-        sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior of the algorithm.
+        sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior
+        of the algorithm.
 
     .
     """
@@ -207,13 +209,15 @@ def circuit_tjm(
         args (tuple): A tuple containing the following elements:
             - int: An index or identifier, primarily for parallelization
             - MPS: The initial state of the system represented as a Matrix Product State.
-            - NoiseModel | None: The noise model to be applied during the simulation, or None if no noise is to be applied.
+            - NoiseModel | None: The noise model to be applied during the simulation, or None if no noise is
+                to be applied.
             - StrongSimParams | WeakSimParams: Parameters for the simulation, either for strong or weak simulation.
             - QuantumCircuit: The quantum circuit to be simulated.
 
     Returns:
-        NDArray[np.float64]: The results of the simulation. If StrongSimParams are used, the results are the measured observables.
-                             If WeakSimParams are used, the results are the measurement outcomes for each shot.
+        NDArray[np.float64]: The results of the simulation. If StrongSimParams are used, the results
+        are the measured observables.
+        If WeakSimParams are used, the results are the measurement outcomes for each shot.
     """
     from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
