@@ -39,7 +39,7 @@ from mqt.yaqs.circuits.utils.mpo_utils import (
     update_MPO,
 )
 from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
@@ -187,7 +187,7 @@ def test_apply_temporal_zone_single_qubit_gates() -> None:
     Constructs an Ising circuit with only single-qubit gates and verifies that applying the temporal zone
     returns a tensor with the same shape as the input.
     """
-    circuit = create_Ising_circuit(L=5, J=0, g=1, dt=0.1, timesteps=1)
+    circuit = create_ising_circuit(L=5, J=0, g=1, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
@@ -201,7 +201,7 @@ def test_apply_temporal_zone_two_qubit_gates() -> None:
     Constructs an Ising circuit with only two-qubit gates and verifies that the tensor shape remains unchanged
     after applying the temporal zone.
     """
-    circuit = create_Ising_circuit(L=5, J=1, g=0, dt=0.1, timesteps=1)
+    circuit = create_ising_circuit(L=5, J=1, g=0, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
@@ -215,7 +215,7 @@ def test_apply_temporal_zone_mixed_qubit_gates() -> None:
     Constructs an Ising circuit with both J and g nonzero, applies the temporal zone, and checks that
     the output tensor has the same shape as the input.
     """
-    circuit = create_Ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
+    circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag = circuit_to_dag(circuit)
 
     theta = random_theta_6d()
@@ -232,7 +232,7 @@ def test_update_MPO() -> None:
     mpo = MPO()
     length = 2
     mpo.init_identity(length)
-    circuit = create_Ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
+    circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
     qubits = [0, 1]
@@ -254,7 +254,7 @@ def test_apply_layer() -> None:
     mpo = MPO()
     length = 3
     mpo.init_identity(length)
-    circuit = create_Ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
+    circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
     threshold = 1e-5

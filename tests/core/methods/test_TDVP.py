@@ -190,7 +190,7 @@ def test_single_site_TDVP() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
@@ -217,7 +217,7 @@ def test_two_site_TDVP() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(

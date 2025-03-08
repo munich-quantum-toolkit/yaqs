@@ -6,7 +6,7 @@
 # Licensed under the MIT License
 
 """This module provides functions for creating quantum circuits that simulate
-the dynamics of the Ising and Heisenberg models. The functions create_Ising_circuit
+the dynamics of the Ising and Heisenberg models. The functions create_ising_circuit
 and create_Heisenberg_circuit construct Qiskit QuantumCircuit objects based on specified
 parameters such as the number of qubits, interaction strengths, time steps, and total simulation time.
 These circuits are used to simulate the evolution of quantum many-body systems under the
@@ -18,7 +18,7 @@ from __future__ import annotations
 from qiskit.circuit import QuantumCircuit
 
 
-def create_Ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) -> QuantumCircuit:
+def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) -> QuantumCircuit:
     """Create a quantum circuit for simulating the Ising model.
 
     Args:

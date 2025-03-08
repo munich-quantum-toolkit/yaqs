@@ -9,18 +9,18 @@ from __future__ import annotations
 
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs.core.libraries.circuit_library import create_Heisenberg_circuit, create_Ising_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_Heisenberg_circuit, create_ising_circuit
 
 
-def test_create_Ising_circuit_valid_even() -> None:
-    """Test that create_Ising_circuit returns a valid circuit for an even number of qubits.
+def test_create_ising_circuit_valid_even() -> None:
+    """Test that create_ising_circuit returns a valid circuit for an even number of qubits.
 
     This test creates an Ising circuit with L=4 qubits using parameters J, g, dt, and timesteps.
     It verifies that:
       - The resulting object is a QuantumCircuit with 4 qubits.
       - The expected number of rx and rzz gates are present (4 rx gates and 3 rzz gates).
     """
-    circ = create_Ising_circuit(L=4, J=1, g=0.5, dt=0.1, timesteps=1)
+    circ = create_ising_circuit(L=4, J=1, g=0.5, dt=0.1, timesteps=1)
 
     # Check that the output is a QuantumCircuit with the correct number of qubits.
     assert isinstance(circ, QuantumCircuit)
@@ -35,15 +35,15 @@ def test_create_Ising_circuit_valid_even() -> None:
     assert rzz_count == 3
 
 
-def test_create_Ising_circuit_valid_odd() -> None:
-    """Test that create_Ising_circuit returns a valid circuit for an odd number of qubits.
+def test_create_ising_circuit_valid_odd() -> None:
+    """Test that create_ising_circuit returns a valid circuit for an odd number of qubits.
 
     This test creates an Ising circuit with L=5 qubits and verifies that:
       - The output is a QuantumCircuit with 5 qubits.
       - The counts of rx and rzz gates match the expected numbers for an odd-length circuit
         (5 rx gates and 4 rzz gates).
     """
-    circ = create_Ising_circuit(L=5, J=1, g=0.5, dt=0.1, timesteps=1)
+    circ = create_ising_circuit(L=5, J=1, g=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == 5

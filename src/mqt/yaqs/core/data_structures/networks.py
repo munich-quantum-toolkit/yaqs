@@ -365,9 +365,9 @@ class MPO:
 
     Methods.
     -------
-    init_Ising(length: int, J: float, g: float) -> None
+    init_ising(length: int, J: float, g: float) -> None
         Initializes the MPO for the Ising model with given parameters.
-    init_Heisenberg(length: int, Jx: float, Jy: float, Jz: float, h: float) -> None
+    init_heisenberg(length: int, Jx: float, Jy: float, Jz: float, h: float) -> None
         Initializes the MPO for the Heisenberg model with given parameters.
     init_identity(length: int, physical_dimension: int = 2) -> None
         Initializes the MPO as an identity operator.
@@ -389,7 +389,7 @@ class MPO:
         Rotates the MPO tensors by swapping physical dimensions.
     """
 
-    def init_Ising(self, length: int, J: float, g: float) -> None:
+    def init_ising(self, length: int, J: float, g: float) -> None:
         """Initialize the Ising model as a Matrix Product Operator (MPO).
         This method constructs the MPO representation of the Ising model with
         specified parameters. The MPO has a 3x3 block structure at each site.
@@ -441,7 +441,7 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-    def init_Heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:
+    def init_heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:
         """Initialize the Heisenberg model as a Matrix Product Operator (MPO).
         Parameters:
         length (int): The number of sites in the chain.

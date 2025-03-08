@@ -55,8 +55,8 @@ rng = np.random.default_rng()
 ##############################################################################
 
 
-def test_init_Ising() -> None:
-    """Test that init_Ising creates the correct MPO for the Ising model.
+def test_init_ising() -> None:
+    """Test that init_ising creates the correct MPO for the Ising model.
 
     This test initializes an Ising MPO with a given length, coupling constant (J), and transverse field (g).
     It verifies that:
@@ -69,7 +69,7 @@ def test_init_Ising() -> None:
     J = 1.0
     g = 0.5
 
-    mpo.init_Ising(length, J, g)
+    mpo.init_ising(length, J, g)
 
     assert mpo.length == length
     assert mpo.physical_dimension == 2
@@ -113,8 +113,8 @@ def test_init_Ising() -> None:
     assert np.allclose(block_I, I)
 
 
-def test_init_Heisenberg() -> None:
-    """Test that init_Heisenberg creates the correct MPO for the Heisenberg model.
+def test_init_heisenberg() -> None:
+    """Test that init_heisenberg creates the correct MPO for the Heisenberg model.
 
     This test initializes a Heisenberg MPO with given coupling constants (Jx, Jy, Jz) and field h.
     It verifies that:
@@ -127,7 +127,7 @@ def test_init_Heisenberg() -> None:
     length = 5
     Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
 
-    mpo.init_Heisenberg(length, Jx, Jy, Jz, h)
+    mpo.init_heisenberg(length, Jx, Jy, Jz, h)
 
     assert mpo.length == length
     assert mpo.physical_dimension == 2
@@ -244,7 +244,7 @@ def test_init_custom() -> None:
 def test_convert_to_MPS() -> None:
     """Test converting an MPO to an MPS.
 
-    This test initializes an MPO using init_Ising, converts it to an MPS via convert_to_MPS,
+    This test initializes an MPO using init_ising, converts it to an MPS via convert_to_MPS,
     and verifies that the resulting MPS has the correct length and that each tensor has been reshaped
     to the expected dimensions.
     """
@@ -252,7 +252,7 @@ def test_convert_to_MPS() -> None:
     length = 3
     J, g = 1.0, 0.5
 
-    mpo.init_Ising(length, J, g)
+    mpo.init_ising(length, J, g)
     mps = mpo.convert_to_MPS()
 
     assert isinstance(mps, MPS)
@@ -275,7 +275,7 @@ def test_check_if_valid_MPO() -> None:
     length = 4
     J, g = 1.0, 0.5
 
-    mpo.init_Ising(length, J, g)
+    mpo.init_ising(length, J, g)
     mpo.check_if_valid_MPO()
 
 
@@ -289,7 +289,7 @@ def test_rotate() -> None:
     length = 3
     J, g = 1.0, 0.5
 
-    mpo.init_Ising(length, J, g)
+    mpo.init_ising(length, J, g)
     original_tensors = [t.copy() for t in mpo.tensors]
 
     mpo.rotate(conjugate=False)

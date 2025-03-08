@@ -27,7 +27,7 @@ def test_dynamic_tdvp_one_site() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")
@@ -60,7 +60,7 @@ def test_dynamic_tdvp_two_site() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")

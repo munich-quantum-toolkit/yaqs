@@ -26,12 +26,12 @@ from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
-from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 # Define the circuit
 num_qubits = 10
 depth = num_qubits
-circuit = create_Ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
 circuit.measure_all()
 
 # Define the initial state

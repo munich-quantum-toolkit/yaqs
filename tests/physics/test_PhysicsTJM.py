@@ -45,7 +45,7 @@ def test_initialize() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel(["relaxation"], [0.1])
     measurements = [Observable("x", site) for site in range(L)]
@@ -73,7 +73,7 @@ def test_step_through() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel(["relaxation"], [0.1])
     measurements = [Observable("x", site) for site in range(L)]
@@ -102,7 +102,7 @@ def test_physics_tjm_2() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]
@@ -125,7 +125,7 @@ def test_physics_tjm_2_sample_timesteps() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]
@@ -148,7 +148,7 @@ def test_physics_tjm_1() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]
@@ -171,7 +171,7 @@ def test_physics_tjm_1_sample_timesteps() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_Ising(L, J, g)
+    H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]

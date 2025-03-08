@@ -27,7 +27,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     StrongSimParams,
     WeakSimParams,
 )
-from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 
 def test_physics_simulation() -> None:
@@ -43,7 +43,7 @@ def test_physics_simulation() -> None:
     initial_state = MPS(length, state="zeros")
 
     H = MPO()
-    H.init_Ising(length, J=1, g=0.5)
+    H.init_ising(length, J=1, g=0.5)
     T = 1
     dt = 0.1
     sample_timesteps = False
@@ -87,7 +87,7 @@ def test_strong_simulation() -> None:
     num_qubits = 5
     state = MPS(num_qubits, state="zeros")
 
-    circuit = create_Ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
 
     N = 10
@@ -132,7 +132,7 @@ def test_weak_simulation_noise() -> None:
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
-    circuit = create_Ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
@@ -162,7 +162,7 @@ def test_weak_simulation_no_noise() -> None:
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
-    circuit = create_Ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
@@ -192,7 +192,7 @@ def test_mismatch() -> None:
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
-    circuit = create_Ising_circuit(L=num_qubits - 1, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit = create_ising_circuit(L=num_qubits - 1, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
