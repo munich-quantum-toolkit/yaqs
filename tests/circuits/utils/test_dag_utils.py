@@ -144,7 +144,7 @@ def test_check_longest_gate() -> None:
     """Test the computation of the longest gate distance in the first layer of a DAGCircuit.
 
     This test creates a three-qubit circuit with two CX gates: one between qubits 0 and 2 and one
-    between qubits 0 and 1. The function check_longest_gate should return 3, indicating that the maximum distance 
+    between qubits 0 and 1. The function check_longest_gate should return 3, indicating that the maximum distance
     between involved qubits is 3.
     """
     qc = QuantumCircuit(3)
