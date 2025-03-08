@@ -396,7 +396,6 @@ class MPS:
         return [-1]
 
 
-# Convention (sigma, sigma', chi_l,  chi_l+1)
 class MPO:
     """Class representing a Matrix Product Operator (MPO) for quantum many-body systems.
 
