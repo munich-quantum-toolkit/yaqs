@@ -54,9 +54,9 @@ def scalar_product(A: MPS, B: MPS, site: int | None = None) -> np.complex128:
 
     result = np.array(np.inf)
     if site is None:
-        for site in range(A.length):
-            tensor = oe.contract("abc, ade->bdce", A_copy.tensors[site], B_copy.tensors[site])
-            result = tensor if site == 0 else oe.contract("abcd, cdef->abef", result, tensor)
+        for idx in range(A.length):
+            tensor = oe.contract("abc, ade->bdce", A_copy.tensors[idx], B_copy.tensors[idx])
+            result = tensor if idx == 0 else oe.contract("abcd, cdef->abef", result, tensor)
     else:
         result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
     return np.complex128(np.squeeze(result))
@@ -110,13 +110,12 @@ def measure_single_shot(state: MPS) -> int:
         selected_state = np.zeros(len(probabilities))
         selected_state[chosen_index] = 1
         # Multiply state: project the tensor onto the selected state.
-        tensor = oe.contract("a, acd->cd", selected_state, tensor)
+        projected_tensor = oe.contract("a, acd->cd", selected_state, tensor)
         # Propagate the measurement to the next site.
         if site != state.length - 1:
-            temp_state.tensors[site + 1] = (
-                1
-                / np.sqrt(probabilities[chosen_index])
-                * oe.contract("ab, cbd->cad", tensor, temp_state.tensors[site + 1])
+            temp_state.tensors[site + 1] = (  # noqa: B909
+                1 / np.sqrt(probabilities[chosen_index])
+                * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])
             )
     return sum(c << i for i, c in enumerate(bitstring))
 
@@ -143,17 +142,15 @@ def measure(state: MPS, shots: int) -> dict[int, int]:
     results: dict[int, int] = {}
     if shots > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            with tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar:
-                futures = [executor.submit(measure_single_shot, copy.deepcopy(state)) for _ in range(shots)]
-                for future in concurrent.futures.as_completed(futures):
-                    try:
-                        result = future.result()
-                        results[result] = results.get(result, 0) + 1
-                    except Exception:
-                        pass
-                    finally:
-                        pbar.update(1)
+        with (
+            concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor,
+            tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
+        ):
+            futures = [executor.submit(measure_single_shot, copy.deepcopy(state)) for _ in range(shots)]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                results[result] = results.get(result, 0) + 1
+                pbar.update(1)
         return results
     basis_state = measure_single_shot(state)
     results[basis_state] = results.get(basis_state, 0) + 1
