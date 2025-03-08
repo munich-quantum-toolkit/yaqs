@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Fast Matrix Exponential Methods
+"""Fast Matrix Exponential Methods.
 
 This module implements matrix-free methods for approximating the action of a matrix exponential
 on a vector via Krylov subspace techniques. It provides an implementation of the Lanczos iteration

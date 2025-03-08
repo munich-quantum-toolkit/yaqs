@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" 1TDVP + 2TDVP implementation with helper functions
+"""1TDVP + 2TDVP implementation with helper functions.
 
 This module implements functions for performing time evolution on Matrix Product States (MPS)
 using the Time-Dependent Variational Principle (TDVP). It provides utilities for:

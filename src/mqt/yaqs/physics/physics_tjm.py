@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Hamiltonian simulation of quantum many-body systems using the Tensor Jump Method (TJM).
+"""Hamiltonian simulation of quantum many-body systems using the Tensor Jump Method (TJM).
 
 This module implements the Tensor Jump Method (TJM) for simulating the dynamics of quantum many-body systems.
 It provides functions for initializing the sampling state with noise (via dissipation and stochastic processes),

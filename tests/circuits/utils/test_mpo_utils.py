@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Tests for the MPO utility functions used in the equivalence checking framework.
+"""Tests for the MPO utility functions used in the equivalence checking framework.
 
 This module contains unit tests for the MPO utility functions used in the equivalence checking framework.
 It verifies the correct functionality of tensor operations including:

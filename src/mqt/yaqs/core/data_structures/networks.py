@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Tensor Network Data Structures.
+"""Tensor Network Data Structures.
 
 This module implements classes for representing quantum states and operators using tensor networks.
 It defines the Matrix Product State (MPS) and Matrix Product Operator (MPO) classes, along with various

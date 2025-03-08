@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Library of quantum gates
+"""Library of quantum gates.
 
 This module defines a collection of quantum gate classes used in quantum simulations.
 Each gate is implemented as a class derived from BaseGate and includes its matrix representation,

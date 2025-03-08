@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" MPO-based equivalence checker for quantum circuits.
+"""MPO-based equivalence checker for quantum circuits.
 
 This module provides a function for checking the equivalence of two quantum circuits
 using an MPO-based simulation algorithm. It converts the circuits to DAGs and iteratively

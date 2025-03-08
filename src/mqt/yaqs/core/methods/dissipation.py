@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Dissipative sweep of the Tensor Jump Method
+"""Dissipative sweep of the Tensor Jump Method.
 
 This module implements a function to apply dissipation to a quantum state represented as an MPS.
 The dissipative operator is computed from a noise model by exponentiating a weighted sum of jump operators,

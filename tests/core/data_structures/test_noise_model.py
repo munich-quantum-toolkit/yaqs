@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Tests for the NoiseModel class.
+"""Tests for the NoiseModel class.
 
 This module provides unit tests for the NoiseModel class.
 It verifies that a NoiseModel is created correctly when valid processes and strengths are provided,

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Noise Models
+"""Noise Models.
 
 This module defines the NoiseModel class, which represents a noise model in a quantum system.
 It stores a list of noise processes and their corresponding strengths, and automatically retrieves

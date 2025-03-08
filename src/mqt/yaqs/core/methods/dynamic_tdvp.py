@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Dynamic Time-Dependent Variational Principle (TDVP)
+"""Dynamic Time-Dependent Variational Principle (TDVP).
 
 This module implements dynamic time evolution of Matrix Product States (MPS)
 using the Time-Dependent Variational Principle (TDVP). The dynamic_TDVP function

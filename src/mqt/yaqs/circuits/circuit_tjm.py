@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Circuit Tensor Jump Method
+"""Circuit Tensor Jump Method.
 
 This module provides functions for simulating quantum circuits using the Tensor Jump Method (TJM). It includes
 utilities for converting quantum circuits to DAG representations, processing gate layers, applying gates to

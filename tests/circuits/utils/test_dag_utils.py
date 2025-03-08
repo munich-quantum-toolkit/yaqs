@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Tests for the DAG utility functions.
+"""Tests for the DAG utility functions.
 
 This module contains unit tests for the DAG utility functions used in the conversion and processing
 of quantum circuits. It verifies that the functions correctly extract gate operations from a DAGCircuit,

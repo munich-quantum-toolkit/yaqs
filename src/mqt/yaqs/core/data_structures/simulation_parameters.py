@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Simulation Parameters for each type of simulation allowed in YAQS
+"""Simulation Parameters for each type of simulation allowed in YAQS.
 
 This module provides classes for representing observables and simulation parameters
 for quantum simulations. It defines the Observable class for measurement, as well as

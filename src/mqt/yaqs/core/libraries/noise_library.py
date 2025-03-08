@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Library of noise processes
+"""Library of noise processes.
 
 This module defines noise operator classes for quantum systems.
 It includes implementations for excitation, relaxation, and dephasing noise operators,

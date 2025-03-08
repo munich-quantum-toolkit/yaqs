@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Tests for simulation parameters classes
+"""Tests for simulation parameters classes.
 
 This module contains unit tests for the Observable and PhysicsSimParams classes used in
 quantum simulation. It verifies that:

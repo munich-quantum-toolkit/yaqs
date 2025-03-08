@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" High-level simulator module for using YAQS.
+"""High-level simulator module for using YAQS.
 
 This module implements the common simulation routine for both circuit-based and Hamiltonian (physics) simulations.
 It provides functions to run simulation trajectories in parallel using an MPS representation of the quantum state.

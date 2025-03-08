@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" General tensor network methods
+"""General tensor network methods.
 
 This module implements functions for computing expectation values and performing measurements
 on quantum states represented as Matrix Product States (MPS). It provides routines for calculating
