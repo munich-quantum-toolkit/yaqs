@@ -186,11 +186,11 @@ def test_init_identity() -> None:
         assert np.allclose(np.squeeze(tensor), I)
 
 
-def test_init_custom_Hamiltonian() -> None:
+def test_init_custom_hamiltonian() -> None:
     """Test initializing a custom Hamiltonian MPO using user-provided boundary and inner tensors.
 
     This test creates random tensors for the left boundary, inner sites, and right boundary,
-    initializes the MPO with these using init_custom_Hamiltonian, and verifies that the tensors
+    initializes the MPO with these using init_custom_hamiltonian, and verifies that the tensors
     have the expected shapes and values (after appropriate transposition).
     """
     length = 4
@@ -201,7 +201,7 @@ def test_init_custom_Hamiltonian() -> None:
     right_bound = rng.random(size=(2, 1, pdim, pdim))
 
     mpo = MPO()
-    mpo.init_custom_Hamiltonian(length, left_bound, inner, right_bound)
+    mpo.init_custom_hamiltonian(length, left_bound, inner, right_bound)
 
     assert mpo.length == length
     assert len(mpo.tensors) == length
@@ -243,10 +243,10 @@ def test_init_custom() -> None:
         assert np.allclose(original, created)
 
 
-def test_convert_to_MPS() -> None:
+def test_to_mps() -> None:
     """Test converting an MPO to an MPS.
 
-    This test initializes an MPO using init_ising, converts it to an MPS via convert_to_MPS,
+    This test initializes an MPO using init_ising, converts it to an MPS via to_mps,
     and verifies that the resulting MPS has the correct length and that each tensor has been reshaped
     to the expected dimensions.
     """
@@ -255,7 +255,7 @@ def test_convert_to_MPS() -> None:
     J, g = 1.0, 0.5
 
     mpo.init_ising(length, J, g)
-    mps = mpo.convert_to_MPS()
+    mps = mpo.to_mps()
 
     assert isinstance(mps, MPS)
     assert mps.length == length
@@ -268,17 +268,17 @@ def test_convert_to_MPS() -> None:
         assert tensor.shape == (pdim2, bond_in, bond_out)
 
 
-def test_check_if_valid_MPO() -> None:
-    """Test that a valid MPO passes the check_if_valid_MPO method without raising errors.
+def test_check_if_valid_mpo() -> None:
+    """Test that a valid MPO passes the check_if_valid_mpo method without raising errors.
 
-    This test initializes an Ising MPO and calls check_if_valid_MPO, which should validate the MPO.
+    This test initializes an Ising MPO and calls check_if_valid_mpo, which should validate the MPO.
     """
     mpo = MPO()
     length = 4
     J, g = 1.0, 0.5
 
     mpo.init_ising(length, J, g)
-    mpo.check_if_valid_MPO()
+    mpo.check_if_valid_mpo()
 
 
 def test_rotate() -> None:
@@ -504,10 +504,10 @@ def test_norm() -> None:
     assert val == 1
 
 
-def test_check_if_valid_MPS() -> None:
+def test_check_if_valid_mps() -> None:
     """Test that an MPS with consistent bond dimensions passes the validity check.
 
-    This test creates an MPS with carefully constructed tensors and verifies that check_if_valid_MPS
+    This test creates an MPS with carefully constructed tensors and verifies that check_if_valid_mps
     does not raise an exception.
     """
     length = 3
@@ -516,7 +516,7 @@ def test_check_if_valid_MPS() -> None:
     t2 = rng.random(size=(pdim, 2, 3))
     t3 = rng.random(size=(pdim, 3, 1))
     mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
-    mps.check_if_valid_MPS()
+    mps.check_if_valid_mps()
 
 
 def test_check_canonical_form() -> None:

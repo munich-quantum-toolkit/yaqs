@@ -49,6 +49,20 @@ class Observable:
     """
 
     def __init__(self, name: str, site: int) -> None:
+        """Initializes an Observable instance.
+
+        Parameters
+        ----------
+        name : str
+            The name of the observable. Must correspond to a valid gate or operator in GateLibrary.
+        site : int
+            The qubit or site index on which this observable is measured.
+
+        Raises:
+        ------
+        AssertionError
+            If the provided `name` is not a valid attribute in the GateLibrary.
+        """
         from ..libraries.gate_library import GateLibrary
 
         assert getattr(GateLibrary, name)
@@ -58,12 +72,14 @@ class Observable:
         self.trajectories: NDArray[np.float64] | None = None
 
     def initialize(self, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
-        """Initialize the simulation parameters based on the type of simulation.
+        """Observable initialization before simulation.
+
+        Initialize the observables based on the type of simulation.
         Parameters:
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): The simulation parameters object
         which can be of type PhysicsSimParams, StrongSimParams, or WeakSimParams.
         """
-        if type(sim_params) == PhysicsSimParams:
+        if isinstance(sim_params, PhysicsSimParams):
             if sim_params.sample_timesteps:
                 self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=np.float64)
                 self.times = sim_params.times
@@ -71,10 +87,10 @@ class Observable:
                 self.trajectories = np.empty((sim_params.N, 1), dtype=np.float64)
                 self.times = sim_params.T
             self.results = np.empty(len(sim_params.times), dtype=np.float64)
-        elif type(sim_params) == WeakSimParams:
+        elif isinstance(sim_params, WeakSimParams):
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
             self.results = np.empty(1, dtype=np.float64)
-        elif type(sim_params) == StrongSimParams:
+        elif isinstance(sim_params, StrongSimParams):
             self.trajectories = np.empty((sim_params.N, 1), dtype=np.complex128)
             self.results = np.empty(1, dtype=np.float64)
 
@@ -125,6 +141,29 @@ class PhysicsSimParams:
         *,
         sample_timesteps: bool = True,
     ) -> None:
+        """Physics simulation parameters initialization.
+
+        Initializes parameters for a physics-based quantum simulation.
+
+        Parameters
+        ----------
+        observables : list[Observable]
+            List of observables to measure during the simulation.
+        T : float
+            Total simulation time.
+        dt : float, optional
+            Time step interval, by default 0.1.
+        N : int, optional
+            Number of simulation samples, by default 1000.
+        max_bond_dim : int, optional
+            Maximum bond dimension allowed, by default 2.
+        threshold : float, optional
+            Threshold for simulation accuracy, by default 1e-6.
+        order : int, optional
+            Order of approximation or numerical scheme, by default 1.
+        sample_timesteps : bool, optional
+            Flag indicating whether to sample at intermediate time steps, by default True.
+        """
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.T = T
@@ -179,8 +218,27 @@ class WeakSimParams:
     N = 0
 
     def __init__(
-        self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
+        self,
+        shots: int,
+        max_bond_dim: int = 2,
+        threshold: float = 1e-6,
+        window_size: int | None = None
     ) -> None:
+        """Weak circuit simulation initialization.
+
+        Initializes parameters for a weak circuit simulation.
+
+        Parameters
+        ----------
+        shots : int
+            Number of measurement shots to simulate.
+        max_bond_dim : int, optional
+            Maximum bond dimension for simulation, by default 2.
+        threshold : float, optional
+            Accuracy threshold for truncating tensors, by default 1e-6.
+        window_size : int or None, optional
+            Window size for the simulation algorithm, by default None.
+        """
         self.measurements: list[dict[int, int] | None] = cast("list[Optional[dict[int, int]]]", shots * [None])
         self.shots = shots
         self.max_bond_dim = max_bond_dim
@@ -255,6 +313,23 @@ class StrongSimParams:
         threshold: float = 1e-6,
         window_size: int | None = None,
     ) -> None:
+        """Strong circuit simulation parameters initialization.
+
+        Initializes parameters for a strong quantum circuit simulation.
+
+        Parameters
+        ----------
+        observables : list[Observable]
+            List of observables to measure during simulation.
+        N : int, optional
+            Number of trajectories to simulate, by default 1000.
+        max_bond_dim : int, optional
+            Maximum bond dimension allowed in simulation, by default 2.
+        threshold : float, optional
+            Threshold for simulation accuracy, by default 1e-6.
+        window_size : int or None, optional
+            Window size for simulation, by default None.
+        """
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
         self.N = N

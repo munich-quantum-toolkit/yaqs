@@ -37,6 +37,20 @@ class NoiseModel:
     """
 
     def __init__(self, processes: list[str] | None = None, strengths: list[float] | None = None) -> None:
+        """Initializes the NoiseModel.
+
+        Parameters
+        ----------
+        processes : list[str], optional
+            A list of noise processes affecting the quantum system. Default is an empty list.
+        strengths : list[float], optional
+            A list of strengths corresponding to each noise process. Default is an empty list.
+
+        Raises:
+        ------
+        AssertionError
+            If the lengths of 'processes' and 'strengths' lists do not match.
+        """
         if strengths is None:
             strengths = []
         if processes is None:

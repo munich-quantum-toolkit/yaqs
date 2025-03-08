@@ -30,8 +30,45 @@ if TYPE_CHECKING:
     from .simulation_parameters import Observable
 
 
-# Convention (sigma, chi_l-1, chi_l)
 class MPS:
+    """Matrix Product State (MPS) class for representing quantum states.
+
+    This class forms the basis of the MPS used in YAQS simulations.
+    The index order is (sigma, chi_l-1, chi_l).
+
+    Attributes:
+    length (int): The number of sites in the MPS.
+    tensors (list[NDArray[np.complex128]]): List of rank-3 tensors representing the MPS.
+    physical_dimensions (list[int]): List of physical dimensions for each site.
+    flipped (bool): Indicates if the network has been flipped.
+
+    Methods:
+    __init__(length: int, tensors: list[NDArray[np.complex128]] | None = None,
+                physical_dimensions: list[int] | None = None, state: str = "zeros") -> None:
+        Initializes the MPS with given length, tensors, physical dimensions, and initial state.
+    write_max_bond_dim() -> int:
+        Returns the maximum bond dimension in the MPS.
+    flip_network() -> None:
+        Flips the bond dimensions in the network to allow operations from right to left.
+    shift_orthogonality_center_right(current_orthogonality_center: int) -> None:
+        Left and right normalizes the MPS around a selected site, shifting the orthogonality center to the right.
+    shift_orthogonality_center_left(current_orthogonality_center: int) -> None:
+        Left and right normalizes the MPS around a selected site, shifting the orthogonality center to the left.
+    set_canonical_form(orthogonality_center: int) -> None:
+        Left and right normalizes the MPS around a selected site to set it in canonical form.
+    normalize(form: str = "B") -> None:
+        Normalizes the MPS in the specified form.
+    measure(observable: Observable) -> np.float64:
+        Measures the expectation value of an observable at a specified site.
+    norm(site: int | None = None) -> np.float64:
+        Computes the norm of the MPS, optionally at a specified site.
+    write_tensor_shapes() -> None:
+        Writes the shapes of the tensors in the MPS.
+    check_if_valid_mps() -> None:
+        Checks if the MPS is valid by verifying bond dimensions.
+    check_canonical_form() -> list[int]:
+        Checks the canonical form of the MPS and returns the orthogonality center(s).
+    """
     def __init__(
         self,
         length: int,
@@ -39,41 +76,37 @@ class MPS:
         physical_dimensions: list[int] | None = None,
         state: str = "zeros",
     ) -> None:
-        """Matrix Product State (MPS) class for representing quantum states.
+        """Initializes a Matrix Product State (MPS).
 
-        Attributes:
-        length (int): The number of sites in the MPS.
-        tensors (list[NDArray[np.complex128]]): List of rank-3 tensors representing the MPS.
-        physical_dimensions (list[int]): List of physical dimensions for each site.
-        flipped (bool): Indicates if the network has been flipped.
+        Parameters
+        ----------
+        length : int
+            Number of sites (qubits) in the MPS.
+        tensors : list[NDArray[np.complex128]], optional
+            Predefined tensors representing the MPS. Must match `length` if provided.
+            If None, tensors are initialized according to `state`.
+        physical_dimensions : list[int], optional
+            Physical dimension for each site. Defaults to qubit systems (dimension 2) if None.
+        state : str, optional
+            Initial state configuration. Valid options include:
+            - "zeros": Initializes all qubits to |0⟩.
+            - "ones": Initializes all qubits to |1⟩.
+            - "x+": Initializes each qubit to (|0⟩ + |1⟩)/√2.
+            - "x-": Initializes each qubit to (|0⟩ - |1⟩)/√2.
+            - "y+": Initializes each qubit to (|0⟩ + i|1⟩)/√2.
+            - "y-": Initializes each qubit to (|0⟩ - i|1⟩)/√2.
+            - "Neel": Alternating pattern |0101...⟩.
+            - "wall": Domain wall at given site |000111>
+            - "random": Initializes each qubit randomly.
+            Default is "zeros".
 
-        Methods:
-        __init__(length: int, tensors: list[NDArray[np.complex128]] | None = None,
-                 physical_dimensions: list[int] | None = None, state: str = "zeros") -> None:
-            Initializes the MPS with given length, tensors, physical dimensions, and initial state.
-        write_max_bond_dim() -> int:
-            Returns the maximum bond dimension in the MPS.
-        flip_network() -> None:
-            Flips the bond dimensions in the network to allow operations from right to left.
-        shift_orthogonality_center_right(current_orthogonality_center: int) -> None:
-            Left and right normalizes the MPS around a selected site, shifting the orthogonality center to the right.
-        shift_orthogonality_center_left(current_orthogonality_center: int) -> None:
-            Left and right normalizes the MPS around a selected site, shifting the orthogonality center to the left.
-        set_canonical_form(orthogonality_center: int) -> None:
-            Left and right normalizes the MPS around a selected site to set it in canonical form.
-        normalize(form: str = "B") -> None:
-            Normalizes the MPS in the specified form.
-        measure(observable: Observable) -> np.float64:
-            Measures the expectation value of an observable at a specified site.
-        norm(site: int | None = None) -> np.float64:
-            Computes the norm of the MPS, optionally at a specified site.
-        write_tensor_shapes() -> None:
-            Writes the shapes of the tensors in the MPS.
-        check_if_valid_MPS() -> None:
-            Checks if the MPS is valid by verifying bond dimensions.
-        check_canonical_form() -> list[int]:
-            Checks the canonical form of the MPS and returns the orthogonality center(s).
-        """
+        Raises:
+        ------
+        AssertionError
+            If `tensors` is provided and its length does not match `length`.
+        ValueError
+            If the provided `state` parameter does not match any valid initialization string.
+        """  # noqa: DOC501
         self.flipped = False
         if tensors is not None:
             assert len(tensors) == length
@@ -145,7 +178,9 @@ class MPS:
                 self.normalize()
 
     def write_max_bond_dim(self) -> int:
-        """Calculate and return the maximum bond dimension of the tensors in the network.
+        """Write max bond dim.
+
+        Calculate and return the maximum bond dimension of the tensors in the network.
         This method iterates over all tensors in the network and determines the maximum
         bond dimension by comparing the first and third dimensions of each tensor's shape.
         The global maximum bond dimension is then returned.
@@ -161,14 +196,11 @@ class MPS:
         return global_max
 
     def flip_network(self) -> None:
-        """Flips the bond dimensions in the network so that we can do operations
-            from right to left.
+        """Flip MPS.
 
-        Args:
-            MPS: list of rank-3 tensors
-        Returns:
-            new_MPS: list of rank-3 tensors with bond dimensions reversed
-                    and sites reversed compared to input MPS
+        Flips the bond dimensions in the network so that we can do operations
+        from right to left rather than coding it twice.
+
         """
         new_tensors = []
         for tensor in self.tensors:
@@ -178,16 +210,15 @@ class MPS:
         new_tensors.reverse()
         self.tensors = new_tensors
         self.flipped = not self.flipped
-        # self.orthogonality_center = self.length+1-self.orthogonality_center
 
     def shift_orthogonality_center_right(self, current_orthogonality_center: int) -> None:
-        """Left and right normalizes an MPS around a selected site.
+        """Shifts orthogonality center right.
+
+        This function performs a QR decomposition to shift the known current center to the right and move
+        the canonical form. This is essential for maintaining efficient tensor network algorithms.
 
         Args:
-            MPS: list of rank-3 tensors with a physical dimension d^2
-            selected_site: site of matrix M around which we normalize
-        Returns:
-            new_MPS: list of rank-3 tensors at each site
+            current_orthogonality_center (int): current center
         """
         tensor = self.tensors[current_orthogonality_center]
         old_dims = tensor.shape
@@ -203,25 +234,25 @@ class MPS:
             )
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int) -> None:
-        """Left and right normalizes an MPS around a selected site.
+        """Shifts orthogonality center left.
+
+        This function flips the network, performs a right shift, then flips the network again.
 
         Args:
-            MPS: list of rank-3 tensors with a physical dimension d^2
-            selected_site: site of matrix M around which we normalize
-        Returns:
-            new_MPS: list of rank-3 tensors at each site
+            current_orthogonality_center (int): current center
         """
         self.flip_network()
         self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1)
         self.flip_network()
 
     def set_canonical_form(self, orthogonality_center: int) -> None:
-        """Left and right normalizes an MPS around a selected site
+        """Sets canonical form of MPS.
+
+        Left and right normalizes an MPS around a selected site.
+        NOTE: Slow method compared to shifting based on known form and should be avoided.
+
         Args:
-            MPS: list of rank-3 tensors with a physical dimension d^2
-            selected_site: site of matrix M around which we normalize
-        Returns:
-            new_MPS: list of rank-3 tensors at each site.
+            orthogonality_center (int): site of matrix MPS around which we normalize
         """
 
         def sweep_decomposition(orthogonality_center: int) -> None:
@@ -237,17 +268,18 @@ class MPS:
         self.flip_network()
 
     def normalize(self, form: str = "B") -> None:
-        """Normalize the network to a specified form.
+        """Normalize MPS.
+
+        Normalize the network to a specified form.
         This method normalizes the network to the specified form. By default, it normalizes
         to form "B" (right canonical).
         The normalization process involves flipping the network, setting the canonical form with the
         orthogonality center at the last position, and shifting the orthogonality center to the rightmost position.
 
+        NOTE: Slow method compared to shifting based on known form and should be avoided.
+
         Args:
             form (str): The form to normalize the network to. Default is "B".
-
-        Returns:
-            None.
         """
         if form == "B":
             self.flip_network()
@@ -259,7 +291,9 @@ class MPS:
             self.flip_network()
 
     def measure(self, observable: Observable) -> np.float64:
-        """Measure the expectation value of a given observable.
+        """Measurement.
+
+        Measure the expectation value of a given observable.
 
         Parameters:
         observable (Observable): The observable to measure. It must have a 'site' attribute indicating
@@ -267,10 +301,6 @@ class MPS:
 
         Returns:
         np.float64: The real part of the expectation value of the observable.
-
-        Raises:
-        AssertionError: If the observable's site is out of range or if the imaginary part of the expectation value
-                        is not negligible.
         """
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
@@ -279,7 +309,9 @@ class MPS:
         return E.real
 
     def norm(self, site: int | None = None) -> np.float64:
-        """Calculate the norm of the state.
+        """Norm calculation.
+
+        Calculate the norm of the state.
 
         Parameters:
         site (int | None): The specific site to calculate the norm from. If None, the norm is calculated for
@@ -292,15 +324,14 @@ class MPS:
             return scalar_product(self, self, site).real
         return scalar_product(self, self).real
 
-    def check_if_valid_MPS(self) -> None:
-        """Check if the current tensor network is a valid Matrix Product State (MPS).
+    def check_if_valid_mps(self) -> None:
+        """MPS validity check.
+
+        Check if the current tensor network is a valid Matrix Product State (MPS).
 
         This method verifies that the bond dimensions between consecutive tensors
         in the network are consistent. Specifically, it checks that the second
         dimension of each tensor matches the third dimension of the previous tensor.
-
-        Raises:
-            AssertionError: If the bond dimensions between consecutive tensors do not match.
         """
         right_bond = self.tensors[0].shape[2]
         for tensor in self.tensors[1::]:
@@ -308,7 +339,8 @@ class MPS:
             right_bond = tensor.shape[2]
 
     def check_canonical_form(self) -> list[int]:
-        """ "
+        """Checks canonical form of MPS.
+
         Checks what canonical form a Matrix Product State (MPS) is in, if any.
         This method verifies if the MPS is in left-canonical form, right-canonical form, or mixed-canonical form.
         It returns a list indicating the canonical form status:
@@ -347,17 +379,17 @@ class MPS:
 
         if not (all(A_truth) and all(B_truth)):
             sites = []
-            for i, truth_value in enumerate(A_truth):
-                if truth_value:
+            for i, _truth_value in enumerate(A_truth):
+                if _truth_value:
                     sites.append(i)
                 else:
                     break
 
-            for i, truth_value in enumerate(B_truth[len(sites) :], start=len(sites)):
+            for i, _truth_value in enumerate(B_truth[len(sites) :], start=len(sites)):
                 sites.append(i)
             try:
                 return [sites.index(False)]
-            except:
+            except:  # noqa: E722
                 for i, value in enumerate(A_truth):
                     if not value:
                         return [i - 1, i]
@@ -368,6 +400,9 @@ class MPS:
 class MPO:
     """Class representing a Matrix Product Operator (MPO) for quantum many-body systems.
 
+    This class forms the basis of the MPS used in YAQS simulations.
+    The index order is (sigma, sigma', chi_l-1, chi_l).
+
     Methods.
     -------
     init_ising(length: int, J: float, g: float) -> None
@@ -376,18 +411,18 @@ class MPO:
         Initializes the MPO for the Heisenberg model with given parameters.
     init_identity(length: int, physical_dimension: int = 2) -> None
         Initializes the MPO as an identity operator.
-    init_custom_Hamiltonian(length: int, left_bound: NDArray[np.complex128],
+    init_custom_hamiltonian(length: int, left_bound: NDArray[np.complex128],
                             inner: NDArray[np.complex128], right_bound: NDArray[np.complex128]) -> None
         Initializes the MPO with custom Hamiltonian tensors.
     init_custom(tensors: list[NDArray[np.complex128]], transpose: bool = True) -> None
         Initializes the MPO with custom tensors.
-    convert_to_MPS() -> MPS
+    to_mps() -> MPS
         Converts the MPO to a Matrix Product State (MPS).
-    convert_to_matrix() -> NDArray[np.complex128]
+    to_matrix() -> NDArray[np.complex128]
         Converts the MPO to a full matrix representation.
     write_tensor_shapes() -> None
         Writes the shapes of the tensors in the MPO.
-    check_if_valid_MPO() -> bool
+    check_if_valid_mpo() -> bool
         Checks if the MPO is valid.
     check_if_identity(fidelity: float) -> bool
         Checks if the MPO represents an identity operator with given fidelity.
@@ -396,17 +431,27 @@ class MPO:
     """
 
     def init_ising(self, length: int, J: float, g: float) -> None:
-        """Initialize the Ising model as a Matrix Product Operator (MPO).
+        """Ising MPO.
+
+        Initialize the Ising model as a Matrix Product Operator (MPO).
         This method constructs the MPO representation of the Ising model with
         specified parameters. The MPO has a 3x3 block structure at each site.
+
+        Left boundary (1, 3, 2, 2)
+        [I, -J Z, -g X]
+
+        Inner tensor (3, 3, 2, 2)
+        W = [[ I,     -J Z,  -g X ],
+              [ 0,       0,     Z  ],
+              [ 0,       0,     I  ]]
+
+        Right boundary (3, 1, 2, 2)
+        [I, -J Z, -g X]
 
         Args:
             length (int): The number of sites in the Ising chain.
             J (float): The coupling constant for the Z interaction.
             g (float): The coupling constant for the X interaction.
-
-        Returns:
-            None.
         """
         physical_dimension = 2
         np.zeros((physical_dimension, physical_dimension), dtype=complex)
@@ -414,13 +459,6 @@ class MPO:
         X = GateLibrary.x().matrix
         Z = GateLibrary.z().matrix
 
-        # The MPO has a 3x3 block structure at each site:
-        # W = [[ I,     -J Z,  -g X ],
-        #      [ 0,       0,     Z  ],
-        #      [ 0,       0,     I  ]]
-
-        # Left boundary (1x3 block) selects the top row of W:
-        # [I, -J Z, -g X]
         left_bound = np.array([identity, -J * Z, -g * X])[np.newaxis, :]
 
         # Inner tensors (3x3 block):
@@ -431,14 +469,9 @@ class MPO:
         inner[1, 2] = Z
         inner[2, 2] = identity
 
-        # Right boundary (3x1 block) selects the last column:
-        # [ -g X, Z, I ]^T but we only take the operators that appear there.
-        # Actually, at the right boundary we just pick out the last column:
-        # (top row: -g X, second row: Z, third row: I)
         right_bound = np.array([[-g * X], [Z], [identity]])
 
         # Construct the MPO as a list of tensors:
-        # Left boundary, (length-2)*inner, right boundary
         self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
         for i, tensor in enumerate(self.tensors):
             # left, right, sigma, sigma'
@@ -448,15 +481,29 @@ class MPO:
         self.physical_dimension = physical_dimension
 
     def init_heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:
-        """Initialize the Heisenberg model as a Matrix Product Operator (MPO).
+        """Heisenberg MPO.
+
+        Initialize the Heisenberg model as a Matrix Product Operator (MPO).
+
+        Left boundary: shape (1, 5, d, d)
+        [I, Jx*X, Jy*Y, Jz*Z, h*Z]
+
+        Inner tensor: shape (5, 5, d, d)
+        W = [[ I,    Jx*X,  Jy*Y,  Jz*Z,   h*Z ],
+              [ 0,     0,     0,     0,     X  ],
+              [ 0,     0,     0,     0,     Y  ],
+              [ 0,     0,     0,     0,     Z  ],
+              [ 0,     0,     0,     0,     I  ]]
+
+        Right boundary: shape (5, 1, d, d)
+        [0, X, Y, Z, I]^T
+
         Parameters:
         length (int): The number of sites in the chain.
         Jx (float): The coupling constant for the X interaction.
         Jy (float): The coupling constant for the Y interaction.
         Jz (float): The coupling constant for the Z interaction.
         h (float): The magnetic field strength.
-
-        .
         """
         physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
@@ -465,16 +512,7 @@ class MPO:
         Y = GateLibrary.y().matrix
         Z = GateLibrary.z().matrix
 
-        # Left boundary: shape (1,5, d, d)
-        # [I, Jx*X, Jy*Y, Jz*Z, h*Z]
         left_bound = np.array([identity, -Jx * X, -Jy * Y, -Jz * Z, -h * Z])[np.newaxis, :]
-
-        # Inner tensor: shape (5,5, d, d)
-        # W = [[ I,    Jx*X,  Jy*Y,  Jz*Z,   h*Z ],
-        #      [ 0,     0,     0,     0,     X  ],
-        #      [ 0,     0,     0,     0,     Y  ],
-        #      [ 0,     0,     0,     0,     Z  ],
-        #      [ 0,     0,     0,     0,     I  ]]
 
         inner = np.zeros((5, 5, physical_dimension, physical_dimension), dtype=complex)
         inner[0, 0] = identity
@@ -487,8 +525,6 @@ class MPO:
         inner[3, 4] = Z
         inner[4, 4] = identity
 
-        # Right boundary: shape (5,1, d, d)
-        # [0, X, Y, Z, I]^T
         right_bound = np.array([zero, X, Y, Z, identity])[:, np.newaxis]
 
         # Construct the MPO
@@ -500,12 +536,12 @@ class MPO:
         self.physical_dimension = physical_dimension
 
     def init_identity(self, length: int, physical_dimension: int = 2) -> None:
-        """Initializes the network with identity matrices.
+        """Initialize identity MPO.
+
+        Initializes the network with identity matrices.
         Parameters:
         length (int): The number of identity matrices to initialize.
         physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
-
-        .
         """
         M = np.eye(2)
         M = np.expand_dims(M, (2, 3))
@@ -516,14 +552,16 @@ class MPO:
         for _ in range(length):
             self.tensors.append(M)
 
-    def init_custom_Hamiltonian(
+    def init_custom_hamiltonian(
         self,
         length: int,
         left_bound: NDArray[np.complex128],
         inner: NDArray[np.complex128],
         right_bound: NDArray[np.complex128],
     ) -> None:
-        """Initialize a custom Hamiltonian as a Matrix Product Operator (MPO).
+        """Custom Hamiltonian from finite state machine MPO.
+
+        Initialize a custom Hamiltonian as a Matrix Product Operator (MPO).
         This method sets up the Hamiltonian using the provided boundary and inner tensors.
         The tensors are transposed to match the expected shape for MPOs.
 
@@ -532,23 +570,19 @@ class MPO:
             left_bound (NDArray[np.complex128]): The tensor at the left boundary.
             inner (NDArray[np.complex128]): The tensor for the inner sites.
             right_bound (NDArray[np.complex128]): The tensor at the right boundary.
-
-        Raises:
-            AssertionError: If the MPO is initialized incorrectly.
-
-        Returns:
-            None.
         """
         self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
         for i, tensor in enumerate(self.tensors):
             # left, right, sigma, sigma'
             self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-        assert self.check_if_valid_MPO(), "MPO initialized wrong"
+        assert self.check_if_valid_mpo(), "MPO initialized wrong"
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def init_custom(self, tensors: list[NDArray[np.complex128]], transpose: bool = True) -> None:
-        """Initialize the custom MPO (Matrix Product Operator) with the given tensors.
+    def init_custom(self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True) -> None:
+        """Custom MPO from tensors.
+
+        Initialize the custom MPO (Matrix Product Operator) with the given tensors.
         Parameters.
         ----------
         tensors : list[NDArray[np.complex128]]
@@ -571,12 +605,14 @@ class MPO:
             for i, tensor in enumerate(self.tensors):
                 # left, right, sigma, sigma'
                 self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-        assert self.check_if_valid_MPO(), "MPO initialized wrong"
+        assert self.check_if_valid_mpo(), "MPO initialized wrong"
         self.length = len(self.tensors)
         self.physical_dimension = tensors[0].shape[0]
 
-    def convert_to_MPS(self) -> MPS:
-        """Converts the current tensor network to a Matrix Product State (MPS) representation.
+    def to_mps(self) -> MPS:
+        """MPO to MPS conversion.
+
+        Converts the current tensor network to a Matrix Product State (MPS) representation.
         This method reshapes each tensor in the network from shape
         (dim1, dim2, dim3, dim4) to (dim1 * dim2, dim3, dim4) and
         returns a new MPS object with the converted tensors.
@@ -591,8 +627,10 @@ class MPO:
 
         return MPS(self.length, converted_tensors)
 
-    def convert_to_matrix(self) -> NDArray[np.complex128]:
-        """Converts a list of tensors into a matrix using Einstein summation convention.
+    def to_matrix(self) -> NDArray[np.complex128]:
+        """MPO to matrix conversion.
+
+        Converts a list of tensors into a matrix using Einstein summation convention.
         This method iterates over the list of tensors and performs tensor contractions
         using the Einstein summation convention (`oe.constrain`). The resulting tensor is
         then reshaped accordingly. The final matrix is squeezed to ensure the left and
@@ -613,8 +651,10 @@ class MPO:
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
 
-    def check_if_valid_MPO(self) -> bool:
-        """Check if the current tensor network is a valid Matrix Product Operator (MPO).
+    def check_if_valid_mpo(self) -> bool:
+        """MPO validity check.
+
+        Check if the current tensor network is a valid Matrix Product Operator (MPO).
         This method verifies the consistency of the bond dimensions between adjacent tensors
         in the network. Specifically, it checks that the right bond dimension of each tensor
         matches the left bond dimension of the subsequent tensor.
@@ -629,7 +669,9 @@ class MPO:
         return True
 
     def check_if_identity(self, fidelity: float) -> bool:
-        """Check if the current MPO (Matrix Product Operator) represents an identity operation
+        """MPO Identity check.
+
+        Check if the current MPO (Matrix Product Operator) represents an identity operation
         within a given fidelity threshold.
 
         Args:
@@ -641,15 +683,17 @@ class MPO:
         identity_MPO = MPO()
         identity_MPO.init_identity(self.length)
 
-        identity_MPS = identity_MPO.convert_to_MPS()
-        MPS = self.convert_to_MPS()
+        identity_MPS = identity_MPO.to_mps()
+        MPS = self.to_mps()
         trace = scalar_product(MPS, identity_MPS)
 
         # Checks if trace is not a singular values for partial trace
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
 
-    def rotate(self, conjugate: bool = False) -> None:
-        """Rotates the tensors in the network by flipping the physical dimensions.
+    def rotate(self, *, conjugate: bool = False) -> None:
+        """Rotates MPO.
+
+        Rotates the tensors in the network by flipping the physical dimensions.
         This method transposes each tensor in the network along specified axes.
         If the `conjugate` parameter is set to True, it also takes the complex
         conjugate of each tensor before transposing.
@@ -657,11 +701,9 @@ class MPO:
         Args:
             conjugate (bool): If True, take the complex conjugate of each tensor
                               before transposing. Default is False.
-
-        Returns:
-            None.
         """
         for i, tensor in enumerate(self.tensors):
             if conjugate:
-                tensor = np.conj(tensor)
-            self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
+                self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
+            else:
+                self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))

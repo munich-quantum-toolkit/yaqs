@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-""" Library of useful quantum circuits
+"""Library of useful quantum circuits.
 
 This module provides functions for creating quantum circuits that simulate
 the dynamics of the Ising and Heisenberg models. The functions create_ising_circuit
