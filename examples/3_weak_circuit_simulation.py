@@ -5,8 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""
-Example: Weak Quantum Circuit Simulation (Shots) with YAQS
+"""Example: Weak Quantum Circuit Simulation (Shots) with YAQS.
 
 This module demonstrates how to run a weak simulation using the YAQS Simulator
 with a TwoLocal circuit generated via Qiskit's circuit library. An MPS is initialized
@@ -21,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import copy
+
 import matplotlib.pyplot as plt
 import numpy as np
 from qiskit.circuit.library.n_local import TwoLocal
@@ -29,7 +29,6 @@ from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
-
 
 if __name__ == "__main__":
     num_qubits = 10
