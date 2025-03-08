@@ -21,7 +21,7 @@ from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO, MPS
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.dynamic_tdvp import dynamic_TDVP
+from ..core.methods.dynamic_tdvp import dynamic_tdvp
 from ..core.methods.operations import measure
 from ..core.methods.stochastic_process import stochastic_process
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
@@ -190,12 +190,12 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
     if sim_params.window_size is not None:
         short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, sim_params)
-        dynamic_TDVP(short_state, short_mpo, sim_params)
+        dynamic_tdvp(short_state, short_mpo, sim_params)
         # Replace the updated tensors back into the full state.
         for i in range(window[0], window[1] + 1):
             state.tensors[i] = short_state.tensors[i - window[0]]
     else:
-        dynamic_TDVP(state, mpo, sim_params)
+        dynamic_tdvp(state, mpo, sim_params)
 
 
 def circuit_tjm(

@@ -13,7 +13,7 @@ first and second order evolution schemes, with and without timestep sampling.
 The tests cover:
   - Initialization: Ensuring that a half time step of dissipation followed by a stochastic process
     is correctly applied to the initial state.
-  - Step-through evolution: Verifying that dynamic_TDVP, apply_dissipation, and stochastic_process
+  - Step-through evolution: Verifying that dynamic_tdvp, apply_dissipation, and stochastic_process
     are called with the proper arguments during a single time step.
   - Physics simulation (order=2): Checking the shape of the results when running a second order evolution,
     with and without sampling timesteps.
@@ -53,8 +53,8 @@ def test_initialize() -> None:
         measurements, T=0.2, dt=0.2, sample_timesteps=False, N=1, max_bond_dim=2, threshold=1e-6, order=1
     )
     with (
-        patch("mqt.yaqs.physics.PhysicsTJM.apply_dissipation") as mock_dissipation,
-        patch("mqt.yaqs.physics.PhysicsTJM.stochastic_process") as mock_stochastic_process,
+        patch("mqt.yaqs.physics.physics_tjm.apply_dissipation") as mock_dissipation,
+        patch("mqt.yaqs.physics.physics_tjm.stochastic_process") as mock_stochastic_process,
     ):
         initialize(state, noise_model, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt / 2)
@@ -62,11 +62,11 @@ def test_initialize() -> None:
 
 
 def test_step_through() -> None:
-    """Test that step_through calls dynamic_TDVP, apply_dissipation, and stochastic_process with correct arguments.
+    """Test that step_through calls dynamic_tdvp, apply_dissipation, and stochastic_process with correct arguments.
 
     This test creates an Ising MPO and an MPS of length 5, along with a minimal NoiseModel and PhysicsSimParams.
-    It patches dynamic_TDVP, apply_dissipation, and stochastic_process to ensure that step_through calls each of them
-    correctly: dynamic_TDVP should be called with the state, H, and sim_params, and both apply_dissipation and
+    It patches dynamic_tdvp, apply_dissipation, and stochastic_process to ensure that step_through calls each of them
+    correctly: dynamic_tdvp should be called with the state, H, and sim_params, and both apply_dissipation and
     stochastic_process should be called with dt.
     """
     L = 5
@@ -81,12 +81,12 @@ def test_step_through() -> None:
         measurements, T=0.2, dt=0.2, sample_timesteps=False, N=1, max_bond_dim=2, threshold=1e-6, order=1
     )
     with (
-        patch("mqt.yaqs.physics.PhysicsTJM.dynamic_TDVP") as mock_dynamic_TDVP,
-        patch("mqt.yaqs.physics.PhysicsTJM.apply_dissipation") as mock_dissipation,
-        patch("mqt.yaqs.physics.PhysicsTJM.stochastic_process") as mock_stochastic_process,
+        patch("mqt.yaqs.physics.physics_tjm.dynamic_tdvp") as mock_dynamic_tdvp,
+        patch("mqt.yaqs.physics.physics_tjm.apply_dissipation") as mock_dissipation,
+        patch("mqt.yaqs.physics.physics_tjm.stochastic_process") as mock_stochastic_process,
     ):
         step_through(state, H, noise_model, sim_params)
-        mock_dynamic_TDVP(state, H, sim_params)
+        mock_dynamic_tdvp(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt)
 

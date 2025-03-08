@@ -17,9 +17,9 @@ from mqt.yaqs.core.methods.tdvp import (
     merge_mps_tensors,
     project_bond,
     project_site,
-    single_site_TDVP,
+    single_site_tdvp,
     split_mps_tensor,
-    two_site_TDVP,
+    two_site_tdvp,
     update_bond,
     update_left_environment,
     update_right_environment,
@@ -196,7 +196,7 @@ def test_single_site_TDVP() -> None:
     sim_params = PhysicsSimParams(
         measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
     )
-    single_site_TDVP(state, H, sim_params, numiter_lanczos=5)
+    single_site_tdvp(state, H, sim_params, numiter_lanczos=5)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -223,7 +223,7 @@ def test_two_site_TDVP() -> None:
     sim_params = PhysicsSimParams(
         measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
     )
-    two_site_TDVP(state, H, sim_params, numiter_lanczos=5)
+    two_site_tdvp(state, H, sim_params, numiter_lanczos=5)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)

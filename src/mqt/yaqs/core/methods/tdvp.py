@@ -331,7 +331,7 @@ def update_bond(
     return evolved_C_flat.reshape(C.shape)
 
 
-def single_site_TDVP(
+def single_site_tdvp(
     state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams, numiter_lanczos: int = 25
 ) -> None:
     """Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
@@ -422,7 +422,7 @@ def single_site_TDVP(
         )
 
 
-def two_site_TDVP(
+def two_site_tdvp(
     state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams, numiter_lanczos: int = 25
 ) -> None:
     """Perform symmetric two-site TDVP integration.

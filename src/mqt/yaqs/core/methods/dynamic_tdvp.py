@@ -17,14 +17,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .tdvp import single_site_TDVP, two_site_TDVP
+from .tdvp import single_site_tdvp, two_site_tdvp
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS
     from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 
-def dynamic_TDVP(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
+def dynamic_tdvp(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
     """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 
     This function evolves the state by choosing between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP)
@@ -44,7 +44,7 @@ def dynamic_TDVP(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimPar
     # state.normalize('B')
     if current_max_bond_dim <= sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
-        two_site_TDVP(state, H, sim_params)
+        two_site_tdvp(state, H, sim_params)
     else:
         # Perform 1TDVP when the bond dimension exceeds the allowed limit
-        single_site_TDVP(state, H, sim_params)
+        single_site_tdvp(state, H, sim_params)

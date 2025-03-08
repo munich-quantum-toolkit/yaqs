@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.dynamic_tdvp import dynamic_TDVP
+from ..core.methods.dynamic_tdvp import dynamic_tdvp
 from ..core.methods.stochastic_process import stochastic_process
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params:
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    dynamic_TDVP(state, H, sim_params)
+    dynamic_tdvp(state, H, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
     return stochastic_process(state, noise_model, sim_params.dt)
 
@@ -89,7 +89,7 @@ def sample(
 
     """
     psi = copy.deepcopy(phi)
-    dynamic_TDVP(psi, H, sim_params)
+    dynamic_tdvp(psi, H, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
     if sim_params.sample_timesteps:
@@ -186,7 +186,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
             results[obs_index, 0] = copy.deepcopy(state).measure(observable)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
-        dynamic_TDVP(state, H, sim_params)
+        dynamic_tdvp(state, H, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
