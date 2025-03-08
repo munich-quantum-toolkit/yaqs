@@ -5,6 +5,9 @@
 #
 # Licensed under the MIT License
 
+"Yet Another Quantum Simulator (YAQS), a part of the Munich Quantum Toolkit (MQT), is a package to faciliate simulation "
+"for the exploration of noise in quantum systems."
+
 from __future__ import annotations
 
 from ._version import version as __version__

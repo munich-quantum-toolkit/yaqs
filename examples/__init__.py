@@ -4,3 +4,5 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
+"Examples for the usage of YAQS features."
