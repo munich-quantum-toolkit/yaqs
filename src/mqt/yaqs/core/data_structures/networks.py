@@ -22,7 +22,6 @@ import numpy as np
 import opt_einsum as oe
 
 from ..libraries.observables_library import ObservablesLibrary
-from ..methods.operations import local_expval, scalar_product
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -303,6 +302,8 @@ class MPS:
         Returns:
         np.float64: The real part of the expectation value of the observable.
         """
+        from ..methods.operations import local_expval
+
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
         E = local_expval(copy.deepcopy(self), ObservablesLibrary[observable.name], observable.site)
@@ -321,6 +322,8 @@ class MPS:
         Returns:
         np.float64: The norm of the state or the specified site.
         """
+        from ..methods.operations import scalar_product
+
         if site is not None:
             return scalar_product(self, self, site).real
         return scalar_product(self, self).real
@@ -679,6 +682,8 @@ class MPO:
         Returns:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
+        from ..methods.operations import scalar_product
+
         identity_MPO = MPO()
         identity_MPO.init_identity(self.length)
 
