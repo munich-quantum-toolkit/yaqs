@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module defines the NoiseModel class, which represents a noise model in a quantum system.
+""" Noise Models
+
+This module defines the NoiseModel class, which represents a noise model in a quantum system.
 It stores a list of noise processes and their corresponding strengths, and automatically retrieves
 the associated jump operator matrices from the NoiseLibrary. These jump operators are used to simulate
 the effects of noise in quantum simulations.

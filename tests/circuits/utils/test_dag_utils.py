@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module contains unit tests for the DAG utility functions used in the conversion and processing
+""" Tests for the DAG utility functions.
+
+This module contains unit tests for the DAG utility functions used in the conversion and processing
 of quantum circuits. It verifies that the functions correctly extract gate operations from a DAGCircuit,
 group nodes into single-qubit and two-qubit (even/odd) categories, ignore unsupported operations (such as
 measure and barrier), and compute properties like the longest gate distance and appropriate starting point

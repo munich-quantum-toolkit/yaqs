@@ -5,6 +5,21 @@
 #
 # Licensed under the MIT License
 
+"""Tests for the Dissipation module in YAQS.
+
+This module provides tests for verifying the correctness of dissipation processes
+applied to Matrix Product States (MPS) via the `apply_dissipation` method.
+
+The tests ensure:
+- Dissipation correctly modifies the canonical form of MPS, specifically shifting
+the orthogonality center as expected.
+- Correct behavior when applying simple noise models (e.g., relaxation processes)
+with given strengths and small time steps.
+
+These tests validate the functionality and correctness of dissipation handling
+in quantum simulations performed using the YAQS framework.
+"""
+
 from __future__ import annotations
 
 from unittest.mock import patch

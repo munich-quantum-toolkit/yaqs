@@ -5,6 +5,20 @@
 #
 # Licensed under the MIT License
 
+"""Tests for Krylov subspace methods used for matrix exponential calculations.
+
+This module provides unit tests for the internal functions `_lanczos_iteration` and `expm_krylov`,
+which are utilized in YAQS for efficient computation of matrix exponentials.
+
+The tests verify that:
+- The Lanczos iteration correctly generates orthonormal bases and respects expected shapes.
+- Early termination of the Lanczos iteration occurs appropriately when convergence conditions are met.
+- Krylov subspace approximations to matrix exponentials match exact computations when the subspace dimension
+  equals the full space, and remain within acceptable error bounds for smaller subspace dimensions.
+
+These tests ensure reliable numerical behavior and accuracy of Krylov-based algorithms within YAQS.
+"""
+
 from __future__ import annotations
 
 import numpy as np

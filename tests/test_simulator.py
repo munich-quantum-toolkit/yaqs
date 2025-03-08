@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Unit tests for the simulator module in YAQS.
+"""Tests for the simulator module in YAQS.
 
 This module verifies the functionality of the simulator by testing both physics (Hamiltonian)
 and circuit simulation branches. It includes tests for identity circuits, two-qubit operations,

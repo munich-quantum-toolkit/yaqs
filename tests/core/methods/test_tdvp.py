@@ -5,6 +5,23 @@
 #
 # Licensed under the MIT License
 
+"""Tests for Time-Dependent Variational Principle (TDVP) methods in YAQS.
+
+This module contains unit tests for verifying various components of TDVP-based methods,
+including:
+
+- Tensor decomposition (splitting and merging) routines for Matrix Product States (MPS) and Matrix Product Operators (MPO).
+- Environment updates (left and right) and projection routines essential to efficient TDVP implementations.
+- Single-site and two-site TDVP algorithms for evolving quantum states under given Hamiltonians.
+
+The tests ensure that:
+- Tensor reshaping and decomposition operations maintain numerical accuracy.
+- Environment tensors are updated with correct shapes and dimensions.
+- TDVP routines yield canonical MPS states with the correct orthogonality center.
+
+These tests confirm the correctness and stability of TDVP-based simulations within the YAQS framework.
+"""
+
 from __future__ import annotations
 
 import numpy as np

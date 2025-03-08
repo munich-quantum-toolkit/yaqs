@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+"Tests for the Dissipation module."
+
 from __future__ import annotations
 
 import numpy as np

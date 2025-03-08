@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module provides unit tests for the equivalence checker implemented in
+""" Tests for MPO-based equivalence checking implementation
+
+This module provides unit tests for the equivalence checker implemented in
 mqt.yaqs.circuits.equivalence_checker. It verifies the correctness of the
 MPO-based equivalence algorithm by comparing quantum circuits. Tests include
 checks for:

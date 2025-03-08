@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module provides unit tests for the CircuitTJM functionality.
+""" Tests for the circuuit tensor jump method implementation
+
+This module provides unit tests for the CircuitTJM functionality.
 The tests verify that various components of the CircuitTJM implementation work correctly,
 including:
   - Grouping and processing of DAG layers for single-qubit and two-qubit gates.

@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module defines noise operator classes for quantum systems.
+""" Library of noise processes
+
+This module defines noise operator classes for quantum systems.
 It includes implementations for excitation, relaxation, and dephasing noise operators,
 each represented as a 2x2 numpy array. The module also provides a NoiseLibrary class
 that aggregates these noise operators for convenient access. Future improvements

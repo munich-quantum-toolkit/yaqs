@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module provides classes for representing observables and simulation parameters
+""" Simulation Parameters for each type of simulation allowed in YAQS
+
+This module provides classes for representing observables and simulation parameters
 for quantum simulations. It defines the Observable class for measurement, as well as
 the PhysicsSimParams, WeakSimParams, and StrongSimParams classes for configuring simulation
 runs. These classes encapsulate settings such as simulation time, time steps, bond dimension limits,

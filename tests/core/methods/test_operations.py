@@ -5,6 +5,20 @@
 #
 # Licensed under the MIT License
 
+"""Tests for basic quantum operations on Matrix Product States (MPS).
+
+This module contains tests verifying fundamental operations on Matrix Product States (MPS)
+implemented in YAQS. Specifically, it tests:
+
+- Scalar products between MPS, including cases of identical states, orthogonal states,
+  and partial scalar products at specified sites.
+- Calculation of local expectation values for common quantum observables (Pauli X and Z)
+  on standard quantum states (|0>, |1>, |+>).
+- Quantum measurements (single-shot and multi-shot) on MPS representations of simple product states.
+
+These tests ensure correctness and reliability of basic quantum operations within YAQS.
+"""
+
 from __future__ import annotations
 
 import numpy as np

@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module provides unit tests for the physics simulation functions implemented in the
+""" Tests for the Hamiltonian simulation with the Tensor Jump Method
+
+This module provides unit tests for the physics simulation functions implemented in the
 PhysicsTJM module. It verifies that the initialization and time evolution routines for
 the Tensor Jump Method (TJM) work as expected in various configurations, including both
 first and second order evolution schemes, with and without timestep sampling.

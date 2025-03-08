@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module contains unit tests for the MPO utility functions used in the equivalence checking framework.
+""" Tests for the MPO utility functions used in the equivalence checking framework.
+
+This module contains unit tests for the MPO utility functions used in the equivalence checking framework.
 It verifies the correct functionality of tensor operations including:
   - SVD-based splitting of MPS tensors (decompose_theta)
   - Gate application routines (apply_gate, apply_temporal_zone)

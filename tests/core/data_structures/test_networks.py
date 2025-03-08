@@ -5,7 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""This module provides unit tests for the Matrix Product State (MPS) class and its associated methods.
+""" Tests for network classes
+
+This module provides unit tests for the Matrix Product State (MPS) class and its associated methods.
 It verifies correct initialization, custom tensor assignment, bond dimension computation, network flipping,
 orthogonality center shifting, normalization, observable measurement, and overall validity of MPS objects.
 These tests ensure that the MPS class functions as expected in various simulation scenarios.
