@@ -114,7 +114,8 @@ def measure_single_shot(state: MPS) -> int:
         # Propagate the measurement to the next site.
         if site != state.length - 1:
             temp_state.tensors[site + 1] = (  # noqa: B909
-                1 / np.sqrt(probabilities[chosen_index])
+                1
+                / np.sqrt(probabilities[chosen_index])
                 * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])
             )
     return sum(c << i for i, c in enumerate(bitstring))
