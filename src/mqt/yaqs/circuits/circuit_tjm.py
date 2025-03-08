@@ -114,8 +114,6 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
     """
     tensors = []
 
-    first_site = min(gate.sites)
-    last_site = max(gate.sites)
     if gate.sites[0] < gate.sites[1]:
         first_gen = 0
         second_gen = 1
@@ -228,13 +226,10 @@ def circuit_tjm(
         are the measured observables.
         If WeakSimParams are used, the results are the measurement outcomes for each shot.
     """
-    from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+    from ..core.data_structures.simulation_parameters import WeakSimParams
 
     _i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
-
-    if isinstance(sim_params, StrongSimParams):
-        results = np.zeros((len(sim_params.observables), 1))
 
     dag = circuit_to_dag(circuit)
 
@@ -261,6 +256,7 @@ def circuit_tjm(
         # Each shot is an individual trajectory
         return measure(state, shots=1)
     # StrongSimParams
+    results = np.zeros((len(sim_params.observables), 1))
     temp_state = copy.deepcopy(state)
     last_site = 0
     for obs_index, observable in enumerate(sim_params.sorted_observables):
