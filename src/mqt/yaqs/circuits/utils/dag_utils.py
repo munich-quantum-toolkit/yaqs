@@ -1,5 +1,4 @@
 # Copyright (c) 2025 Chair for Design Automation, TUM
-
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -15,7 +14,6 @@ It provides utilities to:
 
 These functions facilitate the manipulation and analysis of quantum circuit representations.
 """
-
 
 from __future__ import annotations
 

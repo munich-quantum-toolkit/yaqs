@@ -12,7 +12,6 @@ metrics (absolute error and runtime) are computed correctly and that the generat
 performance of the approximate simulation methods.
 """
 
-
 from __future__ import annotations
 
 import copy
