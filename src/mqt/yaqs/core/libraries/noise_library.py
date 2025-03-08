@@ -22,6 +22,7 @@ class Excitation:
     Todo:
         Extend the implementation to d-level systems.
     """
+
     d = 2
     matrix = np.zeros((d, d))
     for row, array in enumerate(matrix):
@@ -41,6 +42,7 @@ class Relaxation:
     Todo:
         Extend the implementation to d-level systems.
     """
+
     d = 2
     matrix = np.zeros((d, d))
     for row, array in enumerate(matrix):
@@ -56,6 +58,7 @@ class Dephasing:
         matrix (np.ndarray): A 2x2 matrix representing the dephasing operator,
             defined as [[1, 0], [0, -1]].
     """
+
     matrix = np.array([[1, 0], [0, -1]])
 
 
@@ -67,6 +70,7 @@ class NoiseLibrary:
         relaxation: Class representing the relaxation noise operator.
         dephasing: Class representing the dephasing noise operator.
     """
+
     excitation = Excitation
     relaxation = Relaxation
     dephasing = Dephasing

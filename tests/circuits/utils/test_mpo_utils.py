@@ -55,10 +55,7 @@ def random_theta_8d() -> NDArray[np.float64]:
 
 
 def approximate_reconstruction(
-    U: NDArray[np.float64],
-    M: NDArray[np.float64],
-    original: NDArray[np.float64],
-    atol: float = 1e-10
+    U: NDArray[np.float64], M: NDArray[np.float64], original: NDArray[np.float64], atol: float = 1e-10
 ) -> None:
     """Check if the decomposition U * diag(S) * V (reconstructed from U and M)
     approximates 'original' within a given tolerance.
@@ -78,10 +75,7 @@ def approximate_reconstruction(
     dims = original.shape
     # Reorder original to match the permutation used in decompose_theta: (0,3,2,1,4,5)
     original_reordered = np.transpose(original, (0, 3, 2, 1, 4, 5))
-    original_mat = np.reshape(
-        original_reordered,
-        (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5])
-    )
+    original_mat = np.reshape(original_reordered, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
 
     # Rebuild from U and M
     rank = U.shape[-1]
@@ -97,6 +91,7 @@ def approximate_reconstruction(
 ##############################################################################
 # Tests
 ##############################################################################
+
 
 def test_decompose_theta() -> None:
     """Test the SVD-based decomposition of a 6D tensor using decompose_theta.

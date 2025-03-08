@@ -46,6 +46,7 @@ def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex1
 # Tests for the MPO class
 ##############################################################################
 
+
 def test_init_Ising() -> None:
     """Test that init_Ising creates the correct MPO for the Ising model.
 
@@ -311,6 +312,7 @@ def test_check_if_identity() -> None:
 ##############################################################################
 # Tests for the MPS class
 ##############################################################################
+
 
 @pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall"])
 def test_mps_initialization(state: str) -> None:

@@ -296,7 +296,7 @@ class MPS:
             right_bond = tensor.shape[2]
 
     def check_canonical_form(self) -> list[int]:
-        """"
+        """ "
         Checks what canonical form a Matrix Product State (MPS) is in, if any.
         This method verifies if the MPS is in left-canonical form, right-canonical form, or mixed-canonical form.
         It returns a list indicating the canonical form status:
@@ -381,6 +381,7 @@ class MPO:
     rotate(conjugate: bool = False) -> None
         Rotates the MPO tensors by swapping physical dimensions.
     """
+
     def init_Ising(self, length: int, J: float, g: float) -> None:
         """Initialize the Ising model as a Matrix Product Operator (MPO).
         This method constructs the MPO representation of the Ising model with
@@ -582,7 +583,7 @@ class MPO:
     def convert_to_matrix(self) -> NDArray[np.complex128]:
         """Converts a list of tensors into a matrix using Einstein summation convention.
         This method iterates over the list of tensors and performs tensor contractions
-        using the Einstein summation convention (`oe.contrain`). The resulting tensor is
+        using the Einstein summation convention (`oe.constrain`). The resulting tensor is
         then reshaped accordingly. The final matrix is squeezed to ensure the left and
         right bonds are 1.
 
