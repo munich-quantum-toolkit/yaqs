@@ -28,6 +28,7 @@ def _run_strong_sim(
     operator: QuantumCircuit,
     sim_params: StrongSimParams,
     noise_model: NoiseModel | None,
+    *,
     parallel: bool,
 ) -> None:
     from mqt.yaqs.circuits.CircuitTJM import CircuitTJM
@@ -67,6 +68,7 @@ def _run_weak_sim(
     operator: QuantumCircuit,
     sim_params: WeakSimParams,
     noise_model: NoiseModel | None,
+    *,
     parallel: bool,
 ) -> None:
     from mqt.yaqs.circuits.CircuitTJM import CircuitTJM
@@ -102,19 +104,20 @@ def _run_circuit(
     operator: QuantumCircuit,
     sim_params: WeakSimParams | StrongSimParams,
     noise_model: NoiseModel | None,
+    *,
     parallel: bool,
 ) -> None:
     assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
     operator = copy.deepcopy(operator.reverse_bits())
 
     if isinstance(sim_params, StrongSimParams):
-        _run_strong_sim(initial_state, operator, sim_params, noise_model, parallel)
+        _run_strong_sim(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, WeakSimParams):
-        _run_weak_sim(initial_state, operator, sim_params, noise_model, parallel)
+        _run_weak_sim(initial_state, operator, sim_params, noise_model, parallel=parallel)
 
 
 def _run_physics(
-    initial_state: MPS, operator: MPO, sim_params: PhysicsSimParams, noise_model: NoiseModel | None, parallel: bool
+    initial_state: MPS, operator: MPO, sim_params: PhysicsSimParams, noise_model: NoiseModel | None, *, parallel: bool
 ) -> None:
     if sim_params.order == 1:
         from mqt.yaqs.physics.PhysicsTJM import PhysicsTJM_1
@@ -158,6 +161,7 @@ def run(
     operator: MPO | QuantumCircuit,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
     noise_model: NoiseModel | None,
+    *,
     parallel: bool = True,
 ) -> None:
     """Common simulation routine used by both circuit and Hamiltonian simulations.
@@ -169,7 +173,7 @@ def run(
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         assert isinstance(operator, QuantumCircuit)
-        _run_circuit(initial_state, operator, sim_params, noise_model, parallel)
+        _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, PhysicsSimParams):
         assert isinstance(operator, MPO)
-        _run_physics(initial_state, operator, sim_params, noise_model, parallel)
+        _run_physics(initial_state, operator, sim_params, noise_model, parallel=parallel)

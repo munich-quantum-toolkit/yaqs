@@ -59,7 +59,7 @@ def decompose_theta(
 
 
 def apply_gate(
-    gate: BaseGate, theta: NDArray[np.complex128], site0: int, site1: int, conjugate: bool = False
+    gate: BaseGate, theta: NDArray[np.complex128], site0: int, site1: int, *, conjugate: bool = False
 ) -> NDArray[np.complex128]:
     """Applies a single- or two-qubit gate (or multi-qubit gate) from a GateLibrary object
     to the local tensor `theta`.
@@ -140,7 +140,7 @@ def apply_gate(
 
 
 def apply_temporal_zone(
-    theta: NDArray[np.complex128], dag: DAGCircuit, qubits: list[int], conjugate: bool = False
+    theta: NDArray[np.complex128], dag: DAGCircuit, qubits: list[int], *, conjugate: bool = False
 ) -> NDArray[np.complex128]:
     """Applies the temporal zone of `dag` to a local tensor `theta`.
 
@@ -159,7 +159,7 @@ def apply_temporal_zone(
         tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
 
         for gate in tensor_circuit:
-            theta = apply_gate(gate, theta, n, n + 1, conjugate)
+            theta = apply_gate(gate, theta, n, n + 1, conjugate=conjugate)
     return theta
 
 
@@ -220,7 +220,7 @@ def apply_layer(
         update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
 
 
-def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, conjugate: bool, threshold: float) -> None:
+def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float, *, conjugate: bool) -> None:
     """Detects and applies a 'long-range' gate in the first layer of `dag1` (or `dag2`).
     The logic here is partial/placeholder; you must fill in or adjust for your use case.
 
@@ -371,4 +371,4 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> N
         else:
             # Handle a gate that is longer than 2 sites
             conjugate = largest_distance2 > largest_distance1
-            apply_long_range_layer(mpo, dag1, dag2, conjugate, threshold)
+            apply_long_range_layer(mpo, dag1, dag2, threshold, conjugate=conjugate)
