@@ -7,7 +7,7 @@
 
 """Example: Strong Quantum Circuit Simulation (Observable) with YAQS.
 
-This example demonstrates how to run a Hamiltonian simulation using the YAQS Simulator
+This example demonstrates how to run a Hamiltonian simulation using the YAQS simulator
 with an Ising model. An Ising circuit is created and an initial MPS is prepared
 in the |0⟩ state. A noise model is applied and simulation parameters (using StrongSimParams)
 are defined. The simulation is run for a range of noise strengths (gamma values), and the
@@ -22,7 +22,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
@@ -52,7 +52,7 @@ if __name__ == "__main__":
         # Define the noise model
         sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
         noise_model = NoiseModel(["relaxation"], [gamma])
-        Simulator.run(state, circuit, sim_params, noise_model)
+        simulator.run(state, circuit, sim_params, noise_model)
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results
 

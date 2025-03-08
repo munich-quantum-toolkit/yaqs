@@ -7,7 +7,7 @@
 
 """Example: Weak Quantum Circuit Simulation (Shots) with YAQS.
 
-This module demonstrates how to run a weak simulation using the YAQS Simulator
+This module demonstrates how to run a weak simulation using the YAQS simulator
 with a TwoLocal circuit generated via Qiskit's circuit library. An MPS is initialized
 in the |0> state, a noise model is applied, and weak simulation parameters are set.
 After running the simulation, the measurement results (bitstring counts) are displayed
@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from qiskit.circuit.library.n_local import TwoLocal
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
 
     # Run the simulation.
-    Simulator.run(state, circuit, sim_params, noise_model)
+    simulator.run(state, circuit, sim_params, noise_model)
 
     # Plot the measurement outcomes as a bar chart.
     plt.bar(sim_params.results.keys(), sim_params.results.values())

@@ -5,9 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""Unit tests for the Simulator module in YAQS.
+"""Unit tests for the simulator module in YAQS.
 
-This module verifies the functionality of the Simulator by testing both physics (Hamiltonian)
+This module verifies the functionality of the simulator by testing both physics (Hamiltonian)
 and circuit simulation branches. It includes tests for identity circuits, two-qubit operations,
 long-range gate handling, weak and strong simulation modes, and error cases such as mismatched
 qubit counts.
@@ -18,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import (
@@ -36,7 +36,7 @@ def test_physics_simulation() -> None:
     This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
     It also creates a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
     With PhysicsSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
-    Simulator.run is called. The test then verifies that for each observable the results and trajectories have been
+    simulator.run is called. The test then verifies that for each observable the results and trajectories have been
     correctly initialized and that the measurement results are approximately as expected.
     """
     length = 5
@@ -57,7 +57,7 @@ def test_physics_simulation() -> None:
     gamma = 0.1
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
-    Simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
+    simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
 
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
@@ -81,7 +81,7 @@ def test_strong_simulation() -> None:
 
     This test constructs an MPS of length 5 (initialized to "zeros") and an Ising circuit with a CX gate.
     It configures StrongSimParams with specified simulation parameters and a noise model (non-None).
-    Simulator.run is then called, and the test verifies that the observables' results and trajectories
+    simulator.run is then called, and the test verifies that the observables' results and trajectories
     are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
     """
     num_qubits = 5
@@ -101,7 +101,7 @@ def test_strong_simulation() -> None:
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
-    Simulator.run(state, circuit, sim_params, noise_model)
+    simulator.run(state, circuit, sim_params, noise_model)
 
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
@@ -125,7 +125,7 @@ def test_weak_simulation_noise() -> None:
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
     It sets up WeakSimParams with a specified number of shots, max bond dimension, threshold, and window size,
-    and a noise model with small strengths. After running Simulator.run, the test verifies that sim_params.N equals
+    and a noise model with small strengths. After running simulator.run, the test verifies that sim_params.N equals
     the number of shots, that each measurement is a dictionary, and that the total number of shots recorded in sim_params.results
     equals the expected number.
     """
@@ -143,7 +143,7 @@ def test_weak_simulation_noise() -> None:
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
-    Simulator.run(initial_state, circuit, sim_params, noise_model)
+    simulator.run(initial_state, circuit, sim_params, noise_model)
 
     assert shots == sim_params.N, "sim_params.N should be number of shots."
     for measurement in sim_params.measurements:
@@ -172,7 +172,7 @@ def test_weak_simulation_no_noise() -> None:
 
     noise_model = None
 
-    Simulator.run(initial_state, circuit, sim_params, noise_model)
+    simulator.run(initial_state, circuit, sim_params, noise_model)
 
     assert sim_params.N == 1, "sim_params.N should be 1 when noise model strengths are all zero."
     assert isinstance(sim_params.measurements[0], dict) and sim_params.measurements[1] is None, (
@@ -184,7 +184,7 @@ def test_weak_simulation_no_noise() -> None:
 
 
 def test_mismatch() -> None:
-    """Test that Simulator.run raises an AssertionError when the state and circuit qubit counts mismatch.
+    """Test that simulator.run raises an AssertionError when the state and circuit qubit counts mismatch.
 
     This test creates an MPS of length 5 and a circuit with length 4 (one fewer qubits),
     and verifies that an AssertionError with the appropriate message is raised.
@@ -203,4 +203,4 @@ def test_mismatch() -> None:
     noise_model = None
 
     with pytest.raises(AssertionError, match=r"State and circuit qubit counts do not match."):
-        Simulator.run(initial_state, circuit, sim_params, noise_model)
+        simulator.run(initial_state, circuit, sim_params, noise_model)

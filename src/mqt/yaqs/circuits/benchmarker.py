@@ -6,7 +6,7 @@
 # Licensed under the MIT License
 
 """This module provides tests for benchmarking an arbitrary quantum circuit using the Tensor Jump Method (TJM).
-The tests compare exact simulation results from Qiskit's AerSimulator with approximate simulations using various
+The tests compare exact simulation results from Qiskit's Aersimulator with approximate simulations using various
 simulation parameters such as maximum bond dimension, window size, and SVD threshold. It verifies that the simulation
 metrics (absolute error and runtime) are computed correctly and that the generated 3D plots accurately represent the
 performance of the approximate simulation methods.
@@ -23,9 +23,9 @@ import numpy as np
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.ticker import MaxNLocator
 from qiskit.quantum_info import Operator, Pauli, Statevector
-from qiskit_aer import AerSimulator
+from qiskit_aer import Aersimulator
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 
@@ -49,9 +49,9 @@ def run(
       window_sizes (list): List of window sizes to test.
       thresholds (list): List of SVD thresholds to test.
 
-    The function runs the circuit with a Qiskit AerSimulator to obtain the exact expectation
+    The function runs the circuit with a Qiskit Aersimulator to obtain the exact expectation
     value of a Pauli Z measurement on the middle qubit, and then simulates the same circuit using
-    yaqs's Simulator over a grid of simulation parameters. It then groups the results by bond
+    yaqs's simulator over a grid of simulation parameters. It then groups the results by bond
     dimension and plots 3D "planes" in the window/threshold space (with –log₁₀(threshold) as one axis)
     that are stacked along the bond dimension axis. The face color of each plane encodes the absolute
     error (left) or runtime (right).
@@ -68,8 +68,8 @@ def run(
     circuit_exact.save_statevector()  # Instruct the simulator to save the statevector.
     num_qubits = circuit_exact.num_qubits
 
-    # Run the exact simulation using Qiskit's AerSimulator.
-    simulator = AerSimulator(method="statevector")
+    # Run the exact simulation using Qiskit's Aersimulator.
+    simulator = Aersimulator(method="statevector")
     result = simulator.run(circuit_exact).result()
     qiskit_state = result.get_statevector(circuit_exact)
 
@@ -108,7 +108,7 @@ def run(
                 sim_params = StrongSimParams(measurements, N, bond_dim, threshold=threshold, window_size=window)
 
                 start_time = time.time()
-                Simulator.run(state, circuit_copy, sim_params, noise_model)
+                simulator.run(state, circuit_copy, sim_params, noise_model)
                 runtime = time.time() - start_time
 
                 # Compute the absolute error with respect to the exact result.
