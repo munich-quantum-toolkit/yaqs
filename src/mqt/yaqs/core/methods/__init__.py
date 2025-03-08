@@ -5,5 +5,4 @@
 #
 # Licensed under the MIT License
 
-
 """Tensor network methods required for simulation with YAQS."""

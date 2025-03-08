@@ -5,5 +5,4 @@
 #
 # Licensed under the MIT License
 
-
 """Libraries for fixed structures needed for simulation (e.g., circuits, gates, noise models)."""
