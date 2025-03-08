@@ -5,8 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""
-Example: Noisy Hamiltonian Simulation with YAQS
+"""Example: Noisy Hamiltonian Simulation with YAQS.
 
 This module demonstrates how to run a Hamiltonian simulation using the YAQS Simulator
 and visualize the results. In this example, an Ising Hamiltonian is initialized as an MPO, and an MPS
