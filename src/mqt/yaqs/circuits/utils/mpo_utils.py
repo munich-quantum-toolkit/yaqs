@@ -12,7 +12,6 @@ Product Operators (MPO) via layer-wise and long-range gate applications. These u
 conversion of quantum circuits into tensor network algorithms for checking equivalence.
 """
 
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
