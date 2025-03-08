@@ -58,7 +58,8 @@ def _run_strong_sim(
     Args:
         initial_state (MPS): The initial system state as an MPS.
         operator (QuantumCircuit): The quantum circuit representing the operation to simulate.
-        sim_params (StrongSimParams): Simulation parameters for strong simulation, including the number of trajectories (N),
+        sim_params (StrongSimParams): Simulation parameters for strong simulation,
+                                      including the number of trajectories (N),
                                       time step (dt), and sorted observables.
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
@@ -115,7 +116,8 @@ def _run_weak_sim(
     Args:
         initial_state (MPS): The initial system state as an MPS.
         operator (QuantumCircuit): The quantum circuit representing the operation to simulate.
-        sim_params (WeakSimParams): Simulation parameters for weak simulation, including shot count and sorted observables.
+        sim_params (WeakSimParams): Simulation parameters for weak simulation,
+                                    including shot count and sorted observables.
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
 
@@ -193,7 +195,8 @@ def _run_physics(
     Args:
         initial_state (MPS): The initial system state as an MPS.
         operator (MPO): The Hamiltonian operator represented as an MPO.
-        sim_params (PhysicsSimParams): Simulation parameters for physics simulation, including time step and evolution order.
+        sim_params (PhysicsSimParams): Simulation parameters for physics simulation,
+                                       including time step and evolution order.
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
 
