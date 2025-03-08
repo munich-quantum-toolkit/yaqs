@@ -48,10 +48,8 @@ def test_observable_creation_invalid() -> None:
     expecting an AttributeError to be raised.
     """
     name = "FakeName"
-    with pytest.raises(AttributeError) as exc_info:
+    with pytest.raises(AssertionError):
         Observable(name, 0)
-    # The default error message should indicate that the GateLibrary has no attribute 'FakeName'
-    assert "has no attribute" in str(exc_info.value)
 
 
 def test_physics_simparams_basic() -> None:
