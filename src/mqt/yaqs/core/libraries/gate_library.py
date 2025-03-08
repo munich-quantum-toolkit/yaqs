@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from ..data_structures.networks import MPO
 
 
-def _split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
+def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
     """Splits a two-qubit tensor into two tensors using Singular Value Decomposition (SVD).
 
     Args:
@@ -62,7 +62,7 @@ def _split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]
     return [tensor1, tensor2]
 
 
-def _extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
+def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
     """Extends gate to long-range MPO.
 
     Extends a given gate tensor to a Matrix Product Operator (MPO) by adding identity tensors
@@ -83,7 +83,7 @@ def _extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
     """
     from ..data_structures.networks import MPO
 
-    tensors = _split_tensor(tensor)
+    tensors = split_tensor(tensor)
     if len(tensors) == 2:
         # Adds identity tensors between sites
         mpo_tensors = [tensors[0]]
@@ -636,7 +636,7 @@ class CX(BaseGate):
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: π/4 (I-Z ⊗ I-X)
         self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
-        self.mpo = _extend_gate(self.tensor, self.sites)
+        self.mpo = extend_gate(self.tensor, self.sites)
         if sites[1] < sites[0]:  # Adjust for reverse control/target
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
@@ -730,7 +730,7 @@ class CPhase(BaseGate):
         """
         self.sites = list(sites)
         if self.interaction > 2:
-            self.mpo = _extend_gate(self.tensor, self.sites)
+            self.mpo = extend_gate(self.tensor, self.sites)
         elif sites[1] < sites[0]:  # Adjust for reverse control/target
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
