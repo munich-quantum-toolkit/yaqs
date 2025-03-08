@@ -103,7 +103,8 @@ def measure_single_shot(state: MPS) -> int:
     for site, tensor in enumerate(temp_state.tensors):
         reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
         probabilities = np.diag(reduced_density_matrix).real
-        chosen_index = np.random.choice(len(probabilities), p=probabilities)
+        rng = np.random.default_rng()
+        chosen_index = rng.choice(len(probabilities), p=probabilities)
         bitstring.append(chosen_index)
         selected_state = np.zeros(len(probabilities))
         selected_state[chosen_index] = 1

@@ -49,6 +49,8 @@ if TYPE_CHECKING:
 # Helper Functions
 ##############################################################################
 
+rng = np.random.default_rng()
+
 
 def random_theta_6d() -> NDArray[np.float64]:
     """Create a random 6D tensor, e.g. for two-qubit local blocks.
@@ -56,7 +58,7 @@ def random_theta_6d() -> NDArray[np.float64]:
     Returns:
         NDArray[np.float64]: A random 6-dimensional tensor of shape (2,2,2,2,2,2).
     """
-    return np.random.rand(2, 2, 2, 2, 2, 2)
+    return rng.random(size=(2, 2, 2, 2, 2, 2))
 
 
 def random_theta_8d() -> NDArray[np.float64]:
@@ -65,7 +67,8 @@ def random_theta_8d() -> NDArray[np.float64]:
     Returns:
         NDArray[np.float64]: A random 8-dimensional tensor of shape (2,2,2,2,2,2,2,2).
     """
-    return np.random.rand(2, 2, 2, 2, 2, 2, 2, 2)
+    rng = np.random.default_rng()
+    return rng.random(size=(2, 2, 2, 2, 2, 2, 2, 2))
 
 
 def approximate_reconstruction(

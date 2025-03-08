@@ -26,6 +26,8 @@ from mqt.yaqs.core.methods.TDVP import (
     update_site,
 )
 
+rng = np.random.default_rng()
+
 
 def test_split_mps_tensor_left_right_sqrt() -> None:
     """Test splitting of an MPS tensor using different singular value distribution options.
@@ -36,7 +38,7 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
     reconstructs A from A0 and A1 by undoing the transpose on A1 and contracting over the singular value index.
     The reconstructed tensor is compared to the original A.
     """
-    A = np.random.randn(4, 3, 5)
+    A = rng.random(size=(4, 3, 5))
     for distr in ["left", "right", "sqrt"]:
         A0, A1 = split_mps_tensor(A, svd_distribution=distr, threshold=1e-8)
         # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5), where r is the effective rank.
@@ -58,7 +60,7 @@ def test_split_mps_tensor_invalid_shape() -> None:
 
     This test creates a tensor A with shape (3, 3, 5) and expects the function to raise an error.
     """
-    A = np.random.randn(3, 3, 5)
+    A = rng.random(size=(3, 3, 5))
     with pytest.raises(ValueError):
         split_mps_tensor(A, svd_distribution="left")
 
@@ -70,8 +72,8 @@ def test_merge_mps_tensors() -> None:
     It then merges them via merge_mps_tensors. The expected shape is (10, 3, 7) because
     the contraction is performed over the third axis of A0 and the second axis of A1.
     """
-    A0 = np.random.randn(2, 3, 4)
-    A1 = np.random.randn(5, 4, 7)
+    A0 = rng.random(size=(2, 3, 4))
+    A1 = rng.random(size=(5, 4, 7))
     merged = merge_mps_tensors(A0, A1)
     assert merged.shape == (10, 3, 7)
 
@@ -82,8 +84,8 @@ def test_merge_mpo_tensors() -> None:
     This test creates two 4D arrays A0 and A1 with shapes (2, 3, 4, 5) and (7, 8, 5, 9), respectively.
     After merging via merge_mpo_tensors, the expected shape is (14, 24, 4, 9).
     """
-    A0 = np.random.randn(2, 3, 4, 5)
-    A1 = np.random.randn(7, 8, 5, 9)
+    A0 = rng.random(size=(2, 3, 4, 5))
+    A1 = rng.random(size=(7, 8, 5, 9))
     merged = merge_mpo_tensors(A0, A1)
     assert merged.shape == (14, 24, 4, 9)
 
@@ -95,10 +97,10 @@ def test_update_right_environment() -> None:
     operations defined in update_right_environment. It then verifies that the resulting tensor
     has the expected shape (3, 8, 9).
     """
-    A = np.random.randn(2, 3, 4)
-    R = np.random.randn(4, 5, 6)
-    W = np.random.randn(7, 2, 8, 5)
-    B = np.random.randn(7, 9, 6)
+    A = rng.random(size=(2, 3, 4))
+    R = rng.random(size=(4, 5, 6))
+    W = rng.random(size=(7, 2, 8, 5))
+    B = rng.random(size=(7, 9, 6))
     Rnext = update_right_environment(A, B, W, R)
     assert Rnext.shape == (3, 8, 9)
 
@@ -109,10 +111,10 @@ def test_update_left_environment() -> None:
     This test constructs dummy arrays A, B, W, and L with compatible shapes for the contraction.
     It then verifies that the output is a 3D tensor.
     """
-    A = np.random.randn(3, 4, 10)
-    B = np.random.randn(7, 6, 8)
-    L_arr = np.random.randn(4, 5, 6)
-    W = np.random.randn(7, 3, 5, 9)
+    A = rng.random(size=(3, 4, 10))
+    B = rng.random(size=(7, 6, 8))
+    L_arr = rng.random(size=(4, 5, 6))
+    W = rng.random(size=(7, 3, 5, 9))
     Rnext = update_left_environment(A, B, W, L_arr)
     assert Rnext.ndim == 3
 
@@ -123,10 +125,10 @@ def test_project_site() -> None:
     This test creates dummy tensors A, R, W, and L with appropriate shapes and checks that
     the output of project_site is a 3D tensor.
     """
-    A = np.random.randn(2, 3, 4)
-    R = np.random.randn(4, 5, 6)
-    W = np.random.randn(7, 2, 8, 5)
-    L_arr = np.random.randn(3, 8, 9)
+    A = rng.random(size=(2, 3, 4))
+    R = rng.random(size=(4, 5, 6))
+    W = rng.random(size=(7, 2, 8, 5))
+    L_arr = rng.random(size=(3, 8, 9))
     out = project_site(L_arr, R, W, A)
     assert out.ndim == 3
 
@@ -137,9 +139,9 @@ def test_project_bond() -> None:
     This test creates a bond tensor C and dummy tensors L and R with compatible shapes,
     and verifies that the output has the expected shape (6, 5).
     """
-    C = np.random.randn(2, 3)
-    R = np.random.randn(3, 4, 5)
-    L_arr = np.random.randn(2, 4, 6)
+    C = rng.random(size=(2, 3))
+    R = rng.random(size=(3, 4, 5))
+    L_arr = rng.random(size=(2, 4, 6))
     out = project_bond(L_arr, R, C)
     assert out.shape == (6, 5)
 
@@ -151,10 +153,10 @@ def test_update_site() -> None:
     and applies update_site with a small time step and a fixed number of Lanczos iterations.
     The output should have the same shape as the input tensor A.
     """
-    A = np.random.randn(2, 2, 4)
-    R = np.random.randn(4, 1, 4)
-    W = np.random.randn(2, 2, 1, 1)
-    L_arr = np.random.randn(2, 1, 2)
+    A = rng.random(size=(2, 2, 4))
+    R = rng.random(size=(4, 1, 4))
+    W = rng.random(size=(2, 2, 1, 1))
+    L_arr = rng.random(size=(2, 1, 2))
     dt = 0.05
     numiter = 10
     out = update_site(L_arr, R, W, A, dt, numiter)
@@ -167,9 +169,9 @@ def test_update_bond() -> None:
     This test creates a square bond tensor C and compatible dummy tensors R and L.
     It applies update_bond and checks that the output shape matches that of C.
     """
-    C = np.random.randn(2, 2)
-    R = np.random.randn(2, 2, 2)
-    L_arr = np.random.randn(2, 2, 2)
+    C = rng.random(size=(2, 2))
+    R = rng.random(size=(2, 2, 2))
+    L_arr = rng.random(size=(2, 2, 2))
     dt = 0.05
     numiter = 10
     out = update_bond(L_arr, R, C, dt, numiter)

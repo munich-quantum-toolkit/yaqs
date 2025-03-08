@@ -36,7 +36,8 @@ if __name__ == "__main__":
     # Create the circuit.
     twolocal = TwoLocal(num_qubits, ["rx"], ["rzz"], entanglement="linear", reps=num_qubits).decompose()
     num_pars = len(twolocal.parameters)
-    values = np.random.uniform(low=-np.pi, high=np.pi, size=num_pars)
+    rng = np.random.default_rng()
+    values = rng.uniform(-np.pi, np.pi, size=num_pars)
     circuit = copy.deepcopy(twolocal).assign_parameters(values)
     circuit.measure_all()
 

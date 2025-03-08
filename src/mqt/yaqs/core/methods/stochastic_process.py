@@ -120,7 +120,8 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float) ->
         MPS: The updated Matrix Product State after the stochastic process.
     """
     dp = calculate_stochastic_factor(state)
-    if noise_model is None or np.random.rand() >= dp:
+    rng = np.random.default_rng()
+    if noise_model is None or rng.random() >= dp:
         # No jump occurs; shift the state to canonical form at site 0.
         state.shift_orthogonality_center_left(0)
         return state
@@ -128,7 +129,7 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float) ->
     # A jump occurs: create the probability distribution and select a jump operator.
     jump_dict = create_probability_distribution(state, noise_model, dt)
     choices = list(range(len(jump_dict["probabilities"])))
-    choice = np.random.choice(choices, p=jump_dict["probabilities"])
+    choice = rng.choice(choices, p=jump_dict["probabilities"])
     jump_operator = jump_dict["jumps"][choice]
     state.tensors[jump_dict["sites"][choice]] = oe.contract(
         "ab, bcd->acd", jump_operator, state.tensors[jump_dict["sites"][choice]]

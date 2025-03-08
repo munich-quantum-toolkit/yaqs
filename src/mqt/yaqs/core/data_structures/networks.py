@@ -126,7 +126,8 @@ class MPS:
                     else:
                         vector[1] = 1
                 elif state == "random":
-                    vector[0] = np.random.rand()
+                    rng = np.random.default_rng()
+                    vector[0] = rng.random()
                     vector[1] = 1 - vector[0]
                 else:
                     msg = "Invalid state string"

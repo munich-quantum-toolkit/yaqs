@@ -48,6 +48,8 @@ def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex1
     return np.transpose(mpo_tensor, (2, 3, 0, 1))
 
 
+rng = np.random.default_rng()
+
 ##############################################################################
 # Tests for the MPO class
 ##############################################################################
@@ -192,9 +194,9 @@ def test_init_custom_Hamiltonian() -> None:
     length = 4
     pdim = 2
 
-    left_bound = np.random.rand(1, 2, pdim, pdim)
-    inner = np.random.rand(2, 2, pdim, pdim)
-    right_bound = np.random.rand(2, 1, pdim, pdim)
+    left_bound = rng.random(size=(1, 2, pdim, pdim))
+    inner = rng.random(size=(2, 2, pdim, pdim))
+    right_bound = rng.random(size=(2, 1, pdim, pdim))
 
     mpo = MPO()
     mpo.init_custom_Hamiltonian(length, left_bound, inner, right_bound)
@@ -222,9 +224,9 @@ def test_init_custom() -> None:
     length = 3
     pdim = 2
     tensors = [
-        np.random.rand(1, 2, pdim, pdim),
-        np.random.rand(2, 2, pdim, pdim),
-        np.random.rand(2, 1, pdim, pdim),
+        rng.random(size=(1, 2, pdim, pdim)),
+        rng.random(size=(2, 2, pdim, pdim)),
+        rng.random(size=(2, 1, pdim, pdim)),
     ]
 
     mpo = MPO()
@@ -353,9 +355,9 @@ def test_mps_custom_tensors() -> None:
     """
     length = 3
     pdim = 2
-    t1 = np.random.rand(pdim, 1, 2)
-    t2 = np.random.rand(pdim, 2, 2)
-    t3 = np.random.rand(pdim, 2, 1)
+    t1 = rng.random(size=(pdim, 1, 2))
+    t2 = rng.random(size=(pdim, 2, 2))
+    t3 = rng.random(size=(pdim, 2, 2))
     tensors = [t1, t2, t3]
 
     mps = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
@@ -372,9 +374,9 @@ def test_write_max_bond_dim() -> None:
     """
     length = 3
     pdim = 2
-    t1 = np.random.rand(pdim, 1, 4)
-    t2 = np.random.rand(pdim, 4, 5)
-    t3 = np.random.rand(pdim, 5, 2)
+    t1 = rng.random(size=(pdim, 1, 2))
+    t2 = rng.random(size=(pdim, 4, 5))
+    t3 = rng.random(size=(pdim, 5, 2))
     mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
 
     max_bond = mps.write_max_bond_dim()
@@ -389,9 +391,9 @@ def test_flip_network() -> None:
     """
     length = 3
     pdim = 2
-    t1 = np.random.rand(pdim, 1, 2)
-    t2 = np.random.rand(pdim, 2, 2)
-    t3 = np.random.rand(pdim, 2, 1)
+    t1 = rng.random(size=(pdim, 1, 2))
+    t2 = rng.random(size=(pdim, 2, 2))
+    t3 = rng.random(size=(pdim, 2, 1))
     original_tensors = [t1, t2, t3]
     mps = MPS(length, tensors=copy.deepcopy(original_tensors), physical_dimensions=[pdim] * length)
 
@@ -411,10 +413,10 @@ def test_shift_orthogonality_center_right() -> None:
     """
     length = 4
     pdim = 2
-    t1 = np.random.rand(pdim, 1, 2)
-    t2 = np.random.rand(pdim, 2, 3)
-    t3 = np.random.rand(pdim, 3, 3)
-    t4 = np.random.rand(pdim, 3, 1)
+    t1 = rng.random(size=(pdim, 1, 2))
+    t2 = rng.random(size=(pdim, 2, 3))
+    t3 = rng.random(size=(pdim, 3, 3))
+    t4 = rng.random(size=(pdim, 3, 1))
     mps = MPS(length, tensors=[t1, t2, t3, t4], physical_dimensions=[pdim] * length)
 
     mps.shift_orthogonality_center_right(current_orthogonality_center=0)
@@ -429,10 +431,10 @@ def test_shift_orthogonality_center_left() -> None:
     """
     length = 4
     pdim = 2
-    t1 = np.random.rand(pdim, 1, 3)
-    t2 = np.random.rand(pdim, 3, 3)
-    t3 = np.random.rand(pdim, 3, 2)
-    t4 = np.random.rand(pdim, 2, 1)
+    t1 = rng.random(size=(pdim, 1, 2))
+    t2 = rng.random(size=(pdim, 2, 3))
+    t3 = rng.random(size=(pdim, 3, 3))
+    t4 = rng.random(size=(pdim, 3, 1))
     mps = MPS(length, [t1, t2, t3, t4], [pdim] * length)
 
     mps.shift_orthogonality_center_left(current_orthogonality_center=3)
@@ -462,10 +464,10 @@ def test_normalize() -> None:
     """
     length = 4
     pdim = 2
-    t1 = np.random.rand(pdim, 1, 3)
-    t2 = np.random.rand(pdim, 3, 3)
-    t3 = np.random.rand(pdim, 3, 2)
-    t4 = np.random.rand(pdim, 2, 1)
+    t1 = rng.random(size=(pdim, 1, 2))
+    t2 = rng.random(size=(pdim, 2, 3))
+    t3 = rng.random(size=(pdim, 3, 3))
+    t4 = rng.random(size=(pdim, 3, 1))
     mps = MPS(length, [t1, t2, t3, t4], [pdim] * length)
 
     mps.normalize(form="B")
@@ -508,9 +510,9 @@ def test_check_if_valid_MPS() -> None:
     """
     length = 3
     pdim = 2
-    t1 = np.random.rand(pdim, 1, 2)
-    t2 = np.random.rand(pdim, 2, 3)
-    t3 = np.random.rand(pdim, 3, 1)
+    t1 = rng.random(size=(pdim, 1, 2))
+    t2 = rng.random(size=(pdim, 2, 3))
+    t3 = rng.random(size=(pdim, 3, 1))
     mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
     mps.check_if_valid_MPS()
 
