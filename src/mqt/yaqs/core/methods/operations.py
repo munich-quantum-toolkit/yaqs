@@ -23,15 +23,20 @@ if TYPE_CHECKING:
 
 
 def scalar_product(A: MPS, B: MPS, site: int | None = None) -> np.complex128:
-    """Calculates the scalar product of two Matrix Product States
-        by contracting all positions vertically then horizontally.
+    """Compute the scalar (inner) product between two Matrix Product States (MPS).
+
+    The function contracts the corresponding tensors of two MPS objects. If no specific site is
+    provided, the contraction is performed sequentially over all sites to yield the overall inner
+    product. When a site is specified, only the tensors at that site are contracted.
 
     Args:
-        A: first MPS
-        B: second MPS
+        A (MPS): The first Matrix Product State.
+        B (MPS): The second Matrix Product State.
+        site (int | None): Optional site index at which to compute the contraction. If None, the
+            contraction is performed over all sites.
 
     Returns:
-        result: Frobenius norm of A and B <A|B>
+        np.complex128: The resulting scalar product as a complex number.
     """
     A_copy = copy.deepcopy(A)
     B_copy = copy.deepcopy(B)
@@ -49,32 +54,42 @@ def scalar_product(A: MPS, B: MPS, site: int | None = None) -> np.complex128:
 
 
 def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> np.complex128:
-    """Expectation value for a given MPS-MPO-MPS network.
+    """Compute the local expectation value of an operator on an MPS.
+
+    The function applies the given operator to the tensor at the specified site of a deep copy of the
+    input MPS, then computes the scalar product between the original and the modified state at that site.
+    This effectively calculates the expectation value of the operator at the specified site.
 
     Args:
-        A: MPS
-        B: MPO
-        C: MPS
+        state (MPS): The Matrix Product State representing the quantum state.
+        operator (NDArray[np.complex128]): The local operator (matrix) to be applied.
+        site (int): The index of the site at which to evaluate the expectation value.
 
     Returns:
-        E.real: real portion of calculated expectation value
+        np.complex128: The computed expectation value (typically, its real part is of interest).
+
+    Notes:
+        A deep copy of the state is used to prevent modifications to the original MPS.
     """
     # TODO(Aaron): Could be more memory-efficient by not copying state
-
-    # This loop assumes the MPS is in canonical form at the given site
     temp_state = copy.deepcopy(state)
     temp_state.tensors[site] = oe.contract("ab, bcd->acd", operator, temp_state.tensors[site])
     return scalar_product(state, temp_state, site)
 
 
 def measure_single_shot(state: MPS) -> int:
-    """Performs a single-shot measurement of the MPS state.
+    """Perform a single-shot measurement on a Matrix Product State (MPS).
+
+    This function simulates a projective measurement on an MPS. For each site, it computes the
+    local reduced density matrix from the site's tensor, derives the probability distribution over
+    basis states, and randomly selects an outcome. The overall measurement result is encoded as an
+    integer corresponding to the measured bitstring.
 
     Args:
-        state ('MPS'): The MPS state to measure.
+        state (MPS): The MPS state to be measured.
 
     Returns:
-        int: The observed basis state as an integer.
+        int: The measurement outcome represented as an integer.
     """
     temp_state = copy.deepcopy(state)
     bitstring = []
@@ -85,9 +100,9 @@ def measure_single_shot(state: MPS) -> int:
         bitstring.append(chosen_index)
         selected_state = np.zeros(len(probabilities))
         selected_state[chosen_index] = 1
-        # Multiply state
+        # Multiply state: project the tensor onto the selected state.
         tensor = oe.contract("a, acd->cd", selected_state, tensor)
-        # Multiply site into next site
+        # Propagate the measurement to the next site.
         if site != state.length - 1:
             temp_state.tensors[site + 1] = (
                 1
@@ -98,14 +113,23 @@ def measure_single_shot(state: MPS) -> int:
 
 
 def measure(state: MPS, shots: int) -> dict[int, int]:
-    """Measures an MPS state for a given number of shots.
+    """Perform multiple single-shot measurements on an MPS and aggregate the results.
+
+    This function executes a specified number of measurement shots on the given MPS. For each shot,
+    a single-shot measurement is performed, and the outcomes are aggregated into a histogram (dictionary)
+    mapping basis states (represented as integers) to the number of times they were observed.
 
     Args:
-        state ('MPS'): The MPS state to measure.
-        shots (int): Number of measurements (shots) to perform.
+        state (MPS): The Matrix Product State to be measured.
+        shots (int): The number of measurement shots to perform.
 
     Returns:
-        dict: A dictionary mapping basis states to their observed counts.
+        dict[int, int]: A dictionary where keys are measured basis states (as integers) and values are
+        the corresponding counts.
+
+    Notes:
+        - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
+        - A progress bar (via tqdm) displays the progress of the measurement process.
     """
     results: dict[int, int] = {}
     if shots > 1:

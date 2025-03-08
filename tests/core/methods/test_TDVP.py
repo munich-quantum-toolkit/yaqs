@@ -27,181 +27,175 @@ from mqt.yaqs.core.methods.TDVP import (
 )
 
 
-def testsplit_mps_tensor_left_right_sqrt() -> None:
-    # Create an input tensor A with shape (d0*d1, D0, D2).
-    # Let d0 = d1 = 2 so that A.shape[0]=4, and choose D0=3, D2=5.
+def test_split_mps_tensor_left_right_sqrt() -> None:
+    """Test splitting of an MPS tensor using different singular value distribution options.
+
+    This test creates a random tensor A with shape (4, 3, 5), corresponding to (d0*d1, D0, D2)
+    with d0 = d1 = 2, D0 = 3, and D2 = 5. For each SVD distribution option ("left", "right", "sqrt"),
+    the function split_mps_tensor is called to decompose A into two tensors A0 and A1. The test then
+    reconstructs A from A0 and A1 by undoing the transpose on A1 and contracting over the singular value index.
+    The reconstructed tensor is compared to the original A.
+    """
     A = np.random.randn(4, 3, 5)
-    # For each svd_distr option, run the splitting and then reconstruct A.
     for distr in ["left", "right", "sqrt"]:
         A0, A1 = split_mps_tensor(A, svd_distribution=distr, threshold=1e-8)
-        # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5),
-        # where r is the effective rank.
+        # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5), where r is the effective rank.
         assert A0.ndim == 3
         assert A1.ndim == 3
         r = A0.shape[2]
         assert A1.shape[1] == r
-        # Reconstruct A: undo the transpose on A1 then contract A0 and A1.
-        A1_recon = A1.transpose((1, 0, 2))  # now shape (r, 2, 5)
-        # Contract along the rank index:
-        # A0 has indices: (d0, D0, r), A1_recon has indices: (r, d1, D2).
-        # Form a tensor of shape (d0, d1, D0, D2) then reshape back to (4, 3, 5)
+        # Reconstruct A: first undo the transpose on A1 so that its shape becomes (r, 2, 5)
+        A1_recon = A1.transpose((1, 0, 2))
+        # Contract A0 (indices: d0, D0, r) with A1_recon (indices: r, d1, D2) over the rank index r.
+        # This yields a tensor of shape (d0, d1, D0, D2). Then, we transpose to (d0*d1, D0, D2)
         A_recon = np.tensordot(A0, A1_recon, axes=(2, 0))  # shape (2, 3, 2, 5)
         A_recon = A_recon.transpose((0, 2, 1, 3)).reshape(4, 3, 5)
-        # Up to SVD sign and ordering ambiguities, the reconstruction should be close.
         np.testing.assert_allclose(A, A_recon, atol=1e-6)
 
 
-def testsplit_mps_tensor_invalid_shape() -> None:
-    # If A.shape[0] is not divisible by 2, the function should raise a ValueError.
+def test_split_mps_tensor_invalid_shape() -> None:
+    """Test that split_mps_tensor raises a ValueError when the input tensor's first dimension is not divisible by 2.
+
+    This test creates a tensor A with shape (3, 3, 5) and expects the function to raise an error.
+    """
     A = np.random.randn(3, 3, 5)
     with pytest.raises(ValueError):
         split_mps_tensor(A, svd_distribution="left")
 
 
-def testmerge_mps_tensors() -> None:
-    # Let A0 have shape (2, 3, 4) and A1 have shape (5, 4, 7).
-    # In merge_mps_tensors the arrays are interpreted with label tuples
-    # (0,2,3) for A0 and (1,3,4) for A1, so contraction is over the third axis of A0 and
-    # the second axis of A1.
+def test_merge_mps_tensors() -> None:
+    """Test the merge_mps_tensors function.
+
+    This test creates two tensors A0 and A1 with shapes (2, 3, 4) and (5, 4, 7), respectively.
+    It then merges them via merge_mps_tensors. The expected shape is (10, 3, 7) because
+    the contraction is performed over the third axis of A0 and the second axis of A1.
+    """
     A0 = np.random.randn(2, 3, 4)
     A1 = np.random.randn(5, 4, 7)
     merged = merge_mps_tensors(A0, A1)
-    # Expected shape: first two axes merged from A0[0] and A1[0]:
-    # output shape = ((2*5), 3, 7) i.e. (10, 3, 7)
     assert merged.shape == (10, 3, 7)
 
 
-def testmerge_mpo_tensors() -> None:
-    # Let A0 be a 4D array with shape (2, 3, 4, 5) and
-    # A1 be a 4D array with shape (7, 8, 5, 9).
-    # The contract call uses label tuples (0,2,4,6) and (1,3,6,5) and contracts label 6.
+def test_merge_mpo_tensors() -> None:
+    """Test the merge_mpo_tensors function.
+
+    This test creates two 4D arrays A0 and A1 with shapes (2, 3, 4, 5) and (7, 8, 5, 9), respectively.
+    After merging via merge_mpo_tensors, the expected shape is (14, 24, 4, 9).
+    """
     A0 = np.random.randn(2, 3, 4, 5)
     A1 = np.random.randn(7, 8, 5, 9)
     merged = merge_mpo_tensors(A0, A1)
-    # Expected shape: merge first two axes of the result, where result (before reshape)
-    # should have shape (2,7,3,8,4,9), then merged to (2*7, 3*8, 4,9) = (14,24,4,9).
     assert merged.shape == (14, 24, 4, 9)
 
 
-def testupdate_right_environment() -> None:
-    # Choose shapes as described in the function.
+def test_update_right_environment() -> None:
+    """Test the update_right_environment function.
+
+    This test creates dummy arrays A, B, W, and R with compatible shapes for the contraction
+    operations defined in update_right_environment. It then verifies that the resulting tensor
+    has the expected shape (3, 8, 9).
+    """
     A = np.random.randn(2, 3, 4)
-    # R: contract A's last axis (size 4) with R's first axis.
     R = np.random.randn(4, 5, 6)
-    # W must have shape with axes (1,3) matching T from tensordot(A, R, 1) of shape (2,3,5,6):
-    # We require W.shape[1]=2 and W.shape[3]=5. Let W = (7,2,8,5)
     W = np.random.randn(7, 2, 8, 5)
-    # B: choose shape so that B.conj() has axes (0,2) matching T from later step.
-    # After the previous steps, T becomes shape (3,8,7,6); we contract with B.conj() axes ((2,3),(0,2)).
-    # So let B be of shape (7, 9, 6).
     B = np.random.randn(7, 9, 6)
     Rnext = update_right_environment(A, B, W, R)
-    # Expected shape: (3,8,9) (from the discussion above).
     assert Rnext.shape == (3, 8, 9)
 
 
-def testupdate_left_environment() -> None:
-    # Set up dummy arrays with shapes so that the contraction is valid.
-    # Let A be shape (3,4,10)
+def test_update_left_environment() -> None:
+    """Test the update_left_environment function.
+
+    This test constructs dummy arrays A, B, W, and L with compatible shapes for the contraction.
+    It then verifies that the output is a 3D tensor.
+    """
     A = np.random.randn(3, 4, 10)
-    # Let B be shape (7, 6, 8) so that B.conj() has shape (7,6,8).
     B = np.random.randn(7, 6, 8)
-    # Let L be shape (4,5,6) and require that L.shape[2] (6) matches B.shape[1] (6).
     L_arr = np.random.randn(4, 5, 6)
-    # Let W be shape (7,3,5,9) so that we contract axes ((0,2),(2,1)) with T later.
     W = np.random.randn(7, 3, 5, 9)
     Rnext = update_left_environment(A, B, W, L_arr)
-    # The expected shape from our reasoning is (10,9,8) (A's remaining axis 2 becomes output along with leftover dims from T).
-    # We check that the result is 3-dimensional.
     assert Rnext.ndim == 3
 
 
-def testproject_site() -> None:
-    # Let A: shape (2,3,4); R: shape (4,5,6) as before.
+def test_project_site() -> None:
+    """Test the project_site function.
+
+    This test creates dummy tensors A, R, W, and L with appropriate shapes and checks that
+    the output of project_site is a 3D tensor.
+    """
     A = np.random.randn(2, 3, 4)
     R = np.random.randn(4, 5, 6)
-    # Let W be shape (7,2,8,5) as in test above.
     W = np.random.randn(7, 2, 8, 5)
-    # Let L be shape (3,8,9) so that tensordot works.
     L_arr = np.random.randn(3, 8, 9)
     out = project_site(L_arr, R, W, A)
-    # The function transposes the final result so we expect a 3D array.
     assert out.ndim == 3
 
 
-def testproject_bond() -> None:
-    # Let C: shape (2,3)
+def test_project_bond() -> None:
+    """Test the project_bond function.
+
+    This test creates a bond tensor C and dummy tensors L and R with compatible shapes,
+    and verifies that the output has the expected shape (6, 5).
+    """
     C = np.random.randn(2, 3)
-    # Let R: shape (3,4,5)
     R = np.random.randn(3, 4, 5)
-    # Let L: shape (2,4,6)
     L_arr = np.random.randn(2, 4, 6)
     out = project_bond(L_arr, R, C)
-    # Expected output shape: contraction gives shape (6,5)
     assert out.shape == (6, 5)
 
 
-def testupdate_site() -> None:
-    # We choose an MPS tensor A with shape (d0, d0, d1) where d0=2, d1=4.
-    # (The requirement here is that the first two dimensions are equal,
-    # so that after the contraction chain the operator is square.)
-    A = np.random.randn(2, 2, 4)  # total elements: 2*2*4 = 16
-    # Choose R of shape (d1, X, d1) with d1=4 and X=1.
-    R = np.random.randn(4, 1, 4)  # shape: (4,1,4)
-    # Choose W of shape (d0, d0, X, X) with d0=2 and X=1.
-    W = np.random.randn(2, 2, 1, 1)  # shape: (2,2,1,1)
-    # Choose L so that the contraction makes sense.
-    # In our contraction chain, after:
-    #   T1 = tensordot(A, R, axes=1)  → shape (2,2,1,4)
-    #   T2 = tensordot(W, T1, axes=((1,3),(0,2))) → shape (2,1,2,4)
-    #   T3 = T2.transpose((2,1,0,3)) → shape (2,1,2,4) (here the permutation reorders axes)
-    # Then we contract T3 with L along axes ((2,1),(0,1)).
-    # To contract T3's axes (axis2, axis1) = (2,1) we need L with shape (2,1,r).
-    # Then T4 will have shape (remaining T3 axes: (axis0, axis3)) plus L's remaining axis, i.e. (2,4,r).
-    # Finally, a transpose (here, (0,2,1)) gives shape (2, r, 4).
-    # We want the final shape to equal A's shape (2,2,4), so we set r=2.
-    L_arr = np.random.randn(2, 1, 2)  # shape: (2,1,2)
+def test_update_site() -> None:
+    """Test the update_site function.
+
+    This test creates a dummy MPS tensor A (shape (2,2,4)), along with tensors L, R, and W,
+    and applies update_site with a small time step and a fixed number of Lanczos iterations.
+    The output should have the same shape as the input tensor A.
+    """
+    A = np.random.randn(2, 2, 4)
+    R = np.random.randn(4, 1, 4)
+    W = np.random.randn(2, 2, 1, 1)
+    L_arr = np.random.randn(2, 1, 2)
     dt = 0.05
     numiter = 10
     out = update_site(L_arr, R, W, A, dt, numiter)
-    # The operator should be square, so out.shape should equal A.shape.
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
 
 
-def testupdate_bond() -> None:
-    # For the bond step we want the operator to be square.
-    # Let C be a matrix of shape (p, q). We choose C to be square.
-    C = np.random.randn(2, 2)  # total elements: 4
-    # Choose R of shape (q, r, s). To contract C and get back the same number of elements,
-    # we can choose R such that q=2, r=2, s=2.
-    R = np.random.randn(2, 2, 2)  # shape: (2,2,2)
-    # Choose L of shape (p, r, t) with p=2 and r=2.
-    # We want the final result to have shape (p, q) = (2,2); so t must equal q=2.
-    L_arr = np.random.randn(2, 2, 2)  # shape: (2,2,2)
+def test_update_bond() -> None:
+    """Test the update_bond function.
+
+    This test creates a square bond tensor C and compatible dummy tensors R and L.
+    It applies update_bond and checks that the output shape matches that of C.
+    """
+    C = np.random.randn(2, 2)
+    R = np.random.randn(2, 2, 2)
+    L_arr = np.random.randn(2, 2, 2)
     dt = 0.05
     numiter = 10
     out = update_bond(L_arr, R, C, dt, numiter)
-    # The output shape should equal the input shape.
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
 
 def test_single_site_TDVP() -> None:
+    """Test the single_site_TDVP function.
+
+    This test initializes an Ising MPO and an MPS of length 5 (initialized to 'zeros'),
+    along with PhysicsSimParams configured for a single trajectory update.
+    It runs single_site_TDVP and verifies that the MPS remains of the same length, all tensors are numpy arrays,
+    and the MPS is left in a canonical form with the orthogonality center at site 0.
+    """
     L = 5
     J = 1
     g = 0.5
     H = MPO()
     H.init_Ising(L, J, g)
-    state = MPS(L)
+    state = MPS(L, state="zeros")
     measurements = [Observable("z", site) for site in range(L)]
-    sim_params = PhysicsSimParams(
-        measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
-    )
+    sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1)
     single_site_TDVP(state, H, sim_params, numiter_lanczos=5)
-    # Check that state still has L tensors and that each tensor is a numpy array.
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
-
     canonical_site = state.check_canonical_form()[0]
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after single-site TDVP, but got canonical site: {canonical_site}"
@@ -209,22 +203,24 @@ def test_single_site_TDVP() -> None:
 
 
 def test_two_site_TDVP() -> None:
+    """Test the two_site_TDVP function.
+
+    This test initializes an Ising MPO and an MPS of length 5, sets up PhysicsSimParams,
+    and runs two_site_TDVP. It checks that the MPS retains the correct number of tensors,
+    that all tensors remain numpy arrays, and that the MPS is in canonical form with the orthogonality center at site 0.
+    """
     L = 5
     J = 1
     g = 0.5
     H = MPO()
     H.init_Ising(L, J, g)
-    state = MPS(L)
+    state = MPS(L, state="zeros")
     measurements = [Observable("z", site) for site in range(L)]
-    sim_params = PhysicsSimParams(
-        measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
-    )
+    sim_params = PhysicsSimParams(measurements, T=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1)
     two_site_TDVP(state, H, sim_params, numiter_lanczos=5)
-    # Check that state still has L tensors and that each tensor is a numpy array.
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
-
     canonical_site = state.check_canonical_form()[0]
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after two-site TDVP, but got canonical site: {canonical_site}"

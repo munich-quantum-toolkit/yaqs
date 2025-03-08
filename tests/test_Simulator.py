@@ -23,13 +23,18 @@ from mqt.yaqs.core.libraries.circuit_library import create_Ising_circuit
 
 
 def test_physics_simulation() -> None:
-    """Test the branch for Hamiltonian simulation or circuit simulation with StrongSimParams.
-    Here we use a DummyMPO operator and a DummyStrongSimParams.
+    """Test the branch for Hamiltonian simulation (physics simulation) using StrongSimParams.
+
+    This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
+    It also creates a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
+    With PhysicsSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
+    Simulator.run is called. The test then verifies that for each observable the results and trajectories have been
+    correctly initialized and that the measurement results are approximately as expected.
     """
     length = 5
     initial_state = MPS(length, state="zeros")
 
-    H = MPO()  # operator is an instance of MPO
+    H = MPO()
     H.init_Ising(length, J=1, g=0.5)
     T = 1
     dt = 0.1
@@ -64,6 +69,13 @@ def test_physics_simulation() -> None:
 
 
 def test_strong_simulation() -> None:
+    """Test the circuit-based simulation branch using StrongSimParams.
+
+    This test constructs an MPS of length 5 (initialized to "zeros") and an Ising circuit with a CX gate.
+    It configures StrongSimParams with specified simulation parameters and a noise model (non-None).
+    Simulator.run is then called, and the test verifies that the observables' results and trajectories
+    are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
+    """
     num_qubits = 5
     state = MPS(num_qubits, state="zeros")
 
@@ -77,7 +89,7 @@ def test_strong_simulation() -> None:
 
     measurements = [Observable("z", site) for site in range(num_qubits)]
     sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
-    # Use a noise model that is None so that the branch sets sim_params.N = 1.
+    # Use a noise model that is not None so that sim_params.N remains unchanged.
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
@@ -101,6 +113,14 @@ def test_strong_simulation() -> None:
 
 
 def test_weak_simulation_noise() -> None:
+    """Test the weak simulation branch with a non-None noise model.
+
+    This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
+    It sets up WeakSimParams with a specified number of shots, max bond dimension, threshold, and window size,
+    and a noise model with small strengths. After running Simulator.run, the test verifies that sim_params.N equals
+    the number of shots, that each measurement is a dictionary, and that the total number of shots recorded in sim_params.results
+    equals the expected number.
+    """
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
@@ -120,11 +140,17 @@ def test_weak_simulation_noise() -> None:
     assert shots == sim_params.N, "sim_params.N should be number of shots."
     for measurement in sim_params.measurements:
         assert isinstance(measurement, dict)
-
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
 
 
 def test_weak_simulation_no_noise() -> None:
+    """Test the weak simulation branch when the noise model is None.
+
+    This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system,
+    and configures WeakSimParams with a specified number of shots. When noise_model is None,
+    the simulation should set sim_params.N to 1. The test verifies that the measurements and results
+    are consistent with this behavior.
+    """
     num_qubits = 5
     initial_state = MPS(num_qubits)
 
@@ -144,14 +170,17 @@ def test_weak_simulation_no_noise() -> None:
     assert isinstance(sim_params.measurements[0], dict) and sim_params.measurements[1] is None, (
         "There should be only one measurement when noise model strengths are zero."
     )
-
     max_value = max(sim_params.results.values())
     assert sim_params.results[0] == max_value, "Key 0 does not have the highest value."
-
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
 
 
 def test_mismatch() -> None:
+    """Test that Simulator.run raises an AssertionError when the state and circuit qubit counts mismatch.
+
+    This test creates an MPS of length 5 and a circuit with length 4 (one fewer qubits),
+    and verifies that an AssertionError with the appropriate message is raised.
+    """
     num_qubits = 5
     initial_state = MPS(num_qubits)
 

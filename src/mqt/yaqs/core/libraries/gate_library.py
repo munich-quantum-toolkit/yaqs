@@ -19,6 +19,19 @@ if TYPE_CHECKING:
 
 
 def _split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
+    """Splits a two-qubit tensor into two tensors using Singular Value Decomposition (SVD).
+
+    Args:
+        tensor (NDArray[np.complex128]): A 4-dimensional tensor with shape (2, 2, 2, 2).
+
+    Returns:
+        list[NDArray[np.complex128]]: A list containing two tensors resulting from the split.
+            - The first tensor has shape (2, 2, bond_dimension, 1).
+            - The second tensor has shape (2, 2, bond_dimension, 1).
+
+    Raises:
+        AssertionError: If the input tensor does not have the shape (2, 2, 2, 2).
+    """
     assert tensor.shape == (2, 2, 2, 2)
 
     # Splits two-qubit matrix
@@ -33,10 +46,9 @@ def _split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]
     tensor1 = U
     tensor2 = np.diag(S_list) @ V
 
-    # Reshape into physical dimensions and bond dimension from shape
+    # Reshape into physical dimensions and bond dimension
     tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))
     tensor2 = np.reshape(tensor2, (tensor2.shape[0], 2, 2))
-    # tensor2 = np.transpose(tensor2, (1, 0, 2))
     tensor2 = np.transpose(tensor2, (1, 2, 0))
 
     # Add dummy dimension to boundaries
@@ -46,6 +58,22 @@ def _split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]
 
 
 def _extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
+    """Extends a given gate tensor to a Matrix Product Operator (MPO) by adding identity tensors
+    between specified sites.
+
+    Args:
+        tensor (NDArray[np.complex128]): The input gate tensor to be extended.
+        sites (list[int]): A list of site indices where the gate tensor is to be applied.
+
+    Returns:
+        MPO: The resulting Matrix Product Operator with the gate tensor extended over the specified sites.
+
+    Notes:
+        - The function handles cases where the input tensor is split into either 2 or 3 tensors.
+        - Identity tensors are inserted between the specified sites.
+        - If the sites are provided in reverse order, the resulting MPO tensors are reversed and
+          transposed accordingly.
+    """
     from ..data_structures.networks import MPO
 
     tensors = _split_tensor(tensor)
@@ -88,6 +116,20 @@ def _extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
 
 
 class BaseGate:
+    """Base class representing a quantum gate.
+
+    Attributes:
+        name (str): The name of the gate.
+        matrix (NDArray[np.complex128]): The matrix representation of the gate.
+        interaction (int): The interaction type or level of the gate.
+        tensor (NDArray[np.complex128]): The tensor representation of the gate.
+        generator (NDArray[np.complex128] | list[NDArray[np.complex128]]): The generator(s) for the gate.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites on which the gate acts.
+    """
+
     name: str
     matrix: NDArray[np.complex128]
     interaction: int
@@ -95,10 +137,28 @@ class BaseGate:
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
 
     def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
         self.sites: list[int] = list(sites)
 
 
 class X(BaseGate):
+    """Class representing the X (NOT) gate.
+
+    Attributes:
+        name (str): "x".
+        matrix (NDArray[np.complex128]): The 2x2 matrix representation.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator, defined as (π/2)*X.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "x"
     matrix = np.array([[0, 1], [1, 0]])
     interaction = 1
@@ -112,6 +172,19 @@ class X(BaseGate):
 
 
 class Y(BaseGate):
+    """Class representing the Y gate.
+
+    Attributes:
+        name (str): "y".
+        matrix (NDArray[np.complex128]): The 2x2 matrix representation.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator, defined as (π/2)*Y.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "y"
     matrix = np.array([[0, -1j], [1j, 0]])
     interaction = 1
@@ -125,6 +198,19 @@ class Y(BaseGate):
 
 
 class Z(BaseGate):
+    """Class representing the Z gate.
+
+    Attributes:
+        name (str): "z".
+        matrix (NDArray[np.complex128]): The 2x2 matrix representation.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator, defined as (π/2)*Z.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "z"
     matrix = np.array([[1, 0], [0, -1]])
     interaction = 1
@@ -138,12 +224,26 @@ class Z(BaseGate):
 
 
 class H(BaseGate):
+    """Class representing the Hadamard (H) gate.
+
+    Attributes:
+        name (str): "h".
+        matrix (NDArray[np.complex128]): The 2x2 Hadamard matrix.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator, here defined as (π/√2) * 0.5*(X + Z).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "h"
-    matrix = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]])
+    matrix = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)],
+                       [1 / np.sqrt(2), -1 / np.sqrt(2)]])
     interaction = 1
 
     tensor = matrix
-    # Generator: (π/2) * 1/2(X + Z)
+    # Generator: (π/√2) * 0.5*(X + Z)
     generator = [(np.pi / np.sqrt(2)) * np.array([[0.5, 0.5], [0.5, -0.5]])]
 
     def set_sites(self, *sites: int) -> None:
@@ -151,6 +251,19 @@ class H(BaseGate):
 
 
 class I(BaseGate):
+    """Class representing the identity gate.
+
+    Attributes:
+        name (str): "id".
+        matrix (NDArray[np.complex128]): The 2x2 identity matrix.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (NDArray[np.complex128]): The generator, set to a zero matrix.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "id"
     matrix = np.array([[1, 0], [0, 1]])
     interaction = 1
@@ -164,8 +277,22 @@ class I(BaseGate):
 
 
 class SX(BaseGate):
+    """Class representing the square-root X (SX) gate.
+
+    Attributes:
+        name (str): "sx".
+        matrix (NDArray[np.complex128]): The matrix representation of the SX gate.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator, defined as (π/4)*X.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "sx"
-    matrix = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]])
+    matrix = 0.5 * np.array([[1 + 1j, 1 - 1j],
+                             [1 - 1j, 1 + 1j]])
     interaction = 1
 
     tensor = matrix
@@ -177,6 +304,23 @@ class SX(BaseGate):
 
 
 class Rx(BaseGate):
+    """Represents a rotation gate about the x-axis.
+
+    Attributes:
+        name (str): "rx".
+        interaction (int): Interaction level (1 for single-qubit).
+        theta (Parameter): The rotation angle parameter.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator computed as (θ/2)*X.
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the rotation parameter and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "rx"
     interaction = 1
 
@@ -195,6 +339,23 @@ class Rx(BaseGate):
 
 
 class Ry(BaseGate):
+    """Represents a rotation gate about the y-axis.
+
+    Attributes:
+        name (str): "ry".
+        interaction (int): Interaction level (1 for single-qubit).
+        theta (Parameter): The rotation angle parameter.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator computed as (θ/2)*Y.
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the rotation parameter and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "ry"
     interaction = 1
 
@@ -213,12 +374,32 @@ class Ry(BaseGate):
 
 
 class Rz(BaseGate):
+    """Represents a rotation gate about the z-axis.
+
+    Attributes:
+        name (str): "rz".
+        interaction (int): Interaction level (1 for single-qubit).
+        theta (Parameter): The rotation angle parameter.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (list): The generator computed as (θ/2)*Z.
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the rotation parameter and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "rz"
     interaction = 1
 
     def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
-        self.matrix = np.array([[np.exp(-1j * self.theta / 2), 0], [0, np.exp(1j * self.theta / 2)]])
+        self.matrix = np.array([
+            [np.exp(-1j * self.theta / 2), 0],
+            [0, np.exp(1j * self.theta / 2)],
+        ])
         self.tensor = self.matrix
         # Generator: (θ/2) * Z
         self.generator = [(self.theta / 2) * np.array([[-1j, 0], [0, 1j]])]
@@ -228,11 +409,28 @@ class Rz(BaseGate):
 
 
 class Phase(BaseGate):
+    """Class representing a phase gate.
+
+    Attributes:
+        name (str): "p".
+        interaction (int): Interaction level (1 for single-qubit).
+        theta (Parameter): The phase angle parameter.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        generator (NDArray[np.complex128]): The generator computed from theta.
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the phase parameter and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "p"
     interaction = 1
 
     def set_params(self, params: list[Parameter]) -> None:
-        # Phase gate has one parameter theta
+        # Phase gate has one parameter theta.
         self.theta = params[0]
         self.matrix = np.array([[1, 0], [0, np.exp(1j * self.theta)]])
         self.tensor = self.matrix
@@ -244,6 +442,24 @@ class Phase(BaseGate):
 
 
 class U3(BaseGate):
+    """Class representing a U3 gate.
+
+    Attributes:
+        name (str): "u".
+        interaction (int): Interaction level (1 for single-qubit).
+        theta (Parameter): First rotation parameter.
+        phi (Parameter): Second rotation parameter.
+        lam (Parameter): Third rotation parameter.
+        matrix (NDArray[np.complex128]): The matrix representation computed from the parameters.
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the parameters (theta, phi, lambda) and updates the matrix and tensor.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "u"
     interaction = 1
 
@@ -251,10 +467,8 @@ class U3(BaseGate):
         self.theta, self.phi, self.lam = params
         self.matrix = np.array([
             [np.cos(self.theta / 2), -np.exp(1j * self.lam) * np.sin(self.theta / 2)],
-            [
-                np.exp(1j * self.phi) * np.sin(self.theta / 2),
-                np.exp(1j * (self.phi + self.lam)) * np.cos(self.theta / 2),
-            ],
+            [np.exp(1j * self.phi) * np.sin(self.theta / 2),
+             np.exp(1j * (self.phi + self.lam)) * np.cos(self.theta / 2)],
         ])
         self.tensor = self.matrix
 
@@ -263,70 +477,137 @@ class U3(BaseGate):
 
 
 class CX(BaseGate):
+    """Class representing the controlled-NOT (CX) gate.
+
+    Attributes:
+        name (str): "cx".
+        matrix (NDArray[np.complex128]): The 4x4 matrix representation.
+        interaction (int): Interaction level (2 for two-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        generator (list): The generator for the gate.
+        mpo: An MPO representation generated from the gate tensor.
+        sites (list[int]): The control and target sites.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
     name = "cx"
-    matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
+    matrix = np.array([[1, 0, 0, 0],
+                       [0, 1, 0, 0],
+                       [0, 0, 0, 1],
+                       [0, 0, 1, 0]])
     interaction = 2
 
     def set_sites(self, *sites: int) -> None:
         self.sites = list(sites)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-X)
-        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
+        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]),
+                          np.array([[1, -1], [-1, 1]])]
         self.mpo = _extend_gate(self.tensor, self.sites)
         if sites[1] < sites[0]:  # Adjust for reverse control/target
-            # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
 class CZ(BaseGate):
+    """Class representing the controlled-Z (CZ) gate.
+
+    Attributes:
+        name (str): "cz".
+        matrix (NDArray[np.complex128]): The 4x4 matrix representation.
+        interaction (int): Interaction level (2 for two-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        generator (list): The generator for the gate.
+        sites (list[int]): The control and target sites.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor.
+    """
     name = "cz"
-    matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]])
+    matrix = np.array([[1, 0, 0, 0],
+                       [0, 1, 0, 0],
+                       [0, 0, 1, 0],
+                       [0, 0, 0, -1]])
     interaction = 2
 
     def set_sites(self, *sites: int) -> None:
         self.sites = list(sites)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (π/4) * (I-Z ⊗ I-Z)
-        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
-
+        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]),
+                          np.array([[1, -1], [-1, 1]])]
         if sites[1] < sites[0]:  # Adjust for reverse control/target
-            # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
 class CPhase(BaseGate):
+    """Class representing the controlled phase (CPhase) gate.
+
+    Attributes:
+        name (str): "cp".
+        interaction (int): Interaction level (2 for two-qubit).
+        theta (Parameter): The phase parameter.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        generator (list): The generator for the gate.
+        sites (list[int]): The control and target sites.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the phase parameter and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the sites and may update the tensor based on site order.
+    """
     name = "cp"
     interaction = 2
 
     def set_params(self, params: list[Parameter]) -> None:
         self.theta = params[0]
-        self.matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j * self.theta)]])
+        self.matrix = np.array([[1, 0, 0, 0],
+                                [0, 1, 0, 0],
+                                [0, 0, 1, 0],
+                                [0, 0, 0, np.exp(1j * self.theta)]])
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Z ⊗ P), where P = diag(1, 0)
-        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]),
+                          np.array([[1, 0], [0, 0]])]
 
     def set_sites(self, *sites: int) -> None:
         self.sites = list(sites)
         if self.interaction > 2:
             self.mpo = _extend_gate(self.tensor, self.sites)
         elif sites[1] < sites[0]:  # Adjust for reverse control/target
-            # self.generator.reverse()
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
 class SWAP(BaseGate):
+    """Class representing the SWAP gate.
+
+    Attributes:
+        name (str): "swap".
+        matrix (NDArray[np.complex128]): The 4x4 matrix representation.
+        interaction (int): Interaction level (2 for two-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        generator (list): The generator for the gate.
+        sites (list[int]): The sites involved in the swap.
+
+    Methods:
+        __init__() -> None:
+            Initializes the gate and its generator.
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor.
+    """
     name = "swap"
-    matrix = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    matrix = np.array([[1, 0, 0, 0],
+                       [0, 0, 1, 0],
+                       [0, 1, 0, 0],
+                       [0, 0, 0, 1]])
     interaction = 2
 
     def __init__(self) -> None:
         # Generator: (π/4) * (I ⊗ I + X ⊗ X + Y ⊗ Y + Z ⊗ Z)
-        # self.generator = (np.pi / 4) * (
-        #     np.kron(np.eye(2), np.eye(2)) + # I ⊗ I
-        #     np.kron(np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])) +  # X ⊗ X
-        #     np.kron(np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])) +  # Y ⊗ Y
-        #     np.kron(np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]]))  # Z ⊗ Z
-        # )
         self.generator = [
             [
                 (np.pi / 4) * np.eye(2),
@@ -334,7 +615,9 @@ class SWAP(BaseGate):
                 np.pi / 4 * np.array([[0, -1j], [1j, 0]]),
                 np.pi / 4 * np.array([[1, 0], [0, -1]]),
             ],
-            [np.eye(2), np.array([[0, 1], [1, 0]]), np.array([[0, -1j], [1j, 0]]), np.array([[1, 0], [0, -1]])],
+            [np.eye(2), np.array([[0, 1], [1, 0]]),
+             np.array([[0, -1j], [1j, 0]]),
+             np.array([[1, 0], [0, -1]])],
         ]
 
     def set_sites(self, *sites: int) -> None:
@@ -343,6 +626,23 @@ class SWAP(BaseGate):
 
 
 class Rxx(BaseGate):
+    """Represents a two-qubit rotation gate about the xx-axis.
+
+    Attributes:
+        name (str): "rxx".
+        interaction (int): Interaction level (2 for two-qubit).
+        theta (Parameter): The rotation angle.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        generator (list): The generator computed as (θ/2)*(X ⊗ X).
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the rotation angle and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "rxx"
     interaction = 2
 
@@ -356,13 +656,31 @@ class Rxx(BaseGate):
         ])
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (X ⊗ X)
-        self.generator = [(self.theta / 2) * np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[0, 1], [1, 0]]),
+                          np.array([[0, 1], [1, 0]])]
 
     def set_sites(self, *sites: int) -> None:
         self.sites = list(sites)
 
 
 class Ryy(BaseGate):
+    """Represents a two-qubit rotation gate about the yy-axis.
+
+    Attributes:
+        name (str): "ryy".
+        interaction (int): Interaction level (2 for two-qubit).
+        theta (Parameter): The rotation angle.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        generator (list): The generator computed as (θ/2)*(Y ⊗ Y).
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the rotation angle and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "ryy"
     interaction = 2
 
@@ -376,13 +694,31 @@ class Ryy(BaseGate):
         ])
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Y ⊗ Y)
-        self.generator = [(self.theta / 2) * np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
+        self.generator = [(self.theta / 2) * np.array([[0, -1j], [1j, 0]]),
+                          np.array([[0, -1j], [1j, 0]])]
 
     def set_sites(self, *sites: int) -> None:
         self.sites = list(sites)
 
 
 class Rzz(BaseGate):
+    """Represents a two-qubit rotation gate about the zz-axis.
+
+    Attributes:
+        name (str): "rzz".
+        interaction (int): Interaction level (2 for two-qubit).
+        theta (Parameter): The rotation angle.
+        matrix (NDArray[np.complex128]): The matrix representation computed from theta.
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        generator (list): The generator computed as (θ/2)*(Z ⊗ Z).
+        sites (list[int]): The sites where the gate is applied.
+
+    Methods:
+        set_params(params: list[Parameter]) -> None:
+            Sets the rotation angle and updates the matrix, tensor, and generator.
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
     name = "rzz"
     interaction = 2
 
@@ -396,64 +732,36 @@ class Rzz(BaseGate):
         ])
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: (θ/2) * (Z ⊗ Z)
-        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
+        self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]),
+                          np.array([[1, 0], [0, -1]])]
 
     def set_sites(self, *sites: int) -> None:
         self.sites = list(sites)
 
 
-# class U2:
-#     name = 'u2'
-#     interaction = 1
-
-#     def set_params(self, params):
-#         # U2 gate has parameters phi and lambda
-#         self.phi = params[0]
-#         self.lam = params[1]
-#         self.matrix = np.array([
-#             [1, -np.exp(1j * self.lam)],
-#             [np.exp(1j * self.phi), np.exp(1j * (self.phi + self.lam))]
-#         ]) / np.sqrt(2)
-#         self.tensor = self.matrix
-#         # Generator: Derived from the U2 unitary matrix
-#         self.generator = (1 / np.sqrt(2)) * np.array([
-#             [0, -np.exp(-1j * self.lam)],
-#             [np.exp(-1j * self.phi), 0]
-#         ])
-
-#     def set_sites(self, site0: int):
-#         self.sites = [site0]
-
-
-# class CCX:
-#     matrix = np.array([[1, 0, 0, 0, 0, 0, 0, 0],
-#                         [0, 1, 0, 0, 0, 0, 0, 0],
-#                         [0, 0, 1, 0, 0, 0, 0, 0],
-#                         [0, 0, 0, 1, 0, 0, 0, 0],
-#                         [0, 0, 0, 0, 1, 0, 0, 0],
-#                         [0, 0, 0, 0, 0, 1, 0, 0],
-#                         [0, 0, 0, 0, 0, 0, 0, 1],
-#                         [0, 0, 0, 0, 0, 0, 1, 0],])
-#     # matrix = np.array([[1, 0, 0, 0, 0, 0, 0, 0],
-#     #                     [0, 1, 0, 0, 0, 0, 0, 0],
-#     #                     [0, 0, 1, 0, 0, 0, 0, 0],
-#     #                     [0, 0, 0, 0, 0, 0, 0, 1],
-#     #                     [0, 0, 0, 0, 1, 0, 0, 0],
-#     #                     [0, 0, 0, 0, 0, 1, 0, 0],
-#     #                     [0, 0, 0, 0, 0, 0, 1, 0],
-#     #                     [0, 0, 0, 1, 0, 0, 0, 0],])
-
-#     interaction = 3
-
-#     def set_sites(self, site0: int, site1: int, site2: int):
-#         self.sites = [site0, site1, site2]
-#         self.tensor = np.reshape(self.matrix, (2, 2, 2, 2, 2, 2))
-
-#         self.interaction = np.abs(site0 - site2)+1
-#         self.tensor = _extend_gate(self.tensor, self.sites)
-
-
 class GateLibrary:
+    """A collection of quantum gate classes for use in simulations.
+
+    Attributes:
+        x: Class for the X gate.
+        y: Class for the Y gate.
+        z: Class for the Z gate.
+        sx: Class for the square-root X gate.
+        h: Class for the Hadamard gate.
+        id: Class for the identity gate.
+        rx: Class for the rotation gate about the x-axis.
+        ry: Class for the rotation gate about the y-axis.
+        rz: Class for the rotation gate about the z-axis.
+        u: Class for the U3 gate.
+        cx: Class for the controlled-NOT gate.
+        cz: Class for the controlled-Z gate.
+        swap: Class for the SWAP gate.
+        rxx: Class for the rotation gate about the xx-axis.
+        ryy: Class for the rotation gate about the yy-axis.
+        rzz: Class for the rotation gate about the zz-axis.
+        cp: Class for the controlled phase gate.
+        p: Class for the phase gate.
+    """
     x = X
     y = Y
     z = Z
@@ -470,7 +778,5 @@ class GateLibrary:
     rxx = Rxx
     ryy = Ryy
     rzz = Rzz
-    # ccx = CCX
     cp = CPhase
-    # u2 = U2
     p = Phase

@@ -32,6 +32,21 @@ if TYPE_CHECKING:
 
 
 def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
+    """Processes the current layer of a DAGCircuit and categorizes nodes into single-qubit, even-indexed two-qubit,
+    and odd-indexed two-qubit gates.
+
+    Args:
+        dag (DAGCircuit): The directed acyclic graph representing the quantum circuit.
+
+    Returns:
+        tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]: A tuple containing three lists:
+            - single_qubit_nodes: Nodes corresponding to single-qubit gates.
+            - even_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is even.
+            - odd_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is odd.
+
+    Raises:
+        Exception: If a node with more than two qubits is encountered.
+    """
     # Extract the current layer
     current_layer = dag.front_layer()
 
@@ -65,11 +80,29 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
 
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
+    """Apply a single-qubit gate to the given state.
+
+    Parameters:
+    state (MPS): The matrix product state (MPS) representing the quantum state.
+    node (DAGOpNode): The directed acyclic graph (DAG) operation node representing the gate to be applied.
+
+    Returns:
+    None
+    """
     gate = convert_dag_to_tensor_algorithm(node)[0]
     state.tensors[gate.sites[0]] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[gate.sites[0]])
 
 
 def construct_generator_MPO(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
+    """Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a specified length.
+
+    Args:
+        gate (BaseGate): The gate containing the generator and the sites it acts on.
+        length (int): The total number of sites in the system.
+
+    Returns:
+        tuple[MPO, int, int]: A tuple containing the constructed MPO, the first site index, and the last site index.
+    """
     tensors = []
 
     first_site = min(gate.sites)
@@ -105,6 +138,18 @@ def construct_generator_MPO(gate: BaseGate, length: int) -> tuple[MPO, int, int]
 def apply_window(
     state: MPS, mpo: MPO, first_site: int, last_site: int, sim_params: StrongSimParams | WeakSimParams
 ) -> tuple[MPS, MPO, list[int]]:
+    """Apply a window to the given MPS and MPO for a local update.
+
+    Args:
+        state (MPS): The matrix product state (MPS) to be updated.
+        mpo (MPO): The matrix product operator (MPO) to be applied.
+        first_site (int): The index of the first site in the window.
+        last_site (int): The index of the last site in the window.
+        sim_params (StrongSimParams | WeakSimParams): Simulation parameters containing the window size.
+
+    Returns:
+        tuple[MPS, MPO, list[int]]: A tuple containing the shortened MPS, the shortened MPO, and the window indices.
+    """
     # Define a window for a local update.
     assert sim_params.window_size is not None
     window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
@@ -124,6 +169,16 @@ def apply_window(
 
 
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> None:
+    """Applies a two-qubit gate to the given Matrix Product State (MPS).
+
+    Args:
+        state (MPS): The Matrix Product State to which the gate will be applied.
+        node (DAGOpNode): The node representing the two-qubit gate in the Directed Acyclic Graph (DAG).
+        sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior of the algorithm.
+
+    Returns:
+        None.
+    """
     gate = convert_dag_to_tensor_algorithm(node)[0]
 
     # Construct the MPO for the two-qubit gate.
@@ -142,6 +197,20 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 def circuit_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
 ) -> NDArray[np.float64]:
+    """Simulates a quantum circuit using the Tensor Jump Method.
+
+    Args:
+        args (tuple): A tuple containing the following elements:
+            - int: An index or identifier, primarily for parallelization
+            - MPS: The initial state of the system represented as a Matrix Product State.
+            - NoiseModel | None: The noise model to be applied during the simulation, or None if no noise is to be applied.
+            - StrongSimParams | WeakSimParams: Parameters for the simulation, either for strong or weak simulation.
+            - QuantumCircuit: The quantum circuit to be simulated.
+
+    Returns:
+        NDArray[np.float64]: The results of the simulation. If StrongSimParams are used, the results are the measured observables.
+                             If WeakSimParams are used, the results are the measurement outcomes for each shot.
+    """
     from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
     _i, initial_state, noise_model, sim_params, circuit = args

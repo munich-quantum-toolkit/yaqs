@@ -31,6 +31,24 @@ def _run_strong_sim(
     *,
     parallel: bool,
 ) -> None:
+    """Run strong simulation trajectories for a quantum circuit using a strong simulation scheme.
+
+    This function executes circuit-based simulation trajectories using the 'circuit_tjm' backend.
+    If the noise model is absent or its strengths are all zero, only a single trajectory is executed.
+    For each observable in sim_params.sorted_observables, the function initializes the observable,
+    runs the simulation trajectories (in parallel if specified), and aggregates the results.
+
+    Args:
+        initial_state (MPS): The initial system state as an MPS.
+        operator (QuantumCircuit): The quantum circuit representing the operation to simulate.
+        sim_params (StrongSimParams): Simulation parameters for strong simulation, including the number of trajectories (N),
+                                      time step (dt), and sorted observables.
+        noise_model (NoiseModel | None): The noise model applied during simulation.
+        parallel (bool): Flag indicating whether to run trajectories in parallel.
+
+    Returns:
+        None
+    """
     from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
 
     backend = circuit_tjm
@@ -71,6 +89,23 @@ def _run_weak_sim(
     *,
     parallel: bool,
 ) -> None:
+    """Run weak simulation trajectories for a quantum circuit using a weak simulation scheme.
+
+    This function executes circuit-based simulation trajectories using the 'circuit_tjm' backend,
+    adjusted for weak simulation parameters. If the noise model is absent or its strengths are all zero,
+    only a single trajectory is executed; otherwise, sim_params.N is set to sim_params.shots and then shots is set to 1.
+    The trajectories are then executed (in parallel if specified) and the measurement results are aggregated.
+
+    Args:
+        initial_state (MPS): The initial system state as an MPS.
+        operator (QuantumCircuit): The quantum circuit representing the operation to simulate.
+        sim_params (WeakSimParams): Simulation parameters for weak simulation, including shot count and sorted observables.
+        noise_model (NoiseModel | None): The noise model applied during simulation.
+        parallel (bool): Flag indicating whether to run trajectories in parallel.
+
+    Returns:
+        None
+    """
     from mqt.yaqs.circuits.CircuitTJM import circuit_tjm
 
     backend = circuit_tjm
@@ -107,6 +142,22 @@ def _run_circuit(
     *,
     parallel: bool,
 ) -> None:
+    """Run circuit-based simulation trajectories.
+
+    This function validates that the number of qubits in the quantum circuit matches the length of the MPS,
+    reverses the bit order of the circuit, and dispatches the simulation to the appropriate backend based on
+    whether the simulation parameters indicate strong or weak simulation.
+
+    Args:
+        initial_state (MPS): The initial system state as an MPS.
+        operator (QuantumCircuit): The quantum circuit to simulate.
+        sim_params (WeakSimParams | StrongSimParams): Simulation parameters for circuit simulation.
+        noise_model (NoiseModel | None): The noise model applied during simulation.
+        parallel (bool): Flag indicating whether to run trajectories in parallel.
+
+    Returns:
+        None
+    """
     assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
     operator = copy.deepcopy(operator.reverse_bits())
 
@@ -119,13 +170,27 @@ def _run_circuit(
 def _run_physics(
     initial_state: MPS, operator: MPO, sim_params: PhysicsSimParams, noise_model: NoiseModel | None, *, parallel: bool
 ) -> None:
+    """Run physics simulation trajectories for Hamiltonian evolution.
+
+    This function selects the appropriate physics-based simulation backend based on sim_params.order
+    (either one-site or two-site evolution) and runs the simulation trajectories for the given Hamiltonian
+    (represented as an MPO). The trajectories are executed (in parallel if specified) and the results are aggregated.
+
+    Args:
+        initial_state (MPS): The initial system state as an MPS.
+        operator (MPO): The Hamiltonian operator represented as an MPO.
+        sim_params (PhysicsSimParams): Simulation parameters for physics simulation, including time step and evolution order.
+        noise_model (NoiseModel | None): The noise model applied during simulation.
+        parallel (bool): Flag indicating whether to run trajectories in parallel.
+
+    Returns:
+        None
+    """
     if sim_params.order == 1:
         from mqt.yaqs.physics.PhysicsTJM import physics_tjm_1
-
         backend = physics_tjm_1
     else:
         from mqt.yaqs.physics.PhysicsTJM import physics_tjm_2
-
         backend = physics_tjm_2
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
@@ -164,9 +229,22 @@ def run(
     *,
     parallel: bool = True,
 ) -> None:
-    """Common simulation routine used by both circuit and Hamiltonian simulations.
-    It normalizes the state, prepares trajectory arguments, runs the trajectories
-    in parallel, and aggregates the results.
+    """Execute the common simulation routine for both circuit and Hamiltonian simulations.
+
+    This function first normalizes the initial state (MPS) to B normalization, then dispatches the simulation
+    to the appropriate backend based on the type of simulation parameters provided. For circuit-based simulations,
+    the operator must be a QuantumCircuit; for Hamiltonian simulations, the operator must be an MPO.
+
+    Args:
+        initial_state (MPS): The initial state of the system as an MPS. Must be B normalized.
+        operator (MPO | QuantumCircuit): The operator representing the evolution; an MPO for physics simulations
+            or a QuantumCircuit for circuit simulations.
+        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters specifying the simulation mode and settings.
+        noise_model (NoiseModel | None): The noise model to apply during simulation.
+        parallel (bool, optional): Whether to run trajectories in parallel. Defaults to True.
+
+    Returns:
+        None
     """
     # State must start in B normalization
     initial_state.normalize("B")

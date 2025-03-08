@@ -26,12 +26,14 @@ if TYPE_CHECKING:
 
 def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: PhysicsSimParams) -> MPS:
     """Initialize the sampling MPS for second-order Trotterization.
-    Corresponds to F0 in the TJM paper.
+
+    This function prepares the initial sampling MPS (denoted as Phi(0)) by applying a half time step of dissipation
+    followed by a stochastic process. It corresponds to F0 in the TJM paper.
 
     Args:
-        state (MPS): Initial state of the system.
-        noise_model (NoiseModel): Noise model to apply to the system.
-        sim_params (SimulationParams): Simulation parameters, including time step.
+        state (MPS): The initial state of the system.
+        noise_model (NoiseModel | None): The noise model to apply to the system.
+        sim_params (PhysicsSimParams): Simulation parameters including the time step (dt).
 
     Returns:
         MPS: The initialized sampling MPS Phi(0).
@@ -41,17 +43,19 @@ def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: PhysicsSi
 
 
 def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams) -> MPS:
-    """Perform a single time step of the TJM of the system state.
-    Corresponds to Fj in the TJM paper.
+    """Perform a single time step evolution of the system state using the TJM.
+
+    Corresponding to Fj in the TJM paper, this function evolves the state by applying dynamic TDVP,
+    dissipation, and a stochastic process in sequence.
 
     Args:
-        state (MPS): Current state of the system.
-        H (MPO): Hamiltonian operator for the system.
-        noise_model (NoiseModel): Noise model to apply to the system.
-        sim_params (SimulationParams): Simulation parameters, including time step and max bond dimension.
+        state (MPS): The current state of the system.
+        H (MPO): The Hamiltonian operator for the system.
+        noise_model (NoiseModel | None): The noise model to apply to the system.
+        sim_params (PhysicsSimParams): Simulation parameters including the time step and measurement settings.
 
     Returns:
-        MPS: The updated state after performing the time step evolution.
+        MPS: The updated state after one time step evolution.
     """
     dynamic_TDVP(state, H, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
@@ -61,17 +65,22 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params:
 def sample(
     phi: MPS, H: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams, results: NDArray[np.float64], j: int
 ) -> None:
-    """Sample the quantum state and measure an observable from the sampling MPS.
-    Corresponds to Fn in the TJM paper.
+    """Sample the quantum state and record observable measurements from the sampling MPS.
+
+    This function evolves a deep copy of the sampling MPS, applies dissipation and a stochastic process,
+    and then measures the observables specified in sim_params. The measured values are stored in the provided
+    results array at index j (or at index 0 if only one measurement is taken).
 
     Args:
-        phi (MPS): State of the system before sampling.
-        H (MPO): Hamiltonian operator for the system.
-        noise_model (NoiseModel): Noise model to apply to the system.
-        sim_params (SimulationParams): Simulation parameters, including time step and measurements.
+        phi (MPS): The sampling MPS prior to measurement.
+        H (MPO): The Hamiltonian operator for the system.
+        noise_model (NoiseModel | None): The noise model to apply during evolution.
+        sim_params (PhysicsSimParams): Simulation parameters including time step and measurement settings.
+        results (NDArray[np.float64]): An array to store the measured observable values.
+        j (int): The time step or shot index at which the measurement is recorded.
 
     Returns:
-        MPS: The measured observable value.
+        None
     """
     psi = copy.deepcopy(phi)
     dynamic_TDVP(psi, H, sim_params)
@@ -98,17 +107,26 @@ def sample(
 
 
 def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
-    """Run a single trajectory of the TJM.
+    """Run a single trajectory of the TJM using a two-site evolution scheme.
+
+    This function executes a full trajectory by evolving the initial state,
+    sampling observable measurements over time, and recording the results.
+    It corresponds to the two-site evolution method presented in the TJM paper.
 
     Args:
-        args (tuple): Tuple containing index, initial state, noise model, simulation parameters, observables, sites, and Hamiltonian.
+        args (tuple): A tuple containing:
+            - int: Trajectory identifier.
+            - MPS: The initial state of the system.
+            - NoiseModel | None: The noise model to be applied (if any).
+            - PhysicsSimParams: Simulation parameters (including time step, SVD threshold, etc.).
+            - MPO: The Hamiltonian operator represented as an MPO.
 
     Returns:
-        list: Expectation values for the trajectory over time.
+        NDArray[np.float64]: An array of expectation values for the trajectory, with dimensions
+        determined by the number of observables and time steps.
     """
     _i, initial_state, noise_model, sim_params, H = args
 
-    # Create deep copies of the shared inputs to avoid race conditions
     state = copy.deepcopy(initial_state)
     if sim_params.sample_timesteps:
         results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
@@ -132,6 +150,23 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
 
 
 def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
+    """Run a single trajectory of the TJM using a one-site evolution scheme.
+
+    This function evolves the state with a one-site TDVP update, applying noise (if provided)
+    and taking observable measurements over time. It corresponds to the one-site evolution method in the TJM paper.
+
+    Args:
+        args (tuple): A tuple containing:
+            - int: Trajectory identifier.
+            - MPS: The initial state of the system.
+            - NoiseModel | None: The noise model to be applied (if any).
+            - PhysicsSimParams: Simulation parameters including the time step and measurement settings.
+            - MPO: The Hamiltonian operator represented as an MPO.
+
+    Returns:
+        NDArray[np.float64]: An array of expectation values for the trajectory, with shape determined
+        by the number of observables and time steps.
+    """
     _i, initial_state, noise_model, sim_params, H = args
     state = copy.deepcopy(initial_state)
 

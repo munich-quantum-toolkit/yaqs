@@ -28,6 +28,13 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 
 def test_process_layer() -> None:
+    """Test the process_layer function for grouping gate nodes.
+
+    This test creates a 9-qubit circuit with measurement, barrier, single-qubit, and two-qubit gates.
+    After processing, it verifies that measurement and barrier nodes have been removed and that the remaining
+    nodes are correctly grouped into single, even, and odd sets. In the even group, the lower qubit index
+    should be even, and in the odd group, it should be odd.
+    """
     # Create a QuantumCircuit with 9 qubits and 9 classical bits.
     qc = QuantumCircuit(9, 9)
     qc.measure(0, 0)
@@ -65,19 +72,26 @@ def test_process_layer() -> None:
 
 
 def test_process_layer_unsupported_gate() -> None:
-    # Create a QuantumCircuit with 9 qubits and 9 classical bits.
+    """Test that process_layer raises an exception when encountering an unsupported gate.
+
+    This test creates a 3-qubit circuit with a CCX gate, which is not supported by process_layer.
+    It verifies that an exception is raised.
+    """
     qc = QuantumCircuit(3)
     qc.ccx(0, 1, 2)
 
-    # Convert the circuit to a DAG.
     dag = circuit_to_dag(qc)
 
-    # Call process_layer on the DAG.
     with pytest.raises(Exception):
         process_layer(dag)
 
 
 def test_apply_single_qubit_gate() -> None:
+    """Test applying a single-qubit gate to an MPS using apply_single_qubit_gate.
+
+    This test creates a one-qubit MPS and applies an X gate extracted from the front layer of a DAG.
+    It then compares the updated tensor to the expected result computed via an einsum contraction.
+    """
     mps = MPS(length=1)
     tensor = mps.tensors[0]
 
@@ -95,26 +109,34 @@ def test_apply_single_qubit_gate() -> None:
 
 
 def test_construct_generator_MPO() -> None:
+    """Test the construction of a generator MPO from a two-qubit gate.
+
+    This test retrieves a CX gate from the GateLibrary, sets its target sites, and uses construct_generator_MPO
+    to obtain an MPO representation of the gate. It verifies that the first and last site indices match the expected
+    values and that the generator MPO tensors at these sites correspond to the gate's generators. All other tensors
+    should be the identity.
+    """
     gate = GateLibrary.cx()
     gate.set_sites(1, 3)
     length = 5
     mpo, first_site, last_site = construct_generator_MPO(gate, length)
     for _tensor in mpo.tensors:
         pass
-    # The first and last sites should be 1 and 3.
     assert first_site == 1
     assert last_site == 3
-    # Check the MPO tensors at the designated sites.
     np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[1], (2, 3, 0, 1))), np.complex128(gate.generator[0]))
     np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[3], (2, 3, 0, 1))), np.complex128(gate.generator[1]))
-    # All other tensors should be the identity.
     for i in range(length):
         if i not in {1, 3}:
             np.testing.assert_allclose(np.squeeze(np.transpose(mpo.tensors[i], (2, 3, 0, 1))), np.eye(2, dtype=complex))
 
 
 def test_apply_window() -> None:
-    # Create dummy MPS and MPO objects with 5 tensors.
+    """Test the apply_window function for extracting a window from MPS and MPO objects.
+
+    This test creates dummy MPS and MPO objects with 5 tensors, applies a window function with specified parameters,
+    and asserts that the resulting window, as well as the shortened MPS and MPO, have the expected properties.
+    """
     length = 5
     tensors = [np.full((2, 1, 1), i, dtype=complex) for i in range(5)]
     mps = MPS(length, tensors)
@@ -134,12 +156,17 @@ def test_apply_window() -> None:
     short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, sim_params)
 
     assert window == [0, 3]
-    # The short state should have tensors corresponding to indices 1 through 4.
     assert short_state.length == 4
     assert short_mpo.length == 4
 
 
 def test_apply_two_qubit_gate_with_window() -> None:
+    """Test applying a two-qubit gate with and without a specified window size.
+
+    This test creates an MPS and applies a CX gate extracted from a circuit. It verifies that the MPS tensors change
+    as expected after gate application. The test is performed twice: first without a window and then with a window size,
+    and the results are compared for consistency.
+    """
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()
@@ -160,7 +187,6 @@ def test_apply_two_qubit_gate_with_window() -> None:
     sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
     orig_tensors = copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
-    # Check that at least one tensor has changed.
     for i, tensor in enumerate(mps0.tensors):
         if i in {0, 3}:
             np.testing.assert_allclose(np.abs(tensor), np.abs(orig_tensors[i]))
@@ -168,7 +194,6 @@ def test_apply_two_qubit_gate_with_window() -> None:
             with pytest.raises(AssertionError):
                 np.testing.assert_allclose(tensor, orig_tensors[i])
 
-    # Test again with a window size.
     mps1 = MPS(length, copy.deepcopy(orig_tensors))
     window_size = 1
     sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
@@ -180,6 +205,11 @@ def test_apply_two_qubit_gate_with_window() -> None:
 
 
 def test_circuit_tjm_strong() -> None:
+    """Test the circuit_tjm function for strong simulation.
+
+    This test creates a random MPS and a circuit with a CX gate, sets up strong simulation parameters,
+    and runs circuit_tjm. The test verifies that the simulation completes without errors.
+    """
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()
@@ -198,6 +228,11 @@ def test_circuit_tjm_strong() -> None:
 
 
 def test_circuit_tjm_weak() -> None:
+    """Test the circuit_tjm function for weak simulation.
+
+    This test creates a random MPS and a circuit with a CX gate, sets up weak simulation parameters,
+    and runs circuit_tjm. The test verifies that the simulation completes and measurements are obtained.
+    """
     length = 4
     mps0 = MPS(length, state="random")
     mps0.normalize()

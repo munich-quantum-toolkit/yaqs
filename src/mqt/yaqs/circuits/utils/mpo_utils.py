@@ -26,16 +26,21 @@ if TYPE_CHECKING:
 def decompose_theta(
     theta: NDArray[np.complex128], threshold: float
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Performs an SVD-based decomposition of the tensor `theta`, truncating
-    singular values below a specified threshold, and then reshapes the result
-    into two rank-4 tensors.
+    """Perform an SVD-based decomposition of the tensor `theta`, truncating singular values below a given threshold,
+    and reshape the result into two rank-4 tensors.
+
+    The input tensor is first re-ordered and flattened into a matrix, then decomposed using SVD.
+    Singular values below the threshold are discarded. The left singular vectors (U) are reshaped into a tensor
+    with shape (dims[0], dims[1], dims[2], num_sv), and the product of the diagonal singular value matrix with
+    the right singular vectors (V) is reshaped and transposed into a tensor with shape (dims[3], dims[4], num_sv, dims[5]).
 
     Args:
-        theta: The high-rank tensor to decompose.
-        threshold: The cutoff threshold for singular values.
+        theta (NDArray[np.complex128]): The high-rank tensor to decompose.
+        threshold (float): The cutoff threshold for singular values.
 
     Returns:
-        A tuple (U, M) of two reshaped tensors derived from the SVD.
+        tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+            A tuple (U, M) of two reshaped tensors derived from the SVD.
     """
     dims = theta.shape
     # Reorder indices before flattening
@@ -47,10 +52,11 @@ def decompose_theta(
     U = U[:, : len(S_list)]
     V = V[: len(S_list), :]
 
-    # Reshape U
+    # Reshape U into a tensor of shape (dims[0], dims[1], dims[2], num_sv)
     U = np.reshape(U, (dims[0], dims[1], dims[2], len(S_list)))
 
-    # Create site tensor
+    # Compute site tensor M and reshape: first form M = diag(S_list) @ V,
+    # then reshape to (num_sv, dims[3], dims[4], dims[5]) and transpose to (dims[3], dims[4], num_sv, dims[5])
     M = np.diag(S_list) @ V
     M = np.reshape(M, (len(S_list), dims[3], dims[4], dims[5]))
     M = np.transpose(M, (1, 2, 0, 3))
@@ -59,20 +65,28 @@ def decompose_theta(
 
 
 def apply_gate(
-    gate: BaseGate, theta: NDArray[np.complex128], site0: int, site1: int, *, conjugate: bool = False
+    gate: BaseGate,
+    theta: NDArray[np.complex128],
+    site0: int,
+    site1: int,
+    *,
+    conjugate: bool = False,
 ) -> NDArray[np.complex128]:
-    """Applies a single- or two-qubit gate (or multi-qubit gate) from a GateLibrary object
-    to the local tensor `theta`.
+    """Apply a single-, two-, or multi-qubit gate from a GateLibrary object to a local tensor `theta`.
+
+    Depending on the gate's interaction type and the dimensionality of `theta`, this function contracts the gate's
+    tensor with `theta` according to a predefined pattern. If `conjugate` is True, the gate tensor is conjugated before
+    contraction. Identity gates leave `theta` unchanged.
 
     Args:
-        gate: A GateLibrary gate object, containing a .tensor and .interaction attributes.
-        theta: The local tensor to update.
-        site0: The first qubit (site) index.
-        site1: The second qubit (site) index.
-        conjugate: Whether to apply the gate tensor in a conjugated manner.
+        gate (BaseGate): A gate object from the GateLibrary that contains .tensor, .interaction, and .sites attributes.
+        theta (NDArray[np.complex128]): The local tensor to update.
+        site0 (int): The first qubit (site) index.
+        site1 (int): The second qubit (site) index.
+        conjugate (bool, optional): Whether to apply the conjugated version of the gate tensor. Defaults to False.
 
     Returns:
-        The updated local tensor after applying the gate.
+        NDArray[np.complex128]: The updated local tensor after applying the gate.
     """
     # Check gate site usage
     assert gate.interaction in {1, 2}, "Gate interaction must be 1 or 2."
@@ -84,13 +98,13 @@ def apply_gate(
             "Two-qubit gate must be on the correct pair of sites."
         )
 
-    # Nearest-neighbor gates (theta.ndim == 6) or long-range gates (theta.ndim == 8)
+    # For nearest-neighbor gates (theta.ndim == 6)
     if theta.ndim == 6:
         if conjugate:
             theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
         if gate.name == "I":
-            pass  # Identity gate
+            pass  # Identity gate, no action needed.
         elif gate.interaction == 1:
             if gate.sites[0] == site0:
                 if conjugate:
@@ -110,12 +124,13 @@ def apply_gate(
         if conjugate:
             theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
+    # For long-range or multi-qubit gates (theta.ndim == 8)
     elif theta.ndim == 8:
         if conjugate:
             theta = np.transpose(theta, (4, 5, 3, 2, 0, 1, 6, 7))
 
         if gate.name == "I":
-            pass  # Identity gate
+            pass
         elif gate.interaction == 1:
             if gate.sites[0] == site0:
                 if conjugate:
@@ -140,18 +155,26 @@ def apply_gate(
 
 
 def apply_temporal_zone(
-    theta: NDArray[np.complex128], dag: DAGCircuit, qubits: list[int], *, conjugate: bool = False
+    theta: NDArray[np.complex128],
+    dag: DAGCircuit,
+    qubits: list[int],
+    *,
+    conjugate: bool = False,
 ) -> NDArray[np.complex128]:
-    """Applies the temporal zone of `dag` to a local tensor `theta`.
+    """Apply the temporal zone of a DAGCircuit to a local tensor `theta`.
+
+    The temporal zone is the subset of operations extracted from the DAGCircuit that act on the specified qubits.
+    This function uses the temporal zone to create a sequence of gate operations (via the GateLibrary) and applies
+    them sequentially to `theta`. If conjugate is True, the gates are applied in their conjugated form.
 
     Args:
-        theta: The local tensor to which gates will be applied.
-        dag: The DAGCircuit from which to extract and apply gates.
-        qubits: The qubits on which to apply the temporal zone.
-        conjugate: Whether to apply gates in a conjugated manner.
+        theta (NDArray[np.complex128]): The local tensor to update.
+        dag (DAGCircuit): The DAGCircuit from which to extract the temporal zone.
+        qubits (list[int]): The qubit indices on which to apply the temporal zone (typically two neighboring qubits).
+        conjugate (bool, optional): Whether to apply the gates in conjugated form. Defaults to False.
 
     Returns:
-        The updated tensor after applying the temporal zone.
+        NDArray[np.complex128]: The updated tensor after applying the temporal zone.
     """
     n = qubits[0]
     if dag.op_nodes():
@@ -163,34 +186,37 @@ def apply_temporal_zone(
     return theta
 
 
-def update_MPO(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float) -> None:
-    """Applies the gates from `dag1` and `dag2` on the specified `qubits` in `mpo`,
-    first with gates from `dag1`, then gates from `dag2`.
+def update_MPO(
+    mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float
+) -> None:
+    """Update two neighboring MPO tensors by applying gates extracted from two DAGCircuits.
+
+    The function first contracts the two neighboring MPO tensors to form a combined tensor.
+    It then applies gate operations from dag1 and dag2 (with appropriate conjugation) via the temporal zone,
+    and finally decomposes the updated tensor back into two MPO tensors using an SVD-based truncation.
 
     Args:
-        mpo: The MPO object whose tensors will be updated.
-        dag1: A DAGCircuit containing gates to apply from G.
-        dag2: A DAGCircuit containing gates to apply from G'.
-        qubits: The list of qubit indices to apply the gates on (e.g. [n, n+1]).
-        threshold: SVD threshold for truncation.
+        mpo (MPO): The MPO object whose tensors will be updated.
+        dag1 (DAGCircuit): A DAGCircuit containing gates (from the left) to apply.
+        dag2 (DAGCircuit): A DAGCircuit containing gates (from the right) to apply.
+        qubits (list[int]): List of qubit indices (e.g. [n, n+1]) on which to apply the gates.
+        threshold (float): The SVD threshold for truncation.
     """
     n = qubits[0]
     # Contract two neighboring MPO tensors
     theta = oe.contract("abcd, efdg->aecbfg", mpo.tensors[n], mpo.tensors[n + 1])
 
-    # Apply G gates
+    # Apply gates from dag1 (G) and dag2 (G')
     if dag1:
         theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
-    # Apply G' gates
     if dag2:
-        # Used to create MPO during circuit simulation
-        # Dag1 comes from left, Dag2 comes from right
+        # When both dag1 and dag2 are provided, use conjugation on dag2's gates
         if dag1 is None:
             theta = apply_temporal_zone(theta, dag2, qubits, conjugate=False)
         else:
             theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
 
-    # Decompose back
+    # Decompose the tensor back into two MPO tensors
     mpo.tensors[n], mpo.tensors[n + 1] = decompose_theta(theta, threshold)
 
 
@@ -202,16 +228,18 @@ def apply_layer(
     second_iterator: range,
     threshold: float,
 ) -> None:
-    """Applies all gates for the current layer in two sweeps:
-    one using `first_iterator` and another using `second_iterator`.
+    """Apply a complete layer of gate updates to an MPO in two sweeps.
+
+    The layer is applied by updating MPO tensors on qubit pairs defined by the first_iterator and second_iterator.
+    For each pair, the function calls update_MPO to apply the corresponding gates and perform SVD-based truncation.
 
     Args:
-        mpo: The MPO object to update.
-        circuit1_dag: First circuit's DAGCircuit representation.
-        circuit2_dag: Second circuit's DAGCircuit representation.
-        first_iterator: Range of qubits to apply in the first sweep.
-        second_iterator: Range of qubits to apply in the second sweep.
-        threshold: SVD threshold for truncation.
+        mpo (MPO): The MPO object to update.
+        circuit1_dag (DAGCircuit): The first circuit's DAGCircuit representation.
+        circuit2_dag (DAGCircuit): The second circuit's DAGCircuit representation.
+        first_iterator (range): Range of starting qubit indices for the first sweep.
+        second_iterator (range): Range of starting qubit indices for the second sweep.
+        threshold (float): The SVD truncation threshold.
     """
     for n in first_iterator:
         update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
@@ -220,19 +248,24 @@ def apply_layer(
         update_MPO(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
 
 
-def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float, *, conjugate: bool) -> None:
-    """Detects and applies a 'long-range' gate in the first layer of `dag1` (or `dag2`).
-    The logic here is partial/placeholder; you must fill in or adjust for your use case.
+def apply_long_range_layer(
+    mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float, *, conjugate: bool
+) -> None:
+    """Detect and apply a long-range gate from the first layer of a DAGCircuit to an MPO.
+
+    This function searches for a gate in the specified DAGCircuit (dag1 if not conjugate, else dag2)
+    whose qubit distance exceeds 2, and then applies that gate to update the MPO.
+    The process involves contracting neighboring MPO tensors, applying the long-range gate,
+    and then decomposing the result back into MPO tensors via SVD-based truncation.
 
     Args:
-        mpo: The MPO object being updated.
-        dag1: First circuit's DAGCircuit.
-        dag2: Second circuit's DAGCircuit.
-        conjugate: Whether we apply the gate from `dag2` (if True) or from `dag1` (if False).
-        threshold: SVD threshold for truncation.
+        mpo (MPO): The MPO object being updated.
+        dag1 (DAGCircuit): The first circuit's DAGCircuit.
+        dag2 (DAGCircuit): The second circuit's DAGCircuit.
+        threshold (float): The SVD threshold for truncation.
+        conjugate (bool): If True, apply the gate from dag2 in conjugated form; otherwise, from dag1.
     """
-    # TODO(Aaron): MPO on both sides
-    # Identify gate and its position
+    # TODO: Adjust logic as necessary for your specific use case.
     dag_to_search = dag1 if not conjugate else dag2
 
     for layer in dag_to_search.layers():
@@ -245,12 +278,9 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             if gate.operation.num_qubits > 1:
                 distance = np.abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1
                 if distance > 2:
-                    # Save location
                     location = min(gate.qubits[0]._index, gate.qubits[-1]._index)
-                    # Create gate MPO
                     if not conjugate:
                         for node in dag1.op_nodes():
-                            # Guarantees the correct node is removed
                             if (
                                 node.name == gate.operation.name
                                 and len(node.qargs) >= 2
@@ -258,12 +288,10 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                                 and node.qargs[1]._index == gate.qubits[1]._index
                             ):
                                 gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
-                                # Remove from dag
                                 dag1.remove_op_node(node)
                                 break
                     else:
                         for node in dag2.op_nodes():
-                            # Guarantees the correct node is removed
                             if (
                                 node.name == gate.operation.name
                                 and len(node.qargs) >= 2
@@ -272,24 +300,18 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                             ):
                                 gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
                                 gate_MPO.rotate(conjugate=True)
-                                # Remove from dag
                                 dag2.remove_op_node(node)
                                 break
                     break
 
-    assert "gate_MPO" in locals()
+    assert "gate_MPO" in locals(), "Long-range gate MPO not found."
 
     assert gate_MPO.length <= mpo.length
-    # MPO_2 must be the larger MPO
     sites = range(mpo.length) if gate_MPO.length == mpo.length else range(location, location + distance)
 
-    # TODO(Aaron): Only contract first site with gate, then just SVD across chain to second gate tensor
+    # Process even-indexed sites from the gate MPO
     for site_gate_MPO, overall_site in enumerate(sites):
-        # Even sites of gate MPO
         if site_gate_MPO != len(sites) - 1 and site_gate_MPO % 2 == 0:
-            # TODO(Aaron): Could be sped up without putting all tensors together
-            # TODO(Aaron): Remove all transposes from new index order
-            # sigma i, sigma i+1, upper bond gate, upper bond MPO, sigma' i, sigma' i+1, lower bond gate, lower bond MPO
             if not conjugate:
                 tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
                 tensor2 = np.transpose(gate_MPO.tensors[site_gate_MPO + 1], (0, 2, 1, 3))
@@ -302,10 +324,9 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                 tensor2 = np.transpose(gate_MPO.tensors[site_gate_MPO + 1], (0, 2, 1, 3))
                 tensor3 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
                 tensor4 = np.transpose(mpo.tensors[overall_site + 1], (0, 2, 1, 3))
-                theta = oe.contract("abcd,edfg,chij,fjkl->ikhbaelg", tensor1, tensor2, tensor3, tensor4)
+                theta = oe.contract("abcd,edfg,chij,fjkl->aebhikgl", tensor1, tensor2, tensor3, tensor4)
                 mpo.rotate()
 
-            # Apply causal cone on each side
             theta = apply_temporal_zone(theta, dag1, [overall_site, overall_site + 1], conjugate=False)
             theta = apply_temporal_zone(theta, dag2, [overall_site, overall_site + 1], conjugate=True)
 
@@ -313,11 +334,10 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             theta = np.reshape(theta, (dims[0], dims[1], dims[2] * dims[3], dims[4], dims[5], dims[6] * dims[7]))
             mpo.tensors[overall_site], mpo.tensors[overall_site + 1] = decompose_theta(theta, threshold)
 
-            # Used to track tensors already applied
             gate_MPO.tensors[site_gate_MPO] = None
             gate_MPO.tensors[site_gate_MPO + 1] = None
 
-        # Odd length gate MPO, single hanging tensor
+        # Process odd-indexed (or hanging) tensor if present.
         if site_gate_MPO == len(sites) - 1 and any(type(tensor) == np.ndarray for tensor in gate_MPO.tensors):
             if not conjugate:
                 tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
@@ -342,18 +362,24 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             mpo.tensors[overall_site - 1], mpo.tensors[overall_site] = decompose_theta(theta, threshold)
             gate_MPO.tensors[site_gate_MPO] = None
 
-    assert not any(type(tensor) == np.ndarray for tensor in gate_MPO.tensors)
+    assert not any(type(tensor) == np.ndarray for tensor in gate_MPO.tensors), "Not all gate MPO tensors were applied."
 
 
 def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> None:
-    """Iteratively applies gates from `dag1` and `dag2` layer by layer
-    until no gates remain in either DAGCircuit.
+    """Iteratively apply layers of gates from two DAGCircuits to an MPO until no gates remain.
+
+    The function selects starting qubit ranges based on the available operations in dag1 or dag2.
+    In each iteration, it checks the maximum gate distance. If all gates are nearest-neighbor (distance 1 or 2),
+    a standard layer update is applied; otherwise, a specialized long-range update is performed.
 
     Args:
-        mpo: The MPO object to be updated.
-        dag1: First circuit's DAGCircuit.
-        dag2: Second circuit's DAGCircuit.
-        threshold: SVD threshold for truncation.
+        mpo (MPO): The MPO object to update.
+        dag1 (DAGCircuit): The first circuit's DAGCircuit.
+        dag2 (DAGCircuit): The second circuit's DAGCircuit.
+        threshold (float): The SVD truncation threshold used during decomposition.
+
+    Returns:
+        None
     """
     N = mpo.length
 
@@ -365,10 +391,10 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> N
     while dag1.op_nodes() or dag2.op_nodes():
         largest_distance1 = check_longest_gate(dag1)
         largest_distance2 = check_longest_gate(dag2)
-        # If all gates are nearest-neighbor (distance <= 2), apply standard layer
+        # If all gates are nearest-neighbor (distance <= 2), apply the standard layer.
         if largest_distance1 in {1, 2} and largest_distance2 in {1, 2}:
             apply_layer(mpo, dag1, dag2, first_iterator, second_iterator, threshold)
         else:
-            # Handle a gate that is longer than 2 sites
+            # For longer-range gates, decide which DAG to use based on gate distance.
             conjugate = largest_distance2 > largest_distance1
             apply_long_range_layer(mpo, dag1, dag2, threshold, conjugate=conjugate)

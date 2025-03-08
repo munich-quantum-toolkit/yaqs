@@ -16,6 +16,12 @@ from mqt.yaqs.physics.PhysicsTJM import initialize, physics_tjm_1, physics_tjm_2
 
 
 def test_initialize() -> None:
+    """Test that initialize applies a half-time dissipation and then a stochastic process to the MPS.
+
+    This test creates an Ising MPO and an MPS of length 5, along with a minimal NoiseModel and PhysicsSimParams.
+    It patches the functions apply_dissipation and stochastic_process to ensure that initialize calls them with the
+    correct arguments: apply_dissipation should be called with dt/2, and stochastic_process with dt.
+    """
     L = 5
     J = 1
     g = 0.5
@@ -37,6 +43,13 @@ def test_initialize() -> None:
 
 
 def test_step_through() -> None:
+    """Test that step_through calls dynamic_TDVP, apply_dissipation, and stochastic_process with correct arguments.
+
+    This test creates an Ising MPO and an MPS of length 5, along with a minimal NoiseModel and PhysicsSimParams.
+    It patches dynamic_TDVP, apply_dissipation, and stochastic_process to ensure that step_through calls each of them
+    correctly: dynamic_TDVP should be called with the state, H, and sim_params, and both apply_dissipation and
+    stochastic_process should be called with dt.
+    """
     L = 5
     J = 1
     g = 0.5
@@ -60,6 +73,12 @@ def test_step_through() -> None:
 
 
 def test_physics_tjm_2() -> None:
+    """Test the physics_tjm_2 function for a two-site evolution (order=2) without sampling timesteps.
+
+    This test creates an Ising MPO and an MPS of length 5, with no noise model.
+    It calls physics_tjm_2 with sim_params configured for order 2 and sample_timesteps False.
+    The returned results array should have shape (num_observables, 1).
+    """
     L = 5
     J = 1
     g = 0.5
@@ -73,11 +92,16 @@ def test_physics_tjm_2() -> None:
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_2(args)
-    # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
 def test_physics_tjm_2_sample_timesteps() -> None:
+    """Test the physics_tjm_2 function for a two-site evolution (order=2) with sampling timesteps.
+
+    This test creates an Ising MPO and an MPS of length 5, with no noise model,
+    and sim_params with sample_timesteps True. The resulting results array should have shape
+    (num_observables, len(sim_params.times)).
+    """
     L = 5
     J = 1
     g = 0.5
@@ -91,11 +115,16 @@ def test_physics_tjm_2_sample_timesteps() -> None:
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_2(args)
-    # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 
 def test_physics_tjm_1() -> None:
+    """Test the physics_tjm_1 function for a one-site evolution (order=1) without sampling timesteps.
+
+    This test creates an Ising MPO and an MPS of length 5, with no noise model,
+    and sim_params with order 1 and sample_timesteps False.
+    The resulting results array should have shape (num_observables, 1).
+    """
     L = 5
     J = 1
     g = 0.5
@@ -109,11 +138,16 @@ def test_physics_tjm_1() -> None:
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_1(args)
-    # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
 def test_physics_tjm_1_sample_timesteps() -> None:
+    """Test the physics_tjm_1 function for a one-site evolution (order=1) with sampling timesteps.
+
+    This test creates an Ising MPO and an MPS of length 5, with no noise model,
+    and sim_params with sample_timesteps True.
+    The results array should have shape (num_observables, len(sim_params.times)).
+    """
     L = 5
     J = 1
     g = 0.5
@@ -127,5 +161,4 @@ def test_physics_tjm_1_sample_timesteps() -> None:
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_1(args)
-    # When sample_timesteps is True, results should have shape (num_observables, len(times))
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"

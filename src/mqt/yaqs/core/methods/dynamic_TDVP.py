@@ -19,13 +19,16 @@ if TYPE_CHECKING:
 def dynamic_TDVP(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
     """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 
-    Depending on the current bond dimension of the state, this function either performs a two-site TDVP (2TDVP) or a single-site TDVP (1TDVP) to evolve the state.
+    This function evolves the state by choosing between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP)
+    based on the current maximum bond dimension of the MPS. The decision is made by comparing the state's bond
+    dimension (obtained via `state.write_max_bond_dim()`) to the maximum allowed bond dimension specified in
+    `sim_params`.
 
     Args:
-        state (MPS): The Matrix Product State (MPS) representing the current state of the system.
-        H (MPO): The Matrix Product Operator (MPO) representing the Hamiltonian of the system.
-        dt (float): The time step for the evolution.
-        max_bond_dim (int): The maximum allowable bond dimension for the MPS.
+        state (MPS): The Matrix Product State representing the current state of the system.
+        H (MPO): The Matrix Product Operator representing the Hamiltonian of the system.
+        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
+            such as the maximum allowable bond dimension for the MPS.
 
     Returns:
         None

@@ -11,7 +11,18 @@ from qiskit.circuit import QuantumCircuit
 
 
 def create_Ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) -> QuantumCircuit:
-    """H = J ZZ + g X."""
+    """Create a quantum circuit for simulating the Ising model.
+
+    Args:
+        L (int): Number of qubits in the circuit.
+        J (float): Coupling constant for the ZZ interaction.
+        g (float): Transverse field strength.
+        dt (float): Time step for the simulation.
+        timesteps (int): Number of time steps to simulate.
+
+    Returns:
+        QuantumCircuit: A quantum circuit representing the Ising model evolution.
+    """
     # Angle on X rotation
     alpha = -2 * dt * g
     # Angle on ZZ rotation
@@ -46,7 +57,20 @@ def create_Ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) 
 def create_Heisenberg_circuit(
     L: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int
 ) -> QuantumCircuit:
-    """H = Jx XX + Jy YY + Jz ZZ + h Z."""
+    """Create a quantum circuit for simulating the Heisenberg model.
+
+    Args:
+        L (int): Number of qubits (sites) in the circuit.
+        Jx (float): Coupling constant for the XX interaction.
+        Jy (float): Coupling constant for the YY interaction.
+        Jz (float): Coupling constant for the ZZ interaction.
+        h (float): Magnetic field strength.
+        dt (float): Time step for the simulation.
+        timesteps (int): Number of time steps to simulate.
+
+    Returns:
+        QuantumCircuit: A quantum circuit representing the Heisenberg model evolution.
+    """
     theta_xx = -2 * dt * Jx
     theta_yy = -2 * dt * Jy
     theta_zz = -2 * dt * Jz

@@ -13,10 +13,16 @@ from mqt.yaqs.core.libraries.circuit_library import create_Heisenberg_circuit, c
 
 
 def test_create_Ising_circuit_valid_even() -> None:
-    # Use an even number of qubits.
+    """Test that create_Ising_circuit returns a valid circuit for an even number of qubits.
+
+    This test creates an Ising circuit with L=4 qubits using parameters J, g, dt, and timesteps.
+    It verifies that:
+      - The resulting object is a QuantumCircuit with 4 qubits.
+      - The expected number of rx and rzz gates are present (4 rx gates and 3 rzz gates).
+    """
     circ = create_Ising_circuit(L=4, J=1, g=0.5, dt=0.1, timesteps=1)
 
-    # Check that the output is a QuantumCircuit with the right number of qubits.
+    # Check that the output is a QuantumCircuit with the correct number of qubits.
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == 4
 
@@ -30,18 +36,24 @@ def test_create_Ising_circuit_valid_even() -> None:
 
 
 def test_create_Ising_circuit_valid_odd() -> None:
-    # Use an odd number of qubits.
+    """Test that create_Ising_circuit returns a valid circuit for an odd number of qubits.
+
+    This test creates an Ising circuit with L=5 qubits and verifies that:
+      - The output is a QuantumCircuit with 5 qubits.
+      - The counts of rx and rzz gates match the expected numbers for an odd-length circuit
+        (5 rx gates and 4 rzz gates).
+    """
     circ = create_Ising_circuit(L=5, J=1, g=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == 5
 
     # For L=5:
-    #   - The rx loop adds 5 gates.
-    #   - The even-site loop: 5//2 = 2 iterations → 2*2 = 4 CX and 2 RZ.
-    #   - The odd-site loop: range(1, 5//2) → 1 iteration → 2 CX and 1 RZ.
-    #   - The extra clause (since 5 is odd and not 1) adds 2 CX and 1 RZ.
-    # Total: 5 rx, (4+2+2)=8 CX, and (2+1+1)=4 RZ.
+    #   - rx loop adds 5 gates.
+    #   - Even-site loop: 5//2 = 2 iterations → adds 4 CX and 2 RZ.
+    #   - Odd-site loop: range(1, 5//2) → 1 iteration → adds 2 CX and 1 RZ.
+    #   - Extra clause for odd number adds 2 CX and 1 RZ.
+    # Total expected: 5 rx, 8 CX, and 4 rzz gates.
     op_names = [instr.operation.name for instr in circ.data]
     rx_count = op_names.count("rx")
     rzz_count = op_names.count("rzz")
@@ -51,20 +63,29 @@ def test_create_Ising_circuit_valid_odd() -> None:
 
 
 def test_create_Heisenberg_circuit_valid_even() -> None:
-    # Use an even number of qubits.
+    """Test that create_Heisenberg_circuit returns a valid circuit for an even number of qubits.
+
+    This test creates a Heisenberg circuit with L=4 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
+    It verifies that the resulting circuit is a QuantumCircuit with 4 qubits and that it contains the expected gate
+    types (rz, rzz, rxx, and ryy).
+    """
     circ = create_Heisenberg_circuit(L=4, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == 4
 
-    # Check that the circuit contains the expected types of gates.
     op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
-        assert gate in op_names
+        assert gate in op_names, f"Gate {gate} not found in the circuit."
 
 
 def test_create_Heisenberg_circuit_valid_odd() -> None:
-    # Use an odd number of qubits.
+    """Test that create_Heisenberg_circuit returns a valid circuit for an odd number of qubits.
+
+    This test creates a Heisenberg circuit with L=5 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
+    It verifies that the resulting circuit is a QuantumCircuit with 5 qubits and that it contains the expected gate
+    types (rz, rzz, rxx, and ryy).
+    """
     circ = create_Heisenberg_circuit(L=5, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
@@ -72,4 +93,4 @@ def test_create_Heisenberg_circuit_valid_odd() -> None:
 
     op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
-        assert gate in op_names
+        assert gate in op_names, f"Gate {gate} not found in the circuit."
