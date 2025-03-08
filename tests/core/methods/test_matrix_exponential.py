@@ -27,6 +27,7 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.methods.matrix_exponential import _lanczos_iteration, expm_krylov
 
+from numpy.typing import NDArray
 
 def test_lanczos_iteration_small() -> None:
     """Check that _lanczos_iteration produces correct shapes and orthonormal vectors
@@ -34,13 +35,13 @@ def test_lanczos_iteration_small() -> None:
     """
     A = np.array([[2.0, 1.0], [1.0, 3.0]])
 
-    def Afunc(x):
+    def A_operator(x: NDArray[np.complex128]):
         return A @ x
 
     vstart = np.array([1.0, 1.0], dtype=complex)
     numiter = 2
 
-    alpha, beta, V = _lanczos_iteration(Afunc, vstart, numiter)
+    alpha, beta, V = _lanczos_iteration(A_operator, vstart, numiter)
     # alpha should have shape (2,), beta shape (1,), and V shape (2, 2)
     assert alpha.shape == (2,)
     assert beta.shape == (1,)
@@ -63,13 +64,13 @@ def test_lanczos_early_termination() -> None:
     """
     A = np.diag([1.0, 2.0])
 
-    def Afunc(x):
+    def A_operator(x: NDArray[np.complex128]):
         return A @ x
 
     vstart = np.array([1.0, 0.0], dtype=complex)
     numiter = 5
 
-    alpha, beta, V = _lanczos_iteration(Afunc, vstart, numiter)
+    alpha, beta, V = _lanczos_iteration(A_operator, vstart, numiter)
     # Expect termination after 1 iteration: alpha shape (1,), beta shape (0,), V shape (2, 1)
     assert alpha.shape == (1,)
     assert beta.shape == (0,)
@@ -82,14 +83,14 @@ def test_expm_krylov_2x2_exact() -> None:
     """
     A = np.array([[2.0, 1.0], [1.0, 3.0]])
 
-    def Afunc(x):
+    def A_operator(x: NDArray[np.complex128]):
         return A @ x
 
     v = np.array([1.0, 0.0], dtype=complex)
     dt = 0.1
     numiter = 2  # full subspace
 
-    approx = expm_krylov(Afunc, v, dt, numiter)
+    approx = expm_krylov(A_operator, v, dt, numiter)
     direct = expm(-1j * dt * A) @ v
 
     np.testing.assert_allclose(
@@ -107,14 +108,14 @@ def test_expm_krylov_smaller_subspace() -> None:
     """
     A = np.array([[2.0, 1.0], [1.0, 3.0]])
 
-    def Afunc(x):
+    def A_operator(x: NDArray[np.complex128]):
         return A @ x
 
     v = np.array([1.0, 1.0], dtype=complex)
     dt = 0.05
     numiter = 1  # subspace dimension smaller than the full space
 
-    approx = expm_krylov(Afunc, v, dt, numiter)
+    approx = expm_krylov(A_operator, v, dt, numiter)
     direct = expm(-1j * dt * A) @ v
 
     np.testing.assert_allclose(
