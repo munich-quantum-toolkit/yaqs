@@ -5,10 +5,11 @@
 #
 # Licensed under the MIT License
 
-"""Example: Strong Quantum Circuit Simulation (Observable) with YAQS.
+"""
+Example: Strong Quantum Circuit Simulation (Observable) with YAQS
 
 This example demonstrates how to run a Hamiltonian simulation using the YAQS Simulator
-with an Ising model. An Ising Hamiltonian is created as an MPO and an initial MPS is prepared
+with an Ising model. An Ising circuit is created and an initial MPS is prepared
 in the |0⟩ state. A noise model is applied and simulation parameters (using StrongSimParams)
 are defined. The simulation is run for a range of noise strengths (gamma values), and the
 expectation values of the Z observable are recorded and displayed as a heatmap.
