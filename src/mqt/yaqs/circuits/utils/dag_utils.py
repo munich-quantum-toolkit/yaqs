@@ -156,14 +156,13 @@ def check_longest_gate(dag: DAGCircuit) -> int:
         first_layer = layer
         break
 
-    if "first_layer" in locals():
-        from qiskit.converters import dag_to_circuit
+    assert "first_layer" in locals()
 
-        layer_circuit = dag_to_circuit(first_layer["graph"])
-        for gate in layer_circuit.data:
-            if gate.operation.num_qubits > 1:
-                distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
-                largest_distance = max(largest_distance, distance)
+    layer_circuit = dag_to_circuit(first_layer["graph"])
+    for gate in layer_circuit.data:
+        if gate.operation.num_qubits > 1:
+            distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
+            largest_distance = max(largest_distance, distance)
 
     return largest_distance
 
