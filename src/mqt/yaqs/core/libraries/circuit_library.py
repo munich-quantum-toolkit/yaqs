@@ -62,7 +62,7 @@ def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) 
     return circ
 
 
-def create_Heisenberg_circuit(
+def create_heisenberg_circuit(
     L: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int
 ) -> QuantumCircuit:
     """Create a quantum circuit for simulating the Heisenberg model.

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs.core.libraries.circuit_library import create_Heisenberg_circuit, create_ising_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_heisenberg_circuit, create_ising_circuit
 
 
 def test_create_ising_circuit_valid_even() -> None:
@@ -62,14 +62,14 @@ def test_create_ising_circuit_valid_odd() -> None:
     assert rzz_count == 4
 
 
-def test_create_Heisenberg_circuit_valid_even() -> None:
+def test_create_heisenberg_circuit_valid_even() -> None:
     """Test that create_Heisenberg_circuit returns a valid circuit for an even number of qubits.
 
     This test creates a Heisenberg circuit with L=4 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
     It verifies that the resulting circuit is a QuantumCircuit with 4 qubits and that it contains the expected gate
     types (rz, rzz, rxx, and ryy).
     """
-    circ = create_Heisenberg_circuit(L=4, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
+    circ = create_heisenberg_circuit(L=4, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == 4
@@ -79,14 +79,14 @@ def test_create_Heisenberg_circuit_valid_even() -> None:
         assert gate in op_names, f"Gate {gate} not found in the circuit."
 
 
-def test_create_Heisenberg_circuit_valid_odd() -> None:
+def test_create_heisenberg_circuit_valid_odd() -> None:
     """Test that create_Heisenberg_circuit returns a valid circuit for an odd number of qubits.
 
     This test creates a Heisenberg circuit with L=5 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
     It verifies that the resulting circuit is a QuantumCircuit with 5 qubits and that it contains the expected gate
     types (rz, rzz, rxx, and ryy).
     """
-    circ = create_Heisenberg_circuit(L=5, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
+    circ = create_heisenberg_circuit(L=5, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == 5
