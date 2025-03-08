@@ -152,17 +152,14 @@ def check_longest_gate(dag: DAGCircuit) -> int:
         int: The largest distance (in terms of qubit indices) found among the multi-qubit gates in the first layer.
     """
     largest_distance = 1
-    for layer in dag.layers():
-        first_layer = layer
-        break
+    first_layer = next(dag.layers(), None)
 
-    assert "first_layer" in locals()
-
-    layer_circuit = dag_to_circuit(first_layer["graph"])
-    for gate in layer_circuit.data:
-        if gate.operation.num_qubits > 1:
-            distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
-            largest_distance = max(largest_distance, distance)
+    if first_layer is not None:
+        layer_circuit = dag_to_circuit(first_layer["graph"])
+        for gate in layer_circuit.data:
+            if gate.operation.num_qubits > 1:
+                distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # noqa: SLF001
+                largest_distance = max(largest_distance, distance)
 
     return largest_distance
 
@@ -185,15 +182,13 @@ def select_starting_point(N: int, dag: DAGCircuit) -> tuple[range, range]:
     """
     assert N > 1
 
-    for layer in dag.layers():
-        first_layer = layer
-        break
+    first_layer = next(dag.layers(), None)
 
     first_iterator = range(0, N - 1, 2)
     second_iterator = range(1, N - 1, 2)
     odd = False
 
-    if "first_layer" in locals():
+    if first_layer is not None:
         layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
             # If a two-qubit gate appears with an odd-indexed starting qubit, switch the ordering.
