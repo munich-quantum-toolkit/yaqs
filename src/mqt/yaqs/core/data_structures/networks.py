@@ -69,6 +69,7 @@ class MPS:
     check_canonical_form() -> list[int]:
         Checks the canonical form of the MPS and returns the orthogonality center(s).
     """
+
     def __init__(
         self,
         length: int,

@@ -218,11 +218,7 @@ class WeakSimParams:
     N = 0
 
     def __init__(
-        self,
-        shots: int,
-        max_bond_dim: int = 2,
-        threshold: float = 1e-6,
-        window_size: int | None = None
+        self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
     ) -> None:
         """Weak circuit simulation initialization.
 
