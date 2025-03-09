@@ -37,10 +37,7 @@ keywords = ["MQT", "quantum-computing", "quantum-simulation", "tensor-networks"]
 
 dependencies = [
     "matplotlib>=3.5",
-    "numpy>=2.1; python_version >= '3.13'",
-    "numpy>=1.26; python_version >= '3.12'",
-    "numpy>=1.24; python_version >= '3.11'",
-    "numpy>=1.22.4",
+    "numpy>=2.0; python_version >= '3.13'",
     "scipy>=1.13.1",
     "scipy>=1.14.1; python_version >= '3.13'",
     "qiskit>=1.0.0",
