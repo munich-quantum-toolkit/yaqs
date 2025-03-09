@@ -21,8 +21,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
-from .operations import scalar_product
-
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -92,7 +90,7 @@ def create_probability_distribution(
         for j, jump_operator in enumerate(noise_model.jump_operators):
             jumped_state = copy.deepcopy(state)
             jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_operator, state.tensors[site])
-            dp_m = dt * noise_model.strengths[j] * scalar_product(jumped_state, jumped_state, site)
+            dp_m = dt * noise_model.strengths[j] * jumped_state.norm(site)
             dp_m_list.append(dp_m.real)
             jump_dict["jumps"].append(jump_operator)
             jump_dict["strengths"].append(noise_model.strengths[j])

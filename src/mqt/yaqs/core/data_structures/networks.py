@@ -293,6 +293,56 @@ class MPS:
         if form == "B":
             self.flip_network()
 
+    def scalar_product(self, B: MPS, site: int | None = None) -> np.complex128:
+        """Compute the scalar (inner) product between two Matrix Product States (MPS).
+
+        The function contracts the corresponding tensors of two MPS objects. If no specific site is
+        provided, the contraction is performed sequentially over all sites to yield the overall inner
+        product. When a site is specified, only the tensors at that site are contracted.
+
+        Args:
+            B (MPS): The second Matrix Product State.
+            site (int | None): Optional site index at which to compute the contraction. If None, the
+                contraction is performed over all sites.
+
+        Returns:
+            np.complex128: The resulting scalar product as a complex number.
+        """
+        A_copy = copy.deepcopy(self)
+        B_copy = copy.deepcopy(B)
+        for i, tensor in enumerate(A_copy.tensors):
+            A_copy.tensors[i] = np.conj(tensor)
+
+        result = np.array(np.inf)
+        if site is None:
+            for idx in range(self.length):
+                tensor = oe.contract("abc, ade->bdce", A_copy.tensors[idx], B_copy.tensors[idx])
+                result = tensor if idx == 0 else oe.contract("abcd, cdef->abef", result, tensor)
+        else:
+            result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
+        return np.complex128(np.squeeze(result))
+
+    def local_expval(self, operator: NDArray[np.complex128], site: int) -> np.complex128:
+        """Compute the local expectation value of an operator on an MPS.
+
+        The function applies the given operator to the tensor at the specified site of a deep copy of the
+        input MPS, then computes the scalar product between the original and the modified state at that site.
+        This effectively calculates the expectation value of the operator at the specified site.
+
+        Args:
+            operator (NDArray[np.complex128]): The local operator (matrix) to be applied.
+            site (int): The index of the site at which to evaluate the expectation value.
+
+        Returns:
+            np.complex128: The computed expectation value (typically, its real part is of interest).
+
+        Notes:
+            A deep copy of the state is used to prevent modifications to the original MPS.
+        """
+        temp_state = copy.deepcopy(self)
+        temp_state.tensors[site] = oe.contract("ab, bcd->acd", operator, temp_state.tensors[site])
+        return self.scalar_product(temp_state, site)
+
     def measure_expectation_value(self, observable: Observable) -> np.float64:
         """Measurement of expectation value.
 
@@ -305,11 +355,9 @@ class MPS:
         Returns:
         np.float64: The real part of the expectation value of the observable.
         """
-        from ..methods.operations import local_expval
-
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        E = local_expval(copy.deepcopy(self), ObservablesLibrary[observable.name], observable.site)
+        E = self.local_expval(ObservablesLibrary[observable.name], observable.site)
         assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
         return E.real
 
@@ -393,11 +441,9 @@ class MPS:
         Returns:
         np.float64: The norm of the state or the specified site.
         """
-        from ..methods.operations import scalar_product
-
         if site is not None:
-            return scalar_product(self, self, site).real
-        return scalar_product(self, self).real
+            return self.scalar_product(self, site).real
+        return self.scalar_product(self).real
 
     def check_if_valid_mps(self) -> None:
         """MPS validity check.
@@ -753,14 +799,12 @@ class MPO:
         Returns:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
-        from ..methods.operations import scalar_product
-
         identity_MPO = MPO()
         identity_MPO.init_identity(self.length)
 
         identity_MPS = identity_MPO.to_mps()
         MPS = self.to_mps()
-        trace = scalar_product(MPS, identity_MPS)
+        trace = MPS.scalar_product(identity_MPS)
 
         # Checks if trace is not a singular values for partial trace
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity

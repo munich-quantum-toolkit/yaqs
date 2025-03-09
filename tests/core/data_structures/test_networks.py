@@ -477,6 +477,69 @@ def test_normalize() -> None:
     for tensor in mps.tensors:
         assert tensor.ndim == 3
 
+def test_scalar_product_same_state() -> None:
+    """Test that the scalar product of a normalized state with itself equals 1.
+
+    For a normalized product state (here constructed as an MPS in 'random' state), the inner product
+    <psi|psi> should be 1.
+    """
+    psi_mps = MPS(length=3, state="random")
+    val = psi_mps.scalar_product(psi_mps)
+    np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
+
+def test_scalar_product_orthogonal_states() -> None:
+    """Test that the scalar product between orthogonal product states is 0.
+
+    This test creates two MPS objects initialized in orthogonal states ("zeros" and "ones")
+    and verifies that their inner product is 0.
+    """
+    psi_mps_0 = MPS(length=3, state="zeros")
+    psi_mps_1 = MPS(length=3, state="ones")
+    val = psi_mps_0.scalar_product(psi_mps_1)
+    np.testing.assert_allclose(val, 0.0, atol=1e-12)
+
+
+def test_scalar_product_partial_site() -> None:
+    """Test the scalar product function when specifying a single site.
+
+    For a given site (here site 0 of a 3-site MPS), the scalar product computed by
+    scalar_product should equal the direct contraction of the tensor at that site,
+    which for a normalized state is 1.
+    """
+    psi_mps = MPS(length=3, state="x+")
+    site = 0
+    partial_val = psi_mps.scalar_product(psi_mps, site=site)
+    np.testing.assert_allclose(partial_val, 1.0, atol=1e-12)
+
+
+def test_local_expval_z_on_zero_state() -> None:
+    """Test the local expectation value of the Z observable on a |0> state.
+
+    For the computational basis state |0>, the expectation value of Z is +1.
+    This test verifies that local_expval returns +1 for site 0 and site 1 of a 2-qubit MPS
+    initialized in the "zeros" state.
+    """
+    # Pauli-Z in computational basis.
+    Z = np.array([[1, 0], [0, -1]], dtype=complex)
+    psi_mps = MPS(length=2, state="zeros")
+    val = psi_mps.local_expval(Z, site=0)
+    np.testing.assert_allclose(val, 1.0, atol=1e-12)
+    val_site1 = psi_mps.local_expval(Z, site=1)
+    np.testing.assert_allclose(val_site1, 1.0, atol=1e-12)
+
+
+def test_local_expval_x_on_plus_state() -> None:
+    """Test the local expectation value of the X observable on a |+> state.
+
+    For the |+> state, defined as 1/√2 (|0> + |1>), the expectation value of the X observable is +1.
+    This test verifies that local_expval returns +1 for a single-qubit MPS initialized in the "x+" state.
+    """
+    X = np.array([[0, 1], [1, 0]], dtype=complex)
+    psi_mps = MPS(length=3, state="x+")
+    val = psi_mps.local_expval(X, site=0)
+    np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
 
 def test_measure() -> None:
     """Test that the measure method of an MPS returns the expected observable value.
