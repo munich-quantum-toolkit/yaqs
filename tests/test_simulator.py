@@ -31,7 +31,55 @@ from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 
 def test_physics_simulation() -> None:
-    """Test the branch for Hamiltonian simulation (physics simulation) using StrongSimParams.
+    """Test the branch for Hamiltonian simulation (physics simulation) using PhysicsSimParams.
+
+    This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
+    It also creates a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
+    With PhysicsSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
+    simulator.run is called. The test then verifies that for each observable the results and trajectories have been
+    correctly initialized and that the measurement results are approximately as expected.
+    """
+    length = 5
+    initial_state = MPS(length, state="zeros")
+
+    H = MPO()
+    H.init_ising(length, J=1, g=0.5)
+    T = 1
+    dt = 0.1
+    sample_timesteps = False
+    N = 10
+    max_bond_dim = 4
+    threshold = 1e-6
+    order = 2
+
+    measurements = [Observable("z", site) for site in range(length)]
+    sim_params = PhysicsSimParams(
+        measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+    )
+    gamma = 0.1
+    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+
+    simulator.run(initial_state, H, sim_params, noise_model)
+
+    for i, observable in enumerate(sim_params.observables):
+        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
+        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        if i == 0:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        elif i == 1:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 2:
+            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
+        elif i == 3:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 4:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+
+
+def test_physics_simulation_parallel_off() -> None:
+    """Test the branch for Hamiltonian simulation (physics simulation) using PhysicsSimParams, parallelization off.
 
     This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
     It also creates a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
@@ -104,6 +152,49 @@ def test_strong_simulation() -> None:
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
     simulator.run(state, circuit, sim_params, noise_model)
+
+    for i, observable in enumerate(sim_params.observables):
+        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
+        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        if i == 0:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        elif i == 1:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 2:
+            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
+        elif i == 3:
+            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
+        elif i == 4:
+            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+
+def test_strong_simulation_parallel_off() -> None:
+    """Test the circuit-based simulation branch using StrongSimParams, parallelization off.
+
+    This test constructs an MPS of length 5 (initialized to "zeros") and an Ising circuit with a CX gate.
+    It configures StrongSimParams with specified simulation parameters and a noise model (non-None).
+    simulator.run is then called, and the test verifies that the observables' results and trajectories
+    are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
+    """
+    num_qubits = 5
+    state = MPS(num_qubits, state="zeros")
+
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit.measure_all()
+
+    N = 10
+    max_bond_dim = 4
+    threshold = 1e-12
+    window_size = 0
+
+    measurements = [Observable("z", site) for site in range(num_qubits)]
+    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
+    # Use a noise model that is not None so that sim_params.N remains unchanged.
+    gamma = 1e-3
+    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+
+    simulator.run(state, circuit, sim_params, noise_model, parallel=False)
 
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
