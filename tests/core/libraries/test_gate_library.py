@@ -259,7 +259,7 @@ def test_gate_u3() -> None:
 
     expected = np.array([
         [np.cos(theta / 2), -np.exp(1j * lam) * np.sin(theta / 2)],
-        [np.exp(1j * phi) * np.sin(theta / 2), np.exp(1j * (phi + lam)) * np.cos(theta / 2)]
+        [np.exp(1j * phi) * np.sin(theta / 2), np.exp(1j * (phi + lam)) * np.cos(theta / 2)],
     ])
 
     assert_allclose(gate.tensor, expected)
