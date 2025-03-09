@@ -16,7 +16,7 @@ thresholds, and window sizes, and they include methods for aggregating simulatio
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -235,7 +235,7 @@ class WeakSimParams:
         window_size : int or None, optional
             Window size for the simulation algorithm, by default None.
         """
-        self.measurements: list[dict[int, int] | None] = cast("list[Optional[dict[int, int]]]", shots * [None])
+        self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
