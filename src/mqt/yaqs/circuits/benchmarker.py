@@ -25,8 +25,9 @@ import numpy as np
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.ticker import MaxNLocator
 from qiskit.quantum_info import Operator, Pauli, Statevector
-from qiskit_aer import Aersimulator
+from qiskit_aer import AerSimulator
 
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 
@@ -72,8 +73,8 @@ def run(
     num_qubits = circuit_exact.num_qubits
 
     # Run the exact simulation using Qiskit's Aersimulator.
-    simulator = Aersimulator(method="statevector")
-    result = simulator.run(circuit_exact).result()
+    aer_sim = AerSimulator(method="statevector")
+    result = aer_sim.run(circuit_exact).result()
     qiskit_state = result.get_statevector(circuit_exact)
 
     # Construct an observable: Z on the middle qubit (I on others).
@@ -286,5 +287,4 @@ def run(
         cbar2.ax.tick_params(labelsize=10)
 
         fig.suptitle("Performance Metrics Benchmark", fontsize=18, fontweight="bold")
-        plt.tight_layout(pad=4.0)
         plt.show()
