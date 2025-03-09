@@ -46,7 +46,7 @@ def test_run_default_parameters() -> None:
     run(qc)
     figs_after = len(plt.get_fignums())
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
-
+    plt.close("all")
 
 def test_run_custom_parameters() -> None:
     """Benchmarker custom parameters.
@@ -82,7 +82,7 @@ def test_run_custom_parameters() -> None:
     run(qc, max_bond_dims=max_bond_dims, window_sizes=window_sizes, thresholds=thresholds)
     figs_after = len(plt.get_fignums())
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
-
+    plt.close("all")
 
 def test_run_dots_style() -> None:
     """Benchmarker dots.
@@ -108,7 +108,7 @@ def test_run_dots_style() -> None:
     run(qc, style="dots")
     figs_after = len(plt.get_fignums())
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
-
+    plt.close("all")
 
 def test_run_planes_style() -> None:
     """Benchmarker planes.
@@ -132,3 +132,4 @@ def test_run_planes_style() -> None:
     run(qc, style="planes")
     figs_after = len(plt.get_fignums())
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
+    plt.close("all")
