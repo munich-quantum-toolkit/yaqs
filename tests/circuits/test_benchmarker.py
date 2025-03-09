@@ -1,19 +1,22 @@
-import pytest
-from qiskit import QuantumCircuit
-from mqt.yaqs.circuits.benchmarker import run
-import matplotlib.pyplot as plt
-
-import warnings
-
-""" Tests for benchmarker
+"""Tests for benchmarker.
 
 This file tests various aspects of the circuit benchmarker.
 """
 
+from __future__ import annotations
+
+import warnings
+
+import matplotlib.pyplot as plt
+from qiskit import QuantumCircuit
+
+from mqt.yaqs.circuits.benchmarker import run
+
 plt.show = lambda: None
 
-def test_run_default_parameters():
-    """ Benchmarker default parameters
+
+def test_run_default_parameters() -> None:
+    """Benchmarker default parameters.
 
     Test the run function with default parameters.
     This test creates a simple quantum circuit with 3 qubits, applies a Hadamard gate
@@ -37,8 +40,9 @@ def test_run_default_parameters():
     figs_after = len(plt.get_fignums())
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
 
-def test_run_custom_parameters():
-    """ Benchmarker custom parameters
+
+def test_run_custom_parameters() -> None:
+    """Benchmarker custom parameters.
 
     Test the `run` function with custom parameters on a simple quantum circuit.
     This test creates a quantum circuit with 3 qubits, applies a Hadamard gate to the first qubit,
@@ -72,8 +76,9 @@ def test_run_custom_parameters():
     figs_after = len(plt.get_fignums())
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
 
-def test_run_dots_style():
-    """ Benchmarker dots
+
+def test_run_dots_style() -> None:
+    """Benchmarker dots.
 
     Test the run function with a simple quantum circuit using the 'dots' style.
     This test creates a simple quantum circuit with 3 qubits, applies a Hadamard gate
@@ -81,8 +86,6 @@ def test_run_dots_style():
     and the second and third qubits. The circuit is then run using the 'dots' style.
     The purpose of this test is to verify that the run function correctly handles
     the 'dots' style for visualizing the quantum circuit.
-    Raises:
-        AssertionError: If the run function does not handle the 'dots' style correctly.
     """
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     plt.close("all")
@@ -99,8 +102,9 @@ def test_run_dots_style():
     figs_after = len(plt.get_fignums())
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
 
-def test_run_planes_style():
-    """ Benchmarker planes
+
+def test_run_planes_style() -> None:
+    """Benchmarker planes.
 
     Test the benchmarker with the 'planes' style.
     This function creates a simple quantum circuit with 3 qubits, applies a Hadamard gate to the first qubit,
