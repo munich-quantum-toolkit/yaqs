@@ -110,57 +110,30 @@ def apply_gate(
         assert gate.sites[1] in {site0, site1}, "Two-qubit gate must be on the correct pair of sites."
 
     # For nearest-neighbor gates (theta.ndim == 6)
-    if theta.ndim == 6:
-        if conjugate:
-            theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
+    assert theta.ndim == 6
+    if conjugate:
+        theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
-        if gate.name == "I":
-            pass  # Identity gate, no action needed.
-        elif gate.interaction == 1:
-            if gate.sites[0] == site0:
-                if conjugate:
-                    theta = oe.contract("ij, jklmno->iklmno", np.conj(gate.tensor), theta)
-                else:
-                    theta = oe.contract("ij, jklmno->iklmno", gate.tensor, theta)
-            elif gate.sites[0] == site1:
-                if conjugate:
-                    theta = oe.contract("ij, kjlmno->kilmno", np.conj(gate.tensor), theta)
-                else:
-                    theta = oe.contract("ij, kjlmno->kilmno", gate.tensor, theta)
-        elif gate.interaction == 2:
+    if gate.name == "I":
+        pass  # Identity gate, no action needed.
+    elif gate.interaction == 1:
+        if gate.sites[0] == site0:
             if conjugate:
-                theta = oe.contract("ijkl, klmnop->ijmnop", np.conj(gate.tensor), theta)
+                theta = oe.contract("ij, jklmno->iklmno", np.conj(gate.tensor), theta)
             else:
-                theta = oe.contract("ijkl, klmnop->ijmnop", gate.tensor, theta)
-        if conjugate:
-            theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
-
-    # For long-range or multi-qubit gates (theta.ndim == 8)
-    elif theta.ndim == 8:
-        if conjugate:
-            theta = np.transpose(theta, (4, 5, 3, 2, 0, 1, 6, 7))
-
-        if gate.name == "I":
-            pass
-        elif gate.interaction == 1:
-            if gate.sites[0] == site0:
-                if conjugate:
-                    theta = oe.contract("ab, bcdefghi->acdefghi", np.conj(gate.tensor), theta)
-                else:
-                    theta = oe.contract("ab, bcdefghi->acdefghi", gate.tensor, theta)
-            elif gate.sites[0] == site1:
-                if conjugate:
-                    theta = oe.contract("ab, cbdefghi->cadefghi", np.conj(gate.tensor), theta)
-                else:
-                    theta = oe.contract("ab, cbdefghi->cadefghi", gate.tensor, theta)
-        elif gate.interaction == 2:
+                theta = oe.contract("ij, jklmno->iklmno", gate.tensor, theta)
+        elif gate.sites[0] == site1:
             if conjugate:
-                theta = oe.contract("abcd, cdefghij->abefghij", np.conj(gate.tensor), theta)
+                theta = oe.contract("ij, kjlmno->kilmno", np.conj(gate.tensor), theta)
             else:
-                theta = oe.contract("abcd, cdefghij->abefghij", gate.tensor, theta)
-
+                theta = oe.contract("ij, kjlmno->kilmno", gate.tensor, theta)
+    elif gate.interaction == 2:
         if conjugate:
-            theta = np.transpose(theta, (4, 5, 3, 2, 0, 1, 6, 7))
+            theta = oe.contract("ijkl, klmnop->ijmnop", np.conj(gate.tensor), theta)
+        else:
+            theta = oe.contract("ijkl, klmnop->ijmnop", gate.tensor, theta)
+    if conjugate:
+        theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
     return theta
 
