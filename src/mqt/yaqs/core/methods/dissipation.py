@@ -57,14 +57,14 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> 
             state.shift_orthogonality_center_left(current_orthogonality_center=i)
         return
 
-    # Calculate the dissipation operator A from the noise model.
-    A = sum(  # noqa: N806
+    # Calculate the dissipation matrix from the noise model.
+    mat = sum(
         noise_model.strengths[i] * np.conj(jump_operator).T @ jump_operator
         for i, jump_operator in enumerate(noise_model.jump_operators)
     )
 
     # Compute the dissipative operator by exponentiating -0.5 * dt * A.
-    dissipative_operator = expm(-0.5 * dt * A)
+    dissipative_operator = expm(-0.5 * dt * mat)
 
     # Apply the dissipative operator to each tensor in the MPS.
     # The contraction "ab, bcd->acd" applies the operator on the physical indices.
