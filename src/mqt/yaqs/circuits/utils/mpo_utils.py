@@ -309,7 +309,10 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
     assert gate_MPO is not None, "Long-range gate MPO not found."
     assert gate_MPO.length <= mpo.length
 
-    sites = range(mpo.length) if gate_MPO.length == mpo.length else range(location, location + distance)
+    if gate_MPO.length == mpo.length:
+        sites = range(mpo.length)
+    elif location is not None and distance is not None:
+        sites = range(location, location + distance)
 
     # Process even-indexed sites from the gate MPO
     for site_gate_MPO, overall_site in enumerate(sites):
@@ -379,8 +382,6 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> N
         dag1 (DAGCircuit): The first circuit's DAGCircuit.
         dag2 (DAGCircuit): The second circuit's DAGCircuit.
         threshold (float): The SVD truncation threshold used during decomposition.
-
-
     """
     N = mpo.length
 
