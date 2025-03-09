@@ -76,7 +76,10 @@ def random_theta_8d() -> NDArray[np.float64]:
 
 
 def approximate_reconstruction(
-    U: NDArray[np.float64], M: NDArray[np.float64], original: NDArray[np.float64], atol: float = 1e-10
+    U: NDArray[np.float64],  # noqa: N803
+    M: NDArray[np.float64],  # noqa: N803
+    original: NDArray[np.float64],
+    atol: float = 1e-10,
 ) -> None:
     """Helper function to reconstruct tensor.
 

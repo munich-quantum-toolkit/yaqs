@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 
-def dynamic_tdvp(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
+def dynamic_tdvp(state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:  # noqa: N803
     """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
 
     This function evolves the state by choosing between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP)

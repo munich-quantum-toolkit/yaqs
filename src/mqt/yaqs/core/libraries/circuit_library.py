@@ -15,6 +15,9 @@ These circuits are used to simulate the evolution of quantum many-body systems u
 respective Hamiltonians.
 """
 
+# ignore non-lowercase argument names for physics notation
+# ruff: noqa: N803
+
 from __future__ import annotations
 
 from qiskit.circuit import QuantumCircuit

@@ -164,7 +164,7 @@ def check_longest_gate(dag: DAGCircuit) -> int:
     return largest_distance
 
 
-def select_starting_point(N: int, dag: DAGCircuit) -> tuple[range, range]:
+def select_starting_point(num_qubits: int, dag: DAGCircuit) -> tuple[range, range]:
     """Determine the starting set of neighboring qubits (even-even or odd-odd) for gate application.
 
     This function selects a checkerboard pattern for gate application based on the layout of gates in the first
@@ -172,7 +172,7 @@ def select_starting_point(N: int, dag: DAGCircuit) -> tuple[range, range]:
     to be used as starting points.
 
     Args:
-        N (int): Total number of qubits (or sites) in the system.
+        num_qubits (int): Total number of qubits (or sites) in the system.
         dag (DAGCircuit): The DAGCircuit used to inspect the first set of gates.
 
     Returns:
@@ -180,12 +180,12 @@ def select_starting_point(N: int, dag: DAGCircuit) -> tuple[range, range]:
             - The first range corresponds to the first group of qubits.
             - The second range corresponds to the complementary group.
     """
-    assert N > 1
+    assert num_qubits > 1
 
     first_layer = next(dag.layers(), None)
 
-    first_iterator = range(0, N - 1, 2)
-    second_iterator = range(1, N - 1, 2)
+    first_iterator = range(0, num_qubits - 1, 2)
+    second_iterator = range(1, num_qubits - 1, 2)
     odd = False
 
     if first_layer is not None:
@@ -198,7 +198,7 @@ def select_starting_point(N: int, dag: DAGCircuit) -> tuple[range, range]:
                 break
 
         if odd:
-            first_iterator = range(1, N - 1, 2)
-            second_iterator = range(0, N - 1, 2)
+            first_iterator = range(1, num_qubits - 1, 2)
+            second_iterator = range(0, num_qubits - 1, 2)
 
     return first_iterator, second_iterator

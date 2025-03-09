@@ -51,7 +51,7 @@ def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: PhysicsSi
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams) -> MPS:
+def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams) -> MPS:  # noqa: N803
     """Perform a single time step evolution of the system state using the TJM.
 
     Corresponding to Fj in the TJM paper, this function evolves the state by applying dynamic TDVP,
@@ -72,7 +72,12 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params:
 
 
 def sample(
-    phi: MPS, H: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams, results: NDArray[np.float64], j: int
+    phi: MPS,
+    H: MPO,  # noqa: N803
+    noise_model: NoiseModel | None,
+    sim_params: PhysicsSimParams,
+    results: NDArray[np.float64],
+    j: int,
 ) -> None:
     """Sample the quantum state and record observable measurements from the sampling MPS.
 

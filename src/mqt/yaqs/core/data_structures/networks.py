@@ -293,7 +293,7 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def scalar_product(self, B: MPS, site: int | None = None) -> np.complex128:
+    def scalar_product(self, other: MPS, site: int | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
 
         The function contracts the corresponding tensors of two MPS objects. If no specific site is
@@ -301,25 +301,25 @@ class MPS:
         product. When a site is specified, only the tensors at that site are contracted.
 
         Args:
-            B (MPS): The second Matrix Product State.
+            other (MPS): The second Matrix Product State.
             site (int | None): Optional site index at which to compute the contraction. If None, the
                 contraction is performed over all sites.
 
         Returns:
             np.complex128: The resulting scalar product as a complex number.
         """
-        A_copy = copy.deepcopy(self)
-        B_copy = copy.deepcopy(B)
-        for i, tensor in enumerate(A_copy.tensors):
-            A_copy.tensors[i] = np.conj(tensor)
+        a_copy = copy.deepcopy(self)
+        b_copy = copy.deepcopy(other)
+        for i, tensor in enumerate(a_copy.tensors):
+            a_copy.tensors[i] = np.conj(tensor)
 
         result = np.array(np.inf)
         if site is None:
             for idx in range(self.length):
-                tensor = oe.contract("abc, ade->bdce", A_copy.tensors[idx], B_copy.tensors[idx])
+                tensor = oe.contract("abc, ade->bdce", a_copy.tensors[idx], b_copy.tensors[idx])
                 result = tensor if idx == 0 else oe.contract("abcd, cdef->abef", result, tensor)
         else:
-            result = oe.contract("ijk, ijk", A_copy.tensors[site], B_copy.tensors[site])
+            result = oe.contract("ijk, ijk", a_copy.tensors[site], b_copy.tensors[site])
         return np.complex128(np.squeeze(result))
 
     def local_expval(self, operator: NDArray[np.complex128], site: int) -> np.complex128:
@@ -549,7 +549,7 @@ class MPO:
         Rotates the MPO tensors by swapping physical dimensions.
     """
 
-    def init_ising(self, length: int, J: float, g: float) -> None:
+    def init_ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
         """Ising MPO.
 
         Initialize the Ising model as a Matrix Product Operator (MPO).
@@ -575,20 +575,20 @@ class MPO:
         physical_dimension = 2
         np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = ObservablesLibrary["x"]
-        Z = ObservablesLibrary["z"]
+        x = ObservablesLibrary["x"]
+        z = ObservablesLibrary["z"]
 
-        left_bound = np.array([identity, -J * Z, -g * X])[np.newaxis, :]
+        left_bound = np.array([identity, -J * z, -g * x])[np.newaxis, :]
 
         # Inner tensors (3x3 block):
         inner = np.zeros((3, 3, physical_dimension, physical_dimension), dtype=complex)
         inner[0, 0] = identity
-        inner[0, 1] = -J * Z
-        inner[0, 2] = -g * X
-        inner[1, 2] = Z
+        inner[0, 1] = -J * z
+        inner[0, 2] = -g * x
+        inner[1, 2] = z
         inner[2, 2] = identity
 
-        right_bound = np.array([[-g * X], [Z], [identity]])
+        right_bound = np.array([[-g * x], [z], [identity]])
 
         # Construct the MPO as a list of tensors:
         self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
@@ -599,7 +599,7 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-    def init_heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:
+    def init_heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:  # noqa: N803
         """Heisenberg MPO.
 
         Initialize the Heisenberg model as a Matrix Product Operator (MPO).
