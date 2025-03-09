@@ -477,6 +477,7 @@ def test_normalize() -> None:
     for tensor in mps.tensors:
         assert tensor.ndim == 3
 
+
 def test_scalar_product_same_state() -> None:
     """Test that the scalar product of a normalized state with itself equals 1.
 
