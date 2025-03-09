@@ -19,13 +19,12 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..data_structures.networks import MPO
 from .observables_library import ObservablesLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
     from qiskit.circuit import Parameter
-
-    from ..data_structures.networks import MPO
 
 
 def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
@@ -83,8 +82,6 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
         - If the sites are provided in reverse order, the resulting MPO tensors are reversed and
           transposed accordingly.
     """
-    from ..data_structures.networks import MPO
-
     tensors = split_tensor(tensor)
     if len(tensors) == 2:
         # Adds identity tensors between sites

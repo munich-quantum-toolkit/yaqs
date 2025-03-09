@@ -22,6 +22,7 @@ import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO, MPS
+from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.dynamic_tdvp import dynamic_tdvp
 from ..core.methods.stochastic_process import stochastic_process
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from ..core.data_structures.noise_model import NoiseModel
-    from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+    from ..core.data_structures.simulation_parameters import StrongSimParams
     from ..core.libraries.gate_library import BaseGate
 
 
@@ -225,8 +226,6 @@ def circuit_tjm(
         are the measured observables.
         If WeakSimParams are used, the results are the measurement outcomes for each shot.
     """
-    from ..core.data_structures.simulation_parameters import WeakSimParams
-
     _i, initial_state, noise_model, sim_params, circuit = args
     state = copy.deepcopy(initial_state)
 

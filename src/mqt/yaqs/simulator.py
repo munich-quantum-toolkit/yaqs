@@ -32,8 +32,10 @@ from typing import TYPE_CHECKING
 from qiskit.circuit import QuantumCircuit
 from tqdm import tqdm
 
+from .circuits.circuit_tjm import circuit_tjm
 from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
+from .physics.physics_tjm import physics_tjm_1, physics_tjm_2
 
 if TYPE_CHECKING:
     from .core.data_structures.networks import MPS
@@ -66,8 +68,6 @@ def _run_strong_sim(
 
 
     """
-    from mqt.yaqs.circuits.circuit_tjm import circuit_tjm
-
     backend = circuit_tjm
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
@@ -123,8 +123,6 @@ def _run_weak_sim(
 
 
     """
-    from mqt.yaqs.circuits.circuit_tjm import circuit_tjm
-
     backend = circuit_tjm
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
@@ -202,14 +200,7 @@ def _run_physics(
 
 
     """
-    if sim_params.order == 1:
-        from mqt.yaqs.physics.physics_tjm import physics_tjm_1
-
-        backend = physics_tjm_1
-    else:
-        from mqt.yaqs.physics.physics_tjm import physics_tjm_2
-
-        backend = physics_tjm_2
+    backend = physics_tjm_1 if sim_params.order == 1 else physics_tjm_2
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.N = 1
