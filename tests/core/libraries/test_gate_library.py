@@ -244,6 +244,27 @@ def test_gate_rz() -> None:
     assert_allclose(gate.tensor, expected)
 
 
+def test_gate_u3() -> None:
+    """Test the U3 gate.
+    
+    This test sets the parameters (theta, phi, lambda) for the U3 gate and verifies that its tensor,
+    which is equivalent to the 2x2 unitary matrix representation, matches the expected matrix.
+    """
+    gate = GateLibrary.u()
+    theta = np.pi / 2
+    phi = np.pi / 4
+    lam = np.pi / 3
+    gate.set_params([theta, phi, lam])
+    gate.set_sites(0)  # For a single-qubit gate, only one site is needed.
+    
+    expected = np.array([
+        [np.cos(theta/2), -np.exp(1j * lam) * np.sin(theta/2)],
+        [np.exp(1j * phi) * np.sin(theta/2), np.exp(1j * (phi + lam)) * np.cos(theta/2)]
+    ])
+    
+    assert_allclose(gate.tensor, expected)
+
+
 def test_gate_cx() -> None:
     """Test the CX (controlled-NOT) gate from GateLibrary.
 
