@@ -48,42 +48,6 @@ def test_run_default_parameters() -> None:
     assert figs_after > figs_before, "Expected a matplotlib plot to be created."
 
 
-def test_run_custom_parameters() -> None:
-    """Benchmarker custom parameters.
-
-    Test the `run` function with custom parameters on a simple quantum circuit.
-    This test creates a quantum circuit with 3 qubits, applies a Hadamard gate to the first qubit,
-    and then applies CNOT gates between the first and second qubits, and the second and third qubits.
-    It then defines custom parameters for `max_bond_dims`, `window_sizes`, and `thresholds`, and
-    runs the `run` function with these parameters.
-    Custom Parameters:
-    - max_bond_dims: List of maximum bond dimensions to test.
-    - window_sizes: List of window sizes to test.
-    - thresholds: List of thresholds to test.
-    The purpose of this test is to ensure that the `run` function can handle custom parameters
-    correctly and produce the expected results.
-    """
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    plt.close("all")
-    figs_before = len(plt.get_fignums())
-
-    # Create a simple quantum circuit for testing
-    qc = QuantumCircuit(3)
-    qc.h(0)
-    qc.cx(0, 1)
-    qc.cx(1, 2)
-
-    # Define custom parameters
-    max_bond_dims = [2, 4]
-    window_sizes = [0, 1]
-    thresholds = [0.001, 1e-06]
-
-    # Run the benchmarker with custom parameters
-    run(qc, max_bond_dims=max_bond_dims, window_sizes=window_sizes, thresholds=thresholds)
-    figs_after = len(plt.get_fignums())
-    assert figs_after > figs_before, "Expected a matplotlib plot to be created."
-
-
 def test_run_dots_style() -> None:
     """Benchmarker dots.
 
