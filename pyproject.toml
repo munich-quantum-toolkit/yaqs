@@ -45,7 +45,7 @@ dependencies = [
     "scipy>=1.14.1; python_version >= '3.13'",
     "qiskit>=1.0.0",
     "qiskit>=1.3.0; python_version >= '3.13'",
-    "qiskit-aer>=0.14.0",
+    "qiskit-aer>=0.16.4",
     "opt-einsum>=3.4.0",
     "tqdm>=4.67.1",
 ]
