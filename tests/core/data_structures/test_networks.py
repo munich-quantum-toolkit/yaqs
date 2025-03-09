@@ -488,7 +488,7 @@ def test_measure() -> None:
     pdim = 2
     mps = MPS(length=length, physical_dimensions=[pdim] * length, state="x+")
     obs = Observable(site=0, name="x")
-    val = mps.measure(obs)
+    val = mps.measure_expectation_value(obs)
     assert np.isclose(val, 1)
 
 

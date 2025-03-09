@@ -290,8 +290,8 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def measure(self, observable: Observable) -> np.float64:
-        """Measurement.
+    def measure_expectation_value(self, observable: Observable) -> np.float64:
+        """Measurement of expectation value
 
         Measure the expectation value of a given observable.
 

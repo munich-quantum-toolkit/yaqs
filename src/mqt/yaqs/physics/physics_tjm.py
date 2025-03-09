@@ -102,7 +102,7 @@ def sample(
                 for site in range(last_site, observable.site):
                     temp_state.shift_orthogonality_center_right(site)
                 last_site = observable.site
-            results[obs_index, j] = temp_state.measure(observable)
+            results[obs_index, j] = temp_state.measure_expectation_value(observable)
     else:
         temp_state = copy.deepcopy(psi)
         last_site = 0
@@ -111,7 +111,7 @@ def sample(
                 for site in range(last_site, observable.site):
                     temp_state.shift_orthogonality_center_right(site)
                 last_site = observable.site
-            results[obs_index, 0] = temp_state.measure(observable)
+            results[obs_index, 0] = temp_state.measure_expectation_value(observable)
 
 
 def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
@@ -143,7 +143,7 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
 
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+            results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
 
     phi = initialize(state, noise_model, sim_params)
     if sim_params.sample_timesteps:
@@ -185,7 +185,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
 
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+            results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         dynamic_tdvp(state, H, sim_params)
@@ -200,9 +200,9 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
                     for site in range(last_site, observable.site):
                         temp_state.shift_orthogonality_center_right(site)
                     last_site = observable.site
-                results[obs_index, j] = temp_state.measure(observable)
+                results[obs_index, j] = temp_state.measure_expectation_value(observable)
         elif j == len(sim_params.times) - 1:
             for obs_index, observable in enumerate(sim_params.sorted_observables):
-                results[obs_index, 0] = copy.deepcopy(state).measure(observable)
+                results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
 
     return results
