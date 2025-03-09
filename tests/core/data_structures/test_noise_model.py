@@ -62,3 +62,16 @@ def test_noise_model_empty() -> None:
     assert model.processes == []
     assert model.strengths == []
     assert model.jump_operators == []
+
+
+def test_noise_model_empty() -> None:
+    """Test that NoiseModel handles a None input without error.
+
+    This test initializes a NoiseModel with empty lists for processes and strengths, and verifies that the resulting
+    model has empty processes, strengths, and jump_operators lists.
+    """
+    model = NoiseModel(None, None)
+    assert model.processes == []
+    assert model.strengths == []
+    assert model.jump_operators == []
+
