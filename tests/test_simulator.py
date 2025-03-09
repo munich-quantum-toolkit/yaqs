@@ -169,6 +169,7 @@ def test_strong_simulation() -> None:
         elif i == 4:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
+
 def test_strong_simulation_parallel_off() -> None:
     """Test the circuit-based simulation branch using StrongSimParams, parallelization off.
 

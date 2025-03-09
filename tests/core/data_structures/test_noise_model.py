@@ -74,4 +74,3 @@ def test_noise_model_empty() -> None:
     assert model.processes == []
     assert model.strengths == []
     assert model.jump_operators == []
-
