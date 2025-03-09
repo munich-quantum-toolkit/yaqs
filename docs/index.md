@@ -9,18 +9,14 @@ self
 ```{toctree}
 :maxdepth: 2
 :caption: User Guide
-
+examples/physics_simulation
+examples/strong_circuit_simulation
+examples/weak_circuit_simulation
+examples/equivalence_checking
 references
 ```
 
 ````{only} not latex
-```{toctree}
-:maxdepth: 2
-:caption: DD Package Evaluation
-
-dd_package_evaluation
-```
-
 ```{toctree}
 :maxdepth: 2
 :titlesonly:
