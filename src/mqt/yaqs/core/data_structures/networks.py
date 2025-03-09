@@ -15,11 +15,14 @@ utilities are essential for simulating quantum many-body systems using tensor ne
 
 from __future__ import annotations
 
+import concurrent.futures
 import copy
+import multiprocessing
 from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
+from tqdm import tqdm
 
 from ..libraries.observables_library import ObservablesLibrary
 
@@ -291,7 +294,7 @@ class MPS:
             self.flip_network()
 
     def measure_expectation_value(self, observable: Observable) -> np.float64:
-        """Measurement of expectation value
+        """Measurement of expectation value.
 
         Measure the expectation value of a given observable.
 
@@ -309,6 +312,74 @@ class MPS:
         E = local_expval(copy.deepcopy(self), ObservablesLibrary[observable.name], observable.site)
         assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
         return E.real
+
+    def measure_single_shot(self) -> int:
+        """Perform a single-shot measurement on a Matrix Product State (MPS).
+
+        This function simulates a projective measurement on an MPS. For each site, it computes the
+        local reduced density matrix from the site's tensor, derives the probability distribution over
+        basis states, and randomly selects an outcome. The overall measurement result is encoded as an
+        integer corresponding to the measured bitstring.
+
+        Returns:
+            int: The measurement outcome represented as an integer.
+        """
+        temp_state = copy.deepcopy(self)
+        bitstring = []
+        for site, tensor in enumerate(temp_state.tensors):
+            reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
+            probabilities = np.diag(reduced_density_matrix).real
+            rng = np.random.default_rng()
+            chosen_index = rng.choice(len(probabilities), p=probabilities)
+            bitstring.append(chosen_index)
+            selected_state = np.zeros(len(probabilities))
+            selected_state[chosen_index] = 1
+            # Multiply state: project the tensor onto the selected state.
+            projected_tensor = oe.contract("a, acd->cd", selected_state, tensor)
+            # Propagate the measurement to the next site.
+            if site != self.length - 1:
+                temp_state.tensors[site + 1] = (  # noqa: B909
+                    1
+                    / np.sqrt(probabilities[chosen_index])
+                    * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])
+                )
+        return sum(c << i for i, c in enumerate(bitstring))
+
+    def measure_shots(self, shots: int) -> dict[int, int]:
+        """Perform multiple single-shot measurements on an MPS and aggregate the results.
+
+        This function executes a specified number of measurement shots on the given MPS. For each shot,
+        a single-shot measurement is performed, and the outcomes are aggregated into a histogram (dictionary)
+        mapping basis states (represented as integers) to the number of times they were observed.
+
+        Args:
+            state (MPS): The Matrix Product State to be measured.
+            shots (int): The number of measurement shots to perform.
+
+        Returns:
+            dict[int, int]: A dictionary where keys are measured basis states (as integers) and values are
+            the corresponding counts.
+
+        Notes:
+            - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.
+            - A progress bar (via tqdm) displays the progress of the measurement process.
+        """
+        results: dict[int, int] = {}
+        if shots > 1:
+            max_workers = max(1, multiprocessing.cpu_count() - 1)
+            with (
+                concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor,
+                tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
+            ):
+                futures = [executor.submit(self.measure_single_shot) for _ in range(shots)]
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    results[result] = results.get(result, 0) + 1
+                    pbar.update(1)
+            return results
+        basis_state = self.measure_single_shot()
+        results[basis_state] = results.get(basis_state, 0) + 1
+        return results
 
     def norm(self, site: int | None = None) -> np.float64:
         """Norm calculation.

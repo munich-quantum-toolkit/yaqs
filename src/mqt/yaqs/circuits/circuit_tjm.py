@@ -24,7 +24,6 @@ from qiskit.converters import circuit_to_dag
 from ..core.data_structures.networks import MPO, MPS
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.dynamic_tdvp import dynamic_tdvp
-from ..core.methods.operations import measure_shots
 from ..core.methods.stochastic_process import stochastic_process
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -252,9 +251,9 @@ def circuit_tjm(
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             # All shots can be done at once in noise-free model
-            return measure_shots(state, sim_params.shots)
+            return state.measure_shots(sim_params.shots)
         # Each shot is an individual trajectory
-        return measure_shots(state, shots=1)
+        return state.measure_shots(shots=1)
     # StrongSimParams
     results = np.zeros((len(sim_params.observables), 1))
     temp_state = copy.deepcopy(state)

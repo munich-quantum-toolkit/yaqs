@@ -22,10 +22,9 @@ These tests ensure correctness and reliability of basic quantum operations withi
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPS
-from mqt.yaqs.core.methods.operations import local_expval, measure_shots, measure_single_shot, scalar_product
+from mqt.yaqs.core.methods.operations import local_expval, scalar_product
 
 
 def test_scalar_product_same_state() -> None:
@@ -90,28 +89,3 @@ def test_local_expval_x_on_plus_state() -> None:
     psi_mps = MPS(length=3, state="x+")
     val = local_expval(psi_mps, X, site=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
-
-
-def test_single_shot() -> None:
-    """Test measure_single_shot on an MPS initialized in the |0> state.
-
-    For an MPS representing the state |0> on all qubits, a single-shot measurement should yield 0.
-    """
-    psi_mps = MPS(length=3, state="zeros")
-    val = measure_single_shot(psi_mps)
-    np.testing.assert_allclose(val, 0, atol=1e-12)
-
-
-def test_multi_shot() -> None:
-    """Test measure over multiple shots on an MPS initialized in the |1> state.
-
-    This test performs 10 measurement shots on an MPS in the "ones" state and verifies that
-    the measurement result for the corresponding basis state (here, 7) is present, while an unexpected
-    key (e.g., 0) should not be present.
-    """
-    psi_mps = MPS(length=3, state="ones")
-    shots_dict = measure_shots(psi_mps, shots=10)
-    # Assuming that in the "ones" state the measurement outcome is encoded as 7.
-    assert shots_dict[7]
-    with pytest.raises(KeyError):
-        _ = shots_dict[0]

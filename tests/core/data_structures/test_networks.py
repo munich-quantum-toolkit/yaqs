@@ -492,6 +492,31 @@ def test_measure() -> None:
     assert np.isclose(val, 1)
 
 
+def test_single_shot() -> None:
+    """Test measure_single_shot on an MPS initialized in the |0> state.
+
+    For an MPS representing the state |0> on all qubits, a single-shot measurement should yield 0.
+    """
+    psi_mps = MPS(length=3, state="zeros")
+    val = psi_mps.measure_single_shot()
+    np.testing.assert_allclose(val, 0, atol=1e-12)
+
+
+def test_multi_shot() -> None:
+    """Test measure over multiple shots on an MPS initialized in the |1> state.
+
+    This test performs 10 measurement shots on an MPS in the "ones" state and verifies that
+    the measurement result for the corresponding basis state (here, 7) is present, while an unexpected
+    key (e.g., 0) should not be present.
+    """
+    psi_mps = MPS(length=3, state="ones")
+    shots_dict = psi_mps.measure_shots(shots=10)
+    # Assuming that in the "ones" state the measurement outcome is encoded as 7.
+    assert shots_dict[7]
+    with pytest.raises(KeyError):
+        _ = shots_dict[0]
+
+
 def test_norm() -> None:
     """Test that the norm of an MPS initialized in the 'zeros' state is 1.
 
