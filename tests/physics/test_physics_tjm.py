@@ -55,7 +55,7 @@ def test_initialize() -> None:
     noise_model = NoiseModel(["relaxation"], [0.1])
     measurements = [Observable("x", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.2, sample_timesteps=False, N=1, max_bond_dim=2, threshold=1e-6, order=1
+        measurements, elapsed_time=0.2, dt=0.2, sample_timesteps=False, num_traj=1, max_bond_dim=2, threshold=1e-6, order=1
     )
     with (
         patch("mqt.yaqs.physics.physics_tjm.apply_dissipation") as mock_dissipation,
@@ -83,7 +83,7 @@ def test_step_through() -> None:
     noise_model = NoiseModel(["relaxation"], [0.1])
     measurements = [Observable("x", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.2, sample_timesteps=False, N=1, max_bond_dim=2, threshold=1e-6, order=1
+        measurements, elapsed_time=0.2, dt=0.2, sample_timesteps=False, num_traj=1, max_bond_dim=2, threshold=1e-6, order=1
     )
     with (
         patch("mqt.yaqs.physics.physics_tjm.dynamic_tdvp") as mock_dynamic_tdvp,
@@ -112,7 +112,7 @@ def test_physics_tjm_2() -> None:
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=False, N=1, max_bond_dim=4, threshold=1e-6, order=2
+        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=False, num_traj=1, max_bond_dim=4, threshold=1e-6, order=2
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_2(args)
@@ -135,7 +135,7 @@ def test_physics_tjm_2_sample_timesteps() -> None:
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=2
+        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, num_traj=1, max_bond_dim=4, threshold=1e-6, order=2
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_2(args)
@@ -158,7 +158,7 @@ def test_physics_tjm_1() -> None:
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=False, N=1, max_bond_dim=4, threshold=1e-6, order=1
+        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=False, num_traj=1, max_bond_dim=4, threshold=1e-6, order=1
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_1(args)
@@ -181,7 +181,7 @@ def test_physics_tjm_1_sample_timesteps() -> None:
     noise_model = None
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
+        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, num_traj=1, max_bond_dim=4, threshold=1e-6, order=1
     )
     args = (0, state, noise_model, sim_params, H)
     results = physics_tjm_1(args)

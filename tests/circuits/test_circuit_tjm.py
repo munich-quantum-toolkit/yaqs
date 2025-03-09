@@ -164,12 +164,12 @@ def test_apply_window() -> None:
     gate.set_sites(1, 2)
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
 
-    N = 1
+    num_traj = 1
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 1
     measurements = [Observable("z", 0)]
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
 
     short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, sim_params)
 
@@ -197,12 +197,12 @@ def test_apply_two_qubit_gate_with_window() -> None:
     assert cx_nodes, "No CX gate found in the front layer."
     node = cx_nodes[0]
 
-    N = 1
+    num_traj = 1
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
     observable = Observable("z", 0)
-    sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     orig_tensors = copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     for i, tensor in enumerate(mps0.tensors):
@@ -214,7 +214,7 @@ def test_apply_two_qubit_gate_with_window() -> None:
 
     mps1 = MPS(length, copy.deepcopy(orig_tensors))
     window_size = 1
-    sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     apply_two_qubit_gate(mps1, node, sim_params)
 
     for i, tensor in enumerate(mps1.tensors):
@@ -234,12 +234,12 @@ def test_circuit_tjm_strong() -> None:
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
-    N = 1
+    num_traj = 1
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
     observable = Observable("z", 0)
-    sim_params = StrongSimParams([observable], N, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     args = 0, mps0, None, sim_params, qc
     circuit_tjm(args)
 

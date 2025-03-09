@@ -56,13 +56,13 @@ def test_dynamic_tdvp_one_site() -> None:
     elapsed_time = 0.2
     dt = 0.1
     sample_timesteps = False
-    N = 1
+    num_traj = 1
     max_bond_dim = 0  # Force condition for single_site_TDVP.
     threshold = 1e-6
     order = 1
     measurements = [Observable("x", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
 
     with patch("mqt.yaqs.core.methods.dynamic_tdvp.single_site_tdvp") as mock_single_site:
@@ -93,13 +93,13 @@ def test_dynamic_tdvp_two_site() -> None:
     elapsed_time = 0.2
     dt = 0.1
     sample_timesteps = False
-    N = 1
+    num_traj = 1
     max_bond_dim = 2  # Force condition for two_site_tdvp.
     threshold = 1e-6
     order = 1
     measurements = [Observable("x", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
 
     with patch("mqt.yaqs.core.methods.dynamic_tdvp.two_site_tdvp") as mock_two_site:

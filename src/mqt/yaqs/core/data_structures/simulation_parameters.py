@@ -81,17 +81,17 @@ class Observable:
         """
         if isinstance(sim_params, PhysicsSimParams):
             if sim_params.sample_timesteps:
-                self.trajectories = np.empty((sim_params.N, len(sim_params.times)), dtype=np.float64)
+                self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=np.float64)
                 self.times = sim_params.times
             else:
-                self.trajectories = np.empty((sim_params.N, 1), dtype=np.float64)
+                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.float64)
                 self.times = sim_params.elapsed_time
             self.results = np.empty(len(sim_params.times), dtype=np.float64)
         elif isinstance(sim_params, WeakSimParams):
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
             self.results = np.empty(1, dtype=np.float64)
         elif isinstance(sim_params, StrongSimParams):
-            self.trajectories = np.empty((sim_params.N, 1), dtype=np.complex128)
+            self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
             self.results = np.empty(1, dtype=np.float64)
 
 
@@ -114,7 +114,7 @@ class PhysicsSimParams:
         An array of time points from 0 to T with step dt.
     sample_timesteps : bool, optional
         A flag to indicate whether to sample timesteps (default is True).
-    N : int, optional
+    num_traj : int, optional
         The number of samples to be taken (default is 1000).
     max_bond_dim : int, optional
         The maximum bond dimension (default is 2).
@@ -134,7 +134,7 @@ class PhysicsSimParams:
         observables: list[Observable],
         elapsed_time: float,  # noqa: N803
         dt: float = 0.1,
-        N: int = 1000,  # noqa: N803
+        num_traj: int = 1000,  # noqa: N803
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
         order: int = 1,
@@ -153,7 +153,7 @@ class PhysicsSimParams:
             Total simulation time.
         dt : float, optional
             Time step interval, by default 0.1.
-        N : int, optional
+        num_traj : int, optional
             Number of simulation samples, by default 1000.
         max_bond_dim : int, optional
             Maximum bond dimension allowed, by default 2.
@@ -170,7 +170,7 @@ class PhysicsSimParams:
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
         self.sample_timesteps = sample_timesteps
-        self.N = N
+        self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
@@ -194,7 +194,7 @@ class WeakSimParams:
     -----------
     dt : int
         A placeholder property for code compatibility.
-    N : int
+    num_traj : int
         A placeholder property for code compatibility.
     shots : int
         The number of shots for the simulation.
@@ -215,7 +215,7 @@ class WeakSimParams:
 
     # Properties set as placeholders for code compatibility
     dt = 1
-    N = 0
+    num_traj = 0
 
     def __init__(
         self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
@@ -280,7 +280,7 @@ class StrongSimParams:
         A list of observables to be tracked during the simulation.
     sorted_observables : list[Observable]
         A list of observables sorted by site and name.
-    N : int
+    num_traj : int
         The number of trajectories to simulate. Default is 1000.
     max_bond_dim : int
         The maximum bond dimension for the simulation. Default is 2.
@@ -291,7 +291,7 @@ class StrongSimParams:
 
     Methods:
     --------
-    __init__(self, observables: list[Observable], N: int = 1000, max_bond_dim: int = 2,
+    __init__(self, observables: list[Observable], num_traj: int = 1000, max_bond_dim: int = 2,
              threshold: float = 1e-6, window_size: int | None = None) -> None:
         Initializes the StrongSimParams with the given parameters.
     aggregate_trajectories(self) -> None:
@@ -304,7 +304,7 @@ class StrongSimParams:
     def __init__(
         self,
         observables: list[Observable],
-        N: int = 1000,  # noqa: N803
+        num_traj: int = 1000,  # noqa: N803
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
         window_size: int | None = None,
@@ -317,7 +317,7 @@ class StrongSimParams:
         ----------
         observables : list[Observable]
             List of observables to measure during simulation.
-        N : int, optional
+        num_traj : int, optional
             Number of trajectories to simulate, by default 1000.
         max_bond_dim : int, optional
             Maximum bond dimension allowed in simulation, by default 2.
@@ -328,7 +328,7 @@ class StrongSimParams:
         """
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
-        self.N = N
+        self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size

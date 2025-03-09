@@ -215,7 +215,7 @@ def test_single_site_tdvp() -> None:
     state = MPS(L, state="zeros")
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
+        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, num_traj=1, max_bond_dim=4, threshold=1e-6, order=1
     )
     single_site_tdvp(state, H, sim_params, numiter_lanczos=5)
     assert state.length == L
@@ -242,7 +242,7 @@ def test_two_site_tdvp() -> None:
     state = MPS(L, state="zeros")
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, N=1, max_bond_dim=4, threshold=1e-6, order=1
+        measurements, elapsed_time=0.2, dt=0.1, sample_timesteps=True, num_traj=1, max_bond_dim=4, threshold=1e-6, order=1
     )
     two_site_tdvp(state, H, sim_params, numiter_lanczos=5)
     assert state.length == L

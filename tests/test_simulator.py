@@ -50,14 +50,14 @@ def test_physics_simulation() -> None:
     elapsed_time = 1
     dt = 0.1
     sample_timesteps = False
-    N = 10
+    num_traj = 10
     max_bond_dim = 4
     threshold = 1e-6
     order = 2
 
     measurements = [Observable("z", site) for site in range(length)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
@@ -67,7 +67,7 @@ def test_physics_simulation() -> None:
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
         assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
@@ -98,14 +98,14 @@ def test_physics_simulation_parallel_off() -> None:
     elapsed_time = 1
     dt = 0.1
     sample_timesteps = False
-    N = 10
+    num_traj = 10
     max_bond_dim = 4
     threshold = 1e-6
     order = 2
 
     measurements = [Observable("z", site) for site in range(length)]
     sim_params = PhysicsSimParams(
-        measurements, elapsed_time, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
@@ -115,7 +115,7 @@ def test_physics_simulation_parallel_off() -> None:
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
         assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
@@ -143,14 +143,14 @@ def test_strong_simulation() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
 
-    N = 10
+    num_traj = 10
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
 
     measurements = [Observable("z", site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
-    # Use a noise model that is not None so that sim_params.N remains unchanged.
+    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
+    # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
@@ -159,7 +159,7 @@ def test_strong_simulation() -> None:
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
         assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
@@ -187,14 +187,14 @@ def test_strong_simulation_parallel_off() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
 
-    N = 10
+    num_traj = 10
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
 
     measurements = [Observable("z", site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
-    # Use a noise model that is not None so that sim_params.N remains unchanged.
+    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
+    # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
 
@@ -203,7 +203,7 @@ def test_strong_simulation_parallel_off() -> None:
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == N, "Trajectories was not initialized for PhysicsSimParams 2."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
         assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
@@ -222,7 +222,7 @@ def test_weak_simulation_noise() -> None:
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
     It sets up WeakSimParams with a specified number of shots, max bond dimension, threshold, and window size,
-    and a noise model with small strengths. After running simulator.run, the test verifies that sim_params.N equals
+    and a noise model with small strengths. After running simulator.run, the test verifies that sim_params.num_traj equals
     the number of shots, that each measurement is a dictionary, and that the total number of shots
     recorded in sim_params.results equals the expected number.
     """
@@ -242,7 +242,7 @@ def test_weak_simulation_noise() -> None:
 
     simulator.run(initial_state, circuit, sim_params, noise_model)
 
-    assert shots == sim_params.N, "sim_params.N should be number of shots."
+    assert shots == sim_params.num_traj, "sim_params.num_traj should be number of shots."
     for measurement in sim_params.measurements:
         assert isinstance(measurement, dict)
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
@@ -253,7 +253,7 @@ def test_weak_simulation_no_noise() -> None:
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system,
     and configures WeakSimParams with a specified number of shots. When noise_model is None,
-    the simulation should set sim_params.N to 1. The test verifies that the measurements and results
+    the simulation should set sim_params.num_traj to 1. The test verifies that the measurements and results
     are consistent with this behavior.
     """
     num_qubits = 5
@@ -271,7 +271,7 @@ def test_weak_simulation_no_noise() -> None:
 
     simulator.run(initial_state, circuit, sim_params, noise_model)
 
-    assert sim_params.N == 1, "sim_params.N should be 1 when noise model strengths are all zero."
+    assert sim_params.num_traj == 1, "sim_params.num_traj should be 1 when noise model strengths are all zero."
     assert isinstance(sim_params.measurements[0], dict), (
         "There should be only one measurement when noise model strengths are zero. 1"
     )

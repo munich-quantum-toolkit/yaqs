@@ -61,7 +61,7 @@ def _run_strong_sim(
         initial_state (MPS): The initial system state as an MPS.
         operator (QuantumCircuit): The quantum circuit representing the operation to simulate.
         sim_params (StrongSimParams): Simulation parameters for strong simulation,
-                                      including the number of trajectories (N),
+                                      including the number of trajectories (num_traj),
                                       time step (dt), and sorted observables.
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
@@ -71,17 +71,17 @@ def _run_strong_sim(
     backend = circuit_tjm
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-        sim_params.N = 1
+        sim_params.num_traj = 1
 
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
 
-    args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    if parallel and sim_params.N > 1:
+    args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+    if parallel and sim_params.num_traj > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
-            with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
+            with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
                     result = future.result()
@@ -110,7 +110,7 @@ def _run_weak_sim(
 
     This function executes circuit-based simulation trajectories using the 'circuit_tjm' backend,
     adjusted for weak simulation parameters. If the noise model is absent or its strengths are all zero,
-    only a single trajectory is executed; otherwise, sim_params.N is set to sim_params.shots and then shots is set to 1.
+    only a single trajectory is executed; otherwise, sim_params.num_traj is set to sim_params.shots and then shots is set to 1.
     The trajectories are then executed (in parallel if specified) and the measurement results are aggregated.
 
     Args:
@@ -126,17 +126,17 @@ def _run_weak_sim(
     backend = circuit_tjm
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-        sim_params.N = 1
+        sim_params.num_traj = 1
     else:
-        sim_params.N = sim_params.shots
+        sim_params.num_traj = sim_params.shots
         sim_params.shots = 1
 
-    args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    if parallel and sim_params.N > 1:
+    args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+    if parallel and sim_params.num_traj > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
-            with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
+            with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
                     result = future.result()
@@ -203,17 +203,17 @@ def _run_physics(
     backend = physics_tjm_1 if sim_params.order == 1 else physics_tjm_2
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
-        sim_params.N = 1
+        sim_params.num_traj = 1
 
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
 
-    args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.N)]
-    if parallel and sim_params.N > 1:
+    args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+    if parallel and sim_params.num_traj > 1:
         max_workers = max(1, multiprocessing.cpu_count() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
-            with tqdm(total=sim_params.N, desc="Running trajectories", ncols=80) as pbar:
+            with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
                     result = future.result()
