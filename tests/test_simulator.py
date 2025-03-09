@@ -13,6 +13,9 @@ long-range gate handling, weak and strong simulation modes, and error cases such
 qubit counts.
 """
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 import numpy as np

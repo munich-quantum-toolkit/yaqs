@@ -18,8 +18,8 @@ These methods are designed for simulating the dynamics of quantum many-body syst
 techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 """
 
-# ignore non-lowercase argument names for physics notation
-# ruff: noqa: N803
+# ignore non-lowercase argument and variable names for physics notation
+# ruff: noqa: N803, N806
 
 from __future__ import annotations
 

@@ -58,7 +58,7 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> 
         return
 
     # Calculate the dissipation operator A from the noise model.
-    A = sum(
+    A = sum(  # noqa: N806
         noise_model.strengths[i] * np.conj(jump_operator).T @ jump_operator
         for i, jump_operator in enumerate(noise_model.jump_operators)
     )

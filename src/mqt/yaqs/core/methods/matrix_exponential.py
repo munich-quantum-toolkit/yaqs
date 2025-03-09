@@ -64,7 +64,7 @@ def lanczos_iteration(
     alpha = np.zeros(numiter)
     beta = np.zeros(numiter - 1)
 
-    V = np.zeros((numiter, len(vstart)), dtype=complex)
+    V = np.zeros((numiter, len(vstart)), dtype=complex)  # noqa: N806
     V[0] = vstart
 
     for j in range(numiter - 1):
@@ -111,7 +111,7 @@ def expm_krylov(
         NDArray[np.complex128]:
             The approximate result of applying exp(-1j * dt * A) to v.
     """
-    alpha, beta, V = lanczos_iteration(matrix_free_operator, v, numiter)
+    alpha, beta, V = lanczos_iteration(matrix_free_operator, v, numiter)  # noqa: N806
     try:
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stemr")
     except np.linalg.LinAlgError:

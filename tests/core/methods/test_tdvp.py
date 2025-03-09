@@ -23,6 +23,9 @@ The tests ensure that:
 These tests confirm the correctness and stability of TDVP-based simulations within the YAQS framework.
 """
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 import numpy as np

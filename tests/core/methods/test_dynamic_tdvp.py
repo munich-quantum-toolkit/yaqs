@@ -20,6 +20,9 @@ These tests validate the functionality and correctness of dissipation handling
 in quantum simulations performed using the YAQS framework.
 """
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 from unittest.mock import patch

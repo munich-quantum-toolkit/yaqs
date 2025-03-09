@@ -13,6 +13,9 @@ tensor form, interactions, and generator(s). The module provides concrete implem
 for standard gates. The GateLibrary class aggregates all these gate classes for easy access.
 """
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

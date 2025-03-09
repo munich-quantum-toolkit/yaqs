@@ -226,8 +226,8 @@ class MPS:
         tensor = self.tensors[current_orthogonality_center]
         old_dims = tensor.shape
         matricized_tensor = np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2]))
-        Q, R = np.linalg.qr(matricized_tensor)
-        Q = np.reshape(Q, (old_dims[0], old_dims[1], -1))
+        Q, R = np.linalg.qr(matricized_tensor)  # noqa: N806
+        Q = np.reshape(Q, (old_dims[0], old_dims[1], -1))  # noqa: N806
         self.tensors[current_orthogonality_center] = Q
 
         # If normalizing, we just throw away the R
@@ -357,9 +357,9 @@ class MPS:
         """
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        E = self.local_expval(ObservablesLibrary[observable.name], observable.site)
-        assert E.imag < 1e-13, f"Measurement should be real, '{E.real:16f}+{E.imag:16f}i'."
-        return E.real
+        exp = self.local_expval(ObservablesLibrary[observable.name], observable.site)
+        assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
+        return exp.real
 
     def measure_single_shot(self) -> int:
         """Perform a single-shot measurement on a Matrix Product State (MPS).
@@ -473,44 +473,44 @@ class MPS:
         Returns:
             list[int]: A list indicating the canonical form status of the MPS.
         """
-        A = copy.deepcopy(self.tensors)
+        a = copy.deepcopy(self.tensors)
         for i, tensor in enumerate(self.tensors):
-            A[i] = np.conj(tensor)
-        B = self.tensors
+            a[i] = np.conj(tensor)
+        b = self.tensors
 
-        A_truth = []
-        B_truth = []
+        a_truth = []
+        b_truth = []
         epsilon = 1e-12
-        for i in range(len(A)):
-            M = oe.contract("ijk, ijl->kl", A[i], B[i])
-            M[epsilon > M] = 0
-            test_identity = np.eye(M.shape[0], dtype=complex)
-            A_truth.append(np.allclose(M, test_identity))
+        for i in range(len(a)):
+            mat = oe.contract("ijk, ijl->kl", a[i], b[i])
+            mat[epsilon > mat] = 0
+            test_identity = np.eye(mat.shape[0], dtype=complex)
+            a_truth.append(np.allclose(mat, test_identity))
 
-        for i in range(len(A)):
-            M = oe.contract("ijk, ibk->jb", B[i], A[i])
-            M[epsilon > M] = 0
-            test_identity = np.eye(M.shape[0], dtype=complex)
-            B_truth.append(np.allclose(M, test_identity))
+        for i in range(len(a)):
+            mat = oe.contract("ijk, ibk->jb", b[i], a[i])
+            mat[epsilon > mat] = 0
+            test_identity = np.eye(mat.shape[0], dtype=complex)
+            b_truth.append(np.allclose(mat, test_identity))
 
-        if all(B_truth):
+        if all(b_truth):
             return [0]
-        if all(A_truth):
+        if all(a_truth):
             return [self.length - 1]
 
-        if not (all(A_truth) and all(B_truth)):
+        if not (all(a_truth) and all(b_truth)):
             sites = []
-            for i, _truth_value in enumerate(A_truth):
+            for i, _truth_value in enumerate(a_truth):
                 if _truth_value:
                     sites.append(i)
                 else:
                     break
 
-            for i, _truth_value in enumerate(B_truth[len(sites) :], start=len(sites)):
+            for i, _truth_value in enumerate(b_truth[len(sites) :], start=len(sites)):
                 sites.append(i)
             if False in sites:
                 return [sites.index(False)]
-            for i, value in enumerate(A_truth):
+            for i, value in enumerate(a_truth):
                 if not value:
                     return [i - 1, i]
         return [-1]
@@ -627,24 +627,24 @@ class MPO:
         physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        X = ObservablesLibrary["x"]
-        Y = ObservablesLibrary["y"]
-        Z = ObservablesLibrary["z"]
+        x = ObservablesLibrary["x"]
+        y = ObservablesLibrary["y"]
+        z = ObservablesLibrary["z"]
 
-        left_bound = np.array([identity, -Jx * X, -Jy * Y, -Jz * Z, -h * Z])[np.newaxis, :]
+        left_bound = np.array([identity, -Jx * x, -Jy * y, -Jz * z, -h * z])[np.newaxis, :]
 
         inner = np.zeros((5, 5, physical_dimension, physical_dimension), dtype=complex)
         inner[0, 0] = identity
-        inner[0, 1] = -Jx * X
-        inner[0, 2] = -Jy * Y
-        inner[0, 3] = -Jz * Z
-        inner[0, 4] = -h * Z
-        inner[1, 4] = X
-        inner[2, 4] = Y
-        inner[3, 4] = Z
+        inner[0, 1] = -Jx * x
+        inner[0, 2] = -Jy * y
+        inner[0, 3] = -Jz * z
+        inner[0, 4] = -h * z
+        inner[1, 4] = x
+        inner[2, 4] = y
+        inner[3, 4] = z
         inner[4, 4] = identity
 
-        right_bound = np.array([zero, X, Y, Z, identity])[:, np.newaxis]
+        right_bound = np.array([zero, x, y, z, identity])[:, np.newaxis]
 
         # Construct the MPO
         self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
@@ -662,14 +662,14 @@ class MPO:
         length (int): The number of identity matrices to initialize.
         physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
         """
-        M = np.eye(2)
-        M = np.expand_dims(M, (2, 3))
+        mat = np.eye(2)
+        mat = np.expand_dims(mat, (2, 3))
         self.length = length
         self.physical_dimension = physical_dimension
 
         self.tensors = []
         for _ in range(length):
-            self.tensors.append(M)
+            self.tensors.append(mat)
 
     def init_custom_hamiltonian(
         self,
@@ -799,12 +799,12 @@ class MPO:
         Returns:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
-        identity_MPO = MPO()
-        identity_MPO.init_identity(self.length)
+        identity_mpo = MPO()
+        identity_mpo.init_identity(self.length)
 
-        identity_MPS = identity_MPO.to_mps()
-        MPS = self.to_mps()
-        trace = MPS.scalar_product(identity_MPS)
+        identity_mps = identity_mpo.to_mps()
+        mps = self.to_mps()
+        trace = mps.scalar_product(identity_mps)
 
         # Checks if trace is not a singular values for partial trace
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity

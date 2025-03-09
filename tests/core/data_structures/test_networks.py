@@ -13,6 +13,9 @@ orthogonality center shifting, normalization, observable measurement, and overal
 These tests ensure that the MPS class functions as expected in various simulation scenarios.
 """
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 import copy
@@ -522,11 +525,11 @@ def test_local_expval_z_on_zero_state() -> None:
     initialized in the "zeros" state.
     """
     # Pauli-Z in computational basis.
-    Z = np.array([[1, 0], [0, -1]], dtype=complex)
+    z = np.array([[1, 0], [0, -1]], dtype=complex)
     psi_mps = MPS(length=2, state="zeros")
-    val = psi_mps.local_expval(Z, site=0)
+    val = psi_mps.local_expval(z, site=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
-    val_site1 = psi_mps.local_expval(Z, site=1)
+    val_site1 = psi_mps.local_expval(z, site=1)
     np.testing.assert_allclose(val_site1, 1.0, atol=1e-12)
 
 
@@ -536,9 +539,9 @@ def test_local_expval_x_on_plus_state() -> None:
     For the |+> state, defined as 1/√2 (|0> + |1>), the expectation value of the X observable is +1.
     This test verifies that local_expval returns +1 for a single-qubit MPS initialized in the "x+" state.
     """
-    X = np.array([[0, 1], [1, 0]], dtype=complex)
+    x = np.array([[0, 1], [1, 0]], dtype=complex)
     psi_mps = MPS(length=3, state="x+")
-    val = psi_mps.local_expval(X, site=0)
+    val = psi_mps.local_expval(x, site=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
 
 

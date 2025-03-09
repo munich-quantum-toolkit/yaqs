@@ -125,17 +125,17 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
     last_site = gate.sites[second_gen]
     for site in range(length):
         if site == first_site:
-            W = np.zeros((1, 1, 2, 2), dtype=complex)
-            W[0, 0] = gate.generator[first_gen]
-            tensors.append(W)
+            w = np.zeros((1, 1, 2, 2), dtype=complex)
+            w[0, 0] = gate.generator[first_gen]
+            tensors.append(w)
         elif site == last_site:
-            W = np.zeros((1, 1, 2, 2), dtype=complex)
-            W[0, 0] = gate.generator[second_gen]
-            tensors.append(W)
+            w = np.zeros((1, 1, 2, 2), dtype=complex)
+            w[0, 0] = gate.generator[second_gen]
+            tensors.append(w)
         else:
-            W = np.zeros((1, 1, 2, 2), dtype=complex)
-            W[0, 0] = np.eye(2)
-            tensors.append(W)
+            w = np.zeros((1, 1, 2, 2), dtype=complex)
+            w[0, 0] = np.eye(2)
+            tensors.append(w)
 
     mpo = MPO()
     mpo.init_custom(tensors)

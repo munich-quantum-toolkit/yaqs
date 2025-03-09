@@ -165,12 +165,12 @@ def test_select_starting_point_even_odd() -> None:
     The function select_starting_point should return ranges corresponding to even-odd pairings:
     first_iterator = range(0, 3, 2) and second_iterator = range(1, 3, 2).
     """
-    N = 4
-    qc = QuantumCircuit(N)
+    num_qubits = 4
+    qc = QuantumCircuit(num_qubits)
     qc.cx(0, 1)
     dag = circuit_to_dag(qc)
 
-    first_iter, second_iter = select_starting_point(N, dag)
+    first_iter, second_iter = select_starting_point(num_qubits, dag)
     assert first_iter == range(0, 3, 2), "Expected the default even qubits first."
     assert second_iter == range(1, 3, 2), "Then the odd qubit pairs."
 
@@ -182,12 +182,12 @@ def test_select_starting_point_odd() -> None:
     The function select_starting_point should return ranges with odd qubits first:
     first_iterator = range(1, 3, 2) and second_iterator = range(0, 3, 2).
     """
-    N = 4
-    qc = QuantumCircuit(N)
+    num_qubits = 4
+    qc = QuantumCircuit(num_qubits)
     qc.cx(1, 2)
 
     dag = circuit_to_dag(qc)
-    first_iter, second_iter = select_starting_point(N, dag)
+    first_iter, second_iter = select_starting_point(num_qubits, dag)
 
     assert first_iter == range(1, 3, 2), "Expected odd qubits first."
     assert second_iter == range(0, 3, 2), "Then the even qubit pairs."

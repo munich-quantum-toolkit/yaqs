@@ -17,6 +17,9 @@ quantum simulation. It verifies that:
     depending on whether sample_timesteps is True or False.
 """
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 import numpy as np

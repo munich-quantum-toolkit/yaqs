@@ -51,34 +51,33 @@ if TYPE_CHECKING:
 # Helper Functions
 ##############################################################################
 
-rng = np.random.default_rng()
 
-
-def random_theta_6d() -> NDArray[np.float64]:
+def random_theta_6d() -> NDArray[np.complex128]:
     """Helper function to create random 8D theta for nearest-neighbor gates in equivalence checking.
 
     Create a random 6D tensor, e.g. for two-qubit local blocks.
 
     Returns:
-        NDArray[np.float64]: A random 6-dimensional tensor of shape (2,2,2,2,2,2).
+        A random 6-dimensional tensor of shape (2,2,2,2,2,2).
     """
-    return rng.random(size=(2, 2, 2, 2, 2, 2))
+    rng = np.random.default_rng()
+    return rng.random(size=(2, 2, 2, 2, 2, 2)) + 1j * rng.random(size=(2, 2, 2, 2, 2, 2))
 
 
-def random_theta_8d() -> NDArray[np.float64]:
+def random_theta_8d() -> NDArray[np.complex128]:
     """Helper function to create random 8D theta for long-range gates in equivalence checking.
 
     Returns:
-        NDArray[np.float64]: A random 8-dimensional tensor of shape (2,2,2,2,2,2,2,2).
+        A random 8-dimensional tensor of shape (2,2,2,2,2,2,2,2).
     """
     rng = np.random.default_rng()
-    return rng.random(size=(2, 2, 2, 2, 2, 2, 2, 2))
+    return rng.random(size=(2, 2, 2, 2, 2, 2, 2, 2)) + 1j * rng.random(size=(2, 2, 2, 2, 2, 2, 2, 2))
 
 
 def approximate_reconstruction(
-    U: NDArray[np.float64],  # noqa: N803
-    M: NDArray[np.float64],  # noqa: N803
-    original: NDArray[np.float64],
+    U: NDArray[np.complex128],  # noqa: N803
+    M: NDArray[np.complex128],  # noqa: N803
+    original: NDArray[np.complex128],
     atol: float = 1e-10,
 ) -> None:
     """Helper function to reconstruct tensor.
@@ -90,10 +89,10 @@ def approximate_reconstruction(
     reconstructs the matrix, and asserts that it is close to the flattened version of the original tensor.
 
     Args:
-        U (NDArray[np.float64]): The left factor from the SVD decomposition.
-        M (NDArray[np.float64]): The reshaped product of the singular values and right factor.
-        original (NDArray[np.float64]): The original tensor before decomposition.
-        atol (float, optional): Absolute tolerance for the reconstruction check. Defaults to 1e-10.
+        U: The left factor from the SVD decomposition.
+        M: The reshaped product of the singular values and right factor.
+        original: The original tensor before decomposition.
+        atol: Absolute tolerance for the reconstruction check. Defaults to 1e-10.
     """
     dims = original.shape
     # Reorder original to match the permutation used in decompose_theta: (0,3,2,1,4,5)
@@ -102,12 +101,12 @@ def approximate_reconstruction(
 
     # Rebuild from U and M
     rank = U.shape[-1]
-    U_mat = np.reshape(U, (-1, rank))  # Flatten U
+    u_mat = np.reshape(U, (-1, rank))  # Flatten U
     # Reorder and flatten M: from shape (dims[3], dims[4], rank, dims[5]) to (rank, dims[3]*dims[4]*dims[5])
-    M_reordered = np.transpose(M, (2, 0, 1, 3))
-    M_mat = np.reshape(M_reordered, (rank, dims[3] * dims[4] * dims[5]))
+    m_reordered = np.transpose(M, (2, 0, 1, 3))
+    m_mat = np.reshape(m_reordered, (rank, dims[3] * dims[4] * dims[5]))
 
-    reconstruction = U_mat @ M_mat
+    reconstruction = u_mat @ m_mat
     assert np.allclose(reconstruction, original_mat, atol=atol), "Decomposition does not reconstruct original"
 
 
@@ -126,7 +125,7 @@ def test_decompose_theta() -> None:
     theta = random_theta_6d()
     threshold = 1e-5
 
-    U, M = decompose_theta(theta, threshold)
+    U, M = decompose_theta(theta, threshold)  # noqa: N806
 
     # Basic shape checks: U should be rank-4 and M should be rank-4.
     assert U.ndim == 4, "U should be a 4D tensor (including the rank dimension)."

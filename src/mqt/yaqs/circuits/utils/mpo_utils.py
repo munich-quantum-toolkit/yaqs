@@ -59,19 +59,19 @@ def decompose_theta(
     theta = np.transpose(theta, (0, 3, 2, 1, 4, 5))
     theta_matrix = np.reshape(theta, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
 
-    U, S_list, V = np.linalg.svd(theta_matrix, full_matrices=False)
-    S_list = S_list[S_list > threshold]
-    U = U[:, : len(S_list)]
-    V = V[: len(S_list), :]
+    U, S_list, V = np.linalg.svd(theta_matrix, full_matrices=False)  # noqa: N806
+    S_list = S_list[S_list > threshold]  # noqa: N806
+    U = U[:, : len(S_list)]  # noqa: N806
+    V = V[: len(S_list), :]  # noqa: N806
 
     # Reshape U into a tensor of shape (dims[0], dims[1], dims[2], num_sv)
-    U = np.reshape(U, (dims[0], dims[1], dims[2], len(S_list)))
+    U = np.reshape(U, (dims[0], dims[1], dims[2], len(S_list)))  # noqa: N806
 
     # Compute site tensor M and reshape: first form M = diag(S_list) @ V,
     # then reshape to (num_sv, dims[3], dims[4], dims[5]) and transpose to (dims[3], dims[4], num_sv, dims[5])
-    M = np.diag(S_list) @ V
-    M = np.reshape(M, (len(S_list), dims[3], dims[4], dims[5]))
-    M = np.transpose(M, (1, 2, 0, 3))
+    M = np.diag(S_list) @ V  # noqa: N806
+    M = np.reshape(M, (len(S_list), dims[3], dims[4], dims[5]))  # noqa: N806
+    M = np.transpose(M, (1, 2, 0, 3))  # noqa: N806
 
     return U, M
 
@@ -248,7 +248,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
     dag_to_search = dag1 if not conjugate else dag2
 
     first_layer = next(dag_to_search.layers(), None)
-    gate_MPO = None
+    gate_mpo = None
     distance = None
     location = None
     if first_layer is not None:
@@ -272,17 +272,17 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     and node.qargs[0]._index == gate.qubits[0]._index  # noqa: SLF001
                     and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
                 ):
-                    gate_MPO = convert_dag_to_tensor_algorithm(node)[0].mpo
+                    gate_mpo = convert_dag_to_tensor_algorithm(node)[0].mpo
                     if conjugate:
-                        gate_MPO.rotate(conjugate=True)
+                        gate_mpo.rotate(conjugate=True)
                     dag.remove_op_node(node)
                     break
             break
 
-    assert gate_MPO is not None, "Long-range gate MPO not found."
-    assert gate_MPO.length <= mpo.length
+    assert gate_mpo is not None, "Long-range gate MPO not found."
+    assert gate_mpo.length <= mpo.length
 
-    if gate_MPO.length == mpo.length:
+    if gate_mpo.length == mpo.length:
         sites = range(mpo.length)
     else:
         assert location is not None
@@ -290,18 +290,18 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
         sites = range(location, location + distance)
 
     # Process even-indexed sites from the gate MPO
-    for site_gate_MPO, overall_site in enumerate(sites):
-        if site_gate_MPO != len(sites) - 1 and site_gate_MPO % 2 == 0:
+    for site_gate_mpo, overall_site in enumerate(sites):
+        if site_gate_mpo != len(sites) - 1 and site_gate_mpo % 2 == 0:
             if not conjugate:
-                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
-                tensor2 = np.transpose(gate_MPO.tensors[site_gate_MPO + 1], (0, 2, 1, 3))
+                tensor1 = np.transpose(gate_mpo.tensors[site_gate_mpo], (0, 2, 1, 3))
+                tensor2 = np.transpose(gate_mpo.tensors[site_gate_mpo + 1], (0, 2, 1, 3))
                 tensor3 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
                 tensor4 = np.transpose(mpo.tensors[overall_site + 1], (0, 2, 1, 3))
                 theta = oe.contract("abcd,edfg,chij,fjkl->aebhikgl", tensor1, tensor2, tensor3, tensor4)
             else:
                 mpo.rotate()
-                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
-                tensor2 = np.transpose(gate_MPO.tensors[site_gate_MPO + 1], (0, 2, 1, 3))
+                tensor1 = np.transpose(gate_mpo.tensors[site_gate_mpo], (0, 2, 1, 3))
+                tensor2 = np.transpose(gate_mpo.tensors[site_gate_mpo + 1], (0, 2, 1, 3))
                 tensor3 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
                 tensor4 = np.transpose(mpo.tensors[overall_site + 1], (0, 2, 1, 3))
                 theta = oe.contract("abcd,edfg,chij,fjkl->aebhikgl", tensor1, tensor2, tensor3, tensor4)
@@ -314,18 +314,18 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             theta = np.reshape(theta, (dims[0], dims[1], dims[2] * dims[3], dims[4], dims[5], dims[6] * dims[7]))
             mpo.tensors[overall_site], mpo.tensors[overall_site + 1] = decompose_theta(theta, threshold)
 
-            gate_MPO.tensors[site_gate_MPO] = None
-            gate_MPO.tensors[site_gate_MPO + 1] = None
+            gate_mpo.tensors[site_gate_mpo] = None
+            gate_mpo.tensors[site_gate_mpo + 1] = None
 
         # Process odd-indexed (or hanging) tensor if present.
-        if site_gate_MPO == len(sites) - 1 and any(isinstance(tensor, np.ndarray) for tensor in gate_MPO.tensors):
+        if site_gate_mpo == len(sites) - 1 and any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors):
             if not conjugate:
-                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
+                tensor1 = np.transpose(gate_mpo.tensors[site_gate_mpo], (0, 2, 1, 3))
                 tensor2 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
                 theta = oe.contract("abcd,cefg->abefdg", tensor1, tensor2)
             else:
                 mpo.rotate()
-                tensor1 = np.transpose(gate_MPO.tensors[site_gate_MPO], (0, 2, 1, 3))
+                tensor1 = np.transpose(gate_mpo.tensors[site_gate_mpo], (0, 2, 1, 3))
                 tensor2 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
                 theta = oe.contract("abcd,cefg->febagd", tensor1, tensor2)
                 mpo.rotate()
@@ -340,9 +340,9 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             theta = apply_temporal_zone(theta, dag2, [overall_site - 1, overall_site], conjugate=True)
 
             mpo.tensors[overall_site - 1], mpo.tensors[overall_site] = decompose_theta(theta, threshold)
-            gate_MPO.tensors[site_gate_MPO] = None
+            gate_mpo.tensors[site_gate_mpo] = None
 
-    assert not any(isinstance(tensor, np.ndarray) for tensor in gate_MPO.tensors), "Not all gate tensors were applied."
+    assert not any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors), "Not all gate tensors were applied."
 
 
 def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> None:
@@ -358,12 +358,12 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> N
         dag2 (DAGCircuit): The second circuit's DAGCircuit.
         threshold (float): The SVD truncation threshold used during decomposition.
     """
-    N = mpo.length
+    length = mpo.length
 
     if dag1.op_nodes():
-        first_iterator, second_iterator = select_starting_point(N, dag1)
+        first_iterator, second_iterator = select_starting_point(length, dag1)
     else:
-        first_iterator, second_iterator = select_starting_point(N, dag2)
+        first_iterator, second_iterator = select_starting_point(length, dag2)
 
     while dag1.op_nodes() or dag2.op_nodes():
         largest_distance1 = check_longest_gate(dag1)

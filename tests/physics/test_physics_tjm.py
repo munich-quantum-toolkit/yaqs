@@ -26,6 +26,9 @@ These tests ensure that the evolution functions correctly integrate the MPS stat
 specified Hamiltonian and noise model, and that observable measurements are properly aggregated.
 """
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 from unittest.mock import patch

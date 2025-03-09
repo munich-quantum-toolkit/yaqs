@@ -39,15 +39,15 @@ def testlanczos_iteration_small() -> None:
     Check that lanczos_iteration produces correct shapes and orthonormal vectors
     for a small 2x2 Hermitian matrix.
     """
-    A = np.array([[2.0, 1.0], [1.0, 3.0]])
+    mat = np.array([[2.0, 1.0], [1.0, 3.0]])
 
     def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return A @ x
+        return mat @ x
 
     vstart = np.array([1.0, 1.0], dtype=complex)
     numiter = 2
 
-    alpha, beta, V = lanczos_iteration(matrix_free_operator, vstart, numiter)
+    alpha, beta, V = lanczos_iteration(matrix_free_operator, vstart, numiter)  # noqa: N806
     # alpha should have shape (2,), beta shape (1,), and V shape (2, 2)
     assert alpha.shape == (2,)
     assert beta.shape == (1,)
@@ -70,15 +70,15 @@ def test_lanczos_early_termination() -> None:
     iteration can terminate early. In this case, with vstart aligned with [1, 0],
     the iteration should stop after one step.
     """
-    A = np.diag([1.0, 2.0])
+    mat = np.diag([1.0, 2.0])
 
     def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return A @ x
+        return mat @ x
 
     vstart = np.array([1.0, 0.0], dtype=complex)
     numiter = 5
 
-    alpha, beta, V = lanczos_iteration(matrix_free_operator, vstart, numiter)
+    alpha, beta, V = lanczos_iteration(matrix_free_operator, vstart, numiter)  # noqa: N806
     # Expect termination after 1 iteration: alpha shape (1,), beta shape (0,), V shape (2, 1)
     assert alpha.shape == (1,)
     assert beta.shape == (0,)
@@ -91,17 +91,17 @@ def test_expm_krylov_2x2_exact() -> None:
     For a 2x2 Hermitian matrix, when numiter equals the full dimension (2),
     expm_krylov should yield a result that matches the direct matrix exponential exactly.
     """
-    A = np.array([[2.0, 1.0], [1.0, 3.0]])
+    mat = np.array([[2.0, 1.0], [1.0, 3.0]])
 
     def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return A @ x
+        return mat @ x
 
     v = np.array([1.0, 0.0], dtype=complex)
     dt = 0.1
     numiter = 2  # full subspace
 
     approx = expm_krylov(matrix_free_operator, v, dt, numiter)
-    direct = expm(-1j * dt * A) @ v
+    direct = expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(
         approx,
@@ -118,17 +118,17 @@ def test_expm_krylov_smaller_subspace() -> None:
     the expm_krylov result will be approximate. For small dt, the approximation
     should be within a tolerance of 1e-1.
     """
-    A = np.array([[2.0, 1.0], [1.0, 3.0]])
+    mat = np.array([[2.0, 1.0], [1.0, 3.0]])
 
     def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return A @ x
+        return mat @ x
 
     v = np.array([1.0, 1.0], dtype=complex)
     dt = 0.05
     numiter = 1  # subspace dimension smaller than the full space
 
     approx = expm_krylov(matrix_free_operator, v, dt, numiter)
-    direct = expm(-1j * dt * A) @ v
+    direct = expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(
         approx,
