@@ -59,21 +59,21 @@ def decompose_theta(
     theta = np.transpose(theta, (0, 3, 2, 1, 4, 5))
     theta_matrix = np.reshape(theta, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
 
-    U, S_list, V = np.linalg.svd(theta_matrix, full_matrices=False)  # noqa: N806
-    S_list = S_list[S_list > threshold]  # noqa: N806
-    U = U[:, : len(S_list)]  # noqa: N806
-    V = V[: len(S_list), :]  # noqa: N806
+    u_mat, s_list, v_mat = np.linalg.svd(theta_matrix, full_matrices=False)
+    s_list = s_list[s_list > threshold]
+    u_mat = u_mat[:, : len(s_list)]
+    v_mat = v_mat[: len(s_list), :]
 
     # Reshape U into a tensor of shape (dims[0], dims[1], dims[2], num_sv)
-    U = np.reshape(U, (dims[0], dims[1], dims[2], len(S_list)))  # noqa: N806
+    u_tensor = np.reshape(u_mat, (dims[0], dims[1], dims[2], len(s_list)))
 
     # Compute site tensor M and reshape: first form M = diag(S_list) @ V,
     # then reshape to (num_sv, dims[3], dims[4], dims[5]) and transpose to (dims[3], dims[4], num_sv, dims[5])
-    M = np.diag(S_list) @ V  # noqa: N806
-    M = np.reshape(M, (len(S_list), dims[3], dims[4], dims[5]))  # noqa: N806
-    M = np.transpose(M, (1, 2, 0, 3))  # noqa: N806
+    m_mat = np.diag(s_list) @ v_mat
+    m_tensor = np.reshape(m_mat, (len(s_list), dims[3], dims[4], dims[5]))
+    m_tensor = np.transpose(m_tensor, (1, 2, 0, 3))
 
-    return U, M
+    return u_tensor, m_tensor
 
 
 def apply_gate(

@@ -14,7 +14,6 @@ The functions physics_tjm_2 and physics_tjm_1 correspond to second-order and fir
 respectively, and return trajectories of expectation values for further analysis.
 """
 
-
 from __future__ import annotations
 
 import copy

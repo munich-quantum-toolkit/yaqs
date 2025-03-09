@@ -18,9 +18,6 @@ These methods are designed for simulating the dynamics of quantum many-body syst
 techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 """
 
-# ignore non-lowercase argument and variable names for physics notation
-# ruff: noqa: N803, N806
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -85,80 +82,87 @@ def split_mps_tensor(
         shape_transposed[0] * shape_transposed[1],
         shape_transposed[2] * shape_transposed[3],
     )
-    U, sigma, Vh = np.linalg.svd(matrix_for_svd, full_matrices=False)
+    u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
 
     # Truncate singular values below the threshold
     sigma = sigma[sigma > threshold]
     num_sv = len(sigma)
 
     # Truncate U and Vh accordingly
-    U = U[:, :num_sv]
-    Vh = Vh[:num_sv, :]
+    u_mat = u_mat[:, :num_sv]
+    v_mat = v_mat[:num_sv, :]
 
     # Reshape U and Vh back to tensor form:
     # U to shape (d0, D0, num_sv)
-    A0 = U.reshape((shape_transposed[0], shape_transposed[1], num_sv))
+    left_tensor = u_mat.reshape((shape_transposed[0], shape_transposed[1], num_sv))
     # Vh reshaped to (num_sv, d1, D2)
-    A1 = Vh.reshape((num_sv, shape_transposed[2], shape_transposed[3]))
+    right_tensor = v_mat.reshape((num_sv, shape_transposed[2], shape_transposed[3]))
 
     # Distribute the singular values according to the chosen option
     if svd_distribution == "left":
-        A0 *= sigma
+        left_tensor *= sigma
     elif svd_distribution == "right":
-        A1 *= sigma[:, None, None]
+        right_tensor *= sigma[:, None, None]
     elif svd_distribution == "sqrt":
         sqrt_sigma = np.sqrt(sigma)
-        A0 *= sqrt_sigma
-        A1 *= sqrt_sigma[:, None, None]
+        left_tensor *= sqrt_sigma
+        right_tensor *= sqrt_sigma[:, None, None]
     else:
         msg = "svd_distribution parameter must be left, right, or sqrt."
         raise ValueError(msg)
 
     # Adjust the ordering of indices in A1 so that the physical dimension comes first:
-    A1 = A1.transpose((1, 0, 2))
-    return A0, A1
+    right_tensor = right_tensor.transpose((1, 0, 2))
+    return left_tensor, right_tensor
 
 
-def merge_mps_tensors(A0: NDArray[np.complex128], A1: NDArray[np.complex128]) -> NDArray[np.complex128]:
+def merge_mps_tensors(
+    left_tensor: NDArray[np.complex128], right_tensor: NDArray[np.complex128]
+) -> NDArray[np.complex128]:
     """Merge two neighboring MPS tensors into one.
 
-    The tensors A0 and A1 are contracted using opt_einsum. The contraction is performed over the common bond,
-    and the resulting tensor is reshaped to combine the two physical dimensions into one.
+    The tensors left_tensor and right_tensor are contracted using opt_einsum. The contraction is performed
+    over the common bond, and the resulting tensor is reshaped to combine the two physical dimensions into one.
 
     Args:
-        A0 (NDArray[np.complex128]): Left MPS tensor.
-        A1 (NDArray[np.complex128]): Right MPS tensor.
+        left_tensor (NDArray[np.complex128]): Left MPS tensor.
+        right_tensor (NDArray[np.complex128]): Right MPS tensor.
 
     Returns:
         NDArray[np.complex128]: The merged MPS tensor.
     """
     # Contract over the common bond (index 2 in A0 and index 0 in A1) using specified contraction pattern.
-    merged_tensor = oe.contract("abc,dce->adbe", A0, A1)
+    merged_tensor = oe.contract("abc,dce->adbe", left_tensor, right_tensor)
     merged_shape = merged_tensor.shape
     # Reshape to combine the two physical dimensions.
     return merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
 
 
-def merge_mpo_tensors(A0: NDArray[np.complex128], A1: NDArray[np.complex128]) -> NDArray[np.complex128]:
+def merge_mpo_tensors(
+    left_tensor: NDArray[np.complex128], right_tensor: NDArray[np.complex128]
+) -> NDArray[np.complex128]:
     """Merge two neighboring MPO tensors into one.
 
-    The function contracts A0 and A1 over their shared virtual bond and then reshapes the result to combine
-    the physical indices appropriately.
+    The function contracts left_tensor and right_tensor over their shared virtual bond and
+    then reshapes the result to combine the physical indices appropriately.
 
     Args:
-        A0 (NDArray[np.complex128]): Left MPO tensor.
-        A1 (NDArray[np.complex128]): Right MPO tensor.
+        left_tensor (NDArray[np.complex128]): Left MPO tensor.
+        right_tensor (NDArray[np.complex128]): Right MPO tensor.
 
     Returns:
         NDArray[np.complex128]: The merged MPO tensor.
     """
-    merged_tensor = oe.contract("acei,bdif->abcdef", A0, A1, optimize=True)
-    s = merged_tensor.shape
-    return merged_tensor.reshape((s[0] * s[1], s[2] * s[3], s[4], s[5]))
+    merged_tensor = oe.contract("acei,bdif->abcdef", left_tensor, right_tensor, optimize=True)
+    dims = merged_tensor.shape
+    return merged_tensor.reshape((dims[0] * dims[1], dims[2] * dims[3], dims[4], dims[5]))
 
 
 def update_right_environment(
-    A: NDArray[np.complex128], B: NDArray[np.complex128], W: NDArray[np.complex128], R: NDArray[np.complex128]
+    ket: NDArray[np.complex128],
+    bra: NDArray[np.complex128],
+    op: NDArray[np.complex128],
+    right_env: NDArray[np.complex128],
 ) -> NDArray[np.complex128]:
     r"""Perform a contraction step from right to left with an operator inserted.
 
@@ -169,26 +173,29 @@ def update_right_environment(
       4. Contracting with the conjugate of tensor B to obtain the updated right environment.
 
     Args:
-        A (NDArray[np.complex128]): Tensor A (3-index tensor).
-        B (NDArray[np.complex128]): Tensor B (3-index tensor), to be conjugated.
-        W (NDArray[np.complex128]): MPO tensor (4-index tensor).
-        R (NDArray[np.complex128]): Right operator block (3-index tensor).
+        ket (NDArray[np.complex128]): Tensor A (3-index tensor).
+        bra (NDArray[np.complex128]): Tensor B (3-index tensor), to be conjugated.
+        op (NDArray[np.complex128]): MPO tensor (4-index tensor).
+        right_env (NDArray[np.complex128]): Right operator block (3-index tensor).
 
     Returns:
         NDArray[np.complex128]: The updated right operator block.
     """
-    assert A.ndim == 3
-    assert B.ndim == 3
-    assert W.ndim == 4
-    assert R.ndim == 3
-    T = np.tensordot(A, R, axes=1)
-    T = np.tensordot(W, T, axes=((1, 3), (0, 2)))
-    T = T.transpose((2, 1, 0, 3))
-    return np.tensordot(T, B.conj(), axes=((2, 3), (0, 2)))
+    assert ket.ndim == 3
+    assert bra.ndim == 3
+    assert op.ndim == 4
+    assert right_env.ndim == 3
+    tensor = np.tensordot(ket, right_env, axes=1)
+    tensor = np.tensordot(op, tensor, axes=((1, 3), (0, 2)))
+    tensor = tensor.transpose((2, 1, 0, 3))
+    return np.tensordot(tensor, bra.conj(), axes=((2, 3), (0, 2)))
 
 
 def update_left_environment(
-    A: NDArray[np.complex128], B: NDArray[np.complex128], W: NDArray[np.complex128], L: NDArray[np.complex128]
+    ket: NDArray[np.complex128],
+    bra: NDArray[np.complex128],
+    op: NDArray[np.complex128],
+    left_env: NDArray[np.complex128],
 ) -> NDArray[np.complex128]:
     r"""Perform a contraction step from left to right with an operator inserted.
 
@@ -198,17 +205,17 @@ def update_left_environment(
       3. Finally, contracts with tensor A to produce the updated left environment.
 
     Args:
-        A (NDArray[np.complex128]): Tensor A (3-index tensor).
-        B (NDArray[np.complex128]): Tensor B (3-index tensor), to be conjugated.
-        W (NDArray[np.complex128]): MPO tensor (4-index tensor).
-        L (NDArray[np.complex128]): Left operator block (3-index tensor).
+        ket (NDArray[np.complex128]): Tensor A (3-index tensor).
+        bra (NDArray[np.complex128]): Tensor B (3-index tensor), to be conjugated.
+        op (NDArray[np.complex128]): MPO tensor (4-index tensor).
+        left_env (NDArray[np.complex128]): Left operator block (3-index tensor).
 
     Returns:
         NDArray[np.complex128]: The updated left operator block.
     """
-    T = np.tensordot(L, B.conj(), axes=(2, 1))
-    T = np.tensordot(W, T, axes=((0, 2), (2, 1)))
-    return np.tensordot(A, T, axes=((0, 1), (0, 2)))
+    tensor = np.tensordot(left_env, bra.conj(), axes=(2, 1))
+    tensor = np.tensordot(op, tensor, axes=((0, 2), (2, 1)))
+    return np.tensordot(ket, tensor, axes=((0, 1), (0, 2)))
 
 
 def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
@@ -249,7 +256,10 @@ def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
 
 
 def project_site(
-    L: NDArray[np.complex128], R: NDArray[np.complex128], W: NDArray[np.complex128], A: NDArray[np.complex128]
+    left_env: NDArray[np.complex128],
+    right_env: NDArray[np.complex128],
+    op: NDArray[np.complex128],
+    ket: NDArray[np.complex128],
 ) -> NDArray[np.complex128]:
     r"""Apply the local Hamiltonian operator on a tensor A.
 
@@ -257,22 +267,22 @@ def project_site(
     and finally with the left environment L, to yield the effective local Hamiltonian action.
 
     Args:
-        L (NDArray[np.complex128]): Left operator block (3-index tensor).
-        R (NDArray[np.complex128]): Right operator block (3-index tensor).
-        W (NDArray[np.complex128]): MPO tensor (4-index tensor).
-        A (NDArray[np.complex128]): Local MPS tensor (3-index tensor).
+        left_env (NDArray[np.complex128]): Left operator block (3-index tensor).
+        right_env (NDArray[np.complex128]): Right operator block (3-index tensor).
+        op (NDArray[np.complex128]): MPO tensor (4-index tensor).
+        ket (NDArray[np.complex128]): Local MPS tensor (3-index tensor).
 
     Returns:
         NDArray[np.complex128]: The resulting tensor after applying the local Hamiltonian.
     """
-    T = np.tensordot(A, R, axes=1)
-    T = np.tensordot(W, T, axes=((1, 3), (0, 2)))
-    T = np.tensordot(T, L, axes=((2, 1), (0, 1)))
-    return T.transpose((0, 2, 1))
+    tensor = np.tensordot(ket, right_env, axes=1)
+    tensor = np.tensordot(op, tensor, axes=((1, 3), (0, 2)))
+    tensor = np.tensordot(tensor, left_env, axes=((2, 1), (0, 1)))
+    return tensor.transpose((0, 2, 1))
 
 
 def project_bond(
-    L: NDArray[np.complex128], R: NDArray[np.complex128], C: NDArray[np.complex128]
+    left_env: NDArray[np.complex128], right_env: NDArray[np.complex128], bond_tensor: NDArray[np.complex128]
 ) -> NDArray[np.complex128]:
     r"""Apply the "zero-site" bond contraction between two operator blocks L and R using a bond tensor C.
 
@@ -281,24 +291,24 @@ def project_bond(
       2. Contract the resulting tensor with the left operator block L.
 
     Args:
-        L (NDArray[np.complex128]): Left operator block (3-index tensor).
-        R (NDArray[np.complex128]): Right operator block (3-index tensor).
-        C (NDArray[np.complex128]): Bond tensor (2-index tensor).
+        left_env (NDArray[np.complex128]): Left operator block (3-index tensor).
+        right_env (NDArray[np.complex128]): Right operator block (3-index tensor).
+        bond_tensor (NDArray[np.complex128]): Bond tensor (2-index tensor).
 
     Returns:
         NDArray[np.complex128]: The resulting tensor from the bond contraction.
     """
-    T = np.tensordot(C, R, axes=1)
-    return np.tensordot(L, T, axes=((0, 1), (0, 1)))
+    tensor = np.tensordot(bond_tensor, right_env, axes=1)
+    return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
 
 
 def update_site(
-    L: NDArray[np.complex128],
-    R: NDArray[np.complex128],
-    W: NDArray[np.complex128],
-    A: NDArray[np.complex128],
+    left_env: NDArray[np.complex128],
+    right_env: NDArray[np.complex128],
+    op: NDArray[np.complex128],
+    ket: NDArray[np.complex128],
     dt: float,
-    numiter: int,
+    lanczos_iterations: int,
 ) -> NDArray[np.complex128]:
     """Evolve the local MPS tensor A forward in time using the local Hamiltonian.
 
@@ -306,23 +316,32 @@ def update_site(
     to evolve it by time dt, and then reshapes the result back to the original tensor shape.
 
     Args:
-        L (NDArray[np.complex128]): Left operator block.
-        R (NDArray[np.complex128]): Right operator block.
-        W (NDArray[np.complex128]): Local MPO tensor.
-        A (NDArray[np.complex128]): Local MPS tensor.
+        left_env (NDArray[np.complex128]): Left operator block.
+        right_env (NDArray[np.complex128]): Right operator block.
+        op (NDArray[np.complex128]): Local MPO tensor.
+        ket (NDArray[np.complex128]): Local MPS tensor.
         dt (float): Time step for evolution.
-        numiter (int): Number of Lanczos iterations.
+        lanczos_iterations (int): Number of Lanczos iterations.
 
     Returns:
         NDArray[np.complex128]: The updated MPS tensor after evolution.
     """
-    A_flat = A.reshape(-1)
-    evolved_A_flat = expm_krylov(lambda x: project_site(L, R, W, x.reshape(A.shape)).reshape(-1), A_flat, dt, numiter)
-    return evolved_A_flat.reshape(A.shape)
+    ket_flat = ket.reshape(-1)
+    evolved_ket_flat = expm_krylov(
+        lambda x: project_site(left_env, right_env, op, x.reshape(ket.shape)).reshape(-1),
+        ket_flat,
+        dt,
+        lanczos_iterations,
+    )
+    return evolved_ket_flat.reshape(ket.shape)
 
 
 def update_bond(
-    L: NDArray[np.complex128], R: NDArray[np.complex128], C: NDArray[np.complex128], dt: float, numiter: int
+    left_env: NDArray[np.complex128],
+    right_env: NDArray[np.complex128],
+    bond_tensor: NDArray[np.complex128],
+    dt: float,
+    lanczos_iterations: int,
 ) -> NDArray[np.complex128]:
     """Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
 
@@ -330,22 +349,30 @@ def update_bond(
     and then reshaped back to its original form.
 
     Args:
-        L (NDArray[np.complex128]): Left operator block.
-        R (NDArray[np.complex128]): Right operator block.
-        C (NDArray[np.complex128]): Bond tensor.
+        left_env (NDArray[np.complex128]): Left operator block.
+        right_env (NDArray[np.complex128]): Right operator block.
+        bond_tensor (NDArray[np.complex128]): Bond tensor.
         dt (float): Time step for the bond evolution.
-        numiter (int): Number of Lanczos iterations.
+        lanczos_iterations (int): Number of Lanczos iterations.
 
     Returns:
         NDArray[np.complex128]: The updated bond tensor after evolution.
     """
-    C_flat = C.reshape(-1)
-    evolved_C_flat = expm_krylov(lambda x: project_bond(L, R, x.reshape(C.shape)).reshape(-1), C_flat, dt, numiter)
-    return evolved_C_flat.reshape(C.shape)
+    bond_tensor_flat = bond_tensor.reshape(-1)
+    evolved_bond_tensor_flat = expm_krylov(
+        lambda x: project_bond(left_env, right_env, x.reshape(bond_tensor.shape)).reshape(-1),
+        bond_tensor_flat,
+        dt,
+        lanczos_iterations,
+    )
+    return evolved_bond_tensor_flat.reshape(bond_tensor.shape)
 
 
 def single_site_tdvp(
-    state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams, numiter_lanczos: int = 25
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
+    numiter_lanczos: int = 25,
 ) -> None:
     """Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
 
@@ -355,7 +382,7 @@ def single_site_tdvp(
 
     Args:
         state (MPS): The initial state represented as an MPS.
-        H (MPO): Hamiltonian represented as an MPO.
+        hamiltonian (MPO): Hamiltonian represented as an MPO.
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams):
             Simulation parameters containing the time step 'dt' (and possibly a threshold for SVD truncation).
         numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
@@ -363,16 +390,16 @@ def single_site_tdvp(
     Raises:
         ValueError: If Hamiltonian is invalid length.
     """
-    num_sites = H.length
+    num_sites = hamiltonian.length
     if num_sites != state.length:
         msg = "The state and Hamiltonian must have the same number of sites."
         raise ValueError(msg)
 
-    right_blocks = initialize_right_environments(state, H)
+    right_blocks = initialize_right_environments(state, hamiltonian)
 
     left_blocks = [None for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
-    mpo_left_dim = H.tensors[0].shape[2]
+    mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
     for i in range(left_virtual_dim):
         for a in range(mpo_left_dim):
@@ -385,22 +412,36 @@ def single_site_tdvp(
     # Left-to-right sweep: Update sites 0 to L-2.
     for i in range(num_sites - 1):
         state.tensors[i] = update_site(
-            left_blocks[i], right_blocks[i], H.tensors[i], state.tensors[i], 0.5 * sim_params.dt, numiter_lanczos
+            left_blocks[i],
+            right_blocks[i],
+            hamiltonian.tensors[i],
+            state.tensors[i],
+            0.5 * sim_params.dt,
+            numiter_lanczos,
         )
         tensor_shape = state.tensors[i].shape
         reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-        Q, C = np.linalg.qr(reshaped_tensor)
-        state.tensors[i] = Q.reshape((tensor_shape[0], tensor_shape[1], Q.shape[1]))
-        left_blocks[i + 1] = update_left_environment(state.tensors[i], state.tensors[i], H.tensors[i], left_blocks[i])
-        C = update_bond(left_blocks[i + 1], right_blocks[i], C, -0.5 * sim_params.dt, numiter_lanczos)
-        state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), C, (1, 3), (0, 1, 2))
+        site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+        state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
+        left_blocks[i + 1] = update_left_environment(
+            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+        )
+        bond_tensor = update_bond(
+            left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+        )
+        state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
 
     last = num_sites - 1
     state.tensors[last] = update_site(
-        left_blocks[last], right_blocks[last], H.tensors[last], state.tensors[last], sim_params.dt, numiter_lanczos
+        left_blocks[last],
+        right_blocks[last],
+        hamiltonian.tensors[last],
+        state.tensors[last],
+        sim_params.dt,
+        numiter_lanczos,
     )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -411,18 +452,24 @@ def single_site_tdvp(
         state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
         tensor_shape = state.tensors[i].shape
         reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-        Q, C = np.linalg.qr(reshaped_tensor)
-        state.tensors[i] = Q.reshape((tensor_shape[0], tensor_shape[1], Q.shape[1])).transpose((0, 2, 1))
+        site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+        state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1])).transpose((
+            0,
+            2,
+            1,
+        ))
         right_blocks[i - 1] = update_right_environment(
-            state.tensors[i], state.tensors[i], H.tensors[i], right_blocks[i]
+            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
         )
-        C = C.transpose()
-        C = update_bond(left_blocks[i], right_blocks[i - 1], C, -0.5 * sim_params.dt, numiter_lanczos)
-        state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), C, (3, 2), (0, 1, 2))
+        bond_tensor = bond_tensor.transpose()
+        bond_tensor = update_bond(
+            left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+        )
+        state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
         state.tensors[i - 1] = update_site(
             left_blocks[i - 1],
             right_blocks[i - 1],
-            H.tensors[i - 1],
+            hamiltonian.tensors[i - 1],
             state.tensors[i - 1],
             0.5 * sim_params.dt,
             numiter_lanczos,
@@ -430,7 +477,10 @@ def single_site_tdvp(
 
 
 def two_site_tdvp(
-    state: MPS, H: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams, numiter_lanczos: int = 25
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
+    numiter_lanczos: int = 25,
 ) -> None:
     """Perform symmetric two-site TDVP integration.
 
@@ -442,7 +492,7 @@ def two_site_tdvp(
 
     Args:
         state (MPS): The initial state represented as an MPS.
-        H (MPO): Hamiltonian represented as an MPO.
+        hamiltonian (MPO): Hamiltonian represented as an MPO.
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams):
             Simulation parameters containing the time step 'dt' and SVD threshold.
         numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
@@ -450,7 +500,7 @@ def two_site_tdvp(
     Raises:
         ValueError: If Hamiltonian is invalid length.
     """
-    num_sites = H.length
+    num_sites = hamiltonian.length
     if num_sites != state.length:
         msg = "State and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
@@ -458,11 +508,11 @@ def two_site_tdvp(
         msg = "Hamiltonian is too short for a two-site update (2TDVP)."
         raise ValueError(msg)
 
-    right_blocks = initialize_right_environments(state, H)
+    right_blocks = initialize_right_environments(state, hamiltonian)
 
     left_blocks = [None for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
-    mpo_left_dim = H.tensors[0].shape[2]
+    mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
     for i in range(left_virtual_dim):
         for a in range(mpo_left_dim):
@@ -475,18 +525,20 @@ def two_site_tdvp(
     # Left-to-right sweep for sites 0 to L-2.
     for i in range(num_sites - 2):
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
-        merged_mpo = merge_mpo_tensors(H.tensors[i], H.tensors[i + 1])
+        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
         merged_tensor = update_site(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
             merged_tensor, "right", threshold=sim_params.threshold
         )
-        left_blocks[i + 1] = update_left_environment(state.tensors[i], state.tensors[i], H.tensors[i], left_blocks[i])
+        left_blocks[i + 1] = update_left_environment(
+            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+        )
         state.tensors[i + 1] = update_site(
             left_blocks[i + 1],
             right_blocks[i + 1],
-            H.tensors[i + 1],
+            hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
             numiter_lanczos,
@@ -494,13 +546,13 @@ def two_site_tdvp(
 
     i = num_sites - 2
     merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
-    merged_mpo = merge_mpo_tensors(H.tensors[i], H.tensors[i + 1])
+    merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
     merged_tensor = update_site(
         left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos
     )
     state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", threshold=sim_params.threshold)
     right_blocks[i] = update_right_environment(
-        state.tensors[i + 1], state.tensors[i + 1], H.tensors[i + 1], right_blocks[i + 1]
+        state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
     )
 
     # Right-to-left sweep.
@@ -508,17 +560,17 @@ def two_site_tdvp(
         state.tensors[i + 1] = update_site(
             left_blocks[i + 1],
             right_blocks[i + 1],
-            H.tensors[i + 1],
+            hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
             numiter_lanczos,
         )
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
-        merged_mpo = merge_mpo_tensors(H.tensors[i], H.tensors[i + 1])
+        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
         merged_tensor = update_site(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", threshold=sim_params.threshold)
         right_blocks[i] = update_right_environment(
-            state.tensors[i + 1], state.tensors[i + 1], H.tensors[i + 1], right_blocks[i + 1]
+            state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )

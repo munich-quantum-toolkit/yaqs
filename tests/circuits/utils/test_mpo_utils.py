@@ -75,8 +75,8 @@ def random_theta_8d() -> NDArray[np.complex128]:
 
 
 def approximate_reconstruction(
-    U: NDArray[np.complex128],  # noqa: N803
-    M: NDArray[np.complex128],  # noqa: N803
+    u_tensor: NDArray[np.complex128],
+    m_tensor: NDArray[np.complex128],
     original: NDArray[np.complex128],
     atol: float = 1e-10,
 ) -> None:
@@ -89,8 +89,8 @@ def approximate_reconstruction(
     reconstructs the matrix, and asserts that it is close to the flattened version of the original tensor.
 
     Args:
-        U: The left factor from the SVD decomposition.
-        M: The reshaped product of the singular values and right factor.
+        u_tensor: The left factor from the SVD decomposition.
+        m_tensor: The reshaped product of the singular values and right factor.
         original: The original tensor before decomposition.
         atol: Absolute tolerance for the reconstruction check. Defaults to 1e-10.
     """
@@ -100,10 +100,10 @@ def approximate_reconstruction(
     original_mat = np.reshape(original_reordered, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
 
     # Rebuild from U and M
-    rank = U.shape[-1]
-    u_mat = np.reshape(U, (-1, rank))  # Flatten U
+    rank = u_tensor.shape[-1]
+    u_mat = np.reshape(u_tensor, (-1, rank))  # Flatten U
     # Reorder and flatten M: from shape (dims[3], dims[4], rank, dims[5]) to (rank, dims[3]*dims[4]*dims[5])
-    m_reordered = np.transpose(M, (2, 0, 1, 3))
+    m_reordered = np.transpose(m_tensor, (2, 0, 1, 3))
     m_mat = np.reshape(m_reordered, (rank, dims[3] * dims[4] * dims[5]))
 
     reconstruction = u_mat @ m_mat
@@ -125,14 +125,14 @@ def test_decompose_theta() -> None:
     theta = random_theta_6d()
     threshold = 1e-5
 
-    U, M = decompose_theta(theta, threshold)  # noqa: N806
+    tensor1, tensor2 = decompose_theta(theta, threshold)
 
     # Basic shape checks: U should be rank-4 and M should be rank-4.
-    assert U.ndim == 4, "U should be a 4D tensor (including the rank dimension)."
-    assert M.ndim == 4, "M should be a 4D tensor (including the rank dimension)."
+    assert tensor1.ndim == 4, "U should be a 4D tensor (including the rank dimension)."
+    assert tensor2.ndim == 4, "M should be a 4D tensor (including the rank dimension)."
 
     # Check if the original tensor is approximately reconstructed.
-    approximate_reconstruction(U, M, theta, atol=1e-5)
+    approximate_reconstruction(tensor1, tensor2, theta, atol=1e-5)
 
 
 @pytest.mark.parametrize("conjugate", [False, True])

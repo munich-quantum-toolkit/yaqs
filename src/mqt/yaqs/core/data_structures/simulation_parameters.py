@@ -132,9 +132,9 @@ class PhysicsSimParams:
     def __init__(
         self,
         observables: list[Observable],
-        elapsed_time: float,  # noqa: N803
+        elapsed_time: float,
         dt: float = 0.1,
-        num_traj: int = 1000,  # noqa: N803
+        num_traj: int = 1000,
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
         order: int = 1,
@@ -304,7 +304,7 @@ class StrongSimParams:
     def __init__(
         self,
         observables: list[Observable],
-        num_traj: int = 1000,  # noqa: N803
+        num_traj: int = 1000,
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
         window_size: int | None = None,

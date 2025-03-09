@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def testlanczos_iteration_small() -> None:
+def test_lanczos_iteration_small() -> None:
     """Test small Lanczos.
 
     Check that lanczos_iteration produces correct shapes and orthonormal vectors
@@ -44,21 +44,21 @@ def testlanczos_iteration_small() -> None:
     def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return mat @ x
 
-    vstart = np.array([1.0, 1.0], dtype=complex)
-    numiter = 2
+    initial_vec = np.array([1.0, 1.0], dtype=complex)
+    lanczos_iterations = 2
 
-    alpha, beta, V = lanczos_iteration(matrix_free_operator, vstart, numiter)  # noqa: N806
+    alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, initial_vec, lanczos_iterations)
     # alpha should have shape (2,), beta shape (1,), and V shape (2, 2)
     assert alpha.shape == (2,)
     assert beta.shape == (1,)
-    assert V.shape == (2, 2)
+    assert lanczos_mat.shape == (2, 2)
 
     # Check first Lanczos vector is normalized.
-    np.testing.assert_allclose(norm(V[:, 0]), 1.0, atol=1e-12)
+    np.testing.assert_allclose(norm(lanczos_mat[:, 0]), 1.0, atol=1e-12)
     # Check second vector is orthogonal to the first.
-    dot_01 = np.vdot(V[:, 0], V[:, 1])
+    dot_01 = np.vdot(lanczos_mat[:, 0], lanczos_mat[:, 1])
     np.testing.assert_allclose(dot_01, 0.0, atol=1e-12)
-    np.testing.assert_allclose(norm(V[:, 1]), 1.0, atol=1e-12)
+    np.testing.assert_allclose(norm(lanczos_mat[:, 1]), 1.0, atol=1e-12)
 
 
 def test_lanczos_early_termination() -> None:
@@ -67,7 +67,7 @@ def test_lanczos_early_termination() -> None:
     Check that lanczos_iteration terminates early when beta[j] is nearly zero.
 
     Using a diagonal matrix so that if the starting vector is an eigenvector, the
-    iteration can terminate early. In this case, with vstart aligned with [1, 0],
+    iteration can terminate early. In this case, with initial_vec aligned with [1, 0],
     the iteration should stop after one step.
     """
     mat = np.diag([1.0, 2.0])
@@ -75,20 +75,20 @@ def test_lanczos_early_termination() -> None:
     def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return mat @ x
 
-    vstart = np.array([1.0, 0.0], dtype=complex)
-    numiter = 5
+    initial_vec = np.array([1.0, 0.0], dtype=complex)
+    lanczos_iterations = 5
 
-    alpha, beta, V = lanczos_iteration(matrix_free_operator, vstart, numiter)  # noqa: N806
+    alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, initial_vec, lanczos_iterations)
     # Expect termination after 1 iteration: alpha shape (1,), beta shape (0,), V shape (2, 1)
     assert alpha.shape == (1,)
     assert beta.shape == (0,)
-    assert V.shape == (2, 1), "Should have truncated V to 1 Lanczos vector."
+    assert lanczos_mat.shape == (2, 1), "Should have truncated V to 1 Lanczos vector."
 
 
 def test_expm_krylov_2x2_exact() -> None:
     """Test exact Krylov matrix exponential.
 
-    For a 2x2 Hermitian matrix, when numiter equals the full dimension (2),
+    For a 2x2 Hermitian matrix, when lanczos_iterations equals the full dimension (2),
     expm_krylov should yield a result that matches the direct matrix exponential exactly.
     """
     mat = np.array([[2.0, 1.0], [1.0, 3.0]])
@@ -98,23 +98,23 @@ def test_expm_krylov_2x2_exact() -> None:
 
     v = np.array([1.0, 0.0], dtype=complex)
     dt = 0.1
-    numiter = 2  # full subspace
+    lanczos_iterations = 2  # full subspace
 
-    approx = expm_krylov(matrix_free_operator, v, dt, numiter)
+    approx = expm_krylov(matrix_free_operator, v, dt, lanczos_iterations)
     direct = expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(
         approx,
         direct,
         atol=1e-12,
-        err_msg="Krylov expm approximation should match direct exponential for 2x2, numiter=2.",
+        err_msg="Krylov expm approximation should match direct exponential for 2x2, lanczos_iterations=2.",
     )
 
 
 def test_expm_krylov_smaller_subspace() -> None:
     """Test small subspace Krylov matrix exponential.
 
-    For a 2x2 Hermitian matrix, if numiter is less than the full dimension,
+    For a 2x2 Hermitian matrix, if lanczos_iterations is less than the full dimension,
     the expm_krylov result will be approximate. For small dt, the approximation
     should be within a tolerance of 1e-1.
     """
@@ -125,9 +125,9 @@ def test_expm_krylov_smaller_subspace() -> None:
 
     v = np.array([1.0, 1.0], dtype=complex)
     dt = 0.05
-    numiter = 1  # subspace dimension smaller than the full space
+    lanczos_iterations = 1  # subspace dimension smaller than the full space
 
-    approx = expm_krylov(matrix_free_operator, v, dt, numiter)
+    approx = expm_krylov(matrix_free_operator, v, dt, lanczos_iterations)
     direct = expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(

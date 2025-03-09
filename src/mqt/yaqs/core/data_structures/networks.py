@@ -226,14 +226,14 @@ class MPS:
         tensor = self.tensors[current_orthogonality_center]
         old_dims = tensor.shape
         matricized_tensor = np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2]))
-        Q, R = np.linalg.qr(matricized_tensor)  # noqa: N806
-        Q = np.reshape(Q, (old_dims[0], old_dims[1], -1))  # noqa: N806
-        self.tensors[current_orthogonality_center] = Q
+        site_tensor, bond_tensor = np.linalg.qr(matricized_tensor)
+        site_tensor = np.reshape(site_tensor, (old_dims[0], old_dims[1], -1))
+        self.tensors[current_orthogonality_center] = site_tensor
 
         # If normalizing, we just throw away the R
         if current_orthogonality_center + 1 < self.length:
             self.tensors[current_orthogonality_center + 1] = oe.contract(
-                "ij, ajc->aic", R, self.tensors[current_orthogonality_center + 1]
+                "ij, ajc->aic", bond_tensor, self.tensors[current_orthogonality_center + 1]
             )
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int) -> None:

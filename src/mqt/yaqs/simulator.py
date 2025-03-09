@@ -110,8 +110,9 @@ def _run_weak_sim(
 
     This function executes circuit-based simulation trajectories using the 'circuit_tjm' backend,
     adjusted for weak simulation parameters. If the noise model is absent or its strengths are all zero,
-    only a single trajectory is executed; otherwise, sim_params.num_traj is set to sim_params.shots and then shots is set to 1.
-    The trajectories are then executed (in parallel if specified) and the measurement results are aggregated.
+    only a single trajectory is executed; otherwise, sim_params.num_traj is set to sim_params.shots and then shots
+    is set to 1. The trajectories are then executed (in parallel if specified) and the measurement results
+    are aggregated.
 
     Args:
         initial_state (MPS): The initial system state as an MPS.

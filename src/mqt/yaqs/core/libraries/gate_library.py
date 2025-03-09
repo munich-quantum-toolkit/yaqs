@@ -13,9 +13,6 @@ tensor form, interactions, and generator(s). The module provides concrete implem
 for standard gates. The GateLibrary class aggregates all these gate classes for easy access.
 """
 
-# ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -47,13 +44,13 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     matrix = np.transpose(tensor, (0, 2, 1, 3))
     dims = matrix.shape
     matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
-    U, S_list, V = np.linalg.svd(matrix, full_matrices=False)
-    S_list = S_list[S_list > 1e-6]
-    U = U[:, 0 : len(S_list)]
-    V = V[0 : len(S_list), :]
+    u_mat, s_list, v_mat = np.linalg.svd(matrix, full_matrices=False)
+    s_list = s_list[s_list > 1e-6]
+    u_mat = u_mat[:, 0 : len(s_list)]
+    v_mat = v_mat[0 : len(s_list), :]
 
-    tensor1 = U
-    tensor2 = np.diag(S_list) @ V
+    tensor1 = u_mat
+    tensor2 = np.diag(s_list) @ v_mat
 
     # Reshape into physical dimensions and bond dimension
     tensor1 = np.reshape(tensor1, (2, 2, tensor1.shape[1]))

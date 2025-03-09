@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
 def lanczos_iteration(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
-    vstart: NDArray[np.complex128],
-    numiter: int,
+    vec: NDArray[np.complex128],
+    lanczos_iterations: int,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128]]:
     """Perform a matrix-free Lanczos iteration.
 
@@ -42,54 +42,52 @@ def lanczos_iteration(
         matrix_free_operator (Callable[[NDArray[np.complex128]], NDArray[np.complex128]]):
             A function that applies a linear transformation to a vector without explicitly constructing
             the matrix (i.e., matrix-free).
-        vstart (NDArray[np.complex128]):
+        vec (NDArray[np.complex128]):
             The starting vector for the Lanczos iteration. This vector is normalized in place.
-        numiter (int):
+        lanczos_iterations (int):
             The number of Lanczos iterations to perform. It should be much smaller than the dimension of
-            vstart.
+            vec.
 
     Returns:
         tuple:
-            - alpha (NDArray[np.float64]): Array of length numiter containing the diagonal entries of the
+            - alpha (NDArray[np.float64]): Array of length lanczos_iterations containing the diagonal entries of the
               tridiagonal matrix.
-            - beta (NDArray[np.float64]): Array of length numiter-1 containing the off-diagonal entries.
-            - V (NDArray[np.complex128]): A matrix of shape (len(vstart) x numiter) whose columns are the
-              orthonormal Lanczos vectors.
+            - beta (NDArray[np.float64]): Array of length lanczos_iterations-1 containing the off-diagonal entries.
+            - lanczos_mat (NDArray[np.complex128]): A matrix of shape (len(vec) x lanczos_iterations) whose
+              columns are the orthonormal Lanczos vectors.
     """
     # normalize starting vector
-    nrmv = np.linalg.norm(vstart)
-    assert nrmv > 0
-    vstart /= nrmv
+    vec /= np.linalg.norm(vec)
 
-    alpha = np.zeros(numiter)
-    beta = np.zeros(numiter - 1)
+    alpha = np.zeros(lanczos_iterations)
+    beta = np.zeros(lanczos_iterations - 1)
 
-    V = np.zeros((numiter, len(vstart)), dtype=complex)  # noqa: N806
-    V[0] = vstart
+    lanczos_mat = np.zeros((lanczos_iterations, len(vec)), dtype=complex)
+    lanczos_mat[0] = vec
 
-    for j in range(numiter - 1):
-        w = matrix_free_operator(V[j])
-        alpha[j] = np.vdot(w, V[j]).real
-        w -= alpha[j] * V[j] + (beta[j - 1] * V[j - 1] if j > 0 else 0)
-        beta[j] = np.linalg.norm(w)
-        if beta[j] < 100 * len(vstart) * np.finfo(float).eps:
+    for j in range(lanczos_iterations - 1):
+        w_j = matrix_free_operator(lanczos_mat[j])
+        alpha[j] = np.vdot(w_j, lanczos_mat[j]).real
+        w_j -= alpha[j] * lanczos_mat[j] + (beta[j - 1] * lanczos_mat[j - 1] if j > 0 else 0)
+        beta[j] = np.linalg.norm(w_j)
+        if beta[j] < 100 * len(vec) * np.finfo(float).eps:
             # Terminate early if the next vector is (numerically) zero.
-            numiter = j + 1
-            return (alpha[:numiter], beta[: numiter - 1], V[:numiter, :].T)
-        V[j + 1] = w / beta[j]
+            lanczos_iterations = j + 1
+            return (alpha[:lanczos_iterations], beta[: lanczos_iterations - 1], lanczos_mat[:lanczos_iterations, :].T)
+        lanczos_mat[j + 1] = w_j / beta[j]
 
     # Complete final iteration
-    j = numiter - 1
-    w = matrix_free_operator(V[j])
-    alpha[j] = np.vdot(w, V[j]).real
-    return (alpha, beta, V.T)
+    j = lanczos_iterations - 1
+    w_j = matrix_free_operator(lanczos_mat[j])
+    alpha[j] = np.vdot(w_j, lanczos_mat[j]).real
+    return (alpha, beta, lanczos_mat.T)
 
 
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
-    v: NDArray[np.complex128],
+    vec: NDArray[np.complex128],
     dt: float,
-    numiter: int,
+    lanczos_iterations: int,
 ) -> NDArray[np.complex128]:
     """Compute the Krylov subspace approximation of the matrix exponential applied to a vector.
 
@@ -100,18 +98,18 @@ def expm_krylov(
     Args:
         matrix_free_operator (Callable[[NDArray[np.complex128]], NDArray[np.complex128]]):
             A function implementing the matrix-free application of the linear operator A.
-        v (NDArray[np.complex128]):
+        vec (NDArray[np.complex128]):
             The input vector to which the matrix exponential is applied.
         dt (float):
             The time step (or scalar multiplier) in the exponential.
-        numiter (int):
+        lanczos_iterations (int):
             The number of Lanczos iterations (and the dimension of the Krylov subspace) to use.
 
     Returns:
         NDArray[np.complex128]:
-            The approximate result of applying exp(-1j * dt * A) to v.
+            The approximate result of applying exp(-1j * dt * A) to vec.
     """
-    alpha, beta, V = lanczos_iteration(matrix_free_operator, v, numiter)  # noqa: N806
+    alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, vec, lanczos_iterations)
     try:
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stemr")
     except np.linalg.LinAlgError:
@@ -119,4 +117,4 @@ def expm_krylov(
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stebz")
     # Construct the approximation: scale the exponential of the eigenvalues by the norm of v,
     # and project back to the full space via the Lanczos basis V.
-    return V @ (u_hess @ (np.linalg.norm(v) * np.exp(-1j * dt * w_hess) * u_hess[0]))
+    return lanczos_mat @ (u_hess @ (np.linalg.norm(vec) * np.exp(-1j * dt * w_hess) * u_hess[0]))
