@@ -114,7 +114,7 @@ default.extend-ignore-re = [
 [tool.typos.default.extend-words]
 wille = "wille"
 aer = "aer"
-
+ket   = "ket"
 
 [tool.repo-review]
 ignore = ["GH200"]
