@@ -69,6 +69,9 @@ sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
 Run the simulation
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import simulator
 
 simulator.run(state, circuit, sim_params, noise_model)

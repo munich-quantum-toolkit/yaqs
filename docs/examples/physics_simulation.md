@@ -67,6 +67,9 @@ sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, o
 Run the simulation
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import simulator
 
 simulator.run(state, H_0, sim_params, noise_model)

@@ -54,6 +54,9 @@ sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_si
 Run the simulations for a range of noise strengths
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 

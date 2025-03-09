@@ -770,7 +770,7 @@ class SWAP(BaseGate):
 
 
 class Rxx(BaseGate):
-    """Represents a two-qubit rotation gate about the xx-axis.
+    r"""Represents a two-qubit rotation gate about the xx-axis.
 
     Attributes:
         name (str): "rxx".
@@ -778,7 +778,7 @@ class Rxx(BaseGate):
         theta (Parameter): The rotation angle.
         matrix (NDArray[np.complex128]): The matrix representation computed from theta.
         tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
-        generator (list): The generator computed as (θ/2)*(X ⊗ X).
+        generator (list): The generator computed as :math:`(\theta/2)*(X \otimes X)`.
         sites (list[int]): The sites where the gate is applied.
 
     Methods:
@@ -831,7 +831,7 @@ class Rxx(BaseGate):
 
 
 class Ryy(BaseGate):
-    """Represents a two-qubit rotation gate about the yy-axis.
+    r"""Represents a two-qubit rotation gate about the yy-axis.
 
     Attributes:
         name (str): "ryy".
@@ -839,7 +839,7 @@ class Ryy(BaseGate):
         theta (Parameter): The rotation angle.
         matrix (NDArray[np.complex128]): The matrix representation computed from theta.
         tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
-        generator (list): The generator computed as (θ/2)*(Y ⊗ Y).
+        generator (list): The generator computed as :math:`(\theta/2)*(Y \otimes Y)`.
         sites (list[int]): The sites where the gate is applied.
 
     Methods:
@@ -892,7 +892,7 @@ class Ryy(BaseGate):
 
 
 class Rzz(BaseGate):
-    """Represents a two-qubit rotation gate about the zz-axis.
+    r"""Represents a two-qubit rotation gate about the zz-axis.
 
     Attributes:
         name (str): "rzz".
@@ -900,7 +900,7 @@ class Rzz(BaseGate):
         theta (Parameter): The rotation angle.
         matrix (NDArray[np.complex128]): The matrix representation computed from theta.
         tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
-        generator (list): The generator computed as (θ/2)*(Z ⊗ Z).
+        generator (list): The generator computed as :math:`(\theta/2)*(Z \otimes Z)`.
         sites (list[int]): The sites where the gate is applied.
 
     Methods:
