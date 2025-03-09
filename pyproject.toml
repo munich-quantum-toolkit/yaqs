@@ -130,7 +130,6 @@ select = ["ALL"]
 ignore = [
     "C90",     # <...> too complex
     "COM812",  # Conflicts with formatter
-    "CPY001",  # Missing copyright notice at top of file
     "ISC001",  # Conflicts with formatter
     "N806",    # Variable in function should be lowercase
     "N803",    # Argument name should be lowercase
