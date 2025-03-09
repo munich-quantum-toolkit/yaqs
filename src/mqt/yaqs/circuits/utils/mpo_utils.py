@@ -284,7 +284,9 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
 
     if gate_MPO.length == mpo.length:
         sites = range(mpo.length)
-    elif location is not None and distance is not None:
+    else:
+        assert location is not None
+        assert distance is not None
         sites = range(location, location + distance)
 
     # Process even-indexed sites from the gate MPO
