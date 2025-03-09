@@ -47,7 +47,7 @@ def test_physics_simulation() -> None:
 
     H = MPO()
     H.init_ising(length, J=1, g=0.5)
-    T = 1
+    elapsed_time = 1
     dt = 0.1
     sample_timesteps = False
     N = 10
@@ -57,7 +57,7 @@ def test_physics_simulation() -> None:
 
     measurements = [Observable("z", site) for site in range(length)]
     sim_params = PhysicsSimParams(
-        measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        measurements, elapsed_time, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
@@ -95,7 +95,7 @@ def test_physics_simulation_parallel_off() -> None:
 
     H = MPO()
     H.init_ising(length, J=1, g=0.5)
-    T = 1
+    elapsed_time = 1
     dt = 0.1
     sample_timesteps = False
     N = 10
@@ -105,7 +105,7 @@ def test_physics_simulation_parallel_off() -> None:
 
     measurements = [Observable("z", site) for site in range(length)]
     sim_params = PhysicsSimParams(
-        measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        measurements, elapsed_time, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])

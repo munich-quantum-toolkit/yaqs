@@ -53,7 +53,7 @@ Define the simulation parameters
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
-T = 10
+elapsed_time = 10
 dt = 0.1
 sample_timesteps = True
 N = 100
@@ -61,7 +61,7 @@ max_bond_dim = 4
 threshold = 1e-6
 order = 2
 measurements = [Observable("x", site) for site in range(L)]
-sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+sim_params = PhysicsSimParams(measurements, elapsed_time, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
 ```
 
 Run the simulation
@@ -89,7 +89,7 @@ import matplotlib.pyplot as plt
 heatmap = [observable.results for observable in sim_params.observables]
 
 fig, ax = plt.subplots(1, 1)
-im = plt.imshow(heatmap, aspect="auto", extent=(0, T, L, 0), vmin=0, vmax=0.5)
+im = plt.imshow(heatmap, aspect="auto", extent=(0, elapsed_time, L, 0), vmin=0, vmax=0.5)
 plt.xlabel("Site")
 plt.yticks([x - 0.5 for x in list(range(1, L + 1))], [str(x) for x in range(1, L + 1)])
 plt.ylabel("t")

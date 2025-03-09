@@ -85,7 +85,7 @@ class Observable:
                 self.times = sim_params.times
             else:
                 self.trajectories = np.empty((sim_params.N, 1), dtype=np.float64)
-                self.times = sim_params.T
+                self.times = sim_params.elapsed_time
             self.results = np.empty(len(sim_params.times), dtype=np.float64)
         elif isinstance(sim_params, WeakSimParams):
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
@@ -106,7 +106,7 @@ class PhysicsSimParams:
         A list of observables to be tracked during the simulation.
     sorted_observables : list[Observable]
         A list of observables sorted by site and name.
-    T : float
+    elapsed_time : float
         The total time for the simulation.
     dt : float, optional
         The time step for the simulation (default is 0.1).
@@ -132,7 +132,7 @@ class PhysicsSimParams:
     def __init__(
         self,
         observables: list[Observable],
-        T: float,  # noqa: N803
+        elapsed_time: float,  # noqa: N803
         dt: float = 0.1,
         N: int = 1000,  # noqa: N803
         max_bond_dim: int = 2,
@@ -149,7 +149,7 @@ class PhysicsSimParams:
         ----------
         observables : list[Observable]
             List of observables to measure during the simulation.
-        T : float
+        elapsed_time : float
             Total simulation time.
         dt : float, optional
             Time step interval, by default 0.1.
@@ -166,9 +166,9 @@ class PhysicsSimParams:
         """
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
-        self.T = T
+        self.elapsed_time = elapsed_time
         self.dt = dt
-        self.times = np.arange(0, T + dt, dt)
+        self.times = np.arange(0, elapsed_time + dt, dt)
         self.sample_timesteps = sample_timesteps
         self.N = N
         self.max_bond_dim = max_bond_dim

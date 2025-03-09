@@ -14,8 +14,6 @@ The functions physics_tjm_2 and physics_tjm_1 correspond to second-order and fir
 respectively, and return trajectories of expectation values for further analysis.
 """
 
-# ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
 
 from __future__ import annotations
 
@@ -54,7 +52,7 @@ def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: PhysicsSi
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
-def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams) -> MPS:  # noqa: N803
+def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams) -> MPS:
     """Perform a single time step evolution of the system state using the TJM.
 
     Corresponding to Fj in the TJM paper, this function evolves the state by applying dynamic TDVP,
@@ -62,21 +60,21 @@ def step_through(state: MPS, H: MPO, noise_model: NoiseModel | None, sim_params:
 
     Args:
         state (MPS): The current state of the system.
-        H (MPO): The Hamiltonian operator for the system.
+        hamiltonian (MPO): The Hamiltonian operator for the system.
         noise_model (NoiseModel | None): The noise model to apply to the system.
         sim_params (PhysicsSimParams): Simulation parameters including the time step and measurement settings.
 
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    dynamic_tdvp(state, H, sim_params)
+    dynamic_tdvp(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
     return stochastic_process(state, noise_model, sim_params.dt)
 
 
 def sample(
     phi: MPS,
-    H: MPO,  # noqa: N803
+    hamiltonian: MPO,
     noise_model: NoiseModel | None,
     sim_params: PhysicsSimParams,
     results: NDArray[np.float64],
@@ -90,7 +88,7 @@ def sample(
 
     Args:
         phi (MPS): The sampling MPS prior to measurement.
-        H (MPO): The Hamiltonian operator for the system.
+        hamiltonian (MPO): The Hamiltonian operator for the system.
         noise_model (NoiseModel | None): The noise model to apply during evolution.
         sim_params (PhysicsSimParams): Simulation parameters including time step and measurement settings.
         results (NDArray[np.float64]): An array to store the measured observable values.
@@ -99,7 +97,7 @@ def sample(
 
     """
     psi = copy.deepcopy(phi)
-    dynamic_tdvp(psi, H, sim_params)
+    dynamic_tdvp(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
     if sim_params.sample_timesteps:
@@ -141,7 +139,7 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         NDArray[np.float64]: An array of expectation values for the trajectory, with dimensions
         determined by the number of observables and time steps.
     """
-    _i, initial_state, noise_model, sim_params, H = args
+    _i, initial_state, noise_model, sim_params, hamiltonian = args
 
     state = copy.deepcopy(initial_state)
     if sim_params.sample_timesteps:
@@ -155,12 +153,12 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
 
     phi = initialize(state, noise_model, sim_params)
     if sim_params.sample_timesteps:
-        sample(phi, H, noise_model, sim_params, results, j=1)
+        sample(phi, hamiltonian, noise_model, sim_params, results, j=1)
 
     for j, _ in enumerate(sim_params.times[2:], start=2):
-        phi = step_through(phi, H, noise_model, sim_params)
+        phi = step_through(phi, hamiltonian, noise_model, sim_params)
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
-            sample(phi, H, noise_model, sim_params, results, j)
+            sample(phi, hamiltonian, noise_model, sim_params, results, j)
 
     return results
 
@@ -183,7 +181,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         NDArray[np.float64]: An array of expectation values for the trajectory, with shape determined
         by the number of observables and time steps.
     """
-    _i, initial_state, noise_model, sim_params, H = args
+    _i, initial_state, noise_model, sim_params, hamiltonian = args
     state = copy.deepcopy(initial_state)
 
     if sim_params.sample_timesteps:
@@ -196,7 +194,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
             results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
-        dynamic_tdvp(state, H, sim_params)
+        dynamic_tdvp(state, hamiltonian, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
