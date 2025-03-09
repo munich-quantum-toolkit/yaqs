@@ -58,13 +58,13 @@ if __name__ == "__main__":
 
     heatmap = [observable.results for observable in sim_params.observables]
 
-    im = plt.imshow(heatmap, aspect="auto", extent=[0, T, L, 0], vmin=0, vmax=0.5)
+    im = plt.imshow(heatmap, aspect="auto", extent=(0, T, L, 0), vmin=0, vmax=0.5)
     plt.xlabel("Site")
-    plt.yticks([x - 0.5 for x in list(range(1, L + 1))], range(1, L + 1))
+    plt.yticks([x - 0.5 for x in list(range(1, L + 1))], [str(x) for x in range(1, L + 1)])
     plt.ylabel("t")
 
     fig.subplots_adjust(top=0.95, right=0.88)
-    cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.8])
+    cbar_ax = fig.add_axes(rect=(0.9, 0.11, 0.025, 0.8))
     cbar = fig.colorbar(im, cax=cbar_ax)
     cbar.ax.set_title("$\\langle X \\rangle$")
 

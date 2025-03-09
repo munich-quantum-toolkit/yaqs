@@ -64,7 +64,7 @@ if __name__ == "__main__":
     ax.set_xticklabels(formatted_gammas)
 
     fig.subplots_adjust(top=0.95, right=0.88)
-    cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.8])
+    cbar_ax = fig.add_axes(rect=(0.9, 0.11, 0.025, 0.8))
     cbar = fig.colorbar(im, cax=cbar_ax)
     cbar.ax.set_title("$\\langle Z \\rangle$")
 

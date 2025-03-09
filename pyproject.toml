@@ -36,7 +36,7 @@ classifiers = [
 keywords = ["MQT", "quantum-computing", "quantum-simulation", "tensor-networks"]
 
 dependencies = [
-    "matplotlib>=3.5",
+    "matplotlib>=3.8",
     "numpy>=2.0; python_version >= '3.13'",
     "scipy>=1.13.1",
     "scipy>=1.14.1; python_version >= '3.13'",
@@ -101,7 +101,7 @@ explicit_package_bases = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["qiskit.*", "matplotlib.*", "qiskit_aer.*", "opt_einsum.*"]
+module = ["qiskit.*", "qiskit_aer.*", "opt_einsum.*"]
 ignore_missing_imports = true
 
 
