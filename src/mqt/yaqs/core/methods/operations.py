@@ -85,7 +85,7 @@ def local_expval(state: MPS, operator: NDArray[np.complex128], site: int) -> np.
     return scalar_product(state, temp_state, site)
 
 
-def measure_single_shot(state: MPS) -> int:
+def sample_single_shot(state: MPS) -> int:
     """Perform a single-shot measurement on a Matrix Product State (MPS).
 
     This function simulates a projective measurement on an MPS. For each site, it computes the
@@ -121,7 +121,7 @@ def measure_single_shot(state: MPS) -> int:
     return sum(c << i for i, c in enumerate(bitstring))
 
 
-def measure(state: MPS, shots: int) -> dict[int, int]:
+def sample_shots(state: MPS, shots: int) -> dict[int, int]:
     """Perform multiple single-shot measurements on an MPS and aggregate the results.
 
     This function executes a specified number of measurement shots on the given MPS. For each shot,
@@ -147,12 +147,12 @@ def measure(state: MPS, shots: int) -> dict[int, int]:
             concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor,
             tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
         ):
-            futures = [executor.submit(measure_single_shot, copy.deepcopy(state)) for _ in range(shots)]
+            futures = [executor.submit(sample_single_shot, copy.deepcopy(state)) for _ in range(shots)]
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 results[result] = results.get(result, 0) + 1
                 pbar.update(1)
         return results
-    basis_state = measure_single_shot(state)
+    basis_state = sample_single_shot(state)
     results[basis_state] = results.get(basis_state, 0) + 1
     return results
