@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPS
-from mqt.yaqs.core.methods.operations import local_expval, sample_shots, sample_single_shot, scalar_product
+from mqt.yaqs.core.methods.operations import local_expval, measure_shots, measure_single_shot, scalar_product
 
 
 def test_scalar_product_same_state() -> None:
@@ -98,7 +98,7 @@ def test_single_shot() -> None:
     For an MPS representing the state |0> on all qubits, a single-shot measurement should yield 0.
     """
     psi_mps = MPS(length=3, state="zeros")
-    val = sample_single_shot(psi_mps)
+    val = measure_single_shot(psi_mps)
     np.testing.assert_allclose(val, 0, atol=1e-12)
 
 
@@ -110,7 +110,7 @@ def test_multi_shot() -> None:
     key (e.g., 0) should not be present.
     """
     psi_mps = MPS(length=3, state="ones")
-    shots_dict = sample_shots(psi_mps, shots=10)
+    shots_dict = measure_shots(psi_mps, shots=10)
     # Assuming that in the "ones" state the measurement outcome is encoded as 7.
     assert shots_dict[7]
     with pytest.raises(KeyError):
