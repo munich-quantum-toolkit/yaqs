@@ -277,7 +277,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
     first_layer = next(dag_to_search.layers(), None)
     gate_MPO = None
     distance = None
-
+    location = None
     if first_layer is not None:
         layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
@@ -307,8 +307,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             break
 
     assert gate_MPO is not None, "Long-range gate MPO not found."
-
     assert gate_MPO.length <= mpo.length
+
     sites = range(mpo.length) if gate_MPO.length == mpo.length else range(location, location + distance)
 
     # Process even-indexed sites from the gate MPO
