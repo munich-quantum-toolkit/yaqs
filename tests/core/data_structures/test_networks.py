@@ -637,7 +637,7 @@ def test_convert_to_vector() -> None:
 
     for state_str in test_states:
         # Create an MPS for the given state.
-        mps = MPS(length=L, state=state_str)
+        mps = MPS(length=Length, state=state_str)
         psi = mps.convert_to_vector()
 
         # Construct the expected state vector as the Kronecker product of local states.
