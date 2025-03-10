@@ -625,38 +625,15 @@ def test_check_canonical_form() -> None:
 
 
 def test_convert_to_vector() -> None:
-    """Tests the MPS_to_vector function for various initial states.
+    """Test convert to vector.
+
+    Tests the MPS_to_vector function for various initial states.
     For each state, the expected full state vector is computed as the tensor
     product of the corresponding local state vectors.
     """
     test_states = ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall"]
-    L = 4  # Use a small number of sites for testing.
+    Length = 4  # Use a small number of sites for testing.
     tol = 1e-12
-
-    def local_state_vector(state_str: str, index: int, L: int) -> np.ndarray:
-        """Returns the local state vector for a given state string.
-        For 'Neel' and 'wall', the local state depends on the site index.
-        """
-        if state_str == "zeros":
-            return np.array([1, 0], dtype=complex)
-        if state_str == "ones":
-            return np.array([0, 1], dtype=complex)
-        if state_str == "x+":
-            return np.array([1 / np.sqrt(2), 1 / np.sqrt(2)], dtype=complex)
-        if state_str == "x-":
-            return np.array([1 / np.sqrt(2), -1 / np.sqrt(2)], dtype=complex)
-        if state_str == "y+":
-            return np.array([1 / np.sqrt(2), 1j / np.sqrt(2)], dtype=complex)
-        if state_str == "y-":
-            return np.array([1 / np.sqrt(2), -1j / np.sqrt(2)], dtype=complex)
-        if state_str == "Neel":
-            # According to the MPS code: if index is odd, local vector = [1, 0]; if even, [0, 1].
-            return np.array([1, 0], dtype=complex) if index % 2 == 1 else np.array([0, 1], dtype=complex)
-        if state_str == "wall":
-            # For a "wall" state: sites with index < L//2 are |0>, else |1>.
-            return np.array([1, 0], dtype=complex) if index < L // 2 else np.array([0, 1], dtype=complex)
-        msg = "Invalid state string"
-        raise ValueError(msg)
 
     for state_str in test_states:
         # Create an MPS for the given state.
@@ -664,7 +641,13 @@ def test_convert_to_vector() -> None:
         psi = mps.convert_to_vector()
 
         # Construct the expected state vector as the Kronecker product of local states.
-        local_states = [local_state_vector(state_str, i, L) for i in range(L)]
-        expected = reduce(np.kron, local_states)
+        rng = np.random.default_rng()
+        local_state = rng.rand(2)
+        local_state /= np.linalg.norm(local_state)
+        local_states = [local_state for i in range(Length)]
+
+        expected = 1
+        for state in local_states:
+            expected = np.kron(expected, state)
 
         assert np.allclose(psi, expected, atol=tol)
