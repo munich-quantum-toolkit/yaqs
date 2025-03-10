@@ -519,8 +519,9 @@ def two_site_tdvp(
             left_identity[i, a, i] = 1
     left_blocks[0] = left_identity
 
+    # Adjust simulation time step if simulation parameters require a unit time step.
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 1
+        sim_params.dt = 2
 
     # Left-to-right sweep for sites 0 to L-2.
     for i in range(num_sites - 2):
@@ -544,12 +545,23 @@ def two_site_tdvp(
             numiter_lanczos,
         )
 
+    # Guarantees unit time at final site for circuits
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        sim_params.dt = 1
+
     i = num_sites - 2
     merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
     merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
     merged_tensor = update_site(
         left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos
     )
+    # Only a single sweep is needed for circuits
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+            merged_tensor, "right", threshold=sim_params.threshold
+        )
+        return
+
     state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", threshold=sim_params.threshold)
     right_blocks[i] = update_right_environment(
         state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
