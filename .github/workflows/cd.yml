@@ -1,0 +1,38 @@
+name: CD 🚀
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
+
+jobs:
+  python-packaging:
+    name: 🐍 Packaging
+    uses: cda-tum/mqt-workflows/.github/workflows/reusable-python-packaging.yml@v1.7
+    with:
+      pure-python: true
+
+  # Downloads the previously generated artifacts and deploys to PyPI on published releases.
+  deploy:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    name: 🚀 Deploy to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mqt.yaqs
+    needs: [python-packaging]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cibw-*
+          path: dist
+          merge-multiple: true
+      - name: Generate artifact attestation for sdist and wheel
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*"
+      - uses: pypa/gh-action-pypi-publish@release/v1
