@@ -668,4 +668,3 @@ def test_convert_to_vector() -> None:
         expected = reduce(np.kron, local_states)
 
         assert np.allclose(psi, expected, atol=tol)
-           
