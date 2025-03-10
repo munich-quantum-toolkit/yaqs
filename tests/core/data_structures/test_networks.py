@@ -622,3 +622,42 @@ def test_check_canonical_form() -> None:
     mps = MPS(length, physical_dimensions=[pdim] * length, state="zeros")
     res = mps.check_canonical_form()
     assert res is not None
+
+
+def test_convert_to_vector() -> None:
+    """Test convert to vector.
+
+    Tests the MPS_to_vector function for various initial states.
+    For each state, the expected full state vector is computed as the tensor
+    product of the corresponding local state vectors.
+    """
+    test_states = ["zeros", "ones", "x+", "x-", "y+", "y-"]
+    Length = 4  # Use a small number of sites for testing.
+    tol = 1e-12
+
+    for state_str in test_states:
+        if state_str == "zeros":
+            local_state = np.array([1, 0], dtype=complex)
+        if state_str == "ones":
+            local_state = np.array([0, 1], dtype=complex)
+        if state_str == "x+":
+            local_state = np.array([1 / np.sqrt(2), 1 / np.sqrt(2)], dtype=complex)
+        if state_str == "x-":
+            local_state = np.array([1 / np.sqrt(2), -1 / np.sqrt(2)], dtype=complex)
+        if state_str == "y+":
+            local_state = np.array([1 / np.sqrt(2), 1j / np.sqrt(2)], dtype=complex)
+        if state_str == "y-":
+            local_state = np.array([1 / np.sqrt(2), -1j / np.sqrt(2)], dtype=complex)
+
+        # Create an MPS for the given state.
+        mps = MPS(length=Length, state=state_str)
+        psi = mps.convert_to_vector()
+
+        # Construct the expected state vector as the Kronecker product of local states.
+        local_states = [local_state for i in range(Length)]
+
+        expected = 1
+        for state in local_states:
+            expected = np.kron(expected, state)
+
+        assert np.allclose(psi, expected, atol=tol)
