@@ -642,7 +642,7 @@ def test_convert_to_vector() -> None:
 
         # Construct the expected state vector as the Kronecker product of local states.
         rng = np.random.default_rng()
-        local_state = rng.rand(2)
+        local_state = rng.random(2)
         local_state /= np.linalg.norm(local_state)
         local_states = [local_state for i in range(Length)]
 

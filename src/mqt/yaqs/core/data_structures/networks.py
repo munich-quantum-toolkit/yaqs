@@ -515,7 +515,7 @@ class MPS:
                     return [i - 1, i]
         return [-1]
 
-    def convert_to_vector(self) -> np.ndarray:
+    def convert_to_vector(self) -> NDArray[np.complex128]:
         r"""Converts the MPS to a full state vector representation.
 
         Returns:
