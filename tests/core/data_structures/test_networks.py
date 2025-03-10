@@ -667,5 +667,5 @@ def test_convert_to_vector() -> None:
         local_states = [local_state_vector(state_str, i, L) for i in range(L)]
         expected = reduce(np.kron, local_states)
 
-        if np.allclose(psi, expected, atol=tol):
-            pass
+        assert np.allclose(psi, expected, atol=tol)
+           
