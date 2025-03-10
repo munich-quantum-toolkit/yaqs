@@ -623,9 +623,9 @@ def test_check_canonical_form() -> None:
     res = mps.check_canonical_form()
     assert res is not None
 
-def test_convert_to_vector():
-    """
-    Tests the MPS_to_vector function for various initial states.
+
+def test_convert_to_vector() -> None:
+    """Tests the MPS_to_vector function for various initial states.
     For each state, the expected full state vector is computed as the tensor
     product of the corresponding local state vectors.
     """
@@ -634,43 +634,38 @@ def test_convert_to_vector():
     tol = 1e-12
 
     def local_state_vector(state_str: str, index: int, L: int) -> np.ndarray:
-        """
-        Returns the local state vector for a given state string.
+        """Returns the local state vector for a given state string.
         For 'Neel' and 'wall', the local state depends on the site index.
         """
         if state_str == "zeros":
             return np.array([1, 0], dtype=complex)
-        elif state_str == "ones":
+        if state_str == "ones":
             return np.array([0, 1], dtype=complex)
-        elif state_str == "x+":
-            return np.array([1/np.sqrt(2), 1/np.sqrt(2)], dtype=complex)
-        elif state_str == "x-":
-            return np.array([1/np.sqrt(2), -1/np.sqrt(2)], dtype=complex)
-        elif state_str == "y+":
-            return np.array([1/np.sqrt(2), 1j/np.sqrt(2)], dtype=complex)
-        elif state_str == "y-":
-            return np.array([1/np.sqrt(2), -1j/np.sqrt(2)], dtype=complex)
-        elif state_str == "Neel":
+        if state_str == "x+":
+            return np.array([1 / np.sqrt(2), 1 / np.sqrt(2)], dtype=complex)
+        if state_str == "x-":
+            return np.array([1 / np.sqrt(2), -1 / np.sqrt(2)], dtype=complex)
+        if state_str == "y+":
+            return np.array([1 / np.sqrt(2), 1j / np.sqrt(2)], dtype=complex)
+        if state_str == "y-":
+            return np.array([1 / np.sqrt(2), -1j / np.sqrt(2)], dtype=complex)
+        if state_str == "Neel":
             # According to the MPS code: if index is odd, local vector = [1, 0]; if even, [0, 1].
             return np.array([1, 0], dtype=complex) if index % 2 == 1 else np.array([0, 1], dtype=complex)
-        elif state_str == "wall":
+        if state_str == "wall":
             # For a "wall" state: sites with index < L//2 are |0>, else |1>.
             return np.array([1, 0], dtype=complex) if index < L // 2 else np.array([0, 1], dtype=complex)
-        else:
-            raise ValueError("Invalid state string")
+        msg = "Invalid state string"
+        raise ValueError(msg)
 
     for state_str in test_states:
         # Create an MPS for the given state.
         mps = MPS(length=L, state=state_str)
         psi = mps.convert_to_vector()
-        
+
         # Construct the expected state vector as the Kronecker product of local states.
         local_states = [local_state_vector(state_str, i, L) for i in range(L)]
         expected = reduce(np.kron, local_states)
-        
+
         if np.allclose(psi, expected, atol=tol):
-            print(f"Test passed for state '{state_str}'.")
-        else:
-            print(f"Test FAILED for state '{state_str}'.")
-            print("Expected:", expected)
-            print("Got     :", psi)
+            pass
