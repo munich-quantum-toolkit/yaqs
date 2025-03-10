@@ -5,7 +5,9 @@
 [![CD](https://img.shields.io/github/actions/workflow/status/cda-tum/mqt-yaqs/cd.yml?style=flat-square&logo=github&label=cd)](https://github.com/cda-tum/mqt-yaqs/actions/workflows/cd.yml)
 [![codecov](https://img.shields.io/codecov/c/github/cda-tum/mqt-yaqs?style=flat-square&logo=codecov)](https://codecov.io/gh/cda-tum/mqt-yaqs)
 
-![Banner](images/banner.jpeg)
+<picture>
+<img src="https://raw.githubusercontent.com/cda-tum/mqt-yaqs/main/images/banner.jpeg" width="95%" alt="MQT YAQS Banner">
+</picture>
 
 # MQT YAQS: A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
 
