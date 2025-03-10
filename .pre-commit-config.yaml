@@ -65,7 +65,6 @@ repos:
           - nox
           - pytest
           - numpy
-          - scipy-stubs
           - types-tqdm
           - matplotlib
 
