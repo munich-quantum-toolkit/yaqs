@@ -52,37 +52,33 @@ def loss_function(sim_params, ref_traj, traj_der):
     tjm_time = end_time - start_time
     # print(f"TJM time -> {tjm_time:.4f}")
     
-    # Initialize loss
-    loss = 0.0
+   
     
     # Ensure both lists have the same structure
-    if len(ref_traj) != len(exp_vals_traj):
+    if np.shape(ref_traj) != np.shape(exp_vals_traj):
         raise ValueError("Mismatch in the number of sites between qt_exp_vals and tjm_exp_vals.")
 
-    # Compute squared distance for each site
-    for ref_vals, tjm_vals in zip(ref_traj, exp_vals_traj):
-        loss += np.sum((np.array(ref_vals) - np.array(tjm_vals)) ** 2)
-    
 
-    n_jump = len(d_On_d_gk)
-    n_obs = len(d_On_d_gk[0])
-    n_t = len(d_On_d_gk[0][0])
+    n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
 
-    n_gr = n_jump//2
 
+    # Initialize loss
+    loss = 0.0
 
     dJ_d_gr = 0
     dJ_d_gd = 0
 
 
-    for i in range(n_obs):
-        for j in range(n_t):
-            # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
-            for k in range(n_gr):
-                # The initial half of the jump operators are relaxation operators
-                dJ_d_gr += 2*(exp_vals_traj[i][j] - ref_traj[i][j]) * d_On_d_gk[k][i][j]
-                # The second half of the jump operators are dephasing operators
-                dJ_d_gd += 2*(exp_vals_traj[i][j] - ref_traj[i][j]) * d_On_d_gk[n_gr + k][i][j]
+    for i in range(n_obs_site):
+        for j in range(L):
+            for k in range(nt):
+
+                loss += (exp_vals_traj[i,j,k] - ref_traj[i,j,k])**2
+
+                # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
+                dJ_d_gr += 2*(exp_vals_traj[i,j,k] - ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
+
+                dJ_d_gd += 2*(exp_vals_traj[i,j,k] - ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
 
 
 
