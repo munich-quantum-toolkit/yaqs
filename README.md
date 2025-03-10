@@ -3,9 +3,12 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![CI](https://img.shields.io/github/actions/workflow/status/cda-tum/mqt-yaqs/ci.yml?branch=main&style=flat-square&logo=github&label=ci)](https://github.com/cda-tum/mqt-yaqs/actions/workflows/ci.yml)
 [![CD](https://img.shields.io/github/actions/workflow/status/cda-tum/mqt-yaqs/cd.yml?style=flat-square&logo=github&label=cd)](https://github.com/cda-tum/mqt-yaqs/actions/workflows/cd.yml)
+[![Documentation](https://img.shields.io/readthedocs/mqt-yaqs?logo=readthedocs&style=flat-square)](https://mqt.readthedocs.io/projects/yaqs)
 [![codecov](https://img.shields.io/codecov/c/github/cda-tum/mqt-yaqs?style=flat-square&logo=codecov)](https://codecov.io/gh/cda-tum/mqt-yaqs)
 
-![Banner](images/banner.jpeg)
+<picture>
+<img src="https://raw.githubusercontent.com/cda-tum/mqt-yaqs/main/images/banner.jpeg" width="95%" alt="MQT YAQS Banner">
+</picture>
 
 # MQT YAQS: A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
 
