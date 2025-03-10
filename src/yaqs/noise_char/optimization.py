@@ -222,7 +222,7 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
         gr_history.append(sim_params.gamma_rel)
         gd_history.append(sim_params.gamma_deph)
         
-        print(f"!!!!!!! Iteration {iteration}: Loss = {loss}")
+        print(f"!!!!!!! Iteration = {iteration}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
 
@@ -289,6 +289,8 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
         for i in range(n_params):
             if params_new[i] < 0:
                 params_new[i] = 0
+            # if params_new[i] > 1:
+            #     params_new[i] = 1
 
         # Update simulation parameters
         sim_params.gamma_rel, sim_params.gamma_deph = params_new
@@ -321,6 +323,7 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
         params_old = params_new
         grad_old = grad_new
 
-        print(f"Iteration {iteration}: Loss = {loss}")
+        print(f"!!!!!!! Iteration = {iteration}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history

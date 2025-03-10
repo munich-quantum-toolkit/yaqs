@@ -434,6 +434,99 @@ class Rzz:
 #         self.tensor = _extend_gate(self.tensor, self.sites)
 
 
+
+
+class R_X:
+    name = 'r_x'
+    matrix = np.array([[ 0. +0.j, -0.5+0.j],
+                       [-0.5+0.j,  0. +0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
+
+class R_Y:
+    name = 'r_y'
+    matrix = np.array([[0.+0.j , 0.+0.5j],
+                       [0.-0.5j, 0.+0.j ]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
+
+
+class R_Z:
+    name = 'r_z'
+    matrix = np.array([[0.+0.j, 0.+0.j],
+                       [0.+0.j, 2.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
+
+class D_X:
+    name = 'd_x'
+    matrix = np.array([[ 0.+0.j, -2.+0.j],
+                       [-2.+0.j,  0.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
+
+
+class D_Y:
+    name = 'd_y'
+    matrix = np.array([[0.+0.j, 0.+2.j],
+                       [0.-2.j, 0.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
+
+class D_Z:
+    name = 'd_z'
+    matrix = np.array([[0.+0.j, 0.+0.j],
+                       [0.+0.j, 0.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, site0: int):
+        self.sites = [site0]
+
+
 class GateLibrary:
     x = X
     y = Y
@@ -455,3 +548,9 @@ class GateLibrary:
     cp = CPhase
     # u2 = U2
     p = Phase
+    rel_x = R_X
+    rel_y = R_Y
+    rel_z = R_Z
+    deph_x = D_X
+    deph_y = D_Y
+    deph_z = D_Z

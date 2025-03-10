@@ -162,7 +162,7 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 
 
-def tjm(sim_params_class: SimulationParameters, N=1000):
+def tjm_traj(sim_params_class: SimulationParameters):
 
     T = sim_params_class.T
     dt = sim_params_class.dt
@@ -171,15 +171,18 @@ def tjm(sim_params_class: SimulationParameters, N=1000):
     g = sim_params_class.g
     gamma_rel = sim_params_class.gamma_rel
     gamma_deph = sim_params_class.gamma_deph
+    N=sim_params_class.N
+
 
 
     t = np.arange(0, T + dt, dt) 
+    n_t = len(t)
 
 
     # Define the system Hamiltonian
-    d = 2
     H_0 = MPO()
-    H_0.init_Ising(L, d, J, g)
+
+    H_0.init_Ising(L, J, g)
     # Define the initial state
     state = MPS(L, state='zeros')
 
@@ -193,19 +196,60 @@ def tjm(sim_params_class: SimulationParameters, N=1000):
     threshold = 1e-6
     max_bond_dim = 4
     order = 2
-    measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
+    obs_list = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
 
-    sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
+
+
+    jump_site_list = [ 'rel'  ,  'deph']
+
+    obs_site_list = ['x', 'y', 'z']
+
+
+    A_kn_site_list = []
+
+
+    n_jump_site = len(jump_site_list)
+    n_obs_site = len(obs_site_list)
+
+
+    for lk in jump_site_list:
+        for on in obs_site_list:
+            for k in range(L):
+                A_kn_site_list.append(  Observable( lk+'_'+on, k) )
+
+
+
+    new_obs_list = obs_list + A_kn_site_list
+
+
+
+
+    sim_params = PhysicsSimParams(new_obs_list, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
     Simulator.run(state, H_0, sim_params, noise_model)
 
-    tjm_exp_vals = []
+    exp_vals = []
     for observable in sim_params.observables:
-        tjm_exp_vals.append(observable.results)
-        # print(f"Observable at site {observable.site}: {observable.results}")
-    # print(tjm_exp_vals)
+        exp_vals.append(observable.results)
 
 
-    return t, tjm_exp_vals
+
+
+    # Separate original and new expectation values from result_lindblad.
+    n_obs = len(obs_list)  # number of measurement operators (should be L * n_types)
+    original_exp_vals = exp_vals[:n_obs]
+    new_exp_vals = exp_vals[n_obs:]  # these correspond to the A_kn operators
+
+
+
+    # Compute the integral of the new expectation values to obtain the derivatives
+    d_On_d_gk = [ trapezoidal(new_exp_vals[i],t)  for i in range(len(A_kn_site_list)) ]
+
+    d_On_d_gk = np.array(d_On_d_gk).reshape(n_jump_site, n_obs_site, L, n_t)
+    original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, L, n_t)
+
+
+
+    return t, original_exp_vals, d_On_d_gk
 
 
 
