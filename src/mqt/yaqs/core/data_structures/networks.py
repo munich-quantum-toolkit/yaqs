@@ -515,13 +515,11 @@ class MPS:
                     return [i - 1, i]
         return [-1]
 
-    
     def convert_to_vector(self) -> np.ndarray:
-        """
-        Converts the MPS to a full state vector representation.
+        r"""Converts the MPS to a full state vector representation.
 
         Returns:
-                A one-dimensional NumPy array of length \(\prod_{\ell=1}^L d_\ell\) 
+                A one-dimensional NumPy array of length \(\prod_{\ell=1}^L d_\ell\)
                 representing the state vector.
         """
         # Start with the first tensor.
@@ -541,10 +539,7 @@ class MPS:
         # At the end, the final bond dimension should be 1.
         vec = np.squeeze(vec, axis=-1)
         # Flatten the resulting multi-index into a one-dimensional state vector.
-        vec = vec.flatten()
-        return vec
-
-
+        return vec.flatten()
 
 
 class MPO:
