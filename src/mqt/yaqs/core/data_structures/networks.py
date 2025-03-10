@@ -515,6 +515,37 @@ class MPS:
                     return [i - 1, i]
         return [-1]
 
+    
+    def convert_to_vector(self) -> np.ndarray:
+        """
+        Converts the MPS to a full state vector representation.
+
+        Returns:
+                A one-dimensional NumPy array of length \(\prod_{\ell=1}^L d_\ell\) 
+                representing the state vector.
+        """
+        # Start with the first tensor.
+        # Assume each tensor has shape (d, chi_left, chi_right) with chi_left=1 for the first tensor.
+        vec = self.tensors[0]  # shape: (d_1, 1, chi_1)
+
+        # Contract sequentially with the remaining tensors.
+        for i in range(1, self.length):
+            # Contract the last bond of vec with the middle index (left bond) of the next tensor.
+            vec = np.tensordot(vec, self.tensors[i], axes=([-1], [1]))
+            # After tensordot, if vec had shape (..., chi_i) and the new tensor has shape (d_{i+1}, chi_i, chi_{i+1}),
+            # then vec now has shape (..., d_{i+1}, chi_{i+1}).
+            # Reshape to merge all physical indices into one index.
+            new_shape = (-1, vec.shape[-1])
+            vec = np.reshape(vec, new_shape)
+
+        # At the end, the final bond dimension should be 1.
+        vec = np.squeeze(vec, axis=-1)
+        # Flatten the resulting multi-index into a one-dimensional state vector.
+        vec = vec.flatten()
+        return vec
+
+
+
 
 class MPO:
     """Class representing a Matrix Product Operator (MPO) for quantum many-body systems.
