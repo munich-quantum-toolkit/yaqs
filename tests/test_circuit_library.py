@@ -1,7 +1,15 @@
 import pytest
-from qiskit.circuit import QuantumCircuit
 
-from yaqs.core.libraries.circuit_library import create_Ising_circuit, create_Heisenberg_circuit
+import numpy as np
+import scipy as sp
+
+from qiskit.circuit import QuantumCircuit
+from qiskit_nature.second_q.hamiltonians import FermiHubbardModel
+from qiskit_nature.second_q.hamiltonians.lattices import SquareLattice, BoundaryCondition
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+from qiskit.quantum_info import Operator
+
+from yaqs.core.libraries.circuit_library import create_Ising_circuit, create_Heisenberg_circuit, create_2D_Fermi_Hubbard_circuit
 
 
 def test_create_Ising_circuit_valid_even():
@@ -101,3 +109,36 @@ def test_create_Heisenberg_circuit_invalid_model():
     timesteps = 1
     with pytest.raises(AssertionError):
         create_Heisenberg_circuit(model, dt, timesteps)
+
+def test_create_2D_Fermi_Hubbard_circuit_equal_qiskit():
+    # Define the FH model parameters
+    t = -1.0        # kinetic hopping
+    v = 0.5         # chemical potential
+    u = 2.0         # onsite interaction
+    Lx, Ly = 2, 2   # lattice dimensions
+    timesteps = 100
+    dt = 0.1
+    num_trotter_steps = 10
+
+    # yaqs implementation
+    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': v, 'u': u, 't': t, 'num_trotter_steps': num_trotter_steps}
+    circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=timesteps)
+    U_yaqs = Operator(circuit).to_matrix()
+
+    # Qiskit implementation
+    square_lattice = SquareLattice(rows=Lx, cols=Ly, boundary_condition=BoundaryCondition.OPEN)
+    fh_hamiltonian = FermiHubbardModel(
+        square_lattice.uniform_parameters(
+            uniform_interaction=t,
+            uniform_onsite_potential=v,
+        ),
+        onsite_interaction=u,
+    )
+    mapper = JordanWignerMapper()
+    qubit_jw_op = mapper.map(fh_hamiltonian.second_q_op())
+    H_qiskit = qubit_jw_op.to_matrix()
+    U_qiskit = sp.linalg.expm(-1j*dt*timesteps*H_qiskit)
+
+    # Calculate error
+    error = np.linalg.norm(U_yaqs - U_qiskit, 2)
+    assert error <= 10e-3
