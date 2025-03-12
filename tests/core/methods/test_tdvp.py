@@ -261,7 +261,7 @@ def test_two_site_tdvp() -> None:
         threshold=1e-6,
         order=1,
     )
-    two_site_tdvp(state, H, sim_params, numiter_lanczos=5)
+    two_site_tdvp(state, H, sim_params, numiter_lanczos=25)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
