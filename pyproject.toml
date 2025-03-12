@@ -1,20 +1,184 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
-name = "yaqs"
-version = "0.1.0"
-description = "Quantum simulation library designed primarily for simulation of open quantum systems, noisy quantum circuits, and noisy quantum hardware"
+name = "mqt-yaqs"
+description = "A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware"
+license = "MIT"
 authors = [
   { name="Aaron Sander", email = "aaron.sander@tum.de" },
 ]
-dependencies = [
-  "numpy",
-  "scipy",
-  "qiskit",
-  "opt_einsum",
-  "tqdm"
+maintainers = [
+  { name="Lukas Burgholzer", email = "burgholzer@me.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+    "Typing :: Typed",
+]
+keywords = ["MQT", "quantum-computing", "quantum-simulation", "tensor-networks"]
+
+dependencies = [
+    "numpy>=2.1; python_version >= '3.13'",
+    "numpy>=1.26; python_version >= '3.12'",
+    "numpy>=1.24; python_version >= '3.11'",
+    "numpy>=1.23.0",
+    "scipy>=1.13.1",
+    "scipy>=1.14.1; python_version >= '3.13'",
+    "qiskit>=1.1.0",
+    "qiskit>=1.3.0; python_version >= '3.13'",
+    "opt-einsum>=3.4.0",
+    "tqdm>=4.67.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/cda-tum/mqt-yaqs"
+Documentation = "https://mqt.readthedocs.io/projects/yaqs"
+Issues = "https://github.com/cda-tum/mqt-yaqs/issues"
+Discussions = "https://github.com/cda-tum/mqt-yaqs/discussions"
+
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mqt"]
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/mqt/yaqs/_version.py"
+
+
+[tool.pytest.ini_options]
+minversion = "7.2"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = [
+    "error",
+    # Qiskit 1.3 deprecations
+    'ignore:.*``qiskit.dagcircuit.dagcircuit.DAGCircuit.*`` is deprecated as of qiskit 1.3.0.*:DeprecationWarning:',
+]
+log_cli_level = "info"
+testpaths = ["tests"]
+
+
+[tool.coverage]
+run.source = ["mqt.yaqs"]
+report.exclude_also = [
+    '\.\.\.',
+    'if TYPE_CHECKING:',
+    'raise AssertionError',
+    'raise NotImplementedError',
+    'def __dir__()',  # Ignore __dir__ method that exists mainly for better IDE support
+    '@overload'  # Overloads are only for static typing
+]
+
+
+[tool.mypy]
+files = ["src/mqt", "tests", "noxfile.py"]
+mypy_path = ["$MYPY_CONFIG_FILE_DIR/src"]
+python_version = "3.9"
+warn_unused_configs = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+strict = true
+disallow_untyped_defs = false
+explicit_package_bases = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["qiskit.*", "qiskit_aer.*", "opt_einsum.*"]
+ignore_missing_imports = true
+
+
+[tool.typos]
+default.extend-ignore-re = [
+    "(?Rm)^.*(#|//)\\s*spellchecker:disable-line$",  # ignore line
+    "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on" # ignore block
+]
+[tool.typos.default.extend-words]
+wille = "wille"
+aer = "aer"
+ket   = "ket"
+
+[tool.repo-review]
+ignore = ["GH200"]
+
+
+[tool.ruff]
+line-length = 120
+preview = true
+unsafe-fixes = true
+
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "C90",     # <...> too complex
+    "COM812",  # Conflicts with formatter
+    "ISC001",  # Conflicts with formatter
+    "PLR09",   # Too many <...>
+    "PLR2004", # Magic value used in comparison
+    "S101",    # Use of assert detected
+    "S404",    # `subprocess` module is possibly insecure
+    "TID252"   # Prefer absolute imports over relative imports from parent modules
+]
+isort.required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.Callable".msg = "Use collections.abc.Callable instead."
+"typing.Iterator".msg = "Use collections.abc.Iterator instead."
+"typing.Mapping".msg = "Use collections.abc.Mapping instead."
+"typing.Sequence".msg = "Use collections.abc.Sequence instead."
+"typing.Set".msg = "Use collections.abc.Set instead."
+
+[tool.ruff.lint.per-file-ignores]
+"tests" = ["T20", "INP001"]
+"docs/**" = ["T20", "INP001"]
+"noxfile.py" = ["T20", "TID251"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+
+[tool.uv]
+required-version = ">=0.5.20"
+
+[dependency-groups]
+docs = [
+    "furo>=2024.8.6",
+    "myst-nb>=1.2.0",
+    "sphinx-autoapi>=3.6.0",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.6.1",
+    "sphinxcontrib-bibtex>=2.6.3",
+    "sphinxcontrib-svg2pdfconverter>=1.3.0",
+    "sphinxext-opengraph>=0.9.1",
+    "qiskit[visualization]>=1.0.0",
+    "sphinx>=7.4.7",
+    "sphinx>=8.1.3; python_version >= '3.10'",
+    "sphinx>=8.2.3; python_version >= '3.11'",
+]
+test = [
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+]
+dev = [
+    {include-group = "docs"},
+    {include-group = "test"},
+]
