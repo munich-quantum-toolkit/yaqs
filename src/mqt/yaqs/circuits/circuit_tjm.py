@@ -256,6 +256,9 @@ def circuit_tjm(
     # StrongSimParams
     results = np.zeros((len(sim_params.observables), 1))
     temp_state = copy.deepcopy(state)
+    if sim_params.get_state:
+        sim_params.output_state = state
+
     last_site = 0
     for obs_index, observable in enumerate(sim_params.sorted_observables):
         if observable.site > last_site:

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
@@ -172,6 +173,24 @@ def test_strong_simulation() -> None:
         elif i == 4:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
+def test_strong_simulation_no_noise() -> None:
+    """Test the circuit-based simulation using StrongSimParams without noise to get a statevector.
+
+    This test constructs a 2-site Ising circuit and compares the output statevector with known values from qiskit.
+    """
+    num_qubits = 2
+    circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circ.measure_all()
+
+    state = MPS(length=num_qubits)
+    measurements = [Observable('x', num_qubits//2)]
+    sim_params = StrongSimParams(measurements, num_traj=1, max_bond_dim=16, threshold=1e-6, window_size=0, get_state=True)
+    simulator.run(state, circ, sim_params, noise_model=None)
+    sv = sim_params.output_state.convert_to_vector()
+
+    expected = [0.34870601+0.7690227j ,  0.03494528+0.34828721j, 0.03494528+0.34828721j, -0.19159629-0.07244828j]
+    fidelity = np.abs(np.vdot(sv, expected))**2
+    np.testing.assert_allclose(1, fidelity)
 
 def test_strong_simulation_parallel_off() -> None:
     """Test the circuit-based simulation branch using StrongSimParams, parallelization off.

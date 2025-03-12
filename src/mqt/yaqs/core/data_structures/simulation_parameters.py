@@ -25,6 +25,8 @@ from ..libraries.observables_library import ObservablesLibrary
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from mqt.yaqs.core.data_structures.networks import MPS
+
 
 class Observable:
     """Observable class.
@@ -276,6 +278,8 @@ class StrongSimParams:
     -----------
     dt : int
         A placeholder property for code compatibility.
+    output_state: MPS
+        Output state following simulation if get_state is True
     observables : list[Observable]
         A list of observables to be tracked during the simulation.
     sorted_observables : list[Observable]
@@ -288,6 +292,8 @@ class StrongSimParams:
         The threshold value for the simulation. Default is 1e-6.
     window_size : int or None
         The size of the window for the simulation. Default is None.
+    get_state:
+        If True, output MPS is returned.
 
     Methods:
     --------
@@ -300,6 +306,7 @@ class StrongSimParams:
 
     # Properties set as placeholders for code compatibility
     dt = 1
+    output_state: MPS | None = None
 
     def __init__(
         self,
@@ -308,6 +315,8 @@ class StrongSimParams:
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
         window_size: int | None = None,
+        *,
+        get_state: bool = False,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -325,6 +334,8 @@ class StrongSimParams:
             Threshold for simulation accuracy, by default 1e-6.
         window_size : int or None, optional
             Window size for simulation, by default None.
+        get_state:
+            If True, output MPS is returned.
         """
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
@@ -332,6 +343,7 @@ class StrongSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
+        self.get_state = get_state
 
     def aggregate_trajectories(self) -> None:
         """Aggregate trajectories for result.

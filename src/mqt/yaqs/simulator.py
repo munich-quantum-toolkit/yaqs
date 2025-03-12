@@ -65,13 +65,13 @@ def _run_strong_sim(
                                       time step (dt), and sorted observables.
         noise_model (NoiseModel | None): The noise model applied during simulation.
         parallel (bool): Flag indicating whether to run trajectories in parallel.
-
-
     """
     backend = circuit_tjm
 
     if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
         sim_params.num_traj = 1
+    else:
+        assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
 
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
