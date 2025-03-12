@@ -621,6 +621,12 @@ class MPO:
         np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
         x = ObservablesLibrary["x"]
+        if length == 1:
+            tensor = np.reshape(x, (2, 2, 1, 1))
+            self.tensors = [tensor]
+            self.length = length
+            self.physical_dimension = physical_dimension
+            return
         z = ObservablesLibrary["z"]
 
         left_bound = np.array([identity, -J * z, -g * x])[np.newaxis, :]

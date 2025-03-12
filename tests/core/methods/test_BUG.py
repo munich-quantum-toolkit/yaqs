@@ -5,8 +5,9 @@ import pytest
 import numpy as np
 from scipy.linalg import expm
 
+from mqt.yaqs.core.methods.tdvp import update_left_environment
 from mqt.yaqs.core.data_structures.networks import (MPS,
-                                                MPO)
+                                                    MPO)
 from mqt.yaqs.core.methods.bug import (_right_qr,
                                    _left_qr,
                                    _prepare_canonical_site_tensors,
@@ -405,7 +406,7 @@ def test_truncate_no_truncation():
     truncate(mps,
              trunc_params)
     # Check that the MPS is unchanged
-    mps.check_if_valid_MPS()
+    mps.check_if_valid_mps()
     vector = mps.convert_to_vector()
     ref_vector = ref_mps.convert_to_vector()
     assert np.allclose(vector,
@@ -418,14 +419,13 @@ def test_truncate_truncation():
     shapes = [(2,1,4)] + [(2,4,4)]*3 + [(2,4,1)]
     mps = random_mps(shapes)
     mps.set_canonical_form(0)
-    ref_mps = deepcopy(mps)
     trunc_params = TruncationParams(threshold=0.1,
                                     max_dim=3)
     # Perform truncation
     truncate(mps,
              trunc_params)
     # Check that the MPS is truncated
-    mps.check_if_valid_MPS()
+    mps.check_if_valid_mps()
     for tensor in mps.tensors:
         assert tensor.shape[1] <= 3
         assert tensor.shape[2] <= 3
@@ -437,7 +437,7 @@ def test_BUG_single_site():
     mps = random_mps([(2,1,1)])
     ref_mps = deepcopy(mps)
     mpo = MPO()
-    mpo.init_Ising(1, 1, 0.5)
+    mpo.init_ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
     sim_params = TestSimParams()
     # Perform BUG
@@ -447,9 +447,10 @@ def test_BUG_single_site():
         sim_params.max_iter)
     # Check against exact evolution
     state_vec = ref_mps.convert_to_vector()
-    ham_matrix = ref_mpo.convert_to_matrix()
+    ham_matrix = ref_mpo.to_matrix()
     time_evo_op = expm(-1j*sim_params.dt*ham_matrix)
     new_state_vec = time_evo_op @ state_vec
+    print(mps.convert_to_vector() - new_state_vec)
     assert np.allclose(mps.convert_to_vector(),
                           new_state_vec)
 
@@ -460,7 +461,7 @@ def test_BUG_three_sites():
     mps = random_mps([(2,1,4), (2,4,4), (2,4,1)])
     ref_mps = deepcopy(mps)
     mpo = MPO()
-    mpo.init_Ising(3, 1, 0.5)
+    mpo.init_ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
     sim_params = TestSimParams()
     # Perform BUG
@@ -470,7 +471,7 @@ def test_BUG_three_sites():
         sim_params.max_iter)
     # Check against exact evolution
     state_vec = ref_mps.convert_to_vector()
-    ham_matrix = ref_mpo.convert_to_matrix()
+    ham_matrix = ref_mpo.to_matrix()
     time_evo_op = expm(-1j*sim_params.dt*ham_matrix)
     new_state_vec = time_evo_op @ state_vec
     assert np.allclose(mps.convert_to_vector(),

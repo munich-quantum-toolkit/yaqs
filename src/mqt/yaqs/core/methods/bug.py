@@ -15,7 +15,7 @@ from ..data_structures.simulation_parameters import (WeakSimParams,
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Tuple, List
-    from yaqs.core.data_structures.networks import MPO, MPS
+    from ..data_structures.networks import MPO, MPS
 
 def _right_qr(ps_tensor: np.ndarray
               ) -> Tuple[np.ndarray,np.ndarray]:
