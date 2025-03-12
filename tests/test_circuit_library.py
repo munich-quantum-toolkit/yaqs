@@ -9,7 +9,11 @@ from qiskit_nature.second_q.hamiltonians.lattices import SquareLattice, Boundary
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit.quantum_info import Operator
 
+from openfermion.hamiltonians import fermi_hubbard
+from openfermion.linalg import get_sparse_operator
+
 from yaqs.core.libraries.circuit_library import create_Ising_circuit, create_Heisenberg_circuit, create_2D_Fermi_Hubbard_circuit
+from yaqs.circuits.reference_implementation.FH_reference import create_Fermi_Hubbard_model_qutip
 
 
 def test_create_Ising_circuit_valid_even():
@@ -112,16 +116,16 @@ def test_create_Heisenberg_circuit_invalid_model():
 
 def test_create_2D_Fermi_Hubbard_circuit_equal_qiskit():
     # Define the FH model parameters
-    t = -1.0        # kinetic hopping
-    v = 0.5         # chemical potential
-    u = 2.0         # onsite interaction
+    t = 1.0         # kinetic hopping
+    mu = 0.5        # chemical potential
+    u = 4.0         # onsite interaction
     Lx, Ly = 2, 2   # lattice dimensions
-    timesteps = 100
+    timesteps = 1
     dt = 0.1
     num_trotter_steps = 10
 
     # yaqs implementation
-    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': v, 'u': u, 't': t, 'num_trotter_steps': num_trotter_steps}
+    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': mu, 'u': u, 't': t, 'num_trotter_steps': num_trotter_steps}
     circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=timesteps)
     U_yaqs = Operator(circuit).to_matrix()
 
@@ -130,7 +134,7 @@ def test_create_2D_Fermi_Hubbard_circuit_equal_qiskit():
     fh_hamiltonian = FermiHubbardModel(
         square_lattice.uniform_parameters(
             uniform_interaction=t,
-            uniform_onsite_potential=v,
+            uniform_onsite_potential=mu,
         ),
         onsite_interaction=u,
     )
@@ -140,5 +144,54 @@ def test_create_2D_Fermi_Hubbard_circuit_equal_qiskit():
     U_qiskit = sp.linalg.expm(-1j*dt*timesteps*H_qiskit)
 
     # Calculate error
-    error = np.linalg.norm(U_yaqs - U_qiskit, 2)
+    error = np.linalg.norm(U_qiskit - U_yaqs, 2)
+    print("|U_qiskit - U_yaqs| = " + str(error))
+    assert error <= 10e-3
+
+def test_create_2D_Fermi_Hubbard_circuit_equal_qutip():
+    # Define the FH model parameters
+    t = 1.0         # kinetic hopping
+    mu = 0.5        # chemical potential
+    u = 4.0         # onsite interaction
+    Lx, Ly = 2, 2   # lattice dimensions
+    timesteps = 1
+    dt = 0.1
+    num_trotter_steps = 10
+
+    # yaqs implementation
+    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': -mu, 'u': u, 't': -t, 'num_trotter_steps': num_trotter_steps}
+    circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=timesteps)
+    U_yaqs = Operator(circuit).to_matrix()
+
+    # QuTiP implementation
+    H_qutip = create_Fermi_Hubbard_model_qutip(Lx, Ly, u, -t, mu)
+    U_qutip = sp.linalg.expm(-1j*dt*timesteps*H_qutip.full())
+
+    # Calculate error
+    error = np.linalg.norm(U_qutip - U_yaqs, 2)
+    print("|U_qutip - U_yaqs| = " + str(error))
+    assert error <= 10e-3
+
+def test_create_2D_Fermi_Hubbard_circuit_equal_openfermion():
+    # Define the FH model parameters
+    t = 1.0         # kinetic hopping
+    mu = 0.5        # chemical potential
+    u = 4.0         # onsite interaction
+    Lx, Ly = 2, 2   # lattice dimensions
+    timesteps = 1
+    dt = 0.1
+    num_trotter_steps = 10
+
+    # yaqs implementation
+    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': -mu, 'u': u, 't': -t, 'num_trotter_steps': num_trotter_steps}
+    circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=timesteps)
+    U_yaqs = Operator(circuit).to_matrix()
+
+    # Openfermion implementation
+    H_openfermion = get_sparse_operator(fermi_hubbard(Lx, Ly, tunneling=t, coulomb=u, chemical_potential=mu, periodic=False)).todense()
+    U_openfermion = sp.linalg.expm(-1j*dt*timesteps*H_openfermion)
+
+    # Calculate error
+    error = np.linalg.norm(U_openfermion - U_yaqs, 2)
+    print("|U_openfermion - U_yaqs| = " + str(error))
     assert error <= 10e-3
