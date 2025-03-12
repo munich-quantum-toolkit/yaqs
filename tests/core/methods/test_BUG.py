@@ -47,7 +47,9 @@ def random_mps(shapes: list[tuple[int,int,int]]
     """
     tensors = [crandn(shape)
                for shape in shapes]
-    return MPS(len(shapes), tensors=tensors)
+    mps = MPS(len(shapes), tensors=tensors)
+    mps.normalize()
+    return mps
 
 def random_mpo(shapes: list[tuple[int,int,int,int]]
                ) -> MPO:
@@ -266,7 +268,7 @@ def test_build_basis_change_tensor():
 
 from dataclasses import dataclass
 @dataclass
-class TestSimParams(TruncationParams):
+class SimParamsTest(TruncationParams):
     dt: int = 0.01
     max_iter: int = 25
 
@@ -285,7 +287,7 @@ def test_local_update():
     right_block = np.eye(5).reshape(5,1,5)
     site = 2
     right_m_block = np.eye(5)
-    sim_params = TestSimParams()
+    sim_params = SimParamsTest()
     # Perform the local update
     result = _local_update(mps,
                            mpo,
@@ -439,7 +441,7 @@ def test_BUG_single_site():
     mpo = MPO()
     mpo.init_ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = TestSimParams()
+    sim_params = SimParamsTest()
     # Perform BUG
     BUG(mps,
         mpo,
@@ -463,7 +465,7 @@ def test_BUG_three_sites():
     mpo = MPO()
     mpo.init_ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = TestSimParams()
+    sim_params = SimParamsTest()
     # Perform BUG
     BUG(mps,
         mpo,
