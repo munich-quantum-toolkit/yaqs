@@ -1,5 +1,7 @@
 
+from __future__ import annotations
 from dataclasses import dataclass
+from copy import copy
 
 import numpy as np
 from numpy.linalg import qr, svd
@@ -79,8 +81,8 @@ def _prepare_canonical_site_tensors(state: MPS,
 
     """
     # This will merely do a shallow copy of the MPS.
-    canon_tensors = [tensor for tensor in state.tensors]
-    left_end_dimension = state.tensors[0].shape[0]
+    canon_tensors = copy(state.tensors)
+    left_end_dimension = state.tensors[0].shape[1]
     left_envs = [np.eye(left_end_dimension).reshape(left_end_dimension,1,left_end_dimension)]
     for i, local_tensor in enumerate(canon_tensors[1:],
                                      start=1):
@@ -90,13 +92,89 @@ def _prepare_canonical_site_tensors(state: MPS,
         local_tensor = np.tensordot(left_r,
                                     local_tensor,
                                     axes=(1,1))
+        # Leg order of local_tensor: (left, phys, right)
+        local_tensor = local_tensor.transpose(1,0,2)
+        # Correct leg order: (phys, left, right) and orth center
         canon_tensors[i] = local_tensor
         new_env = update_left_environment(left_q,
                                           left_q,
-                                          H[i-1],
+                                          H.tensors[i-1],
                                           left_envs[i-1])
         left_envs.append(new_env)
-    return canon_tensors
+    return canon_tensors, left_envs
+
+def _choose_stack_tensor(site: int,
+                         canon_center_tensors: List[np.ndarray],
+                         state: MPS
+                         ) -> np.ndarray:
+    """
+    Return the non-update tensor that should be used for the stacking step.
+
+    If the site is the last one and thus the leaf site, we need to choose the
+    MPS tensor, when the MPS was in left-canonical form. Otherwise, we choose
+    the MPS tensor, when the local site was the orthognality center.
+
+    Args:
+        site: The site to be updated.
+        canon_center_tensors: The canonical site tensors.
+        state: The MPS.
+    
+    Returns:
+        np.ndarray: The tensor to be stacked.
+
+    """
+    if site == state.num_sites() - 1:
+        # This is the only leaf case.
+        old_stack_tensor = state.tensors[site]
+    else:
+        old_stack_tensor = canon_center_tensors[site]
+    return old_stack_tensor
+
+def _find_new_q(old_stack_tensor: np.ndarray,
+                updated_tensor: np.ndarray
+                ) -> np.ndarray:
+    """
+    Finds the new Q tensor after the update with enlarged left virtual leg.
+
+    Args:
+        old_stack_tensor: The tensor to be stacked with the updated tensor.
+        updated_tensor: The tensor after the update.
+
+    Returns:
+        np.ndarray: The new Q tensor with MPS leg order (phys, left, right).
+    
+    """
+    stacked_tensor = np.concatenate((old_stack_tensor, updated_tensor),
+                                    axis=1)
+    new_q, _ = _left_qr(stacked_tensor)
+    return new_q
+
+def _build_basis_change_tensor(old_q: np.ndarray,
+                               new_q: np.ndarray,
+                               old_m: np.ndarray
+                               ) -> np.ndarray:
+    """
+    Build a new basis change tensor M.
+
+    Args:
+        old_q: The old tensor of the site, when the MPS was in left-canonical
+            form. The leg order is (phys, left, right).
+        new_q: The extended local base tensor after the update. Same leg order
+            as an MPS tensor. The leg order is (phys, left, right).
+        old_m: The basis change matrix of the site to the right. The leg order
+            is (old,new).
+    
+    Returns:
+        np.ndarray: The basis change tensor M. The leg order is (old,new).
+   
+    """
+    new_m = np.tensordot(old_q,
+                         old_m,
+                         axes=(2,0))
+    new_m = np.tensordot(new_m,
+                         new_q.conj(),
+                         axes=([0,2],[0,2]))
+    return new_m
 
 def _local_update(state: MPS,
                     H: MPO,
@@ -129,31 +207,26 @@ def _local_update(state: MPS,
     old_tensor = canon_center_tensors[site]
     updated_tensor = update_site(left_blocks[site],
                                  right_block,
-                                 H[site],
+                                 H.tensors[site],
                                  old_tensor,
                                  sim_params.dt,
                                  numiter_lanczos)
-    if site == state.length - 1:
-        old_stack_tensor = state[site]
-    else:
-        old_stack_tensor = old_tensor
-    stacked_tensor = np.stack((old_stack_tensor, updated_tensor),
-                              axis=1)
-    new_q, _ = _left_qr(stacked_tensor)
+    old_stack_tensor = _choose_stack_tensor(site,
+                                            canon_center_tensors,
+                                            state)
+    new_q = _find_new_q(old_stack_tensor,
+                        updated_tensor)
     old_q = state.tensors[site]
-    basis_change_m = np.tensordot(right_m_block,
-                                  old_q,
-                                  axes=(1,2))
-    basis_change_m = np.tensordot(new_q,
-                                  basis_change_m,
-                                  axes=([0,2],[1,0]))
+    basis_change_m = _build_basis_change_tensor(old_q,
+                                                new_q,
+                                                right_m_block)
     state.tensors[site] = new_q
     canon_center_tensors[site-1] = np.tensordot(canon_center_tensors[site-1],
                                                 basis_change_m,
                                                 axes=(2,0))
     new_right_block = update_right_environment(new_q,
                                                new_q,
-                                               H[site],
+                                               H.tensors[site],
                                                right_block
                                                )
     return basis_change_m, new_right_block
@@ -205,13 +278,12 @@ def _truncated_right_svd(ps_tensor: np.ndarray,
     cut_sum = 0
     thresh_sq = threshold**2
     cut_index = 1
-    for i, s_val in enumerate(s_vector.reverse()):
+    for i, s_val in enumerate(np.flip(s_vector)):
         cut_sum += s_val**2
         if cut_sum >= thresh_sq:
             cut_index = len(s_vector) - i
             break
-    if cut_index > max_dim:
-        cut_index = max_dim
+    cut_index = min(cut_index, max_dim)
     u_tensor = u_matrix[:,:,:cut_index]
     s_vector = s_vector[:cut_index]
     v_matrix = v_matrix[:cut_index,:]
@@ -219,7 +291,7 @@ def _truncated_right_svd(ps_tensor: np.ndarray,
 
 @dataclass
 class TruncationParams:
-    threshold: float = 1e-10
+    threshold: float = 1e-16
     max_dim: int = 1000
 
 def truncate(state: MPS,
@@ -232,6 +304,8 @@ def truncate(state: MPS,
         svd_params: The truncation parameters.
     
     """
+    if state.length == 1:
+        return
     for i, tensor in enumerate(state.tensors[:-1]):
         _, _, v_matrix = _truncated_right_svd(tensor,
                                               svd_params.threshold,
@@ -267,8 +341,6 @@ def BUG(state: MPS,
     num_sites = H.length
     if num_sites != state.length:
         raise ValueError("State and Hamiltonian must have the same number of sites")
-    if num_sites < 2:
-        raise ValueError("Hamiltonian is too short for a two-site update (BUG).")
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
@@ -277,9 +349,9 @@ def BUG(state: MPS,
                                                                       H)
     right_end_dimension = state.tensors[-1].shape[2]
     right_block = np.eye(right_end_dimension).reshape(right_end_dimension,1,right_end_dimension)
-    right_m_block = np.eye(right_end_dimension).reshape(right_end_dimension,right_end_dimension)
+    right_m_block = np.eye(right_end_dimension)
     # Sweep from right to left.
-    for site in range(num_sites-1,1,-1):
+    for site in range(num_sites-1,0,-1):
         right_m_block, right_block = _local_update(state,
                                                    H,
                                                    left_envs,
@@ -290,9 +362,13 @@ def BUG(state: MPS,
                                                    sim_params,
                                                    numiter_lanczos)
     # Update the first site.
+    print(left_envs[0].shape)
+    print(right_block.shape)
+    print(H.tensors[0].shape)
+    print(canon_center_tensors[0].shape)
     updated_tensor = update_site(left_envs[0],
                                     right_block,
-                                    H[0],
+                                    H.tensors[0],
                                     canon_center_tensors[0],
                                     sim_params.dt,
                                     numiter_lanczos)

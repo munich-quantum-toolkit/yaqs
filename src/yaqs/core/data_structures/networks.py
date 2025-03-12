@@ -29,6 +29,7 @@ class MPS:
         assert len(self.physical_dimensions) == length
 
         # Create d-level |0> state
+        # TODO: Use Enum instead of strings
         if not tensors:
             for i, d in enumerate(self.physical_dimensions):
                 vector = np.zeros(d, dtype=complex)
@@ -129,6 +130,41 @@ class MPS:
         # If normalizing, we just throw away the R
         if current_orthogonality_center+1 < self.length:
             self.tensors[current_orthogonality_center+1] = oe.contract('ij, ajc->aic', R, self.tensors[current_orthogonality_center+1])
+
+    def num_sites(self)-> int:
+        """
+        Returns the number of sites of this MPS.
+        """
+        return len(self.tensors)
+
+    def almost_equal(self, other: MPS) -> bool:
+        """
+        Checks if the tensors of this MPS are almost equal to the other MPS.
+        """
+        if self.num_sites() != other.num_sites():
+            return False
+        for i in range(self.num_sites()):
+            if not self.tensors[i].shape == other.tensors[i].shape:
+                return False
+            if not np.allclose(self.tensors[i], other.tensors[i]):
+                return False
+        return True
+
+    def as_vector(self) -> np.ndarray:
+        """
+        Contracts the MPS into a vector.
+        """
+        assert self.tensors[0].shape[1] == 1
+        assert self.tensors[-1].shape[2] == 1
+        big_tensor = np.eye(1)
+        dim = 1
+        for i in range(self.num_sites()):
+            dim *= self.tensors[i].shape[0]
+            big_tensor = np.tensordot(big_tensor,
+                                      self.tensors[i],
+                                      axes=(-1,1))
+        big_tensor = np.reshape(big_tensor, (dim,))
+        return big_tensor
 
     def shift_orthogonality_center_left(self, current_orthogonality_center):
         """ Left and right normalizes an MPS around a selected site
@@ -259,12 +295,18 @@ class MPS:
 
 # Convention (sigma, sigma', chi_l,  chi_l+1)
 class MPO:
+
     def init_Ising(self, length: int, J: float, g: float):
         physical_dimension = 2
-        zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
         X = getattr(GateLibrary, "x")().matrix
         Z = getattr(GateLibrary, "z")().matrix
+        if length == 1:
+            tensor = X.reshape((2, 2, 1, 1))
+            self.tensors = [tensor]
+            self.length = length
+            self.physical_dimension = physical_dimension
+            return
 
         # The MPO has a 3x3 block structure at each site:
         # W = [[ I,     -J Z,  -g X ],

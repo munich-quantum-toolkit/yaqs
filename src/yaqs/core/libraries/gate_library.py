@@ -433,7 +433,6 @@ class Rzz:
 #         self.interaction = np.abs(site0 - site2)+1
 #         self.tensor = _extend_gate(self.tensor, self.sites)
 
-
 class GateLibrary:
     x = X
     y = Y
