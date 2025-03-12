@@ -188,7 +188,8 @@ def test_strong_simulation_no_noise() -> None:
         measurements, num_traj=1, max_bond_dim=16, threshold=1e-6, window_size=0, get_state=True
     )
     simulator.run(state, circ, sim_params, noise_model=None)
-    assert sim_params.output_state is not None and isinstance(sim_params.output_state, MPS)
+    assert sim_params.output_state is not None
+    assert isinstance(sim_params.output_state, MPS)
     sv = sim_params.output_state.convert_to_vector()
 
     expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
