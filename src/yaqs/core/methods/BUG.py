@@ -362,10 +362,6 @@ def BUG(state: MPS,
                                                    sim_params,
                                                    numiter_lanczos)
     # Update the first site.
-    print(left_envs[0].shape)
-    print(right_block.shape)
-    print(H.tensors[0].shape)
-    print(canon_center_tensors[0].shape)
     updated_tensor = update_site(left_envs[0],
                                     right_block,
                                     H.tensors[0],
