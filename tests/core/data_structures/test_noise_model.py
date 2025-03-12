@@ -1,8 +1,34 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Tests for the NoiseModel class.
+
+This module provides unit tests for the NoiseModel class.
+It verifies that a NoiseModel is created correctly when valid processes and strengths are provided,
+raises an AssertionError when the lengths of the processes and strengths lists differ,
+and handles empty noise models appropriately.
+"""
+
+from __future__ import annotations
+
 import pytest
-from yaqs.core.data_structures.noise_model import NoiseModel
+
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
-def test_noise_model_creation():
+def test_noise_model_creation() -> None:
+    """Test that NoiseModel is created correctly with valid processes and strengths.
+
+    This test constructs a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
+    It verifies that:
+      - The processes and strengths are stored correctly.
+      - The number of jump operators equals the number of processes.
+      - The first jump operator has the expected shape (2x2), which is typical for the 'dephasing' process.
+    """
     processes = ["relaxation", "dephasing"]
     strengths = [0.1, 0.05]
 
@@ -11,21 +37,40 @@ def test_noise_model_creation():
     assert model.processes == processes
     assert model.strengths == strengths
     assert len(model.jump_operators) == len(processes)
+    assert model.jump_operators[0].shape == (2, 2), "First jump operator should be 2x2 for 'dephasing'."
 
-    assert model.jump_operators[0].shape == (2,2), "First jump operator should be 2x2 for 'dephasing'."
 
+def test_noise_model_assertion() -> None:
+    """Test that NoiseModel raises an AssertionError when provided with mismatched process and strength lists.
 
-def test_noise_model_assertion():
-    """If processes and strengths differ in length, an AssertionError should be raised."""
+    This test creates a scenario where the list of processes and the list of strengths have different lengths.
+    An AssertionError is expected in this case.
+    """
     processes = ["relaxation", "dephasing"]
     strengths = [0.1]
     with pytest.raises(AssertionError):
         _ = NoiseModel(processes, strengths)
 
 
-def test_noise_model_empty():
-    """Check that NoiseModel handles an empty process list without error."""
+def test_noise_model_empty() -> None:
+    """Test that NoiseModel handles an empty process list without error.
+
+    This test initializes a NoiseModel with empty lists for processes and strengths, and verifies that the resulting
+    model has empty processes, strengths, and jump_operators lists.
+    """
     model = NoiseModel([], [])
+    assert model.processes == []
+    assert model.strengths == []
+    assert model.jump_operators == []
+
+
+def test_noise_model_none() -> None:
+    """Test that NoiseModel handles a None input without error.
+
+    This test initializes a NoiseModel with empty lists for processes and strengths, and verifies that the resulting
+    model has empty processes, strengths, and jump_operators lists.
+    """
+    model = NoiseModel(None, None)
     assert model.processes == []
     assert model.strengths == []
     assert model.jump_operators == []

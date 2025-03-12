@@ -5,11 +5,9 @@ import pytest
 import numpy as np
 from scipy.linalg import expm
 
-from yaqs.core.data_structures.networks import (MPS,
+from mqt.yaqs.core.data_structures.networks import (MPS,
                                                 MPO)
-from yaqs.core.methods.TDVP import (update_left_environment)
-
-from yaqs.core.methods.BUG import (_right_qr,
+from mqt.yaqs.core.methods.bug import (_right_qr,
                                    _left_qr,
                                    _prepare_canonical_site_tensors,
                                    _choose_stack_tensor,
@@ -408,8 +406,8 @@ def test_truncate_no_truncation():
              trunc_params)
     # Check that the MPS is unchanged
     mps.check_if_valid_MPS()
-    vector = mps.as_vector()
-    ref_vector = ref_mps.as_vector()
+    vector = mps.convert_to_vector()
+    ref_vector = ref_mps.convert_to_vector()
     assert np.allclose(vector,
                        ref_vector)
 
@@ -448,11 +446,11 @@ def test_BUG_single_site():
         sim_params,
         sim_params.max_iter)
     # Check against exact evolution
-    state_vec = ref_mps.as_vector()
+    state_vec = ref_mps.convert_to_vector()
     ham_matrix = ref_mpo.convert_to_matrix()
     time_evo_op = expm(-1j*sim_params.dt*ham_matrix)
     new_state_vec = time_evo_op @ state_vec
-    assert np.allclose(mps.as_vector(),
+    assert np.allclose(mps.convert_to_vector(),
                           new_state_vec)
 
 def test_BUG_three_sites():
@@ -471,9 +469,9 @@ def test_BUG_three_sites():
         sim_params,
         sim_params.max_iter)
     # Check against exact evolution
-    state_vec = ref_mps.as_vector()
+    state_vec = ref_mps.convert_to_vector()
     ham_matrix = ref_mpo.convert_to_matrix()
     time_evo_op = expm(-1j*sim_params.dt*ham_matrix)
     new_state_vec = time_evo_op @ state_vec
-    assert np.allclose(mps.as_vector(),
+    assert np.allclose(mps.convert_to_vector(),
                           new_state_vec)
