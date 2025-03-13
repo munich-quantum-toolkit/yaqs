@@ -515,7 +515,7 @@ class MPS:
                     return [i - 1, i]
         return [-1]
 
-    def convert_to_vector(self) -> NDArray[np.complex128]:
+    def to_vec(self) -> NDArray[np.complex128]:
         r"""Converts the MPS to a full state vector representation.
 
         Returns:
@@ -524,6 +524,7 @@ class MPS:
         """
         # Start with the first tensor.
         # Assume each tensor has shape (d, chi_left, chi_right) with chi_left=1 for the first tensor.
+        self.flip_network()
         vec = self.tensors[0]  # shape: (d_1, 1, chi_1)
 
         # Contract sequentially with the remaining tensors.
@@ -535,7 +536,7 @@ class MPS:
             # Reshape to merge all physical indices into one index.
             new_shape = (-1, vec.shape[-1])
             vec = np.reshape(vec, new_shape)
-
+        self.flip_network()
         # At the end, the final bond dimension should be 1.
         vec = np.squeeze(vec, axis=-1)
         # Flatten the resulting multi-index into a one-dimensional state vector.
