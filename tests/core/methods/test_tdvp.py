@@ -60,8 +60,20 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
     The reconstructed tensor is compared to the original A.
     """
     A = rng.random(size=(4, 3, 5))
+    # Placeholder
+    measurements = [Observable("z", site) for site in range(1)]
+    sim_params = PhysicsSimParams(
+        measurements,
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+        num_traj=1,
+        max_bond_dim=100,
+        threshold=1e-8,
+        order=1,
+    )
     for distr in ["left", "right", "sqrt"]:
-        A0, A1 = split_mps_tensor(A, svd_distribution=distr, threshold=1e-8)
+        A0, A1 = split_mps_tensor(A, svd_distribution=distr, sim_params=sim_params)
         # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5), where r is the effective rank.
         assert A0.ndim == 3
         assert A1.ndim == 3
@@ -82,8 +94,20 @@ def test_split_mps_tensor_invalid_shape() -> None:
     This test creates a tensor A with shape (3, 3, 5) and expects the function to raise an error.
     """
     A = rng.random(size=(3, 3, 5))
+    # Placeholder
+    measurements = [Observable("z", site) for site in range(1)]
+    sim_params = PhysicsSimParams(
+        measurements,
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+        num_traj=1,
+        max_bond_dim=100,
+        threshold=1e-8,
+        order=1,
+    )
     with pytest.raises(ValueError, match=r"The first dimension of the tensor must be divisible by 2."):
-        split_mps_tensor(A, svd_distribution="left")
+        split_mps_tensor(A, svd_distribution="left", sim_params=sim_params)
 
 
 def test_merge_mps_tensors() -> None:
