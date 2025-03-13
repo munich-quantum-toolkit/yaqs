@@ -57,8 +57,7 @@ def split_mps_tensor(
     Args:
         tensor (NDArray[np.complex128]): Input MPS tensor of shape (d0*d1, D0, D2).
         svd_distribution (str): How to distribute singular values ("left", "right", or "sqrt").
-        max_bond : Maximum allowed bond dimension. Defaults to None
-        threshold (float, optional): Singular values below this threshold are discarded. Defaults to 0.
+        sim_params: Simulation parameters containing threshold and max bond dimension
 
     Returns:
         tuple[NDArray[np.complex128], NDArray[np.complex128]]:
