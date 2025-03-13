@@ -142,6 +142,25 @@ class BaseGate:
     tensor: NDArray[np.complex128]
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
 
+
+    def __init__(self, mat: NDArray[np.complex128]) -> None:
+
+
+        if mat.shape[0] != mat.shape[1]:
+            raise ValueError("Matrix must be square")
+
+        log=np.log2(mat.shape[0])
+
+        if log.is_integer() == False:
+            raise ValueError("Matrix must have a size that is a power of 2")
+            
+
+        self.matrix = mat
+        self.tensor = mat
+        self.interaction = int(log)
+
+
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -149,6 +168,102 @@ class BaseGate:
             *sites (int): Variable length argument list specifying site indices.
         """
         self.sites: list[int] = list(sites)
+
+
+
+    def __add__(self, other: BaseGate) -> BaseGate:
+        """Adds two gates together.
+
+        Args:
+            other (BaseGate): The gate to be added.
+
+        Returns:
+            BaseGate: The sum of the two gates.
+        """
+
+        if self.interaction != other.interaction:
+            raise ValueError("Cannot add gates with different interaction")
+        else:
+            return BaseGate(self.matrix + other.matrix)
+        
+
+
+    def __sub__(self, other: BaseGate) -> BaseGate:
+        """Subtracts one gate from another.
+
+        Args:
+            other (BaseGate): The gate to be subtracted.
+
+        Returns:
+            BaseGate: The difference between the two gates.
+        """
+        if self.interaction != other.interaction:
+            raise ValueError("Cannot subtract gates with different interaction")
+        else:
+            return BaseGate(self.matrix - other.matrix)
+        
+    
+    def __mul__(self, other) -> BaseGate:
+        """Multiplies two gates together.
+
+        Args:
+            other (BaseGate): The gate to be multiplied.
+
+        Returns:
+            BaseGate: The product of the two gates.
+        """
+
+        if isinstance(other, (int, float, complex)):
+            return BaseGate(self.matrix * other)
+
+        if isinstance(other, BaseGate):
+            if self.interaction != other.interaction:
+                raise ValueError("Cannot multiply gates with different interaction")
+            else:
+                return BaseGate(self.matrix @ other.matrix)
+
+
+    def __rmul__(self, other) -> BaseGate:
+        """Multiplies two gates together.
+
+        Args:
+            other (BaseGate): The gate to be multiplied.
+
+        Returns:
+            BaseGate: The product of the two gates.
+        """
+
+        return self.__mul__(other)
+        
+
+    def dag(self) -> BaseGate:
+        """Returns the conjugate transpose of the gate.
+
+        Returns:
+            BaseGate: The conjugate transpose of the gate.
+        """
+        return BaseGate(np.conj(self.matrix).T)
+    
+
+    def conj(self) -> BaseGate:
+        """Returns the conjugate of the gate.
+
+        Returns:
+            BaseGate: The conjugate of the gate.
+        """
+        return BaseGate(np.conj(self.matrix))
+    
+    def trans(self) -> BaseGate:
+        """Returns the transpose of the gate.
+
+        Returns:
+            BaseGate: The transpose of the gate.
+        """
+        return BaseGate(self.matrix.T)
+        
+    
+    
+
 
 
 class X(BaseGate):
@@ -170,6 +285,9 @@ class X(BaseGate):
     interaction = 1
 
     tensor = matrix
+
+    def __init__(self) -> None:
+        pass
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -200,6 +318,9 @@ class Y(BaseGate):
 
     tensor = matrix
 
+    def __init__(self) -> None:
+        pass
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -228,6 +349,9 @@ class Z(BaseGate):
     interaction = 1
 
     tensor = matrix
+
+    def __init__(self) -> None:
+        pass
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -258,6 +382,11 @@ class H(BaseGate):
 
     tensor = matrix
 
+
+    def __init__(self) -> None:
+        pass
+
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -265,6 +394,45 @@ class H(BaseGate):
             *sites (int): Variable length argument list specifying site indices.
         """
         self.sites = list(sites)
+
+
+
+
+
+
+class Destroy(BaseGate):
+    """Class representing the Hadamard (H) gate.
+
+    Attributes:
+        name (str): "h".
+        matrix (NDArray[np.complex128]): The 2x2 Hadamard matrix.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
+
+    name = "destroy"
+    matrix = np.array([[0,1], [0,0]])
+    interaction = 1
+
+    tensor = matrix
+
+
+    def __init__(self) -> None:
+        pass
+
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
 
 
 class Id(BaseGate):
@@ -286,6 +454,9 @@ class Id(BaseGate):
     interaction = 1
 
     tensor = matrix
+
+    def __init__(self) -> None:
+        pass
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -316,6 +487,9 @@ class SX(BaseGate):
 
     tensor = matrix
 
+    def __init__(self) -> None:
+        pass
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -345,6 +519,9 @@ class Rx(BaseGate):
 
     name = "rx"
     interaction = 1
+
+    def __init__(self) -> None:
+        pass
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -402,6 +579,9 @@ class Ry(BaseGate):
     name = "ry"
     interaction = 1
 
+    def __init__(self) -> None:
+        pass
+
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
 
@@ -457,6 +637,10 @@ class Rz(BaseGate):
 
     name = "rz"
     interaction = 1
+
+
+    def __init__(self) -> None:
+        pass
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -514,6 +698,9 @@ class Phase(BaseGate):
     name = "p"
     interaction = 1
 
+    def __init__(self) -> None:
+        pass
+
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
 
@@ -567,6 +754,9 @@ class U3(BaseGate):
 
     name = "u"
     interaction = 1
+
+    def __init__(self) -> None:
+        pass
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -625,6 +815,9 @@ class CX(BaseGate):
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
     interaction = 2
 
+    def __init__(self) -> None:
+        pass
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -659,6 +852,9 @@ class CZ(BaseGate):
     name = "cz"
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]])
     interaction = 2
+
+    def __init__(self) -> None:
+        pass
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -695,6 +891,9 @@ class CPhase(BaseGate):
 
     name = "cp"
     interaction = 2
+
+    def __init__(self) -> None:
+        pass
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -756,6 +955,10 @@ class SWAP(BaseGate):
     matrix = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
     interaction = 2
 
+    def __init__(self) -> None:
+        pass
+
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -787,6 +990,9 @@ class Rxx(BaseGate):
 
     name = "rxx"
     interaction = 2
+
+    def __init__(self) -> None:
+        pass
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -849,6 +1055,9 @@ class Ryy(BaseGate):
     name = "ryy"
     interaction = 2
 
+    def __init__(self) -> None:
+        pass
+
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
 
@@ -909,6 +1118,9 @@ class Rzz(BaseGate):
 
     name = "rzz"
     interaction = 2
+
+    def __init__(self) -> None:
+        pass
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -991,3 +1203,6 @@ class GateLibrary:
     rzz = Rzz
     cp = CPhase
     p = Phase
+
+
+
