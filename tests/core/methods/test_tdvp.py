@@ -295,9 +295,9 @@ def test_two_site_tdvp() -> None:
         f"MPS should be site-canonical at site 0 after two-site TDVP, but got canonical site: {canonical_site}"
     )
     # Check against exact evolution
-    state_vec = ref_mps.convert_to_vector()
+    state_vec = ref_mps.to_vec()
     H_mat = H.to_matrix()
     U = expm(-1j * sim_params.dt * H_mat)
     state_vec = U @ state_vec
-    found = state.convert_to_vector()
+    found = state.to_vec()
     assert np.allclose(state_vec, found)

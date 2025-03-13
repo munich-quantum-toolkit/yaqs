@@ -461,8 +461,8 @@ def test_truncate_no_truncation() -> None:
              trunc_params)
     # Check that the MPS is unchanged
     mps.check_if_valid_mps()
-    vector = mps.convert_to_vector()
-    ref_vector = ref_mps.convert_to_vector()
+    vector = mps.to_vec()
+    ref_vector = ref_mps.to_vec()
     assert np.allclose(vector,
                        ref_vector)
 
@@ -503,11 +503,11 @@ def test_bug_single_site() -> None:
         sim_params,
         numiter_lanczos=25)
     # Check against exact evolution
-    state_vec = ref_mps.convert_to_vector()
+    state_vec = ref_mps.to_vec()
     ham_matrix = ref_mpo.to_matrix()
     time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
     new_state_vec = time_evo_op @ state_vec
-    assert np.allclose(mps.convert_to_vector(),
+    assert np.allclose(mps.to_vec(),
                           new_state_vec)
 
 
@@ -528,9 +528,9 @@ def test_bug_three_sites() -> None:
         sim_params,
         numiter_lanczos=25)
     # Check against exact evolution
-    state_vec = ref_mps.convert_to_vector()
+    state_vec = ref_mps.to_vec()
     ham_matrix = ref_mpo.to_matrix()
     time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
     new_state_vec = time_evo_op @ state_vec
-    assert np.allclose(mps.convert_to_vector(),
+    assert np.allclose(mps.to_vec(),
                           new_state_vec)
