@@ -36,7 +36,8 @@ if TYPE_CHECKING:
 
 
 def split_mps_tensor(
-    tensor: NDArray[np.complex128], svd_distribution: str, threshold: float = 0
+    tensor: NDArray[np.complex128], svd_distribution: str,
+    sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
 
@@ -56,6 +57,7 @@ def split_mps_tensor(
     Args:
         tensor (NDArray[np.complex128]): Input MPS tensor of shape (d0*d1, D0, D2).
         svd_distribution (str): How to distribute singular values ("left", "right", or "sqrt").
+        max_bond : Maximum allowed bond dimension. Defaults to None
         threshold (float, optional): Singular values below this threshold are discarded. Defaults to 0.
 
     Returns:
@@ -85,8 +87,10 @@ def split_mps_tensor(
     u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
 
     # Truncate singular values below the threshold
-    sigma = sigma[sigma > threshold]
-    num_sv = len(sigma)
+    num_sv = np.sum(sigma > sim_params.threshold)
+    if sim_params.max_bond_dim is not None:
+        num_sv = min(num_sv, sim_params.max_bond_dim)
+    sigma = sigma[0:num_sv]
 
     # Truncate U and Vh accordingly
     u_mat = u_mat[:, :num_sv]
@@ -531,7 +535,7 @@ def two_site_tdvp(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
-            merged_tensor, "right", threshold=sim_params.threshold
+            merged_tensor, "right", sim_params
         )
         left_blocks[i + 1] = update_left_environment(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
@@ -558,11 +562,11 @@ def two_site_tdvp(
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
-            merged_tensor, "right", threshold=sim_params.threshold
+            merged_tensor, "right", sim_params
         )
         return
 
-    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", threshold=sim_params.threshold)
+    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params=sim_params)
     right_blocks[i] = update_right_environment(
         state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
     )
@@ -582,7 +586,7 @@ def two_site_tdvp(
         merged_tensor = update_site(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", threshold=sim_params.threshold)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params)
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
