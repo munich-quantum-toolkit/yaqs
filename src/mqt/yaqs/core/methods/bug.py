@@ -246,7 +246,8 @@ def _right_svd(
 
 
 def _truncated_right_svd(
-    ps_tensor: NDArray[np.complex128], sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
+    ps_tensor: NDArray[np.complex128],
+    sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
     """Truncated right SVD.
 

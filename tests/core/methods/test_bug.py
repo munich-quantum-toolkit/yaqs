@@ -386,7 +386,7 @@ def test_truncated_right_svd_maxbd() -> None:
     assert u_tensor.shape[2] == sim_params.max_bond_dim
     assert sim_params.max_bond_dim == v_matrix.shape[0]
     assert sim_params.max_bond_dim == s_vector.shape[0]
-    assert np.allclose(s_vector, s_vector_i[:sim_params.max_bond_dim])
+    assert np.allclose(s_vector, s_vector_i[: sim_params.max_bond_dim])
 
 
 def test_truncate_no_truncation() -> None:
