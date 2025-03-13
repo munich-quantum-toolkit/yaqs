@@ -27,11 +27,12 @@ These tests confirm the correctness and stability of TDVP-based simulations with
 # ruff: noqa: N806
 
 from __future__ import annotations
+
 from copy import deepcopy
 
 import numpy as np
-from scipy.linalg import expm
 import pytest
+from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams

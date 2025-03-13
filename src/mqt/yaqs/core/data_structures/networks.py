@@ -214,20 +214,24 @@ class MPS:
         self.tensors = new_tensors
         self.flipped = not self.flipped
 
-    def num_sites(self)-> int:
-        """
-        Returns the number of sites of this MPS.
-        """
+    def num_sites(self) -> int:
+        """Returns the number of sites of this MPS."""
         return len(self.tensors)
 
     def almost_equal(self, other: MPS) -> bool:
-        """
-        Checks if the tensors of this MPS are almost equal to the other MPS.
+        """Checks if the tensors of this MPS are almost equal to the other MPS.
+
+        Args:
+            other (MPS): The other MPS to compare with.
+
+        Returns:
+            bool: True if all tensors of this tensor are almost equal to the
+                other MPS, False otherwise.
         """
         if self.num_sites() != other.num_sites():
             return False
         for i in range(self.num_sites()):
-            if not self.tensors[i].shape == other.tensors[i].shape:
+            if self.tensors[i].shape != other.tensors[i].shape:
                 return False
             if not np.allclose(self.tensors[i], other.tensors[i]):
                 return False
@@ -622,7 +626,7 @@ class MPO:
         identity = np.eye(physical_dimension, dtype=complex)
         x = ObservablesLibrary["x"]
         if length == 1:
-            tensor = np.reshape(x, (2, 2, 1, 1))
+            tensor: NDArray[np.complex128] = np.reshape(x, (2, 2, 1, 1))
             self.tensors = [tensor]
             self.length = length
             self.physical_dimension = physical_dimension
@@ -790,7 +794,7 @@ class MPO:
         Returns:
             MPS: An MPS object containing the reshaped tensors.
         """
-        converted_tensors = [
+        converted_tensors: list[NDArray[np.complex128]] = [
             np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
             for tensor in self.tensors
         ]
