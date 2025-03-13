@@ -87,7 +87,7 @@ def split_mps_tensor(
     u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
 
     # Truncate singular values below the threshold
-    num_sv = np.sum(sigma > sim_params.threshold)
+    num_sv: int = np.sum(sigma > sim_params.threshold)
     if sim_params.max_bond_dim is not None:
         num_sv = min(num_sv, sim_params.max_bond_dim)
     sigma = sigma[0:num_sv]
