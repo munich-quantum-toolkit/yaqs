@@ -28,8 +28,11 @@ These tests confirm the correctness and stability of TDVP-based simulations with
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import numpy as np
 import pytest
+from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
@@ -271,6 +274,7 @@ def test_two_site_tdvp() -> None:
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
+    ref_mps = deepcopy(state)
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
@@ -282,7 +286,7 @@ def test_two_site_tdvp() -> None:
         threshold=1e-6,
         order=1,
     )
-    two_site_tdvp(state, H, sim_params, numiter_lanczos=5)
+    two_site_tdvp(state, H, sim_params, numiter_lanczos=25)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -290,3 +294,10 @@ def test_two_site_tdvp() -> None:
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after two-site TDVP, but got canonical site: {canonical_site}"
     )
+    # Check against exact evolution
+    state_vec = ref_mps.to_vec()
+    H_mat = H.to_matrix()
+    U = expm(-1j * sim_params.dt * H_mat)
+    state_vec = U @ state_vec
+    found = state.to_vec()
+    assert np.allclose(state_vec, found)
