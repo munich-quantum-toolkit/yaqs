@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import qutip as qt
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from yaqs.Noise_characterization.optimization import *
-from yaqs.Noise_characterization.propagation import *
-from yaqs import Simulator
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.Noise_characterization.optimization import *
+from mqt.yaqs.Noise_characterization.propagation import *
+from mqt.yaqs import Simulator
 from dataclasses import dataclass
 
 import time

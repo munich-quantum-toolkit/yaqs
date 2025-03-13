@@ -4,21 +4,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import qutip as qt
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from yaqs.core.methods.operations import local_expval
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.methods.operations import local_expval
 
-from yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 
 
 import copy
 
 
-from yaqs.core.methods.dissipation import apply_dissipation
-from yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
-from yaqs.core.methods.stochastic_process import stochastic_process
+from mqt.yaqs.core.methods.dissipation import apply_dissipation
+from mqt.yaqs.core.methods.dynamic_TDVP import dynamic_TDVP
+from mqt.yaqs.core.methods.stochastic_process import stochastic_process
 
 
 
@@ -28,10 +28,10 @@ import multiprocessing
 from qiskit.circuit import QuantumCircuit
 from tqdm import tqdm
 
-from yaqs.noise_char.optimization import *
-from yaqs.noise_char.propagation import *
+from mqt.yaqs.noise_char.optimization import *
+from mqt.yaqs.noise_char.propagation import *
 
-from yaqs.core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
 
     

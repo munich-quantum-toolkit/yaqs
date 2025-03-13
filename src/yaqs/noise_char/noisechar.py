@@ -6,12 +6,12 @@ import time
 import sys
 import os
 
-from yaqs.core.data_structures.networks import MPO
-from yaqs.core.data_structures.networks import MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from yaqs.physics import PhysicsTJM
-from yaqs import Simulator
+from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.physics import PhysicsTJM
+from mqt.yaqs import Simulator
 
 
 

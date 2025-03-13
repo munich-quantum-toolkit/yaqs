@@ -949,6 +949,139 @@ class Rzz(BaseGate):
         self.sites = list(sites)
 
 
+
+
+
+
+
+class R_X(BaseGate):
+    name = 'rel_x'
+    matrix = np.array([[ 0. +0.j, -0.5+0.j],
+                       [-0.5+0.j,  0. +0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
+
+class R_Y(BaseGate):
+    name = 'rel_y'
+    matrix = np.array([[0.+0.j , 0.+0.5j],
+                       [0.-0.5j, 0.+0.j ]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
+
+
+class R_Z(BaseGate):
+    name = 'rel_z'
+    matrix = np.array([[0.+0.j, 0.+0.j],
+                       [0.+0.j, 2.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
+
+class D_X(BaseGate):
+    name = 'deph_x'
+    matrix = np.array([[ 0.+0.j, -2.+0.j],
+                       [-2.+0.j,  0.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
+
+
+class D_Y(BaseGate):
+    name = 'deph_y'
+    matrix = np.array([[0.+0.j, 0.+2.j],
+                       [0.-2.j, 0.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
+
+class D_Z(BaseGate):
+    name = 'deph_z'
+    matrix = np.array([[0.+0.j, 0.+0.j],
+                       [0.+0.j, 0.+0.j]])
+    interaction = 1
+
+    tensor = matrix
+    # Generator: (π/2) * X
+    generator = [(np.pi / 2) * matrix]
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
+
+
+
+
+
+
+
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 
@@ -991,3 +1124,11 @@ class GateLibrary:
     rzz = Rzz
     cp = CPhase
     p = Phase
+
+
+    rel_x = R_X
+    rel_y = R_Y
+    rel_z = R_Z
+    deph_x = D_X
+    deph_y = D_Y
+    deph_z = D_Z

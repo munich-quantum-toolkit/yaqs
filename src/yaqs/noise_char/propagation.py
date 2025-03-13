@@ -3,10 +3,10 @@ import qutip as qt
 
 import scipy as sp
 
-from yaqs.core.data_structures.networks import MPO, MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from yaqs import Simulator
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs import simulator
 from dataclasses import dataclass
 
 from yaqs.noise_char.optimization import trapezoidal
@@ -182,7 +182,7 @@ def tjm_traj(sim_params_class: SimulationParameters):
     # Define the system Hamiltonian
     H_0 = MPO()
 
-    H_0.init_Ising(L, J, g)
+    H_0.init_ising(L, J, g)
     # Define the initial state
     state = MPS(L, state='zeros')
 
@@ -224,8 +224,8 @@ def tjm_traj(sim_params_class: SimulationParameters):
 
 
 
-    sim_params = PhysicsSimParams(new_obs_list, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
-    Simulator.run(state, H_0, sim_params, noise_model)
+    sim_params = PhysicsSimParams(new_obs_list, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
+    simulator.run(state, H_0, sim_params, noise_model)
 
     exp_vals = []
     for observable in sim_params.observables:
