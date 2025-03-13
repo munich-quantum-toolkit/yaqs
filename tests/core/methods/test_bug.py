@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Quantum Computing, TUM
+# Copyright (c) 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -6,6 +6,7 @@
 # Licensed under the MIT License
 
 """Tests for the Basis-Update Galerkin (BUG) method."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -35,9 +36,9 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def crandn(size: int | tuple[int, ...],
-           *args: int,
-           seed: np.random.Generator | int | None = None) -> NDArray[np.complex128]:
+def crandn(
+    size: int | tuple[int, ...], *args: int, seed: np.random.Generator | int | None = None
+) -> NDArray[np.complex128]:
     """Draw random samples from the standard complex normal distribution.
 
     Args:
@@ -54,12 +55,10 @@ def crandn(size: int | tuple[int, ...],
         size = (size,)
     rng = np.random.default_rng(seed)
     # 1/sqrt(2) is a normalization factor
-    return (rng.standard_normal(size)
-       + 1j * rng.standard_normal(size)) / np.sqrt(2)
+    return (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2)
 
 
-def random_mps(shapes: list[tuple[int, int, int]]
-               ) -> MPS:
+def random_mps(shapes: list[tuple[int, int, int]]) -> MPS:
     """Create a random MPS with the given shapes.
 
     Args:
@@ -69,15 +68,13 @@ def random_mps(shapes: list[tuple[int, int, int]]
     Returns:
         MPS: The random MPS.
     """
-    tensors = [crandn(shape)
-               for shape in shapes]
+    tensors = [crandn(shape) for shape in shapes]
     mps = MPS(len(shapes), tensors=tensors)
     mps.normalize()
     return mps
 
 
-def random_mpo(shapes: list[tuple[int, int, int, int]]
-               ) -> MPO:
+def random_mpo(shapes: list[tuple[int, int, int, int]]) -> MPO:
     """Create a random MPO with the given shapes.
 
     Args:
@@ -87,8 +84,7 @@ def random_mpo(shapes: list[tuple[int, int, int, int]]
     Returns:
         MPO: The random MPO.
     """
-    tensors = [crandn(shape)
-                for shape in shapes]
+    tensors = [crandn(shape) for shape in shapes]
     mpo = MPO()
     mpo.init_custom(tensors, transpose=False)
     return mpo
@@ -112,14 +108,10 @@ def test_right_qr() -> None:
     # Check that q_tensor is unitary
     iden = np.eye(q_tensor.shape[2])
     q_matrix = q_tensor.reshape(q_tensor.shape[0] * q_tensor.shape[1], -1)
-    assert np.allclose(q_matrix.conj().T @ q_matrix,
-                       iden)
+    assert np.allclose(q_matrix.conj().T @ q_matrix, iden)
     # Check that qr = tensor
-    contr = np.tensordot(q_tensor,
-                         r_matrix,
-                         axes=(2, 0))
-    assert np.allclose(contr,
-                       tensor)
+    contr = np.tensordot(q_tensor, r_matrix, axes=(2, 0))
+    assert np.allclose(contr, tensor)
 
 
 def test_left_qr() -> None:
@@ -141,15 +133,11 @@ def test_left_qr() -> None:
     iden = np.eye(q_tensor.shape[1])
     q_matrix = q_tensor.transpose(0, 2, 1)
     q_matrix = q_matrix.reshape(-1, q_tensor.shape[1])
-    assert np.allclose(q_matrix.T.conj() @ q_matrix,
-                       iden)
+    assert np.allclose(q_matrix.T.conj() @ q_matrix, iden)
     # Check that qr = tensor
-    contr = np.tensordot(q_tensor,
-                         r_matrix,
-                         axes=(1, 1))
+    contr = np.tensordot(q_tensor, r_matrix, axes=(1, 1))
     contr = contr.transpose(0, 2, 1)
-    assert np.allclose(contr,
-                       tensor)
+    assert np.allclose(contr, tensor)
 
 
 def test_prepare_canonical_site_tensors_single_site() -> None:
@@ -164,17 +152,14 @@ def test_prepare_canonical_site_tensors_single_site() -> None:
     mpo_tensor = crandn(2, 2, 1, 1)
     mpo = MPO()
     mpo.init_custom([mpo_tensor])
-    canon_sites, left_envs = _prepare_canonical_site_tensors(mps,
-                                                             mpo)
+    canon_sites, left_envs = _prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
     assert len(left_envs) == 1
     assert len(canon_sites) == 1
     correct_env = np.eye(3).reshape(3, 1, 3)
-    assert np.allclose(correct_env,
-                       left_envs[0])
+    assert np.allclose(correct_env, left_envs[0])
     correct_canon = mps_tensor
-    assert np.allclose(correct_canon,
-                       canon_sites[0])
+    assert np.allclose(correct_canon, canon_sites[0])
 
 
 def test_prepare_canonical_site_tensors_three_sites() -> None:
@@ -191,8 +176,7 @@ def test_prepare_canonical_site_tensors_three_sites() -> None:
     mpo_tensors = [crandn(shape) for shape in shapes2]
     mpo = MPO()
     mpo.init_custom(mpo_tensors, transpose=False)
-    canon_sites, left_envs = _prepare_canonical_site_tensors(mps,
-                                                             mpo)
+    canon_sites, left_envs = _prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
     assert len(left_envs) == 3
     assert len(canon_sites) == 3
@@ -200,36 +184,20 @@ def test_prepare_canonical_site_tensors_three_sites() -> None:
     # Site 0
     correct_env = np.eye(3).reshape(3, 1, 3)
     correct_canon = mps_tensors[0]
-    assert np.allclose(correct_env,
-                          left_envs[0])
-    assert np.allclose(correct_canon,
-                        canon_sites[0])
+    assert np.allclose(correct_env, left_envs[0])
+    assert np.allclose(correct_canon, canon_sites[0])
     # Site 1
     q_last, r_matrix = _right_qr(mps_tensors[0])
-    correct_canon = np.tensordot(r_matrix,
-                               mps_tensors[1],
-                               axes=(1, 1)).transpose(1, 0, 2)
-    correct_env = update_left_environment(q_last,
-                                          q_last,
-                                          mpo_tensors[0],
-                                          left_envs[0])
-    assert np.allclose(correct_env,
-                       left_envs[1])
-    assert np.allclose(correct_canon,
-                       canon_sites[1])
+    correct_canon = np.tensordot(r_matrix, mps_tensors[1], axes=(1, 1)).transpose(1, 0, 2)
+    correct_env = update_left_environment(q_last, q_last, mpo_tensors[0], left_envs[0])
+    assert np.allclose(correct_env, left_envs[1])
+    assert np.allclose(correct_canon, canon_sites[1])
     # Site 2
     q_last, r_matrix = _right_qr(correct_canon)
-    correct_canon = np.tensordot(r_matrix,
-                                    mps_tensors[2],
-                                    axes=(1, 1)).transpose(1, 0, 2)
-    correct_env = update_left_environment(q_last,
-                                          q_last,
-                                          mpo_tensors[1],
-                                          left_envs[1])
-    assert np.allclose(correct_env,
-                       left_envs[2])
-    assert np.allclose(correct_canon,
-                       correct_canon)
+    correct_canon = np.tensordot(r_matrix, mps_tensors[2], axes=(1, 1)).transpose(1, 0, 2)
+    correct_env = update_left_environment(q_last, q_last, mpo_tensors[1], left_envs[1])
+    assert np.allclose(correct_env, left_envs[2])
+    assert np.allclose(correct_canon, correct_canon)
 
 
 def test_choose_stack_tensor_last_site() -> None:
@@ -239,37 +207,27 @@ def test_choose_stack_tensor_last_site() -> None:
     the state was in left-canonical form.
     """
     num_sites = 3
-    mps_tensors = [crandn(2, 3, 4)
-                   for _ in range(num_sites)]
+    mps_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
     mps = MPS(num_sites, tensors=mps_tensors)
-    canon_center_tensors = [crandn(2, 3, 4)
-                            for _ in range(num_sites)]
+    canon_center_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
     # Found tensor
-    found_tensor = _choose_stack_tensor(num_sites - 1,
-                                        canon_center_tensors,
-                                        mps)
-    assert np.allclose(mps_tensors[-1],
-                       found_tensor)
+    found_tensor = _choose_stack_tensor(num_sites - 1, canon_center_tensors, mps)
+    assert np.allclose(mps_tensors[-1], found_tensor)
 
 
 def test_choose_stack_tensor_middle_site() -> None:
     """Test the choice of the stack tensor for a middle site.
 
-    For any site that is not the last, the tensor choosen should be the MPS
+    For any site that is not the last, the tensor chosen should be the MPS
     tensor, when this site was the canonical center.
     """
     num_sites = 3
-    mps_tensors = [crandn(2, 3, 4)
-                   for _ in range(num_sites)]
+    mps_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
     mps = MPS(num_sites, tensors=mps_tensors)
-    canon_center_tensors = [crandn(2, 3, 4)
-                            for _ in range(num_sites)]
+    canon_center_tensors = [crandn(2, 3, 4) for _ in range(num_sites)]
     # Found tensor
-    found_tensor = _choose_stack_tensor(1,
-                                        canon_center_tensors,
-                                        mps)
-    assert np.allclose(canon_center_tensors[1],
-                       found_tensor)
+    found_tensor = _choose_stack_tensor(1, canon_center_tensors, mps)
+    assert np.allclose(canon_center_tensors[1], found_tensor)
 
 
 def test_find_new_q() -> None:
@@ -280,8 +238,7 @@ def test_find_new_q() -> None:
     """
     old_tensor = crandn(2, 3, 5)
     new_tensor = crandn(2, 4, 5)
-    q_tensor = _find_new_q(old_tensor,
-                           new_tensor)
+    q_tensor = _find_new_q(old_tensor, new_tensor)
     # Test shape
     assert q_tensor.ndim == 3
     assert q_tensor.shape[0] == 2
@@ -289,11 +246,8 @@ def test_find_new_q() -> None:
     assert q_tensor.shape[1] == 7
     # Check that q_tensor is unitary
     iden = np.eye(q_tensor.shape[1])
-    q_prod = np.tensordot(q_tensor,
-                          q_tensor.conj(),
-                          axes=([0, 2], [0, 2]))
-    assert np.allclose(q_prod,
-                       iden)
+    q_prod = np.tensordot(q_tensor, q_tensor.conj(), axes=([0, 2], [0, 2]))
+    assert np.allclose(q_prod, iden)
 
 
 def test_build_basis_change_tensor() -> None:
@@ -305,21 +259,14 @@ def test_build_basis_change_tensor() -> None:
     old_q = crandn(2, 3, 4)
     new_q = crandn(2, 7, 5)
     old_m = crandn(4, 5)
-    basis_change = _build_basis_change_tensor(old_q,
-                                              new_q,
-                                              old_m)
+    basis_change = _build_basis_change_tensor(old_q, new_q, old_m)
     assert basis_change.ndim == 2
     assert basis_change.shape[0] == 3
     assert basis_change.shape[1] == 7
     # Reference
-    ref_basis_change = np.tensordot(old_q,
-                                    old_m,
-                                    axes=(2, 0))
-    ref_basis_change = np.tensordot(ref_basis_change,
-                                    new_q.conj(),
-                                    axes=([0, 2], [0, 2]))
-    assert np.allclose(ref_basis_change,
-                          basis_change)
+    ref_basis_change = np.tensordot(old_q, old_m, axes=(2, 0))
+    ref_basis_change = np.tensordot(ref_basis_change, new_q.conj(), axes=([0, 2], [0, 2]))
+    assert np.allclose(ref_basis_change, basis_change)
 
 
 def test_local_update() -> None:
@@ -333,24 +280,16 @@ def test_local_update() -> None:
     mps.set_canonical_form(0)
     ref_mps = deepcopy(mps)
     mpo = random_mpo([(2, 2, 1, 3), (2, 2, 3, 4), (2, 2, 4, 1)])
-    canon_sites, left_envs = _prepare_canonical_site_tensors(mps,
-                                                             mpo)
+    canon_sites, left_envs = _prepare_canonical_site_tensors(mps, mpo)
     ref_canon_sites = deepcopy(canon_sites)
     right_block = np.eye(5).reshape(5, 1, 5)
     site = 2
     right_m_block = np.eye(5)
-    sim_params = PhysicsSimParams(observables=[],
-                                  elapsed_time=1)
+    sim_params = PhysicsSimParams(observables=[], elapsed_time=1)
     # Perform the local update
-    result = _local_update(mps,
-                           mpo,
-                           left_envs,
-                           right_block,
-                           canon_sites,
-                           site,
-                           right_m_block,
-                           sim_params,
-                           numiter_lanczos=25)
+    result = _local_update(
+        mps, mpo, left_envs, right_block, canon_sites, site, right_m_block, sim_params, numiter_lanczos=25
+    )
     # General Change Check
     assert not mps.almost_equal(ref_mps)
     assert canon_sites[site - 1].shape != ref_canon_sites[site - 1].shape
@@ -376,22 +315,15 @@ def test_right_svd() -> None:
     assert s_vec.shape[0] == v_matrix.shape[0]
     # Check that u_tensor is unitary
     iden = np.eye(u_tensor.shape[2])
-    result = np.tensordot(u_tensor,
-                          u_tensor.conj(),
-                          axes=([0, 1], [0, 1]))
-    assert np.allclose(result,
-                          iden)
+    result = np.tensordot(u_tensor, u_tensor.conj(), axes=([0, 1], [0, 1]))
+    assert np.allclose(result, iden)
     # Check that v_matrix is unitary
     iden = np.eye(v_matrix.shape[1])
     result = v_matrix.conj().T @ v_matrix
-    assert np.allclose(result,
-                          iden)
+    assert np.allclose(result, iden)
     # Check that svd = tensor
-    contr = np.tensordot(u_tensor,
-                         np.diag(s_vec) @ v_matrix,
-                         axes=(2, 0))
-    assert np.allclose(contr,
-                          tensor)
+    contr = np.tensordot(u_tensor, np.diag(s_vec) @ v_matrix, axes=(2, 0))
+    assert np.allclose(contr, tensor)
 
 
 def test_truncated_right_svd_thresh() -> None:
@@ -399,16 +331,12 @@ def test_truncated_right_svd_thresh() -> None:
     s_vector_i = np.array([1, 0.5, 0.1, 0.01])
     u_tensor_i, _ = _right_qr(crandn(2, 3, 4))
     v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
-    tensor = np.tensordot(u_tensor_i,
-                          np.diag(s_vector_i) @ v_matrix_i,
-                          axes=(2, 0))
+    tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
 
     threshold = 0.2
     max_dim = 4
     # Thus the values 0.1 and 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor,
-                                                        threshold,
-                                                        max_dim)
+    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor, threshold, max_dim)
     # Check shapes
     assert u_tensor.shape[0] == 2
     assert u_tensor.shape[1] == 3
@@ -416,8 +344,7 @@ def test_truncated_right_svd_thresh() -> None:
     assert u_tensor.shape[2] == 2
     assert v_matrix.shape[0] == 2
     assert s_vector.shape[0] == 2
-    assert np.allclose(s_vector,
-                       s_vector_i[:2])
+    assert np.allclose(s_vector, s_vector_i[:2])
 
 
 def test_truncated_right_svd_maxbd() -> None:
@@ -425,16 +352,12 @@ def test_truncated_right_svd_maxbd() -> None:
     s_vector_i = np.array([1, 0.5, 0.1, 0.01])
     u_tensor_i, _ = _right_qr(crandn(2, 3, 4))
     v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
-    tensor = np.tensordot(u_tensor_i,
-                          np.diag(s_vector_i) @ v_matrix_i,
-                          axes=(2, 0))
+    tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
 
     threshold = 0.0001
     max_dim = 3
     # Thus the value 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor,
-                                                        threshold,
-                                                        max_dim)
+    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor, threshold, max_dim)
     # Check shapes
     assert u_tensor.shape[0] == 2
     assert u_tensor.shape[1] == 3
@@ -442,8 +365,7 @@ def test_truncated_right_svd_maxbd() -> None:
     assert u_tensor.shape[2] == max_dim
     assert max_dim == v_matrix.shape[0]
     assert max_dim == s_vector.shape[0]
-    assert np.allclose(s_vector,
-                       s_vector_i[:max_dim])
+    assert np.allclose(s_vector, s_vector_i[:max_dim])
 
 
 def test_truncate_no_truncation() -> None:
@@ -452,19 +374,14 @@ def test_truncate_no_truncation() -> None:
     mps = random_mps(shapes)
     mps.set_canonical_form(0)
     ref_mps = deepcopy(mps)
-    trunc_params = PhysicsSimParams(observables=[],
-                                    elapsed_time=1,
-                                    threshold=1e-16,
-                                    max_bond_dim=10)
+    trunc_params = PhysicsSimParams(observables=[], elapsed_time=1, threshold=1e-16, max_bond_dim=10)
     # Perform truncation
-    truncate(mps,
-             trunc_params)
+    truncate(mps, trunc_params)
     # Check that the MPS is unchanged
     mps.check_if_valid_mps()
     vector = mps.to_vec()
     ref_vector = ref_mps.to_vec()
-    assert np.allclose(vector,
-                       ref_vector)
+    assert np.allclose(vector, ref_vector)
 
 
 def test_truncate_truncation() -> None:
@@ -472,13 +389,9 @@ def test_truncate_truncation() -> None:
     shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
     mps = random_mps(shapes)
     mps.set_canonical_form(0)
-    trunc_params = PhysicsSimParams(observables=[],
-                                    elapsed_time=1,
-                                    threshold=0.1,
-                                    max_bond_dim=3)
+    trunc_params = PhysicsSimParams(observables=[], elapsed_time=1, threshold=0.1, max_bond_dim=3)
     # Perform truncation
-    truncate(mps,
-             trunc_params)
+    truncate(mps, trunc_params)
     # Check that the MPS is truncated
     mps.check_if_valid_mps()
     for tensor in mps.tensors:
@@ -493,22 +406,15 @@ def test_bug_single_site() -> None:
     mpo = MPO()
     mpo.init_ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = PhysicsSimParams(observables=[],
-                                    elapsed_time=1,
-                                    threshold=1e-16,
-                                    max_bond_dim=10)
+    sim_params = PhysicsSimParams(observables=[], elapsed_time=1, threshold=1e-16, max_bond_dim=10)
     # Perform BUG
-    bug(mps,
-        mpo,
-        sim_params,
-        numiter_lanczos=25)
+    bug(mps, mpo, sim_params, numiter_lanczos=25)
     # Check against exact evolution
     state_vec = ref_mps.to_vec()
     ham_matrix = ref_mpo.to_matrix()
     time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
     new_state_vec = time_evo_op @ state_vec
-    assert np.allclose(mps.to_vec(),
-                          new_state_vec)
+    assert np.allclose(mps.to_vec(), new_state_vec)
 
 
 def test_bug_three_sites() -> None:
@@ -518,19 +424,12 @@ def test_bug_three_sites() -> None:
     mpo = MPO()
     mpo.init_ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = PhysicsSimParams(observables=[],
-                                    elapsed_time=1,
-                                    threshold=1e-16,
-                                    max_bond_dim=10)
+    sim_params = PhysicsSimParams(observables=[], elapsed_time=1, threshold=1e-16, max_bond_dim=10)
     # Perform BUG
-    bug(mps,
-        mpo,
-        sim_params,
-        numiter_lanczos=25)
+    bug(mps, mpo, sim_params, numiter_lanczos=25)
     # Check against exact evolution
     state_vec = ref_mps.to_vec()
     ham_matrix = ref_mpo.to_matrix()
     time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
     new_state_vec = time_evo_op @ state_vec
-    assert np.allclose(mps.to_vec(),
-                          new_state_vec)
+    assert np.allclose(mps.to_vec(), new_state_vec)
