@@ -214,10 +214,6 @@ class MPS:
         self.tensors = new_tensors
         self.flipped = not self.flipped
 
-    def num_sites(self) -> int:
-        """Returns the number of sites of this MPS."""
-        return len(self.tensors)
-
     def almost_equal(self, other: MPS) -> bool:
         """Checks if the tensors of this MPS are almost equal to the other MPS.
 
@@ -228,9 +224,9 @@ class MPS:
             bool: True if all tensors of this tensor are almost equal to the
                 other MPS, False otherwise.
         """
-        if self.num_sites() != other.num_sites():
+        if self.length != other.length:
             return False
-        for i in range(self.num_sites()):
+        for i in range(self.length):
             if self.tensors[i].shape != other.tensors[i].shape:
                 return False
             if not np.allclose(self.tensors[i], other.tensors[i]):

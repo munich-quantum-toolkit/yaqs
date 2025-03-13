@@ -125,7 +125,7 @@ def _choose_stack_tensor(
         NDArray[np.complex128]: The tensor to be stacked.
 
     """
-    if site == state.num_sites() - 1:  # noqa: SIM108
+    if site == state.length - 1:  # noqa: SIM108
         # This is the only leaf case.
         old_stack_tensor = state.tensors[site]
     else:
