@@ -246,7 +246,7 @@ def _right_svd(
 
 
 def _truncated_right_svd(
-    ps_tensor: NDArray[np.complex128], threshold: float, max_bond_dim: int
+    ps_tensor: NDArray[np.complex128], sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
     """Truncated right SVD.
 
@@ -254,26 +254,25 @@ def _truncated_right_svd(
 
     Args:
         ps_tensor: The tensor to be decomposed.
-        threshold: The truncation threshold.
-        max_bond_dim: The maximum number of singular values to keep.
+        sim_params: Simulation parameters containing threshold and maximum bond dimension
 
     Returns:
-        NDArray[np.complex128]: The U tensor with the left virtual leg and the physical
+        u_tensor: The U tensor with the left virtual leg and the physical
             leg (phys,left,new).
-        NDArray[np.complex128]: The S vector with the singular values.
-        NDArray[np.complex128]: The V matrix with the right virtual leg (new,right).
+        s_vec: The S vector with the singular values.
+        v_mat: The V matrix with the right virtual leg (new,right).
 
     """
     u_mat, s_vec, v_mat = _right_svd(ps_tensor)
     cut_sum = 0
-    thresh_sq = threshold**2
+    thresh_sq = sim_params.threshold**2
     cut_index = 1
     for i, s_val in enumerate(np.flip(s_vec)):
         cut_sum += s_val**2
         if cut_sum >= thresh_sq:
             cut_index = len(s_vec) - i
             break
-    cut_index = min(cut_index, max_bond_dim)
+    cut_index = min(cut_index, sim_params.max_bond_dim)
     u_tensor = u_mat[:, :, :cut_index]
     s_vec = s_vec[:cut_index]
     v_mat = v_mat[:cut_index, :]
@@ -290,7 +289,7 @@ def truncate(state: MPS, sim_params: PhysicsSimParams | WeakSimParams | StrongSi
     """
     if state.length != 1:
         for i, tensor in enumerate(state.tensors[:-1]):
-            _, _, v_mat = _truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
+            _, _, v_mat = _truncated_right_svd(tensor, sim_params)
             # Pull v into left leg of next tensor.
             new_next = np.tensordot(v_mat, state.tensors[i + 1], axes=(1, 1))
             new_next = new_next.transpose(1, 0, 2)
