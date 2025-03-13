@@ -160,7 +160,7 @@ def test_create_ising_circuit_periodic_odd() -> None:
     assert rzz_count == 5
 
 
-def test_create_2d_ising_circuit() -> None:
+def test_create_2d_ising_circuit_2x3() -> None:
     """Test that create_2d_ising_circuit returns a valid circuit for a rectangular grid.
 
     This test creates a 2D Ising circuit for a grid with a specified number of rows and columns.
@@ -171,6 +171,30 @@ def test_create_2d_ising_circuit() -> None:
     """
     num_rows = 2
     num_cols = 3
+    total_qubits = num_rows * num_cols
+    circ = create_2d_ising_circuit(num_rows, num_cols, J=1, g=0.5, dt=0.1, timesteps=1)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
+
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that each qubit gets one rx rotation in the single timestep.
+    assert op_names.count("rx") == total_qubits
+    # Check that rzz gates are present.
+    assert "rzz" in op_names
+
+
+def test_create_2d_ising_circuit_3x2() -> None:
+    """Test that create_2d_ising_circuit returns a valid circuit for a rectangular grid.
+
+    This test creates a 2D Ising circuit for a grid with a specified number of rows and columns.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to num_rows * num_cols.
+      - Each qubit receives an rx gate in every timestep.
+      - The circuit contains rzz gates for the interactions.
+    """
+    num_rows = 3
+    num_cols = 2
     total_qubits = num_rows * num_cols
     circ = create_2d_ising_circuit(num_rows, num_cols, J=1, g=0.5, dt=0.1, timesteps=1)
 
