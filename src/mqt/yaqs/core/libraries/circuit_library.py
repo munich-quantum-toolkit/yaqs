@@ -23,10 +23,13 @@ from __future__ import annotations
 from qiskit.circuit import QuantumCircuit
 
 
-def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) -> QuantumCircuit:
-    """Ising Trotter circuit.
+def create_ising_circuit(
+    L: int, J: float, g: float, dt: float, timesteps: int, *, periodic: bool = False
+) -> QuantumCircuit:
+    """Ising Trotter circuit with optional periodic boundary conditions.
 
-    Create a quantum circuit for simulating the Ising model.
+    Create a quantum circuit for simulating the Ising model. When periodic is True,
+    a long-range rzz gate is added between the last and first qubits in each timestep.
 
     Args:
         L (int): Number of qubits in the circuit.
@@ -34,6 +37,8 @@ def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) 
         g (float): Transverse field strength.
         dt (float): Time step for the simulation.
         timesteps (int): Number of time steps to simulate.
+        periodic (bool, optional): If True, add a long-range gate between qubits 0 and L-1.
+                                   Defaults to False.
 
     Returns:
         QuantumCircuit: A quantum circuit representing the Ising model evolution.
@@ -45,17 +50,91 @@ def create_ising_circuit(L: int, J: float, g: float, dt: float, timesteps: int) 
 
     circ = QuantumCircuit(L)
     for _ in range(timesteps):
+        # Apply RX rotations on all qubits.
         for site in range(L):
             circ.rx(theta=alpha, qubit=site)
 
+        # Even-odd nearest-neighbor interactions.
         for site in range(L // 2):
             circ.rzz(beta, qubit1=2 * site, qubit2=2 * site + 1)
 
+        # Odd-even nearest-neighbor interactions.
         for site in range(1, L // 2):
             circ.rzz(beta, qubit1=2 * site - 1, qubit2=2 * site)
 
+        # For odd L > 1, handle the last pair.
         if L % 2 != 0 and L != 1:
             circ.rzz(beta, qubit1=L - 2, qubit2=L - 1)
+
+        # If periodic, add an additional long-range gate between qubit L-1 and qubit 0.
+        if periodic and L > 1:
+            circ.rzz(beta, qubit1=0, qubit2=L - 1)
+
+    return circ
+
+
+def create_2d_ising_circuit(
+    num_rows: int, num_cols: int, J: float, g: float, dt: float, timesteps: int
+) -> QuantumCircuit:
+    """2D Ising Trotter circuit on a rectangular grid using a snaking MPS ordering.
+
+    Args:
+        num_rows (int): Number of rows in the qubit grid.
+        num_cols (int): Number of columns in the qubit grid.
+        J (float): Coupling constant for the ZZ interaction.
+        g (float): Transverse field strength.
+        dt (float): Time step for the simulation.
+        timesteps (int): Number of Trotter steps.
+
+    Returns:
+        QuantumCircuit: A quantum circuit representing the 2D Ising model evolution with MPS-friendly ordering.
+    """
+    total_qubits = num_rows * num_cols
+    circ = QuantumCircuit(total_qubits)
+
+    # Define a helper function to compute the snaking index.
+    def site_index(row: int, col: int) -> int:
+        # For even rows, map left-to-right; for odd rows, map right-to-left.
+        if row % 2 == 0:
+            return row * num_cols + col
+        return row * num_cols + (num_cols - 1 - col)
+
+    # Single-qubit rotation and ZZ interaction angles.
+    alpha = -2 * dt * g
+    beta = -2 * dt * J
+
+    for _ in range(timesteps):
+        # Apply RX rotations to all qubits according to the snaking order.
+        for row in range(num_rows):
+            for col in range(num_cols):
+                q = site_index(row, col)
+                circ.rx(alpha, q)
+
+        # Horizontal interactions: within each row, apply rzz gates between adjacent qubits.
+        for row in range(num_rows):
+            # Even bonds in the row.
+            for col in range(0, num_cols - 1, 2):
+                q1 = site_index(row, col)
+                q2 = site_index(row, col + 1)
+                circ.rzz(beta, q1, q2)
+            # Odd bonds in the row.
+            for col in range(1, num_cols - 1, 2):
+                q1 = site_index(row, col)
+                q2 = site_index(row, col + 1)
+                circ.rzz(beta, q1, q2)
+
+        # Vertical interactions: between adjacent rows.
+        for col in range(num_cols):
+            # Even bonds vertically.
+            for row in range(0, num_rows - 1, 2):
+                q1 = site_index(row, col)
+                q2 = site_index(row + 1, col)
+                circ.rzz(beta, q1, q2)
+            # Odd bonds vertically.
+            for row in range(1, num_rows - 1, 2):
+                q1 = site_index(row, col)
+                q2 = site_index(row + 1, col)
+                circ.rzz(beta, q1, q2)
 
     return circ
 
