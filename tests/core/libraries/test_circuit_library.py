@@ -23,7 +23,11 @@ from __future__ import annotations
 
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs.core.libraries.circuit_library import create_heisenberg_circuit, create_ising_circuit
+from mqt.yaqs.core.libraries.circuit_library import (
+    create_2d_ising_circuit,
+    create_heisenberg_circuit,
+    create_ising_circuit,
+)
 
 
 def test_create_ising_circuit_valid_even() -> None:
@@ -77,7 +81,7 @@ def test_create_ising_circuit_valid_odd() -> None:
 
 
 def test_create_heisenberg_circuit_valid_even() -> None:
-    """Test that create_Heisenberg_circuit returns a valid circuit for an even number of qubits.
+    """Test that create_heisenberg_circuit returns a valid circuit for an even number of qubits.
 
     This test creates a Heisenberg circuit with L=4 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
     It verifies that the resulting circuit is a QuantumCircuit with 4 qubits and that it contains the expected gate
@@ -94,7 +98,7 @@ def test_create_heisenberg_circuit_valid_even() -> None:
 
 
 def test_create_heisenberg_circuit_valid_odd() -> None:
-    """Test that create_Heisenberg_circuit returns a valid circuit for an odd number of qubits.
+    """Test that create_heisenberg_circuit returns a valid circuit for an odd number of qubits.
 
     This test creates a Heisenberg circuit with L=5 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
     It verifies that the resulting circuit is a QuantumCircuit with 5 qubits and that it contains the expected gate
@@ -108,3 +112,97 @@ def test_create_heisenberg_circuit_valid_odd() -> None:
     op_names = [instr.operation.name for instr in circ.data]
     for gate in ["rz", "rzz", "rxx", "ryy"]:
         assert gate in op_names, f"Gate {gate} not found in the circuit."
+
+
+def test_create_ising_circuit_periodic_even() -> None:
+    """Test that create_ising_circuit returns a valid periodic circuit for an even number of qubits.
+
+    This test creates an Ising circuit with L=4 qubits and periodic boundary conditions.
+    It verifies that:
+      - The circuit is a QuantumCircuit with 4 qubits.
+      - The additional long-range rzz gate between the first and last qubit is present.
+      - The gate counts are adjusted accordingly (4 rx gates and 4 rzz gates).
+    """
+    circ = create_ising_circuit(L=4, J=1, g=0.5, dt=0.1, timesteps=1, periodic=True)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == 4
+
+    op_names = [instr.operation.name for instr in circ.data]
+    rx_count = op_names.count("rx")
+    rzz_count = op_names.count("rzz")
+
+    # Without periodic: 3 rzz gates for L=4, periodic adds one more.
+    assert rx_count == 4
+    assert rzz_count == 4
+
+
+def test_create_ising_circuit_periodic_odd() -> None:
+    """Test that create_ising_circuit returns a valid periodic circuit for an odd number of qubits.
+
+    This test creates an Ising circuit with L=5 qubits and periodic boundary conditions.
+    It verifies that:
+      - The circuit is a QuantumCircuit with 5 qubits.
+      - The additional long-range rzz gate between the first and last qubit is present.
+      - The gate counts are adjusted accordingly (5 rx gates and 5 rzz gates).
+    """
+    circ = create_ising_circuit(L=5, J=1, g=0.5, dt=0.1, timesteps=1, periodic=True)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == 5
+
+    op_names = [instr.operation.name for instr in circ.data]
+    rx_count = op_names.count("rx")
+    rzz_count = op_names.count("rzz")
+
+    # Without periodic: 4 rzz gates for L=5, periodic adds one more.
+    assert rx_count == 5
+    assert rzz_count == 5
+
+
+def test_create_2d_ising_circuit_2x3() -> None:
+    """Test that create_2d_ising_circuit returns a valid circuit for a rectangular grid.
+
+    This test creates a 2D Ising circuit for a grid with a specified number of rows and columns.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to num_rows * num_cols.
+      - Each qubit receives an rx gate in every timestep.
+      - The circuit contains rzz gates for the interactions.
+    """
+    num_rows = 2
+    num_cols = 3
+    total_qubits = num_rows * num_cols
+    circ = create_2d_ising_circuit(num_rows, num_cols, J=1, g=0.5, dt=0.1, timesteps=1)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
+
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that each qubit gets one rx rotation in the single timestep.
+    assert op_names.count("rx") == total_qubits
+    # Check that rzz gates are present.
+    assert "rzz" in op_names
+
+
+def test_create_2d_ising_circuit_3x2() -> None:
+    """Test that create_2d_ising_circuit returns a valid circuit for a rectangular grid.
+
+    This test creates a 2D Ising circuit for a grid with a specified number of rows and columns.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to num_rows * num_cols.
+      - Each qubit receives an rx gate in every timestep.
+      - The circuit contains rzz gates for the interactions.
+    """
+    num_rows = 3
+    num_cols = 2
+    total_qubits = num_rows * num_cols
+    circ = create_2d_ising_circuit(num_rows, num_cols, J=1, g=0.5, dt=0.1, timesteps=1)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
+
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that each qubit gets one rx rotation in the single timestep.
+    assert op_names.count("rx") == total_qubits
+    # Check that rzz gates are present.
+    assert "rzz" in op_names
