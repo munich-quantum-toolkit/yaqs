@@ -16,7 +16,7 @@ import numpy as np
 from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 from mqt.yaqs.core.methods.bug import (
     _build_basis_change_tensor,  # noqa: PLC2701
     _choose_stack_tensor,  # noqa: PLC2701
@@ -328,15 +328,25 @@ def test_right_svd() -> None:
 
 def test_truncated_right_svd_thresh() -> None:
     """Test that the tensor is correctly truncated."""
+    # Placeholder
+    measurements = [Observable("z", site) for site in range(0)]
+    sim_params = PhysicsSimParams(
+        measurements,
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+        num_traj=1,
+        max_bond_dim=4,
+        threshold=0.2,
+        order=1,
+    )
     s_vector_i = np.array([1, 0.5, 0.1, 0.01])
     u_tensor_i, _ = _right_qr(crandn(2, 3, 4))
     v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
     tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
 
-    threshold = 0.2
-    max_dim = 4
     # Thus the values 0.1 and 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor, threshold, max_dim)
+    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor, sim_params)
     # Check shapes
     assert u_tensor.shape[0] == 2
     assert u_tensor.shape[1] == 3
@@ -349,23 +359,34 @@ def test_truncated_right_svd_thresh() -> None:
 
 def test_truncated_right_svd_maxbd() -> None:
     """Test that the tensor is correctly truncated."""
+    # Placeholder
+    measurements = [Observable("z", site) for site in range(0)]
+    sim_params = PhysicsSimParams(
+        measurements,
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+        num_traj=1,
+        max_bond_dim=3,
+        threshold=1e-4,
+        order=1,
+    )
+
     s_vector_i = np.array([1, 0.5, 0.1, 0.01])
     u_tensor_i, _ = _right_qr(crandn(2, 3, 4))
     v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
     tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
 
-    threshold = 0.0001
-    max_dim = 3
     # Thus the value 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor, threshold, max_dim)
+    u_tensor, s_vector, v_matrix = _truncated_right_svd(tensor, sim_params)
     # Check shapes
     assert u_tensor.shape[0] == 2
     assert u_tensor.shape[1] == 3
     assert v_matrix.shape[1] == 4
-    assert u_tensor.shape[2] == max_dim
-    assert max_dim == v_matrix.shape[0]
-    assert max_dim == s_vector.shape[0]
-    assert np.allclose(s_vector, s_vector_i[:max_dim])
+    assert u_tensor.shape[2] == sim_params.max_bond_dim
+    assert sim_params.max_bond_dim == v_matrix.shape[0]
+    assert sim_params.max_bond_dim == s_vector.shape[0]
+    assert np.allclose(s_vector, s_vector_i[:sim_params.max_bond_dim])
 
 
 def test_truncate_no_truncation() -> None:
