@@ -676,9 +676,7 @@ def test_convert_to_vector_fidelity() -> None:
     circ = QuantumCircuit(num_qubits)
     circ.h(0)
     circ.cx(0, 1)
-    state_vector = np.array([0.70710678, 0, 0,
-                            0.70710678, 0, 0,
-                            0, 0])
+    state_vector = np.array([0.70710678, 0, 0, 0.70710678, 0, 0, 0, 0])
 
     # Define the initial state
     state = MPS(num_qubits, state="zeros")
@@ -694,4 +692,4 @@ def test_convert_to_vector_fidelity() -> None:
     simulator.run(state, circ, sim_params, noise_model)
     assert sim_params.output_state is not None
     tdvp_state = sim_params.output_state.to_vec()
-    np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state))**2)
+    np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
