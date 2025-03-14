@@ -357,7 +357,7 @@ class MPS:
         """
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        exp = self.local_expval(ObservablesLibrary[observable.name], observable.site)
+        exp = self.local_expval(observable.gate.matrix, observable.site)
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 
