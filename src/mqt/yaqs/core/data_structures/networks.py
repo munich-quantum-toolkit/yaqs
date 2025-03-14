@@ -48,6 +48,8 @@ class MPS:
     __init__(length: int, tensors: list[NDArray[np.complex128]] | None = None,
                 physical_dimensions: list[int] | None = None, state: str = "zeros") -> None:
         Initializes the MPS with given length, tensors, physical dimensions, and initial state.
+    pad_bond_dimension():
+        Pads bond dimension with zeros
     write_max_bond_dim() -> int:
         Returns the maximum bond dimension in the MPS.
     flip_network() -> None:
@@ -78,6 +80,7 @@ class MPS:
         tensors: list[NDArray[np.complex128]] | None = None,
         physical_dimensions: list[int] | None = None,
         state: str = "zeros",
+        pad: int | None = None,
     ) -> None:
         """Initializes a Matrix Product State (MPS).
 
@@ -179,6 +182,43 @@ class MPS:
 
             if state == "random":
                 self.normalize()
+        if pad is not None:
+            self.pad_bond_dimension(pad)
+
+    def pad_bond_dimension(self, target_dim: int) -> None:
+        """Pad bond dimension.
+
+        Pads the bond dimensions of each tensor in the MPS so that the internal bond
+        dimensions are at least target_dim. For the first tensor the left bond dimension
+        remains 1, and for the last tensor the right bond dimension remains 1.
+
+        Parameters
+        ----------
+        target_dim : int
+            The desired bond dimension for the internal bonds.
+
+        Raises:
+        ------
+        ValueError: If target_dim is smaller than any existing bond dimension.
+        """
+        for i, tensor in enumerate(self.tensors):
+            # Tensor shape is (physical_dim, chi_left, chi_right)
+            phys, chi_left, chi_right = tensor.shape
+
+            # Determine desired bond dimensions
+            new_left = chi_left if i == 0 else target_dim
+            new_right = chi_right if i == self.length - 1 else target_dim
+
+            # Check if the target dimensions are valid
+            if chi_left > new_left or chi_right > new_right:
+                msg = "Target bond dim must be at least as large as the current bond dim."
+                raise ValueError(msg)
+
+            # Create a new tensor with zeros and copy the original data into the appropriate block
+            new_tensor = np.zeros((phys, new_left, new_right), dtype=tensor.dtype)
+            new_tensor[:, :chi_left, :chi_right] = tensor
+
+            self.tensors[i] = new_tensor
 
     def write_max_bond_dim(self) -> int:
         """Write max bond dim.
@@ -213,6 +253,25 @@ class MPS:
         new_tensors.reverse()
         self.tensors = new_tensors
         self.flipped = not self.flipped
+
+    def almost_equal(self, other: MPS) -> bool:
+        """Checks if the tensors of this MPS are almost equal to the other MPS.
+
+        Args:
+            other (MPS): The other MPS to compare with.
+
+        Returns:
+            bool: True if all tensors of this tensor are almost equal to the
+                other MPS, False otherwise.
+        """
+        if self.length != other.length:
+            return False
+        for i in range(self.length):
+            if self.tensors[i].shape != other.tensors[i].shape:
+                return False
+            if not np.allclose(self.tensors[i], other.tensors[i]):
+                return False
+        return True
 
     def shift_orthogonality_center_right(self, current_orthogonality_center: int) -> None:
         """Shifts orthogonality center right.
@@ -488,7 +547,7 @@ class MPS:
             a_truth.append(np.allclose(mat, test_identity))
 
         for i in range(len(a)):
-            mat = oe.contract("ijk, ibk->jb", b[i], a[i])
+            mat = oe.contract("ijk, ilk->jl", b[i], a[i])
             mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
             b_truth.append(np.allclose(mat, test_identity))
@@ -515,7 +574,7 @@ class MPS:
                     return [i - 1, i]
         return [-1]
 
-    def convert_to_vector(self) -> NDArray[np.complex128]:
+    def to_vec(self) -> NDArray[np.complex128]:
         r"""Converts the MPS to a full state vector representation.
 
         Returns:
@@ -524,6 +583,7 @@ class MPS:
         """
         # Start with the first tensor.
         # Assume each tensor has shape (d, chi_left, chi_right) with chi_left=1 for the first tensor.
+        self.flip_network()
         vec = self.tensors[0]  # shape: (d_1, 1, chi_1)
 
         # Contract sequentially with the remaining tensors.
@@ -535,7 +595,7 @@ class MPS:
             # Reshape to merge all physical indices into one index.
             new_shape = (-1, vec.shape[-1])
             vec = np.reshape(vec, new_shape)
-
+        self.flip_network()
         # At the end, the final bond dimension should be 1.
         vec = np.squeeze(vec, axis=-1)
         # Flatten the resulting multi-index into a one-dimensional state vector.
@@ -602,6 +662,12 @@ class MPO:
         np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
         x = ObservablesLibrary["x"]
+        if length == 1:
+            tensor: NDArray[np.complex128] = np.reshape(x, (2, 2, 1, 1))
+            self.tensors = [tensor]
+            self.length = length
+            self.physical_dimension = physical_dimension
+            return
         z = ObservablesLibrary["z"]
 
         left_bound = np.array([identity, -J * z, -g * x])[np.newaxis, :]
@@ -765,7 +831,7 @@ class MPO:
         Returns:
             MPS: An MPS object containing the reshaped tensors.
         """
-        converted_tensors = [
+        converted_tensors: list[NDArray[np.complex128]] = [
             np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
             for tensor in self.tensors
         ]

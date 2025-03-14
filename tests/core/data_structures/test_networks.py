@@ -23,6 +23,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from qiskit.circuit import QuantumCircuit
+
+from mqt.yaqs import simulator
+from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -651,7 +655,7 @@ def test_convert_to_vector() -> None:
 
         # Create an MPS for the given state.
         mps = MPS(length=Length, state=state_str)
-        psi = mps.convert_to_vector()
+        psi = mps.to_vec()
 
         # Construct the expected state vector as the Kronecker product of local states.
         local_states = [local_state for i in range(Length)]
@@ -661,3 +665,74 @@ def test_convert_to_vector() -> None:
             expected = np.kron(expected, state)
 
         assert np.allclose(psi, expected, atol=tol)
+
+
+def test_convert_to_vector_fidelity() -> None:
+    """Test convert to vector.
+
+    Tests the MPS_to_vector function for a circuit input
+    """
+    num_qubits = 3
+    circ = QuantumCircuit(num_qubits)
+    circ.h(0)
+    circ.cx(0, 1)
+    state_vector = np.array([0.70710678, 0, 0, 0.70710678, 0, 0, 0, 0])
+
+    # Define the initial state
+    state = MPS(num_qubits, state="zeros")
+
+    # Define the simulation parameters
+    N = 1
+    max_bond_dim = 8
+    threshold = 0
+    window_size = 0
+    measurements = [Observable("z", site) for site in range(num_qubits)]
+    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
+    noise_model = None
+    simulator.run(state, circ, sim_params, noise_model)
+    assert sim_params.output_state is not None
+    tdvp_state = sim_params.output_state.to_vec()
+    np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
+
+
+def test_padded_mps() -> None:
+    """Test that MPS initializes with correct padding.
+
+    This test creates an MPS with padded bond dimensions.
+    """
+    length = 4
+    pdim = 2
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
+
+    assert mps.length == length
+    assert len(mps.tensors) == length
+    assert all(d == pdim for d in mps.physical_dimensions)
+
+    for i, tensor in enumerate(mps.tensors):
+        if i != 0 and i != mps.length - 1:
+            assert tensor.ndim == 3
+            assert tensor.shape[0] == pdim
+            assert tensor.shape[1] == 2
+            assert tensor.shape[2] == 2
+        elif i == 0:
+            assert tensor.ndim == 3
+            assert tensor.shape[0] == pdim
+            assert tensor.shape[1] == 1
+            assert tensor.shape[2] == 2
+        elif i == mps.length - 1:
+            assert tensor.ndim == 3
+            assert tensor.shape[0] == pdim
+            assert tensor.shape[1] == 2
+            assert tensor.shape[2] == 1
+
+
+def test_padded_mps_error() -> None:
+    """Test that MPS initializes with correct padding.
+
+    This test creates an MPS with incorrect padding
+    """
+    length = 4
+    pdim = 2
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
+    with pytest.raises(ValueError, match=r"Target bond dim must be at least as large as the current bond dim."):
+        mps.pad_bond_dimension(1)

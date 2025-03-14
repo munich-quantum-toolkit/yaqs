@@ -190,7 +190,7 @@ def test_strong_simulation_no_noise() -> None:
     simulator.run(state, circ, sim_params, noise_model=None)
     assert sim_params.output_state is not None
     assert isinstance(sim_params.output_state, MPS)
-    sv = sim_params.output_state.convert_to_vector()
+    sv = sim_params.output_state.to_vec()
 
     expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
     fidelity = np.abs(np.vdot(sv, expected)) ** 2

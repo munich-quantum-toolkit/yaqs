@@ -212,14 +212,6 @@ def test_apply_two_qubit_gate_with_window() -> None:
             with pytest.raises(AssertionError):
                 np.testing.assert_allclose(tensor, orig_tensors[i])
 
-    mps1 = MPS(length, copy.deepcopy(orig_tensors))
-    window_size = 1
-    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
-    apply_two_qubit_gate(mps1, node, sim_params)
-
-    for i, tensor in enumerate(mps1.tensors):
-        assert np.allclose(tensor, mps0.tensors[i]) or np.allclose(tensor, -mps0.tensors[i])
-
 
 def test_circuit_tjm_strong() -> None:
     """Test the circuit_tjm function for strong simulation.

@@ -224,9 +224,7 @@ class WeakSimParams:
     dt = 1
     num_traj = 0
 
-    def __init__(
-        self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
-    ) -> None:
+    def __init__(self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = 0) -> None:
         """Weak circuit simulation initialization.
 
         Initializes parameters for a weak circuit simulation.
@@ -319,7 +317,7 @@ class StrongSimParams:
         num_traj: int = 1000,
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
-        window_size: int | None = None,
+        window_size: int | None = 0,
         *,
         get_state: bool = False,
     ) -> None:

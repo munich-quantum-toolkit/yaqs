@@ -28,8 +28,11 @@ These tests confirm the correctness and stability of TDVP-based simulations with
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import numpy as np
 import pytest
+from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
@@ -60,8 +63,20 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
     The reconstructed tensor is compared to the original A.
     """
     A = rng.random(size=(4, 3, 5))
+    # Placeholder
+    measurements = [Observable("z", site) for site in range(1)]
+    sim_params = PhysicsSimParams(
+        measurements,
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+        num_traj=1,
+        max_bond_dim=100,
+        threshold=1e-8,
+        order=1,
+    )
     for distr in ["left", "right", "sqrt"]:
-        A0, A1 = split_mps_tensor(A, svd_distribution=distr, threshold=1e-8)
+        A0, A1 = split_mps_tensor(A, svd_distribution=distr, sim_params=sim_params)
         # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5), where r is the effective rank.
         assert A0.ndim == 3
         assert A1.ndim == 3
@@ -82,8 +97,20 @@ def test_split_mps_tensor_invalid_shape() -> None:
     This test creates a tensor A with shape (3, 3, 5) and expects the function to raise an error.
     """
     A = rng.random(size=(3, 3, 5))
+    # Placeholder
+    measurements = [Observable("z", site) for site in range(1)]
+    sim_params = PhysicsSimParams(
+        measurements,
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=True,
+        num_traj=1,
+        max_bond_dim=100,
+        threshold=1e-8,
+        order=1,
+    )
     with pytest.raises(ValueError, match=r"The first dimension of the tensor must be divisible by 2."):
-        split_mps_tensor(A, svd_distribution="left")
+        split_mps_tensor(A, svd_distribution="left", sim_params=sim_params)
 
 
 def test_merge_mps_tensors() -> None:
@@ -247,6 +274,7 @@ def test_two_site_tdvp() -> None:
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
+    ref_mps = deepcopy(state)
     measurements = [Observable("z", site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
@@ -258,7 +286,7 @@ def test_two_site_tdvp() -> None:
         threshold=1e-6,
         order=1,
     )
-    two_site_tdvp(state, H, sim_params, numiter_lanczos=5)
+    two_site_tdvp(state, H, sim_params, numiter_lanczos=25)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -266,3 +294,10 @@ def test_two_site_tdvp() -> None:
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after two-site TDVP, but got canonical site: {canonical_site}"
     )
+    # Check against exact evolution
+    state_vec = ref_mps.to_vec()
+    H_mat = H.to_matrix()
+    U = expm(-1j * sim_params.dt * H_mat)
+    state_vec = U @ state_vec
+    found = state.to_vec()
+    assert np.allclose(state_vec, found)
