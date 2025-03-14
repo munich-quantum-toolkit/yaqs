@@ -212,8 +212,7 @@ def create_2d_heisenberg_circuit(
     dt: float,
     timesteps: int
 ) -> QuantumCircuit:
-    """
-    2D Heisenberg Trotter circuit on a rectangular grid using a snaking MPS ordering.
+    """2D Heisenberg Trotter circuit on a rectangular grid using a snaking MPS ordering.
 
     Args:
         num_rows (int): Number of rows in the qubit grid.
@@ -226,10 +225,9 @@ def create_2d_heisenberg_circuit(
         timesteps (int): Number of Trotter steps.
 
     Returns:
-        QuantumCircuit: A quantum circuit representing the 2D Heisenberg model evolution 
+        QuantumCircuit: A quantum circuit representing the 2D Heisenberg model evolution
                        with MPS-friendly ordering.
     """
-
     total_qubits = num_rows * num_cols
     circ = QuantumCircuit(total_qubits)
 
@@ -244,7 +242,7 @@ def create_2d_heisenberg_circuit(
     theta_xx = -2.0 * dt * Jx
     theta_yy = -2.0 * dt * Jy
     theta_zz = -2.0 * dt * Jz
-    theta_z  = -2.0 * dt * h
+    theta_z = -2.0 * dt * h
 
     for _ in range(timesteps):
         # (1) Apply single-qubit Z rotations to all qubits

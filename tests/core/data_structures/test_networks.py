@@ -694,8 +694,9 @@ def test_convert_to_vector_fidelity() -> None:
     tdvp_state = sim_params.output_state.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
-def test_padded_MPS() -> None:
-    """Test that MPS initializes with correct padding
+
+def test_padded_mps() -> None:
+    """Test that MPS initializes with correct padding.
 
     This test creates an MPS with padded bond dimensions.
     """
@@ -708,7 +709,7 @@ def test_padded_MPS() -> None:
     assert all(d == pdim for d in mps.physical_dimensions)
 
     for i, tensor in enumerate(mps.tensors):
-        if i != 0 and i != mps.length-1:
+        if i != 0 and i != mps.length - 1:
             assert tensor.ndim == 3
             assert tensor.shape[0] == pdim
             assert tensor.shape[1] == 2
@@ -718,20 +719,20 @@ def test_padded_MPS() -> None:
             assert tensor.shape[0] == pdim
             assert tensor.shape[1] == 1
             assert tensor.shape[2] == 2
-        elif i == mps.length-1:
+        elif i == mps.length - 1:
             assert tensor.ndim == 3
             assert tensor.shape[0] == pdim
             assert tensor.shape[1] == 2
             assert tensor.shape[2] == 1
 
 
-def test_padded_MPS_error() -> None:
-    """Test that MPS initializes with correct padding
+def test_padded_mps_error() -> None:
+    """Test that MPS initializes with correct padding.
 
     This test creates an MPS with incorrect padding
     """
     length = 4
     pdim = 2
     mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match=r"Target bond dim must be at least as large as the current bond dim."):
         mps.pad_bond_dimension(1)

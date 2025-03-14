@@ -208,6 +208,7 @@ def test_create_2d_ising_circuit_3x2() -> None:
     # Check that rzz gates are present.
     assert "rzz" in op_names
 
+
 def test_create_2d_heisenberg_circuit_2x3() -> None:
     """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
 
@@ -234,6 +235,7 @@ def test_create_2d_heisenberg_circuit_2x3() -> None:
     assert "ryy" in op_names
     assert "rzz" in op_names
 
+
 def test_create_2d_heisenberg_circuit_3x2() -> None:
     """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
 
@@ -259,4 +261,3 @@ def test_create_2d_heisenberg_circuit_3x2() -> None:
     assert "rxx" in op_names
     assert "ryy" in op_names
     assert "rzz" in op_names
-  

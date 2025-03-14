@@ -17,11 +17,12 @@ of the state under a Hamiltonian represented as a Matrix Product Operator (MPO).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 import copy
-from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
+from typing import TYPE_CHECKING
 
+from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 from .tdvp import single_site_tdvp, two_site_tdvp
+
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS
 
