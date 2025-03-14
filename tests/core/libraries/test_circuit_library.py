@@ -24,6 +24,7 @@ from __future__ import annotations
 from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs.core.libraries.circuit_library import (
+    create_2d_heisenberg_circuit,
     create_2d_ising_circuit,
     create_heisenberg_circuit,
     create_ising_circuit,
@@ -206,3 +207,56 @@ def test_create_2d_ising_circuit_3x2() -> None:
     assert op_names.count("rx") == total_qubits
     # Check that rzz gates are present.
     assert "rzz" in op_names
+
+def test_create_2d_heisenberg_circuit_2x3() -> None:
+    """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
+
+    This test creates a 2D Heisenberg circuit for a grid with a specified number of rows and columns.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to num_rows * num_cols.
+      - Each qubit receives an rx gate in every timestep.
+      - The circuit contains rxx gates for the interactions.
+      - The circuit contains ryy gates for the interactions.
+      - The circuit contains rzz gates for the interactions.
+    """
+    num_rows = 2
+    num_cols = 3
+    total_qubits = num_rows * num_cols
+    circ = create_2d_heisenberg_circuit(num_rows, num_cols, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
+
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that each qubit gets one rx rotation in the single timestep.
+    assert op_names.count("rz") == total_qubits
+    assert "rxx" in op_names
+    assert "ryy" in op_names
+    assert "rzz" in op_names
+
+def test_create_2d_heisenberg_circuit_3x2() -> None:
+    """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
+
+    This test creates a 2D Heisenberg circuit for a grid with a specified number of rows and columns.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to num_rows * num_cols.
+      - Each qubit receives an rx gate in every timestep.
+      - The circuit contains rxx gates for the interactions.
+      - The circuit contains ryy gates for the interactions.
+      - The circuit contains rzz gates for the interactions.
+    """
+    num_rows = 3
+    num_cols = 2
+    total_qubits = num_rows * num_cols
+    circ = create_2d_heisenberg_circuit(num_rows, num_cols, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
+
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that each qubit gets one rx rotation in the single timestep.
+    assert op_names.count("rz") == total_qubits
+    assert "rxx" in op_names
+    assert "ryy" in op_names
+    assert "rzz" in op_names
+  
