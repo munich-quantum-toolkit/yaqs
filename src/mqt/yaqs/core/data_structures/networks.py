@@ -48,6 +48,8 @@ class MPS:
     __init__(length: int, tensors: list[NDArray[np.complex128]] | None = None,
                 physical_dimensions: list[int] | None = None, state: str = "zeros") -> None:
         Initializes the MPS with given length, tensors, physical dimensions, and initial state.
+    pad_bond_dimension():
+        Pads bond dimension with zeros
     write_max_bond_dim() -> int:
         Returns the maximum bond dimension in the MPS.
     flip_network() -> None:
@@ -78,6 +80,7 @@ class MPS:
         tensors: list[NDArray[np.complex128]] | None = None,
         physical_dimensions: list[int] | None = None,
         state: str = "zeros",
+        pad: int | None  = None,
     ) -> None:
         """Initializes a Matrix Product State (MPS).
 
@@ -179,6 +182,43 @@ class MPS:
 
             if state == "random":
                 self.normalize()
+        if pad is not None:
+            self.pad_bond_dimension(pad)
+
+    def pad_bond_dimension(self, target_dim: int) -> None:
+        """ Pad bond dimension
+
+        Pads the bond dimensions of each tensor in the MPS so that the internal bond 
+        dimensions are at least target_dim. For the first tensor the left bond dimension
+        remains 1, and for the last tensor the right bond dimension remains 1.
+        
+        Parameters
+        ----------
+        target_dim : int
+            The desired bond dimension for the internal bonds.
+            
+        Raises
+        ------
+        ValueError
+            If target_dim is smaller than any existing bond dimension.
+        """
+        for i, tensor in enumerate(self.tensors):
+            # Tensor shape is (physical_dim, chi_left, chi_right)
+            phys, chi_left, chi_right = tensor.shape
+            
+            # Determine desired bond dimensions
+            new_left = chi_left if i == 0 else target_dim
+            new_right = chi_right if i == self.length - 1 else target_dim
+            
+            # Check if the target dimensions are valid
+            if chi_left > new_left or chi_right > new_right:
+                raise ValueError("Target bond dimension must be at least as large as the current bond dimensions.")
+            
+            # Create a new tensor with zeros and copy the original data into the appropriate block
+            new_tensor = np.zeros((phys, new_left, new_right), dtype=tensor.dtype)
+            new_tensor[:, :chi_left, :chi_right] = tensor
+            
+            self.tensors[i] = new_tensor
 
     def write_max_bond_dim(self) -> int:
         """Write max bond dim.
@@ -507,7 +547,7 @@ class MPS:
             a_truth.append(np.allclose(mat, test_identity))
 
         for i in range(len(a)):
-            mat = oe.contract("ijk, ibk->jb", b[i], a[i])
+            mat = oe.contract("ijk, ilk->jl", b[i], a[i])
             mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
             b_truth.append(np.allclose(mat, test_identity))
