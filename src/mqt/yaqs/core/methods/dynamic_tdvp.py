@@ -18,12 +18,12 @@ of the state under a Hamiltonian represented as a Matrix Product Operator (MPO).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+import copy
+from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 from .tdvp import single_site_tdvp, two_site_tdvp
-
 if TYPE_CHECKING:
     from ..data_structures.networks import MPO, MPS
-    from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 
 def dynamic_tdvp(state: MPS, hamiltonian: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
@@ -41,9 +41,17 @@ def dynamic_tdvp(state: MPS, hamiltonian: MPO, sim_params: PhysicsSimParams | St
             such as the maximum allowable bond dimension for the MPS.
     """
     current_max_bond_dim = state.write_max_bond_dim()
+
+    # Manages long-range gates which require low SVD threshold
+    save = copy.deepcopy(sim_params.threshold)
+    if isinstance(sim_params, (StrongSimParams, WeakSimParams)) and hamiltonian.length > 2:
+        sim_params.threshold = 0
+
     if current_max_bond_dim <= sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_tdvp(state, hamiltonian, sim_params)
     else:
         # Perform 1TDVP when the bond dimension exceeds the allowed limit
         single_site_tdvp(state, hamiltonian, sim_params)
+
+    sim_params.threshold = save
