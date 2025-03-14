@@ -203,14 +203,7 @@ def create_heisenberg_circuit(
 
 
 def create_2d_heisenberg_circuit(
-    num_rows: int,
-    num_cols: int,
-    Jx: float,
-    Jy: float,
-    Jz: float,
-    h: float,
-    dt: float,
-    timesteps: int
+    num_rows: int, num_cols: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int
 ) -> QuantumCircuit:
     """2D Heisenberg Trotter circuit on a rectangular grid using a snaking MPS ordering.
 
