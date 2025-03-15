@@ -203,7 +203,7 @@ class BaseGate:
             return BaseGate(self.matrix - other.matrix)
         
     
-    def __mul__(self, other) -> BaseGate:
+    def __mul__(self, other: BaseGate | int | float | complex ) -> BaseGate:
         """Multiplies two gates together.
 
         Args:
@@ -223,7 +223,7 @@ class BaseGate:
                 return BaseGate(self.matrix @ other.matrix)
 
 
-    def __rmul__(self, other) -> BaseGate:
+    def __rmul__(self, other: BaseGate | int | float | complex) -> BaseGate:
         """Multiplies two gates together.
 
         Args:
@@ -287,7 +287,7 @@ class X(BaseGate):
     tensor = matrix
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -319,7 +319,7 @@ class Y(BaseGate):
     tensor = matrix
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -351,7 +351,7 @@ class Z(BaseGate):
     tensor = matrix
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -384,7 +384,7 @@ class H(BaseGate):
 
 
     def __init__(self) -> None:
-        pass
+        return None
 
 
     def set_sites(self, *sites: int) -> None:
@@ -422,7 +422,7 @@ class Destroy(BaseGate):
 
 
     def __init__(self) -> None:
-        pass
+        return None
 
 
     def set_sites(self, *sites: int) -> None:
@@ -456,7 +456,7 @@ class Id(BaseGate):
     tensor = matrix
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -488,7 +488,7 @@ class SX(BaseGate):
     tensor = matrix
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -521,7 +521,7 @@ class Rx(BaseGate):
     interaction = 1
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -580,7 +580,7 @@ class Ry(BaseGate):
     interaction = 1
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -640,7 +640,7 @@ class Rz(BaseGate):
 
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -699,7 +699,7 @@ class Phase(BaseGate):
     interaction = 1
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -756,7 +756,7 @@ class U3(BaseGate):
     interaction = 1
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -816,7 +816,7 @@ class CX(BaseGate):
     interaction = 2
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -854,7 +854,7 @@ class CZ(BaseGate):
     interaction = 2
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -893,7 +893,7 @@ class CPhase(BaseGate):
     interaction = 2
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -956,7 +956,7 @@ class SWAP(BaseGate):
     interaction = 2
 
     def __init__(self) -> None:
-        pass
+        return None
 
 
     def set_sites(self, *sites: int) -> None:
@@ -992,7 +992,7 @@ class Rxx(BaseGate):
     interaction = 2
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -1056,7 +1056,7 @@ class Ryy(BaseGate):
     interaction = 2
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -1120,7 +1120,7 @@ class Rzz(BaseGate):
     interaction = 2
 
     def __init__(self) -> None:
-        pass
+        return None
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
