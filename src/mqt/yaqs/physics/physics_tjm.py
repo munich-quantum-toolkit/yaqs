@@ -159,6 +159,9 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
             sample(phi, hamiltonian, noise_model, sim_params, results, j)
 
+    if sim_params.get_state:
+        sim_params.output_state = phi
+
     return results
 
 
@@ -209,5 +212,8 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         elif j == len(sim_params.times) - 1:
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
+
+    if sim_params.get_state:
+        sim_params.output_state = state
 
     return results

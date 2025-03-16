@@ -307,6 +307,59 @@ def test_weak_simulation_no_noise() -> None:
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
 
 
+def test_weak_simulation_get_state() -> None:
+    """Test the circuit-based simulation using WeakSimParams without noise to get a statevector.
+
+    This test constructs a 2-site Ising circuit and compares the output statevector with known values from qiskit.
+    """
+    num_qubits = 2
+    initial_state = MPS(num_qubits)
+
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit.measure_all()
+    shots = 1024
+    max_bond_dim = 4
+    threshold = 1e-6
+    window_size = 0
+    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size, get_state=True)
+
+    noise_model = None
+
+    simulator.run(initial_state, circuit, sim_params, noise_model)
+    assert sim_params.output_state is not None
+    assert isinstance(sim_params.output_state, MPS)
+    sv = sim_params.output_state.to_vec()
+
+    expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
+    fidelity = np.abs(np.vdot(sv, expected)) ** 2
+    np.testing.assert_allclose(1, fidelity)
+
+
+def test_weak_simulation_get_state_noise() -> None:
+    """Test the circuit-based simulation using WeakSimParams noise to get a statevector.
+
+    This test constructs a 2-site Ising circuit and configures the WeakSimParams to include a noise model and
+    return the final state. Since the noisy simulation cannot return the statevector, an exception should be raised.
+    """
+    num_qubits = 2
+    initial_state = MPS(num_qubits)
+
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit.measure_all()
+    shots = 1024
+    max_bond_dim = 4
+    threshold = 1e-6
+    window_size = 0
+    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size, get_state=True)
+
+    gamma = 1e-3
+    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+
+    with pytest.raises(AssertionError, match=r"Cannot return state in noisy circuit simulation due to stochastics."):
+        simulator.run(initial_state, circuit, sim_params, noise_model)
+    assert sim_params.output_state is None
+
+
 def test_mismatch() -> None:
     """Test that simulator.run raises an AssertionError when the state and circuit qubit counts mismatch.
 
