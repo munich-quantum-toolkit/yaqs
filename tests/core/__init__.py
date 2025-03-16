@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Tests for high-level simulator function."""
+"""Tests for core structures and methods."""

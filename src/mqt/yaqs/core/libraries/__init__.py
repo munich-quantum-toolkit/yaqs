@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Tests for high-level simulator function."""
+"""Libraries for fixed structures needed for simulation (e.g., circuits, gates, noise models)."""

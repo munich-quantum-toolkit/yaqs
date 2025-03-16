@@ -7,7 +7,7 @@ from qiskit_nature.second_q.hamiltonians.lattices import LineLattice, SquareLatt
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit.quantum_info import Operator
 
-from yaqs.core.libraries.circuit_library import create_1D_Fermi_Hubbard_circuit, create_2D_Fermi_Hubbard_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_1D_Fermi_Hubbard_circuit, create_2D_Fermi_Hubbard_circuit
 
 # FH model parameters
 t = -1.0  # kinetic hopping

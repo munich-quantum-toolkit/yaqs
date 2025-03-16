@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Tests for high-level simulator function."""
+"""YAQS's Hamiltonian simulator based on the the Tensor Jump Method (TJM)."""

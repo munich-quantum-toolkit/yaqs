@@ -2,12 +2,12 @@ import numpy as np
 import qiskit.circuit
 import matplotlib.pyplot as plt
 
-from yaqs.core.data_structures.networks import MPS
-from yaqs.core.data_structures.noise_model import NoiseModel
-from yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
-from yaqs.core.libraries.circuit_library import create_2D_Fermi_Hubbard_circuit
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.libraries.circuit_library import create_2D_Fermi_Hubbard_circuit
 
-from yaqs import Simulator
+from mqt.yaqs import simulator
 
 # Define the model
 t = -1.0        # kinetic hopping
@@ -36,8 +36,6 @@ measurements = [Observable('z', site) for site in range(num_qubits)]
 #heatmap = np.empty((num_qubits, timesteps))
 heatmap = np.zeros((num_sites, timesteps))
 
-print(state.)
-
 if __name__ == "__main__":
     for timestep in range(timesteps):
         print("Timestep: " + str(timestep))
@@ -48,7 +46,7 @@ if __name__ == "__main__":
         sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size)
         #gamma = 1e-5
         #noise_model = NoiseModel(['relaxation'], [gamma])
-        Simulator.run(state, circuit, sim_params, None)
+        simulator.run(state, circuit, sim_params, None)
 
         for observable in sim_params.observables:
             index = observable.site // 2
