@@ -29,6 +29,7 @@ from unittest.mock import patch
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.libraries.gate_library import X
 from mqt.yaqs.core.methods.dynamic_tdvp import dynamic_tdvp
 
 
@@ -60,7 +61,7 @@ def test_dynamic_tdvp_one_site() -> None:
     max_bond_dim = 0  # Force condition for single_site_TDVP.
     threshold = 1e-6
     order = 1
-    measurements = [Observable("x", site) for site in range(L)]
+    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
@@ -97,7 +98,7 @@ def test_dynamic_tdvp_two_site() -> None:
     max_bond_dim = 2  # Force condition for two_site_tdvp.
     threshold = 1e-6
     order = 1
-    measurements = [Observable("x", site) for site in range(L)]
+    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )

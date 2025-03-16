@@ -42,7 +42,7 @@ from mqt.yaqs.circuits.circuit_tjm import (
 )
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 
 
 def test_process_layer() -> None:
@@ -168,7 +168,7 @@ def test_apply_window() -> None:
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 1
-    measurements = [Observable("z", 0)]
+    measurements = [Observable(Z(), 0)]
     sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
 
     short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, sim_params)
@@ -201,7 +201,7 @@ def test_apply_two_qubit_gate_with_window() -> None:
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
-    observable = Observable("z", 0)
+    observable = Observable(Z(), 0)
     sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     orig_tensors = copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
@@ -230,7 +230,7 @@ def test_circuit_tjm_strong() -> None:
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
-    observable = Observable("z", 0)
+    observable = Observable(Z(), 0)
     sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     args = 0, mps0, None, sim_params, qc
     circuit_tjm(args)

@@ -16,21 +16,18 @@ thresholds, and window sizes, and they include methods for aggregating simulatio
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
-
-import copy
-
-from ..libraries.observables_library import ObservablesLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
 
+    from ..libraries.gate_library import BaseGate
 
-from ..libraries.gate_library import BaseGate
 
 class Observable:
     """Observable class.
@@ -341,7 +338,7 @@ class StrongSimParams:
             If True, output MPS is returned.
         """
         self.observables = observables
-        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
+        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
