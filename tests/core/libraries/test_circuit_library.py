@@ -41,9 +41,6 @@ from mqt.yaqs.core.libraries.circuit_library import (
 
 from mqt.yaqs.circuits.reference_implementation.FH_reference import create_Fermi_Hubbard_model_qutip
 
-from openfermion.hamiltonians import fermi_hubbard
-from openfermion.linalg import get_sparse_operator
-
 
 def test_create_ising_circuit_valid_even() -> None:
     """Test that create_ising_circuit returns a valid circuit for an even number of qubits.
@@ -333,28 +330,4 @@ def test_create_2D_Fermi_Hubbard_circuit_equal_qutip():
     # Calculate error
     error = np.linalg.norm(U_qutip - U_yaqs, 2)
     print("|U_qutip - U_yaqs| = " + str(error))
-    assert error <= 10e-3
-
-def test_create_2D_Fermi_Hubbard_circuit_equal_openfermion():
-    # Define the FH model parameters
-    t = 1.0         # kinetic hopping
-    mu = 0.5        # chemical potential
-    u = 4.0         # onsite interaction
-    Lx, Ly = 2, 2   # lattice dimensions
-    timesteps = 1
-    dt = 0.1
-    num_trotter_steps = 10
-
-    # yaqs implementation
-    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': -mu, 'u': u, 't': -t, 'num_trotter_steps': num_trotter_steps}
-    circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=timesteps)
-    U_yaqs = Operator(circuit).to_matrix()
-
-    # Openfermion implementation
-    H_openfermion = get_sparse_operator(fermi_hubbard(Lx, Ly, tunneling=t, coulomb=u, chemical_potential=mu, periodic=False)).todense()
-    U_openfermion = sp.linalg.expm(-1j*dt*timesteps*H_openfermion)
-
-    # Calculate error
-    error = np.linalg.norm(U_openfermion - U_yaqs, 2)
-    print("|U_openfermion - U_yaqs| = " + str(error))
     assert error <= 10e-3
