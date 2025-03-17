@@ -34,6 +34,7 @@ Define the initial state
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.libraries.gate_library import Z
 
 state = MPS(num_qubits, state="zeros")
 ```
@@ -47,7 +48,7 @@ num_traj = 100
 max_bond_dim = 4
 threshold = 1e-6
 window_size = 0
-measurements = [Observable("z", site) for site in range(num_qubits)]
+measurements = [Observable(Z(), site) for site in range(num_qubits)]
 sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
 ```
 
