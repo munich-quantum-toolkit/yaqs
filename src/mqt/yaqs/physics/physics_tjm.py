@@ -99,6 +99,9 @@ def sample(
     dynamic_tdvp(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
+    if j == len(sim_params.times) - 1 and sim_params.get_state:
+        sim_params.output_state = psi
+
     if sim_params.sample_timesteps:
         temp_state = copy.deepcopy(psi)
         last_site = 0
@@ -139,6 +142,8 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         determined by the number of observables and time steps.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
+    if sim_params.get_state:
+        assert not noise_model or all(gamma == 0 for gamma in noise_model.strengths), "Cannot return state in noisy circuit simulation due to stochastics."
 
     state = copy.deepcopy(initial_state)
     if sim_params.sample_timesteps:
@@ -158,9 +163,6 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         phi = step_through(phi, hamiltonian, noise_model, sim_params)
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
             sample(phi, hamiltonian, noise_model, sim_params, results, j)
-
-    if sim_params.get_state:
-        sim_params.output_state = phi
 
     return results
 
@@ -186,6 +188,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
     _i, initial_state, noise_model, sim_params, hamiltonian = args
     if sim_params.get_state:
         assert not noise_model or all(gamma == 0 for gamma in noise_model.strengths), "Cannot return state in noisy circuit simulation due to stochastics."
+
     state = copy.deepcopy(initial_state)
 
     if sim_params.sample_timesteps:
