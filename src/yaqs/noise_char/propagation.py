@@ -11,6 +11,9 @@ from dataclasses import dataclass
 
 from yaqs.noise_char.optimization import trapezoidal
 
+
+from mqt.yaqs.core.libraries.gate_library import *
+
 import scikit_tt.tensor_train as tt
 from scikit_tt.tensor_train import TT
 import scikit_tt.solvers.ode as ode
@@ -196,13 +199,13 @@ def tjm_traj(sim_params_class: SimulationParameters):
     threshold = 1e-6
     max_bond_dim = 4
     order = 2
-    obs_list = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
+    obs_list = [Observable(X(), site) for site in range(L)]  + [Observable(Y(), site) for site in range(L)] + [Observable(Z(), site) for site in range(L)]
 
 
 
-    jump_site_list = [ 'rel'  ,  'deph']
+    jump_site_list = [ Destroy()  ,  Z()]
 
-    obs_site_list = ['x', 'y', 'z']
+    obs_site_list = [X(), Y(), Z()]
 
 
     A_kn_site_list = []
@@ -215,7 +218,7 @@ def tjm_traj(sim_params_class: SimulationParameters):
     for lk in jump_site_list:
         for on in obs_site_list:
             for k in range(L):
-                A_kn_site_list.append(  Observable( lk+'_'+on, k) )
+                A_kn_site_list.append(  Observable( lk.dag()*on*lk  -  0.5*on*lk.dag()*lk  -  0.5*lk.dag()*lk*on , k) )
 
 
 
