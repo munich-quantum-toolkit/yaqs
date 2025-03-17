@@ -142,8 +142,6 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         determined by the number of observables and time steps.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
-    if sim_params.get_state:
-        assert not noise_model or all(gamma == 0 for gamma in noise_model.strengths), "Cannot return state in noisy circuit simulation due to stochastics."
 
     state = copy.deepcopy(initial_state)
     if sim_params.sample_timesteps:
@@ -186,8 +184,6 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         by the number of observables and time steps.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
-    if sim_params.get_state:
-        assert not noise_model or all(gamma == 0 for gamma in noise_model.strengths), "Cannot return state in noisy circuit simulation due to stochastics."
 
     state = copy.deepcopy(initial_state)
 
