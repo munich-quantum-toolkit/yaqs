@@ -228,7 +228,7 @@ class BaseGate:
                 msg = "Cannot multiply gates with different interaction"
                 raise ValueError(msg)
             return BaseGate(self.matrix @ other.matrix)
-
+        return None
 
     def __rmul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies two gates together.
