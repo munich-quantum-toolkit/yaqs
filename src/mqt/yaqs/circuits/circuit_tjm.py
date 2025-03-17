@@ -254,8 +254,6 @@ def circuit_tjm(
                 sim_params.output_state = state
             return state.measure_shots(sim_params.shots)
         # Each shot is an individual trajectory
-        if sim_params.get_state:
-            sim_params.output_state = state
         return state.measure_shots(shots=1)
     # StrongSimParams
     results = np.zeros((len(sim_params.observables), 1))
