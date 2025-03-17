@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..data_structures.networks import MPO
-from .observables_library import ObservablesLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -142,6 +141,31 @@ class BaseGate:
     tensor: NDArray[np.complex128]
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
 
+    def __init__(self, mat: NDArray[np.complex128]) -> None:
+        """Initializes a BaseGate instance with the given matrix.
+
+        Args:
+            mat (NDArray[np.complex128]): The matrix representation of the gate.
+
+        Raises:
+            ValueError: If the matrix is not square.
+            ValueError: If the matrix size is not a power of 2.
+
+        """
+        if mat.shape[0] != mat.shape[1]:
+            msg = "Matrix must be square"
+            raise ValueError(msg)
+
+        log = np.log2(mat.shape[0])
+
+        if log.is_integer() is False:
+            msg = "Matrix must have a size that is a power of 2"
+            raise ValueError(msg)
+
+        self.matrix = mat
+        self.tensor = mat
+        self.interaction = int(log)
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -149,6 +173,97 @@ class BaseGate:
             *sites (int): Variable length argument list specifying site indices.
         """
         self.sites: list[int] = list(sites)
+
+    def __add__(self, other: BaseGate) -> BaseGate:
+        """Adds two gates together.
+
+        Args:
+            other (BaseGate): The gate to be added.
+
+        Raises:
+            ValueError: If the gates have not the same interaction number
+
+        Returns:
+            BaseGate: The sum of the two gates.
+        """
+        if self.interaction != other.interaction:
+            msg = "Cannot add gates with different interaction"
+            raise ValueError(msg)
+        return BaseGate(self.matrix + other.matrix)
+
+    def __sub__(self, other: BaseGate) -> BaseGate:
+        """Subtracts one gate from another.
+
+        Args:
+            other (BaseGate): The gate to be subtracted.
+
+        Raises:
+            ValueError: If the gates have not the same interaction number
+
+        Returns:
+            BaseGate: The difference between the two gates.
+        """
+        if self.interaction != other.interaction:
+            msg = "Cannot subtract gates with different interaction"
+            raise ValueError(msg)
+        return BaseGate(self.matrix - other.matrix)
+
+    def __mul__(self, other: BaseGate | complex) -> BaseGate:
+        """Multiplies two gates together.
+
+        Args:
+            other (BaseGate): The gate to be multiplied.
+
+        Raises:
+            ValueError: If the gates have not the same interaction number
+
+        Returns:
+            BaseGate: The product of the two gates.
+        """
+        if isinstance(other, (int, float, complex)):
+            return BaseGate(self.matrix * other)
+
+        if isinstance(other, BaseGate):
+            if self.interaction != other.interaction:
+                msg = "Cannot multiply gates with different interaction"
+                raise ValueError(msg)
+            return BaseGate(self.matrix @ other.matrix)
+        return None
+
+    def __rmul__(self, other: BaseGate | complex) -> BaseGate:
+        """Multiplies two gates together.
+
+        Args:
+            other (BaseGate): The gate to be multiplied.
+
+        Returns:
+            BaseGate: The product of the two gates.
+        """
+        return self.__mul__(other)
+
+    def dag(self) -> BaseGate:
+        """Returns the conjugate transpose of the gate.
+
+        Returns:
+            BaseGate: The conjugate transpose of the gate.
+        """
+        return BaseGate(np.conj(self.matrix).T)
+
+    def conj(self) -> BaseGate:
+        """Returns the conjugate of the gate.
+
+        Returns:
+            BaseGate: The conjugate of the gate.
+        """
+        return BaseGate(np.conj(self.matrix))
+
+    def trans(self) -> BaseGate:
+        """Returns the transpose of the gate.
+
+        Returns:
+            BaseGate: The transpose of the gate.
+        """
+        return BaseGate(self.matrix.T)
 
 
 class X(BaseGate):
@@ -166,10 +281,14 @@ class X(BaseGate):
     """
 
     name = "x"
-    matrix = ObservablesLibrary["x"]
+    matrix = np.array([[0, 1], [1, 0]])
     interaction = 1
 
     tensor = matrix
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -195,10 +314,14 @@ class Y(BaseGate):
     """
 
     name = "y"
-    matrix = ObservablesLibrary["y"]
+    matrix = np.array([[0, -1j], [1j, 0]])
     interaction = 1
 
     tensor = matrix
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -224,10 +347,14 @@ class Z(BaseGate):
     """
 
     name = "z"
-    matrix = ObservablesLibrary["z"]
+    matrix = np.array([[1, 0], [0, -1]])
     interaction = 1
 
     tensor = matrix
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -258,6 +385,43 @@ class H(BaseGate):
 
     tensor = matrix
 
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
+class Destroy(BaseGate):
+    """Class representing the Hadamard (H) gate.
+
+    Attributes:
+        name (str): "h".
+        matrix (NDArray[np.complex128]): The 2x2 Hadamard matrix.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
+
+    name = "destroy"
+    matrix = np.array([[0, 1], [0, 0]])
+    interaction = 1
+
+    tensor = matrix
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -286,6 +450,10 @@ class Id(BaseGate):
     interaction = 1
 
     tensor = matrix
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -316,6 +484,10 @@ class SX(BaseGate):
 
     tensor = matrix
 
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -345,6 +517,10 @@ class Rx(BaseGate):
 
     name = "rx"
     interaction = 1
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -402,6 +578,10 @@ class Ry(BaseGate):
     name = "ry"
     interaction = 1
 
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
 
@@ -457,6 +637,10 @@ class Rz(BaseGate):
 
     name = "rz"
     interaction = 1
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -514,6 +698,10 @@ class Phase(BaseGate):
     name = "p"
     interaction = 1
 
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
 
@@ -567,6 +755,10 @@ class U3(BaseGate):
 
     name = "u"
     interaction = 1
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -625,6 +817,10 @@ class CX(BaseGate):
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
     interaction = 2
 
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -659,6 +855,10 @@ class CZ(BaseGate):
     name = "cz"
     matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]])
     interaction = 2
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -695,6 +895,10 @@ class CPhase(BaseGate):
 
     name = "cp"
     interaction = 2
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -756,6 +960,10 @@ class SWAP(BaseGate):
     matrix = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
     interaction = 2
 
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
 
@@ -787,6 +995,10 @@ class Rxx(BaseGate):
 
     name = "rxx"
     interaction = 2
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
@@ -849,6 +1061,10 @@ class Ryy(BaseGate):
     name = "ryy"
     interaction = 2
 
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
+
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.
 
@@ -909,6 +1125,10 @@ class Rzz(BaseGate):
 
     name = "rzz"
     interaction = 2
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        return
 
     def set_params(self, params: list[Parameter]) -> None:
         """Sets the rotation parameter for the gate and updates internal representations.

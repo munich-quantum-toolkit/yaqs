@@ -23,9 +23,9 @@ quantum simulation. It verifies that:
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.libraries.gate_library import X
 
 
 def test_observable_creation_valid() -> None:
@@ -34,25 +34,14 @@ def test_observable_creation_valid() -> None:
     This test constructs an Observable with the name "x" on site 0 and verifies that its attributes
     (name, site, results, and trajectories) are correctly initialized.
     """
-    name = "x"
+    gate = X()
     site = 0
-    obs = Observable(name, site)
+    obs = Observable(gate, site)
 
-    assert obs.name == name
+    assert np.array_equal(obs.gate.matrix, np.array([[0, 1], [1, 0]]))
     assert obs.site == site
     assert obs.results is None
     assert obs.trajectories is None
-
-
-def test_observable_creation_invalid() -> None:
-    """Test that creating an Observable with an invalid name raises an AttributeError.
-
-    This test attempts to create an Observable with a name not supported by the GateLibrary,
-    expecting an AttributeError to be raised.
-    """
-    name = "FakeName"
-    with pytest.raises(AssertionError):
-        Observable(name, 0)
 
 
 def test_physics_simparams_basic() -> None:
@@ -62,7 +51,7 @@ def test_physics_simparams_basic() -> None:
     sample_timesteps flag set to True, and a specified number of trajectories num_traj. It then verifies that the
     observables, elapsed_time, dt, times array, sample_timesteps flag, and num_traj are set correctly.
     """
-    obs_list = [Observable("x", 0)]
+    obs_list = [Observable(X(), 0)]
     elapsed_time = 1.0
     dt = 0.2
     params = PhysicsSimParams(obs_list, elapsed_time, dt=dt, sample_timesteps=True, num_traj=50)
@@ -106,7 +95,7 @@ def test_observable_initialize_with_sample_timesteps() -> None:
     It verifies that the results array has shape equal to the length of the times array and that the
     trajectories array has shape (num_traj, len(times)).
     """
-    obs = Observable("x", 1)
+    obs = Observable(X(), 1)
     sim_params = PhysicsSimParams([obs], elapsed_time=1.0, dt=0.5, sample_timesteps=True, num_traj=10)
     # sim_params.times => [0.0, 0.5, 1.0]
 
@@ -124,7 +113,7 @@ def test_observable_initialize_without_sample_timesteps() -> None:
     It verifies that the results array has shape equal to the length of the times array, the trajectories array
     has shape (num_traj, 1), and that the observable's times attribute is set to elapsed_time.
     """
-    obs = Observable("x", 0)
+    obs = Observable(X(), 0)
     sim_params = PhysicsSimParams([obs], elapsed_time=1.0, dt=0.25, sample_timesteps=False, num_traj=5)
     # times => [0.0, 0.25, 0.5, 0.75, 1.0]
 

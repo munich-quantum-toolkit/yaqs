@@ -23,18 +23,17 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from qiskit.circuit import QuantumCircuit
+
+from mqt.yaqs import simulator
+from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
-
-Id = GateLibrary.id.matrix
-X = GateLibrary.x.matrix
-Y = GateLibrary.y.matrix
-Z = GateLibrary.z.matrix
+from mqt.yaqs.core.libraries.gate_library import Id, X, Y, Z
 
 
 def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -91,19 +90,19 @@ def test_init_ising() -> None:
     block_JZ = left_block[0, 1]
     block_gX = left_block[0, 2]
 
-    assert np.allclose(block_I, Id)
-    assert np.allclose(block_JZ, minus_J * Z)
-    assert np.allclose(block_gX, minus_g * X)
+    assert np.allclose(block_I, Id().matrix)
+    assert np.allclose(block_JZ, minus_J * Z().matrix)
+    assert np.allclose(block_gX, minus_g * X().matrix)
 
     # Check an inner tensor (if length > 2): shape (2,2,3,3) -> untransposed to (3,3,2,2)
     if length > 2:
         inner_block = untranspose_block(mpo.tensors[1])
         assert inner_block.shape == (3, 3, 2, 2)
-        assert np.allclose(inner_block[0, 0], Id)
-        assert np.allclose(inner_block[0, 1], minus_J * Z)
-        assert np.allclose(inner_block[0, 2], minus_g * X)
-        assert np.allclose(inner_block[1, 2], Z)
-        assert np.allclose(inner_block[2, 2], Id)
+        assert np.allclose(inner_block[0, 0], Id().matrix)
+        assert np.allclose(inner_block[0, 1], minus_J * Z().matrix)
+        assert np.allclose(inner_block[0, 2], minus_g * X().matrix)
+        assert np.allclose(inner_block[1, 2], Z().matrix)
+        assert np.allclose(inner_block[2, 2], Id().matrix)
 
     # Check right boundary: shape (2,2,3,1) -> untransposed to (3,1,2,2)
     right_block = untranspose_block(mpo.tensors[-1])
@@ -113,9 +112,9 @@ def test_init_ising() -> None:
     block_Z = right_block[1, 0]
     block_I = right_block[2, 0]
 
-    assert np.allclose(block_gX, minus_g * X)
-    assert np.allclose(block_Z, Z)
-    assert np.allclose(block_I, Id)
+    assert np.allclose(block_gX, minus_g * X().matrix)
+    assert np.allclose(block_Z, Z().matrix)
+    assert np.allclose(block_I, Id().matrix)
 
 
 def test_init_heisenberg() -> None:
@@ -152,12 +151,12 @@ def test_init_heisenberg() -> None:
     minus_Jz = -Jz
     minus_h = -h
 
-    assert np.allclose(block_I, Id)
-    assert np.allclose(block_JxX, minus_Jx * X)
-    assert np.allclose(block_JyY, minus_Jy * Y)
+    assert np.allclose(block_I, Id().matrix)
+    assert np.allclose(block_JxX, minus_Jx * X().matrix)
+    assert np.allclose(block_JyY, minus_Jy * Y().matrix)
     assert block_JyY.shape == (2, 2)
-    assert np.allclose(block_JzZ, minus_Jz * Z)
-    assert np.allclose(block_hZ, minus_h * Z)
+    assert np.allclose(block_JzZ, minus_Jz * Z().matrix)
+    assert np.allclose(block_hZ, minus_h * Z().matrix)
 
     for i, tensor in enumerate(mpo.tensors):
         if i == 0:
@@ -186,7 +185,7 @@ def test_init_identity() -> None:
 
     for tensor in mpo.tensors:
         assert tensor.shape == (2, 2, 1, 1)
-        assert np.allclose(np.squeeze(tensor), Id)
+        assert np.allclose(np.squeeze(tensor), Id().matrix)
 
 
 def test_init_custom_hamiltonian() -> None:
@@ -554,7 +553,7 @@ def test_measure() -> None:
     length = 2
     pdim = 2
     mps = MPS(length=length, physical_dimensions=[pdim] * length, state="x+")
-    obs = Observable(site=0, name="x")
+    obs = Observable(X(), 0)
     val = mps.measure_expectation_value(obs)
     assert np.isclose(val, 1)
 
@@ -651,7 +650,7 @@ def test_convert_to_vector() -> None:
 
         # Create an MPS for the given state.
         mps = MPS(length=Length, state=state_str)
-        psi = mps.convert_to_vector()
+        psi = mps.to_vec()
 
         # Construct the expected state vector as the Kronecker product of local states.
         local_states = [local_state for i in range(Length)]
@@ -661,3 +660,74 @@ def test_convert_to_vector() -> None:
             expected = np.kron(expected, state)
 
         assert np.allclose(psi, expected, atol=tol)
+
+
+def test_convert_to_vector_fidelity() -> None:
+    """Test convert to vector.
+
+    Tests the MPS_to_vector function for a circuit input
+    """
+    num_qubits = 3
+    circ = QuantumCircuit(num_qubits)
+    circ.h(0)
+    circ.cx(0, 1)
+    state_vector = np.array([0.70710678, 0, 0, 0.70710678, 0, 0, 0, 0])
+
+    # Define the initial state
+    state = MPS(num_qubits, state="zeros")
+
+    # Define the simulation parameters
+    N = 1
+    max_bond_dim = 8
+    threshold = 0
+    window_size = 0
+    measurements = [Observable(Z(), site) for site in range(num_qubits)]
+    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
+    noise_model = None
+    simulator.run(state, circ, sim_params, noise_model)
+    assert sim_params.output_state is not None
+    tdvp_state = sim_params.output_state.to_vec()
+    np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
+
+
+def test_padded_mps() -> None:
+    """Test that MPS initializes with correct padding.
+
+    This test creates an MPS with padded bond dimensions.
+    """
+    length = 4
+    pdim = 2
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
+
+    assert mps.length == length
+    assert len(mps.tensors) == length
+    assert all(d == pdim for d in mps.physical_dimensions)
+
+    for i, tensor in enumerate(mps.tensors):
+        if i != 0 and i != mps.length - 1:
+            assert tensor.ndim == 3
+            assert tensor.shape[0] == pdim
+            assert tensor.shape[1] == 2
+            assert tensor.shape[2] == 2
+        elif i == 0:
+            assert tensor.ndim == 3
+            assert tensor.shape[0] == pdim
+            assert tensor.shape[1] == 1
+            assert tensor.shape[2] == 2
+        elif i == mps.length - 1:
+            assert tensor.ndim == 3
+            assert tensor.shape[0] == pdim
+            assert tensor.shape[1] == 2
+            assert tensor.shape[2] == 1
+
+
+def test_padded_mps_error() -> None:
+    """Test that MPS initializes with correct padding.
+
+    This test creates an MPS with incorrect padding
+    """
+    length = 4
+    pdim = 2
+    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
+    with pytest.raises(ValueError, match=r"Target bond dim must be at least as large as the current bond dim."):
+        mps.pad_bond_dimension(1)

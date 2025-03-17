@@ -16,15 +16,17 @@ thresholds, and window sizes, and they include methods for aggregating simulatio
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..libraries.observables_library import ObservablesLibrary
-from ..libraries.gate_library import GateLibrary
-
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+    from mqt.yaqs.core.data_structures.networks import MPS
+
+    from ..libraries.gate_library import BaseGate
 
 
 class Observable:
@@ -34,8 +36,8 @@ class Observable:
 
     Attributes:
     ----------
-    name : str
-        The name of the observable, which must be a valid attribute in the GateLibrary.
+    gate : BaseGate
+            The gate that will act as the observable.
     site : int
         The site (or qubit) on which the observable is measured.
     results : NDArray[np.float64] | None
@@ -51,13 +53,13 @@ class Observable:
         Initializes the results and trajectories arrays based on the type of simulation parameters provided.
     """
 
-    def __init__(self, name: str, site: int) -> None:
+    def __init__(self, gate: BaseGate, site: int) -> None:
         """Initializes an Observable instance.
 
         Parameters
         ----------
-        name : str
-            The name of the observable. Must correspond to a valid gate or operator in GateLibrary.
+        gate : BaseGate
+            The gate that will act as the observable.
         site : int
             The qubit or site index on which this observable is measured.
 
@@ -66,9 +68,10 @@ class Observable:
         AssertionError
             If the provided `name` is not a valid attribute in the GateLibrary.
         """
-        assert getattr(GateLibrary, name)
-        self.name = name
+        # assert name in ObservablesLibrary
+        self.gate = copy.deepcopy(gate)
         self.site = site
+        self.gate.set_sites(self.site)
         self.results: NDArray[np.float64] | None = None
         self.trajectories: NDArray[np.float64] | None = None
 
@@ -166,7 +169,7 @@ class PhysicsSimParams:
             Flag indicating whether to sample at intermediate time steps, by default True.
         """
         self.observables = observables
-        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
+        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
         self.elapsed_time = elapsed_time
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
@@ -218,9 +221,7 @@ class WeakSimParams:
     dt = 1
     num_traj = 0
 
-    def __init__(
-        self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None
-    ) -> None:
+    def __init__(self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = 0) -> None:
         """Weak circuit simulation initialization.
 
         Initializes parameters for a weak circuit simulation.
@@ -277,6 +278,8 @@ class StrongSimParams:
     -----------
     dt : int
         A placeholder property for code compatibility.
+    output_state: MPS
+        Output state following simulation if get_state is True
     observables : list[Observable]
         A list of observables to be tracked during the simulation.
     sorted_observables : list[Observable]
@@ -289,6 +292,8 @@ class StrongSimParams:
         The threshold value for the simulation. Default is 1e-6.
     window_size : int or None
         The size of the window for the simulation. Default is None.
+    get_state:
+        If True, output MPS is returned.
 
     Methods:
     --------
@@ -301,6 +306,7 @@ class StrongSimParams:
 
     # Properties set as placeholders for code compatibility
     dt = 1
+    output_state: MPS | None = None
 
     def __init__(
         self,
@@ -308,7 +314,9 @@ class StrongSimParams:
         num_traj: int = 1000,
         max_bond_dim: int = 2,
         threshold: float = 1e-6,
-        window_size: int | None = None,
+        window_size: int | None = 0,
+        *,
+        get_state: bool = False,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -326,13 +334,16 @@ class StrongSimParams:
             Threshold for simulation accuracy, by default 1e-6.
         window_size : int or None, optional
             Window size for simulation, by default None.
+        get_state:
+            If True, output MPS is returned.
         """
         self.observables = observables
-        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
+        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
+        self.get_state = get_state
 
     def aggregate_trajectories(self) -> None:
         """Aggregate trajectories for result.

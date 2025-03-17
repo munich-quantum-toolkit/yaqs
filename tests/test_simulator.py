@@ -31,6 +31,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     WeakSimParams,
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
+from mqt.yaqs.core.libraries.gate_library import X, Z
 
 
 def test_physics_simulation() -> None:
@@ -55,7 +56,7 @@ def test_physics_simulation() -> None:
     threshold = 1e-6
     order = 2
 
-    measurements = [Observable("z", site) for site in range(length)]
+    measurements = [Observable(Z(), site) for site in range(length)]
     sim_params = PhysicsSimParams(
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
@@ -103,7 +104,7 @@ def test_physics_simulation_parallel_off() -> None:
     threshold = 1e-6
     order = 2
 
-    measurements = [Observable("z", site) for site in range(length)]
+    measurements = [Observable(Z(), site) for site in range(length)]
     sim_params = PhysicsSimParams(
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
@@ -148,7 +149,7 @@ def test_strong_simulation() -> None:
     threshold = 1e-12
     window_size = 0
 
-    measurements = [Observable("z", site) for site in range(num_qubits)]
+    measurements = [Observable(Z(), site) for site in range(num_qubits)]
     sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
@@ -173,6 +174,30 @@ def test_strong_simulation() -> None:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
 
+def test_strong_simulation_no_noise() -> None:
+    """Test the circuit-based simulation using StrongSimParams without noise to get a statevector.
+
+    This test constructs a 2-site Ising circuit and compares the output statevector with known values from qiskit.
+    """
+    num_qubits = 2
+    circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circ.measure_all()
+
+    state = MPS(length=num_qubits)
+    measurements = [Observable(X(), num_qubits // 2)]
+    sim_params = StrongSimParams(
+        measurements, num_traj=1, max_bond_dim=16, threshold=1e-6, window_size=0, get_state=True
+    )
+    simulator.run(state, circ, sim_params, noise_model=None)
+    assert sim_params.output_state is not None
+    assert isinstance(sim_params.output_state, MPS)
+    sv = sim_params.output_state.to_vec()
+
+    expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
+    fidelity = np.abs(np.vdot(sv, expected)) ** 2
+    np.testing.assert_allclose(1, fidelity)
+
+
 def test_strong_simulation_parallel_off() -> None:
     """Test the circuit-based simulation branch using StrongSimParams, parallelization off.
 
@@ -192,7 +217,7 @@ def test_strong_simulation_parallel_off() -> None:
     threshold = 1e-12
     window_size = 0
 
-    measurements = [Observable("z", site) for site in range(num_qubits)]
+    measurements = [Observable(Z(), site) for site in range(num_qubits)]
     sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
