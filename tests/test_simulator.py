@@ -129,6 +129,48 @@ def test_physics_simulation_parallel_off() -> None:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
 
+def test_physics_simulation_get_state() -> None:
+    """Test the Hamiltonian simulation (physics simulation) using PhysicsSimParams without noise to get a statevector.
+
+    This test creates an MPS of length 2 initialized to the "zeros" state and an Ising MPO operator.
+    With sample_timesteps set to False, the test verifies for two-site (order=2) and single-site (order=1) that the
+    resulting output statevector is correct.
+    """
+    for order in [1, 2]:
+        length = 2
+        initial_state = MPS(length, state="zeros")
+
+        H = MPO()
+        H.init_ising(length, J=1, g=0.5)
+        elapsed_time = 1
+        dt = 0.1
+        sample_timesteps = False
+        num_traj = 1
+        max_bond_dim = 4
+        threshold = 1e-6
+
+        measurements = [Observable("x", length // 2)]
+        sim_params = PhysicsSimParams(
+            measurements,
+            elapsed_time,
+            dt, num_traj,
+            max_bond_dim,
+            threshold,
+            order,
+            sample_timesteps=sample_timesteps,
+            get_state=True
+        )
+        simulator.run(initial_state, H, sim_params, noise_model=None, parallel=False)
+        assert sim_params.output_state is not None
+        assert isinstance(sim_params.output_state, MPS)
+        sv = sim_params.output_state.to_vec()
+
+        expected = [3.48123000e-01 + 0.76996349j, 0.00000000e+00 + 0.349228j,
+                    0.00000000e+00 + 0.349228j, -1.92179306e-01 - 0.07150749j]
+        fidelity = np.abs(np.vdot(sv, expected)) ** 2
+        np.testing.assert_allclose(1, fidelity)
+
+
 def test_strong_simulation() -> None:
     """Test the circuit-based simulation branch using StrongSimParams.
 
