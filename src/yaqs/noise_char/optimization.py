@@ -133,6 +133,14 @@ def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_ite
         sim_params.gamma_deph -= learning_rate * dJ_dg[1]
 
 
+
+        if sim_params.gamma_rel < 0:
+            sim_params.gamma_rel = 0
+
+        if sim_params.gamma_deph < 0:
+            sim_params.gamma_deph = 0
+
+
         dJ_dgr_history.append(dJ_dg[0])
 
         dJ_dgd_history.append(dJ_dg[1])
@@ -214,6 +222,12 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
         # Update simulation parameters with Adam update (NEW)
         sim_params.gamma_rel -= update[0]
         sim_params.gamma_deph -= update[1]
+
+        if sim_params.gamma_rel < 0:
+            sim_params.gamma_rel = 0
+
+        if sim_params.gamma_deph < 0:
+            sim_params.gamma_deph = 0
 
         # Log gradient updates
         dJ_dgr_history.append(dJ_dg[0])
