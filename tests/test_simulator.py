@@ -153,20 +153,25 @@ def test_physics_simulation_get_state() -> None:
         sim_params = PhysicsSimParams(
             measurements,
             elapsed_time,
-            dt, num_traj,
+            dt,
+            num_traj,
             max_bond_dim,
             threshold,
             order,
             sample_timesteps=sample_timesteps,
-            get_state=True
+            get_state=True,
         )
         simulator.run(initial_state, H, sim_params, noise_model=None, parallel=False)
         assert sim_params.output_state is not None
         assert isinstance(sim_params.output_state, MPS)
         sv = sim_params.output_state.to_vec()
 
-        expected = [3.48123000e-01 + 0.76996349j, 0.00000000e+00 + 0.349228j,
-                    0.00000000e+00 + 0.349228j, -1.92179306e-01 - 0.07150749j]
+        expected = [
+            3.48123000e-01 + 0.76996349j,
+            0.00000000e00 + 0.349228j,
+            0.00000000e00 + 0.349228j,
+            -1.92179306e-01 - 0.07150749j,
+        ]
         fidelity = np.abs(np.vdot(sv, expected)) ** 2
         np.testing.assert_allclose(1, fidelity)
 
