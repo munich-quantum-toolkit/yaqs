@@ -160,7 +160,7 @@ def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_ite
 
 
 # --- ADAM GRADIENT DESCENT (Modified) ---
-def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8):
+def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8):
     """
     Parameters:
     sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
@@ -197,9 +197,7 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
     gd_history.append(sim_params.gamma_deph)
 
     # Adam hyperparameters and initialization (NEW)
-    beta1 = 0.9
-    beta2 = 0.999
-    epsilon = 1e-8
+
     m = np.array([0.0, 0.0])  # First moment (for [gamma_rel, gamma_deph])
     v = np.array([0.0, 0.0])  # Second moment (for [gamma_rel, gamma_deph])
 
