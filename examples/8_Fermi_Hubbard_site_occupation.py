@@ -17,9 +17,9 @@ Lx, Ly = 2, 2   # lattice dimensions
 
 # Define the circuit
 num_sites = Lx * Ly
-num_qubits = 2*num_sites
-num_trotter_steps = 10
-timesteps = 20
+num_qubits = 2 * num_sites
+num_trotter_steps = 1
+timesteps = 1000
 dt = 0.1
 total_time = dt * timesteps
 
@@ -27,7 +27,7 @@ total_time = dt * timesteps
 state = MPS(num_qubits, state='wall')
 
 # Define the simulation parameters
-N = 100
+N = 1
 max_bond_dim = 4
 threshold = 1e-6
 window_size = 0
@@ -49,19 +49,22 @@ if __name__ == "__main__":
 
         #for observable in sim_params.observables:
         #    index = observable.site // 2
-        #    print(str(observable.site) + " -> " + str(index))
-        #    print((1/2 * (1 - observable.results.item())))
-        #    #heatmap[index, timestep] += (1/2 * (1 - observable.results.item()))
         #    heatmap[index, timestep] -= 0.5 * observable.results.item()
 
         for observable in sim_params.observables:
             index = observable.site
-            print(str(observable.site) + " -> " + str(index))
-            print(((observable.results.item())))
-            #heatmap[index, timestep] += (1/2 * (1 - observable.results.item()))
             heatmap[index, timestep] = 0.5 * (1 - observable.results.item())
 
         state = sim_params.output_state
 
-    plt.plot(heatmap.transpose())
-    plt.show()
+plt.figure(figsize=(10, 5))
+for i in range(num_qubits):
+    site = i // 2
+    spin = "↑" if i % 2 == 0 else '↓'
+    plt.plot(heatmap[i, :], label=f"Site {site} " + spin)
+
+plt.xlabel("Time")
+plt.ylabel("Occupation")
+plt.title("2D Hubbard Model: Time Evolution of Site Occupations (mqt-yaqs)")
+plt.legend()
+plt.show()
