@@ -6,8 +6,9 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
-from mqt.yaqs import Simulator
+from mqt.yaqs.simulator import _run_physics
 from dataclasses import dataclass
+from mqt.yaqs.core.libraries.gate_library import *
 
 
 
@@ -89,7 +90,7 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 
 
-def tjm(sim_params_class: SimulationParameters, N=100):
+def tjm(sim_params_class: SimulationParameters, N=3000):
 
     T = sim_params_class.T
     dt = sim_params_class.dt
@@ -106,7 +107,7 @@ def tjm(sim_params_class: SimulationParameters, N=100):
     # Define the system Hamiltonian
     d = 2
     H_0 = MPO()
-    H_0.init_Ising(L, d, J, g)
+    H_0.init_ising(L, J, g)
     # Define the initial state
     state = MPS(L, state='zeros')
 
@@ -120,10 +121,10 @@ def tjm(sim_params_class: SimulationParameters, N=100):
     threshold = 1e-6
     max_bond_dim = 4
     order = 2
-    measurements = [Observable('x', site) for site in range(L)]  #+ [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
+    measurements = [Observable(X(), site) for site in range(L)]  #+ [Observable(Y(), site) for site in range(L)] + [Observable(Z(), site) for site in range(L)]
 
-    sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
-    Simulator.run(state, H_0, sim_params, noise_model)
+    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order)
+    _run_physics(state, H_0, sim_params, noise_model, parallel = True)
 
     tjm_exp_vals = []
     for observable in sim_params.observables:
@@ -141,6 +142,8 @@ if __name__ == "__main__":
 
 
     params_default = SimulationParameters()
+
+    params_default.T = 15
 
     print(params_default.T)
     print(params_default.dt)
@@ -245,7 +248,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(10,8))
     for i in range(len(tjm_results)):
         plt.plot(t, qutip_results[i], label=f'exp val qutip obs {i}')
-        # plt.plot(t, tjm_results[i], label=f'exp val tjm obs {i}')
+        plt.plot(t, tjm_results[i], label=f'exp val tjm obs {i}')
         # plt.plot(t, qutip_results[i]-tjm_results[i], label = f'observable {i}')
     plt.xlabel('times')
     plt.ylabel('expectation value')
