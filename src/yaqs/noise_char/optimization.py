@@ -3,6 +3,9 @@ import time
 
 from scipy.optimize import minimize
 
+import os
+import copy
+
 def trapezoidal(y, x):
 
     len_x = len(x)
@@ -88,7 +91,7 @@ def loss_function(sim_params, ref_traj, traj_der):
 
 
 
-def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8):
+def gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, file_name=" "):
     """
     Performs gradient descent to minimize the loss function.
 
@@ -106,14 +109,14 @@ def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_ite
         SimulationParameters: Optimized simulation parameters.
         list: Loss history.
     """
+
+    sim_params=copy.deepcopy(sim_params_copy)
+
+
     loss_history = []
 
     gr_history = []
     gd_history = []
-
-    gr_history.append(sim_params.gamma_rel)
-    gd_history.append(sim_params.gamma_deph)
-
 
 
     dJ_dgr_history = []
@@ -123,12 +126,33 @@ def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_ite
     for iteration in range(max_iterations):
         # Calculate loss and gradients
         loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
+
+
+        if file_name != " ":
+            if os.path.exists(file_name):
+                os.remove(file_name)
+            with open(file_name, 'a') as file:
+                file.write('    '.join(map(str, [iteration, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
+
+
         loss_history.append(loss)
+        gr_history.append(sim_params.gamma_rel)
+        gd_history.append(sim_params.gamma_deph)
+        dJ_dgr_history.append(dJ_dg[0])
+        dJ_dgd_history.append(dJ_dg[1])
+
+
+        print(f"!!!!!!! Iteration = {iteration}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+
+ 
+
 
         # Check for convergence
         if loss < tolerance:
             print(f"Converged after {iteration} iterations.")
-            break        
+            break       
+
+
         sim_params.gamma_rel -= learning_rate * dJ_dg[0]
         sim_params.gamma_deph -= learning_rate * dJ_dg[1]
 
@@ -141,18 +165,8 @@ def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_ite
             sim_params.gamma_deph = 0
 
 
-        dJ_dgr_history.append(dJ_dg[0])
-
-        dJ_dgd_history.append(dJ_dg[1])
- 
 
 
-
-        gr_history.append(sim_params.gamma_rel)
-        gd_history.append(sim_params.gamma_deph)
-        
-
-        print(f"!!!!!!! Iteration {iteration}: Loss = {loss}")
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
 
@@ -160,7 +174,7 @@ def gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_ite
 
 
 # --- ADAM GRADIENT DESCENT (Modified) ---
-def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8):
+def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, file_name=" "):
     """
     Parameters:
     sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
@@ -187,14 +201,16 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
     - Introduced hyperparameters beta1, beta2, and epsilon.
     - Updated parameters using the Adam update rule with bias correction.
     """
+
+    sim_params=copy.deepcopy(sim_params_copy)
+
+
     loss_history = []
     gr_history = []
     gd_history = []
     dJ_dgr_history = []
     dJ_dgd_history = []
 
-    gr_history.append(sim_params.gamma_rel)
-    gd_history.append(sim_params.gamma_deph)
 
     # Adam hyperparameters and initialization (NEW)
 
@@ -204,7 +220,24 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
     for iteration in range(max_iterations):
         # Calculate loss and gradients (unchanged)
         loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
+        
+
+        if file_name != " ":
+            if os.path.exists(file_name):
+                os.remove(file_name)
+            with open(file_name, 'a') as file:
+                file.write('    '.join(map(str, [iteration, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
+
+
         loss_history.append(loss)
+        gr_history.append(sim_params.gamma_rel)
+        gd_history.append(sim_params.gamma_deph)
+        dJ_dgr_history.append(dJ_dg[0])
+        dJ_dgd_history.append(dJ_dg[1])
+
+
+        print(f"!!!!!!! Iteration = {iteration}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+
 
         if loss < tolerance:
             print(f"Converged after {iteration} iterations.")
@@ -227,14 +260,11 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
         if sim_params.gamma_deph < 0:
             sim_params.gamma_deph = 0
 
-        # Log gradient updates
-        dJ_dgr_history.append(dJ_dg[0])
-        dJ_dgd_history.append(dJ_dg[1])
+
         
-        gr_history.append(sim_params.gamma_rel)
-        gd_history.append(sim_params.gamma_deph)
         
-        print(f"!!!!!!! Iteration = {iteration}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+
+
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
 
@@ -243,7 +273,7 @@ def ADAM_gradient_descent(sim_params, ref_traj, traj_der, learning_rate=0.01, ma
 
 
 
-def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8):
+def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, file_name=" "):
     """
     Parameters:
     sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
@@ -264,14 +294,19 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
     
     Performs BFGS optimization to minimize the loss function.
     """
+
+
+    sim_params=copy.deepcopy(sim_params_copy)
+
+
+
     loss_history = []
     gr_history = []
     gd_history = []
     dJ_dgr_history = []
     dJ_dgd_history = []
 
-    gr_history.append(sim_params.gamma_rel)
-    gd_history.append(sim_params.gamma_deph)
+
 
     # Initial parameters
     params_old = np.array([sim_params.gamma_rel, sim_params.gamma_deph])
@@ -285,7 +320,24 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
 
     # Calculate first loss and gradients
     loss, exp_vals_traj, grad_old = loss_function(sim_params, ref_traj, traj_der)
+
+
+
+    if file_name != " ":
+        if os.path.exists(file_name):
+                os.remove(file_name)
+        with open(file_name, 'a') as file:
+            file.write('    '.join(map(str, [0, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
+
+
     loss_history.append(loss)
+    gr_history.append(params_old[0])
+    gd_history.append(params_old[1])
+    dJ_dgr_history.append(grad_old[0])
+    dJ_dgd_history.append(grad_old[1])
+
+
+    print(f"!!!!!!! Iteration = 0, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
 
 
 
@@ -309,7 +361,24 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
 
         # Calculate new loss and gradients
         loss, exp_vals_traj, grad_new = loss_function(sim_params, ref_traj, traj_der)
+        
+        if file_name != " ":
+            with open(file_name, 'a') as file:
+                file.write('    '.join(map(str, [iteration +1, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
+
+
         loss_history.append(loss)
+        gr_history.append(params_new[0])
+        gd_history.append(params_new[1])
+        dJ_dgr_history.append(grad_new[0])
+        dJ_dgd_history.append(grad_new[1])
+
+
+        print(f"!!!!!!! Iteration = {iteration + 1}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+        
+
+
+
 
         if loss < tolerance:
             print(f"Converged after {iteration} iterations.")
@@ -326,16 +395,13 @@ def BFGS(sim_params, ref_traj, traj_der, learning_rate=0.01, max_iterations=200,
         H_inv = (I - rho * np.outer(s, y)).dot(H_inv).dot(I - rho * np.outer(y, s)) + rho * np.outer(s, s)
 
         # Log history
-        dJ_dgr_history.append(grad_new[0])
-        dJ_dgd_history.append(grad_new[1])
-        gr_history.append(sim_params.gamma_rel)
-        gd_history.append(sim_params.gamma_deph)
+
 
 
         params_old = params_new
         grad_old = grad_new
 
-        print(f"!!!!!!! Iteration = {iteration}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+
 
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
