@@ -123,14 +123,16 @@ def gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, ma
     dJ_dgd_history = []
 
 
+    if os.path.exists(file_name) and file_name != " ":
+        os.remove(file_name)
+
+
     for iteration in range(max_iterations):
         # Calculate loss and gradients
         loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
 
 
         if file_name != " ":
-            if os.path.exists(file_name):
-                os.remove(file_name)
             with open(file_name, 'a') as file:
                 file.write('    '.join(map(str, [iteration, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
 
@@ -212,6 +214,11 @@ def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.0
     dJ_dgd_history = []
 
 
+
+    if os.path.exists(file_name) and file_name != " ":
+        os.remove(file_name)
+
+
     # Adam hyperparameters and initialization (NEW)
 
     m = np.array([0.0, 0.0])  # First moment (for [gamma_rel, gamma_deph])
@@ -223,8 +230,6 @@ def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.0
         
 
         if file_name != " ":
-            if os.path.exists(file_name):
-                os.remove(file_name)
             with open(file_name, 'a') as file:
                 file.write('    '.join(map(str, [iteration, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
 
@@ -306,7 +311,8 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
     dJ_dgr_history = []
     dJ_dgd_history = []
 
-
+    if os.path.exists(file_name) and file_name != " ":
+        os.remove(file_name)
 
     # Initial parameters
     params_old = np.array([sim_params.gamma_rel, sim_params.gamma_deph])
@@ -324,8 +330,6 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
 
 
     if file_name != " ":
-        if os.path.exists(file_name):
-                os.remove(file_name)
         with open(file_name, 'a') as file:
             file.write('    '.join(map(str, [0, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
 
