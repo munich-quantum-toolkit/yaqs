@@ -250,6 +250,8 @@ def circuit_tjm(
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             # All shots can be done at once in noise-free model
+            if sim_params.get_state:
+                sim_params.output_state = state
             return state.measure_shots(sim_params.shots)
         # Each shot is an individual trajectory
         return state.measure_shots(shots=1)
