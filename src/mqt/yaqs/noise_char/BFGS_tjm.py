@@ -15,12 +15,12 @@ import time
 import importlib
 import yaqs
 
-from yaqs.noise_char.optimization import *
-# from yaqs.noise_char.propagation import *
-from yaqs.noise_char.analytical_gradient_tjm import *
+from mqt.yaqs.noise_char.optimization import *
+from mqt.yaqs.noise_char.propagation import *
+from mqt.yaqs.noise_char.analytical_gradient_tjm import *
 
-importlib.reload(yaqs.noise_char.optimization)
-importlib.reload(yaqs.noise_char.propagation)
+# importlib.reload(yaqs.noise_char.optimization)
+# importlib.reload(yaqs.noise_char.propagation)
 
 
 
@@ -202,7 +202,7 @@ if __name__ == '__main__':
     J = 1
     g = 0.5
     H_0 = MPO()
-    H_0.init_Ising(L, d, J, g)
+    H_0.init_ising(L, J, g)
 
     # Define the initial state
     state = MPS(L, state='zeros')
@@ -220,8 +220,10 @@ if __name__ == '__main__':
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
-    measurements = [Observable('x', site) for site in range(L)]  + [Observable('y', site) for site in range(L)]  + [Observable('z', site) for site in range(L)]
-    initial_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
+    measurements = [Observable(X(), site) for site in range(L)]  + [Observable(Y(), site) for site in range(L)]  + [Observable(Z(), site) for site in range(L)]
+    initial_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order)
+    
+
 
 
     '''QUTIP calculation'''

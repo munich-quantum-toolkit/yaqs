@@ -90,7 +90,7 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 
 
-def tjm(sim_params_class: SimulationParameters, N=3000):
+def tjm(sim_params_class: SimulationParameters, N=300):
 
     T = sim_params_class.T
     dt = sim_params_class.dt
@@ -138,11 +138,7 @@ def tjm(sim_params_class: SimulationParameters, N=3000):
 
 if __name__ == "__main__":
 
-
-
-
     params_default = SimulationParameters()
-
     params_default.T = 15
 
     print(params_default.T)
@@ -158,91 +154,6 @@ if __name__ == "__main__":
     t, qutip_results=qutip_traj(params_default)
 
     t_traj, tjm_results=tjm(params_default)
-
-
-
-
-
-    # L = 5
-    # T = 5
-    # dt = 0.1
-    # J = 1
-    # g = 0.5
-    # gamma = 0.1
-
-
-
-    # sample_timesteps = True
-    # N = 1000
-    # threshold = 1e-6
-    # max_bond_dim = 4
-    # order = 2
-    # measurements = [Observable('x', site) for site in range(L)] # + [Observable('y', site) for site in range(L)] + [Observable('z', site) for site in range(L)]
-
-    # sim_params = PhysicsSimParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
-
-
-
-
-    # t = np.arange(0, sim_params.T + sim_params.dt, sim_params.dt)
-
-    # # Define Pauli matrices
-    # sx = qt.sigmax()
-    # sy = qt.sigmay()
-    # sz = qt.sigmaz()
-
-    # # Construct the Ising Hamiltonian
-    # H = 0
-    # for i in range(L-1):
-    #     H += -J * qt.tensor([sz if n==i or n==i+1 else qt.qeye(2) for n in range(L)])
-    # for i in range(L):
-    #     H += -g * qt.tensor([sx if n==i else qt.qeye(2) for n in range(L)])
-
-    # # Construct collapse operators
-    # c_ops = []
-
-    # # Relaxation operators
-    # for i in range(L):
-    #     c_ops.append(np.sqrt(gamma) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
-
-    # # Dephasing operators
-    # for i in range(L):
-    #     c_ops.append(np.sqrt(gamma) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
-
-    # # Initial state
-    # psi0 = qt.tensor([qt.basis(2, 0) for _ in range(L)])
-
-    # # Define measurement operators
-    # sx_list = [qt.tensor([sx if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
-
-    # # Exact Lindblad solution
-    # result_lindblad = qt.mesolve(H, psi0, t, c_ops, sx_list, progress_bar=True)
-    # qutip_results = []
-    # for site in range(len(sx_list)):
-    #     qutip_results.append(result_lindblad.expect[site])
-
-    # H_0 = MPO()
-    # H_0.init_Ising(L, 2, J, g)
-
-    # # Define the initial state
-    # state = MPS(L, state='zeros')
-
-    # # Define the noise model
-    # noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma, gamma])
-
-    # Simulator.run(state, H_0, sim_params, noise_model)
-
-    # tjm_results = []
-    # for observable in sim_params.observables:
-    #     tjm_results.append(observable.results)
-
-
-
-
-    
-
-
-
 
     # Plot results
     plt.figure(figsize=(10,8))
