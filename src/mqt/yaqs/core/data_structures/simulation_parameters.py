@@ -16,6 +16,7 @@ thresholds, and window sizes, and they include methods for aggregating simulatio
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -26,6 +27,12 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
+
+
+class TensorEvolMode(Enum):
+    """Enumerates the different modes of tensor evolution in the simulation."""
+    TDVP = "tdvp"
+    BUG = "bug"
 
 
 class Observable:
@@ -142,6 +149,7 @@ class PhysicsSimParams:
         order: int = 1,
         *,
         sample_timesteps: bool = True,
+        tensorevol_mode: TensorEvolMode = TensorEvolMode.TDVP,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -165,6 +173,8 @@ class PhysicsSimParams:
             Order of approximation or numerical scheme, by default 1.
         sample_timesteps : bool, optional
             Flag indicating whether to sample at intermediate time steps, by default True.
+        tensorevol_mode : TensorEvolMode, optional
+            Mode of tensor evolution in the simulation, by default TensorEvolMode.TDVP.
         """
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
@@ -176,6 +186,7 @@ class PhysicsSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
+        self.tensorevol_mode = tensorevol_mode
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
