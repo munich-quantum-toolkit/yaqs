@@ -107,6 +107,9 @@ def sample(
         bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
+    if j == len(sim_params.times) - 1 and sim_params.get_state:
+        sim_params.output_state = psi
+
     if sim_params.sample_timesteps:
         temp_state = copy.deepcopy(psi)
         last_site = 0
@@ -189,6 +192,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         by the number of observables and time steps.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
+
     state = copy.deepcopy(initial_state)
 
     if sim_params.sample_timesteps:
@@ -217,5 +221,8 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         elif j == len(sim_params.times) - 1:
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
+
+    if sim_params.get_state:
+        sim_params.output_state = state
 
     return results
