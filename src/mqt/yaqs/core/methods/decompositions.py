@@ -20,35 +20,35 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def right_qr(ps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Right QR.
 
     Performs the QR decomposition of an MPS tensor moving to the right.
 
     Args:
-        ps_tensor: The tensor to be decomposed.
+        mps_tensor: The tensor to be decomposed.
 
     Returns:
         q_tensor: The Q tensor with the left virtual leg and the physical
             leg (phys,left,new).
         r_mat: The R matrix with the right virtual leg (new,right).
     """
-    old_shape = ps_tensor.shape
+    old_shape = mps_tensor.shape
     qr_shape = (old_shape[0] * old_shape[1], old_shape[2])
-    ps_tensor = ps_tensor.reshape(qr_shape)
-    q_mat, r_mat = np.linalg.qr(ps_tensor)
+    mps_tensor = mps_tensor.reshape(qr_shape)
+    q_mat, r_mat = np.linalg.qr(mps_tensor)
     new_shape = (old_shape[0], old_shape[1], -1)
     q_tensor = q_mat.reshape(new_shape)
     return q_tensor, r_mat
 
 
-def left_qr(ps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Left QR.
 
     Performs the QR decomposition of an MPS tensor moving to the left.
 
     Args:
-        ps_tensor: The tensor to be decomposed.
+        mps_tensor: The tensor to be decomposed.
 
     Returns:
         q_tensor: The Q tensor with the physical leg and the right virtual
@@ -56,11 +56,11 @@ def left_qr(ps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], 
         r_mat: The R matrix with the left virtual leg (left,new).
 
     """
-    old_shape = ps_tensor.shape
-    ps_tensor = ps_tensor.transpose(0, 2, 1)
+    old_shape = mps_tensor.shape
+    mps_tensor = mps_tensor.transpose(0, 2, 1)
     qr_shape = (old_shape[0] * old_shape[2], old_shape[1])
-    ps_tensor = ps_tensor.reshape(qr_shape)
-    q_mat, r_mat = np.linalg.qr(ps_tensor)
+    mps_tensor = mps_tensor.reshape(qr_shape)
+    q_mat, r_mat = np.linalg.qr(mps_tensor)
     q_tensor = q_mat.reshape((old_shape[0], old_shape[2], -1))
     q_tensor = q_tensor.transpose(0, 2, 1)
     r_mat = r_mat.T
@@ -68,14 +68,14 @@ def left_qr(ps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], 
 
 
 def right_svd(
-    ps_tensor: NDArray[np.complex128],
+    mps_tensor: NDArray[np.complex128],
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
     """Right SVD.
 
     Performs the singular value decomposition of an MPS tensor.
 
     Args:
-        ps_tensor: The tensor to be decomposed.
+        mps_tensor: The tensor to be decomposed.
 
     Returns:
         NDArray[np.complex128]: The U tensor with the left virtual leg and the physical
@@ -84,17 +84,17 @@ def right_svd(
         NDArray[np.complex128]: The V matrix with the right virtual leg (new,right).
 
     """
-    old_shape = ps_tensor.shape
+    old_shape = mps_tensor.shape
     svd_shape = (old_shape[0] * old_shape[1], old_shape[2])
-    ps_tensor = ps_tensor.reshape(svd_shape)
-    u_mat, s_vec, v_mat = np.linalg.svd(ps_tensor, full_matrices=False)
+    mps_tensor = mps_tensor.reshape(svd_shape)
+    u_mat, s_vec, v_mat = np.linalg.svd(mps_tensor, full_matrices=False)
     new_shape = (old_shape[0], old_shape[1], -1)
     u_tensor = u_mat.reshape(new_shape)
     return u_tensor, s_vec, v_mat
 
 
 def truncated_right_svd(
-    ps_tensor: NDArray[np.complex128],
+    mps_tensor: NDArray[np.complex128],
     threshold: float,
     max_bond_dim: int | None,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
@@ -103,7 +103,7 @@ def truncated_right_svd(
     Performs the truncated singular value decomposition of an MPS tensor.
 
     Args:
-        ps_tensor: The tensor to be decomposed.
+        mps_tensor: The tensor to be decomposed.
         threshold: SVD threshold
         max_bond_dim: Maximum bond dimension of MPS
 
@@ -114,7 +114,7 @@ def truncated_right_svd(
         v_mat: The V matrix with the right virtual leg (new,right).
 
     """
-    u_mat, s_vec, v_mat = right_svd(ps_tensor)
+    u_mat, s_vec, v_mat = right_svd(mps_tensor)
     cut_sum = 0
     thresh_sq = threshold**2
     cut_index = 1
