@@ -134,5 +134,5 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float) ->
     state.tensors[jump_dict["sites"][choice]] = oe.contract(
         "ab, bcd->acd", jump_operator, state.tensors[jump_dict["sites"][choice]]
     )
-    state.normalize("B")
+    state.normalize("B", decomposition="SVD")
     return state
