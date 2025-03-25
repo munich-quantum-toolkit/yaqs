@@ -393,8 +393,18 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
         s = params_new - params_old
         y = grad_new - grad_old
 
+        
+        prod=y.dot(s)
+
+        threshold = 1e-10
+
+
+        if abs(prod) < threshold:
+            print("Warning: Prod is less than threshold!!")
+            prod = threshold
+
         # Update inverse Hessian approximation using BFGS formula
-        rho = 1.0 / (y.dot(s))
+        rho = 1.0 / prod
 
         H_inv = (I - rho * np.outer(s, y)).dot(H_inv).dot(I - rho * np.outer(y, s)) + rho * np.outer(s, s)
 
