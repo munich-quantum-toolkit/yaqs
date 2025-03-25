@@ -9,7 +9,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Phys
 from mqt.yaqs import simulator
 from dataclasses import dataclass
 
-from yaqs.noise_char.optimization import trapezoidal
+from mqt.yaqs.noise_char.optimization import trapezoidal
 
 
 from mqt.yaqs.core.libraries.gate_library import *

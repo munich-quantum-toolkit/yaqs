@@ -345,7 +345,7 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
 
 
 
-    for iteration in range(max_iterations):
+    for iteration in range(max_iterations-1):
 
         # Store current parameters and gradients
         # params_old = params.copy()
@@ -368,7 +368,7 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
         
         if file_name != " ":
             with open(file_name, 'a') as file:
-                file.write('    '.join(map(str, [iteration +1, loss,sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
+                file.write('    '.join(map(str, [iteration+1, loss, np.log10(loss),sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
 
 
         loss_history.append(loss)
