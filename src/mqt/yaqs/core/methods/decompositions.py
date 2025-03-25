@@ -80,7 +80,7 @@ def right_svd(
 def truncated_right_svd(
     ps_tensor: NDArray[np.complex128],
     threshold: float,
-    max_bond_dim: int,
+    max_bond_dim: int | None,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
     """Truncated right SVD.
 
@@ -107,7 +107,8 @@ def truncated_right_svd(
         if cut_sum >= thresh_sq:
             cut_index = len(s_vec) - i
             break
-    cut_index = min(cut_index, max_bond_dim)
+    if max_bond_dim is not None:
+        cut_index = min(cut_index, max_bond_dim)
     u_tensor = u_mat[:, :, :cut_index]
     s_vec = s_vec[:cut_index]
     v_mat = v_mat[:cut_index, :]
