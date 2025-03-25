@@ -125,7 +125,7 @@ def truncated_right_svd(
             break
     if max_bond_dim is not None:
         cut_index = min(cut_index, max_bond_dim)
-    u_tensor = u_mat[:, :, :cut_index]
+    u_tensor = u_tensor[:, :, :cut_index]
     s_vec = s_vec[:cut_index]
     v_mat = v_mat[:cut_index, :]
     return u_tensor, s_vec, v_mat
