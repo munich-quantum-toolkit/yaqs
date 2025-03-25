@@ -172,29 +172,6 @@ def local_update(
     return basis_change_m, new_right_block
 
 
-def truncate(state: MPS, sim_params: PhysicsSimParams | WeakSimParams | StrongSimParams) -> None:
-    """Truncates the MPS in place.
-
-    Args:
-        state: The MPS.
-        sim_params: The truncation parameters.
-
-    """
-    if state.length != 1:
-        for i, tensor in enumerate(state.tensors[:-1]):
-            _, _, v_mat = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
-            # Pull v into left leg of next tensor.
-            new_next = np.tensordot(v_mat, state.tensors[i + 1], axes=(1, 1))
-            new_next = new_next.transpose(1, 0, 2)
-            state.tensors[i + 1] = new_next
-            # Pull v^dag into current tensor.
-            state.tensors[i] = np.tensordot(
-                state.tensors[i],
-                v_mat.conj(),  # No transpose, put correct axes instead
-                axes=(2, 1),
-            )
-
-
 def bug(
     state: MPS, mpo: MPO, sim_params: PhysicsSimParams | WeakSimParams | StrongSimParams, numiter_lanczos: int = 25
 ) -> None:
@@ -237,4 +214,4 @@ def bug(
     )
     state.tensors[0] = updated_tensor
     # Truncation
-    truncate(state, sim_params)
+    state.truncate(sim_params.threshold, sim_params.max_bond_dim)

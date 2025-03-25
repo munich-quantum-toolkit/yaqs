@@ -24,7 +24,6 @@ from mqt.yaqs.core.methods.bug import (
     find_new_q,
     local_update,
     prepare_canonical_site_tensors,
-    truncate,
 )
 from mqt.yaqs.core.methods.decompositions import right_qr
 from mqt.yaqs.core.methods.tdvp import update_left_environment
@@ -248,37 +247,6 @@ def test_local_update() -> None:
     assert len(result) == 2
     assert result[0].shape == (3, 6)
     assert result[1].shape == (6, 4, 6)
-
-
-def test_truncate_no_truncation() -> None:
-    """Tests the truncation of an MPS, when no truncation should happen."""
-    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
-    mps = random_mps(shapes)
-    mps.set_canonical_form(0)
-    ref_mps = deepcopy(mps)
-    trunc_params = PhysicsSimParams(observables=[], elapsed_time=1, threshold=1e-16, max_bond_dim=10)
-    # Perform truncation
-    truncate(mps, trunc_params)
-    # Check that the MPS is unchanged
-    mps.check_if_valid_mps()
-    vector = mps.to_vec()
-    ref_vector = ref_mps.to_vec()
-    assert np.allclose(vector, ref_vector)
-
-
-def test_truncate_truncation() -> None:
-    """Tests the truncation of an MPS, when truncation should happen."""
-    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
-    mps = random_mps(shapes)
-    mps.set_canonical_form(0)
-    trunc_params = PhysicsSimParams(observables=[], elapsed_time=1, threshold=0.1, max_bond_dim=3)
-    # Perform truncation
-    truncate(mps, trunc_params)
-    # Check that the MPS is truncated
-    mps.check_if_valid_mps()
-    for tensor in mps.tensors:
-        assert tensor.shape[1] <= 3
-        assert tensor.shape[2] <= 3
 
 
 def test_bug_single_site() -> None:

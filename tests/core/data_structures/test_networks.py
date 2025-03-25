@@ -56,6 +56,42 @@ def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex1
     """
     return np.transpose(mpo_tensor, (2, 3, 0, 1))
 
+def crandn(
+    size: int | tuple[int, ...], *args: int, seed: np.random.Generator | int | None = None
+) -> NDArray[np.complex128]:
+    """Draw random samples from the standard complex normal distribution.
+
+    Args:
+        size (int |Tuple[int,...]): The size/shape of the output array.
+        *args (int): Additional dimensions for the output array.
+        seed (Generator | int): The seed for the random number generator.
+
+    Returns:
+        NDArray[np.complex128]: The array of random complex numbers.
+    """
+    if isinstance(size, int) and len(args) > 0:
+        size = (size, *list(args))
+    elif isinstance(size, int):
+        size = (size,)
+    rng = np.random.default_rng(seed)
+    # 1/sqrt(2) is a normalization factor
+    return (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2)
+
+
+def random_mps(shapes: list[tuple[int, int, int]]) -> MPS:
+    """Create a random MPS with the given shapes.
+
+    Args:
+        shapes (List[Tuple[int, int, int]]): The shapes of the tensors in the
+            MPS.
+
+    Returns:
+        MPS: The random MPS.
+    """
+    tensors = [crandn(shape) for shape in shapes]
+    mps = MPS(len(shapes), tensors=tensors)
+    mps.normalize()
+    return mps
 
 rng = np.random.default_rng()
 
@@ -736,3 +772,31 @@ def test_padded_mps_error() -> None:
     mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
     with pytest.raises(ValueError, match=r"Target bond dim must be at least as large as the current bond dim."):
         mps.pad_bond_dimension(1)
+
+def test_truncate_no_truncation() -> None:
+    """Tests the truncation of an MPS, when no truncation should happen."""
+    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
+    mps = random_mps(shapes)
+    mps.set_canonical_form(0)
+    ref_mps = copy.deepcopy(mps)
+    # Perform truncation
+    mps.truncate(threshold=1e-16, max_bond_dim=10)
+    # Check that the MPS is unchanged
+    mps.check_if_valid_mps()
+    vector = mps.to_vec()
+    ref_vector = ref_mps.to_vec()
+    assert np.allclose(vector, ref_vector)
+
+
+def test_truncate_truncation() -> None:
+    """Tests the truncation of an MPS, when truncation should happen."""
+    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
+    mps = random_mps(shapes)
+    mps.set_canonical_form(0)
+    # Perform truncation
+    mps.truncate(threshold=0.1, max_bond_dim=3)
+    # Check that the MPS is truncated
+    mps.check_if_valid_mps()
+    for tensor in mps.tensors:
+        assert tensor.shape[1] <= 3
+        assert tensor.shape[2] <= 3
