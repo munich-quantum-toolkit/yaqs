@@ -79,7 +79,8 @@ def right_svd(
 
 def truncated_right_svd(
     ps_tensor: NDArray[np.complex128],
-    sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
+    threshold: float,
+    max_bond_dim: int,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
     """Truncated right SVD.
 
@@ -87,7 +88,8 @@ def truncated_right_svd(
 
     Args:
         ps_tensor: The tensor to be decomposed.
-        sim_params: Simulation parameters containing threshold and maximum bond dimension
+        threshold: SVD threshold
+        max_bond_dim: Maximum bond dimension of MPS
 
     Returns:
         u_tensor: The U tensor with the left virtual leg and the physical
@@ -98,14 +100,14 @@ def truncated_right_svd(
     """
     u_mat, s_vec, v_mat = right_svd(ps_tensor)
     cut_sum = 0
-    thresh_sq = sim_params.threshold**2
+    thresh_sq = threshold**2
     cut_index = 1
     for i, s_val in enumerate(np.flip(s_vec)):
         cut_sum += s_val**2
         if cut_sum >= thresh_sq:
             cut_index = len(s_vec) - i
             break
-    cut_index = min(cut_index, sim_params.max_bond_dim)
+    cut_index = min(cut_index, max_bond_dim)
     u_tensor = u_mat[:, :, :cut_index]
     s_vec = s_vec[:cut_index]
     v_mat = v_mat[:cut_index, :]

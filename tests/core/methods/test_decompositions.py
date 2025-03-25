@@ -127,7 +127,7 @@ def test_truncated_right_svd_thresh() -> None:
     tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
 
     # Thus the values 0.1 and 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params)
+    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
     # Check shapes
     assert u_tensor.shape[0] == 2
     assert u_tensor.shape[1] == 3
@@ -158,7 +158,7 @@ def test_truncated_right_svd_maxbd() -> None:
     tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
 
     # Thus the value 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params)
+    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
     # Check shapes
     assert u_tensor.shape[0] == 2
     assert u_tensor.shape[1] == 3

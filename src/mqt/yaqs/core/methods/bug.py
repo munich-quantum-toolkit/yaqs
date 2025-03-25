@@ -182,7 +182,7 @@ def truncate(state: MPS, sim_params: PhysicsSimParams | WeakSimParams | StrongSi
     """
     if state.length != 1:
         for i, tensor in enumerate(state.tensors[:-1]):
-            _, _, v_mat = truncated_right_svd(tensor, sim_params)
+            _, _, v_mat = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
             # Pull v into left leg of next tensor.
             new_next = np.tensordot(v_mat, state.tensors[i + 1], axes=(1, 1))
             new_next = new_next.transpose(1, 0, 2)
