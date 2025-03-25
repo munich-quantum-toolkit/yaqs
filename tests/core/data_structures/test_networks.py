@@ -742,7 +742,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     circ.h(0)
     circ.cx(0, 2)
     state_vector = np.array([0.70710678, 0, 0, 0, 0, 0.70710678, 0, 0])
-                            #  000, 100, 010, 110, 001, 101, 011, 111
+
     # Define the initial state
     state = MPS(num_qubits, state="zeros")
 
