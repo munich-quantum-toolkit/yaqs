@@ -114,7 +114,7 @@ def truncated_right_svd(
         v_mat: The V matrix with the right virtual leg (new,right).
 
     """
-    u_mat, s_vec, v_mat = right_svd(mps_tensor)
+    u_tensor, s_vec, v_mat = right_svd(mps_tensor)
     cut_sum = 0
     thresh_sq = threshold**2
     cut_index = 1
