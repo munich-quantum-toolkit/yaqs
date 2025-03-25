@@ -17,9 +17,9 @@ from copy import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.linalg import qr, svd
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from .decompositions import left_qr, right_qr, truncated_right_svd
 from .tdvp import update_left_environment, update_right_environment, update_site
 
 if TYPE_CHECKING:
@@ -29,54 +29,7 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import PhysicsSimParams
 
 
-def _right_qr(ps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Right QR.
-
-    Performs the QR decomposition of an MPS tensor moving to the right.
-
-    Args:
-        ps_tensor: The tensor to be decomposed.
-
-    Returns:
-        q_tensor: The Q tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        r_mat: The R matrix with the right virtual leg (new,right).
-    """
-    old_shape = ps_tensor.shape
-    qr_shape = (old_shape[0] * old_shape[1], old_shape[2])
-    ps_tensor = ps_tensor.reshape(qr_shape)
-    q_mat, r_mat = qr(ps_tensor)
-    new_shape = (old_shape[0], old_shape[1], -1)
-    q_tensor = q_mat.reshape(new_shape)
-    return q_tensor, r_mat
-
-
-def _left_qr(ps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Left QR.
-
-    Performs the QR decomposition of an MPS tensor moving to the left.
-
-    Args:
-        ps_tensor: The tensor to be decomposed.
-
-    Returns:
-        q_tensor: The Q tensor with the physical leg and the right virtual
-            leg (phys,new,right).
-        r_mat: The R matrix with the left virtual leg (left,new).
-
-    """
-    old_shape = ps_tensor.shape
-    ps_tensor = ps_tensor.transpose(0, 2, 1)
-    qr_shape = (old_shape[0] * old_shape[2], old_shape[1])
-    ps_tensor = ps_tensor.reshape(qr_shape)
-    q_mat, r_mat = qr(ps_tensor)
-    q_tensor = q_mat.reshape((old_shape[0], old_shape[2], -1))
-    q_tensor = q_tensor.transpose(0, 2, 1)
-    r_mat = r_mat.T
-    return q_tensor, r_mat
-
-
-def _prepare_canonical_site_tensors(
+def prepare_canonical_site_tensors(
     state: MPS, mpo: MPO
 ) -> tuple[list[NDArray[np.complex128]], list[NDArray[np.complex128]]]:
     """We need to get the original tensor when every site is the canonical form.
@@ -98,7 +51,7 @@ def _prepare_canonical_site_tensors(
     left_blocks = [np.eye(left_end_dimension).reshape(left_end_dimension, 1, left_end_dimension)]
     for i, old_local_tensor in enumerate(canon_tensors[1:], start=1):
         left_tensor = canon_tensors[i - 1]
-        left_q, left_r = _right_qr(left_tensor)
+        left_q, left_r = right_qr(left_tensor)
         # Legs of right_r: (new, old_right)
         local_tensor = np.tensordot(left_r, old_local_tensor, axes=(1, 1))
         # Leg order of local_tensor: (left, phys, right)
@@ -110,7 +63,7 @@ def _prepare_canonical_site_tensors(
     return canon_tensors, left_blocks
 
 
-def _choose_stack_tensor(
+def choose_stack_tensor(
     site: int, canon_center_tensors: list[NDArray[np.complex128]], state: MPS
 ) -> NDArray[np.complex128]:
     """Return the non-update tensor that should be used for the stacking step.
@@ -136,7 +89,7 @@ def _choose_stack_tensor(
     return old_stack_tensor
 
 
-def _find_new_q(
+def find_new_q(
     old_stack_tensor: NDArray[np.complex128], updated_tensor: NDArray[np.complex128]
 ) -> NDArray[np.complex128]:
     """Finds the new Q tensor after the update with enlarged left virtual leg.
@@ -150,11 +103,11 @@ def _find_new_q(
 
     """
     stacked_tensor = np.concatenate((old_stack_tensor, updated_tensor), axis=1)
-    new_q, _ = _left_qr(stacked_tensor)
+    new_q, _ = left_qr(stacked_tensor)
     return new_q
 
 
-def _build_basis_change_tensor(
+def build_basis_change_tensor(
     old_q: NDArray[np.complex128], new_q: NDArray[np.complex128], old_m: NDArray[np.complex128]
 ) -> NDArray[np.complex128]:
     """Build a new basis change tensor M.
@@ -175,7 +128,7 @@ def _build_basis_change_tensor(
     return np.tensordot(new_m, new_q.conj(), axes=([0, 2], [0, 2]))
 
 
-def _local_update(
+def local_update(
     state: MPS,
     mpo: MPO,
     left_blocks: list[NDArray[np.complex128]],
@@ -209,75 +162,14 @@ def _local_update(
     updated_tensor = update_site(
         left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt, numiter_lanczos
     )
-    old_stack_tensor = _choose_stack_tensor(site, canon_center_tensors, state)
-    new_q = _find_new_q(old_stack_tensor, updated_tensor)
+    old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state)
+    new_q = find_new_q(old_stack_tensor, updated_tensor)
     old_q = state.tensors[site]
-    basis_change_m = _build_basis_change_tensor(old_q, new_q, right_m_block)
+    basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
     state.tensors[site] = new_q
     canon_center_tensors[site - 1] = np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0))
     new_right_block = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
     return basis_change_m, new_right_block
-
-
-def _right_svd(
-    ps_tensor: NDArray[np.complex128],
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
-    """Right SVD.
-
-    Performs the singular value decomposition of an MPS tensor.
-
-    Args:
-        ps_tensor: The tensor to be decomposed.
-
-    Returns:
-        NDArray[np.complex128]: The U tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        NDArray[np.complex128]: The S vector with the singular values.
-        NDArray[np.complex128]: The V matrix with the right virtual leg (new,right).
-
-    """
-    old_shape = ps_tensor.shape
-    svd_shape = (old_shape[0] * old_shape[1], old_shape[2])
-    ps_tensor = ps_tensor.reshape(svd_shape)
-    u_mat, s_vec, v_mat = svd(ps_tensor, full_matrices=False)
-    new_shape = (old_shape[0], old_shape[1], -1)
-    u_tensor = u_mat.reshape(new_shape)
-    return u_tensor, s_vec, v_mat
-
-
-def _truncated_right_svd(
-    ps_tensor: NDArray[np.complex128],
-    sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
-    """Truncated right SVD.
-
-    Performs the truncated singular value decomposition of an MPS tensor.
-
-    Args:
-        ps_tensor: The tensor to be decomposed.
-        sim_params: Simulation parameters containing threshold and maximum bond dimension
-
-    Returns:
-        u_tensor: The U tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        s_vec: The S vector with the singular values.
-        v_mat: The V matrix with the right virtual leg (new,right).
-
-    """
-    u_mat, s_vec, v_mat = _right_svd(ps_tensor)
-    cut_sum = 0
-    thresh_sq = sim_params.threshold**2
-    cut_index = 1
-    for i, s_val in enumerate(np.flip(s_vec)):
-        cut_sum += s_val**2
-        if cut_sum >= thresh_sq:
-            cut_index = len(s_vec) - i
-            break
-    cut_index = min(cut_index, sim_params.max_bond_dim)
-    u_tensor = u_mat[:, :, :cut_index]
-    s_vec = s_vec[:cut_index]
-    v_mat = v_mat[:cut_index, :]
-    return u_tensor, s_vec, v_mat
 
 
 def truncate(state: MPS, sim_params: PhysicsSimParams | WeakSimParams | StrongSimParams) -> None:
@@ -290,7 +182,7 @@ def truncate(state: MPS, sim_params: PhysicsSimParams | WeakSimParams | StrongSi
     """
     if state.length != 1:
         for i, tensor in enumerate(state.tensors[:-1]):
-            _, _, v_mat = _truncated_right_svd(tensor, sim_params)
+            _, _, v_mat = truncated_right_svd(tensor, sim_params)
             # Pull v into left leg of next tensor.
             new_next = np.tensordot(v_mat, state.tensors[i + 1], axes=(1, 1))
             new_next = new_next.transpose(1, 0, 2)
@@ -330,13 +222,13 @@ def bug(
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
 
-    canon_center_tensors, left_envs = _prepare_canonical_site_tensors(state, mpo)
+    canon_center_tensors, left_envs = prepare_canonical_site_tensors(state, mpo)
     right_end_dimension = state.tensors[-1].shape[2]
     right_block = np.eye(right_end_dimension).reshape(right_end_dimension, 1, right_end_dimension)
     right_m_block = np.eye(right_end_dimension)
     # Sweep from right to left.
     for site in range(num_sites - 1, 0, -1):
-        right_m_block, right_block = _local_update(
+        right_m_block, right_block = local_update(
             state, mpo, left_envs, right_block, canon_center_tensors, site, right_m_block, sim_params, numiter_lanczos
         )
     # Update the first site.
