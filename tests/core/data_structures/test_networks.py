@@ -56,6 +56,7 @@ def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex1
     """
     return np.transpose(mpo_tensor, (2, 3, 0, 1))
 
+
 def crandn(
     size: int | tuple[int, ...], *args: int, seed: np.random.Generator | int | None = None
 ) -> NDArray[np.complex128]:
@@ -92,6 +93,7 @@ def random_mps(shapes: list[tuple[int, int, int]]) -> MPS:
     mps = MPS(len(shapes), tensors=tensors)
     mps.normalize()
     return mps
+
 
 rng = np.random.default_rng()
 
@@ -772,6 +774,7 @@ def test_padded_mps_error() -> None:
     mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
     with pytest.raises(ValueError, match=r"Target bond dim must be at least as large as the current bond dim."):
         mps.pad_bond_dimension(1)
+
 
 def test_truncate_no_truncation() -> None:
     """Tests the truncation of an MPS, when no truncation should happen."""

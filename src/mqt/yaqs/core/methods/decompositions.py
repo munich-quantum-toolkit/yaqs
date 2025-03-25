@@ -1,7 +1,23 @@
-import numpy as np
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Tensor Network Decompositions.
+
+This module implements left and right moving versions of the QR and SVD decompositions which are used throughout YAQS.
+"""
+
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
-from numpy.typing import NDArray
-from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def right_qr(ps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:

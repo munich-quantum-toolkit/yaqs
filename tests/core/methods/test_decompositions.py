@@ -1,16 +1,27 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Tests for decompositions.
+
+This module tests the left and right qr and svd decompositions.
+"""
+
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
-from numpy.typing import NDArray
 
-
-from mqt.yaqs.core.methods.decompositions import (
-    left_qr,
-    right_qr,
-    right_svd,
-    truncated_right_svd
-)
 import numpy as np
 
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, truncated_right_svd
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 
 def crandn(
     size: int | tuple[int, ...], *args: int, seed: np.random.Generator | int | None = None
@@ -136,6 +147,7 @@ def test_truncated_right_svd_thresh() -> None:
     assert v_matrix.shape[0] == 2
     assert s_vector.shape[0] == 2
     assert np.allclose(s_vector, s_vector_i[:2])
+
 
 def test_truncated_right_svd_maxbd() -> None:
     """Test that the tensor is correctly truncated."""

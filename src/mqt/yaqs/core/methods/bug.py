@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
-from .decompositions import left_qr, right_qr, truncated_right_svd
+from .decompositions import left_qr, right_qr
 from .tdvp import update_left_environment, update_right_environment, update_site
 
 if TYPE_CHECKING:

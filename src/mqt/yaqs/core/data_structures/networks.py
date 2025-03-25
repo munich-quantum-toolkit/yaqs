@@ -289,7 +289,7 @@ class MPS:
         if decomposition == "QR":
             site_tensor, bond_tensor = right_qr(tensor)
         elif decomposition == "SVD":
-            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-12, max_bond_dim=np.inf)
+            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-12, max_bond_dim=None)
             bond_tensor = np.diag(s_vec) @ v_mat
         self.tensors[current_orthogonality_center] = site_tensor
 
@@ -319,6 +319,7 @@ class MPS:
 
         Args:
             orthogonality_center (int): site of matrix MPS around which we normalize
+            decomposition: Type of decomposition. Default QR.
         """
 
         def sweep_decomposition(orthogonality_center: int, decomposition: str = "QR") -> None:
@@ -358,13 +359,13 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def truncate(self, threshold: float=1e-12, max_bond_dim: int | None=int) -> None:
+    def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:
         """Truncates the MPS in place.
 
         Args:
             state: The MPS.
             sim_params: The truncation parameters.
-            threshold: The truncation threshold. Default 
+            threshold: The truncation threshold. Default
             max_bond_dim: The maximum bond dimension allowed. Default None.
 
         """
