@@ -715,7 +715,34 @@ def test_convert_to_vector_fidelity() -> None:
     circ.h(0)
     circ.cx(0, 1)
     state_vector = np.array([0.70710678, 0, 0, 0.70710678, 0, 0, 0, 0])
+    # Define the initial state
+    state = MPS(num_qubits, state="zeros")
 
+    # Define the simulation parameters
+    N = 1
+    max_bond_dim = 8
+    threshold = 0
+    window_size = 0
+    measurements = [Observable("z", site) for site in range(num_qubits)]
+    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
+    noise_model = None
+    simulator.run(state, circ, sim_params, noise_model)
+    assert sim_params.output_state is not None
+    tdvp_state = sim_params.output_state.to_vec()
+    np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
+
+
+def test_convert_to_vector_fidelity_long_range() -> None:
+    """Test convert to vector.
+
+    Tests the MPS_to_vector function for a circuit input
+    """
+    num_qubits = 3
+    circ = QuantumCircuit(num_qubits)
+    circ.h(0)
+    circ.cx(0, 2)
+    state_vector = np.array([0.70710678, 0, 0, 0, 0, 0.70710678, 0, 0])
+                            #  000, 100, 010, 110, 001, 101, 011, 111
     # Define the initial state
     state = MPS(num_qubits, state="zeros")
 
