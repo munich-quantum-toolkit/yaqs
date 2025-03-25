@@ -25,6 +25,7 @@ import opt_einsum as oe
 from tqdm import tqdm
 
 from ..libraries.observables_library import ObservablesLibrary
+from ..methods.decompositions import right_qr, truncated_right_svd
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -273,7 +274,7 @@ class MPS:
                 return False
         return True
 
-    def shift_orthogonality_center_right(self, current_orthogonality_center: int) -> None:
+    def shift_orthogonality_center_right(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center right.
 
         This function performs a QR decomposition to shift the known current center to the right and move
@@ -281,12 +282,15 @@ class MPS:
 
         Args:
             current_orthogonality_center (int): current center
+            decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
+                           Default is QR.
         """
         tensor = self.tensors[current_orthogonality_center]
-        old_dims = tensor.shape
-        matricized_tensor = np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2]))
-        site_tensor, bond_tensor = np.linalg.qr(matricized_tensor)
-        site_tensor = np.reshape(site_tensor, (old_dims[0], old_dims[1], -1))
+        if decomposition == "QR":
+            site_tensor, bond_tensor = right_qr(tensor)
+        elif decomposition == "SVD":
+            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-12, max_bond_dim=np.inf)
+            bond_tensor = np.diag(s_vec) @ v_mat
         self.tensors[current_orthogonality_center] = site_tensor
 
         # If normalizing, we just throw away the R
@@ -307,7 +311,7 @@ class MPS:
         self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1)
         self.flip_network()
 
-    def set_canonical_form(self, orthogonality_center: int) -> None:
+    def set_canonical_form(self, orthogonality_center: int, decomposition: str = "QR") -> None:
         """Sets canonical form of MPS.
 
         Left and right normalizes an MPS around a selected site.
@@ -317,19 +321,19 @@ class MPS:
             orthogonality_center (int): site of matrix MPS around which we normalize
         """
 
-        def sweep_decomposition(orthogonality_center: int) -> None:
+        def sweep_decomposition(orthogonality_center: int, decomposition: str = "QR") -> None:
             for site, _ in enumerate(self.tensors):
                 if site == orthogonality_center:
                     break
-                self.shift_orthogonality_center_right(site)
+                self.shift_orthogonality_center_right(site, decomposition)
 
-        sweep_decomposition(orthogonality_center)
+        sweep_decomposition(orthogonality_center, decomposition)
         self.flip_network()
         flipped_orthogonality_center = self.length - 1 - orthogonality_center
-        sweep_decomposition(flipped_orthogonality_center)
+        sweep_decomposition(flipped_orthogonality_center, decomposition)
         self.flip_network()
 
-    def normalize(self, form: str = "B") -> None:
+    def normalize(self, form: str = "B", decomposition: str = "QR") -> None:
         """Normalize MPS.
 
         Normalize the network to a specified form.
@@ -342,11 +346,13 @@ class MPS:
 
         Args:
             form (str): The form to normalize the network to. Default is "B".
+            decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
+                           Default is QR.
         """
         if form == "B":
             self.flip_network()
 
-        self.set_canonical_form(orthogonality_center=self.length - 1)
+        self.set_canonical_form(orthogonality_center=self.length - 1, decomposition=decomposition)
         self.shift_orthogonality_center_right(self.length - 1)
 
         if form == "B":
