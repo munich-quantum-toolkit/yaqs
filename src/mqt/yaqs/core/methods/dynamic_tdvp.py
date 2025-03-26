@@ -48,7 +48,7 @@ def dynamic_tdvp(state: MPS, hamiltonian: MPO, sim_params: PhysicsSimParams | St
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)) and hamiltonian.length > 2:
         sim_params.threshold = 0
 
-    if current_max_bond_dim <= sim_params.max_bond_dim:
+    if current_max_bond_dim < sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_tdvp(state, hamiltonian, sim_params)
     else:
