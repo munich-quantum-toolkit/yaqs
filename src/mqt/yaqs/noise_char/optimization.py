@@ -274,11 +274,66 @@ def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.0
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
 
 
+# def line_search(loss_function, loss, sim_params_copy, ref_traj, traj_der, x, p, grad_old):
+#     """
+#     BACKTRACK LINE SEARCH WITH WOLFE CONDITIONS
+
+#     Args:
+#         loss_function (function): The loss function to minimize.
+#         sim_params (SimulationParameters): Current simulation parameters.
+#         ref_traj (array-like): Reference trajectory data.
+#         traj_der (function): Function that computes the trajectory and gradients.
+#         x (np.ndarray): Current parameter vector.
+#         p (np.ndarray): Search direction.
+#         grad_old (np.ndarray): Gradient at the current point.
+
+#     Returns:
+#         float: Step size `a` that satisfies the Wolfe conditions.
+#     """
+#     a = 1  # Initial step size
+#     c1 = 1e-4
+#     c2 = 0.9
+
+#     sim_params=copy.deepcopy(sim_params_copy)
+
+#     # Compute the current loss and gradient
+#     fx=loss
+
+
+#     # Compute the new parameters
+#     x_new = x + a * p
+
+#     while np.any(x_new < 0):
+#         a *= 0.5
+#         x_new = x + a * p
+
+    
+    
+#     sim_params.gamma_rel, sim_params.gamma_deph = x_new
+
+#     # Compute the new loss and gradient
+#     fx_new, _, grad_new = loss_function(sim_params, ref_traj, traj_der)
+
+#     # Check Wolfe conditions
+#     while fx_new > fx + (c1 * a * grad_old.T @ p) or - grad_new.T @ p > - c2 * grad_old.T @ p:
+    
+
+#         with open("x_new_a", 'a') as file:
+#             file.write('    '.join(map(str, [a, fx_new, fx + (c1 * a * grad_old.T @ p), grad_new.T @ p, c2 * grad_old.T @ p ])) + '\n')
+
+#         # Reduce step size
+#         a *= 0.5
+
+#         x_new = x + a * p
+
+#         fx_new, _, grad_new = loss_function(sim_params, ref_traj, traj_der)
+        
+
+#     return a
 
 
 
-
-def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, file_name=" "):
+def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=200, tolerance=1e-8, file_name=" "):
     """
     Parameters:
     sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
@@ -325,7 +380,7 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
 
 
     # Calculate first loss and gradients
-    loss, exp_vals_traj, grad_old = loss_function(sim_params, ref_traj, traj_der)
+    loss, _, grad_old = loss_function(sim_params, ref_traj, traj_der)
 
 
 
@@ -347,24 +402,32 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
 
     for iteration in range(max_iterations-1):
 
-        # Store current parameters and gradients
-        # params_old = params.copy()
-        # grad_old = dJ_dg.copy()
+        # Compute search direction
+        p = -H_inv.dot(grad_old)
+
+        a = learning_rate
+
+
+        # if learning_rate > 0:
+        #     a = learning_rate
+        # else:
+        #     # Perform line search to find step size
+        #     a = line_search(loss_function, loss, sim_params, ref_traj, traj_der, params_old, p, grad_old)
+
 
         # Update parameters
-        params_new = params_old - learning_rate * H_inv.dot(grad_old)
+        params_new = params_old + a * p
 
         for i in range(n_params):
             if params_new[i] < 0:
                 params_new[i] = 0
-            # if params_new[i] > 1:
-            #     params_new[i] = 1
+
 
         # Update simulation parameters
         sim_params.gamma_rel, sim_params.gamma_deph = params_new
 
         # Calculate new loss and gradients
-        loss, exp_vals_traj, grad_new = loss_function(sim_params, ref_traj, traj_der)
+        loss, _, grad_new = loss_function(sim_params, ref_traj, traj_der)
         
         if file_name != " ":
             with open(file_name, 'a') as file:
@@ -390,7 +453,7 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations
 
 
         # Compute differences
-        s = params_new - params_old
+        s = a * p
         y = grad_new - grad_old
 
         
