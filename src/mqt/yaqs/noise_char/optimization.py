@@ -127,6 +127,11 @@ def gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, ma
         os.remove(file_name)
 
 
+    if file_name != " ":
+        with open(file_name, 'w') as file:
+            file.write('#  Iter    Loss    Log10(Loss)    Gamma_rel    Gamma_deph \n')
+
+
     for iteration in range(max_iterations):
         # Calculate loss and gradients
         loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
@@ -217,6 +222,11 @@ def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.0
 
     if os.path.exists(file_name) and file_name != " ":
         os.remove(file_name)
+
+
+    if file_name != " ":
+        with open(file_name, 'w') as file:
+            file.write('#  Iter    Loss    Log10(Loss)    Gamma_rel    Gamma_deph \n')
 
 
     # Adam hyperparameters and initialization (NEW)
@@ -381,6 +391,12 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=20
 
     # Calculate first loss and gradients
     loss, _, grad_old = loss_function(sim_params, ref_traj, traj_der)
+
+
+
+    if file_name != " ":
+        with open(file_name, 'w') as file:
+            file.write('#  Iter    Loss    Log10(Loss)    Gamma_rel    Gamma_deph \n')
 
 
 
