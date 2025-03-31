@@ -500,16 +500,12 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                     if x % 2 == 0:
                         p1 = y*model['Lx'] + x
                         p2 = p1 + 1
-                        #print("particle (" + str(p1) + ", " + str(p2) + ")")
                         q1_up = lookup_qiskit_ordering(p1, '↑')
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
                         add_hopping_term(circ, q1_up, q2_up, alpha)
                         add_hopping_term(circ, q1_down, q2_down, alpha)
-                        #print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
-                        #print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
-                        #print("--")
 
         def horizontal_even():
             for y in range(model['Ly']):
@@ -517,16 +513,12 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                     if x % 2 != 0:
                         p1 = y*model['Lx'] + x
                         p2 = p1 + 1
-                        #print("particle (" + str(p1) + ", " + str(p2) + ")")
                         q1_up = lookup_qiskit_ordering(p1, '↑')
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
                         add_hopping_term(circ, q1_up, q2_up, alpha)
                         add_hopping_term(circ, q1_down, q2_down, alpha)
-                        #print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
-                        #print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
-                        #print("--")
 
         def vertical_odd():
             for y in range(model['Ly']-1):
@@ -534,16 +526,12 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                     for x in range(model['Lx']):
                         p1 = y*model['Lx'] + x
                         p2 = p1 + model['Lx']
-                        #print("particle (" + str(p1) + ", " + str(p2) + ")")
                         q1_up = lookup_qiskit_ordering(p1, '↑')
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
                         add_hopping_term(circ, q1_up, q2_up, alpha)
                         add_hopping_term(circ, q1_down, q2_down, alpha)
-                        #print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
-                        #print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
-                        #print("--")  
 
         def vertical_even():
             for y in range(model['Ly']-1):
@@ -551,18 +539,13 @@ def create_2D_Fermi_Hubbard_circuit(model, dt, timesteps):
                     for x in range(model['Lx']):
                         p1 = y*model['Lx'] + x
                         p2 = p1 + model['Lx']
-                        #print("particle (" + str(p1) + ", " + str(p2) + ")")
                         q1_up = lookup_qiskit_ordering(p1, '↑')
                         q2_up = lookup_qiskit_ordering(p2, '↑')
                         q1_down = lookup_qiskit_ordering(p1, '↓')
                         q2_down = lookup_qiskit_ordering(p2, '↓')
                         add_hopping_term(circ, q1_up, q2_up, alpha)
                         add_hopping_term(circ, q1_down, q2_down, alpha)
-                        #print("qubit ↑ (" + str(q1_up) + ", " + str(q2_up) + ")")
-                        #print("qubit ↓ (" + str(q1_down) + ", " + str(q2_down) + ")")
-                        #print("--")
         
-        #for _ in range(n):
         horizontal_odd()
         horizontal_even()
         vertical_odd()
