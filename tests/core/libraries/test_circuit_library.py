@@ -23,23 +23,20 @@ from __future__ import annotations
 
 import numpy as np
 import scipy as sp
-
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import Operator
-
 from qiskit_nature.second_q.hamiltonians import FermiHubbardModel
-from qiskit_nature.second_q.hamiltonians.lattices import SquareLattice, BoundaryCondition
+from qiskit_nature.second_q.hamiltonians.lattices import BoundaryCondition, SquareLattice
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 
+from mqt.yaqs.circuits.reference_implementation.fermi_hubbard_reference import create_fermi_hubbard_model_qutip
 from mqt.yaqs.core.libraries.circuit_library import (
+    create_2d_fermi_hubbard_circuit,
     create_2d_heisenberg_circuit,
     create_2d_ising_circuit,
     create_heisenberg_circuit,
     create_ising_circuit,
-    create_2D_Fermi_Hubbard_circuit
 )
-
-from mqt.yaqs.circuits.reference_implementation.FH_reference import create_Fermi_Hubbard_model_qutip
 
 
 def test_create_ising_circuit_valid_even() -> None:
@@ -274,23 +271,31 @@ def test_create_2d_heisenberg_circuit_3x2() -> None:
     assert "rzz" in op_names
 
 
-def test_create_2D_Fermi_Hubbard_circuit_equal_qiskit():
+def test_create_2d_fermi_hubbard_circuit_equal_qiskit() -> None:
+    """Test that create_2D_Fermi_Hubbard_circuit is equal to QuTiP.
+
+    This test creates a 2D Fermi-Hubbard circuit for a grid with a specified number of rows and columns.
+    It verifies that the circuit approximates the time evolution operator of the 2D Fermi-Hubbard Hamiltonian
+    with a minimal accuracy that depends on the number of Trotter steps by comparing it to the circuit generated
+    by Qiskit Nature.
+    """
     # Define the FH model parameters
-    t = 1.0         # kinetic hopping
-    mu = 0.5        # chemical potential
-    u = 4.0         # onsite interaction
-    Lx, Ly = 2, 2   # lattice dimensions
+    t = 1.0              # kinetic hopping
+    mu = 0.5             # chemical potential
+    u = 4.0              # onsite interaction
+    dim_x, dim_y = 2, 2  # lattice dimensions
     timesteps = 1
     dt = 0.1
     num_trotter_steps = 10
 
     # yaqs implementation
-    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': mu, 'u': u, 't': t, 'num_trotter_steps': num_trotter_steps}
-    circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=timesteps)
-    U_yaqs = Operator(circuit).to_matrix()
+    circuit = create_2d_fermi_hubbard_circuit(Lx=dim_x, Ly=dim_y, u=u, t=t, mu=mu,
+                                              num_trotter_steps=num_trotter_steps,
+                                              dt=dt, timesteps=timesteps)
+    time_evolution_op_yaqs = Operator(circuit).to_matrix()
 
     # Qiskit implementation
-    square_lattice = SquareLattice(rows=Lx, cols=Ly, boundary_condition=BoundaryCondition.OPEN)
+    square_lattice = SquareLattice(rows=dim_x, cols=dim_y, boundary_condition=BoundaryCondition.OPEN)
     fh_hamiltonian = FermiHubbardModel(
         square_lattice.uniform_parameters(
             uniform_interaction=t,
@@ -300,34 +305,41 @@ def test_create_2D_Fermi_Hubbard_circuit_equal_qiskit():
     )
     mapper = JordanWignerMapper()
     qubit_jw_op = mapper.map(fh_hamiltonian.second_q_op())
-    H_qiskit = qubit_jw_op.to_matrix()
-    U_qiskit = sp.linalg.expm(-1j*dt*timesteps*H_qiskit)
+    hamiltonian_qiskit = qubit_jw_op.to_matrix()
+    time_evolution_op_qiskit = sp.linalg.expm(-1j * dt * timesteps * hamiltonian_qiskit)
 
     # Calculate error
-    error = np.linalg.norm(U_qiskit - U_yaqs, 2)
-    print("|U_qiskit - U_yaqs| = " + str(error))
+    error = np.linalg.norm(time_evolution_op_qiskit - time_evolution_op_yaqs, 2)
     assert error <= 10e-3
 
-def test_create_2D_Fermi_Hubbard_circuit_equal_qutip():
+
+def test_create_2d_fermi_hubbard_circuit_equal_qutip() -> None:
+    """Test that create_2D_Fermi_Hubbard_circuit is equal to QuTiP.
+
+    This test creates a 2D Fermi-Hubbard circuit for a grid with a specified number of rows and columns.
+    It verifies that the circuit approximates the time evolution operator of the 2D Fermi-Hubbard Hamiltonian
+    with a minimal accuracy that depends on the number of Trotter steps by comparing it to the solution of the
+    physical model calculated by QuTiP.
+    """
     # Define the FH model parameters
-    t = 1.0         # kinetic hopping
-    mu = 0.5        # chemical potential
-    u = 4.0         # onsite interaction
-    Lx, Ly = 2, 2   # lattice dimensions
+    t = 1.0              # kinetic hopping
+    mu = 0.5             # chemical potential
+    u = 4.0              # onsite interaction
+    dim_x, dim_y = 2, 2  # lattice dimensions
     timesteps = 1
     dt = 0.1
     num_trotter_steps = 10
 
     # yaqs implementation
-    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': -mu, 'u': u, 't': -t, 'num_trotter_steps': num_trotter_steps}
-    circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=timesteps)
-    U_yaqs = Operator(circuit).to_matrix()
+    circuit = create_2d_fermi_hubbard_circuit(Lx=dim_x, Ly=dim_y, u=u, t=-t, mu=-mu,
+                                              num_trotter_steps=num_trotter_steps,
+                                              dt=dt, timesteps=timesteps)
+    time_evolution_op_yaqs = Operator(circuit).to_matrix()
 
     # QuTiP implementation
-    H_qutip = create_Fermi_Hubbard_model_qutip(Lx, Ly, u, -t, mu)
-    U_qutip = sp.linalg.expm(-1j*dt*timesteps*H_qutip.full())
+    hamiltonian_qutip = create_fermi_hubbard_model_qutip(dim_x, dim_y, u, -t, mu)
+    time_evolution_op_qutip = sp.linalg.expm(-1j * dt * timesteps * hamiltonian_qutip.full())
 
     # Calculate error
-    error = np.linalg.norm(U_qutip - U_yaqs, 2)
-    print("|U_qutip - U_yaqs| = " + str(error))
+    error = np.linalg.norm(time_evolution_op_qutip - time_evolution_op_yaqs, 2)
     assert error <= 10e-3

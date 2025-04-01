@@ -67,8 +67,9 @@ occupations = np.zeros((num_qubits, timesteps), dtype='complex')
 
 for timestep in range(timesteps):
     print("Timestep: " + str(timestep))
-    model = {'name': '2D_Fermi_Hubbard', 'Lx': Lx, 'Ly': Ly, 'mu': -v, 'u': u, 't': -t, 'num_trotter_steps': num_trotter_steps}
-    circuit = create_2D_Fermi_Hubbard_circuit(model, dt=dt, timesteps=1)
+    circuit = create_2d_fermi_hubbard_circuit(Lx=Lx, Ly=Ly, u=u, t=t, mu=mu,
+                                              num_trotter_steps=num_trotter_steps,
+                                              dt=dt, timesteps=1)
 
     sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
 
