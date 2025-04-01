@@ -327,14 +327,8 @@ def create_2d_heisenberg_circuit(
 
 
 def create_1d_fermi_hubbard_circuit(
-        L: int,
-        u: float,
-        t: float,
-        mu: float,
-        num_trotter_steps: int,
-        dt: float,
-        timesteps: int
-    ) -> QuantumCircuit:
+    L: int, u: float, t: float, mu: float, num_trotter_steps: int, dt: float, timesteps: int
+) -> QuantumCircuit:
     """1D Fermi-Hubbard Trotter circuit.
 
     Create a quantum circuit for simulating the Fermi-Hubbard model defined by its
@@ -505,15 +499,8 @@ def add_hopping_term(circ: QuantumCircuit, i: int, j: int, alpha: float) -> None
 
 
 def create_2d_fermi_hubbard_circuit(
-        Lx: int,
-        Ly: int,
-        u: float,
-        t: float,
-        mu: float,
-        num_trotter_steps: int,
-        dt: float,
-        timesteps: int
-    ) -> QuantumCircuit:
+    Lx: int, Ly: int, u: float, t: float, mu: float, num_trotter_steps: int, dt: float, timesteps: int
+) -> QuantumCircuit:
     """2D Fermi-Hubbard Trotter circuit.
 
     Create a quantum circuit for simulating the 2D Fermi-Hubbard model defined by its

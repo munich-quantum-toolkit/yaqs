@@ -17,6 +17,7 @@ mystnb:
 This example demonstrates how to run a Hamiltonian simulation using the YAQS simulator with a 2D Fermi-Hubbard model.
 An Fermi-Hubbard circuit is created and an initial MPS is prepared in the domain wall state.
 The simulation parameters (using StrongSimParams) are defined and the simulation is run. Afterwards, the occupation probability $\braket{n_{i,\sigma}} = \frac{1}{2} \left( 1 - \braket{Z_{i,\sigma}} \right)$ is calculated for each site.
+
 ```{code-cell} ipython3
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,6 +30,7 @@ from mqt.yaqs import simulator
 ```
 
 Define the model
+
 ```{code-cell} ipython3
 t = 1.0         # kinetic hopping
 v = 0.5         # chemical potential
@@ -37,6 +39,7 @@ Lx, Ly = 2, 2   # lattice dimensions
 ```
 
 Define the circuit for a total time of $T=10$
+
 ```{code-cell} ipython3
 num_sites = Lx * Ly
 num_qubits = 2 * num_sites
@@ -48,11 +51,13 @@ print("Total time: ", total_time)
 ```
 
 Set the initial state to the wall state
+
 ```{code-cell} ipython3
 state = MPS(num_qubits, state='wall', pad=32)
 ```
 
 Define the simulation parameters
+
 ```{code-cell} ipython3
 N = 1
 max_bond_dim = 16
@@ -62,6 +67,7 @@ measurements = [Observable('z', site) for site in range(num_qubits)]
 ```
 
 Run the simulation for the specified time
+
 ```{code-cell} ipython3
 occupations = np.zeros((num_qubits, timesteps), dtype='complex')
 
@@ -83,6 +89,7 @@ for timestep in range(timesteps):
 ```
 
 Plot the time evolution of the site occupations for the simulated time
+
 ```{code-cell} ipython3
 ---
 mystnb:

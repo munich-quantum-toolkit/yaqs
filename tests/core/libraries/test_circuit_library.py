@@ -280,18 +280,18 @@ def test_create_2d_fermi_hubbard_circuit_equal_qiskit() -> None:
     by Qiskit Nature.
     """
     # Define the FH model parameters
-    t = 1.0              # kinetic hopping
-    mu = 0.5             # chemical potential
-    u = 4.0              # onsite interaction
+    t = 1.0  # kinetic hopping
+    mu = 0.5  # chemical potential
+    u = 4.0  # onsite interaction
     dim_x, dim_y = 2, 2  # lattice dimensions
     timesteps = 1
     dt = 0.1
     num_trotter_steps = 10
 
     # yaqs implementation
-    circuit = create_2d_fermi_hubbard_circuit(Lx=dim_x, Ly=dim_y, u=u, t=t, mu=mu,
-                                              num_trotter_steps=num_trotter_steps,
-                                              dt=dt, timesteps=timesteps)
+    circuit = create_2d_fermi_hubbard_circuit(
+        Lx=dim_x, Ly=dim_y, u=u, t=t, mu=mu, num_trotter_steps=num_trotter_steps, dt=dt, timesteps=timesteps
+    )
     time_evolution_op_yaqs = Operator(circuit).to_matrix()
 
     # Qiskit implementation
@@ -322,18 +322,18 @@ def test_create_2d_fermi_hubbard_circuit_equal_qutip() -> None:
     physical model calculated by QuTiP.
     """
     # Define the FH model parameters
-    t = 1.0              # kinetic hopping
-    mu = 0.5             # chemical potential
-    u = 4.0              # onsite interaction
+    t = 1.0  # kinetic hopping
+    mu = 0.5  # chemical potential
+    u = 4.0  # onsite interaction
     dim_x, dim_y = 2, 2  # lattice dimensions
     timesteps = 1
     dt = 0.1
     num_trotter_steps = 10
 
     # yaqs implementation
-    circuit = create_2d_fermi_hubbard_circuit(Lx=dim_x, Ly=dim_y, u=u, t=-t, mu=-mu,
-                                              num_trotter_steps=num_trotter_steps,
-                                              dt=dt, timesteps=timesteps)
+    circuit = create_2d_fermi_hubbard_circuit(
+        Lx=dim_x, Ly=dim_y, u=u, t=-t, mu=-mu, num_trotter_steps=num_trotter_steps, dt=dt, timesteps=timesteps
+    )
     time_evolution_op_yaqs = Operator(circuit).to_matrix()
 
     # QuTiP implementation
