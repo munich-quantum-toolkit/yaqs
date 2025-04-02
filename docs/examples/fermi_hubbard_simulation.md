@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
-from mqt.yaqs.core.libraries.circuit_library import create_2D_Fermi_Hubbard_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_2d_fermi_hubbard_circuit
 
 from mqt.yaqs import simulator
 ```
@@ -33,7 +33,7 @@ Define the model
 
 ```{code-cell} ipython3
 t = 1.0         # kinetic hopping
-v = 0.5         # chemical potential
+mu = 0.5        # chemical potential
 u = 4.0         # onsite interaction
 Lx, Ly = 2, 2   # lattice dimensions
 ```
