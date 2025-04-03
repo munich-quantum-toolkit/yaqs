@@ -16,7 +16,7 @@ import numpy as np
 from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
 from mqt.yaqs.core.methods.bug import (
     bug,
     build_basis_change_tensor,
