@@ -32,6 +32,12 @@ from numpy.testing import assert_allclose, assert_array_equal
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, extend_gate, split_tensor
 
+from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, X, Y, Z
+
+
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -383,3 +389,80 @@ def test_gate_cphase_reverse() -> None:
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
     assert_allclose(gate.tensor, expected)
+
+
+
+
+def test_gate_constructor() -> None:
+    """Test the constructor of the GateLibrary.
+
+    This test creates an instance of the GateLibrary and verifies that it is not None.
+    """
+    test_matrix = np.array([[1, 2], [3, 4]])
+    test_gate=BaseGate(test_matrix)
+
+    assert_array_equal(test_gate.matrix, test_matrix)
+    assert_array_equal(test_gate.tensor, test_matrix)
+    assert test_gate.interaction == 1
+
+
+
+
+def test_gate_operations() -> None:
+    """Test the operations of the GateLibrary.
+
+    This test creates instances of the Destroy, X, Y, and Z gates, and verifies that the
+    resulting matrices from performing addition, multiplication and adjoint operations on them are correct.
+    """
+    rel=Destroy()
+
+    x=X()
+    y=Y()
+    z=Z()
+
+    jump_list=[rel,z]
+
+    obs_list=[x,y,z]
+
+
+    matrices=[]
+
+    for lk in jump_list:
+        for on in obs_list:
+            res=lk.dag()*on*lk  -  0.5*on*lk.dag()*lk  -  0.5*lk.dag()*lk*on
+            matrices.append(res.matrix)
+
+    # Check the resulting matrices
+    assert len(matrices) == 6 # 3 jump operators * 2 observables
+
+    assert_array_equal(matrices[0], np.array([[ 0. +0.j, -0.5+0.j],
+                                              [-0.5+0.j,  0. +0.j]]))
+    assert_array_equal(matrices[1], np.array([[0.+0.j , 0.+0.5j],
+                                              [0.-0.5j, 0.+0.j ]]))
+    assert_array_equal(matrices[2], np.array([[0.+0.j, 0.+0.j],
+                                              [0.+0.j, 2.+0.j]]))
+    assert_array_equal(matrices[3], np.array([[ 0.+0.j, -2.+0.j],
+                                              [-2.+0.j,  0.+0.j]]))
+    assert_array_equal(matrices[4], np.array([[0.+0.j, 0.+2.j],
+                                              [0.-2.j, 0.+0.j]]))
+    assert_array_equal(matrices[5], np.array([[0.+0.j, 0.+0.j],
+                                              [0.+0.j, 0.+0.j]]))
+    
+
+
+
+def test_gate_observable() -> None:
+    """Test the observable property of the GateLibrary.
+
+    This test creates an instance of the X gate and verifies that its observable property is set correctly.
+    """
+    gate = X()
+
+    site = 3
+
+    obs=Observable(gate, site)
+    
+    assert_array_equal(obs.gate.matrix, gate.matrix)
+    assert obs.site == site
+    
+
