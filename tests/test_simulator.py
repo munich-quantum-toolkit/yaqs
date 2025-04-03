@@ -150,7 +150,7 @@ def test_physics_simulation_get_state() -> None:
         max_bond_dim = 4
         threshold = 1e-6
 
-        measurements = [Observable("x", length // 2)]
+        measurements = [Observable(X(), length // 2)]
         sim_params = PhysicsSimParams(
             measurements,
             elapsed_time,

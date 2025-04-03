@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, truncated_right_svd
 
 if TYPE_CHECKING:
@@ -121,7 +122,7 @@ def test_right_svd() -> None:
 def test_truncated_right_svd_thresh() -> None:
     """Test that the tensor is correctly truncated."""
     # Placeholder
-    measurements = [Observable("z", site) for site in range(0)]
+    measurements = [Observable(Z(), site) for site in range(0)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -152,7 +153,7 @@ def test_truncated_right_svd_thresh() -> None:
 def test_truncated_right_svd_maxbd() -> None:
     """Test that the tensor is correctly truncated."""
     # Placeholder
-    measurements = [Observable("z", site) for site in range(0)]
+    measurements = [Observable(Z(), site) for site in range(0)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,

@@ -220,15 +220,13 @@ class BaseGate:
         Returns:
             BaseGate: The product of the two gates.
         """
-        if isinstance(other, (int, float, complex)):
-            return BaseGate(self.matrix * other)
-
         if isinstance(other, BaseGate):
             if self.interaction != other.interaction:
                 msg = "Cannot multiply gates with different interaction"
                 raise ValueError(msg)
             return BaseGate(self.matrix @ other.matrix)
-        return None
+
+        return BaseGate(self.matrix * other)
 
     def __rmul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies two gates together.
