@@ -130,6 +130,53 @@ def test_physics_simulation_parallel_off() -> None:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
 
+def test_physics_simulation_get_state() -> None:
+    """Test the Hamiltonian simulation (physics simulation) using PhysicsSimParams without noise to get a statevector.
+
+    This test creates an MPS of length 2 initialized to the "zeros" state and an Ising MPO operator.
+    With sample_timesteps set to False, the test verifies for two-site (order=2) and single-site (order=1) that the
+    resulting output statevector is correct.
+    """
+    for order in [1, 2]:
+        length = 2
+        initial_state = MPS(length, state="zeros")
+
+        H = MPO()
+        H.init_ising(length, J=1, g=0.5)
+        elapsed_time = 1
+        dt = 0.1
+        sample_timesteps = False
+        num_traj = 1
+        max_bond_dim = 4
+        threshold = 1e-6
+
+        measurements = [Observable("x", length // 2)]
+        sim_params = PhysicsSimParams(
+            measurements,
+            elapsed_time,
+            dt,
+            num_traj,
+            max_bond_dim,
+            threshold,
+            order,
+            sample_timesteps=sample_timesteps,
+            get_state=True,
+        )
+        simulator.run(initial_state, H, sim_params, noise_model=None, parallel=False)
+        assert sim_params.output_state is not None
+        assert isinstance(sim_params.output_state, MPS)
+        sv = sim_params.output_state.to_vec()
+
+        expected = [
+            3.48123000e-01 + 0.76996349j,
+            0.00000000e00 + 0.349228j,
+            0.00000000e00 + 0.349228j,
+            -1.92179306e-01 - 0.07150749j,
+        ]
+        fidelity = np.abs(np.vdot(sv, expected)) ** 2
+        np.testing.assert_allclose(1, fidelity)
+
+
 def test_strong_simulation() -> None:
     """Test the circuit-based simulation branch using StrongSimParams.
 
@@ -306,6 +353,59 @@ def test_weak_simulation_no_noise() -> None:
     max_value = max(sim_params.results.values())
     assert sim_params.results[0] == max_value, "Key 0 does not have the highest value."
     assert sum(sim_params.results.values()) == shots, "Wrong number of shots in WeakSimParams."
+
+
+def test_weak_simulation_get_state() -> None:
+    """Test the circuit-based simulation using WeakSimParams without noise to get a statevector.
+
+    This test constructs a 2-site Ising circuit and compares the output statevector with known values from qiskit.
+    """
+    num_qubits = 2
+    initial_state = MPS(num_qubits)
+
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit.measure_all()
+    shots = 1
+    max_bond_dim = 4
+    threshold = 1e-6
+    window_size = 0
+    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size, get_state=True)
+
+    noise_model = None
+
+    simulator.run(initial_state, circuit, sim_params, noise_model)
+    assert sim_params.output_state is not None
+    assert isinstance(sim_params.output_state, MPS)
+    sv = sim_params.output_state.to_vec()
+
+    expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
+    fidelity = np.abs(np.vdot(sv, expected)) ** 2
+    np.testing.assert_allclose(1, fidelity)
+
+
+def test_weak_simulation_get_state_noise() -> None:
+    """Test the circuit-based simulation using WeakSimParams noise to get a statevector.
+
+    This test constructs a 2-site Ising circuit and configures the WeakSimParams to include a noise model and
+    return the final state. Since the noisy simulation cannot return the statevector, an exception should be raised.
+    """
+    num_qubits = 2
+    initial_state = MPS(num_qubits)
+
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
+    circuit.measure_all()
+    shots = 1024
+    max_bond_dim = 4
+    threshold = 1e-6
+    window_size = 0
+    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size, get_state=True)
+
+    gamma = 1e-3
+    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+
+    with pytest.raises(AssertionError, match=r"Cannot return state in noisy circuit simulation due to stochastics."):
+        simulator.run(initial_state, circuit, sim_params, noise_model)
+    assert sim_params.output_state is None
 
 
 def test_mismatch() -> None:

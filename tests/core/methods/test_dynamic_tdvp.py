@@ -95,7 +95,7 @@ def test_dynamic_tdvp_two_site() -> None:
     dt = 0.1
     sample_timesteps = False
     num_traj = 1
-    max_bond_dim = 2  # Force condition for two_site_tdvp.
+    max_bond_dim = 4  # Force condition for two_site_tdvp.
     threshold = 1e-6
     order = 1
     measurements = [Observable(X(), site) for site in range(L)]
