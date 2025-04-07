@@ -24,8 +24,8 @@ from qiskit.converters import circuit_to_dag
 from ..core.data_structures.networks import MPO, MPS
 from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.dynamic_tdvp import dynamic_tdvp
 from ..core.methods.stochastic_process import stochastic_process
+from ..core.methods.tdvp import two_site_tdvp
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -160,8 +160,7 @@ def apply_window(
         tuple[MPS, MPO, list[int]]: A tuple containing the shortened MPS, the shortened MPO, and the window indices.
     """
     # Define a window for a local update.
-    assert sim_params.window_size is not None
-    window = [first_site - sim_params.window_size, last_site + sim_params.window_size]
+    window = [first_site - 1, last_site + 1]
     window[0] = max(window[0], 0)
     window[1] = min(window[1], state.length - 1)
 
@@ -195,14 +194,18 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     # Construct the MPO for the two-qubit gate.
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
-    if sim_params.window_size is not None:
-        short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, sim_params)
-        dynamic_tdvp(short_state, short_mpo, sim_params)
-        # Replace the updated tensors back into the full state.
-        for i in range(window[0], window[1] + 1):
-            state.tensors[i] = short_state.tensors[i - window[0]]
-    else:
-        dynamic_tdvp(state, mpo, sim_params)
+    # Long-range gates require low SVD threshold
+    save = sim_params.threshold
+    if np.abs(first_site - last_site) > 1:
+        sim_params.threshold = 0
+
+    short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, sim_params)
+    two_site_tdvp(short_state, short_mpo, sim_params)
+    # Replace the updated tensors back into the full state.
+    for i in range(window[0], window[1] + 1):
+        state.tensors[i] = short_state.tensors[i - window[0]]
+
+    sim_params.threshold = save
 
 
 def circuit_tjm(
