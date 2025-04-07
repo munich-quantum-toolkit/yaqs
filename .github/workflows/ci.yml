@@ -18,7 +18,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-  
+
   python-tests:
     name: 🐍 Test
     needs: change-detection
