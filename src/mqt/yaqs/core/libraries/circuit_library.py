@@ -117,11 +117,13 @@ def create_2d_ising_circuit(
                 q1 = site_index(row, col)
                 q2 = site_index(row, col + 1)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
             # Odd bonds in the row.
             for col in range(1, num_cols - 1, 2):
                 q1 = site_index(row, col)
                 q2 = site_index(row, col + 1)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
 
         # Vertical interactions: between adjacent rows.
         for col in range(num_cols):
@@ -130,11 +132,14 @@ def create_2d_ising_circuit(
                 q1 = site_index(row, col)
                 q2 = site_index(row + 1, col)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
+
             # Odd bonds vertically.
             for row in range(1, num_rows - 1, 2):
                 q1 = site_index(row, col)
                 q2 = site_index(row + 1, col)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
 
     return circ
 
