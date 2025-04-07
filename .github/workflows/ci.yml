@@ -15,9 +15,6 @@ jobs:
   change-detection:
     name: 🔍 Change
     uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-change-detection.yml@v1.7
-    permissions:
-      contents: read
-      id-token: write
 
   python-tests:
     name: 🐍 Test
