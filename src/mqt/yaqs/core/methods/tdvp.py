@@ -99,9 +99,6 @@ def split_mps_tensor(
     left_tensor = u_mat[:, :cut_index]
     sigma = sigma[:cut_index]
     right_tensor = v_mat[:cut_index, :]
-    norm = np.linalg.norm(sigma)
-    if norm > 0:
-        sigma = sigma / norm
 
     # Reshape U and Vh back to tensor form:
     # U to shape (d0, D0, num_sv)
