@@ -72,7 +72,7 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
         sample_timesteps=True,
         num_traj=1,
         max_bond_dim=100,
-        threshold=1e-8,
+        threshold=1e-16,
         order=1,
     )
     for distr in ["left", "right", "sqrt"]:
@@ -282,8 +282,8 @@ def test_two_site_tdvp() -> None:
         dt=0.1,
         sample_timesteps=True,
         num_traj=1,
-        max_bond_dim=4,
-        threshold=1e-6,
+        max_bond_dim=16,
+        threshold=1e-12,
         order=1,
     )
     two_site_tdvp(state, H, sim_params, numiter_lanczos=25)
