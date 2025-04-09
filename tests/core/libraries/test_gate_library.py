@@ -394,9 +394,28 @@ def test_gate_constructor() -> None:
     test_matrix = np.array([[1, 2], [3, 4]])
     test_gate = BaseGate(test_matrix)
 
+    non_square_matrix = np.array([[1, 2, 3], [4, 5, 6]])
+
+    non_power_of_2_matrix = np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
+
     assert_array_equal(test_gate.matrix, test_matrix)
     assert_array_equal(test_gate.tensor, test_matrix)
+
+    # Test setting sites with a single site
+    test_gate.set_sites(0)
+    assert test_gate.sites == [0], "Failed to set a single site"
+
+    # Test setting sites with multiple sites
+    test_gate.set_sites(0, 1, 2)
+    assert test_gate.sites == [0, 1, 2], "Failed to set multiple sites"
+
     assert test_gate.interaction == 1
+    # Test for non-square matrix
+    with pytest.raises(ValueError, match="Matrix must be square"):
+        BaseGate(non_square_matrix)
+    # Test for matrix size not being a power of 2
+    with pytest.raises(ValueError, match="Matrix must have a size that is a power of 2"):
+        BaseGate(non_power_of_2_matrix)
 
 
 def test_gate_operations() -> None:
@@ -432,6 +451,9 @@ def test_gate_operations() -> None:
     assert_array_equal(matrices[4], np.array([[0.0 + 0.0j, 0.0 + 2.0j], [0.0 - 2.0j, 0.0 + 0.0j]]))
     assert_array_equal(matrices[5], np.array([[0.0 + 0.0j, 0.0 + 0.0j], [0.0 + 0.0j, 0.0 + 0.0j]]))
 
+    assert_array_equal(x.conj().matrix, np.conj(x.matrix))
+    assert_array_equal(x.trans().matrix, x.matrix.T)
+
 
 def test_gate_observable() -> None:
     """Test the observable property of the GateLibrary.
@@ -446,3 +468,23 @@ def test_gate_observable() -> None:
 
     assert_array_equal(obs.gate.matrix, gate.matrix)
     assert obs.site == site
+
+
+def test_basegate_operations_with_different_interaction() -> None:
+    """Test that BaseGate raises ValueError for operations with different interaction levels."""
+    # Create two gates with different interaction levels
+    gate1 = BaseGate(np.eye(2))  # Single-qubit gate (interaction = 1)
+
+    gate2 = BaseGate(np.eye(4))  # Two-qubit gate (interaction = 2)
+
+    # Test addition
+    with pytest.raises(ValueError, match="Cannot add gates with different interaction"):
+        _ = gate1 + gate2
+
+    # Test subtraction
+    with pytest.raises(ValueError, match="Cannot subtract gates with different interaction"):
+        _ = gate1 - gate2
+
+    # Test multiplication
+    with pytest.raises(ValueError, match="Cannot multiply gates with different interaction"):
+        _ = gate1 * gate2

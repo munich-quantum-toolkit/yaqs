@@ -279,14 +279,10 @@ class X(BaseGate):
     """
 
     name = "x"
-    matrix = np.array([[0, 1], [1, 0]])
-    interaction = 1
-
-    tensor = matrix
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        return
+        super().__init__(np.array([[0, 1], [1, 0]]))
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -312,14 +308,10 @@ class Y(BaseGate):
     """
 
     name = "y"
-    matrix = np.array([[0, -1j], [1j, 0]])
-    interaction = 1
-
-    tensor = matrix
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        return
+        super().__init__(np.array([[0, -1j], [1j, 0]]))
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -345,14 +337,10 @@ class Z(BaseGate):
     """
 
     name = "z"
-    matrix = np.array([[1, 0], [0, -1]])
-    interaction = 1
-
-    tensor = matrix
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        return
+        super().__init__(np.array([[1, 0], [0, -1]]))
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -378,14 +366,10 @@ class H(BaseGate):
     """
 
     name = "h"
-    matrix = np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]])
-    interaction = 1
-
-    tensor = matrix
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        return
+        super().__init__(np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]]))
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -411,14 +395,10 @@ class Destroy(BaseGate):
     """
 
     name = "destroy"
-    matrix = np.array([[0, 1], [0, 0]])
-    interaction = 1
-
-    tensor = matrix
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        return
+        super().__init__(np.array([[0, 1], [0, 0]]))
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -444,14 +424,10 @@ class Id(BaseGate):
     """
 
     name = "id"
-    matrix = np.array([[1, 0], [0, 1]])
-    interaction = 1
-
-    tensor = matrix
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        return
+        super().__init__(np.array([[1, 0], [0, 1]]))
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.
@@ -477,14 +453,10 @@ class SX(BaseGate):
     """
 
     name = "sx"
-    matrix = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]])
-    interaction = 1
-
-    tensor = matrix
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        return
+        super().__init__(0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]]))
 
     def set_sites(self, *sites: int) -> None:
         """Sets the sites for the gate.

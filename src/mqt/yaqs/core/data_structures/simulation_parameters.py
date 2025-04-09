@@ -25,8 +25,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
-
-    from ..libraries.gate_library import BaseGate
+    from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
 class Observable:
