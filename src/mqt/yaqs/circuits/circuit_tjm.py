@@ -197,7 +197,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     # Long-range gates require low SVD threshold
     save = sim_params.threshold
     if np.abs(first_site - last_site) > 1:
-        sim_params.threshold = 0
+        sim_params.threshold = 1e-324
 
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, sim_params)
     two_site_tdvp(short_state, short_mpo, sim_params)
