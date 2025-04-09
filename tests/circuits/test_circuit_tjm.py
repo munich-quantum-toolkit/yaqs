@@ -42,7 +42,7 @@ from mqt.yaqs.circuits.circuit_tjm import (
 )
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Z
 
 
 def test_process_layer() -> None:
@@ -121,7 +121,7 @@ def test_apply_single_qubit_gate() -> None:
 
     apply_single_qubit_gate(mps, node)
 
-    gate_tensor = GateLibrary.x.tensor
+    gate_tensor = X().tensor
     expected = np.einsum("ab,bcd->acd", gate_tensor, tensor)
     np.testing.assert_allclose(mps.tensors[0], expected)
 
