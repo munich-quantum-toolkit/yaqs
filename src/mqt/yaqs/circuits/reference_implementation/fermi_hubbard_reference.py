@@ -19,7 +19,7 @@ from __future__ import annotations
 import functools
 import operator
 
-import qutip as qt
+import qutip as qt  # type: ignore[import-untyped]
 
 
 def site_index(x: int, y: int, spin: str, Lx: int) -> int:
@@ -116,8 +116,6 @@ def create_alternating_init_state_qutip(num_sites: int) -> qt.Qobj:
         qutip.Qobj: A quantum state represented as a tensor product of individual site states.
     """
     state_list: list[qt.Qobj] = functools.reduce(
-        operator.iadd,
-        ([qt.basis(2, 0), qt.basis(2, x % 2)] for x in range(num_sites)),
-        []
+        operator.iadd, ([qt.basis(2, 0), qt.basis(2, x % 2)] for x in range(num_sites)), []
     )
     return qt.tensor(state_list).unit()
