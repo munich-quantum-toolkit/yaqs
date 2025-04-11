@@ -34,6 +34,7 @@ def site_index(x: int, y: int, spin: str, Lx: int) -> int:
     Returns:
         int: Index of the given site on a 1D lattice.
     """
+    spin_val = 0
     if spin == "↑":
         spin_val = 0
     elif spin == "↓":
