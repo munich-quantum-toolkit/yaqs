@@ -104,27 +104,6 @@ def split_mps_tensor(
     # Vh reshaped to (num_sv, d1, D2)
     right_tensor = right_tensor.reshape((cut_index, shape_transposed[2], shape_transposed[3]))
 
-    # u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
- 
-    # # Truncate singular values below the threshold
-    # num_sv: int = np.sum(sigma**2 > sim_params.threshold)
-    # if sim_params.max_bond_dim is not None:
-    #     num_sv = min(num_sv, sim_params.max_bond_dim)
-    # sigma = sigma[0:num_sv]
-    # norm = np.linalg.norm(sigma)
-    # if norm > 0:
-    #     sigma = sigma / norm
-
-    # # Truncate U and Vh accordingly
-    # u_mat = u_mat[:, :num_sv]
-    # v_mat = v_mat[:num_sv, :]
-
-    # # Reshape U and Vh back to tensor form:
-    # # U to shape (d0, D0, num_sv)
-    # left_tensor = u_mat.reshape((shape_transposed[0], shape_transposed[1], num_sv))
-    # # Vh reshaped to (num_sv, d1, D2)
-    # right_tensor = v_mat.reshape((num_sv, shape_transposed[2], shape_transposed[3]))
-
     # Distribute the singular values according to the chosen option
     if svd_distribution == "left":
         left_tensor *= sigma
