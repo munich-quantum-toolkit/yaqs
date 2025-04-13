@@ -18,7 +18,6 @@ quantum simulation. It verifies that:
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
 
 from __future__ import annotations
 
