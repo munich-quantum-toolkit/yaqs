@@ -85,7 +85,6 @@ def split_mps_tensor(
         shape_transposed[2] * shape_transposed[3],
     )
     u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
-
     cut_sum = 0
     thresh_sq = sim_params.threshold
     cut_index = 1
@@ -94,8 +93,7 @@ def split_mps_tensor(
         if cut_sum >= thresh_sq:
             cut_index = len(sigma) - i
             break
-    if sim_params.max_bond_dim is not None:
-        cut_index = min(cut_index, sim_params.max_bond_dim)
+
     left_tensor = u_mat[:, :cut_index]
     sigma = sigma[:cut_index]
     right_tensor = v_mat[:cut_index, :]
