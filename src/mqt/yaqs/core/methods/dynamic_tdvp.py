@@ -42,12 +42,9 @@ def dynamic_tdvp(state: MPS, hamiltonian: MPO, sim_params: PhysicsSimParams | St
             such as the maximum allowable bond dimension for the MPS.
     """
     current_max_bond_dim = state.write_max_bond_dim()
-
-    # Manages long-range gates which require low SVD threshold
-    if isinstance(sim_params, PhysicsSimParams):
-        if  current_max_bond_dim < sim_params.max_bond_dim:
-            # Perform 2TDVP when the current bond dimension is within the allowed limit
-            two_site_tdvp(state, hamiltonian, sim_params)
-        else:
-            # Perform 1TDVP when the bond dimension exceeds the allowed limit
-            single_site_tdvp(state, hamiltonian, sim_params)
+    if  current_max_bond_dim < sim_params.max_bond_dim:
+        # Perform 2TDVP when the current bond dimension is within the allowed limit
+        two_site_tdvp(state, hamiltonian, sim_params)
+    else:
+        # Perform 1TDVP when the bond dimension exceeds the allowed limit
+        single_site_tdvp(state, hamiltonian, sim_params)
