@@ -27,7 +27,7 @@ def trapezoidal(y, x):
 
 
 
-def loss_function(sim_params, ref_traj, traj_der):
+def loss_function(sim_params, ref_traj, traj_der, loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
     """
     Compute the loss function and its gradients for the given simulation parameters.
     Parameters:
@@ -82,6 +82,12 @@ def loss_function(sim_params, ref_traj, traj_der):
                 dJ_d_gr += 2*(exp_vals_traj[i,j,k] - ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
 
                 dJ_d_gd += 2*(exp_vals_traj[i,j,k] - ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
+
+
+
+    loss += np.random.normal(loc=0.0, scale=loss_std)
+    dJ_d_gr += np.random.normal(loc=0.0, scale=dJ_d_gr_std)
+    dJ_d_gd += np.random.normal(loc=0.0, scale=dJ_d_gd_std)
 
 
 
