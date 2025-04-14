@@ -502,7 +502,7 @@ def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=20
 
 
 
-def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=200, tolerance=1e-8, Ns=10e8, N0=10e-10, file_name=" "):
+def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=200, tolerance=1e-8, Ns=10e8, N0=10e-10, file_name=" ", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
     """
     Parameters:
     sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
@@ -549,7 +549,7 @@ def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, 
 
 
     # Calculate first loss and gradients
-    loss, _, grad_old = loss_function(sim_params, ref_traj, traj_der)
+    loss, _, grad_old = loss_function(sim_params, ref_traj, traj_der, loss_std=loss_std, dJ_d_gr_std=dJ_d_gr_std, dJ_d_gd_std=dJ_d_gd_std)
 
 
 
@@ -602,7 +602,7 @@ def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, 
         sim_params.gamma_rel, sim_params.gamma_deph = params_new
 
         # Calculate new loss and gradients
-        loss, _, grad_new = loss_function(sim_params, ref_traj, traj_der)
+        loss, _, grad_new = loss_function(sim_params, ref_traj, traj_der, loss_std=loss_std, dJ_d_gr_std=dJ_d_gr_std, dJ_d_gd_std=dJ_d_gd_std)
         
         if file_name != " ":
             with open(file_name, 'a') as file:
