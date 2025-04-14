@@ -209,6 +209,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
+
         if sim_params.sample_timesteps:
             temp_state = copy.deepcopy(state)
             last_site = 0
@@ -219,8 +220,14 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
                     last_site = observable.site
                 results[obs_index, j] = temp_state.measure_expectation_value(observable)
         elif j == len(sim_params.times) - 1:
+            temp_state = copy.deepcopy(state)
+            last_site = 0
             for obs_index, observable in enumerate(sim_params.sorted_observables):
-                results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
+                if observable.site > last_site:
+                    for site in range(last_site, observable.site):
+                        temp_state.shift_orthogonality_center_right(site)
+                    last_site = observable.site
+                results[obs_index, 0] = temp_state.measure_expectation_value(observable)
 
     if sim_params.get_state:
         sim_params.output_state = state
