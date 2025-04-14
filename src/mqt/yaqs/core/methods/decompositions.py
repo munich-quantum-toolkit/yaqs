@@ -116,7 +116,7 @@ def truncated_right_svd(
     """
     u_tensor, s_vec, v_mat = right_svd(mps_tensor)
     cut_sum = 0
-    thresh_sq = threshold**2
+    thresh_sq = threshold
     cut_index = 1
     for i, s_val in enumerate(np.flip(s_vec)):
         cut_sum += s_val**2
