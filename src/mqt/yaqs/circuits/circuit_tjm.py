@@ -205,6 +205,10 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 
+    if np.abs(first_site - last_site) > 1:
+        state.flip_network()
+        state.truncate(threshold=save)
+        state.flip_network()
     sim_params.threshold = save
 
 

@@ -25,14 +25,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
-from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..data_structures.networks import MPO, MPS
-    from ..data_structures.simulation_parameters import PhysicsSimParams
 
 
 def split_mps_tensor(
@@ -85,8 +84,20 @@ def split_mps_tensor(
         shape_transposed[2] * shape_transposed[3],
     )
     u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
-    cut_index = len(sigma)
 
+    # Handled by dynamic TDVP
+    if isinstance(sim_params, PhysicsSimParams):
+        cut_index = len(sigma)
+    else:
+        cut_sum = 0
+        thresh_sq = sim_params.threshold
+        cut_index = 1
+        for i, s_val in enumerate(np.flip(sigma)):
+            cut_sum += s_val**2
+            if cut_sum >= thresh_sq:
+                cut_index = len(sigma) - i
+                break
+        cut_index = min(cut_index, sim_params.max_bond_dim)
     left_tensor = u_mat[:, :cut_index]
     sigma = sigma[:cut_index]
     right_tensor = v_mat[:cut_index, :]
@@ -581,7 +592,3 @@ def two_site_tdvp(
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
-
-    state.flip_network()
-    state.truncate(sim_params.threshold)
-    state.flip_network()
