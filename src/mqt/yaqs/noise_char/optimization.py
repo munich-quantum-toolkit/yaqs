@@ -84,8 +84,13 @@ def loss_function(sim_params, ref_traj, traj_der, loss_std=0, dJ_d_gr_std=0, dJ_
                 dJ_d_gd += 2*(exp_vals_traj[i,j,k] - ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
 
 
+    while True:
+        error=np.random.normal(loc=0.0, scale=loss_std)
 
-    loss += np.random.normal(loc=0.0, scale=loss_std)
+        if loss + error > 0:
+            loss += error
+            break
+
     dJ_d_gr += np.random.normal(loc=0.0, scale=dJ_d_gr_std)
     dJ_d_gd += np.random.normal(loc=0.0, scale=dJ_d_gd_std)
 
@@ -349,160 +354,7 @@ def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.0
 
 
 
-def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=200, tolerance=1e-8, file_name=" "):
-    """
-    Parameters:
-    sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
-    ref_traj (array-like): Reference trajectory data.
-    traj_der (function): Function that runs the simulation and returns the time, 
-                         expected values trajectory, and derivatives of the observables 
-                         with respect to the noise parameters.
-    learning_rate (float, optional): Learning rate for the BFGS optimizer. Default is 0.01.
-    max_iterations (int, optional): Maximum number of iterations for the optimization. Default is 200.
-    tolerance (float, optional): Tolerance for the convergence criterion. Default is 1e-8.
-    Returns:
-    tuple: A tuple containing:
-        - loss_history (list): History of loss values during optimization.
-        - gr_history (list): History of gamma_rel values during optimization.
-        - gd_history (list): History of gamma_deph values during optimization.
-        - dJ_dgr_history (list): History of gradients with respect to gamma_rel.
-        - dJ_dgd_history (list): History of gradients with respect to gamma_deph.
-    
-    Performs BFGS optimization to minimize the loss function.
-    """
-
-
-    sim_params=copy.deepcopy(sim_params_copy)
-
-
-
-    loss_history = []
-    gr_history = []
-    gd_history = []
-    dJ_dgr_history = []
-    dJ_dgd_history = []
-
-    if os.path.exists(file_name) and file_name != " ":
-        os.remove(file_name)
-
-    # Initial parameters
-    params_old = np.array([sim_params.gamma_rel, sim_params.gamma_deph])
-    n_params = len(params_old)
-
-    # Initial inverse Hessian approximation
-    H_inv = np.eye(n_params)
-
-    I = np.eye(n_params)
-
-
-    # Calculate first loss and gradients
-    loss, _, grad_old = loss_function(sim_params, ref_traj, traj_der)
-
-
-
-    if file_name != " ":
-        with open(file_name, 'w') as file:
-            file.write('#  Iter    Loss    Log10(Loss)    Gamma_rel    Gamma_deph \n')
-
-
-
-    if file_name != " ":
-        with open(file_name, 'a') as file:
-            file.write('    '.join(map(str, [0, loss, np.log10(loss),sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
-
-
-    loss_history.append(loss)
-    gr_history.append(params_old[0])
-    gd_history.append(params_old[1])
-    dJ_dgr_history.append(grad_old[0])
-    dJ_dgd_history.append(grad_old[1])
-
-
-    print(f"!!!!!!! Iteration = 0, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
-
-
-
-    for iteration in range(max_iterations-1):
-
-        # Compute search direction
-        p = -H_inv.dot(grad_old)
-
-        a = learning_rate
-
-
-        # if learning_rate > 0:
-        #     a = learning_rate
-        # else:
-        #     # Perform line search to find step size
-        #     a = line_search(loss_function, loss, sim_params, ref_traj, traj_der, params_old, p, grad_old)
-
-
-        # Update parameters
-        params_new = params_old + a * p
-
-        for i in range(n_params):
-            if params_new[i] < 0:
-                params_new[i] = 0
-
-
-        # Update simulation parameters
-        sim_params.gamma_rel, sim_params.gamma_deph = params_new
-
-        # Calculate new loss and gradients
-        loss, _, grad_new = loss_function(sim_params, ref_traj, traj_der)
-        
-        if file_name != " ":
-            with open(file_name, 'a') as file:
-                file.write('    '.join(map(str, [iteration+1, loss, np.log10(loss),sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
-
-
-        loss_history.append(loss)
-        gr_history.append(params_new[0])
-        gd_history.append(params_new[1])
-        dJ_dgr_history.append(grad_new[0])
-        dJ_dgd_history.append(grad_new[1])
-
-
-        print(f"!!!!!!! Iteration = {iteration + 1}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
-        
-
-
-
-
-        if loss < tolerance:
-            print(f"Converged after {iteration} iterations.")
-            break
-
-
-        # Compute differences
-        s = a * p
-        y = grad_new - grad_old
-
-        
-        prod=y.dot(s)
-
-        if prod != 0:
-            
-            # Update inverse Hessian approximation using BFGS formula
-            rho = 1.0 / prod
-
-            H_inv = (I - rho * np.outer(s, y)).dot(H_inv).dot(I - rho * np.outer(y, s)) + rho * np.outer(s, s)
-
-
-        params_old = params_new
-        grad_old = grad_new
-
-
-
-
-    return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
-
-
-
-
-
-
-def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=200, tolerance=1e-8, Ns=10e8, N0=10e-10, file_name=" ", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
+def BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=200, tolerance=1e-8, file_name=" ", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
     """
     Parameters:
     sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
@@ -637,10 +489,164 @@ def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, 
         if prod != 0:
             
             # Update inverse Hessian approximation using BFGS formula
+            rho = 1.0 / prod
 
-            beta=max(Ns*np.linalg.norm(s) + N0 , 1e-20)
+            H_inv = (I - rho * np.outer(s, y)).dot(H_inv).dot(I - rho * np.outer(y, s)) + rho * np.outer(s, s)
 
-            print(f"N_s*norm(s) = {Ns*np.linalg.norm(s)}, beta = {beta}")
+
+        params_old = params_new
+        grad_old = grad_new
+
+
+
+
+    return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
+
+
+
+
+
+
+def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, max_iterations=200, tolerance=1e-8, alpha=1, Ns=10e8, N0=10e-10, file_name=" ", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
+    """
+    Parameters:
+    sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
+    ref_traj (array-like): Reference trajectory data.
+    traj_der (function): Function that runs the simulation and returns the time, 
+                         expected values trajectory, and derivatives of the observables 
+                         with respect to the noise parameters.
+    learning_rate (float, optional): Learning rate for the BFGS optimizer. Default is 0.01.
+    max_iterations (int, optional): Maximum number of iterations for the optimization. Default is 200.
+    tolerance (float, optional): Tolerance for the convergence criterion. Default is 1e-8.
+    Returns:
+    tuple: A tuple containing:
+        - loss_history (list): History of loss values during optimization.
+        - gr_history (list): History of gamma_rel values during optimization.
+        - gd_history (list): History of gamma_deph values during optimization.
+        - dJ_dgr_history (list): History of gradients with respect to gamma_rel.
+        - dJ_dgd_history (list): History of gradients with respect to gamma_deph.
+    
+    Performs BFGS optimization to minimize the loss function.
+    """
+
+
+    sim_params=copy.deepcopy(sim_params_copy)
+
+
+
+    loss_history = []
+    gr_history = []
+    gd_history = []
+    dJ_dgr_history = []
+    dJ_dgd_history = []
+
+    if os.path.exists(file_name) and file_name != " ":
+        os.remove(file_name)
+
+    # Initial parameters
+    params_old = np.array([sim_params.gamma_rel, sim_params.gamma_deph])
+    n_params = len(params_old)
+
+    # Initial inverse Hessian approximation
+    H_inv = np.eye(n_params)
+
+    I = np.eye(n_params)
+
+
+    # Calculate first loss and gradients
+    loss, _, grad_old = loss_function(sim_params, ref_traj, traj_der, loss_std=loss_std, dJ_d_gr_std=dJ_d_gr_std, dJ_d_gd_std=dJ_d_gd_std)
+
+
+
+    if file_name != " ":
+        with open(file_name, 'w') as file:
+            file.write('#  Iter    Loss    Log10(Loss)    Gamma_rel    Gamma_deph \n')
+
+
+
+    if file_name != " ":
+        with open(file_name, 'a') as file:
+            file.write('    '.join(map(str, [0, loss, np.log10(loss),sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
+
+
+    loss_history.append(loss)
+    gr_history.append(params_old[0])
+    gd_history.append(params_old[1])
+    dJ_dgr_history.append(grad_old[0])
+    dJ_dgd_history.append(grad_old[1])
+
+
+    print(f"!!!!!!! Iteration = 0, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+
+
+
+    for iteration in range(max_iterations-1):
+
+        # Compute search direction
+        p = -H_inv.dot(grad_old)
+
+
+        a = (learning_rate/(1+iteration/alpha))
+
+        # if learning_rate > 0:
+        #     a = learning_rate
+        # else:
+        #     # Perform line search to find step size
+        #     a = line_search(loss_function, loss, sim_params, ref_traj, traj_der, params_old, p, grad_old)
+
+
+        # Update parameters
+        params_new = params_old + a * p
+
+        for i in range(n_params):
+            if params_new[i] < 0:
+                params_new[i] = 0
+
+
+        # Update simulation parameters
+        sim_params.gamma_rel, sim_params.gamma_deph = params_new
+
+        # Calculate new loss and gradients
+        loss, _, grad_new = loss_function(sim_params, ref_traj, traj_der, loss_std=loss_std, dJ_d_gr_std=dJ_d_gr_std, dJ_d_gd_std=dJ_d_gd_std)
+        
+        if file_name != " ":
+            with open(file_name, 'a') as file:
+                file.write('    '.join(map(str, [iteration+1, loss, np.log10(loss),sim_params.gamma_rel, sim_params.gamma_deph ])) + '\n')
+
+
+        loss_history.append(loss)
+        gr_history.append(params_new[0])
+        gd_history.append(params_new[1])
+        dJ_dgr_history.append(grad_new[0])
+        dJ_dgd_history.append(grad_new[1])
+
+
+        print(f"!!!!!!! Iteration = {iteration + 1}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+        
+
+
+
+
+        if loss < tolerance:
+            print(f"Converged after {iteration} iterations.")
+            break
+
+
+        # Compute differences
+        s = a * p
+        y = grad_new - grad_old
+
+        
+        prod=y.dot(s)
+
+        if prod != 0:
+            
+            # Update inverse Hessian approximation using BFGS formula
+
+            beta=(Ns/np.sqrt(dJ_d_gr_std**2+dJ_d_gd_std**2))*np.linalg.norm(s) + N0
+
+
+            print(f"N_s*norm(s) = {Ns*np.linalg.norm(s)}, beta = {beta}, a = {a}")
 
             gamma=1.0/(prod+1/beta)
 
