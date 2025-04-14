@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 class TensorEvolMode(Enum):
     """Enumerates the different modes of tensor evolution in the simulation."""
+
     TDVP = "tdvp"
     BUG = "bug"
 
