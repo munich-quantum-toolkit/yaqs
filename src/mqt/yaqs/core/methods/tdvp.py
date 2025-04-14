@@ -85,14 +85,7 @@ def split_mps_tensor(
         shape_transposed[2] * shape_transposed[3],
     )
     u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
-    cut_sum = 0
-    thresh_sq = sim_params.threshold
-    cut_index = 1
-    for i, s_val in enumerate(np.flip(sigma)):
-        cut_sum += s_val**2
-        if cut_sum >= thresh_sq:
-            cut_index = len(sigma) - i
-            break
+    cut_index = len(sigma)
 
     left_tensor = u_mat[:, :cut_index]
     sigma = sigma[:cut_index]
@@ -588,3 +581,7 @@ def two_site_tdvp(
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
+
+    state.flip_network()
+    state.truncate(sim_params.threshold)
+    state.flip_network()
