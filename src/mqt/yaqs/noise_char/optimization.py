@@ -192,7 +192,7 @@ def gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, ma
 
 
 # --- ADAM GRADIENT DESCENT (Modified) ---
-def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, file_name=" "):
+def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, max_iterations=200, tolerance=1e-8, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, file_name=" ", alpha=1, loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
     """
     Parameters:
     sim_params (object): Simulation parameters containing gamma_rel and gamma_deph.
@@ -247,7 +247,7 @@ def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.0
 
     for iteration in range(max_iterations):
         # Calculate loss and gradients (unchanged)
-        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der)
+        loss, exp_vals_traj, dJ_dg = loss_function(sim_params, ref_traj, traj_der, loss_std=loss_std, dJ_d_gr_std=dJ_d_gr_std, dJ_d_gd_std=dJ_d_gd_std)
         
 
         if file_name != " ":
@@ -274,7 +274,12 @@ def ADAM_gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.0
         v = beta2 * v + (1 - beta2) * (dJ_dg ** 2)
         m_hat = m / (1 - beta1 ** (iteration + 1))
         v_hat = v / (1 - beta2 ** (iteration + 1))
-        update = learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+
+
+        a = learning_rate/(1+iteration/alpha)
+
+
+        update = a * m_hat / (np.sqrt(v_hat) + epsilon)
         
         # Update simulation parameters with Adam update (NEW)
         sim_params.gamma_rel -= update[0]
@@ -586,7 +591,8 @@ def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, 
         p = -H_inv.dot(grad_old)
 
 
-        a = (learning_rate/(1+iteration/alpha))
+        
+        a = learning_rate/(1+iteration/alpha)
 
         # if learning_rate > 0:
         #     a = learning_rate
