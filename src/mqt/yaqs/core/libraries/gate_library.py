@@ -409,7 +409,6 @@ class Destroy(BaseGate):
         self.sites = list(sites)
 
 
-
 class Create(BaseGate):
     """Class representing the Create gate.
 
@@ -437,8 +436,6 @@ class Create(BaseGate):
             *sites (int): Variable length argument list specifying site indices.
         """
         self.sites = list(sites)
-
-
 
 
 class Id(BaseGate):
