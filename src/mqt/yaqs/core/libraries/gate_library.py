@@ -534,7 +534,6 @@ class Destroy(BaseGate):
 
 
 
-
 class Create(BaseGate):
     """Class representing the Create gate.
 
@@ -557,8 +556,6 @@ class Create(BaseGate):
         _mat=np.array([[0, 0], [1, 0]])
 
         super().__init__(_mat)
-
-
 
 
 class Id(BaseGate):
