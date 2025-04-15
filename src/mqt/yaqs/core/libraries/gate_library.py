@@ -356,7 +356,7 @@ class H(BaseGate):
 
     Attributes:
         name (str): "h".
-        matrix (NDArray[np.complex128]): The 2x2 Hadamard matrix.
+        matrix (NDArray[np.complex128]): The 2x2 matrix representation.
         interaction (int): Interaction level (1 for single-qubit).
         tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
 
@@ -381,11 +381,11 @@ class H(BaseGate):
 
 
 class Destroy(BaseGate):
-    """Class representing the Hadamard (H) gate.
+    """Class representing the Deatroy gate.
 
     Attributes:
-        name (str): "h".
-        matrix (NDArray[np.complex128]): The 2x2 Hadamard matrix.
+        name (str): "destroy".
+        matrix (NDArray[np.complex128]): The 2x2 matrix representation.
         interaction (int): Interaction level (1 for single-qubit).
         tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
 
@@ -407,6 +407,38 @@ class Destroy(BaseGate):
             *sites (int): Variable length argument list specifying site indices.
         """
         self.sites = list(sites)
+
+
+
+class Create(BaseGate):
+    """Class representing the Create gate.
+
+    Attributes:
+        name (str): "create".
+        matrix (NDArray[np.complex128]): The 2x2 matrix representation.
+        interaction (int): Interaction level (1 for single-qubit).
+        tensor (NDArray[np.complex128]): The tensor representation (same as matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) for the gate.
+    """
+
+    name = "create"
+
+    def __init__(self) -> None:
+        """Initializes the gate."""
+        super().__init__(np.array([[0, 0], [1, 0]]))
+
+    def set_sites(self, *sites: int) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites (int): Variable length argument list specifying site indices.
+        """
+        self.sites = list(sites)
+
+
 
 
 class Id(BaseGate):
