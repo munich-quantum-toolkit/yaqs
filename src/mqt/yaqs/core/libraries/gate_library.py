@@ -172,7 +172,13 @@ class BaseGate:
         Args:
             *sites (int): Variable length argument list specifying site indices.
         """
-        self.sites: list[int] = list(sites)
+        sites_list=list(sites)
+
+        if len(sites_list) != self.interaction:
+            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
+            raise ValueError(msg)
+        else:
+            self.sites: list[int] = sites_list
 
     def __add__(self, other: BaseGate) -> BaseGate:
         """Adds two gates together.
@@ -264,6 +270,144 @@ class BaseGate:
         return BaseGate(self.matrix.T)
 
 
+    @classmethod
+    def x(cls) -> X:
+        """Returns the X gate.
+
+        Returns:
+            X: An instance of the X gate.
+        """
+        return X()
+
+    @classmethod
+    def y(cls) -> Y:
+        """Returns the Y gate.
+
+        Returns:
+            Y: An instance of the Y gate.
+        """
+        return Y()
+
+    @classmethod
+    def z(cls) -> Z:
+        """Returns the Z gate.
+
+        Returns:
+            Z: An instance of the Z gate.
+        """
+        return Z() 
+    
+    @classmethod
+    def h(cls) -> H:
+        """Returns the H gate.
+
+        Returns:
+            H: An instance of the H gate.
+        """
+        return H() 
+    
+    @classmethod
+    def destroy(cls) -> Destroy:
+        """Returns the Destroy gate.
+
+        Returns:
+            Destroy: An instance of the Destroy gate.
+        """
+        return Destroy()
+    
+    @classmethod
+    def create(cls) -> Create:
+        """Returns the Create gate.
+
+        Returns:
+            Create: An instance of the Create gate.
+        """
+        return Create()
+    
+    @classmethod
+    def id(cls) -> Id:
+        """Returns the Id gate.
+
+        Returns:
+            Id: An instance of the Id gate.
+        """
+        return Id()
+    
+    @classmethod
+    def sx(cls) -> SX:
+        """Returns the SX gate.
+
+        Returns:
+            SX: An instance of the SX gate.
+        """
+        return SX()
+    
+    @classmethod
+    def rx(cls, theta: float) -> Rx:
+        """Returns the RX gate.
+
+        Args:
+            theta (float): The rotation angle parameter.
+
+        Returns:
+            Rx: An instance of the RX gate.
+        """
+        return Rx(theta)
+    
+    @classmethod
+    def ry(cls, theta: float) -> Ry:
+        """Returns the RY gate.
+
+        Args:
+            theta (float): The rotation angle parameter.
+
+        Returns:
+            Ry: An instance of the RY gate.
+        """
+        return Ry(theta)
+    
+    @classmethod
+    def rz(cls, theta: float) -> Rz:
+        """Returns the RZ gate.
+
+        Args:
+            theta (float): The rotation angle parameter.
+
+        Returns:
+            Rz: An instance of the RZ gate.
+        """
+        return Rz(theta)
+    
+    @classmethod
+    def phase(cls, theta: float) -> Phase:
+        """Returns the Phase gate.
+
+        Args:
+            theta (float): The phase angle parameter.
+
+        Returns:
+            Phase: An instance of the Phase gate.
+        """
+        return Phase(theta)
+    
+    @classmethod
+    def u3(cls, theta: float, phi: float, lam: float) -> U3:
+        """Returns the U3 gate.
+
+        Args:
+            theta (float): First rotation parameter.
+            phi (float): Second rotation parameter.
+            lam (float): Third rotation parameter.
+
+        Returns:
+            U3: An instance of the U3 gate.
+        """
+        return U3(theta, phi, lam)
+    
+
+
+    
+
 class X(BaseGate):
     """Class representing the X (NOT) gate.
 
@@ -282,15 +426,11 @@ class X(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(np.array([[0, 1], [1, 0]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=np.array([[0, 1], [1, 0]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
+
 
 
 class Y(BaseGate):
@@ -311,15 +451,11 @@ class Y(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(np.array([[0, -1j], [1j, 0]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=np.array([[0, -1j], [1j, 0]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
+
 
 
 class Z(BaseGate):
@@ -340,15 +476,11 @@ class Z(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(np.array([[1, 0], [0, -1]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=np.array([[1, 0], [0, -1]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
+
 
 
 class H(BaseGate):
@@ -369,15 +501,11 @@ class H(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=np.array([[1 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), -1 / np.sqrt(2)]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
+
 
 
 class Destroy(BaseGate):
@@ -398,15 +526,12 @@ class Destroy(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(np.array([[0, 1], [0, 0]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=np.array([[0, 1], [0, 0]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
+
+
 
 
 
@@ -428,15 +553,10 @@ class Create(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(np.array([[0, 0], [1, 0]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=np.array([[0, 0], [1, 0]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
 
 
 
@@ -459,15 +579,11 @@ class Id(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(np.array([[1, 0], [0, 1]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=np.array([[1, 0], [0, 1]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
+
 
 
 class SX(BaseGate):
@@ -488,15 +604,10 @@ class SX(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the gate."""
-        super().__init__(0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]]))
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        _mat=0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]])
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
 
 
 class Rx(BaseGate):
@@ -518,45 +629,19 @@ class Rx(BaseGate):
     """
 
     name = "rx"
-    interaction = 1
 
-    def __init__(self) -> None:
+    def __init__(self, theta: float) -> None:
         """Initializes the gate."""
-        return
 
-    def set_params(self, params: list[Parameter]) -> None:
-        """Sets the rotation parameter for the gate and updates internal representations.
+        self.theta = theta
 
-        Parameters
-        ----------
-        params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
-
-        Updates
-        -------
-        theta : Parameter
-            The rotation angle parameter.
-        matrix : NDArray[np.complex128]
-            The gate's 2x2 unitary matrix.
-        tensor : NDArray[np.complex128]
-            The tensor representation, equivalent to the matrix representation.
-        generator : list[NDArray[np.complex128]]
-            The generator of the gate.
-        """
-        self.theta = params[0]
-        self.matrix = np.array([
+        _mat=np.array([
             [np.cos(self.theta / 2), -1j * np.sin(self.theta / 2)],
             [-1j * np.sin(self.theta / 2), np.cos(self.theta / 2)],
         ])
-        self.tensor = self.matrix
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        super().__init__(_mat)
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
 
 
 class Ry(BaseGate):
@@ -578,45 +663,18 @@ class Ry(BaseGate):
     """
 
     name = "ry"
-    interaction = 1
 
-    def __init__(self) -> None:
+    def __init__(self, theta: float) -> None:
         """Initializes the gate."""
-        return
 
-    def set_params(self, params: list[Parameter]) -> None:
-        """Sets the rotation parameter for the gate and updates internal representations.
+        self.theta = theta
 
-        Parameters
-        ----------
-        params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
-
-        Updates
-        -------
-        theta : Parameter
-            The rotation angle parameter.
-        matrix : NDArray[np.complex128]
-            The gate's 2x2 unitary matrix.
-        tensor : NDArray[np.complex128]
-            The tensor representation, equivalent to the matrix representation.
-        generator : list[NDArray[np.complex128]]
-            The generator of the gate.
-        """
-        self.theta = params[0]
-        self.matrix = np.array([
+        _mat=np.array([
             [np.cos(self.theta / 2), -np.sin(self.theta / 2)],
             [np.sin(self.theta / 2), np.cos(self.theta / 2)],
         ])
-        self.tensor = self.matrix
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
 
 
 class Rz(BaseGate):
@@ -638,45 +696,18 @@ class Rz(BaseGate):
     """
 
     name = "rz"
-    interaction = 1
 
-    def __init__(self) -> None:
+    def __init__(self, theta: float) -> None:
         """Initializes the gate."""
-        return
 
-    def set_params(self, params: list[Parameter]) -> None:
-        """Sets the rotation parameter for the gate and updates internal representations.
+        self.theta = theta
 
-        Parameters
-        ----------
-        params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
-
-        Updates
-        -------
-        theta : Parameter
-            The rotation angle parameter.
-        matrix : NDArray[np.complex128]
-            The gate's 2x2 unitary matrix.
-        tensor : NDArray[np.complex128]
-            The tensor representation, equivalent to the matrix representation.
-        generator : list[NDArray[np.complex128]]
-            The generator of the gate.
-        """
-        self.theta = params[0]
-        self.matrix = np.array([
+        _mat=np.array([
             [np.exp(-1j * self.theta / 2), 0],
             [0, np.exp(1j * self.theta / 2)],
         ])
-        self.tensor = self.matrix
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+        super().__init__(_mat)
 
 
 class Phase(BaseGate):
@@ -698,41 +729,17 @@ class Phase(BaseGate):
     """
 
     name = "p"
-    interaction = 1
 
-    def __init__(self) -> None:
+
+    def __init__(self, theta: float) -> None:
         """Initializes the gate."""
-        return
 
-    def set_params(self, params: list[Parameter]) -> None:
-        """Sets the rotation parameter for the gate and updates internal representations.
+        self.theta = theta
 
-        Parameters
-        ----------
-        params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+        _mat=np.array([[1, 0], [0, np.exp(1j * self.theta)]])
 
-        Updates
-        -------
-        theta : Parameter
-            The rotation angle parameter.
-        matrix : NDArray[np.complex128]
-            The gate's 2x2 unitary matrix.
-        tensor : NDArray[np.complex128]
-            The tensor representation, equivalent to the matrix representation.
-        """
-        # Phase gate has one parameter theta.
-        self.theta = params[0]
-        self.matrix = np.array([[1, 0], [0, np.exp(1j * self.theta)]])
-        self.tensor = self.matrix
+        super().__init__(_mat)
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
 
 
 class U3(BaseGate):
@@ -756,46 +763,26 @@ class U3(BaseGate):
     """
 
     name = "u"
-    interaction = 1
 
-    def __init__(self) -> None:
+
+    def __init__(self, theta: float, phi: float, lam: float) -> None:
         """Initializes the gate."""
-        return
 
-    def set_params(self, params: list[Parameter]) -> None:
-        """Sets the rotation parameter for the gate and updates internal representations.
+        self.theta = theta
+        self.phi = phi 
+        self.lam = lam
 
-        Parameters
-        ----------
-        params : list[Parameter]
-            A list containing a three rotation angle (theta, phi, lambda) parameters.
-
-        Updates
-        -------
-        theta : Parameter
-            The rotation angle parameter.
-        matrix : NDArray[np.complex128]
-            The gate's 2x2 unitary matrix.
-        tensor : NDArray[np.complex128]
-            The tensor representation, equivalent to the matrix representation.
-        """
-        self.theta, self.phi, self.lam = params
-        self.matrix = np.array([
+        _mat=np.array([
             [np.cos(self.theta / 2), -np.exp(1j * self.lam) * np.sin(self.theta / 2)],
             [
                 np.exp(1j * self.phi) * np.sin(self.theta / 2),
                 np.exp(1j * (self.phi + self.lam)) * np.cos(self.theta / 2),
             ],
         ])
-        self.tensor = self.matrix
 
-    def set_sites(self, *sites: int) -> None:
-        """Sets the sites for the gate.
+        super().__init__(_mat)
 
-        Args:
-            *sites (int): Variable length argument list specifying site indices.
-        """
-        self.sites = list(sites)
+
 
 
 class CX(BaseGate):
