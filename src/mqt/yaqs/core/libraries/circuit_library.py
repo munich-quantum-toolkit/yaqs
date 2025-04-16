@@ -20,8 +20,8 @@ respective Hamiltonians.
 
 from __future__ import annotations
 
-from qiskit.circuit import QuantumCircuit
 import numpy as np
+from qiskit.circuit import QuantumCircuit
 from scipy.linalg import expm
 
 
@@ -327,16 +327,13 @@ def create_2d_heisenberg_circuit(
     return circ
 
 
-
 def nearest_neighbour_random_circuit(n_qubits, layers, seed=42):
+    """Creates a random circuit with single- and two qubit nearest
+    neighbor gates which are not Haar distributed
+    as in https://arxiv.org/abs/2002.07730.
 
-    """
-    Creates a random circuit with single- and two qubit nearest 
-    neighbor gates which are not Haar distributed 
-    as in https://arxiv.org/abs/2002.07730
-    
     The rotation coefficients are sampled according to https://arxiv.org/abs/2002.07730
-    and then transferred to parameters that match the U3 gate class in 
+    and then transferred to parameters that match the U3 gate class in
     qiskit via extract_u_parameters(U).
     """
     np.random.seed(seed)
@@ -350,10 +347,10 @@ def nearest_neighbour_random_circuit(n_qubits, layers, seed=42):
         # Two-qubit entangling gates
         if layer % 2 == 0:
             # Even layer → pair (1,2), (3,4), ...
-            pairs = [(i, i+1) for i in range(1, n_qubits-1, 2)]
+            pairs = [(i, i + 1) for i in range(1, n_qubits - 1, 2)]
         else:
             # Odd layer → pair (0,1), (2,3), ...
-            pairs = [(i, i+1) for i in range(0, n_qubits-1, 2)]
+            pairs = [(i, i + 1) for i in range(0, n_qubits - 1, 2)]
 
         for q1, q2 in pairs:
             if np.random.rand() < 0.5:
@@ -366,12 +363,9 @@ def nearest_neighbour_random_circuit(n_qubits, layers, seed=42):
     return qc
 
 
-
-
 def extract_u_parameters(U):
-    """
-    Given a 2x2 SU(2) unitary matrix U, extract the parameters (theta, phi, lambda)
-    such that U = U(theta, phi, lambda)
+    """Given a 2x2 SU(2) unitary matrix U, extract the parameters (theta, phi, lambda)
+    such that U = U(theta, phi, lambda).
 
     Args:
         U (np.ndarray): 2x2 unitary matrix (must be SU(2), i.e., det = 1 or global phase irrelevant)
@@ -381,8 +375,7 @@ def extract_u_parameters(U):
     """
     assert U.shape == (2, 2), "Input must be a 2x2 matrix."
 
-    U = U * np.exp(-1j * np.angle(U[0, 0]))
-
+    U *= np.exp(-1j * np.angle(U[0, 0]))
 
     a, b = U[0, 0], U[0, 1]
     c, d = U[1, 0], U[1, 1]
@@ -403,10 +396,8 @@ def extract_u_parameters(U):
     return float(theta), float(phi), float(lam)
 
 
-
-def add_random_single_qubit_rotation(qc, qubit):
-    """
-    Adds a single-qubit gate to `qc` that matches
+def add_random_single_qubit_rotation(qc, qubit) -> None:
+    """Adds a single-qubit gate to `qc` that matches
     exp(-i * theta * n . sigma), using only standard `u(...)` gates.
     """
     # Sample angles
@@ -433,5 +424,3 @@ def add_random_single_qubit_rotation(qc, qubit):
 
     # Add gate to circuit
     qc.u(theta_u3, phi_u3, lambda_u3, qubit)
-
-

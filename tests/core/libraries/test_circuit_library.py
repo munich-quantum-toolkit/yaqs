@@ -21,12 +21,12 @@ in quantum simulations within the YAQS project.
 
 from __future__ import annotations
 
-from qiskit.circuit import QuantumCircuit
-import pytest
 import numpy as np
-from scipy.linalg import expm
+import pytest
+from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs.core.libraries.circuit_library import *
+
 
 def test_create_ising_circuit_valid_even() -> None:
     """Test that create_ising_circuit returns a valid circuit for an even number of qubits.
@@ -279,10 +279,11 @@ def test_nearest_neighbour_random_circuit_structure() -> None:
     expected_pairs = []
     for layer in range(layers):
         if layer % 2 == 0:
-            expected_pairs.append(len([(i, i+1) for i in range(1, n_qubits-1, 2)]))
+            expected_pairs.append(len([(i, i + 1) for i in range(1, n_qubits - 1, 2)]))
         else:
-            expected_pairs.append(len([(i, i+1) for i in range(0, n_qubits-1, 2)]))
+            expected_pairs.append(len([(i, i + 1) for i in range(0, n_qubits - 1, 2)]))
     assert names.count("cz") + names.count("cx") == sum(expected_pairs)
+
 
 def test_nearest_seed_reproducibility() -> None:
     """Circuits generated with the same seed must be identical."""
@@ -291,40 +292,50 @@ def test_nearest_seed_reproducibility() -> None:
     # comparing OpenQASM is a quick way to verify structural equality
     assert qc1 == qc2
 
+
 def test_extract_u_parameters_invalid_shape() -> None:
     """extract_u_parameters must reject non‑2×2 inputs."""
     with pytest.raises(AssertionError):
         extract_u_parameters(np.eye(3))
 
+
 def test_extract_u_parameters_identity() -> None:
     """extract_u_parameters on I or –I returns (0,0,0)."""
     theta, phi, lam = extract_u_parameters(np.eye(2))
     assert theta == pytest.approx(0.0)
-    assert phi   == pytest.approx(0.0)
-    assert lam   == pytest.approx(0.0)
+    assert phi == pytest.approx(0.0)
+    assert lam == pytest.approx(0.0)
 
     theta, phi, lam = extract_u_parameters(-np.eye(2))
     assert theta == pytest.approx(0.0)
-    assert phi   == pytest.approx(0.0)
-    assert lam   == pytest.approx(0.0)
+    assert phi == pytest.approx(0.0)
+    assert lam == pytest.approx(0.0)
 
-@pytest.mark.parametrize("theta0,phi0,lam0", [
-    (0.1, 0.5, -1.0),
-    (np.pi/2, np.pi/4, np.pi/2),
-    (1.0, 2.0, 3.0),
-])
+
+@pytest.mark.parametrize(
+    ("theta0", "phi0", "lam0"),
+    [
+        (0.1, 0.5, -1.0),
+        (np.pi / 2, np.pi / 4, np.pi / 2),
+        (1.0, 2.0, 3.0),
+    ],
+)
 def test_extract_u_parameters_roundtrip(theta0: float, phi0: float, lam0: float) -> None:
     """Round‑trip U3→matrix→extract_u_parameters recovers (θ,φ,λ)."""
     # build the standard U3(θ,φ,λ) matrix
-    U = np.array([
-        [np.cos(theta0/2),               -np.exp(1j * lam0) * np.sin(theta0/2)],
-        [np.exp(1j * phi0) * np.sin(theta0/2), np.exp(1j * (phi0+lam0)) * np.cos(theta0/2)]
-    ], dtype=complex)
+    U = np.array(
+        [
+            [np.cos(theta0 / 2), -np.exp(1j * lam0) * np.sin(theta0 / 2)],
+            [np.exp(1j * phi0) * np.sin(theta0 / 2), np.exp(1j * (phi0 + lam0)) * np.cos(theta0 / 2)],
+        ],
+        dtype=complex,
+    )
 
     theta, phi, lam = extract_u_parameters(U)
     assert theta == pytest.approx(theta0, rel=1e-8)
-    assert phi   == pytest.approx(phi0, rel=1e-8)
-    assert lam   == pytest.approx(lam0, rel=1e-8)
+    assert phi == pytest.approx(phi0, rel=1e-8)
+    assert lam == pytest.approx(lam0, rel=1e-8)
+
 
 def test_add_random_single_qubit_rotation_adds_u_gate() -> None:
     """add_random_single_qubit_rotation must append a U‐gate with reproducible params."""
@@ -340,5 +351,5 @@ def test_add_random_single_qubit_rotation_adds_u_gate() -> None:
     theta, phi, lam = instr.params
     # these numbers were computed by mirroring the implementation
     assert theta == pytest.approx(0.4754946831863347, rel=1e-7)
-    assert phi   == pytest.approx(2.0208521933155046, rel=1e-7)
-    assert lam   == pytest.approx(-2.4121031295733344, rel=1e-7)
+    assert phi == pytest.approx(2.0208521933155046, rel=1e-7)
+    assert lam == pytest.approx(-2.4121031295733344, rel=1e-7)
