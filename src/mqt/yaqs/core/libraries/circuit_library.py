@@ -327,7 +327,6 @@ def create_2d_heisenberg_circuit(
     return circ
 
 
-
 def nearest_neighbour_random_circuit(
     n_qubits: int,
     layers: int,
