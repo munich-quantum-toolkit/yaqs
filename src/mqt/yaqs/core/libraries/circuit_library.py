@@ -328,24 +328,26 @@ def create_2d_heisenberg_circuit(
 
 
 
-def nearest_neighbour_random_circuit(n_qubits, layers, seed=42):
+def nearest_neighbour_random_circuit(
+    n_qubits: int,
+    layers: int,
+    seed: int = 42,
+) -> QuantumCircuit:
+    """Creates a random circuit with single- and two-qubit nearest-neighbor gates.
 
+    Gates are sampled following the prescription in https://arxiv.org/abs/2002.07730.
+
+    Returns:
+        A `QuantumCircuit` on `n_qubits` implementing `layers` of alternating
+        random single-qubit rotations and nearest‑neighbor CZ/CX entanglers.
     """
-    Creates a random circuit with single- and two qubit nearest 
-    neighbor gates which are not Haar distributed 
-    as in https://arxiv.org/abs/2002.07730
-    
-    The rotation coefficients are sampled according to https://arxiv.org/abs/2002.07730
-    and then transferred to parameters that match the U3 gate class in 
-    qiskit via extract_u_parameters(U).
-    """
-    np.random.seed(seed)
+    rng = np.random.default_rng(seed)
     qc = QuantumCircuit(n_qubits)
 
     for layer in range(layers):
         # Single-qubit random rotations
         for qubit in range(n_qubits):
-            add_random_single_qubit_rotation(qc, qubit)
+            add_random_single_qubit_rotation(qc, qubit, rng)
 
         # Two-qubit entangling gates
         if layer % 2 == 0:
@@ -356,7 +358,7 @@ def nearest_neighbour_random_circuit(n_qubits, layers, seed=42):
             pairs = [(i, i+1) for i in range(0, n_qubits-1, 2)]
 
         for q1, q2 in pairs:
-            if np.random.rand() < 0.5:
+            if rng.random() < 0.5:
                 qc.cz(q1, q2)
             else:
                 qc.cx(q1, q2)
