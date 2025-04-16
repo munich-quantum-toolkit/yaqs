@@ -54,9 +54,11 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[NDArray[np.complex1
         name = gate.op.name
 
         attr = getattr(GateLibrary, name)
-        gate_object = attr()
+        
         if gate.op.params:
             gate_object = attr(gate.op.params)
+        else:
+            gate_object = attr()
 
         sites = [gate.qargs[0]._index]  # noqa: SLF001
         if len(gate.qargs) == 2:
@@ -74,10 +76,12 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[NDArray[np.complex1
                 continue
 
             attr = getattr(GateLibrary, name)
-            gate_object = attr()
+            
 
             if gate.op.params:
                 gate_object = attr(gate.op.params)
+            else:
+                gate_object = attr()
 
             sites = [gate.qargs[0]._index]  # noqa: SLF001
             if len(gate.qargs) == 2:
