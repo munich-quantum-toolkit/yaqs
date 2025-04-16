@@ -343,66 +343,64 @@ class BaseGate:
         return SX()
 
     @classmethod
-    def rx(cls, theta: float) -> Rx:
+    def rx(cls, params: list[Parameter]) -> Rx:
         """Returns the RX gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             Rx: An instance of the RX gate.
         """
-        return Rx(theta)
+        return Rx(params)
 
     @classmethod
-    def ry(cls, theta: float) -> Ry:
+    def ry(cls, params: list[Parameter]) -> Ry:
         """Returns the RY gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             Ry: An instance of the RY gate.
         """
-        return Ry(theta)
+        return Ry(params)
 
     @classmethod
-    def rz(cls, theta: float) -> Rz:
+    def rz(cls, params: list[Parameter]) -> Rz:
         """Returns the RZ gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             Rz: An instance of the RZ gate.
         """
-        return Rz(theta)
+        return Rz(params)
 
     @classmethod
-    def phase(cls, theta: float) -> Phase:
+    def phase(cls, params: list[Parameter]) -> Phase:
         """Returns the Phase gate.
 
         Args:
-            theta (float): The phase angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             Phase: An instance of the Phase gate.
         """
-        return Phase(theta)
+        return Phase(params)
 
     @classmethod
-    def u3(cls, theta: float, phi: float, lam: float) -> U3:
+    def u3(cls, params: list[Parameter]) -> U3:
         """Returns the U3 gate.
 
         Args:
-            theta (float): First rotation parameter.
-            phi (float): Second rotation parameter.
-            lam (float): Third rotation parameter.
+            params (list[Parameter]): The rotation angle parameters.
 
         Returns:
             U3: An instance of the U3 gate.
         """
-        return U3(theta, phi, lam)
+        return U3(params)
 
     @classmethod
     def cx(cls) -> CX:
@@ -423,16 +421,16 @@ class BaseGate:
         return CZ()
 
     @classmethod
-    def cphase(cls, theta: float) -> CPhase:
+    def cphase(cls, params: list[Parameter]) -> CPhase:
         """Returns the CPhase gate.
 
         Args:
-            theta (float): The phase angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             CPhase: An instance of the CPhase gate.
         """
-        return CPhase(theta)
+        return CPhase(params)
 
     @classmethod
     def swap(cls) -> SWAP:
@@ -444,40 +442,40 @@ class BaseGate:
         return SWAP()
 
     @classmethod
-    def rxx(cls, theta: float) -> Rxx:
+    def rxx(cls, params: list[Parameter]) -> Rxx:
         """Returns the RXX gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             Rxx: An instance of the RXX gate.
         """
-        return Rxx(theta)
+        return Rxx(params)
 
     @classmethod
-    def ryy(cls, theta: float) -> Ryy:
+    def ryy(cls, params: list[Parameter]) -> Ryy:
         """Returns the RYY gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             Ryy: An instance of the RYY gate.
         """
-        return Ryy(theta)
+        return Ryy(params)
 
     @classmethod
-    def rzz(cls, theta: float) -> Rzz:
+    def rzz(cls, params: list[Parameter]) -> Rzz:
         """Returns the RZZ gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params (list[Parameter]): The rotation angle parameter.
 
         Returns:
             Rzz: An instance of the RZZ gate.
         """
-        return Rzz(theta)
+        return Rzz(params)
 
 
 class X(BaseGate):
