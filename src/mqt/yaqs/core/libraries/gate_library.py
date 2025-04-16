@@ -23,7 +23,6 @@ from ..data_structures.networks import MPO
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-    from qiskit.circuit import Parameter
 
 
 def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
@@ -403,7 +402,7 @@ class BaseGate:
             U3: An instance of the U3 gate.
         """
         return U3(theta, phi, lam)
-    
+
     @classmethod
     def cx(cls) -> CX:
         """Returns the CX gate.
@@ -478,7 +477,6 @@ class BaseGate:
             Rzz: An instance of the RZZ gate.
         """
         return Rzz(theta)
-
 
 
 class X(BaseGate):
@@ -749,6 +747,7 @@ class Rz(BaseGate):
         ])
         super().__init__(mat)
 
+
 class Phase(BaseGate):
     """Class representing a phase gate.
 
@@ -809,7 +808,10 @@ class U3(BaseGate):
         self.lam = lam
         mat = np.array([
             [np.cos(self.theta / 2), -np.exp(1j * self.lam) * np.sin(self.theta / 2)],
-            [np.exp(1j * self.phi) * np.sin(self.theta / 2), np.exp(1j * (self.phi + self.lam)) * np.cos(self.theta / 2)],
+            [
+                np.exp(1j * self.phi) * np.sin(self.theta / 2),
+                np.exp(1j * (self.phi + self.lam)) * np.cos(self.theta / 2),
+            ],
         ])
         super().__init__(mat)
 
@@ -1074,6 +1076,7 @@ class Rzz(BaseGate):
         super().__init__(mat)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
+
 
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
