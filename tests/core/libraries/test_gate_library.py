@@ -193,9 +193,8 @@ def test_gate_phase() -> None:
     This test sets a rotation parameter for the phase gate, sets its site, and verifies that its generator
     is computed correctly. It also confirms that the tensor equals the matrix.
     """
-    gate = GateLibrary.p()
     theta = np.pi / 3
-    gate.set_params([theta])
+    gate = GateLibrary.p([theta])
     gate.set_sites(4)
     assert gate.sites == [4]
     assert_array_equal(gate.tensor, gate.matrix)
@@ -207,9 +206,8 @@ def test_gate_rx() -> None:
     This test sets a rotation parameter for the Rx gate, sets its site, and verifies that its tensor
     equals the expected rotation matrix.
     """
-    gate = GateLibrary.rx()
     theta = np.pi / 2
-    gate.set_params([theta])
+    gate = GateLibrary.rx([theta])
     gate.set_sites(1)
     expected = np.array([[np.cos(theta / 2), -1j * np.sin(theta / 2)], [-1j * np.sin(theta / 2), np.cos(theta / 2)]])
     assert_allclose(gate.tensor, expected)
@@ -221,9 +219,8 @@ def test_gate_ry() -> None:
     This test sets a rotation parameter for the Ry gate, sets its site, and verifies that both its matrix
     and tensor match the expected rotation matrix.
     """
-    gate = GateLibrary.ry()
     theta = np.pi / 3
-    gate.set_params([theta])
+    gate = GateLibrary.ry([theta])
     gate.set_sites(1)
     expected = np.array([[np.cos(theta / 2), -np.sin(theta / 2)], [np.sin(theta / 2), np.cos(theta / 2)]])
     assert_allclose(gate.matrix, expected)
@@ -236,9 +233,8 @@ def test_gate_rz() -> None:
     This test sets a rotation parameter for the Rz gate, sets its site, and verifies that both its matrix
     and tensor match the expected diagonal rotation matrix.
     """
-    gate = GateLibrary.rz()
     theta = np.pi / 4
-    gate.set_params([theta])
+    gate = GateLibrary.rz([theta])
     gate.set_sites(2)
     expected = np.array([[np.exp(-1j * theta / 2), 0], [0, np.exp(1j * theta / 2)]])
     assert_allclose(gate.matrix, expected)
@@ -251,11 +247,10 @@ def test_gate_u3() -> None:
     This test sets the parameters (theta, phi, lambda) for the U3 gate and verifies that its tensor,
     which is equivalent to the 2x2 unitary matrix representation, matches the expected matrix.
     """
-    gate = GateLibrary.u()
     theta = np.pi / 2
     phi = np.pi / 4
     lam = np.pi / 3
-    gate.set_params([theta, phi, lam])
+    gate = GateLibrary.u([theta, phi, lam])
     gate.set_sites(0)  # For a single-qubit gate, only one site is needed.
 
     expected = np.array([
@@ -321,9 +316,8 @@ def test_gate_rxx() -> None:
     This test sets a rotation parameter for the Rxx gate and verifies that its tensor,
     when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.rxx()
     theta = np.pi / 3
-    gate.set_params([theta])
+    gate = GateLibrary.rxx([theta])
     gate.set_sites(0, 1)
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
@@ -335,9 +329,8 @@ def test_gate_ryy() -> None:
     This test sets a rotation parameter for the Ryy gate and verifies that its tensor,
     when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.ryy()
     theta = np.pi / 4
-    gate.set_params([theta])
+    gate = GateLibrary.ryy([theta])
     gate.set_sites(1, 2)
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
@@ -349,9 +342,8 @@ def test_gate_rzz() -> None:
     This test sets a rotation parameter for the Rzz gate and verifies that its tensor,
     when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.rzz()
     theta = np.pi / 6
-    gate.set_params([theta])
+    gate = GateLibrary.rzz([theta])
     gate.set_sites(0, 1)
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
@@ -363,9 +355,8 @@ def test_gate_cphase_forward() -> None:
     This test sets the parameters for a CPhase gate and sets the sites in forward order.
     It verifies that the tensor, when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.cp()
     theta = np.pi / 2
-    gate.set_params([theta])
+    gate = GateLibrary.cp([theta])
     gate.set_sites(0, 1)  # Forward order
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     assert_array_equal(gate.tensor, expected)
@@ -377,9 +368,8 @@ def test_gate_cphase_reverse() -> None:
     This test sets the parameters for a CPhase gate and sets the sites in reverse order.
     It then verifies that the tensor is correctly transposed (axes (1,0,3,2)) relative to the forward order.
     """
-    gate = GateLibrary.cp()
     theta = np.pi / 2
-    gate.set_params([theta])
+    gate = GateLibrary.cp([theta])
     gate.set_sites(1, 0)  # Reverse order; tensor should be transposed on (1,0,3,2)
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
