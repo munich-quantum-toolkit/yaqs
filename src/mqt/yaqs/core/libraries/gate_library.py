@@ -945,7 +945,6 @@ class CPhase(BaseGate):
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
 
 
-
 class SWAP(BaseGate):
     """Class representing the SWAP gate.
 
@@ -968,7 +967,6 @@ class SWAP(BaseGate):
         mat = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
         super().__init__(mat)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-
 
 
 class Rxx(BaseGate):
