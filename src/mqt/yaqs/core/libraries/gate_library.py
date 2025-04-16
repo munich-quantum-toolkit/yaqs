@@ -23,6 +23,7 @@ from ..data_structures.networks import MPO
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+    from qiskit.circuit import Parameter
 
 
 def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]:
@@ -663,7 +664,7 @@ class Rx(BaseGate):
         matrix (NDArray[np.complex128]): The 2x2 matrix representation of the gate.
         interaction (int): The interaction level (1 for single-qubit gates).
         tensor (NDArray[np.complex128]): The tensor representation of the gate (same as the matrix).
-        theta (float): The rotation angle parameter.
+        theta (Parameter): The rotation angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -672,13 +673,14 @@ class Rx(BaseGate):
 
     name = "rx"
 
-    def __init__(self, theta: float) -> None:
+    def __init__(self, params: list[Parameter]) -> None:
         """Initializes the rotation gate about the x-axis.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([
             [np.cos(self.theta / 2), -1j * np.sin(self.theta / 2)],
             [-1j * np.sin(self.theta / 2), np.cos(self.theta / 2)],
@@ -694,7 +696,7 @@ class Ry(BaseGate):
         matrix (NDArray[np.complex128]): The 2x2 matrix representation of the gate.
         interaction (int): The interaction level (1 for single-qubit gates).
         tensor (NDArray[np.complex128]): The tensor representation of the gate (same as the matrix).
-        theta (float): The rotation angle parameter.
+        theta (Parameter): The rotation angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -703,13 +705,14 @@ class Ry(BaseGate):
 
     name = "ry"
 
-    def __init__(self, theta: float) -> None:
+    def __init__(self, params: list[Parameter]) -> None:
         """Initializes the rotation gate about the y-axis.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([
             [np.cos(self.theta / 2), -np.sin(self.theta / 2)],
             [np.sin(self.theta / 2), np.cos(self.theta / 2)],
@@ -725,7 +728,7 @@ class Rz(BaseGate):
         matrix (NDArray[np.complex128]): The 2x2 matrix representation of the gate.
         interaction (int): The interaction level (1 for single-qubit gates).
         tensor (NDArray[np.complex128]): The tensor representation of the gate (same as the matrix).
-        theta (float): The rotation angle parameter.
+        theta (Parameter): The rotation angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -734,13 +737,14 @@ class Rz(BaseGate):
 
     name = "rz"
 
-    def __init__(self, theta: float) -> None:
+    def __init__(self, params: list[Parameter]) -> None:
         """Initializes the rotation gate about the z-axis.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([
             [np.exp(-1j * self.theta / 2), 0],
             [0, np.exp(1j * self.theta / 2)],
@@ -756,7 +760,7 @@ class Phase(BaseGate):
         matrix (NDArray[np.complex128]): The 2x2 matrix representation of the gate.
         interaction (int): The interaction level (1 for single-qubit gates).
         tensor (NDArray[np.complex128]): The tensor representation of the gate (same as the matrix).
-        theta (float): The phase angle parameter.
+        theta (Parameter): The phase angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -765,13 +769,14 @@ class Phase(BaseGate):
 
     name = "p"
 
-    def __init__(self, theta: float) -> None:
+    def __init__(self, params: list[Parameter]) -> None:
         """Initializes the phase gate.
 
         Args:
-            theta (float): The phase angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([[1, 0], [0, np.exp(1j * self.theta)]])
         super().__init__(mat)
 
@@ -795,17 +800,14 @@ class U3(BaseGate):
 
     name = "u"
 
-    def __init__(self, theta: float, phi: float, lam: float) -> None:
+    def __init__(self, params: list[Parameter]) -> None:
         """Initializes the U3 gate.
 
         Args:
-            theta (float): The first rotation parameter.
-            phi (float): The second rotation parameter.
-            lam (float): The third rotation parameter.
+            params : list[Parameter]
+            A list containing a three rotation angle (theta, phi, lambda) parameters.
         """
-        self.theta = theta
-        self.phi = phi
-        self.lam = lam
+        self.theta, self.phi, self.lam = params
         mat = np.array([
             [np.cos(self.theta / 2), -np.exp(1j * self.lam) * np.sin(self.theta / 2)],
             [
@@ -920,6 +922,7 @@ class CPhase(BaseGate):
         tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
         generator (list[NDArray[np.complex128]]): The generator for the gate.
         sites (list[int]): The control and target sites.
+        theta (Parameter): The angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -927,19 +930,20 @@ class CPhase(BaseGate):
     """
 
     name = "cp"
-    interaction = 2
 
-    def __init__(self, theta: float) -> None:
-        """Initializes the controlled phase (CPhase) gate.
+    def __init__(self, params: list[Parameter]) -> None:
+        """Initializes the gate.
 
         Args:
-            theta (float): The phase angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j * self.theta)]])
         super().__init__(mat)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
+
 
 
 class SWAP(BaseGate):
@@ -958,13 +962,13 @@ class SWAP(BaseGate):
     """
 
     name = "swap"
-    interaction = 2
 
     def __init__(self) -> None:
         """Initializes the SWAP gate."""
         mat = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
         super().__init__(mat)
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
+
 
 
 class Rxx(BaseGate):
@@ -977,6 +981,7 @@ class Rxx(BaseGate):
         tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
         generator (list[NDArray[np.complex128]]): The generator for the gate.
         sites (list[int]): The control and target sites.
+        theta (Parameter): The angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -986,13 +991,14 @@ class Rxx(BaseGate):
     name = "rxx"
     interaction = 2
 
-    def __init__(self, theta: float) -> None:
-        """Initializes the rotation gate about the xx-axis.
+    def __init__(self, params: list[Parameter]) -> None:
+        """Initializes the gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([
             [np.cos(self.theta / 2), 0, 0, -1j * np.sin(self.theta / 2)],
             [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
@@ -1014,6 +1020,7 @@ class Ryy(BaseGate):
         tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
         generator (list[NDArray[np.complex128]]): The generator for the gate.
         sites (list[int]): The control and target sites.
+        theta (Parameter): The angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -1023,13 +1030,14 @@ class Ryy(BaseGate):
     name = "ryy"
     interaction = 2
 
-    def __init__(self, theta: float) -> None:
-        """Initializes the rotation gate about the yy-axis.
+    def __init__(self, params: list[Parameter]) -> None:
+        """Initializes the gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([
             [np.cos(self.theta / 2), 0, 0, 1j * np.sin(self.theta / 2)],
             [0, np.cos(self.theta / 2), -1j * np.sin(self.theta / 2), 0],
@@ -1051,6 +1059,7 @@ class Rzz(BaseGate):
         tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
         generator (list[NDArray[np.complex128]]): The generator for the gate.
         sites (list[int]): The control and target sites.
+        theta (Parameter): The angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -1060,13 +1069,14 @@ class Rzz(BaseGate):
     name = "rzz"
     interaction = 2
 
-    def __init__(self, theta: float) -> None:
-        """Initializes the rotation gate about the zz-axis.
+    def __init__(self, params: list[Parameter]) -> None:
+        """Initializes the gate.
 
         Args:
-            theta (float): The rotation angle parameter.
+            params : list[Parameter]
+            A list containing a single rotation angle (`theta`) parameter.
         """
-        self.theta = theta
+        self.theta = params[0]
         mat = np.array([
             [np.cos(self.theta / 2) - 1j * np.sin(self.theta / 2), 0, 0, 0],
             [0, np.cos(self.theta / 2) + 1j * np.sin(self.theta / 2), 0, 0],
