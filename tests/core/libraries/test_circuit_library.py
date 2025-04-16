@@ -30,7 +30,6 @@ from mqt.yaqs.core.libraries.circuit_library import (
     create_ising_circuit,
 )
 
-
 def test_create_ising_circuit_valid_even() -> None:
     """Test that create_ising_circuit returns a valid circuit for an even number of qubits.
 
