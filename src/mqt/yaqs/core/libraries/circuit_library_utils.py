@@ -13,20 +13,20 @@ This module provides helper routines used in the YAQS circuit library:
 """
 
 # ignore non-lowercase argument names for physics notation
-# ruff: noqa: N803
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 import numpy as np
-from qiskit.circuit import QuantumCircuit
 from scipy.linalg import expm
 
 if TYPE_CHECKING:
     from numpy.random import Generator
     from numpy.typing import NDArray
-    
+    from qiskit.circuit import QuantumCircuit
+
+
 def extract_u_parameters(
     matrix: NDArray[np.complex128],
 ) -> tuple[float, float, float]:

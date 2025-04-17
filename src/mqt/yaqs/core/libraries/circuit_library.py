@@ -14,6 +14,7 @@ parameters such as the number of qubits, interaction strengths, time steps, and 
 These circuits are used to simulate the evolution of quantum many-body systems under the
 respective Hamiltonians.
 """
+
 from __future__ import annotations
 
 # ignore non-lowercase argument names for physics notation
