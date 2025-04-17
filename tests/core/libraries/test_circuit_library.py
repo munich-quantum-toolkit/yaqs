@@ -25,7 +25,15 @@ import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs.core.libraries.circuit_library import *
+from mqt.yaqs.core.libraries.circuit_library import (
+    add_random_single_qubit_rotation,
+    create_2d_heisenberg_circuit,
+    create_2d_ising_circuit,
+    create_heisenberg_circuit,
+    create_ising_circuit,
+    extract_u_parameters,
+    nearest_neighbour_random_circuit,
+)
 
 
 def test_create_ising_circuit_valid_even() -> None:
@@ -261,7 +269,7 @@ def test_create_2d_heisenberg_circuit_3x2() -> None:
 
 
 def test_nearest_neighbour_random_circuit_structure() -> None:
-    """Nearest‐neighbour random circuit: correct qubit count, gate counts and barriers."""
+    """Nearest-neighbour random circuit: correct qubit count, gate counts and barriers."""
     n_qubits = 3
     layers = 2
     qc = nearest_neighbour_random_circuit(n_qubits, layers, seed=42)
@@ -270,7 +278,7 @@ def test_nearest_neighbour_random_circuit_structure() -> None:
     assert qc.num_qubits == n_qubits
 
     names = [instr.operation.name for instr in qc.data]
-    # one U‐gate per qubit per layer
+    # one U-gate per qubit per layer
     assert names.count("u") == n_qubits * layers
     # one barrier at end of each layer
     assert names.count("barrier") == layers
@@ -294,13 +302,13 @@ def test_nearest_seed_reproducibility() -> None:
 
 
 def test_extract_u_parameters_invalid_shape() -> None:
-    """extract_u_parameters must reject non‑2×2 inputs."""
+    """extract_u_parameters must reject non-2x2 inputs."""
     with pytest.raises(AssertionError):
         extract_u_parameters(np.eye(3))
 
 
 def test_extract_u_parameters_identity() -> None:
-    """extract_u_parameters on I or –I returns (0,0,0)."""
+    """extract_u_parameters on I or -I returns (0,0,0)."""
     theta, phi, lam = extract_u_parameters(np.eye(2))
     assert theta == pytest.approx(0.0)
     assert phi == pytest.approx(0.0)
@@ -321,9 +329,9 @@ def test_extract_u_parameters_identity() -> None:
     ],
 )
 def test_extract_u_parameters_roundtrip(theta0: float, phi0: float, lam0: float) -> None:
-    """Round‑trip U3→matrix→extract_u_parameters recovers (θ,φ,λ)."""
+    """Round-trip U3→matrix→extract_u_parameters recovers (θ,φ,λ)."""
     # build the standard U3(θ,φ,λ) matrix
-    U = np.array(
+    u = np.array(
         [
             [np.cos(theta0 / 2), -np.exp(1j * lam0) * np.sin(theta0 / 2)],
             [np.exp(1j * phi0) * np.sin(theta0 / 2), np.exp(1j * (phi0 + lam0)) * np.cos(theta0 / 2)],
@@ -331,25 +339,25 @@ def test_extract_u_parameters_roundtrip(theta0: float, phi0: float, lam0: float)
         dtype=complex,
     )
 
-    theta, phi, lam = extract_u_parameters(U)
+    theta, phi, lam = extract_u_parameters(u)
     assert theta == pytest.approx(theta0, rel=1e-8)
     assert phi == pytest.approx(phi0, rel=1e-8)
     assert lam == pytest.approx(lam0, rel=1e-8)
 
 
 def test_add_random_single_qubit_rotation_adds_u_gate() -> None:
-    """add_random_single_qubit_rotation must append a U‐gate with reproducible params."""
+    """add_random_single_qubit_rotation must append a U-gate with reproducible params."""
     qc = QuantumCircuit(2)
     # seed so we know exactly which gate params are generated
-    np.random.seed(0)
-    add_random_single_qubit_rotation(qc, qubit=1)
+    rng = np.random.default_rng(0)
+    add_random_single_qubit_rotation(qc, qubit=1, rng=rng)
 
     assert qc.num_qubits == 2
     assert len(qc.data) == 1
     instr = qc.data[0].operation
     assert instr.name == "u"
     theta, phi, lam = instr.params
-    # these numbers were computed by mirroring the implementation
-    assert theta == pytest.approx(0.4754946831863347, rel=1e-7)
-    assert phi == pytest.approx(2.0208521933155046, rel=1e-7)
-    assert lam == pytest.approx(-2.4121031295733344, rel=1e-7)
+    # these numbers match default_rng(0)+extract_u_parameters
+    assert theta == pytest.approx(1.2091241975743714, rel=1e-7)
+    assert phi == pytest.approx(-0.6574252905805019, rel=1e-7)
+    assert lam == pytest.approx(1.9692788758507522, rel=1e-7)

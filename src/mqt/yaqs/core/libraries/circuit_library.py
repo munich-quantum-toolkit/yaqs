@@ -20,9 +20,14 @@ respective Hamiltonians.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from qiskit.circuit import QuantumCircuit
 from scipy.linalg import expm
+
+if TYPE_CHECKING:
+    from numpy.random import Generator
 
 
 def create_ising_circuit(
@@ -332,13 +337,13 @@ def nearest_neighbour_random_circuit(
     layers: int,
     seed: int = 42,
 ) -> QuantumCircuit:
-    """Creates a random circuit with single- and two-qubit nearest-neighbor gates.
+    """Creates a random circuit with single and two-qubit nearest-neighbor gates.
 
     Gates are sampled following the prescription in https://arxiv.org/abs/2002.07730.
 
     Returns:
         A `QuantumCircuit` on `n_qubits` implementing `layers` of alternating
-        random single-qubit rotations and nearest‑neighbor CZ/CX entanglers.
+        random single-qubit rotations and nearest-neighbor CZ/CX entanglers.
     """
     rng = np.random.default_rng(seed)
     qc = QuantumCircuit(n_qubits)
@@ -367,64 +372,78 @@ def nearest_neighbour_random_circuit(
     return qc
 
 
-def extract_u_parameters(U):
-    """Given a 2x2 SU(2) unitary matrix U, extract the parameters (theta, phi, lambda)
-    such that U = U(theta, phi, lambda).
+def extract_u_parameters(
+    matrix: np.ndarray,
+) -> tuple[float, float, float]:
+    """Extract θ, φ, λ from a 2x2 SU(2) unitary `matrix`.
+
+    This removes any global phase and then solves
+    matrix = U3(θ,φ,λ) exactly.
 
     Args:
-        U (np.ndarray): 2x2 unitary matrix (must be SU(2), i.e., det = 1 or global phase irrelevant)
+        matrix: 2x2 complex array (must be SU(2), det=1 up to phase).
 
     Returns:
-        theta, phi, lambda (floats): Parameters of the u gate
+        A tuple (θ, φ, λ) of real gate angles.
     """
-    assert U.shape == (2, 2), "Input must be a 2x2 matrix."
+    assert matrix.shape == (2, 2), "Input must be a 2x2 matrix."
 
-    U *= np.exp(-1j * np.angle(U[0, 0]))
+    # ensure complex dtype & strip global phase
+    u = matrix.astype(np.complex128)
+    u *= np.exp(-1j * np.angle(u[0, 0]))
 
-    a, b = U[0, 0], U[0, 1]
-    c, d = U[1, 0], U[1, 1]
+    a, b = u[0, 0], u[0, 1]
+    c, d = u[1, 0], u[1, 1]
 
-    # Get theta from a (ensure real input)
-    theta = 2 * np.arccos(np.clip(np.abs(a), -1.0, 1.0))  # real-valued theta
-
-    # Protect against sin(theta/2) ≈ 0
-    sin_theta_2 = np.sin(theta / 2)
-    if np.isclose(sin_theta_2, 0.0):
+    theta = 2 * np.arccos(np.clip(np.abs(a), -1.0, 1.0))
+    sin_th2 = np.sin(theta / 2)
+    if np.isclose(sin_th2, 0.0):
         phi = 0.0
         lam = np.angle(d) - np.angle(a)
     else:
         phi = np.angle(c)
         lam = np.angle(-b)
 
-    # Cast everything to float (real part only)
     return float(theta), float(phi), float(lam)
 
 
-def add_random_single_qubit_rotation(qc, qubit) -> None:
-    """Adds a single-qubit gate to `qc` that matches
-    exp(-i * theta * n . sigma), using only standard `u(...)` gates.
-    """
-    # Sample angles
-    theta = np.random.uniform(0, 2 * np.pi)
-    alpha = np.random.uniform(0, np.pi)
-    phi = np.random.uniform(0, 2 * np.pi)
+def add_random_single_qubit_rotation(
+    qc: QuantumCircuit,
+    qubit: int,
+    rng: Generator | None = None,
+) -> None:
+    """Append a random single-qubit rotation exp(-i θ n sigma) as a U3 gate.
 
-    # Build rotation axis
+    Samples:
+      - θ ∈ [0, 2π)
+      - axis n uniformly on the Bloch sphere
+
+    Decomposes the resulting 2x2 into U3(θ,φ,λ) and does `qc.u(...)`.
+
+    Args:
+        qc: the circuit to modify.
+        qubit: which wire to rotate.
+        rng: if given, used instead of the global `np.random`.
+    """
+    sampler = rng if rng is not None else np.random
+
+    # sample angles
+    theta = sampler.uniform(0, 2 * np.pi)
+    alpha = sampler.uniform(0, np.pi)
+    phi = sampler.uniform(0, 2 * np.pi)
+
+    # Bloch-sphere axis
     nx = np.sin(alpha) * np.cos(phi)
     ny = np.sin(alpha) * np.sin(phi)
     nz = np.cos(alpha)
 
     # Pauli matrices
-    X = np.array([[0, 1], [1, 0]])
-    Y = np.array([[0, -1j], [1j, 0]])
-    Z = np.array([[1, 0], [0, -1]])
-    H = nx * X + ny * Y + nz * Z
+    x = np.array([[0, 1], [1, 0]])
+    y = np.array([[0, -1j], [1j, 0]])
+    z = np.array([[1, 0], [0, -1]])
 
-    # Build the unitary
-    U = expm(-1j * theta * H)
+    h = nx * x + ny * y + nz * z
+    u_mat = expm(-1j * theta * h)
 
-    # Convert to U3 parameters
-    theta_u3, phi_u3, lambda_u3 = extract_u_parameters(U)
-
-    # Add gate to circuit
-    qc.u(theta_u3, phi_u3, lambda_u3, qubit)
+    th_u3, ph_u3, lam_u3 = extract_u_parameters(u_mat)
+    qc.u(th_u3, ph_u3, lam_u3, qubit)
