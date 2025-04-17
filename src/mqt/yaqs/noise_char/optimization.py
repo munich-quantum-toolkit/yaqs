@@ -668,3 +668,212 @@ def Secant_Penalized_BFGS(sim_params_copy, ref_traj, traj_der, learning_rate=0, 
 
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
+
+
+
+
+### For Bayesian Optimization
+import torch
+import botorch
+import matplotlib.pyplot as plt
+from botorch.acquisition import UpperConfidenceBound
+from botorch.optim import optimize_acqf
+from botorch.fit import fit_gpytorch_mll
+from gpytorch.mlls import ExactMarginalLogLikelihood
+from gpytorch.models import ExactGP
+from gpytorch.means import ConstantMean
+from gpytorch.kernels import ScaleKernel, RBFKernel
+from gpytorch.likelihoods import FixedNoiseGaussianLikelihood
+from gpytorch.distributions import MultivariateNormal
+from botorch.models.model import Model
+from botorch.posteriors import GPyTorchPosterior
+
+
+# GP model for noisy observations
+class NoisyDerivativeGPModel(ExactGP):
+    def __init__(self, train_x, train_y, noise, likelihood):
+        self.num_outputs = 1
+        super().__init__(train_x, train_y, likelihood)
+        self.mean_module = ConstantMean()
+        self.covar_module = ScaleKernel(RBFKernel(ard_num_dims=train_x.shape[-1]))
+        self.likelihood.noise = noise  # fixed noise per point
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return MultivariateNormal(mean_x, covar_x)
+
+    def transform_inputs(self, *args, **kwargs):
+        if args:
+            return args[0]
+        elif "X" in kwargs:
+            return kwargs["X"]
+        else:
+            raise ValueError("transform_inputs called without inputs")
+
+
+class WrappedNoisyDerivativeModel(Model):
+    def __init__(self, gp_model):
+        super().__init__()
+        self.gp = gp_model
+        self._dtype = gp_model.train_inputs[0].dtype
+        self._device = gp_model.train_inputs[0].device
+
+    def posterior(self, X, output_indices=None, observation_noise=False, **kwargs):
+        self.gp.eval()
+        mvn = self.gp(X)  # allow gradients to flow!
+        return GPyTorchPosterior(mvn)
+
+    def condition_on_observations(self, X, Y, **kwargs):
+        raise NotImplementedError("Not needed for this use case.")
+
+    def transform_inputs(self, *args, **kwargs):
+        return self.gp.transform_inputs(*args, **kwargs)
+
+    @property
+    def num_outputs(self):  # ✅ here’s the fix
+        return 1
+
+
+
+def bayesian_optimization(sim_params_copy, ref_traj, traj_der, n_init=5, max_iterations=200, tolerance=1e-8, beta=0.1, num_restarts=10, raw_samples=50, file_name=" ", device="cpu", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
+    """
+    Perform Bayesian Optimization with noisy function and gradient observations.
+
+    Args:
+        sim_params_copy (object): Simulation parameters containing gamma_rel and gamma_deph.
+        ref_traj (array-like): Reference trajectory data.
+        traj_der (function): Function that runs the simulation and returns the time, 
+                                expected values trajectory, and derivatives of the observables 
+                                with respect to the noise parameters.
+        d (int): Dimensionality of the input space.
+        n_init (int): Number of initial random samples.
+        n_iter (int): Number of optimization iterations.
+        noise_f (float): Noise level for the function observations.
+        noise_g (float): Noise level for the gradient observations.
+        beta (float): Exploration-exploitation trade-off parameter for UCB.
+        num_restarts (int): Number of restarts for acquisition function optimization.
+        raw_samples (int): Number of raw samples for acquisition function optimization.
+        file_name (str): File name to save optimization progress.
+        device (str): Device to use for computation ("cpu" or "cuda").
+        dtype (torch.dtype): Data type for tensors.
+
+    Returns:
+        tuple: A tuple containing:
+            - loss_history (list): History of loss values during optimization.
+            - gr_history (list): History of gamma_rel values during optimization.
+            - gd_history (list): History of gamma_deph values during optimization.
+    """
+    sim_params = copy.deepcopy(sim_params_copy)
+
+
+    d = 2  # Number of parameters to optimize (gamma_rel and gamma_deph)
+
+    loss_history = []
+    gr_history = []
+    gd_history = []
+    dJ_dgr_history = []
+    dJ_dgd_history = []
+
+    if os.path.exists(file_name) and file_name != " ":
+        os.remove(file_name)
+
+    if file_name != " ":
+        with open(file_name, 'w') as file:
+            file.write('#  Iter    Loss    Log10(Loss)    Gamma_rel    Gamma_deph \n')
+
+    # Config
+    bounds = torch.tensor([[0.0] * d, [1.0] * d], device=device, dtype=torch.double)
+
+    # Initial data
+    X = torch.rand(n_init, d, device=device, dtype=torch.double, requires_grad=True)
+    Y_vals = []
+    grad_vals = []
+
+    for i in range(n_init):
+        sim_params.gamma_rel, sim_params.gamma_deph = X[i].detach().cpu().numpy()
+        loss, _, dJ_dg = loss_function(sim_params, ref_traj, traj_der, loss_std=loss_std, dJ_d_gr_std=dJ_d_gr_std, dJ_d_gd_std=dJ_d_gd_std)
+        Y_vals.append(-loss)
+        grad_vals.append(dJ_dg)
+
+        loss_history.append(loss)
+        gr_history.append(sim_params.gamma_rel)
+        gd_history.append(sim_params.gamma_deph)
+        dJ_dgr_history.append(dJ_dg[0])
+        dJ_dgd_history.append(dJ_dg[1])
+
+    Y = torch.tensor(Y_vals, dtype=torch.double, device=device).unsqueeze(-1)  # shape: (n_init, 1)
+    grad_Y = torch.tensor(grad_vals, dtype=torch.double, device=device)   
+
+    X_list = [X.detach()]
+    Y_list = [Y.detach()]
+    grad_list = [grad_Y.detach()]
+
+    for iteration in range(n_init,max_iterations+n_init):
+        X_train = torch.cat(X_list, dim=0)
+        Y_train = torch.cat(Y_list, dim=0)
+        d_train = torch.cat(grad_list, dim=0)
+
+        # Joint input data
+        X_func = X_train
+        X_grad = X_train.repeat_interleave(d, dim=0)
+        X_joint = torch.cat([X_func, X_grad], dim=0)
+
+        # Joint targets
+        Y_joint = torch.cat([Y_train.squeeze(-1), d_train.reshape(-1)], dim=0)
+
+        # Create noise vector: same order as Y_joint
+        noise_joint = torch.cat([
+            torch.full((len(Y_train),), loss_std ** 2, dtype=torch.double),
+            torch.full((len(d_train.reshape(-1)),), (max(dJ_d_gr_std,dJ_d_gd_std)) ** 2, dtype=torch.double)
+        ])
+
+        # GP model with fixed noise
+        likelihood = FixedNoiseGaussianLikelihood(noise=noise_joint)
+        model = NoisyDerivativeGPModel(X_joint, Y_joint, noise_joint, likelihood).to(device)
+        mll = ExactMarginalLogLikelihood(model.likelihood, model)
+
+        model.train()
+        fit_gpytorch_mll(mll)
+        model.eval()
+
+        # Wrap the model
+        model = WrappedNoisyDerivativeModel(model)
+
+        # Acquisition
+        acq_func = UpperConfidenceBound(model, beta=beta)
+        candidate, _ = optimize_acqf(
+            acq_function=acq_func,
+            bounds=bounds,
+            q=1,
+            num_restarts=num_restarts,
+            raw_samples=raw_samples,
+        )
+
+        # Sample at new point
+        candidate.requires_grad_()
+        print("Candidate",candidate.detach().cpu().numpy())
+        sim_params.gamma_rel, sim_params.gamma_deph = candidate.detach().cpu().numpy()[0]
+        loss, _, dJ_dg = loss_function(sim_params, ref_traj, traj_der, loss_std=loss_std, dJ_d_gr_std=dJ_d_gr_std, dJ_d_gd_std=dJ_d_gd_std)
+
+        if file_name != " ":
+            with open(file_name, 'a') as file:
+                file.write('    '.join(map(str, [iteration, loss, np.log10(loss), sim_params.gamma_rel, sim_params.gamma_deph])) + '\n')
+
+        loss_history.append(loss)
+        gr_history.append(sim_params.gamma_rel)
+        gd_history.append(sim_params.gamma_deph)
+        dJ_dgr_history.append(dJ_dg[0])
+        dJ_dgd_history.append(dJ_dg[1])
+
+        print(f"!!!!!!! Iteration = {iteration + 1}, Loss = {loss}, g_r = {sim_params.gamma_rel}, g_d = {sim_params.gamma_deph}")
+
+        X_list.append(candidate.detach())
+        Y_list.append(torch.tensor([[-loss]], dtype=torch.double, device=device))
+        grad_list.append(torch.tensor([dJ_dg], dtype=torch.double, device=device))
+
+        if loss < tolerance:
+            print(f"Converged after {iteration + 1} iterations.")
+            break
+
+    return loss_history, gr_history, gd_history
