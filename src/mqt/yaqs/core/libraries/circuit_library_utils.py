@@ -9,7 +9,7 @@
 
 This module provides helper routines used in the YAQS circuit library:
 - `extract_u_parameters`: decompose a 2x2 SU(2) unitary matrix into U3 gate parameters (θ, φ, λ).
-- `add_random_single_qubit_rotation`: append a random single-qubit U3 rotation to a `QuantumCircuit`, 
+- `add_random_single_qubit_rotation`: append a random single-qubit U3 rotation to a `QuantumCircuit`,
 sampling the axis uniformly on the Bloch sphere.
 """
 
