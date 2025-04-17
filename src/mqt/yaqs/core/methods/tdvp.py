@@ -89,15 +89,7 @@ def split_mps_tensor(
     if isinstance(sim_params, PhysicsSimParams):
         cut_index = len(sigma)
     else:
-        cut_sum = 0
-        thresh_sq = sim_params.threshold
-        cut_index = 1
-        for i, s_val in enumerate(np.flip(sigma)):
-            cut_sum += s_val**2
-            if cut_sum >= thresh_sq:
-                cut_index = len(sigma) - i
-                break
-        cut_index = min(cut_index, sim_params.max_bond_dim)
+        cut_index = min(len(sigma), sim_params.max_bond_dim)
     left_tensor = u_mat[:, :cut_index]
     sigma = sigma[:cut_index]
     right_tensor = v_mat[:cut_index, :]
