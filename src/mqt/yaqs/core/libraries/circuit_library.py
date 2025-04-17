@@ -20,7 +20,7 @@ respective Hamiltonians.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 from qiskit.circuit import QuantumCircuit
@@ -375,7 +375,7 @@ def nearest_neighbour_random_circuit(
 
 def extract_u_parameters(
     matrix: NDArray[np.complex128],
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """Extract θ, φ, λ from a 2x2 SU(2) unitary `matrix`.
 
     This removes any global phase and then solves
