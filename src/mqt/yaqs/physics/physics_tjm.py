@@ -70,7 +70,7 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
     """
     if sim_params.evolution_mode == EvolutionMode.TDVP:
         dynamic_tdvp(state, hamiltonian, sim_params)
-    else:
+    elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
     return stochastic_process(state, noise_model, sim_params.dt)
@@ -103,7 +103,7 @@ def sample(
     psi = copy.deepcopy(phi)
     if sim_params.evolution_mode == EvolutionMode.TDVP:
         dynamic_tdvp(psi, hamiltonian, sim_params)
-    else:
+    elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
