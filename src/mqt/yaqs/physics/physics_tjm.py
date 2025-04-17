@@ -68,7 +68,7 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    if sim_params.tensorevol_mode == EvolutionMode.TDVP:
+    if sim_params.evolution_mode == EvolutionMode.TDVP:
         dynamic_tdvp(state, hamiltonian, sim_params)
     else:
         bug(state, hamiltonian, sim_params)
@@ -101,7 +101,7 @@ def sample(
 
     """
     psi = copy.deepcopy(phi)
-    if sim_params.tensorevol_mode == EvolutionMode.TDVP:
+    if sim_params.evolution_mode == EvolutionMode.TDVP:
         dynamic_tdvp(psi, hamiltonian, sim_params)
     else:
         bug(psi, hamiltonian, sim_params)

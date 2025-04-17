@@ -154,7 +154,7 @@ class PhysicsSimParams:
         order: int = 1,
         *,
         sample_timesteps: bool = True,
-        tensorevol_mode: EvolutionMode = EvolutionMode.TDVP,
+        evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
     ) -> None:
         """Physics simulation parameters initialization.
@@ -194,7 +194,7 @@ class PhysicsSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
-        self.tensorevol_mode = tensorevol_mode
+        self.evolution_mode = evolution_mode
         self.get_state = get_state
 
     def aggregate_trajectories(self) -> None:
