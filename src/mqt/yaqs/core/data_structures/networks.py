@@ -299,7 +299,7 @@ class MPS:
                 "ij, ajc->aic", bond_tensor, self.tensors[current_orthogonality_center + 1]
             )
 
-    def shift_orthogonality_center_left(self, current_orthogonality_center: int) -> None:
+    def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center left.
 
         This function flips the network, performs a right shift, then flips the network again.
@@ -308,7 +308,7 @@ class MPS:
             current_orthogonality_center (int): current center
         """
         self.flip_network()
-        self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1)
+        self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
         self.flip_network()
 
     def set_canonical_form(self, orthogonality_center: int, decomposition: str = "QR") -> None:
