@@ -1,5 +1,3 @@
-# Drafted test_utilities.py for user review
-
 # Copyright (c) 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
@@ -28,9 +26,10 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs.core.libraries.circuit_library_utils import (
-    extract_u_parameters,
     add_random_single_qubit_rotation,
+    extract_u_parameters,
 )
+
 
 def test_extract_u_parameters_invalid_shape() -> None:
     """extract_u_parameters must reject non-2x2 inputs."""

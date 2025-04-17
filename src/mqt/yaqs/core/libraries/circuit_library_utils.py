@@ -14,18 +14,18 @@ sampling the axis uniformly on the Bloch sphere.
 """
 
 # ignore non-lowercase argument names for physics notation
-# ruff: noqa: N803
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 import numpy as np
-from qiskit.circuit import QuantumCircuit
 from scipy.linalg import expm
 
 if TYPE_CHECKING:
     from numpy.random import Generator
+    from numpy.typing import NDArray
+    from qiskit.circuit import QuantumCircuit
 
 
 def extract_u_parameters(
