@@ -253,7 +253,6 @@ def circuit_tjm(
                         state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
                 dag.remove_op_node(node)
 
-
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
             # All shots can be done at once in noise-free model
