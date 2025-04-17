@@ -25,10 +25,10 @@ from typing import TYPE_CHECKING, Tuple
 import numpy as np
 from qiskit.circuit import QuantumCircuit
 from scipy.linalg import expm
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from numpy.random import Generator
+    from numpy.typing import NDArray
 
 
 def create_ising_circuit(
@@ -375,7 +375,7 @@ def nearest_neighbour_random_circuit(
 
 def extract_u_parameters(
     matrix: NDArray[np.complex128],
-    ) -> Tuple[float, float, float]:
+) -> Tuple[float, float, float]:
     """Extract θ, φ, λ from a 2x2 SU(2) unitary `matrix`.
 
     This removes any global phase and then solves
@@ -391,7 +391,7 @@ def extract_u_parameters(
 
     # strip global phase
     u: NDArray[np.complex128] = matrix.astype(np.complex128)
-    u = u * np.exp(-1j * np.angle(u[0, 0]))
+    u *= np.exp(-1j * np.angle(u[0, 0]))
 
     a, b = u[0, 0], u[0, 1]
     c, d = u[1, 0], u[1, 1]
