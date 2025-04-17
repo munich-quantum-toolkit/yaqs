@@ -53,22 +53,26 @@ def create_ising_circuit(
         # Apply RX rotations on all qubits.
         for site in range(L):
             circ.rx(theta=alpha, qubit=site)
-
+            circ.barrier()
         # Even-odd nearest-neighbor interactions.
         for site in range(L // 2):
             circ.rzz(beta, qubit1=2 * site, qubit2=2 * site + 1)
+            circ.barrier()
 
         # Odd-even nearest-neighbor interactions.
         for site in range(1, L // 2):
             circ.rzz(beta, qubit1=2 * site - 1, qubit2=2 * site)
+            circ.barrier()
 
         # For odd L > 1, handle the last pair.
         if L % 2 != 0 and L != 1:
             circ.rzz(beta, qubit1=L - 2, qubit2=L - 1)
+            circ.barrier()
 
         # If periodic, add an additional long-range gate between qubit L-1 and qubit 0.
         if periodic and L > 1:
             circ.rzz(beta, qubit1=0, qubit2=L - 1)
+            circ.barrier()
 
     return circ
 
