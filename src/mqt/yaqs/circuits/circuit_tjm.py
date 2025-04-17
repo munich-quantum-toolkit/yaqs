@@ -26,6 +26,7 @@ from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
+
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -195,21 +196,17 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     # Long-range gates require low SVD threshold
-    save = sim_params.threshold
     if np.abs(first_site - last_site) > 1:
-        sim_params.threshold = 1e-324
+        sim_params.threshold = 0
 
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, sim_params)
     two_site_tdvp(short_state, short_mpo, sim_params)
+
     # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 
-    if np.abs(first_site - last_site) > 1:
-        state.flip_network()
-        state.truncate(threshold=save)
-        state.flip_network()
-    sim_params.threshold = save
+    state.normalize(form="B", decomposition="QR")
 
 
 def circuit_tjm(
@@ -250,9 +247,11 @@ def circuit_tjm(
             for node in group:
                 apply_two_qubit_gate(state, node, sim_params)
                 # Jump process occurs after each two-qubit gate
-                apply_dissipation(state, noise_model, dt=1)
-                state = stochastic_process(state, noise_model, dt=1)
+                if noise_model is not None:
+                    apply_dissipation(state, noise_model, dt=1)
+                    state = stochastic_process(state, noise_model, dt=1)
                 dag.remove_op_node(node)
+
 
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
