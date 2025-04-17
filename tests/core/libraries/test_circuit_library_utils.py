@@ -16,8 +16,8 @@ This module contains tests for verifying the correctness of the helper routines
 The tests ensure:
 - `extract_u_parameters` rejects invalid matrix shapes.
 - `extract_u_parameters` returns (0,0,0) for identity and -identity.
-- Round‑trip decomposition: building a U3 and extracting its parameters recovers the originals.
-- `add_random_single_qubit_rotation` appends exactly one U‐gate with deterministic parameters
+- Round-trip decomposition: building a U3 and extracting its parameters recovers the originals.
+- `add_random_single_qubit_rotation` appends exactly one U-gate with deterministic parameters
   when driven by a seeded `numpy.random.default_rng`.
 """
 
@@ -60,7 +60,7 @@ def test_extract_u_parameters_identity() -> None:
     ],
 )
 def test_extract_u_parameters_roundtrip(theta0: float, phi0: float, lam0: float) -> None:
-    """Round-trip U3→matrix→extract_u_parameters recovers (θ,φ,λ)."""
+    """Round-trip U3 matrix extract_u_parameters recovers (θ,φ,λ)."""
     # build the standard U3(θ,φ,λ) matrix
     u = np.array(
         [

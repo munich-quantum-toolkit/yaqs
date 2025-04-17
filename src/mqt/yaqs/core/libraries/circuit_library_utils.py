@@ -8,8 +8,9 @@
 """Utility functions for quantum circuit generation.
 
 This module provides helper routines used in the YAQS circuit library:
-- `extract_u_parameters`: decompose a 2×2 SU(2) unitary matrix into U3 gate parameters (θ, φ, λ).
-- `add_random_single_qubit_rotation`: append a random single-qubit U3 rotation to a `QuantumCircuit`, sampling the axis uniformly on the Bloch sphere.
+- `extract_u_parameters`: decompose a 2x2 SU(2) unitary matrix into U3 gate parameters (θ, φ, λ).
+- `add_random_single_qubit_rotation`: append a random single-qubit U3 rotation to a `QuantumCircuit`, 
+sampling the axis uniformly on the Bloch sphere.
 """
 
 # ignore non-lowercase argument names for physics notation
@@ -25,8 +26,8 @@ from scipy.linalg import expm
 
 if TYPE_CHECKING:
     from numpy.random import Generator
-    from numpy.typing import NDArray
-    
+
+
 def extract_u_parameters(
     matrix: NDArray[np.complex128],
 ) -> tuple[float, float, float]:
