@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from qiskit.circuit import QuantumCircuit
 from scipy.linalg import expm
+from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from numpy.random import Generator
@@ -373,8 +374,8 @@ def nearest_neighbour_random_circuit(
 
 
 def extract_u_parameters(
-    matrix: np.ndarray,
-) -> tuple[float, float, float]:
+    matrix: NDArray[np.complex128],
+    ) -> Tuple[float, float, float]:
     """Extract θ, φ, λ from a 2x2 SU(2) unitary `matrix`.
 
     This removes any global phase and then solves
@@ -388,15 +389,15 @@ def extract_u_parameters(
     """
     assert matrix.shape == (2, 2), "Input must be a 2x2 matrix."
 
-    # ensure complex dtype & strip global phase
-    u = matrix.astype(np.complex128)
-    u *= np.exp(-1j * np.angle(u[0, 0]))
+    # strip global phase
+    u: NDArray[np.complex128] = matrix.astype(np.complex128)
+    u = u * np.exp(-1j * np.angle(u[0, 0]))
 
     a, b = u[0, 0], u[0, 1]
     c, d = u[1, 0], u[1, 1]
 
     theta = 2 * np.arccos(np.clip(np.abs(a), -1.0, 1.0))
-    sin_th2 = np.sin(theta / 2)
+    sin_th2: float = float(np.sin(theta / 2))
     if np.isclose(sin_th2, 0.0):
         phi = 0.0
         lam = np.angle(d) - np.angle(a)
