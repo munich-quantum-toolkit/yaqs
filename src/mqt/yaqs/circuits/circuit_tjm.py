@@ -194,12 +194,8 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     if np.abs(first_site - last_site) > 1:
-        if state.write_max_bond_dim() < sim_params.max_bond_dim:
-            # 2TDVP in dynamic TDVP
-            window_size = 1
-        else:
-            # 1TDVP in dynamic TDVP
-            window_size = 0
+        # If 2TDVP, else if 1TDVP. Based on math derivation.
+        window_size = 1 if state.write_max_bond_dim() < sim_params.max_bond_dim else 0
         short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
         dynamic_tdvp(short_state, short_mpo, sim_params)
     else:
