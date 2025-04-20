@@ -38,6 +38,7 @@ def split_mps_tensor(
     tensor: NDArray[np.complex128],
     svd_distribution: str,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
+    dynamic: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
 
@@ -58,6 +59,7 @@ def split_mps_tensor(
         tensor (NDArray[np.complex128]): Input MPS tensor of shape (d0*d1, D0, D2).
         svd_distribution (str): How to distribute singular values ("left", "right", or "sqrt").
         sim_params: Simulation parameters containing threshold and max bond dimension
+        dynamic: Determines if bond dimension is handled by dynamic TDVP (True) or truncation (False).
 
     Returns:
         tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -86,7 +88,7 @@ def split_mps_tensor(
     u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
 
     # Handled by dynamic TDVP
-    if isinstance(sim_params, PhysicsSimParams):
+    if dynamic:
         cut_index = len(sigma)
     else:
         cut_index = min(len(sigma), sim_params.max_bond_dim)
@@ -483,6 +485,8 @@ def two_site_tdvp(
     hamiltonian: MPO,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
     numiter_lanczos: int = 25,
+    *,
+    dynamic: bool = False,
 ) -> None:
     """Perform symmetric two-site TDVP integration.
 
@@ -498,6 +502,7 @@ def two_site_tdvp(
         sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams):
             Simulation parameters containing the time step 'dt' and SVD threshold.
         numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
+        dynamic: Determines if bond dimension is handled by dynamic TDVP (True) or truncation (False).
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -532,7 +537,7 @@ def two_site_tdvp(
         merged_tensor = update_site(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic)
         left_blocks[i + 1] = update_left_environment(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
         )
@@ -557,10 +562,10 @@ def two_site_tdvp(
     )
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic)
         return
 
-    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params=sim_params)
+    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic)
     right_blocks[i] = update_right_environment(
         state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
     )
@@ -580,7 +585,7 @@ def two_site_tdvp(
         merged_tensor = update_site(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic)
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
