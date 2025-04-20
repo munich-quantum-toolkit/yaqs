@@ -24,10 +24,9 @@ from qiskit.converters import circuit_to_dag
 from ..core.data_structures.networks import MPO, MPS
 from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
+from ..core.methods.dynamic_tdvp import dynamic_tdvp
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
-from ..core.methods.dynamic_tdvp import dynamic_tdvp
-
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -144,9 +143,7 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
     return mpo, first_site, last_site
 
 
-def apply_window(
-    state: MPS, mpo: MPO, first_site: int, last_site: int, window_size: int
-) -> tuple[MPS, MPO, list[int]]:
+def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_size: int) -> tuple[MPS, MPO, list[int]]:
     """Apply Window.
 
     Apply a window to the given MPS and MPO for a local update.
@@ -195,8 +192,6 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
     # Construct the MPO for the two-qubit gate.
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
-
-
 
     if np.abs(first_site - last_site) > 1:
         if state.write_max_bond_dim() < sim_params.max_bond_dim:
