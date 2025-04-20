@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..core.data_structures.simulation_parameters import EvolutionMode
+from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.dynamic_tdvp import dynamic_tdvp
 from ..core.methods.stochastic_process import stochastic_process
@@ -66,7 +68,10 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    dynamic_tdvp(state, hamiltonian, sim_params)
+    if sim_params.evolution_mode == EvolutionMode.TDVP:
+        dynamic_tdvp(state, hamiltonian, sim_params)
+    elif sim_params.evolution_mode == EvolutionMode.BUG:
+        bug(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
     return stochastic_process(state, noise_model, sim_params.dt)
 
@@ -96,7 +101,10 @@ def sample(
 
     """
     psi = copy.deepcopy(phi)
-    dynamic_tdvp(psi, hamiltonian, sim_params)
+    if sim_params.evolution_mode == EvolutionMode.TDVP:
+        dynamic_tdvp(psi, hamiltonian, sim_params)
+    elif sim_params.evolution_mode == EvolutionMode.BUG:
+        bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
     if j == len(sim_params.times) - 1 and sim_params.get_state:
@@ -201,6 +209,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
+
         if sim_params.sample_timesteps:
             temp_state = copy.deepcopy(state)
             last_site = 0
@@ -211,8 +220,14 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
                     last_site = observable.site
                 results[obs_index, j] = temp_state.measure_expectation_value(observable)
         elif j == len(sim_params.times) - 1:
+            temp_state = copy.deepcopy(state)
+            last_site = 0
             for obs_index, observable in enumerate(sim_params.sorted_observables):
-                results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
+                if observable.site > last_site:
+                    for site in range(last_site, observable.site):
+                        temp_state.shift_orthogonality_center_right(site)
+                    last_site = observable.site
+                results[obs_index, 0] = temp_state.measure_expectation_value(observable)
 
     if sim_params.get_state:
         sim_params.output_state = state
