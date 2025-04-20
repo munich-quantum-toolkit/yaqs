@@ -24,8 +24,6 @@ the Tensor Jump Method.
 
 from __future__ import annotations
 
-import copy
-
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
