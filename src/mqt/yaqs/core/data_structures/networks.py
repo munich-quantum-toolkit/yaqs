@@ -289,7 +289,7 @@ class MPS:
         if decomposition == "QR":
             site_tensor, bond_tensor = right_qr(tensor)
         elif decomposition == "SVD":
-            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-17, max_bond_dim=None)
+            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-15, max_bond_dim=None)
             bond_tensor = np.diag(s_vec) @ v_mat
         self.tensors[current_orthogonality_center] = site_tensor
 
