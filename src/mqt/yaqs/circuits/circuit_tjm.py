@@ -26,6 +26,7 @@ from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
+from ..core.methods.dynamic_tdvp import dynamic_tdvp
 
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -144,7 +145,7 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
 
 
 def apply_window(
-    state: MPS, mpo: MPO, first_site: int, last_site: int, sim_params: StrongSimParams | WeakSimParams
+    state: MPS, mpo: MPO, first_site: int, last_site: int, window_size: int
 ) -> tuple[MPS, MPO, list[int]]:
     """Apply Window.
 
@@ -155,13 +156,13 @@ def apply_window(
         mpo (MPO): The matrix product operator (MPO) to be applied.
         first_site (int): The index of the first site in the window.
         last_site (int): The index of the last site in the window.
-        sim_params (StrongSimParams | WeakSimParams): Simulation parameters containing the window size.
+        window_size: Number of sites on each side of first and last site
 
     Returns:
         tuple[MPS, MPO, list[int]]: A tuple containing the shortened MPS, the shortened MPO, and the window indices.
     """
     # Define a window for a local update.
-    window = [first_site - 1, last_site + 1]
+    window = [first_site - window_size, last_site + window_size]
     window[0] = max(window[0], 0)
     window[1] = min(window[1], state.length - 1)
 
@@ -195,12 +196,21 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     # Construct the MPO for the two-qubit gate.
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
-    # Long-range gates require low SVD threshold
-    if np.abs(first_site - last_site) > 1:
-        sim_params.threshold = 0
 
-    short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, sim_params)
-    two_site_tdvp(short_state, short_mpo, sim_params)
+
+    if np.abs(first_site - last_site) > 1:
+        if state.write_max_bond_dim() < sim_params.max_bond_dim:
+            # 2TDVP in dynamic TDVP
+            window_size = 1
+        else:
+            # 1TDVP in dynamic TDVP
+            window_size = 0
+        short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
+        dynamic_tdvp(short_state, short_mpo, sim_params)
+    else:
+        window_size = 1
+        short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
+        two_site_tdvp(short_state, short_mpo, sim_params)
 
     # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
@@ -249,6 +259,7 @@ def circuit_tjm(
                     apply_dissipation(state, noise_model, dt=1)
                     state = stochastic_process(state, noise_model, dt=1)
                 else:
+                    # Normalizes state
                     for i in reversed(range(state.length)):
                         state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
                 dag.remove_op_node(node)
