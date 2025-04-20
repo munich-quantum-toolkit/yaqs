@@ -38,6 +38,7 @@ def split_mps_tensor(
     tensor: NDArray[np.complex128],
     svd_distribution: str,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
+    *,
     dynamic: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
@@ -534,7 +535,7 @@ def two_site_tdvp(
         merged_tensor = update_site(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
         left_blocks[i + 1] = update_left_environment(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
         )
@@ -559,10 +560,10 @@ def two_site_tdvp(
     )
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
         return
 
-    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic)
+    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
     right_blocks[i] = update_right_environment(
         state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
     )
@@ -582,7 +583,7 @@ def two_site_tdvp(
         merged_tensor = update_site(
             left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic)
+        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
