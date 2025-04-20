@@ -163,14 +163,9 @@ def test_apply_window() -> None:
     gate.set_sites(1, 2)
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
 
-    num_traj = 1
-    max_bond_dim = 4
-    threshold = 1e-12
     window_size = 1
-    measurements = [Observable("z", 0)]
-    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
 
-    short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, sim_params)
+    short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, window_size)
 
     assert window == [0, 3]
     assert short_state.length == 4
