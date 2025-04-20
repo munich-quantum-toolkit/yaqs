@@ -306,6 +306,8 @@ class MPS:
 
         Args:
             current_orthogonality_center (int): current center
+            decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
+                Default is QR.
         """
         self.flip_network()
         self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
