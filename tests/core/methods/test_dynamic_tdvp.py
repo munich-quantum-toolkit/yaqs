@@ -94,7 +94,7 @@ def test_dynamic_tdvp_two_site() -> None:
     dt = 0.1
     sample_timesteps = False
     num_traj = 1
-    max_bond_dim = 4  # Force condition for two_site_tdvp.
+    max_bond_dim = 8  # Force condition for two_site_tdvp.
     threshold = 1e-6
     order = 1
     measurements = [Observable("x", site) for site in range(L)]
@@ -104,4 +104,4 @@ def test_dynamic_tdvp_two_site() -> None:
 
     with patch("mqt.yaqs.core.methods.dynamic_tdvp.two_site_tdvp") as mock_two_site:
         dynamic_tdvp(state, H, sim_params)
-        mock_two_site.assert_called_once_with(state, H, sim_params)
+        mock_two_site.assert_called_once_with(state, H, sim_params, dynamic=True)

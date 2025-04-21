@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.networks import MPS
 
 
-class TensorEvolMode(Enum):
+class EvolutionMode(Enum):
     """Enumerates the different modes of tensor evolution in the simulation."""
 
     TDVP = "tdvp"
@@ -154,7 +154,7 @@ class PhysicsSimParams:
         order: int = 1,
         *,
         sample_timesteps: bool = True,
-        tensorevol_mode: TensorEvolMode = TensorEvolMode.TDVP,
+        evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
     ) -> None:
         """Physics simulation parameters initialization.
@@ -179,8 +179,8 @@ class PhysicsSimParams:
             Order of approximation or numerical scheme, by default 1.
         sample_timesteps : bool, optional
             Flag indicating whether to sample at intermediate time steps, by default True.
-        tensorevol_mode : TensorEvolMode, optional
-            Mode of tensor evolution in the simulation, by default TensorEvolMode.TDVP.
+        tensorevol_mode : EvolutionMode, optional
+            Mode of tensor evolution in the simulation, by default EvolutionMode.TDVP.
         get_state : bool, optional
             If True, output MPS is returned.
         """
@@ -194,7 +194,7 @@ class PhysicsSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
-        self.tensorevol_mode = tensorevol_mode
+        self.evolution_mode = evolution_mode
         self.get_state = get_state
 
     def aggregate_trajectories(self) -> None:

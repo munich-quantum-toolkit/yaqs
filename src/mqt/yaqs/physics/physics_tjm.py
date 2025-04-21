@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..core.data_structures.simulation_parameters import TensorEvolMode
+from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.dynamic_tdvp import dynamic_tdvp
@@ -68,9 +68,9 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
     Returns:
         MPS: The updated state after one time step evolution.
     """
-    if sim_params.tensorevol_mode == TensorEvolMode.TDVP:
+    if sim_params.evolution_mode == EvolutionMode.TDVP:
         dynamic_tdvp(state, hamiltonian, sim_params)
-    else:
+    elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
     return stochastic_process(state, noise_model, sim_params.dt)
@@ -101,9 +101,9 @@ def sample(
 
     """
     psi = copy.deepcopy(phi)
-    if sim_params.tensorevol_mode == TensorEvolMode.TDVP:
+    if sim_params.evolution_mode == EvolutionMode.TDVP:
         dynamic_tdvp(psi, hamiltonian, sim_params)
-    else:
+    elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
     psi = stochastic_process(psi, noise_model, sim_params.dt)
