@@ -629,7 +629,7 @@ def dynamic_tdvp(
         # current bond dimension between i and i+1
         bond_dim = state.tensors[i].shape[2]
 
-        if True: # bond_dim > sim_params.max_bond_dim or lock_one_site:
+        if bond_dim > sim_params.max_bond_dim or lock_one_site:
             print("1TDVP")
             # if i == num_sites - 2:
             #     assert lock_one_site
@@ -657,9 +657,10 @@ def dynamic_tdvp(
                 lock_one_site = True
         else:
             print("2TDVP")
-            if i == num_sites -2:
-                break
-            assert i != num_sites - 2
+            if i == num_sites - 2:
+                assert not lock_one_site
+                continue
+
             merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
@@ -678,7 +679,7 @@ def dynamic_tdvp(
                 numiter_lanczos,
             )
 
-    if True: # lock_one_site:
+    if lock_one_site:
         last = num_sites - 1
         state.tensors[last] = update_site(
             left_blocks[last],
@@ -706,12 +707,12 @@ def dynamic_tdvp(
     lock_one_site = False
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i-1].shape[1]
-        if True: # bond_dim > sim_params.max_bond_dim or lock_one_site:
+        if False: # bond_dim > sim_params.max_bond_dim or lock_one_site:
             print("1TDVP")
             if i == 0:
-                break
-            if i == 0:
-                assert lock_one_site
+                assert not lock_one_site
+                continue
+
             state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
             tensor_shape = state.tensors[i].shape
             reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
