@@ -387,7 +387,6 @@ def test_gate_constructor() -> None:
 
     assert one_site_gate.interaction == 1, "Failed to set interaction level for one site"
 
-
     # Testing multiple-sites gates
     two_sites_matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
     two_sites_gate = BaseGate(two_sites_matrix)
@@ -396,7 +395,6 @@ def test_gate_constructor() -> None:
     assert_array_equal(two_sites_gate.tensor, two_sites_matrix)
 
     assert two_sites_gate.interaction == 2, "Failed to set interaction level for two sites"
-
 
     # Testing error messages for invalid matrices
     non_square_matrix = np.array([[1, 2, 3], [4, 5, 6]])
