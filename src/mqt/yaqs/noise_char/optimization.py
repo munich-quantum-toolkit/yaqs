@@ -736,7 +736,7 @@ class WrappedNoisyDerivativeModel(Model):
 
 
 
-def bayesian_optimization(sim_params_copy, ref_traj, traj_der, n_init=5, max_iterations=200, tolerance=1e-8, beta=0.1, num_restarts=10, raw_samples=50, file_name=" ", device="cpu", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
+def bayesian_optimization(sim_params_copy, ref_traj, traj_der, bounds_list, n_init=5, max_iterations=200, tolerance=1e-8, beta=0.1, num_restarts=10, raw_samples=50, file_name=" ", device="cpu", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
     """
     Perform Bayesian Optimization with noisy function and gradient observations.
 
@@ -783,10 +783,15 @@ def bayesian_optimization(sim_params_copy, ref_traj, traj_der, n_init=5, max_ite
             file.write('#  Iter    Loss    Log10(Loss)    Gamma_rel    Gamma_deph \n')
 
     # Config
-    bounds = torch.tensor([[0.0] * d, [1.0] * d], device=device, dtype=torch.double)
+    bounds = torch.tensor(bounds_list, device=device, dtype=torch.double).T  # Transpose to match the shape [[lower1, lower2, ...], [upper1, upper2, ...]]
 
     # Initial data
-    X = torch.rand(n_init, d, device=device, dtype=torch.double, requires_grad=True)
+    X = torch.empty(n_init, len(bounds_list), device=device, dtype=torch.double, requires_grad=True)
+    X_new = torch.empty_like(X)  # Create a new tensor to avoid in-place operations
+    for i, (lower, upper) in enumerate(bounds_list):
+        X_new[:, i] = torch.rand(n_init, device=device, dtype=torch.double) * (upper - lower) + lower  # Scale and shift random values to the bounds
+    X = X_new  # Assign the new tensor to X
+
     Y_vals = []
     grad_vals = []
 
