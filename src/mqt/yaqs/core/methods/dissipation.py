@@ -54,7 +54,7 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> 
     # Check if noise is absent or has zero strength; if so, simply shift the state to canonical form.
     if noise_model is None or all(gamma == 0 for gamma in noise_model.strengths):
         for i in reversed(range(state.length)):
-            state.shift_orthogonality_center_left(current_orthogonality_center=i)
+            state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
         return
 
     # Calculate the dissipation matrix from the noise model.
@@ -73,4 +73,4 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> 
         # Prepare the state for probability calculation by shifting the orthogonality center.
         # Shifting during the sweep is more efficient than setting it only once at the end.
         if i != 0:
-            state.shift_orthogonality_center_left(current_orthogonality_center=i)
+            state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="SVD")

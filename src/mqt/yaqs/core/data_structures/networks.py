@@ -289,7 +289,7 @@ class MPS:
         if decomposition == "QR":
             site_tensor, bond_tensor = right_qr(tensor)
         elif decomposition == "SVD":
-            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-12, max_bond_dim=None)
+            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-15, max_bond_dim=None)
             bond_tensor = np.diag(s_vec) @ v_mat
         self.tensors[current_orthogonality_center] = site_tensor
 
@@ -299,16 +299,18 @@ class MPS:
                 "ij, ajc->aic", bond_tensor, self.tensors[current_orthogonality_center + 1]
             )
 
-    def shift_orthogonality_center_left(self, current_orthogonality_center: int) -> None:
+    def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center left.
 
         This function flips the network, performs a right shift, then flips the network again.
 
         Args:
             current_orthogonality_center (int): current center
+            decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
+                Default is QR.
         """
         self.flip_network()
-        self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1)
+        self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
         self.flip_network()
 
     def set_canonical_form(self, orthogonality_center: int, decomposition: str = "QR") -> None:

@@ -36,6 +36,7 @@ from mqt.yaqs.core.libraries.circuit_library import (
     create_2d_ising_circuit,
     create_heisenberg_circuit,
     create_ising_circuit,
+    nearest_neighbour_random_circuit,
 )
 
 
@@ -343,3 +344,36 @@ def test_create_2d_fermi_hubbard_circuit_equal_qutip() -> None:
     # Calculate error
     error = np.linalg.norm(time_evolution_op_qutip - time_evolution_op_yaqs, 2)
     assert error <= 10e-3
+
+
+def test_nearest_neighbour_random_circuit_structure() -> None:
+    """Nearest-neighbour random circuit: correct qubit count, gate counts and barriers."""
+    n_qubits = 3
+    layers = 2
+    qc = nearest_neighbour_random_circuit(n_qubits, layers, seed=42)
+
+    assert isinstance(qc, QuantumCircuit)
+    assert qc.num_qubits == n_qubits
+
+    names = [instr.operation.name for instr in qc.data]
+    # one U-gate per qubit per layer
+    assert names.count("u") == n_qubits * layers
+    # one barrier at end of each layer
+    assert names.count("barrier") == layers
+
+    # count CZ+CX per layer:
+    expected_pairs = []
+    for layer in range(layers):
+        if layer % 2 == 0:
+            expected_pairs.append(len([(i, i + 1) for i in range(1, n_qubits - 1, 2)]))
+        else:
+            expected_pairs.append(len([(i, i + 1) for i in range(0, n_qubits - 1, 2)]))
+    assert names.count("cz") + names.count("cx") == sum(expected_pairs)
+
+
+def test_nearest_seed_reproducibility() -> None:
+    """Circuits generated with the same seed must be identical."""
+    qc1 = nearest_neighbour_random_circuit(4, 3, seed=123)
+    qc2 = nearest_neighbour_random_circuit(4, 3, seed=123)
+    # comparing OpenQASM is a quick way to verify structural equality
+    assert qc1 == qc2
