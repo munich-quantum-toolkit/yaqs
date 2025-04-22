@@ -24,8 +24,6 @@ the Tensor Jump Method.
 
 from __future__ import annotations
 
-import copy
-
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
@@ -163,29 +161,25 @@ def test_apply_window() -> None:
     gate.set_sites(1, 2)
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
 
-    num_traj = 1
-    max_bond_dim = 4
-    threshold = 1e-12
     window_size = 1
     measurements = [Observable(Z(), 0)]
     sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
 
-    short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, sim_params)
+    short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, window_size)
 
     assert window == [0, 3]
     assert short_state.length == 4
     assert short_mpo.length == 4
 
 
-def test_apply_two_qubit_gate_with_window() -> None:
-    """Test applying a two-qubit gate with and without a specified window size.
+def test_apply_two_qubit_gate() -> None:
+    """Test applying a two-qubit gate.
 
     This test creates an MPS and applies a CX gate extracted from a circuit. It verifies that the MPS tensors change
-    as expected after gate application. The test is performed twice: first without a window and then with a window size,
-    and the results are compared for consistency.
+    as expected after gate application.
     """
     length = 4
-    mps0 = MPS(length, state="random")
+    mps0 = MPS(length, state="ones")
     mps0.normalize()
 
     qc = QuantumCircuit(length)
@@ -204,12 +198,12 @@ def test_apply_two_qubit_gate_with_window() -> None:
     sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     orig_tensors = copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
-    for i, tensor in enumerate(mps0.tensors):
-        if i in {0, 3}:
-            np.testing.assert_allclose(np.abs(tensor), np.abs(orig_tensors[i]))
+    mps0.normalize(decomposition="SVD")
+    for i, element in enumerate(mps0.to_vec()):
+        if i == 11:
+            np.testing.assert_allclose(np.abs(element), 1, atol=1e-16)
         else:
-            with pytest.raises(AssertionError):
-                np.testing.assert_allclose(tensor, orig_tensors[i])
+            np.testing.assert_allclose(np.abs(element), 0, atol=1e-16)
 
 
 def test_circuit_tjm_strong() -> None:
