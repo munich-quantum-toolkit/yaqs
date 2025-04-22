@@ -1117,12 +1117,14 @@ class GateLibrary:
     rx = Rx
     ry = Ry
     rz = Rz
-    u = U3
+    u3 = U3
     cx = CX
     cz = CZ
     swap = SWAP
     rxx = Rxx
     ryy = Ryy
     rzz = Rzz
-    cp = CPhase
-    p = Phase
+    cphase = CPhase
+    phase = Phase
+    destroy = Destroy
+    create = Create

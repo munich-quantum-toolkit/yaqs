@@ -131,6 +131,9 @@ def test_gate_x() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.x()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_y() -> None:
     """Test the Y gate from GateLibrary.
@@ -141,6 +144,9 @@ def test_gate_y() -> None:
     gate.set_sites(0)
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.y()
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_z() -> None:
@@ -153,6 +159,9 @@ def test_gate_z() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.z()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_id() -> None:
     """Test the identity gate from GateLibrary.
@@ -163,6 +172,9 @@ def test_gate_id() -> None:
     gate.set_sites(0)
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.id()
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_sx() -> None:
@@ -175,6 +187,9 @@ def test_gate_sx() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.sx()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_h() -> None:
     """Test the Hadamard (H) gate from GateLibrary.
@@ -186,6 +201,35 @@ def test_gate_h() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.h()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_create() -> None:
+    """Test the Create gate from GateLibrary.
+
+    """
+    gate = GateLibrary.create()
+    gate.set_sites(0)
+    assert gate.sites == [0]
+    assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.create()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_destroy() -> None:
+    """Test the Create gate from GateLibrary.
+
+    """
+    gate = GateLibrary.destroy()
+    gate.set_sites(0)
+    assert gate.sites == [0]
+    assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.destroy()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_phase() -> None:
     """Test the phase (p) gate from GateLibrary.
@@ -194,10 +238,13 @@ def test_gate_phase() -> None:
     is computed correctly. It also confirms that the tensor equals the matrix.
     """
     theta = np.pi / 3
-    gate = GateLibrary.p([theta])
+    gate = GateLibrary.phase([theta])
     gate.set_sites(4)
     assert gate.sites == [4]
     assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.phase([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_rx() -> None:
@@ -211,6 +258,9 @@ def test_gate_rx() -> None:
     gate.set_sites(1)
     expected = np.array([[np.cos(theta / 2), -1j * np.sin(theta / 2)], [-1j * np.sin(theta / 2), np.cos(theta / 2)]])
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.rx([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_ry() -> None:
@@ -226,6 +276,9 @@ def test_gate_ry() -> None:
     assert_allclose(gate.matrix, expected)
     assert_allclose(gate.tensor, expected)
 
+    base_gate = BaseGate.ry([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_rz() -> None:
     """Test the Rz gate from GateLibrary.
@@ -240,6 +293,9 @@ def test_gate_rz() -> None:
     assert_allclose(gate.matrix, expected)
     assert_allclose(gate.tensor, expected)
 
+    base_gate = BaseGate.rz([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_u3() -> None:
     """Test the U3 gate.
@@ -250,7 +306,7 @@ def test_gate_u3() -> None:
     theta = np.pi / 2
     phi = np.pi / 4
     lam = np.pi / 3
-    gate = GateLibrary.u([theta, phi, lam])
+    gate = GateLibrary.u3([theta, phi, lam])
     gate.set_sites(0)  # For a single-qubit gate, only one site is needed.
 
     expected = np.array([
@@ -259,6 +315,9 @@ def test_gate_u3() -> None:
     ])
 
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.u3([theta, phi, lam])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_cx() -> None:
@@ -276,6 +335,12 @@ def test_gate_cx() -> None:
     assert hasattr(gate, "mpo")
     assert isinstance(gate.mpo, MPO)
     assert len(gate.mpo.tensors) >= 2
+
+    base_gate = BaseGate.cx()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
 
 
 def test_gate_cz() -> None:
@@ -295,6 +360,12 @@ def test_gate_cz() -> None:
     expected = np.transpose(tensor_forward, (1, 0, 3, 2))
     np.testing.assert_allclose(gate_rev.tensor, expected)
 
+    base_gate = BaseGate.cz()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
+
 
 def test_gate_swap() -> None:
     """Test the SWAP gate from GateLibrary.
@@ -309,6 +380,9 @@ def test_gate_swap() -> None:
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_array_equal(gate.tensor, expected)
 
+    base_gate = BaseGate.swap()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_rxx() -> None:
     """Test the Rxx gate from GateLibrary.
@@ -321,6 +395,9 @@ def test_gate_rxx() -> None:
     gate.set_sites(0, 1)
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.rxx([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_ryy() -> None:
@@ -335,6 +412,9 @@ def test_gate_ryy() -> None:
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
 
+    base_gate = BaseGate.ryy([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_rzz() -> None:
     """Test the Rzz gate from GateLibrary.
@@ -348,6 +428,8 @@ def test_gate_rzz() -> None:
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
 
+    base_gate = BaseGate.rzz([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 def test_gate_cphase_forward() -> None:
     """Test the forward order of the CPhase gate from GateLibrary.
@@ -356,10 +438,13 @@ def test_gate_cphase_forward() -> None:
     It verifies that the tensor, when reshaped to (2,2,2,2), matches the expected matrix.
     """
     theta = np.pi / 2
-    gate = GateLibrary.cp([theta])
+    gate = GateLibrary.cphase([theta])
     gate.set_sites(0, 1)  # Forward order
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     assert_array_equal(gate.tensor, expected)
+
+    base_gate = BaseGate.cphase([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_cphase_reverse() -> None:
@@ -369,11 +454,12 @@ def test_gate_cphase_reverse() -> None:
     It then verifies that the tensor is correctly transposed (axes (1,0,3,2)) relative to the forward order.
     """
     theta = np.pi / 2
-    gate = GateLibrary.cp([theta])
+    gate = GateLibrary.cphase([theta])
     gate.set_sites(1, 0)  # Reverse order; tensor should be transposed on (1,0,3,2)
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
     assert_allclose(gate.tensor, expected)
+
 
 
 def test_gate_constructor() -> None:
@@ -430,6 +516,9 @@ def test_set_sites() -> None:
         two_sites_gate.set_sites(0, 1, 2)
 
 
+    
+
+
 def test_gate_operations() -> None:
     """Test the operations of the GateLibrary.
 
@@ -465,6 +554,10 @@ def test_gate_operations() -> None:
 
     assert_array_equal(x.conj().matrix, np.conj(x.matrix))
     assert_array_equal(x.trans().matrix, x.matrix.T)
+
+    assert_array_equal((x + y).matrix, (y + x).matrix)
+    assert_array_equal((x + y).matrix, x.matrix + y.matrix)
+
 
 
 def test_gate_observable() -> None:
