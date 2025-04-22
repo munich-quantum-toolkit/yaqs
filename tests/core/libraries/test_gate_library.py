@@ -206,9 +206,7 @@ def test_gate_h() -> None:
 
 
 def test_gate_create() -> None:
-    """Test the Create gate from GateLibrary.
-
-    """
+    """Test the Create gate from GateLibrary."""
     gate = GateLibrary.create()
     gate.set_sites(0)
     assert gate.sites == [0]
@@ -219,9 +217,7 @@ def test_gate_create() -> None:
 
 
 def test_gate_destroy() -> None:
-    """Test the Create gate from GateLibrary.
-
-    """
+    """Test the Create gate from GateLibrary."""
     gate = GateLibrary.destroy()
     gate.set_sites(0)
     assert gate.sites == [0]
@@ -431,6 +427,7 @@ def test_gate_rzz() -> None:
     base_gate = BaseGate.rzz([theta])
     assert_array_equal(gate.matrix, base_gate.matrix)
 
+
 def test_gate_cphase_forward() -> None:
     """Test the forward order of the CPhase gate from GateLibrary.
 
@@ -459,7 +456,6 @@ def test_gate_cphase_reverse() -> None:
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
     assert_allclose(gate.tensor, expected)
-
 
 
 def test_gate_constructor() -> None:
@@ -514,9 +510,6 @@ def test_set_sites() -> None:
         two_sites_gate.set_sites(0, 1, 2)
 
 
-    
-
-
 def test_gate_operations() -> None:
     """Test the operations of the GateLibrary.
 
@@ -555,7 +548,6 @@ def test_gate_operations() -> None:
 
     assert_array_equal((x + y).matrix, (y + x).matrix)
     assert_array_equal((x + y).matrix, x.matrix + y.matrix)
-
 
 
 def test_gate_observable() -> None:
