@@ -377,29 +377,36 @@ def test_gate_cphase_reverse() -> None:
 
 
 def test_gate_constructor() -> None:
-    """Test the constructor of the GateLibrary.
+    """Test the constructor of the GateLibrary."""
+    # Testing 1-site gates
+    one_site_matrix = np.array([[1, 2], [3, 4]])
+    one_site_gate = BaseGate(one_site_matrix)
 
-    This test creates an instance of the GateLibrary and verifies that it is not None.
-    """
-    test_matrix = np.array([[1, 2], [3, 4]])
-    test_gate = BaseGate(test_matrix)
+    assert_array_equal(one_site_gate.matrix, one_site_matrix)
+    assert_array_equal(one_site_gate.tensor, one_site_matrix)
 
+    assert one_site_gate.interaction == 1, "Failed to set interaction level for one site"
+
+    one_site_gate.set_sites(0)
+    assert one_site_gate.sites == [0], "Failed to set a single site"
+
+    # Testing multiple-sites gates
+    two_sites_matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+    two_sites_gate = BaseGate(two_sites_matrix)
+
+    assert_array_equal(two_sites_gate.matrix, two_sites_matrix)
+    assert_array_equal(two_sites_gate.tensor, two_sites_matrix)
+
+    assert two_sites_gate.interaction == 2, "Failed to set interaction level for two sites"
+
+    two_sites_gate.set_sites(0, 1)
+    assert two_sites_gate.sites == [0, 1], "Failed to set multiple sites"
+
+    # Testing error messages for invalid matrices
     non_square_matrix = np.array([[1, 2, 3], [4, 5, 6]])
 
     non_power_of_2_matrix = np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
 
-    assert_array_equal(test_gate.matrix, test_matrix)
-    assert_array_equal(test_gate.tensor, test_matrix)
-
-    # Test setting sites with a single site
-    test_gate.set_sites(0)
-    assert test_gate.sites == [0], "Failed to set a single site"
-
-    # Test setting sites with multiple sites
-    test_gate.set_sites(0, 1, 2)
-    assert test_gate.sites == [0, 1, 2], "Failed to set multiple sites"
-
-    assert test_gate.interaction == 1
     # Test for non-square matrix
     with pytest.raises(ValueError, match="Matrix must be square"):
         BaseGate(non_square_matrix)
