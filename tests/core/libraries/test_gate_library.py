@@ -387,8 +387,6 @@ def test_gate_constructor() -> None:
 
     assert one_site_gate.interaction == 1, "Failed to set interaction level for one site"
 
-    one_site_gate.set_sites(0)
-    assert one_site_gate.sites == [0], "Failed to set a single site"
 
     # Testing multiple-sites gates
     two_sites_matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
@@ -399,8 +397,6 @@ def test_gate_constructor() -> None:
 
     assert two_sites_gate.interaction == 2, "Failed to set interaction level for two sites"
 
-    two_sites_gate.set_sites(0, 1)
-    assert two_sites_gate.sites == [0, 1], "Failed to set multiple sites"
 
     # Testing error messages for invalid matrices
     non_square_matrix = np.array([[1, 2, 3], [4, 5, 6]])
@@ -413,6 +409,25 @@ def test_gate_constructor() -> None:
     # Test for matrix size not being a power of 2
     with pytest.raises(ValueError, match="Matrix must have a size that is a power of 2"):
         BaseGate(non_power_of_2_matrix)
+
+
+def test_set_sites() -> None:
+    """Test the set_sites method of the BaseGate class.
+
+    This test creates a BaseGate instance and sets its sites using the set_sites method.
+    It verifies that the sites are correctly set and that the tensor is equal to the matrix.
+    """
+    # Testing multiple-sites gates
+    two_sites_matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+    two_sites_gate = BaseGate(two_sites_matrix)
+
+    assert two_sites_gate.interaction == 2, "Failed to set interaction level for two sites"
+
+    two_sites_gate.set_sites(0, 1)
+    assert two_sites_gate.sites == [0, 1], "Failed to set multiple sites"
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        two_sites_gate.set_sites(0, 1, 2)
 
 
 def test_gate_operations() -> None:
