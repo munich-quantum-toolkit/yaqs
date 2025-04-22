@@ -24,6 +24,8 @@ the Tensor Jump Method.
 
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
@@ -162,8 +164,6 @@ def test_apply_window() -> None:
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
 
     window_size = 1
-    measurements = [Observable(Z(), 0)]
-    StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
 
     short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, window_size)
 
