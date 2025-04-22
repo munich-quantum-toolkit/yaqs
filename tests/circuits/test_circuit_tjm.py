@@ -163,7 +163,7 @@ def test_apply_window() -> None:
 
     window_size = 1
     measurements = [Observable(Z(), 0)]
-    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
+    StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
 
     short_state, short_mpo, window = apply_window(mps, mpo, first_site, last_site, window_size)
 
@@ -196,7 +196,7 @@ def test_apply_two_qubit_gate() -> None:
     window_size = 0
     observable = Observable(Z(), 0)
     sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
-    orig_tensors = copy.deepcopy(mps0.tensors)
+    copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
     for i, element in enumerate(mps0.to_vec()):
