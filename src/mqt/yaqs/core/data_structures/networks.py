@@ -574,7 +574,7 @@ class MPS:
         b = self.tensors
 
         # Find the first index where the left canonical form is not satisfied.
-        # We choose the rightmost index in case even that one fullfills the condition
+        # We choose the rightmost index in case even that one fulfills the condition
         a_index = len(a) - 1
         for i in range(len(a)):
             mat = oe.contract("ijk, ijl->kl", a[i], b[i])
@@ -583,9 +583,9 @@ class MPS:
             if not np.allclose(mat, test_identity):
                 a_index = i
                 break
-        
+
         # Find the last index where the right canonical form is not satisfied.
-        # We choose the leftmost index in case even that one fullfills the condition
+        # We choose the leftmost index in case even that one fulfills the condition
         b_index = 0
         for i in reversed(range(len(a))):
             mat = oe.contract("ijk, ilk->jl", b[i], a[i])

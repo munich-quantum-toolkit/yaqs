@@ -266,6 +266,7 @@ def test_bug_single_site() -> None:
     new_state_vec = time_evo_op @ state_vec
     assert np.allclose(mps.to_vec(), new_state_vec)
 
+
 def test_bug_three_sites() -> None:
     """Tests the BUG on a three site MPS against an exact time evolution."""
     mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
@@ -282,8 +283,9 @@ def test_bug_three_sites() -> None:
     time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
     new_state_vec = time_evo_op @ state_vec
     # Check the result
-    assert [0] == mps.check_canonical_form()
+    assert mps.check_canonical_form() == [0]
     assert np.allclose(mps.to_vec(), new_state_vec)
+
 
 # def test_bug_ten_sites() -> None:
 #     """Tests a single BUG time step on ten sites."""

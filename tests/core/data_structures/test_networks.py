@@ -22,9 +22,9 @@ import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.stats import unitary_group
 import pytest
 from qiskit.circuit import QuantumCircuit
+from scipy.stats import unitary_group
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
@@ -655,52 +655,56 @@ def test_check_if_valid_mps() -> None:
     mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
     mps.check_if_valid_mps()
 
+
 def test_check_canonical_form_none() -> None:
     """Tests that no canonical form is detected for an MPS in a non-canonical state."""
     mps = random_mps([(2, 1, 2), (2, 2, 3), (2, 3, 1)], normalize=False)
     res = mps.check_canonical_form()
     assert res == [-1]
 
+
 def test_check_canonical_form_left() -> None:
     """Test that the left canonical form is detected correctly."""
-    unitary_mid = unitary_group.rvs(6).reshape((6,2,3)).transpose(1,0,2)
-    unitary_right = unitary_group.rvs(3).reshape(3,3,1)
-    tensors = [crandn(2,1,6),unitary_mid,unitary_right]
+    unitary_mid = unitary_group.rvs(6).reshape((6, 2, 3)).transpose(1, 0, 2)
+    unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
+    tensors = [crandn(2, 1, 6), unitary_mid, unitary_right]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
     assert res == [0]
 
+
 def test_check_canonical_form_right() -> None:
     """Test that the right canonical form is detected correctly."""
-    unitary_left = unitary_group.rvs(3).reshape(3,1,3)
-    unitary_mid = unitary_group.rvs(6).reshape((2,3,6))
-    tensors = [unitary_left,unitary_mid,crandn(2,6,1)]
+    unitary_left = unitary_group.rvs(3).reshape(3, 1, 3)
+    unitary_mid = unitary_group.rvs(6).reshape((2, 3, 6))
+    tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
     assert res == [2]
 
+
 def test_check_canonical_form_middle() -> None:
     """Test that a site canonical form is detected correctly."""
-    unitary_left = unitary_group.rvs(3).reshape(3,1,3)
-    unitary_right = unitary_group.rvs(3).reshape(3,3,1)
-    tensors = [unitary_left,crandn(2,3,3),unitary_right]
+    unitary_left = unitary_group.rvs(3).reshape(3, 1, 3)
+    unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
+    tensors = [unitary_left, crandn(2, 3, 3), unitary_right]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
     assert res == [1]
 
+
 def test_check_canonical_form_full() -> None:
-    """
-    Test the very special case that all canonical forms are true
-    """
-    delta_left = np.eye(2).reshape(2,1,2)
-    delta_right = np.eye(2).reshape(2,2,1)
-    delta_mid = np.zeros((2,2,2))
-    delta_mid[0,0,0] = 1
-    delta_mid[1,1,1] = 1
-    tensors = [delta_left,delta_mid,delta_right]
+    """Test the very special case that all canonical forms are true."""
+    delta_left = np.eye(2).reshape(2, 1, 2)
+    delta_right = np.eye(2).reshape(2, 2, 1)
+    delta_mid = np.zeros((2, 2, 2))
+    delta_mid[0, 0, 0] = 1
+    delta_mid[1, 1, 1] = 1
+    tensors = [delta_left, delta_mid, delta_right]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
-    assert res == [0,1,2]
+    assert res == [0, 1, 2]
+
 
 def test_convert_to_vector() -> None:
     """Test convert to vector.
