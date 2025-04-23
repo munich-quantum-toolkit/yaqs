@@ -687,6 +687,8 @@ from gpytorch.likelihoods import FixedNoiseGaussianLikelihood
 from gpytorch.distributions import MultivariateNormal
 from botorch.models.model import Model
 from botorch.posteriors import GPyTorchPosterior
+from botorch.acquisition.monte_carlo import qNoisyExpectedImprovement
+from botorch.acquisition.logei import qLogNoisyExpectedImprovement
 
 
 # GP model for noisy observations
@@ -736,7 +738,7 @@ class WrappedNoisyDerivativeModel(Model):
 
 
 
-def bayesian_optimization(sim_params_copy, ref_traj, traj_der, bounds_list, n_init=5, max_iterations=200, tolerance=1e-8, beta=0.1, num_restarts=10, raw_samples=50, file_name=" ", device="cpu", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
+def bayesian_optimization(sim_params_copy, ref_traj, traj_der, bounds_list, acquisition="UCB", n_init=5, max_iterations=200, tolerance=1e-8, beta=0.1, num_restarts=10, raw_samples=50, file_name=" ", device="cpu", loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
     """
     Perform Bayesian Optimization with noisy function and gradient observations.
 
@@ -846,7 +848,18 @@ def bayesian_optimization(sim_params_copy, ref_traj, traj_der, bounds_list, n_in
         model = WrappedNoisyDerivativeModel(model)
 
         # Acquisition
-        acq_func = UpperConfidenceBound(model, beta=beta)
+        if acquisition == "UCB":
+            acq_func = UpperConfidenceBound(model, beta=beta)
+
+        elif acquisition == "qNEI":
+            acq_func = qNoisyExpectedImprovement(model, X_baseline=X_joint)
+        
+        elif acquisition == "qLNEI":
+            acq_func = qLogNoisyExpectedImprovement(model, X_baseline=X_joint)
+
+        else:
+            raise ValueError(f"Unknown acquisition function: {acquisition}. Valid options are 'UCB', 'qNEI', and 'qLNEI'.")
+
         candidate, _ = optimize_acqf(
             acq_function=acq_func,
             bounds=bounds,
