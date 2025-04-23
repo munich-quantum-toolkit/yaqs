@@ -266,7 +266,6 @@ def test_bug_single_site() -> None:
     new_state_vec = time_evo_op @ state_vec
     assert np.allclose(mps.to_vec(), new_state_vec)
 
-
 def test_bug_three_sites() -> None:
     """Tests the BUG on a three site MPS against an exact time evolution."""
     mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
