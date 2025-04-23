@@ -285,3 +285,25 @@ def test_bug_three_sites() -> None:
     # Check the result
     assert [0] == mps.check_canonical_form()
     assert np.allclose(mps.to_vec(), new_state_vec)
+
+def test_bug_ten_sites() -> None:
+    """Tests a single BUG time step on ten sites."""
+    num_sites = 10
+    shapes = [(2,1,4)] + (num_sites-2)*[(2,4,4)] + [(2,4,1)]
+    mps = random_mps(shapes)
+    ref_mps = deepcopy(mps)
+    mpo = MPO()
+    mpo.init_ising(num_sites, 1, 0.5)
+    ref_mpo = deepcopy(mpo)
+    sim_params = PhysicsSimParams(observables=[], elapsed_time=1, threshold=0, max_bond_dim=10000, dt=0.001)
+    # Perform BUG
+    bug(mps, mpo, sim_params, numiter_lanczos=25)
+    # Check against exact evolution
+    state_vec = ref_mps.to_vec()
+    ham_matrix = ref_mpo.to_matrix()
+    time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
+    new_state_vec = time_evo_op @ state_vec
+    # Check the result
+    assert [0] == mps.check_canonical_form()
+    print(max(np.abs(mps.to_vec() - new_state_vec)))
+    assert np.allclose(mps.to_vec(), new_state_vec)
