@@ -80,7 +80,7 @@ def crandn(
     return (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2)
 
 
-def random_mps(shapes: list[tuple[int, int, int]], normalize: bool = True) -> MPS: # noqa: FBT002
+def random_mps(shapes: list[tuple[int, int, int]], normalize: bool = True) -> MPS:  # noqa: FBT002
     """Create a random MPS with the given shapes.
 
     Args:
