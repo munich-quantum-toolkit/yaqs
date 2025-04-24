@@ -36,6 +36,7 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp import (
     merge_mpo_tensors,
     merge_mps_tensors,
@@ -64,7 +65,7 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
     """
     A = rng.random(size=(4, 3, 5))
     # Placeholder
-    measurements = [Observable("z", site) for site in range(1)]
+    measurements = [Observable(Z(), site) for site in range(1)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -98,7 +99,7 @@ def test_split_mps_tensor_invalid_shape() -> None:
     """
     A = rng.random(size=(3, 3, 5))
     # Placeholder
-    measurements = [Observable("z", site) for site in range(1)]
+    measurements = [Observable(Z(), site) for site in range(1)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -240,7 +241,7 @@ def test_single_site_tdvp() -> None:
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
-    measurements = [Observable("z", site) for site in range(L)]
+    measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -275,7 +276,7 @@ def test_two_site_tdvp() -> None:
     H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
     ref_mps = deepcopy(state)
-    measurements = [Observable("z", site) for site in range(L)]
+    measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
