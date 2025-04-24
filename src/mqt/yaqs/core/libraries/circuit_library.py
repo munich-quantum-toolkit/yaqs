@@ -15,12 +15,14 @@ These circuits are used to simulate the evolution of quantum many-body systems u
 respective Hamiltonians.
 """
 
-# ignore non-lowercase argument names for physics notation
-# ruff: noqa: N803
-
 from __future__ import annotations
 
+# ignore non-lowercase argument names for physics notation
+# ruff: noqa: N803
+import numpy as np
 from qiskit.circuit import QuantumCircuit
+
+from .circuit_library_utils import add_random_single_qubit_rotation
 
 
 def create_ising_circuit(
@@ -53,22 +55,26 @@ def create_ising_circuit(
         # Apply RX rotations on all qubits.
         for site in range(L):
             circ.rx(theta=alpha, qubit=site)
-
+            circ.barrier()
         # Even-odd nearest-neighbor interactions.
         for site in range(L // 2):
             circ.rzz(beta, qubit1=2 * site, qubit2=2 * site + 1)
+            circ.barrier()
 
         # Odd-even nearest-neighbor interactions.
         for site in range(1, L // 2):
             circ.rzz(beta, qubit1=2 * site - 1, qubit2=2 * site)
+            circ.barrier()
 
         # For odd L > 1, handle the last pair.
         if L % 2 != 0 and L != 1:
             circ.rzz(beta, qubit1=L - 2, qubit2=L - 1)
+            circ.barrier()
 
         # If periodic, add an additional long-range gate between qubit L-1 and qubit 0.
         if periodic and L > 1:
             circ.rzz(beta, qubit1=0, qubit2=L - 1)
+            circ.barrier()
 
     return circ
 
@@ -117,11 +123,13 @@ def create_2d_ising_circuit(
                 q1 = site_index(row, col)
                 q2 = site_index(row, col + 1)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
             # Odd bonds in the row.
             for col in range(1, num_cols - 1, 2):
                 q1 = site_index(row, col)
                 q2 = site_index(row, col + 1)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
 
         # Vertical interactions: between adjacent rows.
         for col in range(num_cols):
@@ -130,11 +138,14 @@ def create_2d_ising_circuit(
                 q1 = site_index(row, col)
                 q2 = site_index(row + 1, col)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
+
             # Odd bonds vertically.
             for row in range(1, num_rows - 1, 2):
                 q1 = site_index(row, col)
                 q2 = site_index(row + 1, col)
                 circ.rzz(beta, q1, q2)
+                circ.barrier()
 
     return circ
 
@@ -323,3 +334,42 @@ def create_2d_heisenberg_circuit(
                 circ.ryy(theta_yy, q1, q2)
 
     return circ
+
+
+def nearest_neighbour_random_circuit(
+    n_qubits: int,
+    layers: int,
+    seed: int = 42,
+) -> QuantumCircuit:
+    """Creates a random circuit with single and two-qubit nearest-neighbor gates.
+
+    Gates are sampled following the prescription in https://arxiv.org/abs/2002.07730.
+
+    Returns:
+        A `QuantumCircuit` on `n_qubits` implementing `layers` of alternating
+        random single-qubit rotations and nearest-neighbor CZ/CX entanglers.
+    """
+    rng = np.random.default_rng(seed)
+    qc = QuantumCircuit(n_qubits)
+
+    for layer in range(layers):
+        # Single-qubit random rotations
+        for qubit in range(n_qubits):
+            add_random_single_qubit_rotation(qc, qubit, rng)
+
+        # Two-qubit entangling gates
+        if layer % 2 == 0:
+            # Even layer → pair (1,2), (3,4), ...
+            pairs = [(i, i + 1) for i in range(1, n_qubits - 1, 2)]
+        else:
+            # Odd layer → pair (0,1), (2,3), ...
+            pairs = [(i, i + 1) for i in range(0, n_qubits - 1, 2)]
+
+        for q1, q2 in pairs:
+            if rng.random() < 0.5:
+                qc.cz(q1, q2)
+            else:
+                qc.cx(q1, q2)
+
+        qc.barrier()
+    return qc

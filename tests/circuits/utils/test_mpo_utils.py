@@ -162,8 +162,7 @@ def test_apply_two_qubit_gate(*, conjugate: bool) -> None:
     Args:
         conjugate (bool): Whether to apply the conjugated version of the gate.
     """
-    gate = GateLibrary.rzz()  # Two-qubit gate.
-    gate.set_params([np.pi / 2])
+    gate = GateLibrary.rzz([np.pi / 2])
     gate.set_sites(0, 1)
     theta = random_theta_6d()
     updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)

@@ -30,7 +30,8 @@ import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
 from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, extend_gate, split_tensor
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, X, Y, Z, extend_gate, split_tensor
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -130,6 +131,9 @@ def test_gate_x() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.x()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_y() -> None:
     """Test the Y gate from GateLibrary.
@@ -140,6 +144,9 @@ def test_gate_y() -> None:
     gate.set_sites(0)
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.y()
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_z() -> None:
@@ -152,6 +159,9 @@ def test_gate_z() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.z()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_id() -> None:
     """Test the identity gate from GateLibrary.
@@ -162,6 +172,9 @@ def test_gate_id() -> None:
     gate.set_sites(0)
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.id()
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_sx() -> None:
@@ -174,6 +187,9 @@ def test_gate_sx() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.sx()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_h() -> None:
     """Test the Hadamard (H) gate from GateLibrary.
@@ -185,6 +201,31 @@ def test_gate_h() -> None:
     assert gate.sites == [0]
     assert_array_equal(gate.tensor, gate.matrix)
 
+    base_gate = BaseGate.h()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_create() -> None:
+    """Test the Create gate from GateLibrary."""
+    gate = GateLibrary.create()
+    gate.set_sites(0)
+    assert gate.sites == [0]
+    assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.create()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_destroy() -> None:
+    """Test the Create gate from GateLibrary."""
+    gate = GateLibrary.destroy()
+    gate.set_sites(0)
+    assert gate.sites == [0]
+    assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.destroy()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_phase() -> None:
     """Test the phase (p) gate from GateLibrary.
@@ -192,12 +233,14 @@ def test_gate_phase() -> None:
     This test sets a rotation parameter for the phase gate, sets its site, and verifies that its generator
     is computed correctly. It also confirms that the tensor equals the matrix.
     """
-    gate = GateLibrary.p()
     theta = np.pi / 3
-    gate.set_params([theta])
+    gate = GateLibrary.phase([theta])
     gate.set_sites(4)
     assert gate.sites == [4]
     assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.phase([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_rx() -> None:
@@ -206,12 +249,14 @@ def test_gate_rx() -> None:
     This test sets a rotation parameter for the Rx gate, sets its site, and verifies that its tensor
     equals the expected rotation matrix.
     """
-    gate = GateLibrary.rx()
     theta = np.pi / 2
-    gate.set_params([theta])
+    gate = GateLibrary.rx([theta])
     gate.set_sites(1)
     expected = np.array([[np.cos(theta / 2), -1j * np.sin(theta / 2)], [-1j * np.sin(theta / 2), np.cos(theta / 2)]])
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.rx([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_ry() -> None:
@@ -220,13 +265,15 @@ def test_gate_ry() -> None:
     This test sets a rotation parameter for the Ry gate, sets its site, and verifies that both its matrix
     and tensor match the expected rotation matrix.
     """
-    gate = GateLibrary.ry()
     theta = np.pi / 3
-    gate.set_params([theta])
+    gate = GateLibrary.ry([theta])
     gate.set_sites(1)
     expected = np.array([[np.cos(theta / 2), -np.sin(theta / 2)], [np.sin(theta / 2), np.cos(theta / 2)]])
     assert_allclose(gate.matrix, expected)
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.ry([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_rz() -> None:
@@ -235,13 +282,15 @@ def test_gate_rz() -> None:
     This test sets a rotation parameter for the Rz gate, sets its site, and verifies that both its matrix
     and tensor match the expected diagonal rotation matrix.
     """
-    gate = GateLibrary.rz()
     theta = np.pi / 4
-    gate.set_params([theta])
+    gate = GateLibrary.rz([theta])
     gate.set_sites(2)
     expected = np.array([[np.exp(-1j * theta / 2), 0], [0, np.exp(1j * theta / 2)]])
     assert_allclose(gate.matrix, expected)
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.rz([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_u3() -> None:
@@ -250,11 +299,10 @@ def test_gate_u3() -> None:
     This test sets the parameters (theta, phi, lambda) for the U3 gate and verifies that its tensor,
     which is equivalent to the 2x2 unitary matrix representation, matches the expected matrix.
     """
-    gate = GateLibrary.u()
     theta = np.pi / 2
     phi = np.pi / 4
     lam = np.pi / 3
-    gate.set_params([theta, phi, lam])
+    gate = GateLibrary.u3([theta, phi, lam])
     gate.set_sites(0)  # For a single-qubit gate, only one site is needed.
 
     expected = np.array([
@@ -263,6 +311,9 @@ def test_gate_u3() -> None:
     ])
 
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.u3([theta, phi, lam])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_cx() -> None:
@@ -280,6 +331,12 @@ def test_gate_cx() -> None:
     assert hasattr(gate, "mpo")
     assert isinstance(gate.mpo, MPO)
     assert len(gate.mpo.tensors) >= 2
+
+    base_gate = BaseGate.cx()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
 
 
 def test_gate_cz() -> None:
@@ -299,6 +356,12 @@ def test_gate_cz() -> None:
     expected = np.transpose(tensor_forward, (1, 0, 3, 2))
     np.testing.assert_allclose(gate_rev.tensor, expected)
 
+    base_gate = BaseGate.cz()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
+
 
 def test_gate_swap() -> None:
     """Test the SWAP gate from GateLibrary.
@@ -313,6 +376,9 @@ def test_gate_swap() -> None:
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_array_equal(gate.tensor, expected)
 
+    base_gate = BaseGate.swap()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
 
 def test_gate_rxx() -> None:
     """Test the Rxx gate from GateLibrary.
@@ -320,12 +386,14 @@ def test_gate_rxx() -> None:
     This test sets a rotation parameter for the Rxx gate and verifies that its tensor,
     when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.rxx()
     theta = np.pi / 3
-    gate.set_params([theta])
+    gate = GateLibrary.rxx([theta])
     gate.set_sites(0, 1)
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.rxx([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_ryy() -> None:
@@ -334,12 +402,14 @@ def test_gate_ryy() -> None:
     This test sets a rotation parameter for the Ryy gate and verifies that its tensor,
     when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.ryy()
     theta = np.pi / 4
-    gate.set_params([theta])
+    gate = GateLibrary.ryy([theta])
     gate.set_sites(1, 2)
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.ryy([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_rzz() -> None:
@@ -348,12 +418,14 @@ def test_gate_rzz() -> None:
     This test sets a rotation parameter for the Rzz gate and verifies that its tensor,
     when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.rzz()
     theta = np.pi / 6
-    gate.set_params([theta])
+    gate = GateLibrary.rzz([theta])
     gate.set_sites(0, 1)
     expected = gate.matrix.reshape(2, 2, 2, 2)
     assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.rzz([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_cphase_forward() -> None:
@@ -362,12 +434,14 @@ def test_gate_cphase_forward() -> None:
     This test sets the parameters for a CPhase gate and sets the sites in forward order.
     It verifies that the tensor, when reshaped to (2,2,2,2), matches the expected matrix.
     """
-    gate = GateLibrary.cp()
     theta = np.pi / 2
-    gate.set_params([theta])
+    gate = GateLibrary.cphase([theta])
     gate.set_sites(0, 1)  # Forward order
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     assert_array_equal(gate.tensor, expected)
+
+    base_gate = BaseGate.cphase([theta])
+    assert_array_equal(gate.matrix, base_gate.matrix)
 
 
 def test_gate_cphase_reverse() -> None:
@@ -376,10 +450,136 @@ def test_gate_cphase_reverse() -> None:
     This test sets the parameters for a CPhase gate and sets the sites in reverse order.
     It then verifies that the tensor is correctly transposed (axes (1,0,3,2)) relative to the forward order.
     """
-    gate = GateLibrary.cp()
     theta = np.pi / 2
-    gate.set_params([theta])
+    gate = GateLibrary.cphase([theta])
     gate.set_sites(1, 0)  # Reverse order; tensor should be transposed on (1,0,3,2)
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
     assert_allclose(gate.tensor, expected)
+
+
+def test_gate_constructor() -> None:
+    """Test the constructor of the GateLibrary."""
+    # Testing 1-site gates
+    one_site_matrix = np.array([[1, 2], [3, 4]])
+    one_site_gate = BaseGate(one_site_matrix)
+
+    assert_array_equal(one_site_gate.matrix, one_site_matrix)
+    assert_array_equal(one_site_gate.tensor, one_site_matrix)
+
+    assert one_site_gate.interaction == 1, "Failed to set interaction level for one site"
+
+    # Testing multiple-sites gates
+    two_sites_matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+    two_sites_gate = BaseGate(two_sites_matrix)
+
+    assert_array_equal(two_sites_gate.matrix, two_sites_matrix)
+    assert_array_equal(two_sites_gate.tensor, two_sites_matrix)
+
+    assert two_sites_gate.interaction == 2, "Failed to set interaction level for two sites"
+
+    # Testing error messages for invalid matrices
+    non_square_matrix = np.array([[1, 2, 3], [4, 5, 6]])
+
+    non_power_of_2_matrix = np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
+
+    # Test for non-square matrix
+    with pytest.raises(ValueError, match="Matrix must be square"):
+        BaseGate(non_square_matrix)
+    # Test for matrix size not being a power of 2
+    with pytest.raises(ValueError, match="Matrix must have a size that is a power of 2"):
+        BaseGate(non_power_of_2_matrix)
+
+
+def test_set_sites() -> None:
+    """Test the set_sites method of the BaseGate class.
+
+    This test creates a BaseGate instance and sets its sites using the set_sites method.
+    It verifies that the sites are correctly set and that the tensor is equal to the matrix.
+    """
+    # Testing multiple-sites gates
+    two_sites_matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+    two_sites_gate = BaseGate(two_sites_matrix)
+
+    assert two_sites_gate.interaction == 2, "Failed to set interaction level for two sites"
+
+    two_sites_gate.set_sites(0, 1)
+    assert two_sites_gate.sites == [0, 1], "Failed to set multiple sites"
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        two_sites_gate.set_sites(0, 1, 2)
+
+
+def test_gate_operations() -> None:
+    """Test the operations of the GateLibrary.
+
+    This test creates instances of the Destroy, X, Y, and Z gates, and verifies that the
+    resulting matrices from performing addition, multiplication and adjoint operations on them are correct.
+    """
+    rel = Destroy()
+
+    x = X()
+    y = Y()
+    z = Z()
+
+    jump_list = [rel, z]
+
+    obs_list = [x, y, z]
+
+    matrices = []
+
+    for lk in jump_list:
+        for on in obs_list:
+            res = lk.dag() * on * lk - 0.5 * on * lk.dag() * lk - 0.5 * lk.dag() * lk * on
+            matrices.append(res.matrix)
+
+    # Check the resulting matrices
+    assert len(matrices) == 6  # 3 jump operators * 2 observables
+
+    assert_array_equal(matrices[0], np.array([[0.0 + 0.0j, -0.5 + 0.0j], [-0.5 + 0.0j, 0.0 + 0.0j]]))
+    assert_array_equal(matrices[1], np.array([[0.0 + 0.0j, 0.0 + 0.5j], [0.0 - 0.5j, 0.0 + 0.0j]]))
+    assert_array_equal(matrices[2], np.array([[0.0 + 0.0j, 0.0 + 0.0j], [0.0 + 0.0j, 2.0 + 0.0j]]))
+    assert_array_equal(matrices[3], np.array([[0.0 + 0.0j, -2.0 + 0.0j], [-2.0 + 0.0j, 0.0 + 0.0j]]))
+    assert_array_equal(matrices[4], np.array([[0.0 + 0.0j, 0.0 + 2.0j], [0.0 - 2.0j, 0.0 + 0.0j]]))
+    assert_array_equal(matrices[5], np.array([[0.0 + 0.0j, 0.0 + 0.0j], [0.0 + 0.0j, 0.0 + 0.0j]]))
+
+    assert_array_equal(x.conj().matrix, np.conj(x.matrix))
+    assert_array_equal(x.trans().matrix, x.matrix.T)
+
+    assert_array_equal((x + y).matrix, (y + x).matrix)
+    assert_array_equal((x + y).matrix, x.matrix + y.matrix)
+
+
+def test_gate_observable() -> None:
+    """Test the observable property of the GateLibrary.
+
+    This test creates an instance of the X gate and verifies that its observable property is set correctly.
+    """
+    gate = X()
+
+    site = 3
+
+    obs = Observable(gate, site)
+
+    assert_array_equal(obs.gate.matrix, gate.matrix)
+    assert obs.site == site
+
+
+def test_basegate_operations_with_different_interaction() -> None:
+    """Test that BaseGate raises ValueError for operations with different interaction levels."""
+    # Create two gates with different interaction levels
+    gate1 = BaseGate(np.eye(2))  # Single-qubit gate (interaction = 1)
+
+    gate2 = BaseGate(np.eye(4))  # Two-qubit gate (interaction = 2)
+
+    # Test addition
+    with pytest.raises(ValueError, match="Cannot add gates with different interaction"):
+        _ = gate1 + gate2
+
+    # Test subtraction
+    with pytest.raises(ValueError, match="Cannot subtract gates with different interaction"):
+        _ = gate1 - gate2
+
+    # Test multiplication
+    with pytest.raises(ValueError, match="Cannot multiply gates with different interaction"):
+        _ = gate1 * gate2

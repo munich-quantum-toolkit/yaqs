@@ -17,6 +17,7 @@ thresholds, and window sizes, and they include methods for aggregating simulatio
 from __future__ import annotations
 
 import copy
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -25,8 +26,14 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
+    from mqt.yaqs.core.libraries.gate_library import BaseGate
 
-    from ..libraries.gate_library import BaseGate
+
+class EvolutionMode(Enum):
+    """Enumerates the different modes of tensor evolution in the simulation."""
+
+    TDVP = "tdvp"
+    BUG = "bug"
 
 
 class Observable:
@@ -126,12 +133,16 @@ class PhysicsSimParams:
         The threshold value for the simulation (default is 1e-6).
     order : int, optional
         The order of the simulation (default is 1).
+    get_state: bool, optional
+        If True, output MPS is returned.
 
     Methods:
     --------
     aggregate_trajectories() -> None:
         Aggregates the trajectories of the observables by computing their mean.
     """
+
+    output_state: MPS | None = None
 
     def __init__(
         self,
@@ -144,6 +155,8 @@ class PhysicsSimParams:
         order: int = 1,
         *,
         sample_timesteps: bool = True,
+        evolution_mode: EvolutionMode = EvolutionMode.TDVP,
+        get_state: bool = False,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -167,6 +180,10 @@ class PhysicsSimParams:
             Order of approximation or numerical scheme, by default 1.
         sample_timesteps : bool, optional
             Flag indicating whether to sample at intermediate time steps, by default True.
+        tensorevol_mode : EvolutionMode, optional
+            Mode of tensor evolution in the simulation, by default EvolutionMode.TDVP.
+        get_state : bool, optional
+            If True, output MPS is returned.
         """
         self.observables = observables
         self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
@@ -178,6 +195,8 @@ class PhysicsSimParams:
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.order = order
+        self.evolution_mode = evolution_mode
+        self.get_state = get_state
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
@@ -208,6 +227,8 @@ class WeakSimParams:
         The threshold value for the simulation.
     window_size : int | None
         The window size for the simulation.
+    get_state:
+        If True, output MPS is returned.
 
     Methods:
     --------
@@ -220,8 +241,17 @@ class WeakSimParams:
     # Properties set as placeholders for code compatibility
     dt = 1
     num_traj = 0
+    output_state: MPS | None = None
 
-    def __init__(self, shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = 0) -> None:
+    def __init__(
+        self,
+        shots: int,
+        max_bond_dim: int = 2,
+        threshold: float = 1e-6,
+        window_size: int | None = 0,
+        *,
+        get_state: bool = False,
+    ) -> None:
         """Weak circuit simulation initialization.
 
         Initializes parameters for a weak circuit simulation.
@@ -236,12 +266,15 @@ class WeakSimParams:
             Accuracy threshold for truncating tensors, by default 1e-6.
         window_size : int or None, optional
             Window size for the simulation algorithm, by default None.
+        get_state:
+            If True, output MPS is returned.
         """
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
         self.window_size = window_size
+        self.get_state = get_state
 
     def aggregate_measurements(self) -> None:
         """Aggregates shots into final result.
@@ -298,7 +331,7 @@ class StrongSimParams:
     Methods:
     --------
     __init__(self, observables: list[Observable], num_traj: int = 1000, max_bond_dim: int = 2,
-             threshold: float = 1e-6, window_size: int | None = None) -> None:
+             threshold: float = 1e-6, window_size: int | None = None, get_state: bool = False) -> None:
         Initializes the StrongSimParams with the given parameters.
     aggregate_trajectories(self) -> None:
         Aggregates the trajectories of the observables by computing the mean across all trajectories.
