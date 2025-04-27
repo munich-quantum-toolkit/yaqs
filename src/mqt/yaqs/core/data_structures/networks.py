@@ -551,7 +551,7 @@ class MPS:
             assert tensor.shape[1] == right_bond
             right_bond = tensor.shape[2]
 
-    def check_canonical_form(self) -> list[int]:
+    def check_canonical_form(self, epsilon: float = 1e-12) -> list[int]:
         """Checks canonical form of MPS.
 
         Checks what canonical form a Matrix Product State (MPS) is in, if any.
@@ -562,6 +562,9 @@ class MPS:
         - [index] if the MPS is in mixed-canonical form, where `index` is the position where the form changes.
         - [-1] if the MPS is not in any canonical form.
 
+        Parameters:
+        epsilon (float): Tolerance for numerical comparisons. Default is 1e-12.
+
         Returns:
             list[int]: A list indicating the canonical form status of the MPS.
         """
@@ -570,41 +573,34 @@ class MPS:
             a[i] = np.conj(tensor)
         b = self.tensors
 
-        a_truth = []
-        b_truth = []
-        epsilon = 1e-12
+        # Find the first index where the left canonical form is not satisfied.
+        # We choose the rightmost index in case even that one fulfills the condition
+        a_index = len(a) - 1
         for i in range(len(a)):
             mat = oe.contract("ijk, ijl->kl", a[i], b[i])
             mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
-            a_truth.append(np.allclose(mat, test_identity))
+            if not np.allclose(mat, test_identity):
+                a_index = i
+                break
 
-        for i in range(len(a)):
+        # Find the last index where the right canonical form is not satisfied.
+        # We choose the leftmost index in case even that one fulfills the condition
+        b_index = 0
+        for i in reversed(range(len(a))):
             mat = oe.contract("ijk, ilk->jl", b[i], a[i])
             mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
-            b_truth.append(np.allclose(mat, test_identity))
+            if not np.allclose(mat, test_identity):
+                b_index = i
+                break
 
-        if all(b_truth):
-            return [0]
-        if all(a_truth):
-            return [self.length - 1]
-
-        if not (all(a_truth) and all(b_truth)):
-            sites = []
-            for i, _truth_value in enumerate(a_truth):
-                if _truth_value:
-                    sites.append(i)
-                else:
-                    break
-
-            for i, _truth_value in enumerate(b_truth[len(sites) :], start=len(sites)):
-                sites.append(i)
-            if False in sites:
-                return [sites.index(False)]
-            for i, value in enumerate(a_truth):
-                if not value:
-                    return [i - 1, i]
+        if b_index == 0 and a_index == len(a) - 1:
+            # In this very special case the MPS is in all canonical forms.
+            return list(range(len(a)))
+        if a_index == b_index:
+            # The site at which both forms are satisfied is the orthogonality center.
+            return [a_index]
         return [-1]
 
     def to_vec(self) -> NDArray[np.complex128]:
