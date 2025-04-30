@@ -386,10 +386,10 @@ class MPS:
             max_bond_dim: The maximum bond dimension allowed. Default None.
 
         """
-        ortho_center = self.orthogonality_center
+        orthogonality_center = self.orthogonality_center
 
         if self.length != 1:
-            for i in range(ortho_center):
+            for i in range(orthogonality_center):
                 self.tensors[i].shape
                 u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
                 self.tensors[i] = u_tensor
@@ -401,8 +401,8 @@ class MPS:
 
             self.flip_network()
 
-            ortho_center_flipped = self.length - 1 - ortho_center
-            for i in range(ortho_center_flipped):
+            orthogonality_center_flipped = self.length - 1 - orthogonality_center
+            for i in range(orthogonality_center_flipped):
                 u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
                 self.tensors[i] = u_tensor
                 # Pull v into left leg of next tensor.
