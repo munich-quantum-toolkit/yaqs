@@ -390,7 +390,6 @@ class MPS:
 
         if self.length != 1:
             for i in range(orthogonality_center):
-                self.tensors[i].shape
                 u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
                 self.tensors[i] = u_tensor
 
