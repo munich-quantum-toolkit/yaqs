@@ -317,7 +317,7 @@ class MPS:
         """
         if self.orthogonality_center > 0:
             self.orthogonality_center = current_orthogonality_center - 1
-        
+
         self.flip_network()
         self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
         self.flip_network()
@@ -332,7 +332,6 @@ class MPS:
             orthogonality_center (int): site of matrix MPS around which we normalize
             decomposition: Type of decomposition. Default QR.
         """
-
         self.orthogonality_center = orthogonality_center
 
         # Sweep to the right
@@ -373,7 +372,7 @@ class MPS:
         if form == "B":
             self.flip_network()
             self.orthogonality_center = 0
-        
+
         else:
             self.orthogonality_center = self.length - 1
 
@@ -391,13 +390,13 @@ class MPS:
 
         if self.length != 1:
             for i in range(ortho_center):
-                old_shape = self.tensors[i].shape
+                self.tensors[i].shape
                 u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
                 self.tensors[i] = u_tensor
 
                 # Pull v into left leg of next tensor.
                 bond = np.diag(s_vec) @ v_mat
-                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i+1])
+                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i + 1])
                 self.tensors[i + 1] = new_next
 
             self.flip_network()
@@ -408,12 +407,10 @@ class MPS:
                 self.tensors[i] = u_tensor
                 # Pull v into left leg of next tensor.
                 bond = np.diag(s_vec) @ v_mat
-                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i+1])
+                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i + 1])
                 self.tensors[i + 1] = new_next
 
             self.flip_network()
-
-
 
     def scalar_product(self, other: MPS, site: int | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
