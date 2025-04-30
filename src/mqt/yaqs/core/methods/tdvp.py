@@ -447,6 +447,7 @@ def single_site_tdvp(
     )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        state.orthogonality_center = state.length - 1
         return
 
     # Right-to-left sweep: Update sites 1 to L-1.
@@ -476,6 +477,7 @@ def single_site_tdvp(
             0.5 * sim_params.dt,
             numiter_lanczos,
         )
+        state.orthogonality_center = 0
 
 
 def two_site_tdvp(
@@ -561,12 +563,14 @@ def two_site_tdvp(
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
+        state.orthogonality_center = state.length - 1 # state.length - 1 if "right", state.length -2 if "left"
         return
 
     state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
     right_blocks[i] = update_right_environment(
         state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
     )
+    
 
     # Right-to-left sweep.
     for i in reversed(range(num_sites - 2)):
@@ -587,3 +591,4 @@ def two_site_tdvp(
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
+    state.orthogonality_center = 0

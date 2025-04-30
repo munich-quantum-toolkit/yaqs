@@ -115,6 +115,7 @@ class MPS:
             If the provided `state` parameter does not match any valid initialization string.
         """  # noqa: DOC501
         self.flipped = False
+        self.orthogonality_center = 0
         if tensors is not None:
             assert len(tensors) == length
             self.tensors = tensors
@@ -246,6 +247,8 @@ class MPS:
         from right to left rather than coding it twice.
 
         """
+        self.orthogonality_center = self.length - 1 - self.orthogonality_center
+
         new_tensors = []
         for tensor in self.tensors:
             new_tensor = np.transpose(tensor, (0, 2, 1))
@@ -285,6 +288,9 @@ class MPS:
             decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
                            Default is QR.
         """
+        if self.orthogonality_center < self.length - 1:
+            self.orthogonality_center = current_orthogonality_center + 1
+
         tensor = self.tensors[current_orthogonality_center]
         if decomposition == "QR":
             site_tensor, bond_tensor = right_qr(tensor)
@@ -309,6 +315,9 @@ class MPS:
             decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
                 Default is QR.
         """
+        if self.orthogonality_center > 0:
+            self.orthogonality_center = current_orthogonality_center - 1
+        
         self.flip_network()
         self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
         self.flip_network()
@@ -324,6 +333,9 @@ class MPS:
             decomposition: Type of decomposition. Default QR.
         """
 
+        self.orthogonality_center = orthogonality_center
+
+        # Sweep to the right
         def sweep_decomposition(orthogonality_center: int, decomposition: str = "QR") -> None:
             for site, _ in enumerate(self.tensors):
                 if site == orthogonality_center:
@@ -360,9 +372,13 @@ class MPS:
 
         if form == "B":
             self.flip_network()
+            self.orthogonality_center = 0
+        
+        else:
+            self.orthogonality_center = self.length - 1
 
     def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:
-        """Truncates the MPS in place.
+        """Truncates the MPS in place and does not change the canonical form.
 
         Args:
             state: The MPS.
@@ -371,19 +387,33 @@ class MPS:
             max_bond_dim: The maximum bond dimension allowed. Default None.
 
         """
+        ortho_center = self.orthogonality_center
+
         if self.length != 1:
-            for i, tensor in enumerate(self.tensors[:-1]):
-                _, _, v_mat = truncated_right_svd(tensor, threshold, max_bond_dim)
+            for i in range(ortho_center):
+                old_shape = self.tensors[i].shape
+                u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
+                self.tensors[i] = u_tensor
+
                 # Pull v into left leg of next tensor.
-                new_next = np.tensordot(v_mat, self.tensors[i + 1], axes=(1, 1))
-                new_next = new_next.transpose(1, 0, 2)
+                bond = np.diag(s_vec) @ v_mat
+                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i+1])
                 self.tensors[i + 1] = new_next
-                # Pull v^dag into current tensor.
-                self.tensors[i] = np.tensordot(
-                    self.tensors[i],
-                    v_mat.conj(),  # No transpose, put correct axes instead
-                    axes=(2, 1),
-                )
+
+            self.flip_network()
+
+            ortho_center_flipped = self.length - 1 - ortho_center
+            for i in range(ortho_center_flipped):
+                u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
+                self.tensors[i] = u_tensor
+                # Pull v into left leg of next tensor.
+                bond = np.diag(s_vec) @ v_mat
+                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i+1])
+                self.tensors[i + 1] = new_next
+
+            self.flip_network()
+
+
 
     def scalar_product(self, other: MPS, site: int | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
