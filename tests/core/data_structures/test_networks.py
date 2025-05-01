@@ -887,6 +887,7 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
     """When threshold or max_bond_dim force a cut,
     bond dimensions on every bond should be <= max_bond_dim.
     """
+    
     # build an MPS with initially large bonds
     shapes = [(2, 1, 8)] + [(2, 8, 8)] * 3 + [(2, 8, 1)]
     mps = random_mps(shapes)
