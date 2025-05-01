@@ -373,7 +373,7 @@ class MPS:
             self.flip_network()
             self.orthogonality_center = 0
 
-        else:
+        elif form == "A":
             self.orthogonality_center = self.length - 1
 
     def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:

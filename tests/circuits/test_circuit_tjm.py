@@ -170,6 +170,7 @@ def test_apply_window() -> None:
     assert window == [0, 3]
     assert short_state.length == 4
     assert short_mpo.length == 4
+    assert short_state.orthogonality_center == 0
 
 
 def test_apply_two_qubit_gate() -> None:
@@ -199,12 +200,13 @@ def test_apply_two_qubit_gate() -> None:
     copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
+    assert mps0.orthogonality_center == 0
     for i, element in enumerate(mps0.to_vec()):
         if i == 11:
             np.testing.assert_allclose(np.abs(element), 1, atol=1e-16)
         else:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-16)
-
+    
 
 def test_circuit_tjm_strong() -> None:
     """Test the circuit_tjm function for strong simulation.
