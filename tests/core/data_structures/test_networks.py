@@ -845,7 +845,6 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
 
     This test checks that after truncation, the orthogonality center remains unchanged.
     """
-
     # build a simple MPS of length 4
     shapes = [(2, 1, 4)] + [(2, 4, 4)] * 2 + [(2, 4, 1)]
     mps = random_mps(shapes)
@@ -889,7 +888,6 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
 
     This test creates an MPS with large bond dimensions and then truncates it to a smaller size.
     """
-
     # build an MPS with initially large bonds
     shapes = [(2, 1, 8)] + [(2, 8, 8)] * 3 + [(2, 8, 1)]
     mps = random_mps(shapes)
