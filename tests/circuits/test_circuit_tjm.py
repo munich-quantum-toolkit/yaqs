@@ -207,7 +207,7 @@ def test_apply_two_qubit_gate() -> None:
             np.testing.assert_allclose(np.abs(element), 1, atol=1e-16)
         else:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-16)
-    
+
 
 def test_circuit_tjm_strong() -> None:
     """Test the circuit_tjm function for strong simulation.

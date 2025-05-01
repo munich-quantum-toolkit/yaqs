@@ -199,7 +199,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
         short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
         dynamic_tdvp(short_state, short_mpo, sim_params)
         state.orthogonality_center = window[0] + short_state.orthogonality_center - window_size
-        
+
     else:
         window_size = 1
         short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
