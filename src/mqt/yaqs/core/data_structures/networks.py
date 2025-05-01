@@ -386,7 +386,9 @@ class MPS:
             max_bond_dim: The maximum bond dimension allowed. Default None.
 
         """
+
         orthogonality_center = self.orthogonality_center
+
 
         if self.length != 1:
             for i in range(orthogonality_center):

@@ -847,7 +847,6 @@ def test_padded_mps_error() -> None:
         mps.pad_bond_dimension(1)
 
 
-
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
 def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> None:
     """Test that truncation preserves the orthogonality center and canonicity.
