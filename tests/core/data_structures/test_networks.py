@@ -841,12 +841,10 @@ def test_padded_mps_error() -> None:
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
 def test_truncate_preserves_orthogonality_center_and_canonicity(center) -> None:
-    """
-    After truncate(threshold<<1, max_bond_dim large), 
+    """After truncate(threshold<<1, max_bond_dim large),
     the orthogonality center and mixed-canonical form
     should be exactly the same.
     """
-
     # build a simple MPS of length 4
     shapes = [(2, 1, 4)] + [(2, 4, 4)] * 2 + [(2, 4, 1)]
     mps = random_mps(shapes)
@@ -858,7 +856,7 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center) -> None:
     before_center = mps.check_canonical_form()[0]
     assert before_center == center
 
-    # do a “no-real” truncation (tiny threshold, generous max bond)
+    # do a "no-real" truncation (tiny threshold, generous max bond)
     mps.truncate(threshold=1e-16, max_bond_dim=100)
     after_center = mps.check_canonical_form()[0]
     assert after_center == before_center
@@ -889,7 +887,6 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
     """When threshold or max_bond_dim force a cut,
     bond dimensions on every bond should be <= max_bond_dim.
     """
-    
     # build an MPS with initially large bonds
     shapes = [(2, 1, 8)] + [(2, 8, 8)] * 3 + [(2, 8, 1)]
     mps = random_mps(shapes)
