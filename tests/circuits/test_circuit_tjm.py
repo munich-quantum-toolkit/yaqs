@@ -199,6 +199,7 @@ def test_apply_two_qubit_gate() -> None:
     sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
+    assert mps0.orthogonality_center == 2
     mps0.normalize(decomposition="SVD")
     assert mps0.orthogonality_center == 0
     for i, element in enumerate(mps0.to_vec()):

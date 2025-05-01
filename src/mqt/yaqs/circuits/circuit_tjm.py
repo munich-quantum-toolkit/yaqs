@@ -198,10 +198,13 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
         window_size = 1 if state.write_max_bond_dim() < sim_params.max_bond_dim else 0
         short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
         dynamic_tdvp(short_state, short_mpo, sim_params)
+        state.orthogonality_center = window[0] + short_state.orthogonality_center - window_size
+        
     else:
         window_size = 1
         short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
         two_site_tdvp(short_state, short_mpo, sim_params)
+        state.orthogonality_center = window[0] + short_state.orthogonality_center - 1
 
     # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
