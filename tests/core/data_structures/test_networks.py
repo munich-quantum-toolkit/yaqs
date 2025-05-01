@@ -840,11 +840,12 @@ def test_padded_mps_error() -> None:
 
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
-def test_truncate_preserves_orthogonality_center_and_canonicity(center) -> None:
+def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> None:
     """After truncate(threshold<<1, max_bond_dim large),
     the orthogonality center and mixed-canonical form
     should be exactly the same.
     """
+
     # build a simple MPS of length 4
     shapes = [(2, 1, 4)] + [(2, 4, 4)] * 2 + [(2, 4, 1)]
     mps = random_mps(shapes)
