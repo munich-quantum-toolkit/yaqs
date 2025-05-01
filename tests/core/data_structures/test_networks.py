@@ -22,6 +22,7 @@ import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
+import opt_einsum as oe
 import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
@@ -838,30 +839,66 @@ def test_padded_mps_error() -> None:
         mps.pad_bond_dimension(1)
 
 
-def test_truncate_no_truncation() -> None:
-    """Tests the truncation of an MPS, when no truncation should happen."""
-    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
+@pytest.mark.parametrize("center", [0, 1, 2, 3])
+def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> None:
+    """Test that truncation preserves the orthogonality center and canonicity.
+
+    This test checks that after truncation, the orthogonality center remains unchanged.
+    """
+    # build a simple MPS of length 4
+    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 2 + [(2, 4, 1)]
     mps = random_mps(shapes)
-    mps.set_canonical_form(0)
-    ref_mps = copy.deepcopy(mps)
-    # Perform truncation
-    mps.truncate(threshold=1e-16, max_bond_dim=10)
-    # Check that the MPS is unchanged
-    mps.check_if_valid_mps()
-    vector = mps.to_vec()
-    ref_vector = ref_mps.to_vec()
-    assert np.allclose(vector, ref_vector)
+    # set an arbitrary initial center
+    mps.set_canonical_form(center)
+    # record the full state-vector for fidelity check
+    before_vec = mps.to_vec()
+    # record the center and canonical-split
+    before_center = mps.check_canonical_form()[0]
+    assert before_center == center
+
+    # do a "no-real" truncation (tiny threshold, generous max bond)
+    mps.truncate(threshold=1e-16, max_bond_dim=100)
+    after_center = mps.check_canonical_form()[0]
+    assert after_center == before_center
+
+    # fidelity of state stays unity
+    after_vec = mps.to_vec()
+    overlap = np.abs(np.vdot(before_vec, after_vec)) ** 2
+    assert np.isclose(overlap, 1.0, atol=1e-12)
+
+    # also check left/right canonicity around that center
+    L = mps.length
+    for i in range(before_center):
+        # left-canonical test
+        A = mps.tensors[i]
+        conjA = np.conj(A)
+        gram = oe.contract("ijk, ijl->kl", conjA, A)
+        # identity on the i-th right bond
+        assert np.allclose(gram, np.eye(gram.shape[0]), atol=1e-12)
+    for i in range(before_center + 1, L):
+        # right-canonical test
+        A = mps.tensors[i]
+        conjA = np.conj(A)
+        gram = oe.contract("ijk, ilk->jl", A, conjA)
+        assert np.allclose(gram, np.eye(gram.shape[0]), atol=1e-12)
 
 
-def test_truncate_truncation() -> None:
-    """Tests the truncation of an MPS, when truncation should happen."""
-    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
+def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
+    """Test that truncation reduces bond dimensions and truncates the MPS.
+
+    This test creates an MPS with large bond dimensions and then truncates it to a smaller size.
+    """
+    # build an MPS with initially large bonds
+    shapes = [(2, 1, 8)] + [(2, 8, 8)] * 3 + [(2, 8, 1)]
     mps = random_mps(shapes)
-    mps.set_canonical_form(0)
-    # Perform truncation
-    mps.truncate(threshold=0.1, max_bond_dim=3)
-    # Check that the MPS is truncated
+    # put it into a known canonical form
+    mps.set_canonical_form(2)
+    # perform a truncation that will cut back to max_bond=3
+    mps.truncate(threshold=0.0, max_bond_dim=3)
+
+    # check validity and that every bond dim <= 3
     mps.check_if_valid_mps()
-    for tensor in mps.tensors:
-        assert tensor.shape[1] <= 3
-        assert tensor.shape[2] <= 3
+    for T in mps.tensors:
+        _, bond_left, bond_right = T.shape
+        assert bond_left <= 3
+        assert bond_right <= 3
