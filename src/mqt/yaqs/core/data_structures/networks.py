@@ -411,6 +411,22 @@ class MPS:
 
             self.flip_network()
 
+
+        # if self.length != 1:
+        #     for i, tensor in enumerate(self.tensors[:-1]):
+        #         _, _, v_mat = truncated_right_svd(tensor, threshold, max_bond_dim)
+        #         # Pull v into left leg of next tensor.
+        #         new_next = np.tensordot(v_mat, self.tensors[i + 1], axes=(1, 1))
+        #         new_next = new_next.transpose(1, 0, 2)
+        #         self.tensors[i + 1] = new_next
+        #         # Pull v^dag into current tensor.
+        #         self.tensors[i] = np.tensordot(
+        #             self.tensors[i],
+        #             v_mat.conj(),  # No transpose, put correct axes instead
+        #             axes=(2, 1),
+        #         )
+            
+
     def scalar_product(self, other: MPS, site: int | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
 
