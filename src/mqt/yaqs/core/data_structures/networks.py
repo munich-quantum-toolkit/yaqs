@@ -205,7 +205,8 @@ class MPS:
         ------
         ValueError: target_dim must be at least current bond dim.
         """
-        L = self.length
+
+        length = self.length
 
         # enlarge tensors
         for i, tensor in enumerate(self.tensors):
@@ -215,13 +216,13 @@ class MPS:
             if i == 0:
                 left_target = 1
             else:
-                exp_left = min(i, L - i)          # bond index = i‑1
+                exp_left = min(i, length - i)          # bond index = i‑1
                 left_target = min(target_dim, 2 ** exp_left)
 
-            if i == L - 1:
+            if i == length - 1:
                 right_target = 1
             else:
-                exp_right = min(i + 1, L - 1 - i) # bond index = i
+                exp_right = min(i + 1, length - 1 - i) # bond index = i
                 right_target = min(target_dim, 2 ** exp_right)
 
 

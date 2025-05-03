@@ -804,8 +804,8 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 
-@pytest.mark.parametrize("L, target", [(6, 16), (7, 7), (9, 8), (10, 3)])
-def test_pad_shapes_and_centre(L: int, target: int) -> None:
+@pytest.mark.parametrize("length, target", [(6, 16), (7, 7), (9, 8), (10, 3)])
+def test_pad_shapes_and_centre(length: int, target: int) -> None:
     """Test that pad_bond_dimension correctly pads the MPS and preserves invariants.
 
         * the state’s norm is unchanged
@@ -813,7 +813,7 @@ def test_pad_shapes_and_centre(L: int, target: int) -> None:
         * every virtual leg has the expected size
           ( powers-of-two “staircase” capped by target_dim )
     """
-    mps = MPS(length=L, state="zeros")          # all bonds = 1
+    mps = MPS(length=length, state="zeros")          # all bonds = 1
     norm_before   = mps.norm()
 
     mps.pad_bond_dimension(target)
@@ -826,7 +826,7 @@ def test_pad_shapes_and_centre(L: int, target: int) -> None:
     for i, T in enumerate(mps.tensors):
         _, chi_l, chi_r = T.shape
 
-        # left (bond i‑1)
+        # left (bond i - 1)
         if i == 0:
             left_expected = 1
         else:
@@ -834,7 +834,7 @@ def test_pad_shapes_and_centre(L: int, target: int) -> None:
             left_expected = min(target, 2 ** exp_left)
 
         # right (bond i)
-        if i == L - 1:
+        if i == length - 1:
             right_expected = 1
         else:
             exp_right      = min(i + 1, L - 1 - i)
@@ -854,7 +854,7 @@ def test_pad_raises_on_shrink() -> None:
     mps.pad_bond_dimension(4)      # enlarge first
 
     with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
-        mps.pad_bond_dimension(2)   # would shrink – must fail
+        mps.pad_bond_dimension(2)   # would shrink - must fail
 
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
