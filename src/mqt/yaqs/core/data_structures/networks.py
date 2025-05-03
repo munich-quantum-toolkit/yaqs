@@ -188,8 +188,7 @@ class MPS:
             self.pad_bond_dimension(pad)
 
     def pad_bond_dimension(self, target_dim: int) -> None:
-        """
-        Enlarge every internal bond up to
+        """Enlarge every internal bond up to
             min(target_dim, 2**exp)
         where exp = min(bond_index+1, L-1-bond_index).
 
@@ -205,7 +204,6 @@ class MPS:
         ------
         ValueError: target_dim must be at least current bond dim.
         """
-
         length = self.length
 
         # enlarge tensors
@@ -216,27 +214,26 @@ class MPS:
             if i == 0:
                 left_target = 1
             else:
-                exp_left = min(i, length - i)          # bond index = i‑1
-                left_target = min(target_dim, 2 ** exp_left)
+                exp_left = min(i, length - i)  # bond index = i‑1
+                left_target = min(target_dim, 2**exp_left)
 
             if i == length - 1:
                 right_target = 1
             else:
-                exp_right = min(i + 1, length - 1 - i) # bond index = i
-                right_target = min(target_dim, 2 ** exp_right)
-
+                exp_right = min(i + 1, length - 1 - i)  # bond index = i
+                right_target = min(target_dim, 2**exp_right)
 
             # sanity‑check — we must never shrink an existing bond
             if chi_l > left_target or chi_r > right_target:
-                raise ValueError("Target bond dim must be at least current bond dim.")
+                msg = "Target bond dim must be at least current bond dim."
+                raise ValueError(msg)
 
             # allocate new tensor and copy original data
             new_tensor = np.zeros((phys, left_target, right_target), dtype=tensor.dtype)
             new_tensor[:, :chi_l, :chi_r] = tensor
             self.tensors[i] = new_tensor
         # renormalise the state
-        self.normalize()             
-
+        self.normalize()
 
     def write_max_bond_dim(self) -> int:
         """Write max bond dim.

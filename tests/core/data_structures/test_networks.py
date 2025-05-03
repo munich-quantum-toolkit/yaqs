@@ -804,23 +804,23 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 
-@pytest.mark.parametrize("length, target", [(6, 16), (7, 7), (9, 8), (10, 3)])
+@pytest.mark.parametrize(("length", "target"), [(6, 16), (7, 7), (9, 8), (10, 3)])
 def test_pad_shapes_and_centre(length: int, target: int) -> None:
     """Test that pad_bond_dimension correctly pads the MPS and preserves invariants.
 
-        * the state’s norm is unchanged
-        * the orthogonality-centre index is [0]
-        * every virtual leg has the expected size
-          ( powers-of-two “staircase” capped by target_dim )
+    * the state's norm is unchanged
+    * the orthogonality-centre index is [0]
+    * every virtual leg has the expected size
+      ( powers-of-two "staircase" capped by target_dim )
     """
-    mps = MPS(length=length, state="zeros")          # all bonds = 1
-    norm_before   = mps.norm()
+    mps = MPS(length=length, state="zeros")  # all bonds = 1
+    norm_before = mps.norm()
 
     mps.pad_bond_dimension(target)
 
     # invariants
     assert np.isclose(mps.norm(), norm_before, atol=1e-12)
-    assert mps.check_canonical_form()[0] == 0 
+    assert mps.check_canonical_form()[0] == 0
 
     # expected staircase
     for i, T in enumerate(mps.tensors):
@@ -830,17 +830,17 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
         if i == 0:
             left_expected = 1
         else:
-            exp_left     = min(i, L - i)          
-            left_expected = min(target, 2 ** exp_left)
+            exp_left = min(i, L - i)
+            left_expected = min(target, 2**exp_left)
 
         # right (bond i)
         if i == length - 1:
             right_expected = 1
         else:
-            exp_right      = min(i + 1, L - 1 - i)
-            right_expected = min(target, 2 ** exp_right)
+            exp_right = min(i + 1, L - 1 - i)
+            right_expected = min(target, 2**exp_right)
 
-        assert chi_l == left_expected,  f"site {i}: left {chi_l} vs {left_expected}"
+        assert chi_l == left_expected, f"site {i}: left {chi_l} vs {left_expected}"
         assert chi_r == right_expected, f"site {i}: right {chi_r} vs {right_expected}"
 
 
@@ -851,10 +851,10 @@ def test_pad_raises_on_shrink() -> None:
     bond must raise a ValueError.
     """
     mps = MPS(length=5, state="zeros")
-    mps.pad_bond_dimension(4)      # enlarge first
+    mps.pad_bond_dimension(4)  # enlarge first
 
     with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
-        mps.pad_bond_dimension(2)   # would shrink - must fail
+        mps.pad_bond_dimension(2)  # would shrink - must fail
 
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
