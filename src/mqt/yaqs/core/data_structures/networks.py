@@ -187,10 +187,11 @@ class MPS:
             self.pad_bond_dimension(pad)
 
     def pad_bond_dimension(self, target_dim: int) -> None:
-        """Enlarge every internal bond up to
+        """Pad MPS with extra zeros to increase bond dims.
+        
+        Enlarge every internal bond up to
             min(target_dim, 2**exp)
         where exp = min(bond_index+1, L-1-bond_index).
-
         The first tensor keeps a left bond of 1, the last tensor a right bond of 1.
         After padding the state is renormalised (canonicalised).
 
