@@ -188,7 +188,7 @@ class MPS:
 
     def pad_bond_dimension(self, target_dim: int) -> None:
         """Pad MPS with extra zeros to increase bond dims.
-        
+
         Enlarge every internal bond up to
             min(target_dim, 2**exp)
         where exp = min(bond_index+1, L-1-bond_index).
@@ -202,7 +202,6 @@ class MPS:
         Raises:
         ValueError: target_dim must be at least current bond dim.
         """
-
         length = self.length
 
         # enlarge tensors
