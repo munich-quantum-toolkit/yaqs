@@ -203,6 +203,7 @@ class MPS:
         ------
         ValueError: target_dim must be at least current bond dim.
         """
+
         length = self.length
 
         # enlarge tensors
@@ -213,7 +214,7 @@ class MPS:
             if i == 0:
                 left_target = 1
             else:
-                exp_left = min(i, length - i)  # bond index = i‑1
+                exp_left = min(i, length - i)  # bond index = i - 1
                 left_target = min(target_dim, 2**exp_left)
 
             if i == length - 1:
@@ -222,7 +223,7 @@ class MPS:
                 exp_right = min(i + 1, length - 1 - i)  # bond index = i
                 right_target = min(target_dim, 2**exp_right)
 
-            # sanity‑check — we must never shrink an existing bond
+            # sanity-check — we must never shrink an existing bond
             if chi_l > left_target or chi_r > right_target:
                 msg = "Target bond dim must be at least current bond dim."
                 raise ValueError(msg)
