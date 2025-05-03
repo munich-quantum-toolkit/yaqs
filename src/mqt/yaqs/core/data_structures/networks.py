@@ -194,13 +194,11 @@ class MPS:
         The first tensor keeps a left bond of 1, the last tensor a right bond of 1.
         After padding the state is renormalised (canonicalised).
 
-        Parameters
-        ----------
+        Args:
         target_dim : int
             The desired bond dimension for the internal bonds.
 
         Raises:
-        ------
         ValueError: target_dim must be at least current bond dim.
         """
 
