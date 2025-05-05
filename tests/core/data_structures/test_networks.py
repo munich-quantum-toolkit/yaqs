@@ -796,47 +796,57 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 
-def test_padded_mps() -> None:
-    """Test that MPS initializes with correct padding.
+@pytest.mark.parametrize(("length", "target"), [(6, 16), (7, 7), (9, 8), (10, 3)])
+def test_pad_shapes_and_centre(length: int, target: int) -> None:
+    """Test that pad_bond_dimension correctly pads the MPS and preserves invariants.
 
-    This test creates an MPS with padded bond dimensions.
+    * the state's norm is unchanged
+    * the orthogonality-centre index is [0]
+    * every virtual leg has the expected size
+      ( powers-of-two "staircase" capped by target_dim )
     """
-    length = 4
-    pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
+    mps = MPS(length=length, state="zeros")  # all bonds = 1
+    norm_before = mps.norm()
 
-    assert mps.length == length
-    assert len(mps.tensors) == length
-    assert all(d == pdim for d in mps.physical_dimensions)
+    mps.pad_bond_dimension(target)
 
-    for i, tensor in enumerate(mps.tensors):
-        if i != 0 and i != mps.length - 1:
-            assert tensor.ndim == 3
-            assert tensor.shape[0] == pdim
-            assert tensor.shape[1] == 2
-            assert tensor.shape[2] == 2
-        elif i == 0:
-            assert tensor.ndim == 3
-            assert tensor.shape[0] == pdim
-            assert tensor.shape[1] == 1
-            assert tensor.shape[2] == 2
-        elif i == mps.length - 1:
-            assert tensor.ndim == 3
-            assert tensor.shape[0] == pdim
-            assert tensor.shape[1] == 2
-            assert tensor.shape[2] == 1
+    # invariants
+    assert np.isclose(mps.norm(), norm_before, atol=1e-12)
+    assert mps.check_canonical_form()[0] == 0
+
+    # expected staircase
+    for i, T in enumerate(mps.tensors):
+        _, chi_l, chi_r = T.shape
+
+        # left (bond i - 1)
+        if i == 0:
+            left_expected = 1
+        else:
+            exp_left = min(i, length - i)
+            left_expected = min(target, 2**exp_left)
+
+        # right (bond i)
+        if i == length - 1:
+            right_expected = 1
+        else:
+            exp_right = min(i + 1, length - 1 - i)
+            right_expected = min(target, 2**exp_right)
+
+        assert chi_l == left_expected, f"site {i}: left {chi_l} vs {left_expected}"
+        assert chi_r == right_expected, f"site {i}: right {chi_r} vs {right_expected}"
 
 
-def test_padded_mps_error() -> None:
-    """Test that MPS initializes with correct padding.
+def test_pad_raises_on_shrink() -> None:
+    """Test that pad_bond_dimension raises a ValueError when trying to shrink the bond dimension.
 
-    This test creates an MPS with incorrect padding
+    Calling pad_bond_dimension with a *smaller* target than an existing
+    bond must raise a ValueError.
     """
-    length = 4
-    pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
-    with pytest.raises(ValueError, match=r"Target bond dim must be at least as large as the current bond dim."):
-        mps.pad_bond_dimension(1)
+    mps = MPS(length=5, state="zeros")
+    mps.pad_bond_dimension(4)  # enlarge first
+
+    with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
+        mps.pad_bond_dimension(2)  # would shrink - must fail
 
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
