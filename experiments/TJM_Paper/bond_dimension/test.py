@@ -9,6 +9,7 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 from mqt.yaqs import simulator
+from mqt.yaqs.core.libraries.gate_library import X
 
 # Define the system Hamiltonian
 L = 10
@@ -38,7 +39,7 @@ if __name__ == "__main__":
     threshold = 0
     max_bond_dim = 4
     order = 2
-    measurements = [Observable('x', site) for site in range(L)]
+    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
     filename = f"TJM_Convergence_Bond4.pickle"
@@ -47,21 +48,21 @@ if __name__ == "__main__":
             'sim_params': sim_params,
         }, f)
 
-    max_bond_dim = 2
-    measurements = [Observable('x', site) for site in range(L)]
+    max_bond_dim = 8
+    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
-    filename = f"TJM_Convergence_Bond2.pickle"
+    filename = f"TJM_Convergence_Bond8.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'sim_params': sim_params,
         }, f)
 
-    max_bond_dim = 8
-    measurements = [Observable('x', site) for site in range(L)]
+    max_bond_dim = 16
+    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
-    filename = f"TJM_Convergence_Bond8.pickle"
+    filename = f"TJM_Convergence_Bond16.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'sim_params': sim_params,
