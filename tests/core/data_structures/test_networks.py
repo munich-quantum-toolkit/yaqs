@@ -22,8 +22,10 @@ import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
+import opt_einsum as oe
 import pytest
 from qiskit.circuit import QuantumCircuit
+from scipy.stats import unitary_group
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
@@ -33,12 +35,7 @@ if TYPE_CHECKING:
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
-
-Id = GateLibrary.id.matrix
-X = GateLibrary.x.matrix
-Y = GateLibrary.y.matrix
-Z = GateLibrary.z.matrix
+from mqt.yaqs.core.libraries.gate_library import Id, X, Y, Z
 
 
 def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -79,19 +76,21 @@ def crandn(
     return (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2)
 
 
-def random_mps(shapes: list[tuple[int, int, int]]) -> MPS:
+def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) -> MPS:
     """Create a random MPS with the given shapes.
 
     Args:
         shapes (List[Tuple[int, int, int]]): The shapes of the tensors in the
             MPS.
+        normalize (bool): Whether to normalize the MPS.
 
     Returns:
         MPS: The random MPS.
     """
     tensors = [crandn(shape) for shape in shapes]
     mps = MPS(len(shapes), tensors=tensors)
-    mps.normalize()
+    if normalize:
+        mps.normalize()
     return mps
 
 
@@ -133,19 +132,19 @@ def test_init_ising() -> None:
     block_JZ = left_block[0, 1]
     block_gX = left_block[0, 2]
 
-    assert np.allclose(block_I, Id)
-    assert np.allclose(block_JZ, minus_J * Z)
-    assert np.allclose(block_gX, minus_g * X)
+    assert np.allclose(block_I, Id().matrix)
+    assert np.allclose(block_JZ, minus_J * Z().matrix)
+    assert np.allclose(block_gX, minus_g * X().matrix)
 
     # Check an inner tensor (if length > 2): shape (2,2,3,3) -> untransposed to (3,3,2,2)
     if length > 2:
         inner_block = untranspose_block(mpo.tensors[1])
         assert inner_block.shape == (3, 3, 2, 2)
-        assert np.allclose(inner_block[0, 0], Id)
-        assert np.allclose(inner_block[0, 1], minus_J * Z)
-        assert np.allclose(inner_block[0, 2], minus_g * X)
-        assert np.allclose(inner_block[1, 2], Z)
-        assert np.allclose(inner_block[2, 2], Id)
+        assert np.allclose(inner_block[0, 0], Id().matrix)
+        assert np.allclose(inner_block[0, 1], minus_J * Z().matrix)
+        assert np.allclose(inner_block[0, 2], minus_g * X().matrix)
+        assert np.allclose(inner_block[1, 2], Z().matrix)
+        assert np.allclose(inner_block[2, 2], Id().matrix)
 
     # Check right boundary: shape (2,2,3,1) -> untransposed to (3,1,2,2)
     right_block = untranspose_block(mpo.tensors[-1])
@@ -155,9 +154,9 @@ def test_init_ising() -> None:
     block_Z = right_block[1, 0]
     block_I = right_block[2, 0]
 
-    assert np.allclose(block_gX, minus_g * X)
-    assert np.allclose(block_Z, Z)
-    assert np.allclose(block_I, Id)
+    assert np.allclose(block_gX, minus_g * X().matrix)
+    assert np.allclose(block_Z, Z().matrix)
+    assert np.allclose(block_I, Id().matrix)
 
 
 def test_init_heisenberg() -> None:
@@ -194,12 +193,12 @@ def test_init_heisenberg() -> None:
     minus_Jz = -Jz
     minus_h = -h
 
-    assert np.allclose(block_I, Id)
-    assert np.allclose(block_JxX, minus_Jx * X)
-    assert np.allclose(block_JyY, minus_Jy * Y)
+    assert np.allclose(block_I, Id().matrix)
+    assert np.allclose(block_JxX, minus_Jx * X().matrix)
+    assert np.allclose(block_JyY, minus_Jy * Y().matrix)
     assert block_JyY.shape == (2, 2)
-    assert np.allclose(block_JzZ, minus_Jz * Z)
-    assert np.allclose(block_hZ, minus_h * Z)
+    assert np.allclose(block_JzZ, minus_Jz * Z().matrix)
+    assert np.allclose(block_hZ, minus_h * Z().matrix)
 
     for i, tensor in enumerate(mpo.tensors):
         if i == 0:
@@ -228,7 +227,7 @@ def test_init_identity() -> None:
 
     for tensor in mpo.tensors:
         assert tensor.shape == (2, 2, 1, 1)
-        assert np.allclose(np.squeeze(tensor), Id)
+        assert np.allclose(np.squeeze(tensor), Id().matrix)
 
 
 def test_init_custom_hamiltonian() -> None:
@@ -458,17 +457,17 @@ def test_shift_orthogonality_center_right() -> None:
 
     This test verifies that shifting the orthogonality center does not change the rank of the tensors.
     """
-    length = 4
     pdim = 2
-    t1 = rng.random(size=(pdim, 1, 2))
-    t2 = rng.random(size=(pdim, 2, 3))
-    t3 = rng.random(size=(pdim, 3, 3))
-    t4 = rng.random(size=(pdim, 3, 1))
-    mps = MPS(length, tensors=[t1, t2, t3, t4], physical_dimensions=[pdim] * length)
-
+    shapes = [(pdim, 1, 2), (pdim, 2, 3), (pdim, 3, 3), (pdim, 3, 1)]
+    mps = random_mps(shapes)
+    mps.set_canonical_form(0)
+    assert mps.check_canonical_form() == [0]
     mps.shift_orthogonality_center_right(current_orthogonality_center=0)
-    for tensor in mps.tensors:
-        assert tensor.ndim == 3
+    assert mps.check_canonical_form() == [1]
+    mps.shift_orthogonality_center_right(current_orthogonality_center=1)
+    assert mps.check_canonical_form() == [2]
+    mps.shift_orthogonality_center_right(current_orthogonality_center=2)
+    assert mps.check_canonical_form() == [3]
 
 
 def test_shift_orthogonality_center_left() -> None:
@@ -476,31 +475,31 @@ def test_shift_orthogonality_center_left() -> None:
 
     This test ensures that the left shift operation does not alter the rank (3) of the MPS tensors.
     """
-    length = 4
     pdim = 2
-    t1 = rng.random(size=(pdim, 1, 2))
-    t2 = rng.random(size=(pdim, 2, 3))
-    t3 = rng.random(size=(pdim, 3, 3))
-    t4 = rng.random(size=(pdim, 3, 1))
-    mps = MPS(length, [t1, t2, t3, t4], [pdim] * length)
-
+    shapes = [(pdim, 1, 2), (pdim, 2, 3), (pdim, 3, 3), (pdim, 3, 1)]
+    mps = random_mps(shapes)
+    mps.set_canonical_form(3)
+    assert mps.check_canonical_form() == [3]
     mps.shift_orthogonality_center_left(current_orthogonality_center=3)
-    for tensor in mps.tensors:
-        assert tensor.ndim == 3
+    assert mps.check_canonical_form() == [2]
+    mps.shift_orthogonality_center_left(current_orthogonality_center=2)
+    assert mps.check_canonical_form() == [1]
+    mps.shift_orthogonality_center_left(current_orthogonality_center=1)
+    assert mps.check_canonical_form() == [0]
 
 
-def test_set_canonical_form() -> None:
+@pytest.mark.parametrize("desired_center", [0, 1, 2, 3])
+def test_set_canonical_form(desired_center: int) -> None:
     """Test that set_canonical_form correctly sets the MPS into a canonical form without altering tensor shapes.
 
-    This test initializes an MPS with a default state and applies the canonical form procedure, ensuring
-    that tensor ranks remain unchanged.
+    This test initializes an MPS with a default state, applies the canonical form procedure, and checks the
+    orthogonality.
     """
-    length = 4
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim] * length, state="zeros")
-    mps.set_canonical_form(orthogonality_center=2)
-    for tensor in mps.tensors:
-        assert tensor.ndim == 3
+    shapes = [(pdim, 1, 2), (pdim, 2, 4), (pdim, 4, 3), (pdim, 3, 1)]
+    mps = random_mps(shapes)
+    mps.set_canonical_form(desired_center)
+    assert [desired_center] == mps.check_canonical_form()
 
 
 def test_normalize() -> None:
@@ -596,7 +595,7 @@ def test_measure() -> None:
     length = 2
     pdim = 2
     mps = MPS(length=length, physical_dimensions=[pdim] * length, state="x+")
-    obs = Observable(site=0, name="x")
+    obs = Observable(X(), 0)
     val = mps.measure_expectation_value(obs)
     assert np.isclose(val, 1)
 
@@ -653,17 +652,54 @@ def test_check_if_valid_mps() -> None:
     mps.check_if_valid_mps()
 
 
-def test_check_canonical_form() -> None:
-    """Test that check_canonical_form executes without error and returns canonical information.
-
-    This test initializes an MPS and calls check_canonical_form to ensure it produces output
-    (e.g., debug information or canonical indices) without crashing.
-    """
-    length = 3
-    pdim = 2
-    mps = MPS(length, physical_dimensions=[pdim] * length, state="zeros")
+def test_check_canonical_form_none() -> None:
+    """Tests that no canonical form is detected for an MPS in a non-canonical state."""
+    mps = random_mps([(2, 1, 2), (2, 2, 3), (2, 3, 1)], normalize=False)
     res = mps.check_canonical_form()
-    assert res is not None
+    assert res == [-1]
+
+
+def test_check_canonical_form_left() -> None:
+    """Test that the left canonical form is detected correctly."""
+    unitary_mid = unitary_group.rvs(6).reshape((6, 2, 3)).transpose(1, 0, 2)
+    unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
+    tensors = [crandn(2, 1, 6), unitary_mid, unitary_right]
+    mps = MPS(length=3, tensors=tensors)
+    res = mps.check_canonical_form()
+    assert res == [0]
+
+
+def test_check_canonical_form_right() -> None:
+    """Test that the right canonical form is detected correctly."""
+    unitary_left = unitary_group.rvs(3).reshape(3, 1, 3)
+    unitary_mid = unitary_group.rvs(6).reshape((2, 3, 6))
+    tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]
+    mps = MPS(length=3, tensors=tensors)
+    res = mps.check_canonical_form()
+    assert res == [2]
+
+
+def test_check_canonical_form_middle() -> None:
+    """Test that a site canonical form is detected correctly."""
+    unitary_left = unitary_group.rvs(3).reshape(3, 1, 3)
+    unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
+    tensors = [unitary_left, crandn(2, 3, 3), unitary_right]
+    mps = MPS(length=3, tensors=tensors)
+    res = mps.check_canonical_form()
+    assert res == [1]
+
+
+def test_check_canonical_form_full() -> None:
+    """Test the very special case that all canonical forms are true."""
+    delta_left = np.eye(2).reshape(2, 1, 2)
+    delta_right = np.eye(2).reshape(2, 2, 1)
+    delta_mid = np.zeros((2, 2, 2))
+    delta_mid[0, 0, 0] = 1
+    delta_mid[1, 1, 1] = 1
+    tensors = [delta_left, delta_mid, delta_right]
+    mps = MPS(length=3, tensors=tensors)
+    res = mps.check_canonical_form()
+    assert res == [0, 1, 2]
 
 
 def test_convert_to_vector() -> None:
@@ -723,7 +759,7 @@ def test_convert_to_vector_fidelity() -> None:
     max_bond_dim = 8
     threshold = 0
     window_size = 0
-    measurements = [Observable("z", site) for site in range(num_qubits)]
+    measurements = [Observable(Z(), site) for site in range(num_qubits)]
     sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
     noise_model = None
     simulator.run(state, circ, sim_params, noise_model)
@@ -751,7 +787,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     max_bond_dim = 8
     threshold = 0
     window_size = 0
-    measurements = [Observable("z", site) for site in range(num_qubits)]
+    measurements = [Observable(Z(), site) for site in range(num_qubits)]
     sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
     noise_model = None
     simulator.run(state, circ, sim_params, noise_model)
@@ -760,73 +796,119 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 
-def test_padded_mps() -> None:
-    """Test that MPS initializes with correct padding.
+@pytest.mark.parametrize(("length", "target"), [(6, 16), (7, 7), (9, 8), (10, 3)])
+def test_pad_shapes_and_centre(length: int, target: int) -> None:
+    """Test that pad_bond_dimension correctly pads the MPS and preserves invariants.
 
-    This test creates an MPS with padded bond dimensions.
+    * the state's norm is unchanged
+    * the orthogonality-centre index is [0]
+    * every virtual leg has the expected size
+      ( powers-of-two "staircase" capped by target_dim )
     """
-    length = 4
-    pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
+    mps = MPS(length=length, state="zeros")  # all bonds = 1
+    norm_before = mps.norm()
 
-    assert mps.length == length
-    assert len(mps.tensors) == length
-    assert all(d == pdim for d in mps.physical_dimensions)
+    mps.pad_bond_dimension(target)
 
-    for i, tensor in enumerate(mps.tensors):
-        if i != 0 and i != mps.length - 1:
-            assert tensor.ndim == 3
-            assert tensor.shape[0] == pdim
-            assert tensor.shape[1] == 2
-            assert tensor.shape[2] == 2
-        elif i == 0:
-            assert tensor.ndim == 3
-            assert tensor.shape[0] == pdim
-            assert tensor.shape[1] == 1
-            assert tensor.shape[2] == 2
-        elif i == mps.length - 1:
-            assert tensor.ndim == 3
-            assert tensor.shape[0] == pdim
-            assert tensor.shape[1] == 2
-            assert tensor.shape[2] == 1
+    # invariants
+    assert np.isclose(mps.norm(), norm_before, atol=1e-12)
+    assert mps.check_canonical_form()[0] == 0
+
+    # expected staircase
+    for i, T in enumerate(mps.tensors):
+        _, chi_l, chi_r = T.shape
+
+        # left (bond i - 1)
+        if i == 0:
+            left_expected = 1
+        else:
+            exp_left = min(i, length - i)
+            left_expected = min(target, 2**exp_left)
+
+        # right (bond i)
+        if i == length - 1:
+            right_expected = 1
+        else:
+            exp_right = min(i + 1, length - 1 - i)
+            right_expected = min(target, 2**exp_right)
+
+        assert chi_l == left_expected, f"site {i}: left {chi_l} vs {left_expected}"
+        assert chi_r == right_expected, f"site {i}: right {chi_r} vs {right_expected}"
 
 
-def test_padded_mps_error() -> None:
-    """Test that MPS initializes with correct padding.
+def test_pad_raises_on_shrink() -> None:
+    """Test that pad_bond_dimension raises a ValueError when trying to shrink the bond dimension.
 
-    This test creates an MPS with incorrect padding
+    Calling pad_bond_dimension with a *smaller* target than an existing
+    bond must raise a ValueError.
     """
-    length = 4
-    pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim] * length, pad=2)
-    with pytest.raises(ValueError, match=r"Target bond dim must be at least as large as the current bond dim."):
-        mps.pad_bond_dimension(1)
+    mps = MPS(length=5, state="zeros")
+    mps.pad_bond_dimension(4)  # enlarge first
+
+    with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
+        mps.pad_bond_dimension(2)  # would shrink - must fail
 
 
-def test_truncate_no_truncation() -> None:
-    """Tests the truncation of an MPS, when no truncation should happen."""
-    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
+@pytest.mark.parametrize("center", [0, 1, 2, 3])
+def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> None:
+    """Test that truncation preserves the orthogonality center and canonicity.
+
+    This test checks that after truncation, the orthogonality center remains unchanged.
+    """
+    # build a simple MPS of length 4
+    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 2 + [(2, 4, 1)]
     mps = random_mps(shapes)
-    mps.set_canonical_form(0)
-    ref_mps = copy.deepcopy(mps)
-    # Perform truncation
-    mps.truncate(threshold=1e-16, max_bond_dim=10)
-    # Check that the MPS is unchanged
-    mps.check_if_valid_mps()
-    vector = mps.to_vec()
-    ref_vector = ref_mps.to_vec()
-    assert np.allclose(vector, ref_vector)
+    # set an arbitrary initial center
+    mps.set_canonical_form(center)
+    # record the full state-vector for fidelity check
+    before_vec = mps.to_vec()
+    # record the center and canonical-split
+    before_center = mps.check_canonical_form()[0]
+    assert before_center == center
+
+    # do a "no-real" truncation (tiny threshold, generous max bond)
+    mps.truncate(threshold=1e-16, max_bond_dim=100)
+    after_center = mps.check_canonical_form()[0]
+    assert after_center == before_center
+
+    # fidelity of state stays unity
+    after_vec = mps.to_vec()
+    overlap = np.abs(np.vdot(before_vec, after_vec)) ** 2
+    assert np.isclose(overlap, 1.0, atol=1e-12)
+
+    # also check left/right canonicity around that center
+    L = mps.length
+    for i in range(before_center):
+        # left-canonical test
+        A = mps.tensors[i]
+        conjA = np.conj(A)
+        gram = oe.contract("ijk, ijl->kl", conjA, A)
+        # identity on the i-th right bond
+        assert np.allclose(gram, np.eye(gram.shape[0]), atol=1e-12)
+    for i in range(before_center + 1, L):
+        # right-canonical test
+        A = mps.tensors[i]
+        conjA = np.conj(A)
+        gram = oe.contract("ijk, ilk->jl", A, conjA)
+        assert np.allclose(gram, np.eye(gram.shape[0]), atol=1e-12)
 
 
-def test_truncate_truncation() -> None:
-    """Tests the truncation of an MPS, when truncation should happen."""
-    shapes = [(2, 1, 4)] + [(2, 4, 4)] * 3 + [(2, 4, 1)]
+def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
+    """Test that truncation reduces bond dimensions and truncates the MPS.
+
+    This test creates an MPS with large bond dimensions and then truncates it to a smaller size.
+    """
+    # build an MPS with initially large bonds
+    shapes = [(2, 1, 8)] + [(2, 8, 8)] * 3 + [(2, 8, 1)]
     mps = random_mps(shapes)
-    mps.set_canonical_form(0)
-    # Perform truncation
-    mps.truncate(threshold=0.1, max_bond_dim=3)
-    # Check that the MPS is truncated
+    # put it into a known canonical form
+    mps.set_canonical_form(2)
+    # perform a truncation that will cut back to max_bond=3
+    mps.truncate(threshold=0.0, max_bond_dim=3)
+
+    # check validity and that every bond dim <= 3
     mps.check_if_valid_mps()
-    for tensor in mps.tensors:
-        assert tensor.shape[1] <= 3
-        assert tensor.shape[2] <= 3
+    for T in mps.tensors:
+        _, bond_left, bond_right = T.shape
+        assert bond_left <= 3
+        assert bond_right <= 3

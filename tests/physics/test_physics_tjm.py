@@ -36,6 +36,7 @@ from unittest.mock import patch
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.physics.physics_tjm import initialize, physics_tjm_1, physics_tjm_2, step_through
 
 
@@ -53,7 +54,7 @@ def test_initialize() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel(["relaxation"], [0.1])
-    measurements = [Observable("x", site) for site in range(L)]
+    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -88,7 +89,7 @@ def test_step_through() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel(["relaxation"], [0.1])
-    measurements = [Observable("x", site) for site in range(L)]
+    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -124,7 +125,7 @@ def test_physics_tjm_2() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
-    measurements = [Observable("z", site) for site in range(L)]
+    measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -154,7 +155,7 @@ def test_physics_tjm_2_sample_timesteps() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
-    measurements = [Observable("z", site) for site in range(L)]
+    measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -184,7 +185,7 @@ def test_physics_tjm_1() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
-    measurements = [Observable("z", site) for site in range(L)]
+    measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
@@ -214,7 +215,7 @@ def test_physics_tjm_1_sample_timesteps() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = None
-    measurements = [Observable("z", site) for site in range(L)]
+    measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
         elapsed_time=0.2,
