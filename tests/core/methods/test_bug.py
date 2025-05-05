@@ -282,4 +282,6 @@ def test_bug_three_sites() -> None:
     ham_matrix = ref_mpo.to_matrix()
     time_evo_op = expm(-1j * sim_params.dt * ham_matrix)
     new_state_vec = time_evo_op @ state_vec
+    # Check the result
+    assert mps.check_canonical_form() == [0]
     assert np.allclose(mps.to_vec(), new_state_vec)

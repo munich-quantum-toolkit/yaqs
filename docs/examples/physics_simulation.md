@@ -53,6 +53,8 @@ Define the simulation parameters
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 
+from mqt.yaqs.core.libraries.gate_library import X
+
 elapsed_time = 10
 dt = 0.1
 sample_timesteps = True
@@ -60,7 +62,7 @@ num_traj = 100
 max_bond_dim = 4
 threshold = 1e-6
 order = 2
-measurements = [Observable("x", site) for site in range(L)]
+measurements = [Observable(X(), site) for site in range(L)]
 sim_params = PhysicsSimParams(measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
 ```
 
