@@ -24,6 +24,8 @@ the Tensor Jump Method.
 
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
@@ -39,7 +41,7 @@ from mqt.yaqs.circuits.circuit_tjm import (
 )
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Z
 
 
 def test_process_layer() -> None:
@@ -118,7 +120,7 @@ def test_apply_single_qubit_gate() -> None:
 
     apply_single_qubit_gate(mps, node)
 
-    gate_tensor = GateLibrary.x.tensor
+    gate_tensor = X().tensor
     expected = np.einsum("ab,bcd->acd", gate_tensor, tensor)
     np.testing.assert_allclose(mps.tensors[0], expected)
 
@@ -189,9 +191,12 @@ def test_apply_two_qubit_gate() -> None:
     node = cx_nodes[0]
 
     num_traj = 1
-    max_bond_dim = 2
-    observable = Observable("z", 0)
-    sim_params = StrongSimParams([observable], num_traj, max_bond_dim)
+    max_bond_dim = 4
+    threshold = 1e-12
+    window_size = 0
+    observable = Observable(Z(), 0)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
+    copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
     for i, element in enumerate(mps0.to_vec()):
@@ -218,7 +223,7 @@ def test_circuit_tjm_strong() -> None:
     max_bond_dim = 4
     threshold = 1e-12
     window_size = 0
-    observable = Observable("z", 0)
+    observable = Observable(Z(), 0)
     sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
     args = 0, mps0, None, sim_params, qc
     circuit_tjm(args)

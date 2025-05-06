@@ -16,17 +16,17 @@ thresholds, and window sizes, and they include methods for aggregating simulatio
 
 from __future__ import annotations
 
+import copy
 from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..libraries.observables_library import ObservablesLibrary
-
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
+    from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
 class EvolutionMode(Enum):
@@ -43,8 +43,8 @@ class Observable:
 
     Attributes:
     ----------
-    name : str
-        The name of the observable, which must be a valid attribute in the GateLibrary.
+    gate : BaseGate
+            The gate that will act as the observable.
     site : int
         The site (or qubit) on which the observable is measured.
     results : NDArray[np.float64] | None
@@ -60,13 +60,13 @@ class Observable:
         Initializes the results and trajectories arrays based on the type of simulation parameters provided.
     """
 
-    def __init__(self, name: str, site: int) -> None:
+    def __init__(self, gate: BaseGate, site: int) -> None:
         """Initializes an Observable instance.
 
         Parameters
         ----------
-        name : str
-            The name of the observable. Must correspond to a valid gate or operator in GateLibrary.
+        gate : BaseGate
+            The gate that will act as the observable.
         site : int
             The qubit or site index on which this observable is measured.
 
@@ -75,9 +75,10 @@ class Observable:
         AssertionError
             If the provided `name` is not a valid attribute in the GateLibrary.
         """
-        assert name in ObservablesLibrary
-        self.name = name
+        # assert name in ObservablesLibrary
+        self.gate = copy.deepcopy(gate)
         self.site = site
+        self.gate.set_sites(self.site)
         self.results: NDArray[np.float64] | None = None
         self.trajectories: NDArray[np.float64] | None = None
 
@@ -185,7 +186,7 @@ class PhysicsSimParams:
             If True, output MPS is returned.
         """
         self.observables = observables
-        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
+        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
         self.elapsed_time = elapsed_time
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
@@ -370,7 +371,7 @@ class StrongSimParams:
             If True, output MPS is returned.
         """
         self.observables = observables
-        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site, obs.name))
+        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold

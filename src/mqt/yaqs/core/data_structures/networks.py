@@ -187,39 +187,51 @@ class MPS:
             self.pad_bond_dimension(pad)
 
     def pad_bond_dimension(self, target_dim: int) -> None:
-        """Pad bond dimension.
+        """Pad MPS with extra zeros to increase bond dims.
 
-        Pads the bond dimensions of each tensor in the MPS so that the internal bond
-        dimensions are at least target_dim. For the first tensor the left bond dimension
-        remains 1, and for the last tensor the right bond dimension remains 1.
+        Enlarge every internal bond up to
+            min(target_dim, 2**exp)
+        where exp = min(bond_index+1, L-1-bond_index).
+        The first tensor keeps a left bond of 1, the last tensor a right bond of 1.
+        After padding the state is renormalised (canonicalised).
 
-        Parameters
-        ----------
+        Args:
         target_dim : int
             The desired bond dimension for the internal bonds.
 
         Raises:
-        ------
-        ValueError: If target_dim is smaller than any existing bond dimension.
+        ValueError: target_dim must be at least current bond dim.
         """
+        length = self.length
+
+        # enlarge tensors
         for i, tensor in enumerate(self.tensors):
-            # Tensor shape is (physical_dim, chi_left, chi_right)
-            phys, chi_left, chi_right = tensor.shape
+            phys, chi_l, chi_r = tensor.shape
 
-            # Determine desired bond dimensions
-            new_left = chi_left if i == 0 else target_dim
-            new_right = chi_right if i == self.length - 1 else target_dim
+            # compute the desired dimension for the bond left of site i
+            if i == 0:
+                left_target = 1
+            else:
+                exp_left = min(i, length - i)  # bond index = i - 1
+                left_target = min(target_dim, 2**exp_left)
 
-            # Check if the target dimensions are valid
-            if chi_left > new_left or chi_right > new_right:
-                msg = "Target bond dim must be at least as large as the current bond dim."
+            if i == length - 1:
+                right_target = 1
+            else:
+                exp_right = min(i + 1, length - 1 - i)  # bond index = i
+                right_target = min(target_dim, 2**exp_right)
+
+            # sanity-check — we must never shrink an existing bond
+            if chi_l > left_target or chi_r > right_target:
+                msg = "Target bond dim must be at least current bond dim."
                 raise ValueError(msg)
 
-            # Create a new tensor with zeros and copy the original data into the appropriate block
-            new_tensor = np.zeros((phys, new_left, new_right), dtype=tensor.dtype)
-            new_tensor[:, :chi_left, :chi_right] = tensor
-
+            # allocate new tensor and copy original data
+            new_tensor = np.zeros((phys, left_target, right_target), dtype=tensor.dtype)
+            new_tensor[:, :chi_l, :chi_r] = tensor
             self.tensors[i] = new_tensor
+        # renormalise the state
+        self.normalize()
 
     def write_max_bond_dim(self) -> int:
         """Write max bond dim.
@@ -371,19 +383,29 @@ class MPS:
             max_bond_dim: The maximum bond dimension allowed. Default None.
 
         """
+        orthogonality_center = self.check_canonical_form()[0]
         if self.length != 1:
-            for i, tensor in enumerate(self.tensors[:-1]):
-                _, _, v_mat = truncated_right_svd(tensor, threshold, max_bond_dim)
+            for i in range(orthogonality_center):
+                u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
+                self.tensors[i] = u_tensor
+
                 # Pull v into left leg of next tensor.
-                new_next = np.tensordot(v_mat, self.tensors[i + 1], axes=(1, 1))
-                new_next = new_next.transpose(1, 0, 2)
+                bond = np.diag(s_vec) @ v_mat
+                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i + 1])
                 self.tensors[i + 1] = new_next
-                # Pull v^dag into current tensor.
-                self.tensors[i] = np.tensordot(
-                    self.tensors[i],
-                    v_mat.conj(),  # No transpose, put correct axes instead
-                    axes=(2, 1),
-                )
+
+            self.flip_network()
+
+            orthogonality_center_flipped = self.length - 1 - orthogonality_center
+            for i in range(orthogonality_center_flipped):
+                u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
+                self.tensors[i] = u_tensor
+                # Pull v into left leg of next tensor.
+                bond = np.diag(s_vec) @ v_mat
+                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i + 1])
+                self.tensors[i + 1] = new_next
+
+            self.flip_network()
 
     def scalar_product(self, other: MPS, site: int | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
@@ -449,7 +471,7 @@ class MPS:
         """
         assert observable.site in range(self.length), "State is shorter than selected site for expectation value."
         # Copying done to stop the state from messing up its own canonical form
-        exp = self.local_expval(ObservablesLibrary[observable.name], observable.site)
+        exp = self.local_expval(observable.gate.matrix, observable.site)
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 
@@ -551,7 +573,7 @@ class MPS:
             assert tensor.shape[1] == right_bond
             right_bond = tensor.shape[2]
 
-    def check_canonical_form(self) -> list[int]:
+    def check_canonical_form(self, epsilon: float = 1e-12) -> list[int]:
         """Checks canonical form of MPS.
 
         Checks what canonical form a Matrix Product State (MPS) is in, if any.
@@ -562,6 +584,9 @@ class MPS:
         - [index] if the MPS is in mixed-canonical form, where `index` is the position where the form changes.
         - [-1] if the MPS is not in any canonical form.
 
+        Parameters:
+        epsilon (float): Tolerance for numerical comparisons. Default is 1e-12.
+
         Returns:
             list[int]: A list indicating the canonical form status of the MPS.
         """
@@ -570,41 +595,34 @@ class MPS:
             a[i] = np.conj(tensor)
         b = self.tensors
 
-        a_truth = []
-        b_truth = []
-        epsilon = 1e-12
+        # Find the first index where the left canonical form is not satisfied.
+        # We choose the rightmost index in case even that one fulfills the condition
+        a_index = len(a) - 1
         for i in range(len(a)):
             mat = oe.contract("ijk, ijl->kl", a[i], b[i])
             mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
-            a_truth.append(np.allclose(mat, test_identity))
+            if not np.allclose(mat, test_identity):
+                a_index = i
+                break
 
-        for i in range(len(a)):
+        # Find the last index where the right canonical form is not satisfied.
+        # We choose the leftmost index in case even that one fulfills the condition
+        b_index = 0
+        for i in reversed(range(len(a))):
             mat = oe.contract("ijk, ilk->jl", b[i], a[i])
             mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
-            b_truth.append(np.allclose(mat, test_identity))
+            if not np.allclose(mat, test_identity):
+                b_index = i
+                break
 
-        if all(b_truth):
-            return [0]
-        if all(a_truth):
-            return [self.length - 1]
-
-        if not (all(a_truth) and all(b_truth)):
-            sites = []
-            for i, _truth_value in enumerate(a_truth):
-                if _truth_value:
-                    sites.append(i)
-                else:
-                    break
-
-            for i, _truth_value in enumerate(b_truth[len(sites) :], start=len(sites)):
-                sites.append(i)
-            if False in sites:
-                return [sites.index(False)]
-            for i, value in enumerate(a_truth):
-                if not value:
-                    return [i - 1, i]
+        if b_index == 0 and a_index == len(a) - 1:
+            # In this very special case the MPS is in all canonical forms.
+            return list(range(len(a)))
+        if a_index == b_index:
+            # The site at which both forms are satisfied is the orthogonality center.
+            return [a_index]
         return [-1]
 
     def to_vec(self) -> NDArray[np.complex128]:
