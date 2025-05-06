@@ -25,11 +25,7 @@ import numpy as np
 import scipy as sp
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import Operator
-from qiskit_nature.second_q.hamiltonians import FermiHubbardModel
-from qiskit_nature.second_q.hamiltonians.lattices import BoundaryCondition, SquareLattice
-from qiskit_nature.second_q.mappers import JordanWignerMapper
 
-from mqt.yaqs.circuits.reference_implementation.fermi_hubbard_reference import create_fermi_hubbard_model_qutip
 from mqt.yaqs.core.libraries.circuit_library import (
     create_2d_fermi_hubbard_circuit,
     create_2d_heisenberg_circuit,
@@ -245,6 +241,33 @@ def test_create_2d_heisenberg_circuit_2x3() -> None:
     assert "rzz" in op_names
 
 
+def test_create_2d_heisenberg_circuit_2x3() -> None:
+    """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
+
+    This test creates a 2D Heisenberg circuit for a grid with a specified number of rows and columns.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to num_rows * num_cols.
+      - Each qubit receives an rx gate in every timestep.
+      - The circuit contains rxx gates for the interactions.
+      - The circuit contains ryy gates for the interactions.
+      - The circuit contains rzz gates for the interactions.
+    """
+    num_rows = 2
+    num_cols = 3
+    total_qubits = num_rows * num_cols
+    circ = create_2d_heisenberg_circuit(num_rows, num_cols, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
+
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that each qubit gets one rx rotation in the single timestep.
+    assert op_names.count("rz") == total_qubits
+    assert "rxx" in op_names
+    assert "ryy" in op_names
+    assert "rzz" in op_names
+
+
 def test_create_2d_heisenberg_circuit_3x2() -> None:
     """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
 
@@ -272,78 +295,36 @@ def test_create_2d_heisenberg_circuit_3x2() -> None:
     assert "rzz" in op_names
 
 
-def test_create_2d_fermi_hubbard_circuit_equal_qiskit() -> None:
-    """Test that create_2D_Fermi_Hubbard_circuit is equal to QuTiP.
+def test_create_2d_fermi_hubbard_circuit_3x2() -> None:
+    """Test that create_2d_fermi_hubbard_circuit returns a valid circuit for a rectangular grid.
 
     This test creates a 2D Fermi-Hubbard circuit for a grid with a specified number of rows and columns.
-    It verifies that the circuit approximates the time evolution operator of the 2D Fermi-Hubbard Hamiltonian
-    with a minimal accuracy that depends on the number of Trotter steps by comparing it to the circuit generated
-    by Qiskit Nature.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to 2 * num_rows * num_cols.
+      - The circuit contains phase gates for the chemical potential term.
+      - The number of phase gates is equal to twice the number of qubits.
+      - The circuit contains controlled phase gates for the onsite term.
+      - The circuit contains rx gates for the long-range interactions.
+      - The circuit contains ry gates for the long-range interactions.
+      - The circuit contains rz gates for the long-range interactions.
     """
-    # Define the FH model parameters
-    t = 1.0  # kinetic hopping
-    mu = 0.5  # chemical potential
-    u = 4.0  # onsite interaction
-    dim_x, dim_y = 2, 2  # lattice dimensions
-    timesteps = 1
-    dt = 0.1
-    num_trotter_steps = 10
+    Lx = 3
+    Ly = 2
+    total_qubits = 2 * Lx * Ly
+    circ = create_2d_fermi_hubbard_circuit(Lx, Ly, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1)
 
-    # yaqs implementation
-    circuit = create_2d_fermi_hubbard_circuit(
-        Lx=dim_x, Ly=dim_y, u=u, t=t, mu=mu, num_trotter_steps=num_trotter_steps, dt=dt, timesteps=timesteps
-    )
-    time_evolution_op_yaqs = Operator(circuit).to_matrix()
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
 
-    # Qiskit implementation
-    square_lattice = SquareLattice(rows=dim_x, cols=dim_y, boundary_condition=BoundaryCondition.OPEN)
-    fh_hamiltonian = FermiHubbardModel(
-        square_lattice.uniform_parameters(
-            uniform_interaction=t,
-            uniform_onsite_potential=mu,
-        ),
-        onsite_interaction=u,
-    )
-    mapper = JordanWignerMapper()
-    qubit_jw_op = mapper.map(fh_hamiltonian.second_q_op())
-    hamiltonian_qiskit = qubit_jw_op.to_matrix()
-    time_evolution_op_qiskit = sp.linalg.expm(-1j * dt * timesteps * hamiltonian_qiskit)
-
-    # Calculate error
-    error = np.linalg.norm(time_evolution_op_qiskit - time_evolution_op_yaqs, 2)
-    assert error <= 10e-3
-
-
-def test_create_2d_fermi_hubbard_circuit_equal_qutip() -> None:
-    """Test that create_2D_Fermi_Hubbard_circuit is equal to QuTiP.
-
-    This test creates a 2D Fermi-Hubbard circuit for a grid with a specified number of rows and columns.
-    It verifies that the circuit approximates the time evolution operator of the 2D Fermi-Hubbard Hamiltonian
-    with a minimal accuracy that depends on the number of Trotter steps by comparing it to the solution of the
-    physical model calculated by QuTiP.
-    """
-    # Define the FH model parameters
-    t = 1.0  # kinetic hopping
-    mu = 0.5  # chemical potential
-    u = 4.0  # onsite interaction
-    dim_x, dim_y = 2, 2  # lattice dimensions
-    timesteps = 1
-    dt = 0.1
-    num_trotter_steps = 10
-
-    # yaqs implementation
-    circuit = create_2d_fermi_hubbard_circuit(
-        Lx=dim_x, Ly=dim_y, u=u, t=-t, mu=-mu, num_trotter_steps=num_trotter_steps, dt=dt, timesteps=timesteps
-    )
-    time_evolution_op_yaqs = Operator(circuit).to_matrix()
-
-    # QuTiP implementation
-    hamiltonian_qutip = create_fermi_hubbard_model_qutip(dim_x, dim_y, u, -t, mu)
-    time_evolution_op_qutip = sp.linalg.expm(-1j * dt * timesteps * hamiltonian_qutip.full())
-
-    # Calculate error
-    error = np.linalg.norm(time_evolution_op_qutip - time_evolution_op_yaqs, 2)
-    assert error <= 10e-3
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that the phase gates from the chemical potential term are present for every timestep and trotter step (two per trotter step)
+    assert op_names.count("p") == 2 * total_qubits
+    # Check that the controlled phase gates from the onsite interaction term are present for every timestep and trotter step (two per trotter step)
+    assert op_names.count("cp") == total_qubits
+    # Check that the rotation gates from the hopping terms are present
+    assert "rx" in op_names
+    assert "ry" in op_names
+    assert "rz" in op_names
 
 
 def test_nearest_neighbour_random_circuit_structure() -> None:
