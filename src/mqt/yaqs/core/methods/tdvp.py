@@ -629,7 +629,6 @@ def dynamic_tdvp(
         # current bond dimension between i and i+1
         bond_dim = state.tensors[i].shape[2]
         if bond_dim >= sim_params.max_bond_dim or lock_final_site:
-            print("First 1TDVP", i)
             if lock_final_site:
                 assert i == num_sites - 1
                 state.tensors[i] = update_site(
@@ -664,9 +663,9 @@ def dynamic_tdvp(
                     # Guarantees final site is 1TDVP
                     lock_final_site = True
         else:
-            if i > num_sites - 2:
+            # Will be encountered at final site in loop due to dummy dimension
+            if i == num_sites - 1:
                 continue
-            print("First 2TDVP", i, i+1)
             if i == num_sites - 2:
                 merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
                 merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
@@ -678,7 +677,6 @@ def dynamic_tdvp(
                 right_blocks[i] = update_right_environment(
                     state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
                 )
-                flag = True
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
                 )
@@ -707,8 +705,6 @@ def dynamic_tdvp(
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i].shape[1]
         if bond_dim >= sim_params.max_bond_dim or lock_final_site:
-            print("Second 1TDVP", i)
-
             state.tensors[i] = update_site(
             left_blocks[i],
             right_blocks[i],
@@ -736,11 +732,12 @@ def dynamic_tdvp(
                 )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
             if i == 1:
+                # Guarantees final site is 1TDVP
                 lock_final_site = True
         else:
+            # Will be encountered at final site in loop due to dummy dimension
             if i == 0:
                 continue
-            print("Second 2TDVP", i-1, i)
 
             merged_tensor = merge_mps_tensors(state.tensors[i-1], state.tensors[i])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i-1], hamiltonian.tensors[i])
