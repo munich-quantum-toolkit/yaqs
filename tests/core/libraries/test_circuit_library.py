@@ -24,6 +24,7 @@ from __future__ import annotations
 from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs.core.libraries.circuit_library import (
+    create_1d_fermi_hubbard_circuit,
     create_2d_fermi_hubbard_circuit,
     create_2d_heisenberg_circuit,
     create_2d_ising_circuit,
@@ -299,6 +300,39 @@ def test_create_2d_fermi_hubbard_circuit_3x2() -> None:
     assert "rx" in op_names
     assert "ry" in op_names
     assert "rz" in op_names
+
+
+def test_create_2d_fermi_hubbard_circuit_3x2() -> None:
+    """Test that create_1d_fermi_hubbard_circuit returns a valid circuit.
+
+    This test creates a 1D Fermi-Hubbard circuit with a specified number lattice sites.
+    It verifies that:
+      - The circuit is a QuantumCircuit with total qubits equal to 2 * num_sites.
+      - The circuit contains phase gates for the chemical potential term.
+      - The number of phase gates is equal to twice the number of qubits.
+      - The circuit contains controlled phase gates for the onsite term.
+      - The circuit contains rxx gates for the hopping term.
+      - The circuit contains ryy gates for the hopping term.
+    """
+    num_sites = 4
+    total_qubits = 2 * num_sites
+    circ = create_1d_fermi_hubbard_circuit(
+        num_sites, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1
+    )
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == total_qubits
+
+    op_names = [instr.operation.name for instr in circ.data]
+    # Check that the phase gates from the chemical potential term
+    # are present for every timestep and trotter step (two per trotter step)
+    assert op_names.count("p") == 2 * total_qubits
+    # Check that the controlled phase gates from the onsite interaction term
+    # are present for every timestep and trotter step (two per trotter step)
+    assert op_names.count("cp") == total_qubits
+    # Check that the rotation gates from the hopping terms are present
+    op_names.count("rxx") == 2 * (num_sites - 1)
+    op_names.count("rzz") == 2 * (num_sites - 1)
 
 
 def test_nearest_neighbour_random_circuit_structure() -> None:
