@@ -238,33 +238,6 @@ def test_create_2d_heisenberg_circuit_2x3() -> None:
     assert "rzz" in op_names
 
 
-def test_create_2d_heisenberg_circuit_2x3() -> None:
-    """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
-
-    This test creates a 2D Heisenberg circuit for a grid with a specified number of rows and columns.
-    It verifies that:
-      - The circuit is a QuantumCircuit with total qubits equal to num_rows * num_cols.
-      - Each qubit receives an rx gate in every timestep.
-      - The circuit contains rxx gates for the interactions.
-      - The circuit contains ryy gates for the interactions.
-      - The circuit contains rzz gates for the interactions.
-    """
-    num_rows = 2
-    num_cols = 3
-    total_qubits = num_rows * num_cols
-    circ = create_2d_heisenberg_circuit(num_rows, num_cols, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1)
-
-    assert isinstance(circ, QuantumCircuit)
-    assert circ.num_qubits == total_qubits
-
-    op_names = [instr.operation.name for instr in circ.data]
-    # Check that each qubit gets one rx rotation in the single timestep.
-    assert op_names.count("rz") == total_qubits
-    assert "rxx" in op_names
-    assert "ryy" in op_names
-    assert "rzz" in op_names
-
-
 def test_create_2d_heisenberg_circuit_3x2() -> None:
     """Test that create_2d_heisenberg_circuit returns a valid circuit for a rectangular grid.
 
@@ -305,18 +278,20 @@ def test_create_2d_fermi_hubbard_circuit_3x2() -> None:
       - The circuit contains ry gates for the long-range interactions.
       - The circuit contains rz gates for the long-range interactions.
     """
-    Lx = 3
-    Ly = 2
-    total_qubits = 2 * Lx * Ly
-    circ = create_2d_fermi_hubbard_circuit(Lx, Ly, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1)
+    num_rows = 3
+    num_cols = 2
+    total_qubits = 2 * num_rows * num_cols
+    circ = create_2d_fermi_hubbard_circuit(num_rows, num_cols, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == total_qubits
 
     op_names = [instr.operation.name for instr in circ.data]
-    # Check that the phase gates from the chemical potential term are present for every timestep and trotter step (two per trotter step)
+    # Check that the phase gates from the chemical potential term
+    # are present for every timestep and trotter step (two per trotter step)
     assert op_names.count("p") == 2 * total_qubits
-    # Check that the controlled phase gates from the onsite interaction term are present for every timestep and trotter step (two per trotter step)
+    # Check that the controlled phase gates from the onsite interaction term
+    # are present for every timestep and trotter step (two per trotter step)
     assert op_names.count("cp") == total_qubits
     # Check that the rotation gates from the hopping terms are present
     assert "rx" in op_names
