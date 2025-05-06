@@ -24,8 +24,8 @@ H_0.init_heisenberg(L, J, J, J, g)
 state = MPS(L, state='wall')
 
 # Define the noise model
-gamma_relaxation = 0
-gamma_dephasing = 0
+gamma_relaxation = 0.1
+gamma_dephasing = 0.1
 noise_model = NoiseModel(['relaxation', 'excitation'], [gamma_relaxation, gamma_dephasing])
 
 # Define the simulation parameters
@@ -33,7 +33,7 @@ T = 10
 dt = 0.1
 sample_timesteps = True
 N = 100
-max_bond_dim = 64
+max_bond_dim = 8
 threshold = 0
 order = 2
 measurements = [Observable(Z(), site) for site in range(L)]
