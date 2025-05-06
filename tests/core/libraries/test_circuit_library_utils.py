@@ -31,7 +31,8 @@ from mqt.yaqs.core.libraries.circuit_library_utils import (
 )
 
 from mqt.yaqs.core.libraries.circuit_library import (
-    add_long_range_interaction
+    add_long_range_interaction,
+    lookup_qiskit_ordering
 )
 
 
@@ -98,7 +99,7 @@ def test_add_random_single_qubit_rotation_adds_u_gate() -> None:
 
 
 def test_add_long_range_interaction_x_interaction() -> None:
-  """Test that def add_long_range_interaction adds the correct operation to a circuit.
+  """Test that add_long_range_interaction adds the correct operation to a circuit.
 
     This test creates a quantum circuit and adds a long-range interaction between the
     first and the last qubit.
@@ -121,7 +122,7 @@ def test_add_long_range_interaction_x_interaction() -> None:
 
 
 def test_add_long_range_interaction_y_interaction() -> None:
-  """Test that def add_long_range_interaction adds the correct operation to a circuit.
+  """Test that add_long_range_interaction adds the correct operation to a circuit.
 
     This test creates a quantum circuit and adds a long-range interaction between the
     first and the last qubit.
@@ -144,7 +145,7 @@ def test_add_long_range_interaction_y_interaction() -> None:
 
 
 def test_add_long_range_interaction_wrong_initialization() -> None:
-  """Test that def add_long_range_interaction reacts correctly to wrong inputs.
+  """Test that add_long_range_interaction reacts correctly to wrong inputs.
 
     This test creates a quantum circuit and calls the add_long_range_interaction
     function with wrong inputs. It verifies that:
@@ -158,3 +159,16 @@ def test_add_long_range_interaction_wrong_initialization() -> None:
   with pytest.raises(IndexError):
     add_long_range_interaction(circ, i=3, j=0, outer_op="x", alpha=0.5)
 
+
+def test_lookup_qiskit_ordering() -> None:
+  """Test that lookup_qiskit_ordering returns the correct ordering.
+
+    It verifies multiple cases of spin up and spin down qubits as well as
+    invalid inputs.
+    """
+  assert lookup_qiskit_ordering(0, "↑") == 0
+  assert lookup_qiskit_ordering(0, "↓") == 1
+  assert lookup_qiskit_ordering(1, "↑") == 2
+  assert lookup_qiskit_ordering(1, "↓") == 3
+  with pytest.raises(ValueError):
+    lookup_qiskit_ordering(0, "invalid")
