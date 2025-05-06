@@ -594,9 +594,10 @@ def dynamic_tdvp(
     hamiltonian: MPO,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
     numiter_lanczos: int = 25,
-    dynamic: bool = True,
 ) -> None:
-    """Perform a dynamic TDVP sweep: at each bond, if the current bond dimension
+    """Perform a dynamic TDVP sweep: at each bond.
+
+    Local dynamic TDVP sweep. If the current bond dimension
     exceeds max_bond_dim, apply a local single-site TDVP step; otherwise,
     apply a two-site TDVP step.
 
@@ -606,6 +607,9 @@ def dynamic_tdvp(
         sim_params: Simulation parameters including dt and threshold.
         max_bond_dim (int): Maximum allowed bond dimension for two-site updates.
         numiter_lanczos (int): Lanczos iterations per local update.
+
+    Raises:
+        ValueError: If Hamiltonian is invalid length.
     """
     num_sites = hamiltonian.length
     if num_sites != state.length:
@@ -673,7 +677,9 @@ def dynamic_tdvp(
                     left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
                 )
 
-                state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
+                state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+                    merged_tensor, "right", sim_params, dynamic=True
+                )
                 right_blocks[i] = update_right_environment(
                     state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
                 )
@@ -687,7 +693,9 @@ def dynamic_tdvp(
                 merged_tensor = update_site(
                     left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
                 )
-                state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
+                state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+                    merged_tensor, "right", sim_params, dynamic=True
+                )
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
                 )
@@ -706,12 +714,12 @@ def dynamic_tdvp(
         bond_dim = state.tensors[i].shape[1]
         if bond_dim >= sim_params.max_bond_dim or lock_final_site:
             state.tensors[i] = update_site(
-            left_blocks[i],
-            right_blocks[i],
-            hamiltonian.tensors[i],
-            state.tensors[i],
-            0.5 * sim_params.dt,
-            numiter_lanczos,
+                left_blocks[i],
+                right_blocks[i],
+                hamiltonian.tensors[i],
+                state.tensors[i],
+                0.5 * sim_params.dt,
+                numiter_lanczos,
             )
             state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
             tensor_shape = state.tensors[i].shape
@@ -744,17 +752,17 @@ def dynamic_tdvp(
             merged_tensor = update_site(
                 left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
             )
-            state.tensors[i - 1], state.tensors[i] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
+            state.tensors[i - 1], state.tensors[i] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=True)
             right_blocks[i - 1] = update_right_environment(
-                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
-                )
+                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+            )
             # No backwards evolution at final site
             if i != 1:
                 state.tensors[i - 1] = update_site(
-                        left_blocks[i - 1],
-                        right_blocks[i - 1],
-                        hamiltonian.tensors[i - 1],
-                        state.tensors[i - 1],
-                        -0.5 * sim_params.dt,
-                        numiter_lanczos,
-                    )
+                    left_blocks[i - 1],
+                    right_blocks[i - 1],
+                    hamiltonian.tensors[i - 1],
+                    state.tensors[i - 1],
+                    -0.5 * sim_params.dt,
+                    numiter_lanczos,
+                )
