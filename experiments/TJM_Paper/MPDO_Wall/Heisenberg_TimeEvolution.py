@@ -8,6 +8,7 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 from mqt.yaqs import simulator
+from mqt.yaqs.core.libraries.gate_library import Z
 
 
 # Define the system Hamiltonian
@@ -17,14 +18,14 @@ J = 1
 g = 0.5
 H_0 = MPO()
 # H_0.init_Ising(L, d, J, g)
-H_0.init_heisenberg(L, d, J, J, J, g)
+H_0.init_heisenberg(L, J, J, J, g)
 
 # Define the initial state
 state = MPS(L, state='wall')
 
 # Define the noise model
-gamma_relaxation = 0.1
-gamma_dephasing = 0.1
+gamma_relaxation = 0
+gamma_dephasing = 0
 noise_model = NoiseModel(['relaxation', 'excitation'], [gamma_relaxation, gamma_dephasing])
 
 # Define the simulation parameters
@@ -32,17 +33,17 @@ T = 10
 dt = 0.1
 sample_timesteps = True
 N = 100
-max_bond_dim = 4
-threshold = 1e-6
+max_bond_dim = 64
+threshold = 0
 order = 2
-measurements = [Observable('z', site) for site in range(L)]
-sim_params = SimulationParams(measurements, T, dt, sample_timesteps, N, max_bond_dim, threshold, order)
+measurements = [Observable(Z(), site) for site in range(L)]
+sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
 
 fig, ax = plt.subplots(1, 1)
 if __name__ == "__main__":
     ########## TJM Example #################
     start_time = time.time()
-    TJM(state, H_0, noise_model, sim_params)
+    simulator.run(state, H_0, sim_params, noise_model)
     print(time.time() - start_time)
 
     heatmap = []
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     cbar = plt.colorbar(im, ax=ax)
     cbar.ax.set_title('$\\langle Z \\rangle$')
     #########################################
-    filename = f"30L_Noise.pickle"
+    filename = f"30L_NoNoise.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'sim_params': sim_params,
