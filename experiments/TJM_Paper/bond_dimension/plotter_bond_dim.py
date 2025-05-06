@@ -7,6 +7,11 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LogNorm, Normalize, CenteredNorm, Colormap
 from matplotlib import cm
 
+# right after your imports
+import os
+os.chdir(os.path.dirname(__file__))
+
+
 def combine_trajectories(dir):
     dir = dir + '/'
     data = []
@@ -54,9 +59,9 @@ fig, axes = plt.subplots(3, 3, figsize=(7.2, 4.3))
 
 L = 10
 
-axes[0, 0].set_title("$\\chi=2$", fontsize=12)
-axes[0, 1].set_title("$\\chi=4$", fontsize=12)
-axes[0, 2].set_title("$\\chi=8$", fontsize=12)
+axes[0, 0].set_title("$\\chi=4$", fontsize=12)
+axes[0, 1].set_title("$\\chi=8$", fontsize=12)
+axes[0, 2].set_title("$\\chi=16$", fontsize=12)
 axes[0, 0].set_ylabel("Site", fontsize=12)
 axes[1, 0].set_ylabel("Site", fontsize=12)
 axes[2, 0].set_ylabel("Site", fontsize=12)
@@ -122,7 +127,7 @@ norm = LogNorm(vmin=1e-3, vmax=1e-1)
 # norm = CenteredNorm(vcenter=1e-2)
 cmap = cm.coolwarm
 
-data = pickle.load(open("TJM_convergence_Bond2.pickle", "rb"))
+data = pickle.load(open("TJM_convergence_Bond4.pickle", "rb"))
 heatmap1000 = []
 for observable in data['sim_params'].observables:
         heatmap1000.append(observable.results)
@@ -173,7 +178,7 @@ error_heatmap = np.array(error_heatmap)
 error_heatmap = np.mean(error_heatmap, axis=0)
 im = axes[2, 0].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].elapsed_time, L, 0], norm=norm)
 
-data = pickle.load(open("TJM_convergence_Bond4.pickle", "rb"))
+data = pickle.load(open("TJM_convergence_Bond8.pickle", "rb"))
 heatmap1000 = []
 for observable in data['sim_params'].observables:
         heatmap1000.append(observable.results)
@@ -224,7 +229,7 @@ error_heatmap = np.array(error_heatmap)
 error_heatmap = np.mean(error_heatmap, axis=0)
 im = axes[2, 1].imshow(error_heatmap, cmap=cmap, aspect='auto', extent=[0, data['sim_params'].elapsed_time, L, 0], norm=norm)
 
-data = pickle.load(open("TJM_convergence_Bond8.pickle", "rb"))
+data = pickle.load(open("TJM_convergence_Bond16.pickle", "rb"))
 heatmap1000 = []
 for observable in data['sim_params'].observables:
         heatmap1000.append(observable.results)
