@@ -596,8 +596,7 @@ def dynamic_tdvp(
     numiter_lanczos: int = 25,
     dynamic: bool = True,
 ) -> None:
-    """
-    Perform a dynamic TDVP sweep: at each bond, if the current bond dimension
+    """Perform a dynamic TDVP sweep: at each bond, if the current bond dimension
     exceeds max_bond_dim, apply a local single-site TDVP step; otherwise,
     apply a two-site TDVP step.
 
@@ -610,7 +609,8 @@ def dynamic_tdvp(
     """
     num_sites = hamiltonian.length
     if num_sites != state.length:
-        raise ValueError("State and Hamiltonian must have the same length")
+        msg = "State and Hamiltonian must have the same length"
+        raise ValueError(msg)
 
     # Prepare environments
     right_blocks = initialize_right_environments(state, hamiltonian)
@@ -623,7 +623,7 @@ def dynamic_tdvp(
         eye[i, :, i] = 1
     left_blocks[0] = eye
 
-    #----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
+    # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
     lock_final_site = False
     for i in range(num_sites):
         # current bond dimension between i and i+1
@@ -636,7 +636,7 @@ def dynamic_tdvp(
                     right_blocks[i],
                     hamiltonian.tensors[i],
                     state.tensors[i],
-                    0.5*sim_params.dt,
+                    0.5 * sim_params.dt,
                     numiter_lanczos,
                 )
             else:
@@ -670,7 +670,7 @@ def dynamic_tdvp(
                 merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
                 merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
                 merged_tensor = update_site(
-                    left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5*sim_params.dt, numiter_lanczos
+                    left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
                 )
 
                 state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
@@ -700,7 +700,7 @@ def dynamic_tdvp(
                     numiter_lanczos,
                 )
 
-    #----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
+    # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
     lock_final_site = False
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i].shape[1]
@@ -739,22 +739,22 @@ def dynamic_tdvp(
             if i == 0:
                 continue
 
-            merged_tensor = merge_mps_tensors(state.tensors[i-1], state.tensors[i])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i-1], hamiltonian.tensors[i])
+            merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
             merged_tensor = update_site(
-                left_blocks[i-1], right_blocks[i], merged_mpo, merged_tensor, 0.5*sim_params.dt, numiter_lanczos
+                left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
             )
-            state.tensors[i-1], state.tensors[i] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
-            right_blocks[i-1] = update_right_environment(
+            state.tensors[i - 1], state.tensors[i] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
+            right_blocks[i - 1] = update_right_environment(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
                 )
             # No backwards evolution at final site
             if i != 1:
-                state.tensors[i-1] = update_site(
-                        left_blocks[i-1],
-                        right_blocks[i-1],
-                        hamiltonian.tensors[i-1],
-                        state.tensors[i-1],
+                state.tensors[i - 1] = update_site(
+                        left_blocks[i - 1],
+                        right_blocks[i - 1],
+                        hamiltonian.tensors[i - 1],
+                        state.tensors[i - 1],
                         -0.5 * sim_params.dt,
                         numiter_lanczos,
                     )
