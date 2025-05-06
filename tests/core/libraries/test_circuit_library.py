@@ -302,7 +302,7 @@ def test_create_2d_fermi_hubbard_circuit_3x2() -> None:
     assert "rz" in op_names
 
 
-def test_create_2d_fermi_hubbard_circuit_3x2() -> None:
+def test_create_1d_fermi_hubbard_circuit() -> None:
     """Test that create_1d_fermi_hubbard_circuit returns a valid circuit.
 
     This test creates a 1D Fermi-Hubbard circuit with a specified number lattice sites.
