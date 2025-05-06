@@ -481,9 +481,6 @@ def add_long_range_interaction(circ: QuantumCircuit, i: int, j: int, outer_op: s
         # append the same Rx gates with negative phase
         circ.rx(theta=-theta, qubit=i)
         circ.rx(theta=-theta, qubit=j)
-    else:
-        msg = "Only Pauli X or Y matrices are supported as outer operator."
-        raise ValueError(msg)
 
 
 def add_hopping_term(circ: QuantumCircuit, i: int, j: int, alpha: float) -> None:
