@@ -625,11 +625,11 @@ def dynamic_tdvp(
 
     #----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
     lock_final_site = False
-    for i in range(num_sites-1):
+    flag = False
+    for i in range(num_sites):
         # current bond dimension between i and i+1
         bond_dim = state.tensors[i].shape[2]
-
-        if bond_dim > sim_params.max_bond_dim or lock_final_site:
+        if False: # bond_dim >= sim_params.max_bond_dim or lock_final_site:
             print("First 1TDVP", i)
             # if i == num_sites - 2:
             #     assert lock_one_site
@@ -640,7 +640,7 @@ def dynamic_tdvp(
                     right_blocks[i],
                     hamiltonian.tensors[i],
                     state.tensors[i],
-                    sim_params.dt,
+                    0.5*sim_params.dt,
                     numiter_lanczos,
                 )
             else:
@@ -667,54 +667,65 @@ def dynamic_tdvp(
                     # Guarantees final site is 1TDVP
                     lock_final_site = True
         else:
+            if i > num_sites - 2:
+                # assert lock_final_site
+                continue
             print("First 2TDVP", i, i+1)
             if i == num_sites - 2:
-                assert not lock_final_site
-                continue
+                merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+                merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+                merged_tensor = update_site(
+                    left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5*sim_params.dt, numiter_lanczos
+                )
 
-            merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-            merged_tensor = update_site(
-                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
-            )
-            state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
-            left_blocks[i + 1] = update_left_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-            )
-            state.tensors[i + 1] = update_site(
-                left_blocks[i + 1],
-                right_blocks[i + 1],
-                hamiltonian.tensors[i + 1],
-                state.tensors[i + 1],
-                -0.5 * sim_params.dt,
-                numiter_lanczos,
-            )
+                state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
+                right_blocks[i] = update_right_environment(
+                    state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+                )
+                flag = True
+                left_blocks[i + 1] = update_left_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                )
 
+            else:
+                merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+                merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+                merged_tensor = update_site(
+                    left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                )
+                state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=dynamic)
+                left_blocks[i + 1] = update_left_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                )
+                state.tensors[i + 1] = update_site(
+                    left_blocks[i + 1],
+                    right_blocks[i + 1],
+                    hamiltonian.tensors[i + 1],
+                    state.tensors[i + 1],
+                    -0.5 * sim_params.dt,
+                    numiter_lanczos,
+                )
 
-    # else:
-    #     # Always 2TDVP at end for now
-    #     i = num_sites - 2
-    #     print("End 2TDVP", i, i+1)
-    #     merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
-    #     merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-    #     merged_tensor = update_site(
-    #         left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos
-    #     )
-
-    #     state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
-    #     right_blocks[i] = update_right_environment(
-    #         state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
-    #     )
 
     #----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
     lock_final_site = False
-    for i in reversed(range(num_sites-1)):
-        bond_dim = state.tensors[i-1].shape[1]
-        if bond_dim > sim_params.max_bond_dim or lock_final_site:
-            if i == 0:
-                continue
+    last_used_one_tdvp = False
+    for i in reversed(range(num_sites)):
+        bond_dim = state.tensors[i].shape[1]
+        if True: # bond_dim >= sim_params.max_bond_dim:
+            # if i == 0:
+            #     continue
             print("Second 1TDVP", i)
 
+            # if i == num_sites-1:
+            state.tensors[i] = update_site(
+            left_blocks[i],
+            right_blocks[i],
+            hamiltonian.tensors[i],
+            state.tensors[i],
+            0.5 * sim_params.dt,
+            numiter_lanczos,
+            )
             state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
             tensor_shape = state.tensors[i].shape
             reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
@@ -732,24 +743,36 @@ def dynamic_tdvp(
                 left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
             )
             state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
-            state.tensors[i - 1] = update_site(
-                left_blocks[i - 1],
-                right_blocks[i - 1],
-                hamiltonian.tensors[i - 1],
-                state.tensors[i - 1],
-                0.5 * sim_params.dt,
-                numiter_lanczos,
-            )
+
+            last_used_one_tdvp = True
         else:
             if i > num_sites - 2:
                 continue
             print("Second 2TDVP", i, i+1)
+            if last_used_one_tdvp:
+                state.tensors[i+1] = state.tensors[i+1].transpose((0, 2, 1))
+                tensor_shape = state.tensors[i+1].shape
+                reshaped_tensor = state.tensors[i+1].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+                state.tensors[i+1] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1])).transpose((
+                    0,
+                    2,
+                    1,
+                ))
+                right_blocks[i] = update_right_environment(
+                    state.tensors[i+1], state.tensors[i+1], hamiltonian.tensors[i+1], right_blocks[i+1]
+                )
+                bond_tensor = bond_tensor.transpose()
+                bond_tensor = update_bond(
+                    left_blocks[i+1], right_blocks[i], bond_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                )
+                state.tensors[i] = oe.contract(state.tensors[i], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
 
             if i == num_sites - 2:
                 merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
                 merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
                 merged_tensor = update_site(
-                    left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos
+                    left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5*sim_params.dt, numiter_lanczos
                 )
 
                 state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
@@ -774,3 +797,5 @@ def dynamic_tdvp(
                 right_blocks[i] = update_right_environment(
                     state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
                 )
+
+            last_used_one_tdvp = False

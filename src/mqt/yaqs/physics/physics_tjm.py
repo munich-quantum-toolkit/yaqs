@@ -24,7 +24,9 @@ import numpy as np
 from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
-from ..core.methods.dynamic_tdvp import dynamic_tdvp
+# from ..core.methods.dynamic_tdvp import dynamic_tdvp
+from ..core.methods.tdvp import dynamic_tdvp
+
 from ..core.methods.stochastic_process import stochastic_process
 
 if TYPE_CHECKING:
