@@ -368,7 +368,7 @@ def test_create_1d_fermi_hubbard_circuit() -> None:
     assert op_names.count("cp") == total_qubits
     # Check that the rotation gates from the hopping terms are present
     op_names.count("rxx") == 2 * (num_sites - 1)
-    op_names.count("rzz") == 2 * (num_sites - 1)
+    op_names.count("ryy") == 2 * (num_sites - 1)
 
 
 def test_nearest_neighbour_random_circuit_structure() -> None:
