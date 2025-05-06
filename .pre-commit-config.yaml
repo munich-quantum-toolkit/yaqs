@@ -68,8 +68,6 @@ repos:
           - scipy-stubs
           - types-tqdm
           - matplotlib
-          - qutip
-          - qiskit-nature
 
   # Also run Black on examples in the documentation
   - repo: https://github.com/adamchainz/blacken-docs
