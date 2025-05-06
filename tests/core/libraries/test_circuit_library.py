@@ -352,9 +352,7 @@ def test_create_1d_fermi_hubbard_circuit() -> None:
     """
     num_sites = 4
     total_qubits = 2 * num_sites
-    circ = create_1d_fermi_hubbard_circuit(
-        num_sites, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1
-    )
+    circ = create_1d_fermi_hubbard_circuit(num_sites, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1)
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == total_qubits

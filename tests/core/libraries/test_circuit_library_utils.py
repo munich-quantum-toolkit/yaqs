@@ -25,14 +25,10 @@ import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 
+from mqt.yaqs.core.libraries.circuit_library import add_long_range_interaction, lookup_qiskit_ordering
 from mqt.yaqs.core.libraries.circuit_library_utils import (
     add_random_single_qubit_rotation,
     extract_u_parameters,
-)
-
-from mqt.yaqs.core.libraries.circuit_library import (
-    add_long_range_interaction,
-    lookup_qiskit_ordering
 )
 
 
@@ -115,7 +111,7 @@ def test_add_long_range_interaction_x_interaction() -> None:
     assert isinstance(circ, QuantumCircuit)
 
     op_names = [instr.operation.name for instr in circ.data]
-    # Check that the long-range interaction consits of enough Rz, CNOT, and rotation gates
+    # Check that the long-range interaction consists of enough Rz, CNOT, and rotation gates
     assert op_names.count("ry") == 4
     assert op_names.count("rz") == 1
     assert op_names.count("cx") == 2 * (num_qubits - 1)
@@ -138,7 +134,7 @@ def test_add_long_range_interaction_y_interaction() -> None:
     assert isinstance(circ, QuantumCircuit)
 
     op_names = [instr.operation.name for instr in circ.data]
-    # Check that the long-range interaction consits of enough Rz, CNOT, and rotation gates
+    # Check that the long-range interaction consists of enough Rz, CNOT, and rotation gates
     assert op_names.count("rx") == 4
     assert op_names.count("rz") == 1
     assert op_names.count("cx") == 2 * (num_qubits - 1)
