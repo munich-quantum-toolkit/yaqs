@@ -30,6 +30,10 @@ from mqt.yaqs.core.libraries.circuit_library_utils import (
     extract_u_parameters,
 )
 
+from mqt.yaqs.core.libraries.circuit_library import (
+    add_long_range_interaction
+)
+
 
 def test_extract_u_parameters_invalid_shape() -> None:
     """extract_u_parameters must reject non-2x2 inputs."""
@@ -91,3 +95,66 @@ def test_add_random_single_qubit_rotation_adds_u_gate() -> None:
     assert theta == pytest.approx(1.2091241975743714, rel=1e-7)
     assert phi == pytest.approx(-0.6574252905805019, rel=1e-7)
     assert lam == pytest.approx(1.9692788758507522, rel=1e-7)
+
+
+def test_add_long_range_interaction_x_interaction() -> None:
+  """Test that def add_long_range_interaction adds the correct operation to a circuit.
+
+    This test creates a quantum circuit and adds a long-range interaction between the
+    first and the last qubit.
+    It verifies that:
+      - The circuit contains four Ry gates
+      - The circuit contains one Rz gate
+      - The circuit contains 2 * (num_qubits - 1) CNOT gates
+    """
+  num_qubits = 5
+  circ = QuantumCircuit(num_qubits)
+  add_long_range_interaction(circ, i=0, j=num_qubits - 1, outer_op="x", alpha=0.5)
+
+  assert isinstance(circ, QuantumCircuit)
+
+  op_names = [instr.operation.name for instr in circ.data]
+  # Check that the long-range interaction consits of enough Rz, CNOT, and rotation gates
+  assert op_names.count("ry") == 4
+  assert op_names.count("rz") == 1
+  assert op_names.count("cx") == 2 * (num_qubits - 1)
+
+
+def test_add_long_range_interaction_y_interaction() -> None:
+  """Test that def add_long_range_interaction adds the correct operation to a circuit.
+
+    This test creates a quantum circuit and adds a long-range interaction between the
+    first and the last qubit.
+    It verifies that:
+      - The circuit contains four Rx gates
+      - The circuit contains one Rz gate
+      - The circuit contains 2 * (num_qubits - 1) CNOT gates
+    """
+  num_qubits = 5
+  circ = QuantumCircuit(num_qubits)
+  add_long_range_interaction(circ, i=0, j=num_qubits - 1, outer_op="y", alpha=0.5)
+
+  assert isinstance(circ, QuantumCircuit)
+
+  op_names = [instr.operation.name for instr in circ.data]
+  # Check that the long-range interaction consits of enough Rz, CNOT, and rotation gates
+  assert op_names.count("rx") == 4
+  assert op_names.count("rz") == 1
+  assert op_names.count("cx") == 2 * (num_qubits - 1)
+
+
+def test_add_long_range_interaction_wrong_initialization() -> None:
+  """Test that def add_long_range_interaction reacts correctly to wrong inputs.
+
+    This test creates a quantum circuit and calls the add_long_range_interaction
+    function with wrong inputs. It verifies that:
+    - The function raises a ValueError when the outer_op is not 'x' or 'y'.
+    - the function raises a ValueError if the assumption i < j is violated.
+    """
+  num_qubits = 5
+  circ = QuantumCircuit(num_qubits)
+  with pytest.raises(ValueError):
+    add_long_range_interaction(circ, i=0, j=num_qubits - 1, outer_op="a", alpha=0.5)
+  with pytest.raises(IndexError):
+    add_long_range_interaction(circ, i=3, j=0, outer_op="x", alpha=0.5)
+
