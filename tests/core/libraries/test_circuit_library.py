@@ -281,7 +281,9 @@ def test_create_2d_fermi_hubbard_circuit_3x2() -> None:
     num_rows = 3
     num_cols = 2
     total_qubits = 2 * num_rows * num_cols
-    circ = create_2d_fermi_hubbard_circuit(num_rows, num_cols, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1)
+    circ = create_2d_fermi_hubbard_circuit(
+        num_rows, num_cols, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1
+    )
 
     assert isinstance(circ, QuantumCircuit)
     assert circ.num_qubits == total_qubits
