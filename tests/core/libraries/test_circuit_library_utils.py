@@ -154,9 +154,9 @@ def test_add_long_range_interaction_wrong_initialization() -> None:
     """
     num_qubits = 5
     circ = QuantumCircuit(num_qubits)
-    with pytest.raises(ValueError, match="Outer_op must be either 'X' or 'Y'."):
+    with pytest.raises(ValueError, match=r"Outer_op must be either 'X' or 'Y'."):
         add_long_range_interaction(circ, i=0, j=num_qubits - 1, outer_op="a", alpha=0.5)
-    with pytest.raises(IndexError, match="Assumption i < j violated."):
+    with pytest.raises(IndexError, match=r"Assumption i < j violated."):
         add_long_range_interaction(circ, i=3, j=0, outer_op="x", alpha=0.5)
 
 
@@ -170,5 +170,5 @@ def test_lookup_qiskit_ordering() -> None:
     assert lookup_qiskit_ordering(0, "↓") == 1
     assert lookup_qiskit_ordering(1, "↑") == 2
     assert lookup_qiskit_ordering(1, "↓") == 3
-    with pytest.raises(ValueError, match="Spin must be '↑' or '↓."):
+    with pytest.raises(ValueError, match=r"Spin must be '↑' or '↓."):
         lookup_qiskit_ordering(0, "invalid")
