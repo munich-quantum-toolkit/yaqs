@@ -415,14 +415,13 @@ def lookup_qiskit_ordering(particle: int, spin: str) -> int:
     Raises:
         ValueError: If spin is neither '↑' nor '↓.
     """
-    if spin not in {"↑", "↓"}:
-        msg = "Spin must be '↑' or '↓."
-        raise ValueError(msg)
-
     if spin == "↑":
         spin_val = 0
     elif spin == "↓":
         spin_val = 1
+    else:
+        msg = "Spin must be '↑' or '↓."
+        raise ValueError(msg)
 
     return 2 * particle + spin_val
 
