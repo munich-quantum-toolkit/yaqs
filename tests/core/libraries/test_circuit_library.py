@@ -21,10 +21,7 @@ in quantum simulations within the YAQS project.
 
 from __future__ import annotations
 
-import numpy as np
-import scipy as sp
 from qiskit.circuit import QuantumCircuit
-from qiskit.quantum_info import Operator
 
 from mqt.yaqs.core.libraries.circuit_library import (
     create_2d_fermi_hubbard_circuit,
