@@ -4,11 +4,10 @@ import numpy as np
 import pickle
 import time
 
-from yaqs.general.data_structures.MPO import MPO
-from yaqs.general.data_structures.MPS import MPS
-from yaqs.general.data_structures.noise_model import NoiseModel
-from yaqs.general.data_structures.simulation_parameters import Observable, SimulationParams
-from yaqs.physics.methods.TJM import TJM
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs import simulator
 
 
 # Define the system Hamiltonian
@@ -18,7 +17,7 @@ J = 1
 g = 0.5
 H_0 = MPO()
 # H_0.init_Ising(L, d, J, g)
-H_0.init_Heisenberg(L, d, J, J, J, g)
+H_0.init_heisenberg(L, d, J, J, J, g)
 
 # Define the initial state
 state = MPS(L, state='wall')
