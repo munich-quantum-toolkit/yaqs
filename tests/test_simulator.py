@@ -53,7 +53,7 @@ def test_physics_simulation() -> None:
     sample_timesteps = False
     num_traj = 10
     max_bond_dim = 4
-    threshold = 1e-6
+    threshold = 0
     order = 2
 
     measurements = [Observable(Z(), site) for site in range(length)]
@@ -101,7 +101,7 @@ def test_physics_simulation_parallel_off() -> None:
     sample_timesteps = False
     num_traj = 10
     max_bond_dim = 4
-    threshold = 1e-6
+    threshold = 0
     order = 2
 
     measurements = [Observable(Z(), site) for site in range(length)]
@@ -148,7 +148,7 @@ def test_physics_simulation_get_state() -> None:
         sample_timesteps = False
         num_traj = 1
         max_bond_dim = 4
-        threshold = 1e-12
+        threshold = 0
 
         measurements = [Observable(X(), length // 2)]
         sim_params = PhysicsSimParams(
@@ -193,11 +193,9 @@ def test_strong_simulation() -> None:
 
     num_traj = 10
     max_bond_dim = 4
-    threshold = 1e-12
-    window_size = 0
 
     measurements = [Observable(Z(), site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim)
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
@@ -261,11 +259,9 @@ def test_strong_simulation_parallel_off() -> None:
 
     num_traj = 10
     max_bond_dim = 4
-    threshold = 1e-12
-    window_size = 0
 
     measurements = [Observable(Z(), site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams(measurements, num_traj, max_bond_dim)
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
@@ -305,9 +301,7 @@ def test_weak_simulation_noise() -> None:
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
-    threshold = 1e-12
-    window_size = 0
-    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
+    sim_params = WeakSimParams(shots, max_bond_dim)
 
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
@@ -335,9 +329,7 @@ def test_weak_simulation_no_noise() -> None:
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
-    threshold = 1e-12
-    window_size = 0
-    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
+    sim_params = WeakSimParams(shots, max_bond_dim)
 
     noise_model = None
 
@@ -367,9 +359,7 @@ def test_weak_simulation_get_state() -> None:
     circuit.measure_all()
     shots = 1
     max_bond_dim = 4
-    threshold = 1e-12
-    window_size = 0
-    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size, get_state=True)
+    sim_params = WeakSimParams(shots, max_bond_dim, get_state=True)
 
     noise_model = None
 
@@ -396,9 +386,7 @@ def test_weak_simulation_get_state_noise() -> None:
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
-    threshold = 1e-12
-    window_size = 0
-    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size, get_state=True)
+    sim_params = WeakSimParams(shots, max_bond_dim, get_state=True)
 
     gamma = 1e-3
     noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
@@ -421,9 +409,7 @@ def test_mismatch() -> None:
     circuit.measure_all()
     shots = 1024
     max_bond_dim = 4
-    threshold = 1e-6
-    window_size = 0
-    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
+    sim_params = WeakSimParams(shots, max_bond_dim)
 
     noise_model = None
 
