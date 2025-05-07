@@ -28,6 +28,7 @@ These tests confirm the correctness and stability of TDVP-based simulations with
 
 from __future__ import annotations
 
+from unittest.mock import patch
 from copy import deepcopy
 
 import numpy as np
@@ -36,7 +37,7 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
     merge_mpo_tensors,
     merge_mps_tensors,
@@ -45,6 +46,7 @@ from mqt.yaqs.core.methods.tdvp import (
     single_site_tdvp,
     split_mps_tensor,
     two_site_tdvp,
+    global_dynamic_tdvp,
     update_bond,
     update_left_environment,
     update_right_environment,
@@ -302,3 +304,77 @@ def test_two_site_tdvp() -> None:
     state_vec = U @ state_vec
     found = state.to_vec()
     assert np.allclose(state_vec, found)
+
+def test_dynamic_tdvp_one_site() -> None:
+    """Test dynamic TDVP, single site.
+
+    Test that dynamic_TDVP calls single_site_TDVP exactly once when the current maximum bond dimension
+    exceeds sim_params.max_bond_dim.
+
+    In this test, sim_params.max_bond_dim is set to 0 so that the current maximum bond dimension of the MPS,
+    computed by state.write_max_bond_dim(), is greater than 0. Therefore, the else branch of dynamic_TDVP should be
+    taken, and single_site_tdvp should be called exactly once.
+    """
+    # Define the system Hamiltonian.
+    L = 5
+    J = 1
+    g = 0.5
+    H = MPO()
+    H.init_ising(L, J, g)
+
+    # Define the initial state.
+    state = MPS(L, state="zeros")
+
+    # Define simulation parameters with max_bond_dim set to 0.
+    elapsed_time = 0.2
+    dt = 0.1
+    sample_timesteps = False
+    num_traj = 1
+    max_bond_dim = 0  # Force condition for single_site_TDVP.
+    threshold = 1e-6
+    order = 1
+    measurements = [Observable(X(), site) for site in range(L)]
+    sim_params = PhysicsSimParams(
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+    )
+
+    with patch("mqt.yaqs.core.methods.tdvp.single_site_tdvp") as mock_single_site:
+        global_dynamic_tdvp(state, H, sim_params)
+        mock_single_site.assert_called_once_with(state, H, sim_params)
+
+
+def test_dynamic_tdvp_two_site() -> None:
+    """Test dynamic TDVP, two site.
+
+    Test that dynamic_TDVP calls two_site_TDVP exactly once when the current maximum bond dimension
+    is less than or equal to sim_params.max_bond_dim.
+
+    In this test, sim_params.max_bond_dim is set to 2, so if the current maximum bond dimension is ≤ 2,
+    the if branch of dynamic_TDVP is executed and two_site_TDVP is called exactly once.
+    """
+    # Define the system Hamiltonian.
+    L = 5
+    J = 1
+    g = 0.5
+    H = MPO()
+    H.init_ising(L, J, g)
+
+    # Define the initial state.
+    state = MPS(L, state="zeros")
+
+    # Define simulation parameters with max_bond_dim set to 2.
+    elapsed_time = 0.2
+    dt = 0.1
+    sample_timesteps = False
+    num_traj = 1
+    max_bond_dim = 8  # Force condition for two_site_tdvp.
+    threshold = 1e-6
+    order = 1
+    measurements = [Observable(X(), site) for site in range(L)]
+    sim_params = PhysicsSimParams(
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+    )
+
+    with patch("mqt.yaqs.core.methods.tdvp.two_site_tdvp") as mock_two_site:
+        global_dynamic_tdvp(state, H, sim_params)
+        mock_two_site.assert_called_once_with(state, H, sim_params, dynamic=True)

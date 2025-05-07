@@ -101,7 +101,7 @@ def test_step_through() -> None:
         order=1,
     )
     with (
-        patch("mqt.yaqs.physics.physics_tjm.dynamic_tdvp") as mock_dynamic_tdvp,
+        patch("mqt.yaqs.physics.physics_tjm.local_dynamic_tdvp") as mock_dynamic_tdvp,
         patch("mqt.yaqs.physics.physics_tjm.apply_dissipation") as mock_dissipation,
         patch("mqt.yaqs.physics.physics_tjm.stochastic_process") as mock_stochastic_process,
     ):
