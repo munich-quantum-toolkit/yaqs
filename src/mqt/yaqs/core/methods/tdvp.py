@@ -647,6 +647,7 @@ def local_dynamic_tdvp(
                     numiter_lanczos,
                 )
             else:
+                assert i != num_sites - 1
                 state.tensors[i] = update_site(
                     left_blocks[i],
                     right_blocks[i],
