@@ -589,7 +589,7 @@ def two_site_tdvp(
         )
 
 
-def dynamic_tdvp(
+def local_dynamic_tdvp(
     state: MPS,
     hamiltonian: MPO,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
@@ -626,6 +626,9 @@ def dynamic_tdvp(
     for i in range(chi0):
         eye[i, :, i] = 1
     left_blocks[0] = eye
+
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        sim_params.dt = 2
 
     # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
     lock_final_site = False
@@ -670,7 +673,7 @@ def dynamic_tdvp(
             # Will be encountered at final site in loop due to dummy dimension
             if i == num_sites - 1:
                 continue
-            if i == num_sites - 2:
+            elif i == num_sites - 2:
                 merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
                 merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
                 merged_tensor = update_site(
@@ -707,6 +710,9 @@ def dynamic_tdvp(
                     -0.5 * sim_params.dt,
                     numiter_lanczos,
                 )
+
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        return
 
     # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
     lock_final_site = False
@@ -766,3 +772,26 @@ def dynamic_tdvp(
                     -0.5 * sim_params.dt,
                     numiter_lanczos,
                 )
+
+
+def global_dynamic_tdvp(state: MPS, hamiltonian: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
+    """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
+
+    This function evolves the state by choosing between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP)
+    based on the current maximum bond dimension of the MPS. The decision is made by comparing the state's bond
+    dimension (obtained via `state.write_max_bond_dim()`) to the maximum allowed bond dimension specified in
+    `sim_params`.
+
+    Args:
+        state (MPS): The Matrix Product State representing the current state of the system.
+        hamiltonian (MPO): The Matrix Product Operator representing the Hamiltonian of the system.
+        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
+            such as the maximum allowable bond dimension for the MPS.
+    """
+    current_max_bond_dim = state.write_max_bond_dim()
+    if current_max_bond_dim < sim_params.max_bond_dim:
+        # Perform 2TDVP when the current bond dimension is within the allowed limit
+        two_site_tdvp(state, hamiltonian, sim_params, dynamic=True)
+    else:
+        # Perform 1TDVP when the bond dimension exceeds the allowed limit
+        single_site_tdvp(state, hamiltonian, sim_params)
