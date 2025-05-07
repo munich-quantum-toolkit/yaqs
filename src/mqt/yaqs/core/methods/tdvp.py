@@ -717,7 +717,11 @@ def local_dynamic_tdvp(
                 tensor_shape = state.tensors[i].shape
                 reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
                 site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-                state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1])).transpose((
+                state.tensors[i] = site_tensor.reshape((
+                    tensor_shape[0],
+                    tensor_shape[1],
+                    site_tensor.shape[1],
+                )).transpose((
                     0,
                     2,
                     1,
@@ -734,10 +738,9 @@ def local_dynamic_tdvp(
                 if i == 1:
                     lock_final_site = True
         elif i == 0:
-        # Will be encountered at final site in loop due to dummy dimension
+            # Will be encountered at final site in loop due to dummy dimension
             continue
         else:
-
             merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
             merged_tensor = update_site(
