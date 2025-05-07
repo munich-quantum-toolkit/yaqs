@@ -646,18 +646,17 @@ def local_dynamic_tdvp(
             )
             if lock_final_site:
                 continue
-            else:
-                tensor_shape = state.tensors[i].shape
-                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-                state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
-                left_blocks[i + 1] = update_left_environment(
-                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-                )
-                bond_tensor = update_bond(
-                    left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
-                )
-                state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
+            tensor_shape = state.tensors[i].shape
+            reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+            site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+            state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
+            left_blocks[i + 1] = update_left_environment(
+                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+            )
+            bond_tensor = update_bond(
+                left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+            )
+            state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
             if i == num_sites - 2 and not lock_final_site:
                 # Guarantees final site is 1TDVP
                 lock_final_site = True
