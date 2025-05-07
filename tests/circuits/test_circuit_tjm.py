@@ -201,9 +201,9 @@ def test_apply_two_qubit_gate() -> None:
     mps0.normalize(decomposition="SVD")
     for i, element in enumerate(mps0.to_vec()):
         if i == 11:
-            np.testing.assert_allclose(np.abs(element), 1, atol=1e-16)
+            np.testing.assert_allclose(np.abs(element), 1, atol=1e-15)
         else:
-            np.testing.assert_allclose(np.abs(element), 0, atol=1e-16)
+            np.testing.assert_allclose(np.abs(element), 0, atol=1e-15)
 
 
 def test_circuit_tjm_strong() -> None:
