@@ -20,7 +20,7 @@ from __future__ import annotations
 # ignore non-lowercase argument names for physics notation
 # ruff: noqa: N803
 import numpy as np
-from qiskit.circuit import QuantumCircuit
+from qiskit.circuit import QuantumCircuit, QuantumRegister
 
 from .circuit_library_utils import add_random_single_qubit_rotation
 
@@ -332,6 +332,291 @@ def create_2d_heisenberg_circuit(
                 q1 = site_index(row, col)
                 q2 = site_index(row + 1, col)
                 circ.ryy(theta_yy, q1, q2)
+
+    return circ
+
+
+def create_1d_fermi_hubbard_circuit(
+    L: int, u: float, t: float, mu: float, num_trotter_steps: int, dt: float, timesteps: int
+) -> QuantumCircuit:
+    """1D Fermi-Hubbard Trotter circuit.
+
+    Create a quantum circuit for simulating the Fermi-Hubbard model defined by its
+    Hamiltonian:
+    H = -1/2 mu (I-Z) + 1/4 u (I-Z) (I-Z) - 1/2 t (XX + YY)
+
+    Args:
+        L (int): Number of sites in the model.
+        u (float): On-site interaction parameter.
+        t (float): Transfer energy parameter.
+        mu (float): Chemical potential parameter.
+        num_trotter_steps (int): Number of Trotter steps.
+        dt (float): Time step for the simulation.
+        timesteps (int): Number of time steps to simulate.
+
+    Returns:
+        QuantumCircuit: A quantum circuit representing the 1D Fermi-Hubbard model evolution.
+    """
+    n = num_trotter_steps
+
+    spin_up = QuantumRegister(L, "↑")
+    spin_down = QuantumRegister(L, "↓")
+    circ = QuantumCircuit(spin_up, spin_down)
+
+    def chemical_potential_term() -> None:
+        """Add the time evolution of the chemical potential term."""
+        theta = mu * dt / (2 * n)
+        for j in range(L):
+            circ.p(theta=theta, qubit=spin_up[j])
+            circ.p(theta=theta, qubit=spin_down[j])
+
+    def onsite_interaction_term() -> None:
+        """Add the time evolution of the onsite interaction term."""
+        theta = -u * dt / (2 * n)
+        for j in range(L):
+            circ.cp(theta=theta, control_qubit=spin_up[j], target_qubit=spin_down[j])
+
+    def kinetic_hopping_term() -> None:
+        """Add the time evolution of the kinetic hopping term."""
+        theta = -dt * t / n
+        for j in range(L - 1):
+            if j % 2 == 0:
+                circ.rxx(theta=theta, qubit1=spin_up[j + 1], qubit2=spin_up[j])
+                circ.ryy(theta=theta, qubit1=spin_up[j + 1], qubit2=spin_up[j])
+                circ.rxx(theta=theta, qubit1=spin_down[j + 1], qubit2=spin_down[j])
+                circ.ryy(theta=theta, qubit1=spin_down[j + 1], qubit2=spin_down[j])
+        for j in range(L - 1):
+            if j % 2 != 0:
+                circ.rxx(theta=theta, qubit1=spin_up[j + 1], qubit2=spin_up[j])
+                circ.ryy(theta=theta, qubit1=spin_up[j + 1], qubit2=spin_up[j])
+                circ.rxx(theta=theta, qubit1=spin_down[j + 1], qubit2=spin_down[j])
+                circ.ryy(theta=theta, qubit1=spin_down[j + 1], qubit2=spin_down[j])
+
+    for _ in range(n * timesteps):
+        chemical_potential_term()
+        onsite_interaction_term()
+        kinetic_hopping_term()
+        onsite_interaction_term()
+        chemical_potential_term()
+
+    return circ
+
+
+def lookup_qiskit_ordering(particle: int, spin: str) -> int:
+    """Looks up the Qiskit mapping from a 2D lattice to a 1D qubit-line.
+
+    Args:
+        particle (int): The index of the particle in the physical lattice.
+        spin (str): '↑' for spin up, '↓' for spin down.
+
+    Returns:
+        int: The index in the 1D qubit-line.
+
+    Raises:
+        ValueError: If spin is neither '↑' nor '↓.
+    """
+    if spin == "↑":
+        spin_val = 0
+    elif spin == "↓":
+        spin_val = 1
+    else:
+        msg = "Spin must be '↑' or '↓."
+        raise ValueError(msg)
+
+    return 2 * particle + spin_val
+
+
+def add_long_range_interaction(circ: QuantumCircuit, i: int, j: int, outer_op: str, alpha: float) -> None:
+    """Add long-range interaction.
+
+    Add a long range interaction between qubit i and j that is decomposed into two-qubit gates.
+
+    Args:
+        circ (QuantumCircuit): The quantum circuit to which the long range interaction should be applied.
+        i (int): Index of the first qubit
+        j (int): Index of the second qubit
+        outer_op (str): Selects if the outer matrix is a Pauli X or Y matrix
+                        outer_op=X: X_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ X_j
+                        outer_op=Y: Y_i ⊗ Z_{i+1} ⊗ ... ⊗ Y_{j-1} ⊗ X_j
+        alpha (float): Phase of the exponent.
+
+    Raises:
+        IndexError: If i is greater than or equal to j (assumption i < j is violated).
+        ValueError: If outer_op is not 'X' or 'Y'.
+    """
+    if i >= j:
+        msg = "Assumption i < j violated."
+        raise IndexError(msg)
+    if outer_op not in {"x", "X", "y", "Y"}:
+        msg = "Outer_op must be either 'X' or 'Y'."
+        raise ValueError(msg)
+
+    phi = 1 * alpha
+    circ.rz(phi=phi, qubit=j)
+
+    for k in range(i, j):
+        # prepend the CNOT gate
+        aux_circ = QuantumCircuit(circ.num_qubits)
+        aux_circ.cx(control_qubit=k, target_qubit=j)
+        circ.compose(aux_circ, front=True, inplace=True)
+        # append the CNOT gate
+        circ.cx(control_qubit=k, target_qubit=j)
+    if outer_op in {"x", "X"}:
+        theta = np.pi / 2
+        # prepend the Ry gates
+        aux_circ = QuantumCircuit(circ.num_qubits)
+        aux_circ.ry(theta=theta, qubit=i)
+        aux_circ.ry(theta=theta, qubit=j)
+        circ.compose(aux_circ, front=True, inplace=True)
+        # append the same Ry gates with negative phase
+        circ.ry(theta=-theta, qubit=i)
+        circ.ry(theta=-theta, qubit=j)
+    elif outer_op in {"y", "Y"}:
+        theta = np.pi / 2
+        # prepend the Rx gates
+        aux_circ = QuantumCircuit(circ.num_qubits)
+        aux_circ.rx(theta=theta, qubit=i)
+        aux_circ.rx(theta=theta, qubit=j)
+        circ.compose(aux_circ, front=True, inplace=True)
+        # append the same Rx gates with negative phase
+        circ.rx(theta=-theta, qubit=i)
+        circ.rx(theta=-theta, qubit=j)
+
+
+def add_hopping_term(circ: QuantumCircuit, i: int, j: int, alpha: float) -> None:
+    """Add a hopping term to the circuit.
+
+    Adds a hopping operator of the form
+    exp(-i*(X_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ X_j + Y_i ⊗ Z_{i+1} ⊗ ... ⊗ Z_{j-1} ⊗ Y_j))
+    to the circuit.
+
+    Args:
+        circ (QuantumCircuit): The quantum circuit to which the hopping term should be applied.
+        i (int): Index of the first qubit.
+        j (int): Index of the second qubit.
+        alpha (float): Phase of the exponent.
+    """
+    circ_xx = QuantumCircuit(circ.num_qubits)
+    circ_yy = QuantumCircuit(circ.num_qubits)
+    add_long_range_interaction(circ_xx, i, j, "X", alpha)
+    add_long_range_interaction(circ_yy, i, j, "Y", alpha)
+    circ.compose(circ_xx, inplace=True)
+    circ.compose(circ_yy, inplace=True)
+
+
+def create_2d_fermi_hubbard_circuit(
+    Lx: int, Ly: int, u: float, t: float, mu: float, num_trotter_steps: int, dt: float, timesteps: int
+) -> QuantumCircuit:
+    """2D Fermi-Hubbard Trotter circuit.
+
+    Create a quantum circuit for simulating the 2D Fermi-Hubbard model defined by its
+    Hamiltonian:
+    H = -1/2 mu (I-Z) + 1/4 u (I-Z) (I-Z) - 1/2 t (XZ...ZX + YZ...ZY)
+
+    Args:
+        Lx (int): Number of columns in the grid lattice.
+        Ly (int): Number of rows in the grid lattice.
+        u (float): On-site interaction parameter.
+        t (float): Transfer energy parameter.
+        mu (float): Chemical potential parameter.
+        num_trotter_steps (int): Number of Trotter steps.
+        dt (float): Time step for the simulation.
+        timesteps (int): Number of time steps to simulate.
+
+    Returns:
+        QuantumCircuit: A quantum circuit representing the 2D Fermi-Hubbard model evolution.
+    """
+    n = num_trotter_steps
+    num_sites = Lx * Ly
+    num_qubits = 2 * num_sites
+
+    circ = QuantumCircuit(num_qubits)
+
+    def chemical_potential_term() -> None:
+        """Add the time evolution of the chemical potential term."""
+        theta = -mu * dt / (2 * n)
+        for j in range(num_sites):
+            q_up = lookup_qiskit_ordering(j, "↑")
+            q_down = lookup_qiskit_ordering(j, "↓")
+            circ.p(theta=theta, qubit=q_up)
+            circ.p(theta=theta, qubit=q_down)
+
+    def onsite_interaction_term() -> None:
+        """Add the time evolution of the onsite interaction term."""
+        theta = -u * dt / (2 * n)
+        for j in range(num_sites):
+            q_up = lookup_qiskit_ordering(j, "↑")
+            q_down = lookup_qiskit_ordering(j, "↓")
+            circ.cp(theta=theta, control_qubit=q_up, target_qubit=q_down)
+
+    def kinetic_hopping_term() -> None:
+        """Add the time evolution of the kinetic hopping term."""
+        alpha = t * dt / n
+
+        def horizontal_odd() -> None:
+            for y in range(Ly):
+                for x in range(Lx - 1):
+                    if x % 2 == 0:
+                        p1 = y * Lx + x
+                        p2 = p1 + 1
+                        q1_up = lookup_qiskit_ordering(p1, "↑")
+                        q2_up = lookup_qiskit_ordering(p2, "↑")
+                        q1_down = lookup_qiskit_ordering(p1, "↓")
+                        q2_down = lookup_qiskit_ordering(p2, "↓")
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
+
+        def horizontal_even() -> None:
+            for y in range(Ly):
+                for x in range(Lx - 1):
+                    if x % 2 != 0:
+                        p1 = y * Lx + x
+                        p2 = p1 + 1
+                        q1_up = lookup_qiskit_ordering(p1, "↑")
+                        q2_up = lookup_qiskit_ordering(p2, "↑")
+                        q1_down = lookup_qiskit_ordering(p1, "↓")
+                        q2_down = lookup_qiskit_ordering(p2, "↓")
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
+
+        def vertical_odd() -> None:
+            for y in range(Ly - 1):
+                if y % 2 == 0:
+                    for x in range(Lx):
+                        p1 = y * Lx + x
+                        p2 = p1 + Lx
+                        q1_up = lookup_qiskit_ordering(p1, "↑")
+                        q2_up = lookup_qiskit_ordering(p2, "↑")
+                        q1_down = lookup_qiskit_ordering(p1, "↓")
+                        q2_down = lookup_qiskit_ordering(p2, "↓")
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
+
+        def vertical_even() -> None:
+            for y in range(Ly - 1):
+                if y % 2 != 0:
+                    for x in range(Lx):
+                        p1 = y * Lx + x
+                        p2 = p1 + Lx
+                        q1_up = lookup_qiskit_ordering(p1, "↑")
+                        q2_up = lookup_qiskit_ordering(p2, "↑")
+                        q1_down = lookup_qiskit_ordering(p1, "↓")
+                        q2_down = lookup_qiskit_ordering(p2, "↓")
+                        add_hopping_term(circ, q1_up, q2_up, alpha)
+                        add_hopping_term(circ, q1_down, q2_down, alpha)
+
+        horizontal_odd()
+        horizontal_even()
+        vertical_odd()
+        vertical_even()
+
+    for _ in range(timesteps):
+        for _ in range(n):
+            chemical_potential_term()
+            onsite_interaction_term()
+            kinetic_hopping_term()
+            onsite_interaction_term()
+            chemical_potential_term()
 
     return circ
 
