@@ -28,8 +28,8 @@ These tests confirm the correctness and stability of TDVP-based simulations with
 
 from __future__ import annotations
 
-from unittest.mock import patch
 from copy import deepcopy
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -39,6 +39,7 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
+    global_dynamic_tdvp,
     merge_mpo_tensors,
     merge_mps_tensors,
     project_bond,
@@ -46,7 +47,6 @@ from mqt.yaqs.core.methods.tdvp import (
     single_site_tdvp,
     split_mps_tensor,
     two_site_tdvp,
-    global_dynamic_tdvp,
     update_bond,
     update_left_environment,
     update_right_environment,
@@ -304,6 +304,7 @@ def test_two_site_tdvp() -> None:
     state_vec = U @ state_vec
     found = state.to_vec()
     assert np.allclose(state_vec, found)
+
 
 def test_dynamic_tdvp_one_site() -> None:
     """Test dynamic TDVP, single site.
