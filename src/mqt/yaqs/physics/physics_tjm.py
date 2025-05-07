@@ -25,7 +25,7 @@ from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import dynamic_tdvp
+from ..core.methods.tdvp import local_dynamic_tdvp
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -69,7 +69,7 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
         MPS: The updated state after one time step evolution.
     """
     if sim_params.evolution_mode == EvolutionMode.TDVP:
-        dynamic_tdvp(state, hamiltonian, sim_params)
+        local_dynamic_tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt)
@@ -102,7 +102,7 @@ def sample(
     """
     psi = copy.deepcopy(phi)
     if sim_params.evolution_mode == EvolutionMode.TDVP:
-        dynamic_tdvp(psi, hamiltonian, sim_params)
+        local_dynamic_tdvp(psi, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2)
@@ -205,7 +205,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
             results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
-        dynamic_tdvp(state, hamiltonian, sim_params)
+        local_dynamic_tdvp(state, hamiltonian, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt)
             state = stochastic_process(state, noise_model, sim_params.dt)
