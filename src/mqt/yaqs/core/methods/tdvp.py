@@ -636,26 +636,17 @@ def local_dynamic_tdvp(
         # current bond dimension between i and i+1
         bond_dim = state.tensors[i].shape[2]
         if bond_dim >= sim_params.max_bond_dim or lock_final_site:
+            state.tensors[i] = update_site(
+                left_blocks[i],
+                right_blocks[i],
+                hamiltonian.tensors[i],
+                state.tensors[i],
+                0.5 * sim_params.dt,
+                numiter_lanczos,
+            )
             if lock_final_site:
-                assert i == num_sites - 1
-                state.tensors[i] = update_site(
-                    left_blocks[i],
-                    right_blocks[i],
-                    hamiltonian.tensors[i],
-                    state.tensors[i],
-                    0.5 * sim_params.dt,
-                    numiter_lanczos,
-                )
+                continue
             else:
-                assert i != num_sites - 1
-                state.tensors[i] = update_site(
-                    left_blocks[i],
-                    right_blocks[i],
-                    hamiltonian.tensors[i],
-                    state.tensors[i],
-                    0.5 * sim_params.dt,
-                    numiter_lanczos,
-                )
                 tensor_shape = state.tensors[i].shape
                 reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
                 site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
@@ -667,9 +658,9 @@ def local_dynamic_tdvp(
                     left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
                 )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
-                if i == num_sites - 2:
-                    # Guarantees final site is 1TDVP
-                    lock_final_site = True
+            if i == num_sites - 2 and not lock_final_site:
+                # Guarantees final site is 1TDVP
+                lock_final_site = True
         # Will be encountered at final site in loop due to dummy dimension
         elif i == num_sites - 1:
             continue
