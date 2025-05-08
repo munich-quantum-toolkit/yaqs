@@ -83,7 +83,7 @@ trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
 
 # Use average_random_samples to calculate averaged errors with shaded error bars
 max_sample_size = 10000
-num_samples = 1000
+num_samples = 5000
 errors = []
 std_devs = []
 
@@ -126,7 +126,7 @@ for sample_size in x_values:
 errors = np.array(errors)
 std_devs = np.array(std_devs)
 p1_1, = axes[0].plot(x_values, errors, label='$0.2$')
-axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2)
+# axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2)
 
 
 data = pickle.load(open("TJM_Convergence_order2_dt01.pickle", "rb"))
@@ -152,7 +152,7 @@ for sample_size in x_values:
 errors = np.array(errors)
 std_devs = np.array(std_devs)
 p1_05, = axes[0].plot(x_values, errors, label='$0.1$')
-# axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2, color='green')
+axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2, color='green')
 
 data = pickle.load(open("TJM_Convergence_order1_dt05.pickle", "rb"))
 times = data['sim_params'].observables[4].times
