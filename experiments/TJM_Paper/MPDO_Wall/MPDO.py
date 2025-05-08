@@ -2,25 +2,20 @@ import qutip as qt
 import numpy as np
 import sys
 import matplotlib.pyplot as plt
+import pickle
 
 
-# Add the path to the lindbladmpo package
-sys.path.append('/Users/maximilianfrohlich/lindbladmpo')
-
-# Import the LindbladMPOSolver class
+sys.path.append('/Users/user/lindbladmpo')
 from lindbladmpo.LindbladMPOSolver import LindbladMPOSolver
 
-
-
-''' Heisenberg Model + Noise QuTip and Lindblad MPO simulation'''
 
 # Parameters
 N = 30  # number of sites
 J = 1    # X and Y coupling strength
 J_z = 1  # Z coupling strength
 h = 0.5  # transverse field strength
-gamma_dephasing = 1 / 10.0  # dephasing rate (1/T2star)
-gamma_relaxation = 1 / 10.0  # relaxation rate (1/T1)
+gamma_dephasing = 0.1  # dephasing rate (1/T2star)
+gamma_relaxation = 0.1  # relaxation rate (1/T1)
 
 # Time vector
 T = 10
@@ -55,12 +50,9 @@ lindblad_mpo_results = solver.result
 z_expectation_values_mpo = np.array([[solver.result['obs-1q'][('z', (i,))][1][t] 
                                 for t in range(len(solver.result['obs-1q'][('z', (i,))][0]))] for i in range(N)])
 
-import pickle
 
-# Filepath for the pickle file
 pickle_filepath = 'lindblad_mpo_results.pkl'
 
-# Data to save (you can include all the relevant results)
 data_to_save = {
     'parameters': parameters,  # Simulation parameters
     'result': lindblad_mpo_results,  # Lindblad MPO results
@@ -69,8 +61,5 @@ data_to_save = {
     'z_expectation_values_mpo': z_expectation_values_mpo
 }
 
-# Save data to a pickle file
 with open(pickle_filepath, 'wb') as f:
     pickle.dump(data_to_save, f)
-
-print(f"Lindblad MPO results saved to {pickle_filepath}")
