@@ -64,7 +64,7 @@ def plot_bonddimension_data():
     for site in range(L):
         heatmap_exact.append(data['observables'][site])
 
-    num_samples = 100
+    num_samples = 1000
     norm = LogNorm(vmin=1e-3, vmax=1e-1)
 
     cmap = cm.coolwarm
@@ -234,3 +234,6 @@ def plot_bonddimension_data():
 
     plt.savefig("results.pdf", dpi=300, format="pdf")
     plt.show()
+
+if __name__ == "__main__":
+    plot_bonddimension_data()
