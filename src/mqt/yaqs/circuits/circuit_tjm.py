@@ -25,7 +25,7 @@ from ..core.data_structures.networks import MPO, MPS
 from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import local_dynamic_tdvp
+from ..core.methods.tdvp import local_dynamic_tdvp, two_site_tdvp
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -194,7 +194,10 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
-    local_dynamic_tdvp(short_state, short_mpo, sim_params)
+    if np.abs(first_site - last_site) == 1:
+        two_site_tdvp(short_state, short_mpo, sim_params)
+    else:
+        local_dynamic_tdvp(short_state, short_mpo, sim_params)
 
     # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
