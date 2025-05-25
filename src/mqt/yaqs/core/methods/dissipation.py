@@ -21,9 +21,12 @@ import numpy as np
 import opt_einsum as oe
 from scipy.linalg import expm
 
+from ..libraries.noise_library import NoiseLibrary
+
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
+    
 
 
 def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> None:
@@ -52,23 +55,31 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> 
         - The operator is then applied to each tensor in the MPS via a contraction using `opt_einsum`.
     """
     # Check if noise is absent or has zero strength; if so, simply shift the state to canonical form.
-    if noise_model is None or all(gamma == 0 for gamma in noise_model.strengths):
+    if (noise_model is None or all(all(gamma == 0 for gamma in site_gammas) for site_gammas in noise_model.strengths)):
         for i in reversed(range(state.length)):
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
         return
 
-    # Calculate the dissipation matrix from the noise model.
-    mat = sum(
-        noise_model.strengths[i] * np.conj(jump_operator).T @ jump_operator
-        for i, jump_operator in enumerate(noise_model.jump_operators)
-    )
+    # # Calculate the dissipation matrix from the noise model.
+    # mat = sum(
+    #     noise_model.strengths[i] * np.conj(jump_operator).T @ jump_operator
+    #     for i, jump_operator in enumerate(noise_model.jump_operators)
+    # )
 
-    # Compute the dissipative operator by exponentiating -0.5 * dt * A.
-    dissipative_operator = expm(-0.5 * dt * mat)
+    # # Compute the dissipative operator by exponentiating -0.5 * dt * A.
+    # dissipative_operator = expm(-0.5 * dt * mat)
 
     # Apply the dissipative operator to each tensor in the MPS.
     # The contraction "ab, bcd->acd" applies the operator on the physical indices.
     for i in reversed(range(state.length)):
+        mat = 0
+        for j, process in enumerate(noise_model.processes[i]):
+            jump_operator = getattr(NoiseLibrary, process)().matrix
+            mat += noise_model.strengths[i][j] * np.conj(jump_operator).T @ jump_operator
+    
+
+        # Compute the dissipative operator by exponentiating -0.5 * dt * A.
+        dissipative_operator = expm(-0.5 * dt * mat)
         state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_operator, state.tensors[i])
         # Prepare the state for probability calculation by shifting the orthogonality center.
         # Shifting during the sweep is more efficient than setting it only once at the end.
