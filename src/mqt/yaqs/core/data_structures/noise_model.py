@@ -14,6 +14,7 @@ the effects of noise in quantum simulations.
 """
 
 from __future__ import annotations
+import numpy as np
 
 from ..libraries.noise_library import NoiseLibrary
 
@@ -59,5 +60,14 @@ class NoiseModel:
         self.processes = processes
         self.strengths = strengths
         self.jump_operators = []
-        for process in processes:
-            self.jump_operators.append(getattr(NoiseLibrary, process)().matrix)
+        # for process in processes:
+        #     self.jump_operators.append(getattr(NoiseLibrary, process)().matrix)
+
+        for site_processes in processes:
+            site_ops = []
+            for process in site_processes:
+                new_op = getattr(NoiseLibrary, process)().matrix
+                if not any(np.allclose(op, new_op) for op in site_ops):
+                    site_ops.append(new_op)
+            self.jump_operators.append(site_ops)
+

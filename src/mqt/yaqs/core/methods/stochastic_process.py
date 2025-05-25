@@ -20,12 +20,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
+from ..libraries.noise_library import NoiseLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
+
 
 
 def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
@@ -87,13 +89,14 @@ def create_probability_distribution(
         if site not in {0, state.length}:
             state.shift_orthogonality_center_right(site - 1)
 
-        for j, jump_operator in enumerate(noise_model.jump_operators):
+        for j, process in enumerate(noise_model.processes[site]):
+            jump_operator = getattr(NoiseLibrary, process)().matrix
             jumped_state = copy.deepcopy(state)
             jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_operator, state.tensors[site])
-            dp_m = dt * noise_model.strengths[j] * jumped_state.norm(site)
+            dp_m = dt * noise_model.strengths[site][j] * jumped_state.norm(site)
             dp_m_list.append(dp_m.real)
             jump_dict["jumps"].append(jump_operator)
-            jump_dict["strengths"].append(noise_model.strengths[j])
+            jump_dict["strengths"].append(noise_model.strengths[site][j])
             jump_dict["sites"].append(site)
 
     # Normalize the probabilities.
