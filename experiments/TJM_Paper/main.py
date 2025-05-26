@@ -4,6 +4,7 @@ from mpdo_comparison import run_mpdo_comparison
 from noise_comparison import run_noise_test
 from large_scale import run_large_scale
 
+
 if __name__ == "__main__":
     # 10 site Monte Carlo convergence
     run_monte_carlo_convergence()
@@ -14,9 +15,9 @@ if __name__ == "__main__":
     # 30 site MPDO comparison
     run_mpdo_comparison()
 
-    # 100 site Heisenberg model
+    # # 100 site Heisenberg model
     run_noise_test()
 
-    # 1000 site Heisenberg model
-    run_large_scale()
+    # # 1000 site Heisenberg model
+    # run_large_scale()
 

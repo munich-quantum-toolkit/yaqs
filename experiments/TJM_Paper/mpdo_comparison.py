@@ -11,7 +11,7 @@ def run_mpdo_comparison():
     # Define the system Hamiltonian
     L = 30
     J = 1
-    g = 0.5
+    g = 1
     H_0 = MPO()
     # H_0.init_Ising(L, d, J, g)
     H_0.init_heisenberg(L, J, J, J, g)
@@ -27,21 +27,21 @@ def run_mpdo_comparison():
     threshold = 0
     order = 2
 
-    # Define the noise model
-    gamma_relaxation = 0
-    gamma_dephasing = 0
-    noise_model = NoiseModel(['relaxation', 'excitation'], [gamma_relaxation, gamma_dephasing])
-    max_bond_dim = 32
+    # # Define the noise model
+    # gamma_relaxation = 0
+    # gamma_dephasing = 0
+    # noise_model = NoiseModel(['relaxation', 'excitation'], [gamma_relaxation, gamma_dephasing])
+    # max_bond_dim = 32
 
-    measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
-    simulator.run(state, H_0, sim_params, noise_model)
+    # measurements = [Observable(Z(), site) for site in range(L)]
+    # sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
+    # simulator.run(state, H_0, sim_params, noise_model)
 
-    filename = f"results/mpdo_comparison/30L_NoNoise.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'sim_params': sim_params,
-        }, f)
+    # filename = f"results/mpdo_comparison/30L_NoNoise.pickle"
+    # with open(filename, 'wb') as f:
+    #     pickle.dump({
+    #         'sim_params': sim_params,
+    #     }, f)
 
     # Define the noise model
     gamma_relaxation = 0.1
@@ -53,7 +53,31 @@ def run_mpdo_comparison():
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
     simulator.run(state, H_0, sim_params, noise_model)
 
-    filename = f"results/mpdo_comparison/30L_Noise.pickle"
+    filename = f"results/mpdo_comparison/30L_bond8.pickle"
+    with open(filename, 'wb') as f:
+        pickle.dump({
+            'sim_params': sim_params,
+        }, f)
+
+    max_bond_dim = 16
+
+    measurements = [Observable(Z(), site) for site in range(L)]
+    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
+    simulator.run(state, H_0, sim_params, noise_model)
+
+    filename = f"results/mpdo_comparison/30L_bond16.pickle"
+    with open(filename, 'wb') as f:
+        pickle.dump({
+            'sim_params': sim_params,
+        }, f)
+
+    max_bond_dim = 32
+
+    measurements = [Observable(Z(), site) for site in range(L)]
+    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
+    simulator.run(state, H_0, sim_params, noise_model)
+
+    filename = f"results/mpdo_comparison/30L_bond32.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'sim_params': sim_params,
