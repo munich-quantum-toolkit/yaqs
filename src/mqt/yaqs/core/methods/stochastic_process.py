@@ -98,10 +98,11 @@ def create_probability_distribution(
             jump_dict["jumps"].append(jump_operator)
             jump_dict["strengths"].append(noise_model.strengths[site][j])
             jump_dict["sites"].append(site)
-
+    # print('dp_m_list:', dp_m_list)
     # Normalize the probabilities.
     dp: np.float64 = np.sum(dp_m_list)
     jump_dict["probabilities"] = (dp_m_list / dp).astype(float)
+    # print('jump_dict:', jump_dict)
     return jump_dict
 
 
@@ -130,10 +131,13 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float) ->
         return state
 
     # A jump occurs: create the probability distribution and select a jump operator.
+    # print('about to apply jump')
     jump_dict = create_probability_distribution(state, noise_model, dt)
     choices = list(range(len(jump_dict["probabilities"])))
     choice = rng.choice(choices, p=jump_dict["probabilities"])
+    # print('choice:', choice)
     jump_operator = jump_dict["jumps"][choice]
+    # print('jump_operator:', jump_operator)
     state.tensors[jump_dict["sites"][choice]] = oe.contract(
         "ab, bcd->acd", jump_operator, state.tensors[jump_dict["sites"][choice]]
     )

@@ -149,6 +149,7 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         NDArray[np.float64]: An array of expectation values for the trajectory, with dimensions
         determined by the number of observables and time steps.
     """
+   # print("Starting TJM simulation...")
     _i, initial_state, noise_model, sim_params, hamiltonian = args
 
     state = copy.deepcopy(initial_state)
@@ -160,12 +161,15 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.sorted_observables):
             results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
-
+    # print("TJM time steps:", sim_params.times)
     phi = initialize(state, noise_model, sim_params)
     if sim_params.sample_timesteps:
         sample(phi, hamiltonian, noise_model, sim_params, results, j=1)
 
+    
     for j, _ in enumerate(sim_params.times[2:], start=2):
+
+        #print(f"Step {j} of {len(sim_params.times) - 1}")
         phi = step_through(phi, hamiltonian, noise_model, sim_params)
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
             sample(phi, hamiltonian, noise_model, sim_params, results, j)
