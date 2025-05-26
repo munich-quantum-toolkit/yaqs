@@ -43,7 +43,7 @@ def run_noise_test():
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"results/mpdo_comparison/100L_bond8.pickle"
+    filename = f"results/noise_comparison/100L_bond8.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
@@ -63,7 +63,7 @@ def run_noise_test():
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"results/mpdo_comparison/100L_bond16.pickle"
+    filename = f"results/noise_comparison/100L_bond16.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
@@ -84,7 +84,7 @@ def run_noise_test():
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"results/mpdo_comparison/100L_bond32.pickle"
+    filename = f"results/noise_comparison/100L_bond32.pickle"
     with open(filename, 'wb') as f:
         pickle.dump({
             'heatmap': heatmap,
