@@ -29,6 +29,7 @@ def run_noise_test():
     order = 2
     gammas = np.logspace(-4, 1, 100)
 
+    print("Noise test, bond dimension 8")
     measurements = [Observable(Z(), site) for site in range(L)]
     heatmap = np.empty((L, len(gammas)))
     max_bond_dim = 8
@@ -49,6 +50,7 @@ def run_noise_test():
             'heatmap': heatmap,
         }, f)
 
+    print("Noise test, bond dimension 16")
     measurements = [Observable(Z(), site) for site in range(L)]
     heatmap = np.empty((L, len(gammas)))
     max_bond_dim = 16
@@ -69,7 +71,7 @@ def run_noise_test():
             'heatmap': heatmap,
         }, f)
 
-
+    print("Noise test, bond dimension 32")
     measurements = [Observable(Z(), site) for site in range(L)]
     heatmap = np.empty((L, len(gammas)))
     max_bond_dim = 32

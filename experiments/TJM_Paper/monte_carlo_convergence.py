@@ -32,6 +32,7 @@ def run_monte_carlo_convergence():
     threshold = 0
     max_bond_dim = 2**L
 
+    print("Order 2, dt = 0.1")
     dt = 0.1
     order = 2
     measurements = [Observable(XX(), L//2, L//2+1)]
@@ -43,6 +44,7 @@ def run_monte_carlo_convergence():
             'sim_params': sim_params,
         }, f)
 
+    print("Order 2, dt = 0.2")
     dt = 0.2
     order = 2
     measurements = [Observable(XX(), L//2, L//2+1)]
@@ -54,6 +56,7 @@ def run_monte_carlo_convergence():
             'sim_params': sim_params,
         }, f)
 
+    print("Order 2, dt = 0.5")
     dt = 0.5
     order = 2
     measurements = [Observable(XX(), L//2, L//2+1)]
@@ -65,6 +68,7 @@ def run_monte_carlo_convergence():
             'sim_params': sim_params,
         }, f)
 
+    print("Order 1, dt = 0.1")
     dt = 0.1
     order = 1
     measurements = [Observable(XX(), L//2, L//2+1)]
@@ -76,6 +80,7 @@ def run_monte_carlo_convergence():
             'sim_params': sim_params,
         }, f)
 
+    print("Order 1, dt = 0.2")
     dt = 0.2
     order = 1
     measurements = [Observable(XX(), L//2, L//2+1)]
@@ -87,6 +92,7 @@ def run_monte_carlo_convergence():
             'sim_params': sim_params,
         }, f)
 
+    print("Order 1, dt = 0.5")
     dt = 0.5
     order = 1
     measurements = [Observable(XX(), L//2, L//2+1)]

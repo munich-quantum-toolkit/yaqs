@@ -33,6 +33,7 @@ def run_bond_dimension_convergence():
     N = 10000
     threshold = 0
 
+    print("Bond dim convergence: Bond dim 4")
     max_bond_dim = 4
     order = 2
     measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
@@ -44,6 +45,7 @@ def run_bond_dimension_convergence():
             'sim_params': sim_params,
         }, f)
 
+    print("Bond dim convergence: Bond dim 8")
     max_bond_dim = 8
     measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
@@ -54,6 +56,7 @@ def run_bond_dimension_convergence():
             'sim_params': sim_params,
         }, f)
 
+    print("Bond dim convergence: Bond dim 16")
     max_bond_dim = 16
     measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
