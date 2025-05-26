@@ -73,14 +73,22 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel | None, dt: float) -> 
     # The contraction "ab, bcd->acd" applies the operator on the physical indices.
     for i in reversed(range(state.length)):
         mat = 0
+        #print('Processing site:', i)
         for j, process in enumerate(noise_model.processes[i]):
             jump_operator = getattr(NoiseLibrary, process)().matrix
             mat += noise_model.strengths[i][j] * np.conj(jump_operator).T @ jump_operator
-    
+            #print('mat:', mat)
+            #print('mat shape:', mat.shape)
+        # if mat == 0:
+        #     if i != 0:
+        #         state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="SVD")
+        #         return
 
         # Compute the dissipative operator by exponentiating -0.5 * dt * A.
         dissipative_operator = expm(-0.5 * dt * mat)
+        #print('state.tensors[i].shape, dissipative_operator.shape):', state.tensors[i].shape, dissipative_operator.shape)
         state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_operator, state.tensors[i])
+        #print('state.tensors[i].shape after contraction:', state.tensors[i].shape)
         # Prepare the state for probability calculation by shifting the orthogonality center.
         # Shifting during the sweep is more efficient than setting it only once at the end.
         if i != 0:

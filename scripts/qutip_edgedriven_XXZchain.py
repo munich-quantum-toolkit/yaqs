@@ -39,11 +39,8 @@ def qt_build_lindblad_operators(L, epsilon):
 
     c_ops = []
     
-    # L1 = sqrt(ε) * σ_1^+
-    c_ops.append(np.sqrt(epsilon) * qt.tensor([sp] + [I] * (L - 1)))
-
-    # L2 = sqrt(ε) * σ_n^-
-    c_ops.append(np.sqrt(epsilon) * qt.tensor([I] * (L - 1) + [sm]))
+    c_ops.append(np.sqrt(epsilon) * qt.tensor([sm] + [I] * (L - 1)))
+    c_ops.append(np.sqrt(epsilon) * qt.tensor([I] * (L - 1) + [sp]))
 
     return c_ops
 
@@ -60,51 +57,54 @@ def steady_state(L):
 if __name__ == "__main__":
 
     # Define parameters
-    L = 8
+    L = 30
     J_x = 1
     J_y = 1
-    J_z = 1
+    J_z = 1 # 0.25
     g = 0
     delta = 1
     epsilon = 40  # coupling strength (ε)
 
-    T= 4
+
+    T= 20
     dt = 0.1
     t = np.arange(0, T + dt, dt)
 
 
 
-    # Qutip setup
-    H_qt = qt_build_XXZ_operator(delta, L)
-    c_ops = []
-    c_ops = qt_build_lindblad_operators(L, epsilon)
+    # H_qt = qt_build_XXZ_operator(delta, L)
+    # c_ops = []
+    # c_ops = qt_build_lindblad_operators(L, epsilon)
 
 
-    # psi0 = qt.rand_ket(2**L) # random initial state
+    # # psi0 = qt.rand_ket(2**L) # random initial state
 
-    zero = qt.basis(2, 0)  # single-qubit |0⟩
-    one = qt.basis(2, 1) # single-qubit |1⟩
-
-
-    # psi0 = qt.tensor([zero] * L)  # all zero state
-
-    # wall state: half |1⟩ and half |0⟩
-    half = L // 2
-    state_list = [one]*half + [zero]*(L - half)
-    psi0 = qt.tensor(state_list)
-
-    psi0.dims = [[2]*L, [1]]  # Matches the L-qubit tensor structure
-
-    sx = qt.sigmax()
-    sy = qt.sigmay()
-    sz = qt.sigmaz()
+    # zero = qt.basis(2, 0)  # single-qubit |0⟩
+    # one = qt.basis(2, 1) # single-qubit |1⟩
 
 
+    # # psi0 = qt.tensor([zero] * L)  # all zero state
 
-    sz_list = [qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
+    # # wall state: half |0⟩ and half |1⟩
+    # half = L // 2
+    # state_list = [zero]*half + [one]*(L - half)
+    # psi0 = qt.tensor(state_list)
 
-    # Lindblad solution
-    result_lindblad = qt.mesolve(H_qt, psi0, t, c_ops, sz_list, progress_bar=True)
+    # psi0.dims = [[2]*L, [1]]  # Matches the L-qubit tensor structure
+
+    # sx = qt.sigmax()
+    # sy = qt.sigmay()
+    # sz = qt.sigmaz()
+    # print(sz)
+
+
+
+    # sz_list = [qt.tensor([sz if n == i else qt.qeye(2) for n in range(L)]) for i in range(L)]
+
+    # # Lindblad solution
+    # result_lindblad = qt.mesolve(H_qt, psi0, t, c_ops, sz_list, progress_bar=True)
+
+
 
 
     # analytical steady state
@@ -120,14 +120,19 @@ if __name__ == "__main__":
 
     # Define the simulation parameters
     sample_timesteps = True
-    N = 100
+    N = 300
     max_bond_dim = 16
     threshold = 1e-6
     order = 2
     measurements = [Observable(Z(), site) for site in range(L)]
-    gammas = [0.1,0.2]
+    gamma =  epsilon*2  # coupling strength (γ)
 
-    noise_model = NoiseModel([['relaxation', 'excitation'] for _ in range(L)], [[gammas[0], gammas[1]] for _ in range(L)])
+    noise_model = NoiseModel(
+    [['excitation']] + [['excitation'] for _ in range(L - 2)] + [['relaxation']],
+    [[gamma]] + [[0] for _ in range(L - 2)] + [[gamma]]
+)
+    # noise_model = NoiseModel([['excitation', 'relaxation'] for _ in range(L)], [[gamma, gamma] for _ in range(L)])
+
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
 
     ########## TJM Example #################
@@ -136,7 +141,7 @@ if __name__ == "__main__":
 
 
     # qubit ordering is reversed in qutip, so we need to reverse the expectation values
-    reversed_lindblad_expect = result_lindblad.expect[::-1]
+
 
     # plot the results
     plt.figure(figsize=(10, 6))
@@ -146,9 +151,9 @@ if __name__ == "__main__":
     for i, observable in enumerate(sim_params.observables):
         plt.plot(t, observable.results, label=f'⟨{observable.gate.name} {observable.site}⟩ TJM', color='orange')
         plt.axhline(y=steadystate_exact[i], linestyle='--', color='gray', label=f'⟨Z_{i}⟩ (exact steady state)' if i == 0 else None)
-        plt.plot(t, result_lindblad.expect[i], label=f'⟨Z_{i}⟩ QT', color='blue')
-        # difference = reversed_lindblad_expect[i] - observable.results
-        # plt.plot(t, difference, label=f'Difference ⟨Z_{i}⟩ - ⟨Z_{i}⟩_exact', linestyle='--', color='red')
+        #plt.plot(t, result_lindblad.expect[i], label=f'⟨Z_{i}⟩ QT', color='blue')
+        #difference = result_lindblad.expect[i] - observable.results
+        #plt.plot(t, difference, label=f'Difference ⟨Z_{i}⟩ - ⟨Z_{i}⟩_exact', linestyle='--', color='red')
     plt.legend()
     plt.grid()
     plt.show()
