@@ -18,54 +18,54 @@ def run_bond_dimension_convergence():
     H_0 = MPO()
     H_0.init_ising(L, J, g)
 
-    # Define the initial state
-    state = MPS(L, state='zeros')
+    # # Define the initial state
+    # state = MPS(L, state='zeros')
 
-    # Define the noise model
+    # # Define the noise model
     gamma_relaxation = 0.1
     gamma_dephasing = 0.1
     noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma_relaxation, gamma_dephasing])
 
-    # Define the simulation parameters
+    # # Define the simulation parameters
     T = 10
     dt = 0.1
     sample_timesteps = True
     N = 10000
     threshold = 0
 
-    print("Bond dim convergence: Bond dim 4")
+    # print("Bond dim convergence: Bond dim 4")
     max_bond_dim = 4
     order = 2
     measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
-    simulator.run(state, H_0, sim_params, noise_model)
-    filename = f"results/bond_dimension_convergence/TJM_Convergence_Bond4.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'sim_params': sim_params,
-        }, f)
+    # simulator.run(state, H_0, sim_params, noise_model)
+    # filename = f"results/bond_dimension_convergence/TJM_Convergence_Bond4.pickle"
+    # with open(filename, 'wb') as f:
+    #     pickle.dump({
+    #         'sim_params': sim_params,
+    #     }, f)
 
-    print("Bond dim convergence: Bond dim 8")
-    max_bond_dim = 8
-    measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
-    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
-    simulator.run(state, H_0, sim_params, noise_model)
-    filename = f"results/bond_dimension_convergence/TJM_Convergence_Bond8.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'sim_params': sim_params,
-        }, f)
+    # print("Bond dim convergence: Bond dim 8")
+    # max_bond_dim = 8
+    # measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
+    # sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+    # simulator.run(state, H_0, sim_params, noise_model)
+    # filename = f"results/bond_dimension_convergence/TJM_Convergence_Bond8.pickle"
+    # with open(filename, 'wb') as f:
+    #     pickle.dump({
+    #         'sim_params': sim_params,
+    #     }, f)
 
-    print("Bond dim convergence: Bond dim 16")
-    max_bond_dim = 16
-    measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
-    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
-    simulator.run(state, H_0, sim_params, noise_model)
-    filename = f"results/bond_dimension_convergence/TJM_Convergence_Bond16.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'sim_params': sim_params,
-        }, f)
+    # print("Bond dim convergence: Bond dim 16")
+    # max_bond_dim = 16
+    # measurements = [Observable(XX(), [site, site+1]) for site in range(L-1)]
+    # sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+    # simulator.run(state, H_0, sim_params, noise_model)
+    # filename = f"results/bond_dimension_convergence/TJM_Convergence_Bond16.pickle"
+    # with open(filename, 'wb') as f:
+    #     pickle.dump({
+    #         'sim_params': sim_params,
+    #     }, f)
 
     # Time vector
     t = np.arange(0, sim_params.elapsed_time + sim_params.dt, sim_params.dt)
@@ -107,3 +107,7 @@ def run_bond_dimension_convergence():
             'sim_params': sim_params,
             'observables': result_lindblad.expect,
         }, f)
+
+if __name__ == "__main__":
+    run_bond_dimension_convergence()
+    

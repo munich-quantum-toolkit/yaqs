@@ -48,18 +48,18 @@ def plot_convergence_data():
     # Load data from file
     data = pickle.load(open("QuTip_exact_convergence.pickle", "rb"))
     # Site 5, Time T=1
-    exp_value_exact = data['observables'][4][10]
+    exp_value_exact = data['observables'][0][10]
 
 
     data = pickle.load(open("TJM_Convergence_order2_dt05.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    times = data['sim_params'].observables[0].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     max_sample_size = 10000
-    num_samples = 5000
+    num_samples = 1000
     errors = []
     std_devs = []
 
@@ -80,10 +80,10 @@ def plot_convergence_data():
     # axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2)
 
     data = pickle.load(open("TJM_Convergence_order2_dt02.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    times = data['sim_params'].observables[0].times
 
     # # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
 
     # # # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -106,10 +106,10 @@ def plot_convergence_data():
 
 
     data = pickle.load(open("TJM_Convergence_order2_dt01.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    times = data['sim_params'].observables[0].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -131,10 +131,10 @@ def plot_convergence_data():
     axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2, color='green')
 
     data = pickle.load(open("TJM_Convergence_order1_dt05.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    times = data['sim_params'].observables[0].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -156,10 +156,10 @@ def plot_convergence_data():
 
 
     data = pickle.load(open("TJM_Convergence_order1_dt02.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    times = data['sim_params'].observables[0].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -180,10 +180,10 @@ def plot_convergence_data():
     p1_05, = axes[0].plot(x_values, errors, linestyle='--', linewidth=1.5, color='orange')
 
     data = pickle.load(open("TJM_Convergence_order1_dt01.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    times = data['sim_params'].observables[0].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -209,3 +209,6 @@ def plot_convergence_data():
 
     plt.savefig("results.pdf", dpi=300, format="pdf")
     plt.show()
+
+if __name__ == "__main__":
+    plot_convergence_data()

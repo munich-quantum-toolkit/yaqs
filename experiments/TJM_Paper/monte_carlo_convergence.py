@@ -35,7 +35,7 @@ def run_monte_carlo_convergence():
     print("Order 2, dt = 0.1")
     dt = 0.1
     order = 2
-    measurements = [Observable(XX(), L//2, L//2+1)]
+    measurements = [Observable(XX(), [L//2, L//2+1])]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
     filename = f"results/monte_carlo_convergence/TJM_Convergence_order2_dt01.pickle"
@@ -47,7 +47,7 @@ def run_monte_carlo_convergence():
     print("Order 2, dt = 0.2")
     dt = 0.2
     order = 2
-    measurements = [Observable(XX(), L//2, L//2+1)]
+    measurements = [Observable(XX(), [L//2, L//2+1])]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
     filename = f"results/monte_carlo_convergence/TJM_Convergence_order2_dt02.pickle"
@@ -59,7 +59,7 @@ def run_monte_carlo_convergence():
     print("Order 2, dt = 0.5")
     dt = 0.5
     order = 2
-    measurements = [Observable(XX(), L//2, L//2+1)]
+    measurements = [Observable(XX(), [L//2, L//2+1])]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
     filename = f"results/monte_carlo_convergence/TJM_Convergence_order2_dt05.pickle"
@@ -71,7 +71,7 @@ def run_monte_carlo_convergence():
     print("Order 1, dt = 0.1")
     dt = 0.1
     order = 1
-    measurements = [Observable(XX(), L//2, L//2+1)]
+    measurements = [Observable(XX(), [L//2, L//2+1])]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
     filename = f"results/monte_carlo_convergence/TJM_Convergence_order1_dt01.pickle"
@@ -83,7 +83,7 @@ def run_monte_carlo_convergence():
     print("Order 1, dt = 0.2")
     dt = 0.2
     order = 1
-    measurements = [Observable(XX(), L//2, L//2+1)]
+    measurements = [Observable(XX(), [L//2, L//2+1])]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
     filename = f"results/monte_carlo_convergence/TJM_Convergence_order1_dt02.pickle"
@@ -95,7 +95,7 @@ def run_monte_carlo_convergence():
     print("Order 1, dt = 0.5")
     dt = 0.5
     order = 1
-    measurements = [Observable(XX(), L//2, L//2+1)]
+    measurements = [Observable(XX(), [L//2, L//2+1])]
     sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
     simulator.run(state, H_0, sim_params, noise_model)
     filename = f"results/monte_carlo_convergence/TJM_Convergence_order1_dt05.pickle"
