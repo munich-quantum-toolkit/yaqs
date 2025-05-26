@@ -562,7 +562,7 @@ def test_gate_observable() -> None:
     obs = Observable(gate, site)
 
     assert_array_equal(obs.gate.matrix, gate.matrix)
-    assert obs.site == site
+    assert obs.sites == site
 
 
 def test_basegate_operations_with_different_interaction() -> None:
