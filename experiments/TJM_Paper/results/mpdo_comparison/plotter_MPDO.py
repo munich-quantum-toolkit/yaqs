@@ -50,14 +50,14 @@ def plot_MPDO_data():
     #########################################################################################
     x = np.logspace(-2, 4)
 
-    data = pickle.load(open("30L_NoNoise.pickle", "rb"))
+    data = pickle.load(open("30L_Bond8.pickle", "rb"))
     heatmap = []
     for observable in data['sim_params'].observables:
         heatmap.append(observable.results)
 
     im = axes[0].imshow(heatmap, aspect='auto', vmin=-1, vmax=1)
 
-    data = pickle.load(open("30L_Noise.pickle", "rb"))
+    data = pickle.load(open("30L_Bond32.pickle", "rb"))
     heatmap = []
     for observable in data['sim_params'].observables:
         heatmap.append(observable.results)
@@ -68,9 +68,9 @@ def plot_MPDO_data():
     im = axes[2].imshow(data['z_expectation_values_mpo'], aspect='auto', vmin=-1, vmax=1)
 
     # Add vertical annotations on the left side above the "Site" label
-    axes[0].text(-0.125, 0.5, "TJM \n ($\\gamma = 0$)", fontsize=12, transform=axes[0].transAxes, va='center', ha='center', rotation=90)
-    axes[1].text(-0.125, 0.5, "TJM \n ($\\gamma = 0.1$)", fontsize=12, transform=axes[1].transAxes, va='center', ha='center', rotation=90)
-    axes[2].text(-0.125, 0.5, "MPDO \n ($\\gamma = 0.1$)", fontsize=12, transform=axes[2].transAxes, va='center', ha='center', rotation=90)
+    axes[0].text(-0.125, 0.5, "TJM \n ($\\gamma = 0.1, \\chi=8$)", fontsize=12, transform=axes[0].transAxes, va='center', ha='center', rotation=90)
+    axes[1].text(-0.125, 0.5, "TJM \n ($\\gamma = 0.1, \\chi=32$)", fontsize=12, transform=axes[1].transAxes, va='center', ha='center', rotation=90)
+    axes[2].text(-0.125, 0.5, "MPO \n ($\\gamma = 0.1$)", fontsize=12, transform=axes[2].transAxes, va='center', ha='center', rotation=90)
 
 
     fig.subplots_adjust(top=0.95, right=0.88)
@@ -80,3 +80,6 @@ def plot_MPDO_data():
 
     plt.savefig("results.pdf", dpi=300, format="pdf")
     plt.show()
+
+if __name__ == "__main__":
+    plot_MPDO_data()

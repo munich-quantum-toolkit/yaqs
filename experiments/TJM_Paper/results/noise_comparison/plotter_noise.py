@@ -67,20 +67,20 @@ def plot_gamma_test():
 
     #########################################################################################
 
-    heatmap = pickle.load(open("100L_T1_wall.pickle", "rb"))['heatmap']#
+    heatmap = pickle.load(open("100L_bond8.pickle", "rb"))['heatmap']#
     im = axes[0].imshow(heatmap, aspect='auto', extent=(0, 100, 100, 0), vmin=-1, vmax=1)
     axes[0].set_xticks(tick_positions)
     axes[0].set_xticklabels(tick_labels, rotation=rotation)
 
-    heatmap = pickle.load(open("100L_T5_wall.pickle", "rb"))['heatmap']
-    im = axes[1].imshow(heatmap, aspect='auto', extent=(0, 100, 100, 0), vmin=-1, vmax=1)
-    axes[1].set_xticks(tick_positions)
-    axes[1].set_xticklabels(tick_labels, rotation=rotation)
+    # heatmap = pickle.load(open("100L_T5_wall.pickle", "rb"))['heatmap']
+    # im = axes[1].imshow(heatmap, aspect='auto', extent=(0, 100, 100, 0), vmin=-1, vmax=1)
+    # axes[1].set_xticks(tick_positions)
+    # axes[1].set_xticklabels(tick_labels, rotation=rotation)
 
-    heatmap = pickle.load(open("100L_T10_wall.pickle", "rb"))['heatmap']
-    im = axes[2].imshow(heatmap, aspect='auto', extent=(0, 100, 100, 0), vmin=-1, vmax=1)
-    axes[2].set_xticks(tick_positions)
-    axes[2].set_xticklabels(tick_labels, rotation=rotation)
+    # heatmap = pickle.load(open("100L_T10_wall.pickle", "rb"))['heatmap']
+    # im = axes[2].imshow(heatmap, aspect='auto', extent=(0, 100, 100, 0), vmin=-1, vmax=1)
+    # axes[2].set_xticks(tick_positions)
+    # axes[2].set_xticklabels(tick_labels, rotation=rotation)
 
     fig.subplots_adjust(top=0.95, right=0.88)
     cbar_ax = fig.add_axes([0.9, 0.11, 0.025, 0.8])
@@ -89,3 +89,6 @@ def plot_gamma_test():
 
     plt.savefig("results.pdf", dpi=300, format="pdf")
     plt.show()
+
+if __name__ == "__main__":
+    plot_gamma_test()
