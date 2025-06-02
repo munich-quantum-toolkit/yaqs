@@ -1,214 +1,171 @@
 import pickle
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.legend_handler import HandlerTuple
-import os
+import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-from matplotlib.colors import LogNorm
+import matplotlib as mpl
+
+def compute_mean_errors(pickle_path, exp_value_exact, x_values, num_samples=1000):
+    """
+    Load trajectories from pickle_path, then for each sample size in x_values:
+    - draw num_samples random subsets
+    - compute absolute error |mean(sample) - exp_value_exact|
+    - return arrays of mean errors and standard deviations
+    """
+    with open(pickle_path, "rb") as f:
+        data = pickle.load(f)
+    trajectories = data['sim_params'].observables[0].trajectories.squeeze()
+
+    errors = []
+    std_devs = []
+    for sample_size in x_values:
+        sample_errors = []
+        for _ in range(num_samples):
+            sample = np.random.choice(trajectories, sample_size, replace=False)
+            error = abs(np.mean(sample) - exp_value_exact)
+            sample_errors.append(error)
+        errors.append(np.mean(sample_errors))
+        std_devs.append(np.std(sample_errors))
+
+    return np.array(errors), np.array(std_devs)
 
 
 def plot_convergence_data():
-    ### Overall Plot
+    # ——— Global plotting parameters ———
     plt.rcParams.update({
         "text.usetex": True,
         "font.family": "serif",
         "font.serif": ["Computer Modern Roman"],
         "mathtext.fontset": "cm",
-        "text.latex.preamble": r"\usepackage{amsmath}",
-        "text.latex.preamble": r"\usepackage{newtxtext}\usepackage{newtxmath}",
-        "lines.linewidth": 3
-    })
-    fig  = plt.figure(figsize=(3.5, 3), constrained_layout=True)  # a size often acceptable for Nature
+        "text.latex.preamble": r"\usepackage{amsmath}\usepackage{newtxtext}\usepackage{newtxmath}",
+        "font.size": 12,
+        "axes.labelsize": 14,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "lines.linewidth": 2,
+        "legend.fontsize": 10,
+        })
 
+    fig = plt.figure(figsize=(3.5, 3), constrained_layout=True)
     gs = GridSpec(1, 1, figure=fig)
-    ax1 = fig.add_subplot(gs[0])
-    # ax2 = fig.add_subplot(gs[1, 0])
-    # ax3 = fig.add_subplot(gs[1, 1])
-    # ax4 = fig.add_subplot(gs[1, 2])
+    ax = fig.add_subplot(gs[0])
 
-    axes = [ax1]
-    # plt.rcParams['pdf.fonttype'] = 42  # ensures fonts are embedded
-    # axes[0].set_frame_on(False)
-    # axes[0].tick_params(labeltop=False, top=False, labelright=False, right=False)
-
-
-    axes[0].set_xlabel('Trajectories ($N$)', fontsize=12)
-    axes[0].set_ylabel("$|\\langle X^{[5]} \\rangle - \\langle \\tilde{X}^{[5]} \\rangle|$", fontsize=12)
-    axes[0].tick_params(labelsize=10)
-    axes[0].set_xlim(1, 1e4)
-    axes[0].xaxis.grid(linestyle='--')
-    axes[0].yaxis.grid(linestyle='--')
-    axes[0].set_xscale('log')
-    axes[0].set_yscale('log')
-    axes[0].set_ylim(1e-3, 1e-1)
-    # axes[0].grid(which='both', linestyle=':', linewidth=0.8, alpha=0.7)
-
-    #########################################################################################
-    x = np.logspace(-2, 4)
-    # Load data from file
-    data = pickle.load(open("QuTip_exact_convergence.pickle", "rb"))
-    # Site 5, Time T=1
-    exp_value_exact = data['observables'][0][10]
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(1, 1e4)
+    ax.set_ylim(1e-3, 1e-1)
+    ax.set_xlabel(r"Trajectories ($N$)")
+    ax.set_ylabel(r"$\bigl|\langle X^{[5]}\rangle - \langle \tilde X^{[5]}\rangle\bigr|$")
+    ax.grid(which='both', linestyle='--', color='0.8', linewidth=0.8, alpha=0.7)
 
 
-    data = pickle.load(open("TJM_Convergence_order2_dt05.pickle", "rb"))
-    times = data['sim_params'].observables[0].times
+    # ——— Precompute exact expectation for Site 5, T=1 ———
+    with open("QuTip_exact_convergence.pickle", "rb") as f_exact:
+        data_exact = pickle.load(f_exact)
+    exp_value_exact = data_exact['observables'][0][10]
 
-    # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
+    # ——— Define x_values (trajectory counts) ———
+    x_values = [*range(1, 10),
+                *range(10, 110, 10),
+                *range(100, 1100, 100),
+                *range(1000, 11000, 1000)]
 
-    # Use average_random_samples to calculate averaged errors with shaded error bars
-    max_sample_size = 10000
-    num_samples = 1000
-    errors = []
-    std_devs = []
+    # ——— Configuration: (pickle file, label, linestyle, color, fill_color) ———
+    configs = [
+        {
+            "path": "TJM_Convergence_order2_dt05.pickle",
+            "label": r"$0.5$",
+            "linestyle": "-",
+            "color": "tab:blue",
+            "fill_color": None
+        },
+        {
+            "path": "TJM_Convergence_order2_dt02.pickle",
+            "label": r"$0.2$",
+            "linestyle": "-",
+            "color": "tab:orange",
+            "fill_color": None
+        },
+        {
+            "path": "TJM_Convergence_order2_dt01.pickle",
+            "label": r"$0.1$",
+            "linestyle": "-",
+            "color": "tab:green",
+            "fill_color": "tab:green"
+        },
+        {
+            "path": "TJM_Convergence_order1_dt05.pickle",
+            "label": None,
+            "linestyle": "--",
+            "color": "tab:blue",
+            "fill_color": None
+        },
+        {
+            "path": "TJM_Convergence_order1_dt02.pickle",
+            "label": None,
+            "linestyle": "--",
+            "color": "tab:orange",
+            "fill_color": None
+        },
+        {
+            "path": "TJM_Convergence_order1_dt01.pickle",
+            "label": None,
+            "linestyle": "--",
+            "color": "tab:green",
+            "fill_color": None
+        },
+    ]
 
-    x_values = [*range(1, 10), *range(10, 110, 10), *range(100, 1100, 100), *range(1000, 11000, 1000)]
-    for sample_size in x_values:
-        sample_errors = []
-        for _ in range(num_samples):
-            sample = np.random.choice(trajectories, sample_size, replace=False)
-            exp_value_stochastic = np.mean(sample)
-            error = np.abs(exp_value_stochastic - exp_value_exact)
-            sample_errors.append(error)
-        errors.append(np.mean(sample_errors))
-        std_devs.append(np.std(sample_errors))
+    # ——— Loop over each configuration, compute and plot errors ———
+    num_samples = 5000
+    for cfg in configs:
+        errors, std_devs = compute_mean_errors(
+            pickle_path=cfg["path"],
+            exp_value_exact=exp_value_exact,
+            x_values=x_values,
+            num_samples=num_samples
+        )
 
-    errors = np.array(errors)
-    std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, label='$0.5$')
-    # axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2)
+        ax.plot(
+            x_values,
+            errors,
+            label=cfg["label"],
+            linestyle=cfg["linestyle"],
+            color=cfg["color"]
+            )
 
-    data = pickle.load(open("TJM_Convergence_order2_dt02.pickle", "rb"))
-    times = data['sim_params'].observables[0].times
+        if cfg["fill_color"] is not None:
+            ax.fill_between(
+                x_values,
+                errors - std_devs,
+                errors + std_devs,
+                alpha=0.2,
+                color=cfg["fill_color"]
+            )
 
-    # # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
+    # ——— Plot the theoretical 1/√N reference curve ———
+    x_ref = np.logspace(-2, 4)
+    ax.plot(
+        x_ref,
+        0.1 / np.sqrt(x_ref),
+        linestyle='-',
+        color='black',
+        linewidth=1.5,
+    )
+    ax.text(
+        8,                     # manually pick an x‐location
+        0.1 / np.sqrt(6) * 1.1,  # y‐position slightly above
+        r"$0.1/\sqrt{N}$",
+        color="black",
+        fontsize=11,
+        rotation=-35,
+        va="center",
+        ha="center"
+    )
+    legend = ax.legend(loc='upper right', frameon=True, title=r"$\delta t$")
 
-    # # # Use average_random_samples to calculate averaged errors with shaded error bars
-    errors = []
-    std_devs = []
-
-    for sample_size in x_values:
-        sample_errors = []
-        for _ in range(num_samples):
-            sample = np.random.choice(trajectories, sample_size, replace=False)
-            exp_value_stochastic = np.mean(sample)
-            error = np.abs(exp_value_stochastic - exp_value_exact)
-            sample_errors.append(error)
-        errors.append(np.mean(sample_errors))
-        std_devs.append(np.std(sample_errors))
-
-    errors = np.array(errors)
-    std_devs = np.array(std_devs)
-    p1_1, = axes[0].plot(x_values, errors, label='$0.2$')
-    # axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2)
-
-
-    data = pickle.load(open("TJM_Convergence_order2_dt01.pickle", "rb"))
-    times = data['sim_params'].observables[0].times
-
-    # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
-
-    # Use average_random_samples to calculate averaged errors with shaded error bars
-    errors = []
-    std_devs = []
-
-    for sample_size in x_values:
-        sample_errors = []
-        for _ in range(num_samples):
-            sample = np.random.choice(trajectories, sample_size, replace=False)
-            exp_value_stochastic = np.mean(sample)
-            error = np.abs(exp_value_stochastic - exp_value_exact)
-            sample_errors.append(error)
-        errors.append(np.mean(sample_errors))
-        std_devs.append(np.std(sample_errors))
-
-    errors = np.array(errors)
-    std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, label='$0.1$')
-    axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2, color='green')
-
-    data = pickle.load(open("TJM_Convergence_order1_dt05.pickle", "rb"))
-    times = data['sim_params'].observables[0].times
-
-    # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
-
-    # Use average_random_samples to calculate averaged errors with shaded error bars
-    errors = []
-    std_devs = []
-
-    for sample_size in x_values:
-        sample_errors = []
-        for _ in range(num_samples):
-            sample = np.random.choice(trajectories, sample_size, replace=False)
-            exp_value_stochastic = np.mean(sample)
-            error = np.abs(exp_value_stochastic - exp_value_exact)
-            sample_errors.append(error)
-        errors.append(np.mean(sample_errors))
-        std_devs.append(np.std(sample_errors))
-
-    errors = np.array(errors)
-    std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, linestyle='--', linewidth=1.5, color='blue')
-
-
-    data = pickle.load(open("TJM_Convergence_order1_dt02.pickle", "rb"))
-    times = data['sim_params'].observables[0].times
-
-    # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
-
-    # Use average_random_samples to calculate averaged errors with shaded error bars
-    errors = []
-    std_devs = []
-
-    for sample_size in x_values:
-        sample_errors = []
-        for _ in range(num_samples):
-            sample = np.random.choice(trajectories, sample_size, replace=False)
-            exp_value_stochastic = np.mean(sample)
-            error = np.abs(exp_value_stochastic - exp_value_exact)
-            sample_errors.append(error)
-        errors.append(np.mean(sample_errors))
-        std_devs.append(np.std(sample_errors))
-
-    errors = np.array(errors)
-    std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, linestyle='--', linewidth=1.5, color='orange')
-
-    data = pickle.load(open("TJM_Convergence_order1_dt01.pickle", "rb"))
-    times = data['sim_params'].observables[0].times
-
-    # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[0].trajectories.squeeze()
-
-    # Use average_random_samples to calculate averaged errors with shaded error bars
-    errors = []
-    std_devs = []
-
-    for sample_size in x_values:
-        sample_errors = []
-        for _ in range(num_samples):
-            sample = np.random.choice(trajectories, sample_size, replace=False)
-            exp_value_stochastic = np.mean(sample)
-            error = np.abs(exp_value_stochastic - exp_value_exact)
-            sample_errors.append(error)
-        errors.append(np.mean(sample_errors))
-        std_devs.append(np.std(sample_errors))
-
-    errors = np.array(errors)
-    std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, linestyle='--', linewidth=1.5, color='green')
-
-    p1_exact = axes[0].plot(x, 0.1/np.sqrt(x), linestyle='-', color='black', linewidth=1.5)
-
-    axes[0].legend(title='$\\delta t$', loc='upper right')
-
-    plt.savefig("results.pdf", dpi=300, format="pdf")
+    plt.savefig("Benchmark_MonteCarloConvergence.pdf", dpi=300)
     plt.show()
+
 
 if __name__ == "__main__":
     plot_convergence_data()
