@@ -2,12 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import qutip as qt
 
+import concurrent.futures
+import os
+import pickle
+from functools import partial
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
 from mqt.yaqs import simulator
+
 
 # Build Hamiltonian
 def qt_build_XXZ_operator(delta, L):
@@ -56,17 +61,22 @@ def steady_state(L):
 
 if __name__ == "__main__":
 
+    # make directory for output
+    output_dir = "tjm_trajectories"
+    os.makedirs(output_dir, exist_ok=True)
+
     # Define parameters
-    L = 30
+    L = 100
     J_x = 1
     J_y = 1
     J_z = 1 # 0.25
     g = 0
     delta = 1
-    epsilon = 40  # coupling strength (ε)
+    factor = 5
+    epsilon = factor*2*np.pi  # coupling strength (ε)
 
 
-    T= 20
+    T = 10000
     dt = 0.1
     t = np.arange(0, T + dt, dt)
 
@@ -120,10 +130,11 @@ if __name__ == "__main__":
 
     # Define the simulation parameters
     sample_timesteps = True
-    N = 300
-    max_bond_dim = 16
+    N = 100
+    batchsize = 10
+    max_bond_dim = 4
     threshold = 1e-6
-    order = 2
+    order = 1
     measurements = [Observable(Z(), site) for site in range(L)]
     gamma =  epsilon*2  # coupling strength (γ)
 
@@ -131,16 +142,16 @@ if __name__ == "__main__":
     [['excitation']] + [['excitation'] for _ in range(L - 2)] + [['relaxation']],
     [[gamma]] + [[0] for _ in range(L - 2)] + [[gamma]]
 )
-    # noise_model = NoiseModel([['excitation', 'relaxation'] for _ in range(L)], [[gamma, gamma] for _ in range(L)])
-
-    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
-
-    ########## TJM Example #################
-
-    simulator.run(state, H_0, sim_params, noise_model)
-
-
-    # qubit ordering is reversed in qutip, so we need to reverse the expectation values
+ 
+    measurements = [Observable(Z(), site) for site in range(L)]
+    for batch in range(N// batchsize):
+        sim_params = PhysicsSimParams(measurements, T, dt, batchsize, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+        simulator.run(state, H_0, sim_params, noise_model)
+        filename = os.path.join(output_dir, f"tjm_results_L{L}_T{T}_factor{5}_10trajectories_pack{batch}.pkl")
+        with open(filename, 'wb') as f:
+                pickle.dump({
+        'sim_params': sim_params,
+    }, f)
 
 
     # plot the results
@@ -151,11 +162,19 @@ if __name__ == "__main__":
     for i, observable in enumerate(sim_params.observables):
         plt.plot(t, observable.results, label=f'⟨{observable.gate.name} {observable.site}⟩ TJM', color='orange')
         plt.axhline(y=steadystate_exact[i], linestyle='--', color='gray', label=f'⟨Z_{i}⟩ (exact steady state)' if i == 0 else None)
-        #plt.plot(t, result_lindblad.expect[i], label=f'⟨Z_{i}⟩ QT', color='blue')
-        #difference = result_lindblad.expect[i] - observable.results
-        #plt.plot(t, difference, label=f'Difference ⟨Z_{i}⟩ - ⟨Z_{i}⟩_exact', linestyle='--', color='red')
+        # plt.plot(t, result_lindblad.expect[i], label=f'⟨Z_{i}⟩ QT', color='blue')
+        # difference = result_lindblad.expect[i] - observable.results
+        # plt.plot(t, difference, label=f'Difference ⟨Z_{i}⟩ - ⟨Z_{i}⟩_exact', linestyle='--', color='red')
     plt.legend()
     plt.grid()
     plt.show()
+
+
+
+
+
+
+
+
 
 
