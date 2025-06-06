@@ -27,6 +27,130 @@ def trapezoidal(y, x):
 
 
 
+
+
+class loss_class:
+    def __init__(self, sim_params, ref_traj, traj_der, print_to_file=False):
+
+        self.d = 2  
+
+        self.print_to_file = print_to_file
+
+        self.ref_traj = ref_traj.copy()
+        self.traj_der = traj_der
+        self.sim_params = copy.deepcopy(sim_params)
+
+        self.n_eval = 0
+
+        self.x_history = []
+        self.f_history = []
+        self.x_avg_history = []
+        self.diff_avg_history = []
+
+        self.n_avg = 20
+
+    def __call__(self, x):
+
+        self.sim_params.gamma_rel = x[0]
+        self.sim_params.gamma_deph = x[1] 
+
+
+
+        t, exp_vals_traj, d_On_d_gk = self.traj_der(self.sim_params) 
+
+
+        self.t = t.copy()
+        self.exp_vals_traj = exp_vals_traj.copy() 
+
+        n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
+
+
+        f = 0.0
+
+        dJ_d_gr = 0
+        dJ_d_gd = 0
+
+
+        for i in range(n_obs_site):
+            for j in range(L):
+                for k in range(nt):
+
+                    f += (exp_vals_traj[i,j,k] - self.ref_traj[i,j,k])**2
+
+                    # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
+                    dJ_d_gr += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
+
+                    dJ_d_gd += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
+
+
+        grad = np.array([dJ_d_gr, dJ_d_gd])
+
+
+
+        self.n_eval += 1
+        self.x_history.append(x.copy())
+        self.f_history.append(f)
+
+
+
+        if len(self.x_history) <= self.n_avg:
+            x_avg = np.mean(self.x_history, axis=0)
+        else:
+            x_avg = np.mean(self.x_history[self.n_avg:], axis=0)
+
+        self.x_avg_history.append(x_avg.copy())
+
+        if len(self.x_avg_history) > 1:
+            diff = np.max(np.abs(self.x_avg_history[-1] - self.x_avg_history[-2]))
+            self.diff_avg_history.append(diff)
+
+        if self.print_to_file:
+            self.write_to_file(self.history_file_name, f, x)
+            self.write_to_file(self.history_avg_file_name, f, x_avg)
+
+        return f, grad
+    
+
+    def reset(self):
+        self.n_eval = 0
+        self.x_history = []
+        self.f_history = []
+        self.x_avg_history = []
+        self.diff_avg_history = []
+
+
+    def set_file_name(self, file_name):
+
+        if self.print_to_file:
+            self.history_file_name = file_name+".txt"
+            self.history_avg_file_name = file_name+"_avg.txt"
+
+            with open(self.history_file_name, "w") as file:
+                file.write("# iter  loss  " + "  ".join([f"x{i+1}" for i in range(self.d)]) + "\n")
+            with open(self.history_avg_file_name, "w") as file:
+                file.write("# iter  loss  " + "  ".join([f"x{i+1}_avg" for i in range(self.d)]) + "\n")
+
+
+
+    def write_to_file(self, file_name, f, x):
+        if self.print_to_file:
+            with open(file_name, "a") as file:
+                file.write(f"{self.n_eval}    {f}  " + "  ".join([f"{x[j]:.6f}" for j in range(self.d)]) + "\n")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def loss_function(sim_params, ref_traj, traj_der, loss_std=0, dJ_d_gr_std=0, dJ_d_gd_std=0):
     """
     Compute the loss function and its gradients for the given simulation parameters.
@@ -188,6 +312,56 @@ def gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, ma
 
     return loss_history, gr_history, gd_history, dJ_dgr_history, dJ_dgd_history
 
+
+
+
+
+def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-4, max_n_convergence = 50, tolerance=1e-8, beta1 = 0.5, beta2 = 0.999, epsilon = 1e-8):
+
+    x=x_copy.copy()  # Make a copy of the input x to avoid modifying the original
+
+    d = len(x)
+
+
+    # Adam hyperparameters and initialization (NEW)
+    m = np.array([0.0]*d)  # First moment (for [gamma_rel, gamma_deph])
+    v = np.array([0.0]*d)  # Second moment (for [gamma_rel, gamma_deph])
+
+
+    for i in range(max_iterations):
+        # Calculate loss and gradients (unchanged)
+        loss, grad = f(x)
+
+
+        if abs(loss) < tolerance:
+            print(f"Loss converged after {i} iterations. Loss={loss}, tolerance={tolerance}")
+            break
+
+    
+        # Adam update steps (NEW)
+        m = beta1 * m + (1 - beta1) * grad
+        v = beta2 * v + (1 - beta2) * (grad ** 2)
+
+        beta1_t = beta1 ** (i + 1)
+        beta2_t = beta2 ** (i + 1)
+
+
+        m_hat = m / (1 - beta1_t)
+        v_hat = v / (1 - beta2_t)
+
+        update = alpha * m_hat / (np.sqrt(v_hat) + epsilon)
+
+
+        # Update simulation parameters with Adam update (NEW)
+        x -= update    
+
+        x[x < 0] = 0
+
+        if len(f.diff_avg_history)>max_n_convergence and all (diff < threshhold for diff in f.diff_avg_history[-max_n_convergence:]):
+            break
+
+
+    return f.f_history, f.x_history, f.x_avg_history, f.t, f.exp_vals_traj
 
 
 
