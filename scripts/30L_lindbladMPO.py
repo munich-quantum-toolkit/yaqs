@@ -5,6 +5,8 @@ import os
 import time
 import qutip as qt
 
+import matplotlib.pyplot as plt
+
 sys.path.append('/Users/maximilianfrohlich/lindbladmpo')
 from lindbladmpo.LindbladMPOSolver import LindbladMPOSolver
 
@@ -15,7 +17,7 @@ half_N = N // 2  # half the number of sites for initial state
 J = 1    # X and Y coupling strength
 J_z = 1  # Z coupling strength
 h = 1  # transverse field strength
-gamma_dephasing = 0.1  # dephasing rate (1/T2star)
+gamma_excitation = 0.1  # dephasing rate (1/T2star)
 gamma_relaxation = 0.1  # relaxation rate (1/T1)
 
 # Time vector
@@ -29,6 +31,8 @@ t = np.linspace(0, T, timesteps+1)
 # sx = qt.sigmax()
 # sy = qt.sigmay()
 # sz = qt.sigmaz()
+# sigmam = qt.sigmam()
+
 
 # # Construct the Ising Hamiltonian
 # H = 0
@@ -43,9 +47,9 @@ t = np.linspace(0, T, timesteps+1)
 # # Construct collapse operators
 # c_ops = []
 
-# # Dephasing operators
+# # Excitation opatorser
 # for i in range(N):
-#     c_ops.append(np.sqrt(gamma_dephasing) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(N)]))
+#     c_ops.append(np.sqrt(gamma_excitation) * qt.tensor([sigmam if n==i else qt.qeye(2) for n in range(N)]))
 
 # # Relaxation operators
 # for i in range(N):
@@ -74,7 +78,7 @@ parameters = {
     "J_z": -2*J_z, 
     "h_z": -2*h,
     "g_0": gamma_relaxation,  # Strength of deexcitation 
-    "g_2": gamma_dephasing,  # Strength of dephasing
+    "g_1": gamma_excitation,  # Strength of excitation
     "init_product_state": ["+z"]*half_N + ["-z"]*half_N,  # initial state 
     "1q_components": ["Z"],  # Request x, y, z observables
     "2q_components": [],      # No 2-site observables
@@ -102,7 +106,6 @@ z_expectation_values_mpo = np.array([[solver.result['obs-1q'][('z', (i,))][1][t]
                                 for t in range(len(solver.result['obs-1q'][('z', (i,))][0]))] for i in range(N)])
 
 
-import matplotlib.pyplot as plt
 
 # # QuTiP: shape is (len(t), N), transpose to (N, len(t))
 # z_expectation_values_qutip = np.array(result_lindblad.expect)

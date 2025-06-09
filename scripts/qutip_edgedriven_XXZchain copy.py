@@ -76,7 +76,7 @@ if __name__ == "__main__":
     epsilon = factor*2*np.pi  # coupling strength (ε)
 
 
-    T = 10000
+    T = 100000
     dt = 0.1
     t = np.arange(0, T + dt, dt)
 
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     # Define the simulation parameters
     sample_timesteps = True
     N = 100
-    batchsize = 10
+    batchsize = 100
     max_bond_dim = 4
     threshold = 1e-6
     order = 1
