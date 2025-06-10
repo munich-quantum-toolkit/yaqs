@@ -36,9 +36,11 @@ def plot_MPDO_data():
 
     # ── Filenames + titles ────────────────────────────────────────────────────
     files_and_titles = [
+        ("30L_Bond2.pickle",  "$\\chi = 2$"),
+        ("30L_Bond4.pickle",  "$\\chi = 4$"),
         ("30L_Bond8.pickle",  "$\\chi = 8$"),
-        ("30L_Bond16.pickle", "$\\chi = 16$"),
-        ("30L_Bond32.pickle", "$\\chi = 32$"),
+        # ("30L_Bond16.pickle", "$\\chi = 16$"),
+        # ("30L_Bond32.pickle", "$\\chi = 32$"),
         ("lindblad_mpo_results.pkl", "MPO ($D_s=400$)"),
     ]
 
@@ -66,7 +68,7 @@ def plot_MPDO_data():
         ax.set_yticklabels([1, 10, 20, 30], fontsize=10)
 
         # Vertical dashed line at Jt=4
-        ax.axvline(4.0, color="white", linestyle="--", linewidth=2)
+        # ax.axvline(4.0, color="white", linestyle="--", linewidth=2)
         ax.set_ylabel("Site", fontsize=12)
         if i == 3:
             ax.set_xlim(0, t_max)
@@ -74,20 +76,20 @@ def plot_MPDO_data():
             ax.set_xticklabels([str(x) for x in xticks], fontsize=10)
             ax.set_xlabel(r"Time $(Jt)$", fontsize=12)
 
-            # Add "Truncated" / "Exact" around Jt=4
-            ax.text(4.2, 13, "Truncated", color="white", fontsize=11,
-                    va="top", ha="left")
-            ax.text(3.8, 13, "Exact", color="white", fontsize=11,
-                    va="top", ha="right")
+            # # Add "Truncated" / "Exact" around Jt=4
+            # ax.text(4.2, 13, "Truncated", color="white", fontsize=11,
+            #         va="top", ha="left")
+            # ax.text(3.8, 13, "Exact", color="white", fontsize=11,
+            #         va="top", ha="right")
         else:
             ax.set_xticks([])
 
         # Panel letter
-        # letter = chr(ord('a') + i)
-        # ax.text(0.01, 0.98, f"({letter})",
-        #         transform=ax.transAxes,
-        #         fontsize=8, fontweight="bold",
-        #         va="top", ha="left")
+        letter = chr(ord('a') + i)
+        ax.text(0.01, 0.95, f"({letter})",
+                transform=ax.transAxes,
+                fontsize=8, fontweight="bold",
+                va="top", ha="left")
 
     # ── Plot each heatmap + set title ───────────────────────────────────────────
     for ax, hmap, (_, title) in zip(heatmap_axes, all_hmaps, files_and_titles):
@@ -115,7 +117,7 @@ def plot_MPDO_data():
     sites = [1, 5, 10, 15]
     side_axes = [fig.add_subplot(outer_gs[i, 1]) for i in range(4)]
 
-    colors    = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+    colors    = ["lightcoral", "red", "darkred", "black"]
     linestyles = ["-", "-", "-", "--"]  # dashed for MPO
 
     for idx, (ax, site) in enumerate(zip(side_axes, sites)):
@@ -142,11 +144,11 @@ def plot_MPDO_data():
         ax.set_title(fr"$\langle Z^{{[{site}]}}\rangle$", fontsize=10, pad=4)
 
         # Panel letters (e–h)
-        # letter = chr(ord('e') + idx)
-        # ax.text(0.98, 0.98, f"({letter})",
-        #         transform=ax.transAxes,
-        #         fontsize=8, fontweight="bold",
-        #         va="top", ha="right")
+        letter = chr(ord('e') + idx)
+        ax.text(0.99, 0.95, f"({letter})",
+                transform=ax.transAxes,
+                fontsize=8, fontweight="bold",
+                va="top", ha="right")
 
     # ── Combined legend on the right side, outside of the plots ─────────────────
     # Remove individual legends
@@ -156,7 +158,7 @@ def plot_MPDO_data():
 
     legend_lines = []
     legend_labels = []
-    for col, lbl, ls in zip(colors, [r"$\chi=8$", r"$\chi=16$", r"$\chi=32$", "MPO"], linestyles):
+    for col, lbl, ls in zip(colors, [r"$\chi=2$", r"$\chi=4$", r"$\chi=8$", "MPO"], linestyles):
         legend_lines.append(plt.Line2D([], [], color=col, linestyle=ls, linewidth=1.5))
         legend_labels.append(lbl)
 
