@@ -91,6 +91,9 @@ class NoiseModel:
         self.processes = []
         if processes is not None:
             for proc in processes:
+                assert "name" in proc, "Each process must have a 'name' key"
+                assert "sites" in proc, "Each process must have a 'sites' key"
+                assert "strength" in proc, "Each process must have a 'strength' key"
                 # Try to look up the operator if not explicitly provided
                 if 'jump_operator' not in proc:
                     proc['jump_operator'] = self.get_operator(proc['name'], len(proc['sites']))

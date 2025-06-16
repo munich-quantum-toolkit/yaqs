@@ -39,12 +39,16 @@ def test_apply_dissipation_site_canonical_0() -> None:
 
     state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
 
-    # 2) Create a minimal NoiseModel with a single process and a small strength.
-    noise_model = NoiseModel(processes=["relaxation"], strengths=[0.1])
+    # 2) Create a minimal NoiseModel with a two processes per site and a small strength.
+    noise_model = NoiseModel([
+    {"name": name, "sites": [i], "strength": 0.1}
+    for i in range(length)
+    for name in ["relaxation", "dephasing"]
+])
     dt = 0.1
-
+    sim_params = None
     # 3) Apply dissipation to the MPS.
-    apply_dissipation(state, noise_model, dt)
+    apply_dissipation(state, noise_model, dt, sim_params)
 
     # 4) Verify that the MPS is site-canonical at site 0.
     canonical_site = state.check_canonical_form()
