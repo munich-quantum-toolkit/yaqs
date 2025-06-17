@@ -1103,6 +1103,85 @@ class Rzz(BaseGate):
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
 
 
+class XX(BaseGate):
+    """Class representing an XX operation. Used for two-site correlators.
+
+    Attributes:
+        name (str): The name of the gate ("xx").
+        matrix (NDArray[np.complex128]): The 4x4 matrix representation of the gate.
+        interaction (int): The interaction level (2 for two-qubit gates).
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        mpo: An MPO representation generated from the gate tensor.
+        sites (list[int]): The control and target sites.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "xx"
+
+    def __init__(self) -> None:
+        """Initializes the XX gate."""
+        x = X().matrix
+        # two-site operator X⊗X
+        mat = np.kron(x, x)
+        super().__init__(mat)
+
+
+class YY(BaseGate):
+    """Class representing an YY operation. Used for two-site correlators.
+
+    Attributes:
+        name (str): The name of the gate ("yy").
+        matrix (NDArray[np.complex128]): The 4x4 matrix representation of the gate.
+        interaction (int): The interaction level (2 for two-qubit gates).
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        mpo: An MPO representation generated from the gate tensor.
+        sites (list[int]): The control and target sites.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "yy"
+
+    def __init__(self) -> None:
+        """Initializes the YY gate."""
+        y = Y().matrix
+        # two-site operator Y⊗Y
+        mat = np.kron(y, y)
+        super().__init__(mat)
+
+
+class ZZ(BaseGate):
+    """Class representing an ZZ operation. Used for two-site correlators.
+
+    Attributes:
+        name (str): The name of the gate ("zz").
+        matrix (NDArray[np.complex128]): The 4x4 matrix representation of the gate.
+        interaction (int): The interaction level (2 for two-qubit gates).
+        tensor (NDArray[np.complex128]): The tensor representation reshaped to (2, 2, 2, 2).
+        mpo: An MPO representation generated from the gate tensor.
+        sites (list[int]): The control and target sites.
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the sites and updates the tensor and MPO.
+    """
+
+    name = "zz"
+
+    def __init__(self) -> None:
+        """Initializes the ZZ gate."""
+        z = Z().matrix
+        # two-site operator Z⊗Z
+        mat = np.kron(z, z)
+        super().__init__(mat)
+
+
+
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 
@@ -1147,3 +1226,6 @@ class GateLibrary:
     phase = Phase
     destroy = Destroy
     create = Create
+    xx = XX
+    yy = YY
+    zz = ZZ

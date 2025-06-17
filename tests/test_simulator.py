@@ -115,7 +115,11 @@ def test_physics_simulation_parallel_off() -> None:
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
-    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+    noise_model = NoiseModel([
+    {"name": name, "sites": [i], "strength": gamma}
+    for i in range(length)
+    for name in ["relaxation", "dephasing"]
+])
 
     simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
 
