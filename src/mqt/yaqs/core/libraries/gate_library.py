@@ -1181,7 +1181,6 @@ class ZZ(BaseGate):
         super().__init__(mat)
 
 
-
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 

@@ -71,7 +71,9 @@ class X:
         matrix (np.ndarray): A 2x2 matrix representing the Pauli-X operator,
             defined as [[0, 1], [1, 0]].
     """
+
     matrix = np.array([[0, 1], [1, 0]])
+
 
 class Y:
     """Class representing the Pauli-Y noise operator for a two-level system.
@@ -80,7 +82,9 @@ class Y:
         matrix (np.ndarray): A 2x2 matrix representing the Pauli-Y operator,
             defined as [[0, -1j], [1j, 0]].
     """
+
     matrix = np.array([[0, -1j], [1j, 0]])
+
 
 class DoubleExcitation:
     """Class representing the double excitation noise operator acting on two neighboring sites.
@@ -88,7 +92,9 @@ class DoubleExcitation:
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Excitation ⊗ Excitation.
     """
+
     matrix = np.kron(Excitation.matrix, Excitation.matrix)
+
 
 class DoubleRelaxation:
     """Class representing the double relaxation noise operator acting on two neighboring sites.
@@ -96,7 +102,9 @@ class DoubleRelaxation:
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Relaxation ⊗ Relaxation.
     """
+
     matrix = np.kron(Relaxation.matrix, Relaxation.matrix)
+
 
 class DoubleDephasing:
     """Class representing the double dephasing noise operator acting on two neighboring sites.
@@ -104,7 +112,9 @@ class DoubleDephasing:
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Dephasing ⊗ Dephasing.
     """
+
     matrix = np.kron(Dephasing.matrix, Dephasing.matrix)
+
 
 class XX:
     """Class representing the two-qubit Pauli-XX noise operator.
@@ -112,7 +122,9 @@ class XX:
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product X ⊗ X.
     """
+
     matrix = np.kron(X.matrix, X.matrix)
+
 
 class YY:
     """Class representing the two-qubit Pauli-YY noise operator.
@@ -120,7 +132,9 @@ class YY:
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Y ⊗ Y.
     """
+
     matrix = np.kron(Y.matrix, Y.matrix)
+
 
 class NoiseLibrary:
     """A library of noise operator classes.
@@ -137,6 +151,7 @@ class NoiseLibrary:
         double_relaxation: Class representing the double relaxation noise operator.
         double_dephasing: Class representing the double dephasing noise operator.
     """
+
     excitation = Excitation
     relaxation = Relaxation
     dephasing = Dephasing

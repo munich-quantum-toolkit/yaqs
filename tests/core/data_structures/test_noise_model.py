@@ -56,7 +56,7 @@ def test_noise_model_assertion() -> None:
     # Missing 'strength' in the second dict
     processes = [
         {"name": "relaxation", "sites": [0], "strength": 0.1},
-        {"name": "dephasing", "sites": [1]}  # Missing strength
+        {"name": "dephasing", "sites": [1]},  # Missing strength
     ]
 
     with pytest.raises(AssertionError):
@@ -70,9 +70,8 @@ def test_noise_model_empty() -> None:
     model has empty `processes` and `jump_operators` lists.
     """
     model = NoiseModel()
-    
-    assert model.processes == []
 
+    assert model.processes == []
 
 
 def test_noise_model_none() -> None:
@@ -84,4 +83,3 @@ def test_noise_model_none() -> None:
     model = NoiseModel(None)
 
     assert model.processes == []
-

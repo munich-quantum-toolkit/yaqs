@@ -41,10 +41,8 @@ def test_apply_dissipation_site_canonical_0() -> None:
 
     # 2) Create a minimal NoiseModel with a two processes per site and a small strength.
     noise_model = NoiseModel([
-    {"name": name, "sites": [i], "strength": 0.1}
-    for i in range(length)
-    for name in ["relaxation", "dephasing"]
-])
+        {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["relaxation", "dephasing"]
+    ])
     dt = 0.1
     sim_params = None
     # 3) Apply dissipation to the MPS.

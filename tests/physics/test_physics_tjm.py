@@ -53,9 +53,7 @@ def test_initialize() -> None:
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L)
-    noise_model = NoiseModel([
-    {"name": "relaxation", "sites": [i], "strength": 0.1}
-    for i in range(L)])
+    noise_model = NoiseModel([{"name": "relaxation", "sites": [i], "strength": 0.1} for i in range(L)])
     measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
@@ -90,9 +88,7 @@ def test_step_through() -> None:
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L)
-    noise_model = NoiseModel([
-    {"name": "relaxation", "sites": [i], "strength": 0.1}
-    for i in range(L)])
+    noise_model = NoiseModel([{"name": "relaxation", "sites": [i], "strength": 0.1} for i in range(L)])
     measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,

@@ -1,14 +1,19 @@
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
-import numpy as np
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
 import pickle
 
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs import simulator
-
+from mqt.yaqs.core.libraries.gate_library import Z
 
 # Define the system Hamiltonian
 L = 1000
@@ -20,7 +25,7 @@ H_0 = MPO()
 H_0.init_heisenberg(L, J, J, J, g)
 
 # Define the initial state
-state = MPS(L, state='wall')
+state = MPS(L, state="wall")
 
 # Define the simulation parameters
 T = 10
@@ -33,25 +38,22 @@ order = 2
 measurements = [Observable(Z(), site) for site in range(L)]
 
 if __name__ == "__main__":
-
     # Define the noise parameters
-    gammas= [0.1, 0]
+    gammas = [0.1, 0]
     for gamma in gammas:
+        noise_model = NoiseModel(["relaxation", "excitation"], [gamma, gamma])
+        sim_params = PhysicsSimParams(
+            measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        )
 
-        noise_model = NoiseModel(['relaxation', 'excitation'], [gamma, gamma])
-        sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
-
-
-        ########## TJM Example #################
+        # TJM Example #################
         simulator.run(state, H_0, sim_params, noise_model)
 
-        if gamma == 0:
-            filename = f"TJM_1000L_Exact.pickle"
-        else:
-            filename = f"TJM_1000L_Gamma01.pickle"
-        with open(filename, 'wb') as f:
-            pickle.dump({
-                'sim_params': sim_params,
-            }, f)
-
-    
+        filename = "TJM_1000L_Exact.pickle" if gamma == 0 else "TJM_1000L_Gamma01.pickle"
+        with open(filename, "wb") as f:
+            pickle.dump(
+                {
+                    "sim_params": sim_params,
+                },
+                f,
+            )

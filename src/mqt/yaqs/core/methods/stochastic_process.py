@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
-from ..methods.tdvp import split_mps_tensor, merge_mps_tensors
+
+from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -49,8 +50,7 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
 def create_probability_distribution(
     state: MPS, noise_model: NoiseModel | None, dt: float, sim_params=None
 ) -> dict[str, list]:
-    """
-    Create a probability distribution for potential quantum jumps in the system,
+    """Create a probability distribution for potential quantum jumps in the system,
     supporting both 1-site and 2-site jump operators.
 
     The function sweeps from left to right over the sites of the MPS. For each site,
@@ -81,7 +81,6 @@ def create_probability_distribution(
             - "sites": Site indices (list of 1 or 2 ints) where each jump operator is applied.
             - "probabilities": Normalized probabilities for each possible jump.
     """
-
     jump_dict = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
     if noise_model is None or not noise_model.processes:
         return jump_dict
@@ -127,7 +126,7 @@ def create_probability_distribution(
                     A_new, B_new = split_mps_tensor(merged, "right", sim_params, dynamic=False)
                     jumped_state.tensors[site], jumped_state.tensors[site + 1] = A_new, B_new
                     # compute the norm at `site`
-                    
+
                     dp_m_list.append(dp_m.real)
                     jump_dict["jumps"].append(L)
                     jump_dict["strengths"].append(gamma)
@@ -140,16 +139,15 @@ def create_probability_distribution(
 
 
 def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float, sim_params=None) -> MPS:
-    """
-    Perform a stochastic process on the given state, simulating a quantum jump.
+    """Perform a stochastic process on the given state, simulating a quantum jump.
     Supports both 1-site and 2-site jump operators.
-    
+
     Args:
         state (MPS): The current Matrix Product State, left-canonical at site 0.
         noise_model (NoiseModel | None): The noise model, or None for no jumps.
         dt (float): The time step for the evolution.
         sim_params: Simulation parameters (for splitting tensors, required for 2-site jumps).
-    
+
     Returns:
         MPS: The updated Matrix Product State after the stochastic process.
     """
@@ -170,24 +168,23 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float, si
     if len(sites) == 1:
         # 1-site jump
         site = sites[0]
-        state.tensors[site] = oe.contract(
-            "ab, bcd->acd", jump_operator, state.tensors[site]
-        )
+        state.tensors[site] = oe.contract("ab, bcd->acd", jump_operator, state.tensors[site])
     elif len(sites) == 2:
         # 2-site jump: merge, apply, split
         i, j = sites
         # Ensure j == i+1
         if j != i + 1:
-            raise ValueError(f"Only nearest-neighbor 2-site jumps are supported (got sites {i}, {j})")
+            msg = f"Only nearest-neighbor 2-site jumps are supported (got sites {i}, {j})"
+            raise ValueError(msg)
         merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
         merged = oe.contract("ab, bcd->acd", jump_operator, merged)
         # For stochastic jumps, always contract singular values to the right
         A_new, B_new = split_mps_tensor(merged, "right", sim_params, dynamic=False)
         state.tensors[i], state.tensors[j] = A_new, B_new
     else:
-        raise ValueError("Jump operator must act on 1 or 2 sites.")
+        msg = "Jump operator must act on 1 or 2 sites."
+        raise ValueError(msg)
 
     # Normalize MPS after jump
     state.normalize("B", decomposition="SVD")
     return state
-

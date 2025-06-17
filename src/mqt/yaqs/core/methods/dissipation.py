@@ -15,26 +15,24 @@ noise strengths are zero, the MPS is simply shifted to its canonical form.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
 from scipy.linalg import expm
-from collections import defaultdict
 
-from ..libraries.noise_library import NoiseLibrary
-from ..methods.tdvp import split_mps_tensor, merge_mps_tensors
+from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
-    
+
+
 def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params) -> None:
-    """
-    Dissipative sweep: right-to-left, compatible with left-canonical MPS.
+    """Dissipative sweep: right-to-left, compatible with left-canonical MPS.
     Assumes state is left-canonical at start.
     """
-
     if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
         for i in reversed(range(state.length)):
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
@@ -59,26 +57,26 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params
                 dissipative_operator = expm(-0.5 * dt * gamma * mat)
                 state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_operator, state.tensors[i])
 
-            bond = (i-1, i)
+            bond = (i - 1, i)
             processes_here = two_site_on_bond.get(bond, [])
-            n_procs = len(processes_here)
+            len(processes_here)
 
         # 2. Apply all 2-site dissipators acting on sites (i-1, i)
-        if i!=0:
-            for idx, process in enumerate(processes_here):
+        if i != 0:
+            for process in processes_here:
                 gamma = process["strength"]
                 L = process["jump_operator"]
                 mat = np.conj(L).T @ L
                 dissipative_operator = expm(-0.5 * dt * gamma * mat)
 
-                merged_tensor = merge_mps_tensors(state.tensors[i-1], state.tensors[i])
+                merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
                 merged_tensor = oe.contract("ab, bcd->acd", dissipative_operator, merged_tensor)
 
                 # singular values always contracted right
                 # since ortho center is shifter to the left after loop
-                A, B = split_mps_tensor(merged_tensor, 'right', sim_params, dynamic=False)
-                state.tensors[i-1], state.tensors[i] = A, B
-                
+                A, B = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=False)
+                state.tensors[i - 1], state.tensors[i] = A, B
+
         # Shift orthogonality center
         if i != 0:
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="SVD")
