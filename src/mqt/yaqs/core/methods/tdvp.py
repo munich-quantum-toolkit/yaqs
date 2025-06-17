@@ -575,13 +575,13 @@ def two_site_tdvp(
             right_blocks[i + 1],
             hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
-            0.5 * sim_params.dt,
+            -0.5 * sim_params.dt,
             numiter_lanczos,
         )
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
         merged_tensor = update_site(
-            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, -0.5 * sim_params.dt, numiter_lanczos
+            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
         )
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=dynamic)
         right_blocks[i] = update_right_environment(

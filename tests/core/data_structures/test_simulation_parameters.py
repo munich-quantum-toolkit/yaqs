@@ -38,7 +38,7 @@ def test_observable_creation_valid() -> None:
     obs = Observable(gate, site)
 
     assert np.array_equal(obs.gate.matrix, np.array([[0, 1], [1, 0]]))
-    assert obs.site == site
+    assert obs.sites == site
     assert obs.results is None
     assert obs.trajectories is None
 

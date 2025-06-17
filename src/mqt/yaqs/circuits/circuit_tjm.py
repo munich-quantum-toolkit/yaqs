@@ -195,6 +195,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
     if np.abs(first_site - last_site) == 1:
+        # Apply two-site TDVP for nearest-neighbor gates.
         two_site_tdvp(short_state, short_mpo, sim_params)
     else:
         local_dynamic_tdvp(short_state, short_mpo, sim_params)
@@ -267,9 +268,13 @@ def circuit_tjm(
 
     last_site = 0
     for obs_index, observable in enumerate(sim_params.sorted_observables):
-        if observable.site > last_site:
-            for site in range(last_site, observable.site):
+        if isinstance(observable.sites, list):
+            idx = observable.sites[0]
+        elif isinstance(observable.sites, int):
+            idx = observable.sites
+        if idx > last_site:
+            for site in range(last_site, idx):
                 temp_state.shift_orthogonality_center_right(site)
-            last_site = observable.site
-        results[obs_index, 0] = temp_state.measure_expectation_value(observable)
+            last_site = idx
+        results[obs_index, 0] = temp_state.expect(observable)
     return results

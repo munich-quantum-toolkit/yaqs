@@ -82,7 +82,7 @@ for timestep in range(timesteps):
     simulator.run(state, circuit, sim_params, None)
 
     for observable in sim_params.observables:
-        index = observable.site
+        index = observable.sites[0]
         occupations[index, timestep] = 0.5 * (1 - observable.results.item())
 
     state = MPS(num_qubits, sim_params.output_state.tensors, pad=32)

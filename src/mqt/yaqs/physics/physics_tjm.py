@@ -114,20 +114,28 @@ def sample(
         temp_state = copy.deepcopy(psi)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.site > last_site:
-                for site in range(last_site, observable.site):
+            if isinstance(observable.sites, list):
+                idx = observable.sites[0]
+            elif isinstance(observable.sites, int):
+                idx = observable.sites
+            if idx > last_site:
+                for site in range(last_site, idx):
                     temp_state.shift_orthogonality_center_right(site)
-                last_site = observable.site
-            results[obs_index, j] = temp_state.measure_expectation_value(observable)
+                last_site = idx
+            results[obs_index, j] = temp_state.expect(observable)
     else:
         temp_state = copy.deepcopy(psi)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.site > last_site:
-                for site in range(last_site, observable.site):
+            if isinstance(observable.sites, list):
+                idx = observable.sites[0]
+            elif isinstance(observable.sites, int):
+                idx = observable.sites
+            if idx > last_site:
+                for site in range(last_site, idx):
                     temp_state.shift_orthogonality_center_right(site)
-                last_site = observable.site
-            results[obs_index, 0] = temp_state.measure_expectation_value(observable)
+                last_site = idx
+            results[obs_index, 0] = temp_state.expect(observable)
 
 
 def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO]) -> NDArray[np.float64]:
@@ -149,7 +157,6 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
         NDArray[np.float64]: An array of expectation values for the trajectory, with dimensions
         determined by the number of observables and time steps.
     """
-   # print("Starting TJM simulation...")
     _i, initial_state, noise_model, sim_params, hamiltonian = args
 
     state = copy.deepcopy(initial_state)
@@ -160,16 +167,13 @@ def physics_tjm_2(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
 
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
-    # print("TJM time steps:", sim_params.times)
+            results[obs_index, 0] = copy.deepcopy(state).expect(observable)
+
     phi = initialize(state, noise_model, sim_params)
     if sim_params.sample_timesteps:
         sample(phi, hamiltonian, noise_model, sim_params, results, j=1)
 
-    
     for j, _ in enumerate(sim_params.times[2:], start=2):
-
-        #print(f"Step {j} of {len(sim_params.times) - 1}")
         phi = step_through(phi, hamiltonian, noise_model, sim_params)
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
             sample(phi, hamiltonian, noise_model, sim_params, results, j)
@@ -206,7 +210,7 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
 
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            results[obs_index, 0] = copy.deepcopy(state).measure_expectation_value(observable)
+            results[obs_index, 0] = copy.deepcopy(state).expect(observable)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         local_dynamic_tdvp(state, hamiltonian, sim_params)
@@ -218,20 +222,28 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
             temp_state = copy.deepcopy(state)
             last_site = 0
             for obs_index, observable in enumerate(sim_params.sorted_observables):
-                if observable.site > last_site:
-                    for site in range(last_site, observable.site):
+                if isinstance(observable.sites, list):
+                    idx = observable.sites[0]
+                elif isinstance(observable.sites, int):
+                    idx = observable.sites
+                if idx > last_site:
+                    for site in range(last_site, idx):
                         temp_state.shift_orthogonality_center_right(site)
-                    last_site = observable.site
-                results[obs_index, j] = temp_state.measure_expectation_value(observable)
+                    last_site = idx
+                results[obs_index, j] = temp_state.expect(observable)
         elif j == len(sim_params.times) - 1:
             temp_state = copy.deepcopy(state)
             last_site = 0
             for obs_index, observable in enumerate(sim_params.sorted_observables):
-                if observable.site > last_site:
-                    for site in range(last_site, observable.site):
+                if isinstance(observable.sites, list):
+                    idx = observable.sites[0]
+                elif isinstance(observable.sites, int):
+                    idx = observable.sites
+                if idx > last_site:
+                    for site in range(last_site, idx):
                         temp_state.shift_orthogonality_center_right(site)
-                    last_site = observable.site
-                results[obs_index, 0] = temp_state.measure_expectation_value(observable)
+                    last_site = idx
+                results[obs_index, 0] = temp_state.expect(observable)
 
     if sim_params.get_state:
         sim_params.output_state = state
