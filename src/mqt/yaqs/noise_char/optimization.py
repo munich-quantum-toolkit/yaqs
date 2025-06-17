@@ -5,6 +5,7 @@ from scipy.optimize import minimize
 
 import os
 import copy
+import pickle
 
 def trapezoidal(y, x):
 
@@ -118,17 +119,27 @@ class loss_class:
         self.x_avg_history = []
         self.diff_avg_history = []
 
+    def set_history(self, x_history, f_history, x_avg_history, diff_avg_history):
+        self.n_eval = len(x_history)
+        self.x_history = list(x_history)
+        self.f_history = list(f_history)
+        self.x_avg_history = list(x_avg_history)
+        self.diff_avg_history = list(diff_avg_history)
 
-    def set_file_name(self, file_name):
+
+
+    def set_file_name(self, file_name, reset):
 
         if self.print_to_file:
             self.history_file_name = file_name+".txt"
             self.history_avg_file_name = file_name+"_avg.txt"
 
-            with open(self.history_file_name, "w") as file:
-                file.write("# iter  loss  " + "  ".join([f"x{i+1}" for i in range(self.d)]) + "\n")
-            with open(self.history_avg_file_name, "w") as file:
-                file.write("# iter  loss  " + "  ".join([f"x{i+1}_avg" for i in range(self.d)]) + "\n")
+            if reset or not os.path.exists(self.history_file_name) :
+                with open(self.history_file_name, "w") as file:
+                    file.write("# iter  loss  " + "  ".join([f"x{i+1}" for i in range(self.d)]) + "\n")
+            if reset or not os.path.exists(self.history_avg_file_name):
+                with open(self.history_avg_file_name, "w") as file:
+                    file.write("# iter  loss  " + "  ".join([f"x{i+1}_avg" for i in range(self.d)]) + "\n")
 
 
 
@@ -316,19 +327,34 @@ def gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, ma
 
 
 
-def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-4, max_n_convergence = 50, tolerance=1e-8, beta1 = 0.5, beta2 = 0.999, epsilon = 1e-8):
+def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-4, max_n_convergence = 50, tolerance=1e-8, beta1 = 0.5, beta2 = 0.999, epsilon = 1e-8, restart=False, restart_file=None, restart_dir="adam_restart"):
 
-    x=x_copy.copy()  # Make a copy of the input x to avoid modifying the original
+        # Initialization
+    if restart:
+        if restart_file is None or not os.path.exists(restart_file):
+            raise ValueError("Restart file not found or not specified.")
+        with open(restart_file, "rb") as handle:
+            saved = pickle.load(handle)
+        x = saved["x"]
+        m = saved["m"]
+        v = saved["v"]
+        start_iter = saved["iteration"] + 1  # resume from next iteration
 
-    d = len(x)
+        f.set_history(saved["x_history"], saved["f_history"], saved["x_avg_history"], saved["diff_avg_history"])
+
+        print(f"Restarting from iteration {saved['iteration']}, loss={saved['loss']:.6f}")
+
+        f.set_history()
+    else:
+        x = x_copy.copy()
+        d = len(x)
+        m = np.zeros(d)
+        v = np.zeros(d)
+        start_iter = 0
+        os.makedirs(restart_dir, exist_ok=True)
 
 
-    # Adam hyperparameters and initialization (NEW)
-    m = np.array([0.0]*d)  # First moment (for [gamma_rel, gamma_deph])
-    v = np.array([0.0]*d)  # Second moment (for [gamma_rel, gamma_deph])
-
-
-    for i in range(max_iterations):
+    for i in range(start_iter,max_iterations):
         # Calculate loss and gradients (unchanged)
         loss, grad = f(x)
 
@@ -351,14 +377,45 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
 
         update = alpha * m_hat / (np.sqrt(v_hat) + epsilon)
 
-
         # Update simulation parameters with Adam update (NEW)
         x -= update    
 
         x[x < 0] = 0
 
-        if len(f.diff_avg_history)>max_n_convergence and all (diff < threshhold for diff in f.diff_avg_history[-max_n_convergence:]):
+
+
+        
+        restart_data = {
+            "iteration": i,
+            "x": x.copy(),
+            "x_loss": x+update,
+            "loss": loss,
+            "grad": grad.copy(),
+            "beta1": beta1,
+            "beta2": beta2,
+            "m": m.copy(),
+            "v": v.copy(),
+            "update":update.copy(),
+            "f_history": f.f_history.copy(),
+            "x_history": f.x_history.copy(),
+            "x_avg_history": f.x_avg_history.copy(),
+            "diff_avg_history": f.diff_avg_history.copy(),
+            "t": f.t.copy(),
+            "exp_vals_traj": f.exp_vals_traj.copy(),
+        }
+
+        with open(os.path.join(restart_dir, f"restart_step_{i:04d}.pkl"), "wb") as handle:
+            pickle.dump(restart_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+
+        
+
+        # Convergence check
+        if len(f.diff_avg_history) > max_n_convergence and all(
+                diff < threshhold for diff in f.diff_avg_history[-max_n_convergence:]):
+            print(f"Gradient convergence reached at iteration {i}.")
             break
+        
 
 
     return f.f_history, f.x_history, f.x_avg_history, f.t, f.exp_vals_traj

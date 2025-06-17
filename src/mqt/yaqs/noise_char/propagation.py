@@ -32,6 +32,10 @@ class SimulationParameters:
     gamma_deph: float = 0.1
     observables = ['x','y','z']
 
+    threshold: float = 1e-6
+    max_bond_dim: int = 4
+    order: int = 2
+
     # For scikit_tt
     N:int = 100
     rank: int= 8
@@ -177,6 +181,11 @@ def tjm_traj(sim_params_class: SimulationParameters):
     N=sim_params_class.N
 
 
+    threshold = sim_params_class.threshold
+    max_bond_dim = sim_params_class.max_bond_dim
+    order = sim_params_class.order
+
+
 
     t = np.arange(0, T + dt, dt) 
     n_t = len(t)
@@ -195,10 +204,8 @@ def tjm_traj(sim_params_class: SimulationParameters):
     noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma_rel, gamma_deph])
 
     sample_timesteps = True
-    # N = 10
-    threshold = 1e-6
-    max_bond_dim = 4
-    order = 2
+
+    
     obs_list = [Observable(X(), site) for site in range(L)]  + [Observable(Y(), site) for site in range(L)] + [Observable(Z(), site) for site in range(L)]
 
 
