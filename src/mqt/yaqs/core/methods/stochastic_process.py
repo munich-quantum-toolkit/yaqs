@@ -37,9 +37,11 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     This factor is used to determine the probability that a quantum jump will occur
     during the stochastic evolution. It is defined as 1 minus the norm of the state
     at site 0.
+
     Args:
         state (MPS): The Matrix Product State representing the current state of the system.
                      The state should be in mixed canonical form at site 0 or B normalized.
+
     Returns:
         NDArray[np.float64]: The calculated stochastic factor as a float.
     """
@@ -53,7 +55,7 @@ def create_probability_distribution(
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
 ) -> dict[str, list]:
     """Create a probability distribution for potential quantum jumps in the system.
-    
+
     The function sweeps from left to right over the sites of the MPS. For each site,
     it shifts the orthogonality center to that site if necessary and then considers all
     relevant jump operators in the noise model:
@@ -66,12 +68,14 @@ def create_probability_distribution(
         and records the operator and the site pair.
     After all possible jumps are considered, the probabilities are normalized and returned along with
     the associated jump operators and their target site(s).
+
     Args:
         state (MPS): The Matrix Product State, assumed left-canonical at site 0 on entry.
         noise_model (NoiseModel | None): The noise model as a list of process dicts, each with keys
         "jump_operator", "strength", and "sites" (list of length 1 or 2).
         dt (float): Time step for the evolution, used to scale the jump probabilities.
         sim_params: Simulation parameters, needed for splitting merged tensors (e.g., SVD threshold, bond dimension).
+
     Returns:
         dict[str, list]: A dictionary with the following keys:
             - "jumps": List of jump operator tensors.
@@ -145,18 +149,21 @@ def stochastic_process(
     """Perform a stochastic process on the given state, simulating a quantum jump.
 
     This function randomly determines whether a quantum jump occurs in the given
-    timestep based on the system state and noise model. If a jump is triggered, 
-    the function samples the specific jump process according to the calculated 
-    probability distribution and applies the corresponding operator to the MPS. 
-    Both single-site and nearest-neighbor two-site jump processes are supported, 
+    timestep based on the system state and noise model. If a jump is triggered,
+    the function samples the specific jump process according to the calculated
+    probability distribution and applies the corresponding operator to the MPS.
+    Both single-site and nearest-neighbor two-site jump processes are supported,
     with appropriate tensor contractions and normalization to ensure physical validity.
+
     Args:
         state (MPS): The current Matrix Product State, left-canonical at site 0.
         noise_model (NoiseModel | None): The noise model, or None for no jumps.
         dt (float): The time step for the evolution.
         sim_params: Simulation parameters (for splitting tensors, required for 2-site jumps).
+
     Returns:
         MPS: The updated Matrix Product State after the stochastic process.
+
     Raises:
         ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.
     """

@@ -23,7 +23,7 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 def test_noise_model_creation() -> None:
     """Test that NoiseModel is created correctly with valid process dicts.
 
-    This test constructs a NoiseModel with two single-site processes 
+    This test constructs a NoiseModel with two single-site processes
     ("relaxation" and "dephasing") and corresponding strengths.
     It verifies that:
       - Each process is stored as a dictionary with correct fields.
