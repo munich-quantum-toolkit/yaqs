@@ -54,7 +54,7 @@ def create_probability_distribution(
 ) -> dict[str, list]:
     """Create a probability distribution for potential quantum jumps in the system,
     supporting both 1-site and 2-site jump operators.
-
+    
     The function sweeps from left to right over the sites of the MPS. For each site,
     it shifts the orthogonality center to that site if necessary and then considers all
     relevant jump operators in the noise model:
