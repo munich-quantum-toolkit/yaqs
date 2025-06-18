@@ -23,16 +23,18 @@ import opt_einsum as oe
 from scipy.linalg import expm
 
 from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
+from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
 
 
-def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params) -> None:
+def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
     """Dissipative sweep: right-to-left, compatible with left-canonical MPS.
     Assumes state is left-canonical at start.
     """
+
     if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
         for i in reversed(range(state.length)):
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
@@ -52,8 +54,8 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params
         for process in noise_model.processes:
             if len(process["sites"]) == 1 and process["sites"][0] == i:
                 gamma = process["strength"]
-                L = process["jump_operator"]
-                mat = np.conj(L).T @ L
+                jump_operator = process["jump_operator"]
+                mat = np.conj(jump_operator).T @ jump_operator
                 dissipative_operator = expm(-0.5 * dt * gamma * mat)
                 state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_operator, state.tensors[i])
 
@@ -65,8 +67,8 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params
         if i != 0:
             for process in processes_here:
                 gamma = process["strength"]
-                L = process["jump_operator"]
-                mat = np.conj(L).T @ L
+                jump_operator = process["jump_operator"]
+                mat = np.conj(jump_operator).T @ jump_operator
                 dissipative_operator = expm(-0.5 * dt * gamma * mat)
 
                 merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
@@ -74,8 +76,8 @@ def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params
 
                 # singular values always contracted right
                 # since ortho center is shifter to the left after loop
-                A, B = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=False)
-                state.tensors[i - 1], state.tensors[i] = A, B
+                tensor_right, tensor_left = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=False)
+                state.tensors[i - 1], state.tensors[i] = tensor_right, tensor_left
 
         # Shift orthogonality center
         if i != 0:

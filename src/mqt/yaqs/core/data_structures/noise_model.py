@@ -38,15 +38,19 @@ class NoiseModel:
                 assert "strength" in proc, "Each process must have a 'strength' key"
                 # Try to look up the operator if not explicitly provided
                 if "jump_operator" not in proc:
-                    proc["jump_operator"] = self.get_operator(proc["name"], len(proc["sites"]))
+                    proc["jump_operator"] = self.get_operator(proc["name"])
                 self.processes.append(proc)
 
     @staticmethod
-    def get_operator(name: str, num_sites: int):
-        """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed."""
-        # Example: for two-site process 'xx', call NoiseLibrary.xx().matrix, etc.
-        # This logic should match your NoiseLibrary's API.
-        # For a generic approach:
+    def get_operator(name: str):
+        """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
+        
+        Args: 
+            name (str): Name of the noise process (e.g., 'xx', 'zz').
+            num_sites (int): Number of sites this operator acts on.
+        Returns: 
+            np.ndarray: The matrix representation of the operator."""
+        
         operator_class = getattr(NoiseLibrary, name)
         return operator_class().matrix
-        # Optionally check op.shape matches 2^num_sites x 2^num_sites
+

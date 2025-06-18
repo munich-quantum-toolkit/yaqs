@@ -22,6 +22,7 @@ import numpy as np
 import opt_einsum as oe
 
 from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
+from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -44,11 +45,12 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     Returns:
         NDArray[np.float64]: The calculated stochastic factor as a float.
     """
+
     return 1 - state.norm(0)
 
 
 def create_probability_distribution(
-    state: MPS, noise_model: NoiseModel | None, dt: float, sim_params=None
+    state: MPS, noise_model: NoiseModel | None, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams
 ) -> dict[str, list]:
     """Create a probability distribution for potential quantum jumps in the system,
     supporting both 1-site and 2-site jump operators.
@@ -81,6 +83,7 @@ def create_probability_distribution(
             - "sites": Site indices (list of 1 or 2 ints) where each jump operator is applied.
             - "probabilities": Normalized probabilities for each possible jump.
     """
+
     jump_dict = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
     if noise_model is None or not noise_model.processes:
         return jump_dict
@@ -138,7 +141,7 @@ def create_probability_distribution(
     return jump_dict
 
 
-def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float, sim_params=None) -> MPS:
+def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> MPS:
     """Perform a stochastic process on the given state, simulating a quantum jump.
     Supports both 1-site and 2-site jump operators.
 
@@ -151,6 +154,7 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float, si
     Returns:
         MPS: The updated Matrix Product State after the stochastic process.
     """
+    
     dp = calculate_stochastic_factor(state)
     rng = np.random.default_rng()
     if noise_model is None or rng.random() >= dp:
