@@ -67,17 +67,14 @@ def create_probability_distribution(
       - For each 2-site jump operator acting on the current site and its right neighbor,
         it merges the two tensors, applies the operator, splits the result, computes the probability,
         and records the operator and the site pair.
-
     After all possible jumps are considered, the probabilities are normalized and returned along with
     the associated jump operators and their target site(s).
-
     Args:
         state (MPS): The Matrix Product State, assumed left-canonical at site 0 on entry.
         noise_model (NoiseModel | None): The noise model as a list of process dicts, each with keys
             "jump_operator", "strength", and "sites" (list of length 1 or 2).
         dt (float): Time step for the evolution, used to scale the jump probabilities.
         sim_params: Simulation parameters, needed for splitting merged tensors (e.g., SVD threshold, bond dimension).
-
     Returns:
         dict[str, list]: A dictionary with the following keys:
             - "jumps": List of jump operator tensors.
@@ -156,10 +153,8 @@ def stochastic_process(
         noise_model (NoiseModel | None): The noise model, or None for no jumps.
         dt (float): The time step for the evolution.
         sim_params: Simulation parameters (for splitting tensors, required for 2-site jumps).
-
     Returns:
         MPS: The updated Matrix Product State after the stochastic process.
-
     Raises:
         ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.
     """

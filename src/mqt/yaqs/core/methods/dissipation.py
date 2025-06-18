@@ -33,8 +33,15 @@ if TYPE_CHECKING:
 def apply_dissipation(
     state: MPS, noise_model: NoiseModel, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams
 ) -> None:
-    """Dissipative sweep: right-to-left, compatible with left-canonical MPS.
-    Assumes state is left-canonical at start.
+    """Dissipative sweep: right-to-left, compatible with left-canonical MPS. Assumes state is left-canonical at start.
+
+    This function applies dissipative evolution to an MPS state 
+    by exponentiating weighted sums of jump operators derived from 
+    the provided noise model. Both one-site and two-site dissipators 
+    are handled, and the corresponding operators are applied to the 
+    appropriate tensors via efficient tensor contractions. 
+    The function iterates from right to left, updating the 
+    MPS tensors and shifting the orthogonality center as needed.
     """
     if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
         for i in reversed(range(state.length)):
