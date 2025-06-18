@@ -52,8 +52,7 @@ def create_probability_distribution(
     dt: float,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
 ) -> dict[str, list]:
-    """Create a probability distribution for potential quantum jumps in the system,
-    supporting both 1-site and 2-site jump operators.
+    """Create a probability distribution for potential quantum jumps in the system.
     
     The function sweeps from left to right over the sites of the MPS. For each site,
     it shifts the orthogonality center to that site if necessary and then considers all
