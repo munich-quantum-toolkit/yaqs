@@ -83,7 +83,6 @@ def create_probability_distribution(
             - "sites": Site indices (list of 1 or 2 ints) where each jump operator is applied.
             - "probabilities": Normalized probabilities for each possible jump.
     """
-
     jump_dict = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
     if noise_model is None or not noise_model.processes:
         return jump_dict
@@ -100,13 +99,13 @@ def create_probability_distribution(
         for process in noise_model.processes:
             if len(process["sites"]) == 1 and process["sites"][0] == site:
                 gamma = process["strength"]
-                L = process["jump_operator"]
+                jump_operator = process["jump_operator"]
 
                 jumped_state = copy.deepcopy(state)
-                jumped_state.tensors[site] = oe.contract("ab, bcd->acd", L, state.tensors[site])
+                jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_operator, state.tensors[site])
                 dp_m = dt * gamma * jumped_state.norm(site)
                 dp_m_list.append(dp_m.real)
-                jump_dict["jumps"].append(L)
+                jump_dict["jumps"].append(jump_operator)
                 jump_dict["strengths"].append(gamma)
                 jump_dict["sites"].append([site])
 
@@ -115,23 +114,23 @@ def create_probability_distribution(
             for process in noise_model.processes:
                 if len(process["sites"]) == 2 and process["sites"][0] == site and process["sites"][1] == site + 1:
                     gamma = process["strength"]
-                    L = process["jump_operator"]
+                    jump_operator = process["jump_operator"]
 
                     jumped_state = copy.deepcopy(state)
                     # merge the tensors at site and site+1
-                    A = jumped_state.tensors[site]
-                    B = jumped_state.tensors[site + 1]
+                    tensor_left = jumped_state.tensors[site]
+                    tensor_right = jumped_state.tensors[site + 1]
                     merged = merge_mps_tensors(A, B)
                     # apply the 2-site jump operator
-                    merged = oe.contract("ab, bcd->acd", L, merged)
+                    merged = oe.contract("ab, bcd->acd", jump_operator, merged)
                     dp_m = dt * gamma * jumped_state.norm(site)
                     # split the tensor (always contract singular values right for probabilities)
-                    A_new, B_new = split_mps_tensor(merged, "right", sim_params, dynamic=False)
-                    jumped_state.tensors[site], jumped_state.tensors[site + 1] = A_new, B_new
+                    tensor_left_new, tensor_right_new = split_mps_tensor(merged, "right", sim_params, dynamic=False)
+                    jumped_state.tensors[site], jumped_state.tensors[site + 1] = tensor_left_new, tensor_right_new
                     # compute the norm at `site`
 
                     dp_m_list.append(dp_m.real)
-                    jump_dict["jumps"].append(L)
+                    jump_dict["jumps"].append(jump_operator)
                     jump_dict["strengths"].append(gamma)
                     jump_dict["sites"].append([site, site + 1])
 
@@ -154,7 +153,7 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float, si
     Returns:
         MPS: The updated Matrix Product State after the stochastic process.
     """
-    
+
     dp = calculate_stochastic_factor(state)
     rng = np.random.default_rng()
     if noise_model is None or rng.random() >= dp:
@@ -183,8 +182,8 @@ def stochastic_process(state: MPS, noise_model: NoiseModel | None, dt: float, si
         merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
         merged = oe.contract("ab, bcd->acd", jump_operator, merged)
         # For stochastic jumps, always contract singular values to the right
-        A_new, B_new = split_mps_tensor(merged, "right", sim_params, dynamic=False)
-        state.tensors[i], state.tensors[j] = A_new, B_new
+        tensor_left_new, tensor_right_new = split_mps_tensor(merged, "right", sim_params, dynamic=False)
+        state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
     else:
         msg = "Jump operator must act on 1 or 2 sites."
         raise ValueError(msg)
