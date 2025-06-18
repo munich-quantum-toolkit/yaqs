@@ -70,7 +70,7 @@ def create_probability_distribution(
     Args:
         state (MPS): The Matrix Product State, assumed left-canonical at site 0 on entry.
         noise_model (NoiseModel | None): The noise model as a list of process dicts, each with keys
-            "jump_operator", "strength", and "sites" (list of length 1 or 2).
+        "jump_operator", "strength", and "sites" (list of length 1 or 2).
         dt (float): Time step for the evolution, used to scale the jump probabilities.
         sim_params: Simulation parameters, needed for splitting merged tensors (e.g., SVD threshold, bond dimension).
     Returns:
