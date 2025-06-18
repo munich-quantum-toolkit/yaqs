@@ -159,6 +159,9 @@ def stochastic_process(
 
     Returns:
         MPS: The updated Matrix Product State after the stochastic process.
+
+    Raises:
+        ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.
     """
     dp = calculate_stochastic_factor(state)
     rng = np.random.default_rng()
