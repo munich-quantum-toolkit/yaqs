@@ -14,6 +14,7 @@ the effects of noise in quantum simulations.
 """
 
 from __future__ import annotations
+import numpy as np
 
 from ..libraries.noise_library import NoiseLibrary
 
@@ -42,7 +43,7 @@ class NoiseModel:
                 self.processes.append(proc)
 
     @staticmethod
-    def get_operator(name: str):
+    def get_operator(name: str)-> np.ndarray:
         """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
 
         Args:
