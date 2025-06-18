@@ -14,6 +14,7 @@ import numpy as np
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
+from mqt.yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
 
 rng = np.random.default_rng()
 
@@ -44,7 +45,8 @@ def test_apply_dissipation_site_canonical_0() -> None:
         {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["relaxation", "dephasing"]
     ])
     dt = 0.1
-    sim_params = None
+    sim_params = PhysicsSimParams(observables=[], elapsed_time=0.0, max_bond_dim=10, threshold=1e-10)
+
     # 3) Apply dissipation to the MPS.
     apply_dissipation(state, noise_model, dt, sim_params)
 
