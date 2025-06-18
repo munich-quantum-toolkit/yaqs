@@ -37,11 +37,9 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     This factor is used to determine the probability that a quantum jump will occur
     during the stochastic evolution. It is defined as 1 minus the norm of the state
     at site 0.
-
     Args:
         state (MPS): The Matrix Product State representing the current state of the system.
                      The state should be in mixed canonical form at site 0 or B normalized.
-
     Returns:
         NDArray[np.float64]: The calculated stochastic factor as a float.
     """
@@ -146,8 +144,13 @@ def stochastic_process(
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
 ) -> MPS:
     """Perform a stochastic process on the given state, simulating a quantum jump.
-    Supports both 1-site and 2-site jump operators.
 
+    This function randomly determines whether a quantum jump occurs in the given
+    timestep based on the system state and noise model. If a jump is triggered, 
+    the function samples the specific jump process according to the calculated 
+    probability distribution and applies the corresponding operator to the MPS. 
+    Both single-site and nearest-neighbor two-site jump processes are supported, 
+    with appropriate tensor contractions and normalization to ensure physical validity.
     Args:
         state (MPS): The current Matrix Product State, left-canonical at site 0.
         noise_model (NoiseModel | None): The noise model, or None for no jumps.
