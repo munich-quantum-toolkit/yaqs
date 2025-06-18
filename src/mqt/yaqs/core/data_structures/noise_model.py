@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from ..libraries.noise_library import NoiseLibrary
 
+
 class NoiseModel:
-    """
-    A class to represent a noise model with arbitrary-site jump operators.
+    """A class to represent a noise model with arbitrary-site jump operators.
 
     Each process is a dict with:
         - name (str): process name or identifier
@@ -28,10 +28,8 @@ class NoiseModel:
         - jump_operator (np.ndarray): matrix representing the operator on those sites
     """
 
-    def __init__(self, processes: list[dict] = None) -> None:
-        """
-        processes: list of dicts with keys 'name', 'sites', 'strength', and optionally 'jump_operator'.
-        """
+    def __init__(self, processes: list[dict] | None = None) -> None:
+        """processes: list of dicts with keys 'name', 'sites', 'strength', and optionally 'jump_operator'."""
         self.processes = []
         if processes is not None:
             for proc in processes:
@@ -39,8 +37,8 @@ class NoiseModel:
                 assert "sites" in proc, "Each process must have a 'sites' key"
                 assert "strength" in proc, "Each process must have a 'strength' key"
                 # Try to look up the operator if not explicitly provided
-                if 'jump_operator' not in proc:
-                    proc['jump_operator'] = self.get_operator(proc['name'], len(proc['sites']))
+                if "jump_operator" not in proc:
+                    proc["jump_operator"] = self.get_operator(proc["name"], len(proc["sites"]))
                 self.processes.append(proc)
 
     @staticmethod
@@ -50,6 +48,5 @@ class NoiseModel:
         # This logic should match your NoiseLibrary's API.
         # For a generic approach:
         operator_class = getattr(NoiseLibrary, name)
-        op = operator_class().matrix
+        return operator_class().matrix
         # Optionally check op.shape matches 2^num_sites x 2^num_sites
-        return op

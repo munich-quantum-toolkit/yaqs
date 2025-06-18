@@ -1,20 +1,26 @@
-import sys
-import numpy as np
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
 import pickle
-import os
+import sys
 import time
-import qutip as qt
 
 import matplotlib.pyplot as plt
+import numpy as np
 
-sys.path.append('/Users/maximilianfrohlich/lindbladmpo')
+sys.path.append("/Users/maximilianfrohlich/lindbladmpo")
 from lindbladmpo.LindbladMPOSolver import LindbladMPOSolver
 
-
 # Parameters
-N = 30 # number of sites
+N = 30  # number of sites
 half_N = N // 2  # half the number of sites for initial state
-J = 1    # X and Y coupling strength
+J = 1  # X and Y coupling strength
 J_z = 1  # Z coupling strength
 h = 1  # transverse field strength
 gamma_excitation = 0.1  # dephasing rate (1/T2star)
@@ -23,7 +29,7 @@ gamma_relaxation = 0.1  # relaxation rate (1/T1)
 # Time vector
 T = 10
 timesteps = 100
-t = np.linspace(0, T, timesteps+1)
+t = np.linspace(0, T, timesteps + 1)
 
 # # Qutip setup
 
@@ -67,22 +73,20 @@ t = np.linspace(0, T, timesteps+1)
 # result_lindblad = qt.mesolve(H, psi0, t, c_ops, sz_list, progress_bar=True)
 
 
-
-
 # Define parameters for LindbladMPOSolver
 parameters = {
     "N": N,
     "t_final": T,
     "tau": T / (timesteps),  # time step
-    "J": -2*J,  # coupling factor of XX and YY
-    "J_z": -2*J_z, 
-    "h_z": -2*h,
-    "g_0": gamma_relaxation,  # Strength of deexcitation 
+    "J": -2 * J,  # coupling factor of XX and YY
+    "J_z": -2 * J_z,
+    "h_z": -2 * h,
+    "g_0": gamma_relaxation,  # Strength of deexcitation
     "g_1": gamma_excitation,  # Strength of excitation
-    "init_product_state": ["+z"]*half_N + ["-z"]*half_N,  # initial state 
+    "init_product_state": ["+z"] * half_N + ["-z"] * half_N,  # initial state
     "1q_components": ["Z"],  # Request x, y, z observables
-    "2q_components": [],      # No 2-site observables
-    "3q_components": [],      # No 3-site observables
+    "2q_components": [],  # No 2-site observables
+    "3q_components": [],  # No 3-site observables
     "l_x": N,  # Length of the chain
     "l_y": 1,  # Width of the chain (1 for a 1D chain)
     "b_periodic_x": False,  # Open boundary conditions in x-direction
@@ -94,17 +98,16 @@ solver = LindbladMPOSolver(parameters)
 starting_time = time.time()
 solver.solve()
 simulation_time = time.time() - starting_time
-print(f"Simulation completed in {simulation_time:.2f} seconds.")
-
 
 
 # Access the LindbladMPO results
 lindblad_mpo_results = solver.result
 
 
-z_expectation_values_mpo = np.array([[solver.result['obs-1q'][('z', (i,))][1][t] 
-                                for t in range(len(solver.result['obs-1q'][('z', (i,))][0]))] for i in range(N)])
-
+z_expectation_values_mpo = np.array([
+    [solver.result["obs-1q"]["z", (i,)][1][t] for t in range(len(solver.result["obs-1q"]["z", (i,)][0]))]
+    for i in range(N)
+])
 
 
 # # QuTiP: shape is (len(t), N), transpose to (N, len(t))
@@ -114,14 +117,14 @@ pickle_filepath = "/Users/maximilianfrohlich/Documents/GitHub/mqt-yaqs/scripts/l
 
 
 data_to_save = {
-    'parameters': parameters,                      # Simulation parameters
-    'result': lindblad_mpo_results,               # Lindblad MPO results
-    'z_expectation_values_mpo': z_expectation_values_mpo,  # Observables
-    'simulation_time': simulation_time            # Total simulation time in seconds
+    "parameters": parameters,  # Simulation parameters
+    "result": lindblad_mpo_results,  # Lindblad MPO results
+    "z_expectation_values_mpo": z_expectation_values_mpo,  # Observables
+    "simulation_time": simulation_time,  # Total simulation time in seconds
 }
 
 
-with open(pickle_filepath, 'wb') as f:
+with open(pickle_filepath, "wb") as f:
     pickle.dump(data_to_save, f)
 
 # Plot comparison
@@ -138,4 +141,3 @@ plt.legend(ncol=2, fontsize="small")
 plt.grid(True)
 plt.tight_layout()
 plt.show()
-

@@ -1,14 +1,21 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
 import pickle
+
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.legend_handler import HandlerTuple
-import os
 from matplotlib.gridspec import GridSpec
-from matplotlib.colors import LogNorm
 
 
-def plot_convergence_data():
-    ### Overall Plot
+def plot_convergence_data() -> None:
+    # Overall Plot
     plt.rcParams.update({
         "text.usetex": True,
         "font.family": "serif",
@@ -16,9 +23,9 @@ def plot_convergence_data():
         "mathtext.fontset": "cm",
         "text.latex.preamble": r"\usepackage{amsmath}",
         "text.latex.preamble": r"\usepackage{newtxtext}\usepackage{newtxmath}",
-        "lines.linewidth": 3
+        "lines.linewidth": 3,
     })
-    fig  = plt.figure(figsize=(3.5, 3), constrained_layout=True)  # a size often acceptable for Nature
+    fig = plt.figure(figsize=(3.5, 3), constrained_layout=True)  # a size often acceptable for Nature
 
     gs = GridSpec(1, 1, figure=fig)
     ax1 = fig.add_subplot(gs[0])
@@ -31,15 +38,14 @@ def plot_convergence_data():
     # axes[0].set_frame_on(False)
     # axes[0].tick_params(labeltop=False, top=False, labelright=False, right=False)
 
-
-    axes[0].set_xlabel('Trajectories ($N$)', fontsize=12)
+    axes[0].set_xlabel("Trajectories ($N$)", fontsize=12)
     axes[0].set_ylabel("$|\\langle X^{[5]} \\rangle - \\langle \\tilde{X}^{[5]} \\rangle|$", fontsize=12)
     axes[0].tick_params(labelsize=10)
     axes[0].set_xlim(1, 1e4)
-    axes[0].xaxis.grid(linestyle='--')
-    axes[0].yaxis.grid(linestyle='--')
-    axes[0].set_xscale('log')
-    axes[0].set_yscale('log')
+    axes[0].xaxis.grid(linestyle="--")
+    axes[0].yaxis.grid(linestyle="--")
+    axes[0].set_xscale("log")
+    axes[0].set_yscale("log")
     axes[0].set_ylim(1e-3, 1e-1)
     # axes[0].grid(which='both', linestyle=':', linewidth=0.8, alpha=0.7)
 
@@ -48,17 +54,15 @@ def plot_convergence_data():
     # Load data from file
     data = pickle.load(open("QuTip_exact_convergence.pickle", "rb"))
     # Site 5, Time T=1
-    exp_value_exact = data['observables'][4][10]
-
+    exp_value_exact = data["observables"][4][10]
 
     data = pickle.load(open("TJM_Convergence_order2_dt05.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    data["sim_params"].observables[4].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories = data["sim_params"].observables[4].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
-    max_sample_size = 10000
     num_samples = 5000
     errors = []
     std_devs = []
@@ -76,14 +80,14 @@ def plot_convergence_data():
 
     errors = np.array(errors)
     std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, label='$0.5$')
+    (_p1_05,) = axes[0].plot(x_values, errors, label="$0.5$")
     # axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2)
 
     data = pickle.load(open("TJM_Convergence_order2_dt02.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    data["sim_params"].observables[4].times
 
     # # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories = data["sim_params"].observables[4].trajectories.squeeze()
 
     # # # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -101,15 +105,14 @@ def plot_convergence_data():
 
     errors = np.array(errors)
     std_devs = np.array(std_devs)
-    p1_1, = axes[0].plot(x_values, errors, label='$0.2$')
+    (_p1_1,) = axes[0].plot(x_values, errors, label="$0.2$")
     # axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2)
 
-
     data = pickle.load(open("TJM_Convergence_order2_dt01.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    data["sim_params"].observables[4].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories = data["sim_params"].observables[4].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -127,14 +130,14 @@ def plot_convergence_data():
 
     errors = np.array(errors)
     std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, label='$0.1$')
-    axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2, color='green')
+    (_p1_05,) = axes[0].plot(x_values, errors, label="$0.1$")
+    axes[0].fill_between(x_values, errors - std_devs, errors + std_devs, alpha=0.2, color="green")
 
     data = pickle.load(open("TJM_Convergence_order1_dt05.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    data["sim_params"].observables[4].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories = data["sim_params"].observables[4].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -152,14 +155,13 @@ def plot_convergence_data():
 
     errors = np.array(errors)
     std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, linestyle='--', linewidth=1.5, color='blue')
-
+    (_p1_05,) = axes[0].plot(x_values, errors, linestyle="--", linewidth=1.5, color="blue")
 
     data = pickle.load(open("TJM_Convergence_order1_dt02.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    data["sim_params"].observables[4].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories = data["sim_params"].observables[4].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -177,13 +179,13 @@ def plot_convergence_data():
 
     errors = np.array(errors)
     std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, linestyle='--', linewidth=1.5, color='orange')
+    (_p1_05,) = axes[0].plot(x_values, errors, linestyle="--", linewidth=1.5, color="orange")
 
     data = pickle.load(open("TJM_Convergence_order1_dt01.pickle", "rb"))
-    times = data['sim_params'].observables[4].times
+    data["sim_params"].observables[4].times
 
     # [Trajectories, Times]
-    trajectories =  data['sim_params'].observables[4].trajectories.squeeze()
+    trajectories = data["sim_params"].observables[4].trajectories.squeeze()
 
     # Use average_random_samples to calculate averaged errors with shaded error bars
     errors = []
@@ -201,11 +203,11 @@ def plot_convergence_data():
 
     errors = np.array(errors)
     std_devs = np.array(std_devs)
-    p1_05, = axes[0].plot(x_values, errors, linestyle='--', linewidth=1.5, color='green')
+    (_p1_05,) = axes[0].plot(x_values, errors, linestyle="--", linewidth=1.5, color="green")
 
-    p1_exact = axes[0].plot(x, 0.1/np.sqrt(x), linestyle='-', color='black', linewidth=1.5)
+    axes[0].plot(x, 0.1 / np.sqrt(x), linestyle="-", color="black", linewidth=1.5)
 
-    axes[0].legend(title='$\\delta t$', loc='upper right')
+    axes[0].legend(title="$\\delta t$", loc="upper right")
 
     plt.savefig("results.pdf", dpi=300, format="pdf")
     plt.show()

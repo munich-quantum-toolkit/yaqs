@@ -1,27 +1,36 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
 import copy
-import matplotlib.pyplot as plt
+
 # from mqt import qcec
 import pickle
-import qiskit.circuit
-import qiskit.compiler
-from qiskit.circuit.library.n_local import TwoLocal
-import numpy as np
 import random
 import time
 
+import matplotlib.pyplot as plt
+import numpy as np
+import qiskit.circuit
+import qiskit.compiler
+from qiskit.circuit.library.n_local import TwoLocal
 from yaqs.circuits.equivalence_checking import equivalence_checker
-
 
 num_qubits = 10
 depth = num_qubits
 threshold = 1e-1
-fidelity = 1-1e-13
-starting_gates = ['h', 'x', 'cx', 'cz', 'swap', 'id', 'rz', 'rx', 'ry', 'rxx', 'ryy', 'rzz']
+fidelity = 1 - 1e-13
+starting_gates = ["h", "x", "cx", "cz", "swap", "id", "rz", "rx", "ry", "rxx", "ryy", "rzz"]
 
 # Original
 # basis_gates = ['h', 'x', 'cx', 'rz', 'id']
 # IBM Heron
-basis_gates = ['cz', 'rz', 'sx', 'x', 'id']
+basis_gates = ["cz", "rz", "sx", "x", "id"]
 # Quantinuum H1-1, H1-2
 # basis_gates = ['rx', 'ry', 'rz', 'rzz']
 
@@ -35,22 +44,19 @@ assert sum(calculate) == 1
 # x_list = range(0, 6) # TN 1e-12 to 1e-5
 # x_list = range(0, 16) # TN 1e-5 to 1e-2
 # x_list = range(0, 51) # TN 1e-1
-x_list = range(0, 11) # TN
+x_list = range(11)  # TN
 # x_list = range(0, 2) # DD
 # x_list = range(2, 33, 2) # ZX
 
 samples = 10
-runs = {'method': 'TN', 'N': x_list, 't': []}
-for sample in range(samples):
-    print("Sample", sample)
+runs = {"method": "TN", "N": x_list, "t": []}
+for _sample in range(samples):
     TN_times = []
     DD_times = []
     ZX_times = []
     for errors in x_list:
-        print(errors)
-
         circuit = qiskit.circuit.QuantumCircuit(num_qubits)
-        twolocal = TwoLocal(num_qubits, ['rx'], ['rzz'], entanglement='linear', reps=depth).decompose()        
+        twolocal = TwoLocal(num_qubits, ["rx"], ["rzz"], entanglement="linear", reps=depth).decompose()
         num_pars = len(twolocal.parameters)
         values = np.random.uniform(low=-np.pi, high=np.pi, size=num_pars)
         circuit = copy.deepcopy(twolocal).assign_parameters(values)
@@ -59,20 +65,21 @@ for sample in range(samples):
         transpiled_circuit = qiskit.compiler.transpile(circuit, basis_gates=basis_gates, optimization_level=1)
         for _ in range(errors):
             random_gate = random.choice(transpiled_circuit)
-            while random_gate.operation.name == 'barrier':
+            while random_gate.operation.name == "barrier":
                 random_gate = random.choice(transpiled_circuit)
             transpiled_circuit.data.remove(random_gate)
 
         if calculate_TN:
             start_time = time.time()
-            result = equivalence_checker.run(copy.deepcopy(circuit), copy.deepcopy(transpiled_circuit), threshold, fidelity)
+            result = equivalence_checker.run(
+                copy.deepcopy(circuit), copy.deepcopy(transpiled_circuit), threshold, fidelity
+            )
             if errors == 0:
-                assert result['equivalent']
+                assert result["equivalent"]
             else:
-                assert not result['equivalent']
+                assert not result["equivalent"]
             end_time = time.time()
             TN_time = end_time - start_time
-            print("TN", TN_time)
         else:
             TN_time = None
 
@@ -109,25 +116,24 @@ for sample in range(samples):
         # else:
         #     ZX_time = None
 
-
         TN_times.append(TN_time)
 
         # DD_times.append(DD_time)
         # ZX_times.append(ZX_time)
 
-    runs['t'].append(TN_times)
-    pickle.dump(runs, open("TN1.p", "wb" ))
+    runs["t"].append(TN_times)
+    pickle.dump(runs, open("TN1.p", "wb"))
 
 
-plt.title('Verification of VQE Circuit')
-plt.plot(x_list, TN_times, label='TN')
+plt.title("Verification of VQE Circuit")
+plt.plot(x_list, TN_times, label="TN")
 
 # plt.plot(x_list, DD_times, label='DD')
 # plt.plot(x_list, ZX_times, label='ZX')
 
-plt.yscale('log')
+plt.yscale("log")
 plt.ylim(top=cutoff)
-plt.xlabel('Qubits')
-plt.ylabel('Runtime (s)')
+plt.xlabel("Qubits")
+plt.ylabel("Runtime (s)")
 plt.legend()
 plt.show()

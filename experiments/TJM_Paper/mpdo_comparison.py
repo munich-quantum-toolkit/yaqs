@@ -1,13 +1,22 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
 import pickle
 
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs import simulator
+from mqt.yaqs.core.libraries.gate_library import Z
 
 
-def run_mpdo_comparison():
+def run_mpdo_comparison() -> None:
     # Define the system Hamiltonian
     L = 30
     J = 1
@@ -17,12 +26,11 @@ def run_mpdo_comparison():
     H_0.init_heisenberg(L, J, J, J, g)
 
     # Define the initial state
-    state = MPS(L, state='wall')
+    state = MPS(L, state="wall")
 
     # Define the simulation parameters
     T = 10
     dt = 0.1
-    sample_timesteps = True
     N = 100
     threshold = 0
     order = 2
@@ -30,39 +38,44 @@ def run_mpdo_comparison():
     # Define the noise model
     gamma_relaxation = 0
     gamma_dephasing = 0
-    noise_model = NoiseModel(['relaxation', 'excitation'], [gamma_relaxation, gamma_dephasing])
+    noise_model = NoiseModel(["relaxation", "excitation"], [gamma_relaxation, gamma_dephasing])
     max_bond_dim = 32
 
     measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
+    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
     simulator.run(state, H_0, sim_params, noise_model)
 
-    filename = f"results/mpdo_comparison/30L_NoNoise.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'sim_params': sim_params,
-        }, f)
+    filename = "results/mpdo_comparison/30L_NoNoise.pickle"
+    with open(filename, "wb") as f:
+        pickle.dump(
+            {
+                "sim_params": sim_params,
+            },
+            f,
+        )
 
     # Define the noise model
     gamma_relaxation = 0.1
     gamma_dephasing = 0.1
-    noise_model = NoiseModel(['relaxation', 'excitation'], [gamma_relaxation, gamma_dephasing])
+    noise_model = NoiseModel(["relaxation", "excitation"], [gamma_relaxation, gamma_dephasing])
     max_bond_dim = 8
 
     measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps = True)
+    sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
     simulator.run(state, H_0, sim_params, noise_model)
 
-    filename = f"results/mpdo_comparison/30L_Noise.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'sim_params': sim_params,
-        }, f)
+    filename = "results/mpdo_comparison/30L_Noise.pickle"
+    with open(filename, "wb") as f:
+        pickle.dump(
+            {
+                "sim_params": sim_params,
+            },
+            f,
+        )
 
     # NOTE: This package needs to be installed locally. The data is included in the capsule.
     # sys.path.append('/Users/user/lindbladmpo')
     # from lindbladmpo.LindbladMPOSolver import LindbladMPOSolver
-
 
     # Parameters
     # N = 30  # number of sites
@@ -83,11 +96,11 @@ def run_mpdo_comparison():
     #     "t_final": T,
     #     "tau": T / (timesteps),  # time step
     #     "J": -2*J,  # coupling factor of XX and YY
-    #     "J_z": -2*J_z, 
+    #     "J_z": -2*J_z,
     #     "h_z": -2*h,
-    #     "g_0": gamma_relaxation,  # Strength of deexcitation 
+    #     "g_0": gamma_relaxation,  # Strength of deexcitation
     #     "g_1": gamma_dephasing,  # Strength of dephasing
-    #     "init_product_state": ["+z"]*15 + ["-z"]*15,  # initial state 
+    #     "init_product_state": ["+z"]*15 + ["-z"]*15,  # initial state
     #     "1q_components": ["X", "Y", "Z"],  # Request x, y, z observables
     #     "l_x": N,  # Length of the chain
     #     "l_y": 1,  # Width of the chain (1 for a 1D chain)
@@ -102,9 +115,8 @@ def run_mpdo_comparison():
     # Access the LindbladMPO results
     # lindblad_mpo_results = solver.result
 
-    # z_expectation_values_mpo = np.array([[solver.result['obs-1q'][('z', (i,))][1][t] 
+    # z_expectation_values_mpo = np.array([[solver.result['obs-1q'][('z', (i,))][1][t]
     #                                 for t in range(len(solver.result['obs-1q'][('z', (i,))][0]))] for i in range(N)])
-
 
     # pickle_filepath = 'results/mpdo_comparison/lindblad_mpo_results.pkl'
 

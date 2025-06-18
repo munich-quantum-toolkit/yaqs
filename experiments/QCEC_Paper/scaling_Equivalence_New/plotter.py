@@ -1,4 +1,14 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
 import pickle
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -14,14 +24,15 @@ def set_size(width, fraction=1, subplots=(1, 1)):
             Fraction of the width which you wish the figure to occupy
     subplots: array-like, optional
             The number of rows and columns of subplots.
-    Returns
+
+    Returns:
     -------
     fig_dim: tuple
             Dimensions of figure in inches
     """
-    if width == 'thesis':
+    if width == "thesis":
         width_pt = 426.79135
-    elif width == 'beamer':
+    elif width == "beamer":
         width_pt = 307.28987
     else:
         width_pt = width
@@ -33,26 +44,27 @@ def set_size(width, fraction=1, subplots=(1, 1)):
 
     # Golden ratio to set aesthetic figure height
     # https://disq.us/p/2940ij3
-    golden_ratio = (5**.5 - 1) / 2
+    golden_ratio = (5**0.5 - 1) / 2
 
     # Figure width in inches
     fig_width_in = fig_width_pt * inches_per_pt
     # Figure height in inches
-    fig_height_in = 1*(fig_width_in * golden_ratio * (subplots[0] / subplots[1]))
+    fig_height_in = 1 * (fig_width_in * golden_ratio * (subplots[0] / subplots[1]))
 
     return (fig_width_in, fig_height_in)
 
-### Overall Plot
+
+# Overall Plot
 x = np.linspace(0, 25)
 y = x
 fig, axes = plt.subplots(1, 3, figsize=set_size(514.1736, subplots=(2, 3)))
-axes[0].set_title('Linear')
-axes[1].set_title('SCA')
-axes[2].set_title('Full')
+axes[0].set_title("Linear")
+axes[1].set_title("SCA")
+axes[2].set_title("Full")
 
-axes[0].set(xlabel='N', ylabel='Runtime (s)')
-axes[1].set(xlabel='N')
-axes[2].set(xlabel='N')
+axes[0].set(xlabel="N", ylabel="Runtime (s)")
+axes[1].set(xlabel="N")
+axes[2].set(xlabel="N")
 
 # axes[1, 0].set(xlabel="Errors ($N=60$)", ylabel='Runtime (s)')
 # axes[1, 1].set(xlabel='Errors ($N=20$)')
@@ -60,7 +72,7 @@ axes[2].set(xlabel='N')
 
 for i, ax in enumerate(axes):
     if i != 0:
-        ax.tick_params('y', labelleft=False)
+        ax.tick_params("y", labelleft=False)
 
 # Adjust misaligned y axis labels
 # labelx = -0.3
@@ -113,86 +125,90 @@ for i, ax in enumerate(axes):
 
 # Linear
 x = np.linspace(2, 50)
-proportional = pickle.load( open("TN_Lin.p", "rb" ) )
-proportional_qubits = np.array(proportional['N'])
-proportional_times = np.mean(np.array(proportional['t']), axis=0)
-TN_std = np.std(np.array(proportional['t']), axis=0)
+proportional = pickle.load(open("TN_Lin.p", "rb"))
+proportional_qubits = np.array(proportional["N"])
+proportional_times = np.mean(np.array(proportional["t"]), axis=0)
+TN_std = np.std(np.array(proportional["t"]), axis=0)
 a, b, c = np.polyfit(np.log10(proportional_qubits), np.log10(proportional_times), 2)
-axes[0].scatter(proportional_qubits, proportional_times, color='tab:red', marker='o')
-axes[0].plot(x, 10**(a*np.log10(x)**2 + b*np.log10(x) + c), color='tab:red')
+axes[0].scatter(proportional_qubits, proportional_times, color="tab:red", marker="o")
+axes[0].plot(x, 10 ** (a * np.log10(x) ** 2 + b * np.log10(x) + c), color="tab:red")
 
-ZX = pickle.load( open("ZX_Lin.p", "rb" ) )
-ZX_qubits = np.array(ZX['N'])
-ZX_times = np.mean(np.array(ZX['t']), axis=0)
+ZX = pickle.load(open("ZX_Lin.p", "rb"))
+ZX_qubits = np.array(ZX["N"])
+ZX_times = np.mean(np.array(ZX["t"]), axis=0)
 a, b, c = np.polyfit(np.log10(ZX_qubits), np.log10(ZX_times), 2)
-axes[0].scatter(ZX_qubits, ZX_times, marker='X', color='tab:green')
-axes[0].plot(x, 10**(a*np.log10(x)**2 + b*np.log10(x) + c), linestyle='--', color='tab:green')
+axes[0].scatter(ZX_qubits, ZX_times, marker="X", color="tab:green")
+axes[0].plot(x, 10 ** (a * np.log10(x) ** 2 + b * np.log10(x) + c), linestyle="--", color="tab:green")
 
-DD = pickle.load( open("DD_Lin.p", "rb" ) )
-DD_qubits = np.array(DD['N'])
-DD_times = np.mean(np.array(DD['t']), axis=0)
-axes[0].scatter(DD_qubits, DD_times, marker='^', color='tab:blue')
+DD = pickle.load(open("DD_Lin.p", "rb"))
+DD_qubits = np.array(DD["N"])
+DD_times = np.mean(np.array(DD["t"]), axis=0)
+axes[0].scatter(DD_qubits, DD_times, marker="^", color="tab:blue")
 a, b, c, d = np.polyfit(np.log10(DD_qubits), np.log10(DD_times), 3)
-axes[0].plot(x, 10**(a*np.log10(x)**3 + b*np.log10(x)**2 + c*np.log10(x) + d), linestyle=':', color='tab:blue')
+axes[0].plot(
+    x, 10 ** (a * np.log10(x) ** 3 + b * np.log10(x) ** 2 + c * np.log10(x) + d), linestyle=":", color="tab:blue"
+)
 
 
 axes[0].set_xlim(1, 32)
 axes[0].set_ylim(1e-3, 1e2)
-axes[0].set_yscale('log')
+axes[0].set_yscale("log")
 
 # SCA
-proportional = pickle.load( open("TN_SCA.p", "rb" ) )
-proportional_qubits = np.array(proportional['N'])
-proportional_times = np.mean(np.array(proportional['t']), axis=0)
+proportional = pickle.load(open("TN_SCA.p", "rb"))
+proportional_qubits = np.array(proportional["N"])
+proportional_times = np.mean(np.array(proportional["t"]), axis=0)
 a, b, c = np.polyfit(np.log10(proportional_qubits), np.log10(proportional_times), 2)
-axes[1].scatter(proportional_qubits, proportional_times, color='tab:red', marker='o')
-axes[1].plot(x, 10**(a*np.log10(x)**2 + b*np.log10(x) + c), color='tab:red')
+axes[1].scatter(proportional_qubits, proportional_times, color="tab:red", marker="o")
+axes[1].plot(x, 10 ** (a * np.log10(x) ** 2 + b * np.log10(x) + c), color="tab:red")
 
-ZX = pickle.load( open("ZX_SCA.p", "rb" ) )
-ZX_qubits = np.array(ZX['N'])
-ZX_times = np.mean(np.array(ZX['t']), axis=0)
+ZX = pickle.load(open("ZX_SCA.p", "rb"))
+ZX_qubits = np.array(ZX["N"])
+ZX_times = np.mean(np.array(ZX["t"]), axis=0)
 a, b, c = np.polyfit(np.log10(ZX_qubits), np.log10(ZX_times), 2)
-axes[1].scatter(ZX_qubits, ZX_times, marker='X', color='tab:green')
-axes[1].plot(x, 10**(a*np.log10(x)**2 + b*np.log10(x) + c), linestyle='--', color='tab:green')
+axes[1].scatter(ZX_qubits, ZX_times, marker="X", color="tab:green")
+axes[1].plot(x, 10 ** (a * np.log10(x) ** 2 + b * np.log10(x) + c), linestyle="--", color="tab:green")
 
-DD = pickle.load( open("DD_SCA.p", "rb" ) )
-DD_qubits = np.array(DD['N'])
-DD_times = np.mean(np.array(DD['t']), axis=0)
-axes[1].scatter(DD_qubits, DD_times, marker='^', color='tab:blue')
+DD = pickle.load(open("DD_SCA.p", "rb"))
+DD_qubits = np.array(DD["N"])
+DD_times = np.mean(np.array(DD["t"]), axis=0)
+axes[1].scatter(DD_qubits, DD_times, marker="^", color="tab:blue")
 a, b, c, d = np.polyfit(np.log10(DD_qubits), np.log10(DD_times), 3)
-axes[1].plot(x, 10**(a*np.log10(x)**3 + b*np.log10(x)**2 + c*np.log10(x) + d), linestyle=':', color='tab:blue')
+axes[1].plot(
+    x, 10 ** (a * np.log10(x) ** 3 + b * np.log10(x) ** 2 + c * np.log10(x) + d), linestyle=":", color="tab:blue"
+)
 
 
 axes[1].set_xlim(1, 32)
 axes[1].set_ylim(1e-3, 1e2)
-axes[1].set_yscale('log')
+axes[1].set_yscale("log")
 
 # # # # # Full
-proportional = pickle.load( open("TN_Full.p", "rb" ) )
-proportional_qubits = np.array(proportional['N'])
-proportional_times = np.mean(np.array(proportional['t']), axis=0)
+proportional = pickle.load(open("TN_Full.p", "rb"))
+proportional_qubits = np.array(proportional["N"])
+proportional_times = np.mean(np.array(proportional["t"]), axis=0)
 a, b, c = np.polyfit(np.log10(proportional_qubits), np.log10(proportional_times), 2)
-axes[2].scatter(proportional_qubits, proportional_times, color='tab:red', marker='o', label='MPO')
-axes[2].plot(x, 10**(a*np.log10(x)**2 + b*np.log10(x) + c), color='tab:red')
+axes[2].scatter(proportional_qubits, proportional_times, color="tab:red", marker="o", label="MPO")
+axes[2].plot(x, 10 ** (a * np.log10(x) ** 2 + b * np.log10(x) + c), color="tab:red")
 
-ZX = pickle.load( open("ZX_Full.p", "rb" ) )
-ZX_qubits = np.array(ZX['N'])
-ZX_times = np.mean(np.array(ZX['t']), axis=0)
+ZX = pickle.load(open("ZX_Full.p", "rb"))
+ZX_qubits = np.array(ZX["N"])
+ZX_times = np.mean(np.array(ZX["t"]), axis=0)
 a, b, c = np.polyfit(np.log10(ZX_qubits), np.log10(ZX_times), 2)
-axes[2].scatter(ZX_qubits, ZX_times, marker='X', color='tab:green', label='ZX')
-axes[2].plot(x, 10**(a*np.log10(x)**2 + b*np.log10(x) + c), linestyle='--', color='tab:green')
+axes[2].scatter(ZX_qubits, ZX_times, marker="X", color="tab:green", label="ZX")
+axes[2].plot(x, 10 ** (a * np.log10(x) ** 2 + b * np.log10(x) + c), linestyle="--", color="tab:green")
 
-DD = pickle.load( open("DD_Full.p", "rb" ) )
-DD_qubits = np.array(DD['N'])
-DD_times = np.mean(np.array(DD['t']), axis=0)
-axes[2].scatter(DD_qubits, DD_times, marker='^', color='tab:blue', label='DD')
+DD = pickle.load(open("DD_Full.p", "rb"))
+DD_qubits = np.array(DD["N"])
+DD_times = np.mean(np.array(DD["t"]), axis=0)
+axes[2].scatter(DD_qubits, DD_times, marker="^", color="tab:blue", label="DD")
 a, b, c = np.polyfit(np.log10(DD_qubits), np.log10(DD_times), 2)
-axes[2].plot(x, 10**(a*np.log10(x)**2 + b*np.log10(x) + c), linestyle=':', color='tab:blue')
+axes[2].plot(x, 10 ** (a * np.log10(x) ** 2 + b * np.log10(x) + c), linestyle=":", color="tab:blue")
 
 axes[2].set_xlim(1, 32)
 axes[2].set_ylim(1e-3, 1e2)
-axes[2].set_yscale('log')
-axes[2].legend(loc='lower right')
+axes[2].set_yscale("log")
+axes[2].legend(loc="lower right")
 # fig.legend(loc=7)
 fig.tight_layout()
 # fig.subplots_adjust(right=0.86)

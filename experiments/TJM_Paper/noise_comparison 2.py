@@ -1,17 +1,26 @@
-import numpy as np
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
 import pickle
 
+import numpy as np
+
+from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
-from mqt.yaqs import simulator
+from mqt.yaqs.core.libraries.gate_library import Z
 
 
-def run_noise_test():
+def run_noise_test() -> None:
     # Define the system Hamiltonian
     L = 100
-    d = 2
     J = 1
     g = 0.5
     H_0 = MPO()
@@ -19,7 +28,7 @@ def run_noise_test():
     H_0.init_heisenberg(L, J, J, J, g)
 
     # Define the initial state
-    state = MPS(L, state='wall')
+    state = MPS(L, state="wall")
 
     # Define the simulation parameters
     dt = 0.1
@@ -34,59 +43,71 @@ def run_noise_test():
 
     heatmap = np.empty((L, len(gammas)))
     for j, gamma in enumerate(gammas):
-        print("Gamma =", gamma)
         # Define the noise model
-        noise_model = NoiseModel(['relaxation', 'excitation'], [gamma, gamma])
-        sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+        noise_model = NoiseModel(["relaxation", "excitation"], [gamma, gamma])
+        sim_params = PhysicsSimParams(
+            measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        )
 
-        ########## TJM Example #################
+        # TJM Example #################
         simulator.run(state, H_0, sim_params, noise_model)
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"results/mpdo_comparison/100L_T1.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'heatmap': heatmap,
-        }, f)
+    filename = "results/mpdo_comparison/100L_T1.pickle"
+    with open(filename, "wb") as f:
+        pickle.dump(
+            {
+                "heatmap": heatmap,
+            },
+            f,
+        )
 
     gammas = np.logspace(-2, -1, 20)
     T = 5
     heatmap = np.empty((L, len(gammas)))
     for j, gamma in enumerate(gammas):
-        print("Gamma =", gamma)
         # Define the noise model
-        noise_model = NoiseModel(['relaxation', 'excitation'], [gamma, gamma])
-        sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+        noise_model = NoiseModel(["relaxation", "excitation"], [gamma, gamma])
+        sim_params = PhysicsSimParams(
+            measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        )
 
-        ########## TJM Example #################
+        # TJM Example #################
         simulator.run(state, H_0, sim_params, noise_model)
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"results/mpdo_comparison/100L_T5.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'heatmap': heatmap,
-        }, f)
+    filename = "results/mpdo_comparison/100L_T5.pickle"
+    with open(filename, "wb") as f:
+        pickle.dump(
+            {
+                "heatmap": heatmap,
+            },
+            f,
+        )
 
     T = 10
     gammas = np.logspace(-4, 1, 100)
     gammas = gammas[55:65]
     heatmap = np.empty((L, len(gammas)))
     for j, gamma in enumerate(gammas):
-        print("Gamma =", gamma)
         # Define the noise model
-        noise_model = NoiseModel(['relaxation', 'excitation'], [gamma, gamma])
-        sim_params = PhysicsSimParams(measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+        noise_model = NoiseModel(["relaxation", "excitation"], [gamma, gamma])
+        sim_params = PhysicsSimParams(
+            measurements, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+        )
 
-        ########## TJM Example #################
+        # TJM Example #################
         simulator.run(state, H_0, sim_params, noise_model)
         for i, observable in enumerate(sim_params.observables):
             heatmap[i, j] = observable.results[0]
 
-    filename = f"results/mpdo_comparison/100L_T10.pickle"
-    with open(filename, 'wb') as f:
-        pickle.dump({
-            'heatmap': heatmap,
-        }, f)
+    filename = "results/mpdo_comparison/100L_T10.pickle"
+    with open(filename, "wb") as f:
+        pickle.dump(
+            {
+                "heatmap": heatmap,
+            },
+            f,
+        )
