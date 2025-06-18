@@ -15,12 +15,14 @@ the effects of noise in quantum simulations.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
 
 from ..libraries.noise_library import NoiseLibrary
 
 if TYPE_CHECKING:
     import numpy as np
+    from numpy.typing import NDArray
 
 
 class NoiseModel:
@@ -33,9 +35,9 @@ class NoiseModel:
         - jump_operator (np.ndarray): matrix representing the operator on those sites
     """
 
-    def __init__(self, processes: list[dict] | None = None) -> None:
+    def __init__(self, processes: list[dict[str, Any]]  | None = None) -> None:
         """processes: list of dicts with keys 'name', 'sites', 'strength', and optionally 'jump_operator'."""
-        self.processes = []
+        self.processes: list[dict[str, Any]] = []
         if processes is not None:
             for proc in processes:
                 assert "name" in proc, "Each process must have a 'name' key"
@@ -47,7 +49,7 @@ class NoiseModel:
                 self.processes.append(proc)
 
     @staticmethod
-    def get_operator(name: str) -> np.ndarray:
+    def get_operator(name: str) -> NDArray[Any]:
         """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
 
         Args:

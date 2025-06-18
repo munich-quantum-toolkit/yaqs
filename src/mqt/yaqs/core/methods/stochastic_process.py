@@ -83,7 +83,8 @@ def create_probability_distribution(
             - "sites": Site indices (list of 1 or 2 ints) where each jump operator is applied.
             - "probabilities": Normalized probabilities for each possible jump.
     """
-    jump_dict = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
+    jump_dict: dict[str, list] = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
+
     if noise_model is None or not noise_model.processes:
         return jump_dict
 
@@ -135,7 +136,7 @@ def create_probability_distribution(
                     jump_dict["sites"].append([site, site + 1])
 
     # Normalize the probabilities
-    dp = np.sum(dp_m_list)
+    dp: float = np.sum(dp_m_list)
     jump_dict["probabilities"] = (np.array(dp_m_list) / dp).tolist() if dp > 0 else [0.0] * len(dp_m_list)
     return jump_dict
 

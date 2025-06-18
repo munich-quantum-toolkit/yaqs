@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 
 def apply_dissipation(
-    state: MPS, noise_model: NoiseModel, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams
+    state: MPS, noise_model: NoiseModel | None, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams
 ) -> None:
     """Dissipative sweep: right-to-left, compatible with left-canonical MPS. Assumes state is left-canonical at start.
 
@@ -43,7 +43,7 @@ def apply_dissipation(
     The function iterates from right to left, updating the
     MPS tensors and shifting the orthogonality center as needed.
     """
-    if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
+    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
         for i in reversed(range(state.length)):
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
         return
