@@ -23,18 +23,19 @@ import opt_einsum as oe
 from scipy.linalg import expm
 
 from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
-from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 if TYPE_CHECKING:
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
+    from ..data_structures.simulation_parameters import PhysicsSimParams, StrongSimParams, WeakSimParams
 
 
-def apply_dissipation(state: MPS, noise_model: NoiseModel, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
+def apply_dissipation(
+    state: MPS, noise_model: NoiseModel, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams
+) -> None:
     """Dissipative sweep: right-to-left, compatible with left-canonical MPS.
     Assumes state is left-canonical at start.
     """
-
     if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
         for i in reversed(range(state.length)):
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
