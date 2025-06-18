@@ -44,13 +44,13 @@ class NoiseModel:
     @staticmethod
     def get_operator(name: str):
         """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
-        
-        Args: 
+
+        Args:
             name (str): Name of the noise process (e.g., 'xx', 'zz').
             num_sites (int): Number of sites this operator acts on.
-        Returns: 
-            np.ndarray: The matrix representation of the operator."""
-        
+
+        Returns:
+            np.ndarray: The matrix representation of the operator.
+        """
         operator_class = getattr(NoiseLibrary, name)
         return operator_class().matrix
-
