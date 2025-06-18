@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 
 def apply_dissipation(
-    state: MPS, noise_model: NoiseModel | None, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams
+    state: MPS, noise_model: NoiseModel | None, dt: float, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams | None
 ) -> None:
     """Dissipative sweep: right-to-left, compatible with left-canonical MPS. Assumes state is left-canonical at start.
 

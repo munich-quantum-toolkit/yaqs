@@ -14,6 +14,7 @@ and handles empty noise models appropriately.
 """
 
 from __future__ import annotations
+from typing import Any
 
 import pytest
 
@@ -30,7 +31,7 @@ def test_noise_model_creation() -> None:
       - The number of processes is correct.
       - Each process contains a jump_operator with the expected shape (2x2).
     """
-    processes = [
+    processes: list[dict[str, Any]] = [
         {"name": "relaxation", "sites": [0], "strength": 0.1},
         {"name": "dephasing", "sites": [1], "strength": 0.05},
     ]
@@ -55,7 +56,7 @@ def test_noise_model_assertion() -> None:
     which should cause the NoiseModel initialization to fail.
     """
     # Missing 'strength' in the second dict
-    processes = [
+    processes: list[dict[str, Any]] = [
         {"name": "relaxation", "sites": [0], "strength": 0.1},
         {"name": "dephasing", "sites": [1]},  # Missing strength
     ]

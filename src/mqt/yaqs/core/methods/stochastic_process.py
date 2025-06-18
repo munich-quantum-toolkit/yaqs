@@ -25,6 +25,7 @@ from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+    from typing import Any
 
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
@@ -53,7 +54,7 @@ def create_probability_distribution(
     noise_model: NoiseModel | None,
     dt: float,
     sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
-) -> dict[str, list]:
+) -> dict[str, list[Any]]:
     """Create a probability distribution for potential quantum jumps in the system.
 
     The function sweeps from left to right over the sites of the MPS. For each site,
@@ -83,7 +84,7 @@ def create_probability_distribution(
             - "sites": Site indices (list of 1 or 2 ints) where each jump operator is applied.
             - "probabilities": Normalized probabilities for each possible jump.
     """
-    jump_dict: dict[str, list] = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
+    jump_dict: dict[str, list[Any]] = {"jumps": [], "strengths": [], "sites": [], "probabilities": []}
 
     if noise_model is None or not noise_model.processes:
         return jump_dict
