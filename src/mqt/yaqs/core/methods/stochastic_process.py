@@ -120,9 +120,9 @@ def create_probability_distribution(
 
                     jumped_state = copy.deepcopy(state)
                     # merge the tensors at site and site+1
-                    jumped_state.tensors[site]
-                    jumped_state.tensors[site + 1]
-                    merged = merge_mps_tensors(A, B)
+                    tensor_left = jumped_state.tensors[site]
+                    tensor_right = jumped_state.tensors[site + 1]
+                    merged = merge_mps_tensors(tensor_left, tensor_right)
                     # apply the 2-site jump operator
                     merged = oe.contract("ab, bcd->acd", jump_operator, merged)
                     dp_m = dt * gamma * jumped_state.norm(site)
