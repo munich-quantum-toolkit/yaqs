@@ -13,7 +13,7 @@ maintainers = [
   { name="Lukas Burgholzer", email = "burgholzer@me.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -25,7 +25,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -93,7 +92,7 @@ report.exclude_also = [
 [tool.mypy]
 files = ["src/mqt", "tests", "noxfile.py"]
 mypy_path = ["$MYPY_CONFIG_FILE_DIR/src"]
-python_version = "3.9"
+python_version = "3.10"
 warn_unused_configs = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 strict = true
