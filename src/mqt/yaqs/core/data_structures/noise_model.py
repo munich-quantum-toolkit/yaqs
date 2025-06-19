@@ -17,11 +17,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-
 from ..libraries.noise_library import NoiseLibrary
 
 if TYPE_CHECKING:
-    import numpy as np
     from numpy.typing import NDArray
 
 
@@ -35,7 +33,7 @@ class NoiseModel:
         - jump_operator (np.ndarray): matrix representing the operator on those sites
     """
 
-    def __init__(self, processes: list[dict[str, Any]]  | None = None) -> None:
+    def __init__(self, processes: list[dict[str, Any]] | None = None) -> None:
         """processes: list of dicts with keys 'name', 'sites', 'strength', and optionally 'jump_operator'."""
         self.processes: list[dict[str, Any]] = []
         if processes is not None:

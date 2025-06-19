@@ -13,8 +13,8 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.methods.dissipation import apply_dissipation
 from mqt.yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
+from mqt.yaqs.core.methods.dissipation import apply_dissipation
 
 rng = np.random.default_rng()
 

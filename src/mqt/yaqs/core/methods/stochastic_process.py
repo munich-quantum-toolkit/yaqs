@@ -24,8 +24,9 @@ import opt_einsum as oe
 from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
     from typing import Any
+
+    from numpy.typing import NDArray
 
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
