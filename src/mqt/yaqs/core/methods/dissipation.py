@@ -43,7 +43,7 @@ def apply_dissipation(
     The function iterates from right to left, updating the
     MPS tensors and shifting the orthogonality center as needed.
     """
-    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
+    if noise_model is None or sim_params is None or all(proc["strength"] == 0 for proc in noise_model.processes):
         for i in reversed(range(state.length)):
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
         return
