@@ -116,7 +116,7 @@ def testextend_gate_reverse_order() -> None:
     mpo_forward = extend_gate(tensor, [0, 1])
     mpo_reverse = extend_gate(tensor, [1, 0])
     mpo_reverse.tensors.reverse()
-    for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors):
+    for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors, strict=False):
         assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))
 
 

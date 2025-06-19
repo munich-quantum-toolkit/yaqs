@@ -282,7 +282,7 @@ def test_init_custom() -> None:
     assert mpo.physical_dimension == pdim
     assert len(mpo.tensors) == length
 
-    for original, created in zip(tensors, mpo.tensors):
+    for original, created in zip(tensors, mpo.tensors, strict=False):
         assert original.shape == created.shape
         assert np.allclose(original, created)
 
@@ -339,7 +339,7 @@ def test_rotate() -> None:
     original_tensors = [t.copy() for t in mpo.tensors]
 
     mpo.rotate(conjugate=False)
-    for orig, rotated in zip(original_tensors, mpo.tensors):
+    for orig, rotated in zip(original_tensors, mpo.tensors, strict=False):
         assert rotated.shape == (orig.shape[1], orig.shape[0], orig.shape[2], orig.shape[3])
         np.testing.assert_allclose(rotated, np.transpose(orig, (1, 0, 2, 3)))
 
@@ -448,7 +448,7 @@ def test_flip_network() -> None:
     assert len(flipped_tensors) == length
     assert flipped_tensors[0].shape == (pdim, original_tensors[2].shape[2], original_tensors[2].shape[1])
     mps.flip_network()
-    for orig, now in zip(original_tensors, mps.tensors):
+    for orig, now in zip(original_tensors, mps.tensors, strict=False):
         assert np.allclose(orig, now)
 
 
