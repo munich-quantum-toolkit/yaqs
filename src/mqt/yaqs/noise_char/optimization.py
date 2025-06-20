@@ -130,6 +130,8 @@ class loss_class:
 
     def set_file_name(self, file_name, reset):
 
+        self.work_dir = file_name.rsplit("/", 1)[0]
+
         if self.print_to_file:
             self.history_file_name = file_name+".txt"
             self.history_avg_file_name = file_name+"_avg.txt"
@@ -327,9 +329,23 @@ def gradient_descent(sim_params_copy, ref_traj, traj_der, learning_rate=0.01, ma
 
 
 
-def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-4, max_n_convergence = 50, tolerance=1e-8, beta1 = 0.5, beta2 = 0.999, epsilon = 1e-8, restart=False, restart_file=None, restart_dir="adam_restart"):
+def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-4, max_n_convergence = 50, tolerance=1e-8, beta1 = 0.5, beta2 = 0.999, epsilon = 1e-8, restart=False, restart_file=None):
 
-        # Initialization
+
+    restart_dir = f.work_dir
+
+    # Find the latest restart file in the restart_dir
+    if restart_file is None:
+        if os.path.isdir(restart_dir):
+            restart_files = [f for f in os.listdir(restart_dir) if f.startswith("restart_step_") and f.endswith(".pkl")]
+            if restart_files:
+                # Sort by step number
+                restart_files.sort()
+                restart_file = os.path.join(restart_dir, restart_files[-1])
+
+
+
+    # Initialization
     if restart:
         if restart_file is None or not os.path.exists(restart_file):
             raise ValueError("Restart file not found or not specified.")
@@ -344,14 +360,14 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
 
         print(f"Restarting from iteration {saved['iteration']}, loss={saved['loss']:.6f}")
 
-        f.set_history()
     else:
         x = x_copy.copy()
         d = len(x)
         m = np.zeros(d)
         v = np.zeros(d)
         start_iter = 0
-        os.makedirs(restart_dir, exist_ok=True)
+
+    
 
 
     for i in range(start_iter,max_iterations):
@@ -404,7 +420,7 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
             "exp_vals_traj": f.exp_vals_traj.copy(),
         }
 
-        with open(os.path.join(restart_dir, f"restart_step_{i:04d}.pkl"), "wb") as handle:
+        with open(os.path.join(restart_dir, f"restart_step_{i+1:04d}.pkl"), "wb") as handle:
             pickle.dump(restart_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         
 
