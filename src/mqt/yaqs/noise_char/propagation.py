@@ -283,9 +283,9 @@ def evaluate_Ank(A_nk, state):
     n_jumps = A_nk.shape[0]
     n_obs = A_nk.shape[2]
     n_sites = state.order
-    A = np.zeros([n_sites, n_jumps, n_sites, n_obs], dtype=complex)
+    A = np.zeros([n_jumps, n_obs, n_sites], dtype=complex)
 
-    A[0,:,0,:] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[0][:,:,0,:]), A_nk, state.cores[0][:,:,0,:])
+    A[:,:,0] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[0][:,:,0,:]), A_nk, state.cores[0][:,:,0,:])
     
     for i in range(state.order-1):
         # apply SVD
@@ -296,9 +296,9 @@ def evaluate_Ank(A_nk, state):
         # shift non-orthonormal part to next core
         state.cores[i + 1] = np.tensordot(np.diag(s).dot(v), state.cores[i + 1], axes=(1, 0))
 
-        A[i+1,:,i+1,:] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[i+1][:,:,0,:]), A_nk, state.cores[i+1][:,:,0,:])
+        A[:,:,i+1] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[i+1][:,:,0,:]), A_nk, state.cores[i+1][:,:,0,:])
 
-    return A.transpose([1,0,3,2]).reshape([n_sites*n_jumps, n_sites*n_obs])
+    return A
 
 
 
@@ -351,25 +351,25 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     obs_list=[]
 
     for pauli in O_list:
-        for j in range(L):
-            obs= tt.eye(dims=[2]*L)
-            obs.cores[j]=np.zeros([1,2,2,1], dtype=complex)
-            obs.cores[j][0,:,:,0]=pauli
-            obs_list.append(obs)
+       for j in range(L):
+           obs= tt.eye(dims=[2]*L)
+           obs.cores[j]=np.zeros([1,2,2,1], dtype=complex)
+           obs.cores[j][0,:,:,0]=pauli
+           obs_list.append(obs)
 
     
 
-    n_obs= len(obs_list)
-    n_jump= 2*L
+    n_obs= len(O_list)
+    n_jump= len(L_list)
 
 
 
-    exp_vals = np.zeros([n_obs,timesteps+1])
+    exp_vals = np.zeros([len(obs_list),timesteps+1])
 
     A_nk=construct_Ank(O_list, L_list)
 
 
-    A_kn_numpy=np.zeros([n_jump, n_obs, timesteps+1],dtype=complex)
+    A_kn_numpy=np.zeros([n_jump, n_obs, L, timesteps+1],dtype=complex)
 
     for k in range(N):
         initial_state = tt.unit([2] * L, [0] * L)
@@ -379,20 +379,20 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
         initial_state = (1 / initial_state.norm()) * initial_state
 
         
-        for j in range(n_obs):
-            exp_vals[j,0] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+        #for j in range(n_obs):
+        #    exp_vals[j,0] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
         
-        A_kn_numpy[:,:,0]+= evaluate_Ank(A_nk, initial_state)
+        A_kn_numpy[:,:,:,0] += evaluate_Ank(A_nk, initial_state)
         
         
         
         for i in range(timesteps):
             initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1)[-1]
 
-            for j in range(n_obs):                
-                exp_vals[j,i+1] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+        #    for j in range(n_obs):                
+        #        exp_vals[j,i+1] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
 
-            A_kn_numpy[:,:,i+1] += evaluate_Ank(A_nk, initial_state)
+            A_kn_numpy[:,:,:,i+1] += evaluate_Ank(A_nk, initial_state)
             
 
 
@@ -403,7 +403,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
     ## The .real part is added as a workaround 
-    d_On_d_gk = [ [trapezoidal(A_kn_numpy[i,j].real,t)  for j in range(n_obs)] for i in range(n_jump) ]
+    d_On_d_gk = [ [[trapezoidal(A_kn_numpy[i,j,k].real,t) for k in range(L)] for j in range(n_obs)] for i in range(n_jump)  ]
 
 
 
