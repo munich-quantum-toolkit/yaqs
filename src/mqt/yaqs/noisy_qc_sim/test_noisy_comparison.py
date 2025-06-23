@@ -9,36 +9,43 @@ from qiskit_aer.primitives import Estimator
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_aer import Aer
 
-from .noisy_QC_simulator_qiskit import simulate_noisy_layers_with_estimator
-from .krauschannel_simulation import (
+
+
+from mqt.yaqs.noisy_qc_sim.noisy_QC_simulator_qiskit import simulate_noisy_layers_with_estimator
+from mqt.yaqs.noisy_qc_sim.krauschannel_simulation import (
     create_all_zero_density_matrix, 
     evolve_noisy_circuit, 
     circuit_to_unitary_list, 
     z_expectations
 )
-from .qiskit_noisemodels import qiskit_dephasing_noise
-from mqt.yaqs.core.libraries.noise_library import NoiseLibrary
+from mqt.yaqs.noisy_qc_sim.qiskit_noisemodels import qiskit_dephasing_noise
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
-class KrausCompatibleNoiseModel:
-    """A noise model compatible with the KrausChannel function."""
+def create_yaqs_dephasing_noise(num_qubits: int, noise_strengths: list) -> NoiseModel:
+    """Create a YAQS noise model with dephasing noise for single qubits and qubit pairs."""
+    single_qubit_strength = noise_strengths[0]
+    pair_qubit_strength = noise_strengths[1] if len(noise_strengths) > 1 else single_qubit_strength
     
-    def __init__(self, num_qubits: int, noise_strengths: list):
-        self.num_qubits = num_qubits
-        single_qubit_strength = noise_strengths[0]
-        pair_qubit_strength = noise_strengths[1] if len(noise_strengths) > 1 else single_qubit_strength
-        
-        # Create site-indexed structure expected by KrausChannel
-        self.processes = [[] for _ in range(num_qubits)]
-        self.strengths = [[] for _ in range(num_qubits)]
-        
-        # Add single qubit dephasing
-        for qubit in range(num_qubits):
-            self.processes[qubit].append("dephasing")
-            self.strengths[qubit].append(single_qubit_strength)
-        
-        # Add two qubit dephasing (this is more complex and would need modification)
-        # For now, we'll focus on single qubit dephasing to test the basic functionality
+    processes = []
+    
+    # Single qubit dephasing
+    for qubit in range(num_qubits):
+        processes.append({
+            "name": "dephasing",
+            "sites": [qubit],
+            "strength": single_qubit_strength
+        })
+    
+    # Two qubit ZZ dephasing (equivalent to double_dephasing in NoiseLibrary)
+    for qubit in range(num_qubits - 1):
+        processes.append({
+            "name": "double_dephasing",
+            "sites": [qubit, qubit + 1],
+            "strength": pair_qubit_strength
+        })
+    
+    return NoiseModel(processes)
 
 
 def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder, 
@@ -56,7 +63,7 @@ def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder,
     
     # Create noise models
     qiskit_noise_model = qiskit_dephasing_noise(num_qubits, noise_strengths)
-    kraus_noise_model = KrausCompatibleNoiseModel(num_qubits, noise_strengths)
+    yaqs_noise_model = create_yaqs_dephasing_noise(num_qubits, noise_strengths)
     
     # Run Qiskit simulation
     print("Running Qiskit simulation...")
@@ -75,7 +82,7 @@ def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder,
         cumulative_circuit = cumulative_circuit.compose(qc)
         
         # Run the cumulative circuit through Kraus simulator
-        rho_final = evolve_noisy_circuit(rho0, circuit_to_unitary_list(cumulative_circuit), kraus_noise_model)
+        rho_final = evolve_noisy_circuit(rho0, circuit_to_unitary_list(cumulative_circuit), yaqs_noise_model)
         kraus_results[layer, :] = z_expectations(rho_final, num_qubits)
     
     # Compare results

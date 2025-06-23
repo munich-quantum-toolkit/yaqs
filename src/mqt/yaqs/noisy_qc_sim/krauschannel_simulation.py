@@ -45,21 +45,22 @@ def KrausChannel(rho, noisemodel, sites):
         return rho
     n_qubits = int(np.log2(rho.shape[0]))
     kraus_ops_global = []
-    if len(sites) == 1:
-        site = sites[0]
-        for i, process in enumerate(noisemodel.processes[site]):
-            local_K = np.sqrt(noisemodel.strengths[site][i]) * getattr(NoiseLibrary, process)().matrix
-            global_K = expand_operator(local_K, site, n_qubits)
+        
+    # For all processes in noisemodel, see if they should be applied
+    for process in noisemodel.processes:
+        # Handle single-site noise
+        if len(sites) == 1 and process["sites"] == [sites[0]]:
+            local_K = np.sqrt(process["strength"]) * process["jump_operator"]
+            global_K = expand_operator(local_K, sites[0], n_qubits)
             kraus_ops_global.append(global_K)
-    elif len(sites) == 2:
-        # For each site, embed each local Kraus operator individually (identity elsewhere)
-        for idx, site in enumerate(sites):
-            for i, process in enumerate(noisemodel.processes[site]):
-                local_K = np.sqrt(noisemodel.strengths[site][i]) * getattr(NoiseLibrary, process)().matrix
-                global_K = expand_operator(local_K, site, n_qubits)
-                kraus_ops_global.append(global_K)
-    else:
-        raise ValueError("This function currently supports only 1 or 2 sites.")
+        # Handle two-site case: only embed single-site operators
+        elif len(sites) == 2 and process["sites"] in ([sites[0]], [sites[1]]):
+            site_idx = process["sites"][0]  # either sites[0] or sites[1]
+            local_K = np.sqrt(process["strength"]) * process["jump_operator"]
+            global_K = expand_operator(local_K, site_idx, n_qubits)
+            kraus_ops_global.append(global_K)
+        else:
+            raise ValueError("This function currently supports only 1 or 2 sites.")
 
     # Kraus channel application
     result = np.zeros_like(rho, dtype=complex)
