@@ -2,7 +2,7 @@ from qiskit import QuantumCircuit
 from qiskit_aer.noise import NoiseModel as QiskitNoiseModel
 from qiskit_aer.noise.errors import PauliError
 from qiskit_aer.noise import depolarizing_error
-from qiskit.quantum_info import SparsePauliOp
+from qiskit.quantum_info import SparsePauliOp, Pauli
 from qiskit_aer.primitives import Estimator
 from qiskit_aer import Aer
 import numpy as np
