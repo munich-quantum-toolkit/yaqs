@@ -207,19 +207,17 @@ class loss_class_nd(loss_class):
 
         grad= np.zeros(self.d)
 
-        for i in range(n_obs_site):
-            for j in range(L):
-                for k in range(nt):
-
-                    f += (exp_vals_traj[i,j,k] - self.ref_traj[i,j,k])**2
-
-                    # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
-                    dJ_d_gr += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
-
-                    dJ_d_gd += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
 
 
-        grad = np.array([dJ_d_gr, dJ_d_gd])
+        diff = exp_vals_traj - self.ref_traj
+
+
+        f = np.sum(diff**2)
+
+
+        ## I sum over the n_obs_site and time axis. 
+        grad[:self.L] = np.sum(2 * diff * d_On_d_gk[0,:,:,:], axis=(1,3))
+        grad[self.L:] = np.sum(2 * diff * d_On_d_gk[1,:,:,:], axis=(1,3))
 
 
         self.post_process(self, x.copy(),f)
@@ -230,6 +228,15 @@ class loss_class_nd(loss_class):
 
 
 
+
+#%%
+import numpy as np
+
+a = np.random.rand(2, 3, 4)
+
+np.sum(a, axis=1)  # → array([4, 6])
+
+#%%
 
 
 
