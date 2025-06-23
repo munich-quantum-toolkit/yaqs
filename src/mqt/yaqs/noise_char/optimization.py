@@ -31,86 +31,44 @@ def trapezoidal(y, x):
 
 
 class loss_class:
-    def __init__(self, sim_params, ref_traj, traj_der, print_to_file=False):
 
-        self.d = 2  
+    n_eval = 0
 
-        self.print_to_file = print_to_file
+    x_history = []
+    f_history = []
+    x_avg_history = []
+    diff_avg_history = []
 
-        self.ref_traj = ref_traj.copy()
-        self.traj_der = traj_der
-        self.sim_params = copy.deepcopy(sim_params)
-
-        self.n_eval = 0
-
-        self.x_history = []
-        self.f_history = []
-        self.x_avg_history = []
-        self.diff_avg_history = []
-
-        self.n_avg = 20
-
-    def __call__(self, x):
-
-        self.sim_params.gamma_rel = x[0]
-        self.sim_params.gamma_deph = x[1] 
+    n_avg = 20
+    
 
 
-
-        t, exp_vals_traj, d_On_d_gk = self.traj_der(self.sim_params) 
-
-
-        self.t = t.copy()
-        self.exp_vals_traj = exp_vals_traj.copy() 
-
-        n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
-
-
-        f = 0.0
-
-        dJ_d_gr = 0
-        dJ_d_gd = 0
-
-
-        for i in range(n_obs_site):
-            for j in range(L):
-                for k in range(nt):
-
-                    f += (exp_vals_traj[i,j,k] - self.ref_traj[i,j,k])**2
-
-                    # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
-                    dJ_d_gr += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
-
-                    dJ_d_gd += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
-
-
-        grad = np.array([dJ_d_gr, dJ_d_gd])
-
-
-
-        self.n_eval += 1
-        self.x_history.append(x.copy())
-        self.f_history.append(f)
-
-
-
+    def compute_avg(self):
         if len(self.x_history) <= self.n_avg:
             x_avg = np.mean(self.x_history, axis=0)
         else:
             x_avg = np.mean(self.x_history[self.n_avg:], axis=0)
 
         self.x_avg_history.append(x_avg.copy())
+        
 
+    def compute_diff_avg(self):
         if len(self.x_avg_history) > 1:
             diff = np.max(np.abs(self.x_avg_history[-1] - self.x_avg_history[-2]))
             self.diff_avg_history.append(diff)
 
-        if self.print_to_file:
-            self.write_to_file(self.history_file_name, f, x)
-            self.write_to_file(self.history_avg_file_name, f, x_avg)
 
-        return f, grad
-    
+    def post_process(self, x, f):
+        self.n_eval += 1
+        self.x_history.append(x)
+        self.f_history.append(f)
+
+        self.compute_avg(self)
+        self.compute_diff_avg(self)
+
+        if self.print_to_file:
+            self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1])
+            self.write_to_file(self.history_avg_file_name, self.f_history[-1], self.x_avg_history[-1])
 
     def reset(self):
         self.n_eval = 0
@@ -154,6 +112,119 @@ class loss_class:
 
 
 
+
+class loss_class_2d(loss_class):
+
+    def __init__(self, sim_params, ref_traj, traj_der, print_to_file=False):
+
+        self.d = 2  
+
+        self.print_to_file = print_to_file
+
+        self.ref_traj = ref_traj.copy()
+        self.traj_der = traj_der
+        self.sim_params = copy.deepcopy(sim_params)
+
+        
+
+    def __call__(self, x):
+
+        self.sim_params.gamma_rel = x[0]
+        self.sim_params.gamma_deph = x[1] 
+
+
+
+        t, exp_vals_traj, d_On_d_gk = self.traj_der(self.sim_params) 
+
+
+        self.t = t.copy()
+        self.exp_vals_traj = exp_vals_traj.copy() 
+
+        n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
+
+
+        f = 0.0
+
+        dJ_d_gr = 0
+        dJ_d_gd = 0
+
+
+        for i in range(n_obs_site):
+            for j in range(L):
+                for k in range(nt):
+
+                    f += (exp_vals_traj[i,j,k] - self.ref_traj[i,j,k])**2
+
+                    # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
+                    dJ_d_gr += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
+
+                    dJ_d_gd += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
+
+
+        grad = np.array([dJ_d_gr, dJ_d_gd])
+
+
+        self.post_process(self, x.copy(),f)
+
+        return f, grad
+
+
+
+
+class loss_class_nd(loss_class):
+
+    def __init__(self, sim_params, ref_traj, traj_der, print_to_file=False):
+
+        self.print_to_file = print_to_file
+
+        self.ref_traj = ref_traj.copy()
+        self.traj_der = traj_der
+        self.sim_params = copy.deepcopy(sim_params)
+
+        self.d = len(self.sim_params.gamma_rel) + len(self.sim_params.gamma_deph)
+
+        
+
+    def __call__(self, x):
+
+        self.sim_params.gamma_rel = x[0]
+        self.sim_params.gamma_deph = x[1] 
+
+        self.sim_params.set_gammas(list(x[:self.L]), list(x[self.L:]))
+
+
+
+        t, exp_vals_traj, d_On_d_gk = self.traj_der(self.sim_params) 
+
+
+        self.t = t.copy()
+        self.exp_vals_traj = exp_vals_traj.copy() 
+
+        n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
+
+
+        f = 0.0
+
+        grad= np.zeros(self.d)
+
+        for i in range(n_obs_site):
+            for j in range(L):
+                for k in range(nt):
+
+                    f += (exp_vals_traj[i,j,k] - self.ref_traj[i,j,k])**2
+
+                    # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
+                    dJ_d_gr += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
+
+                    dJ_d_gd += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
+
+
+        grad = np.array([dJ_d_gr, dJ_d_gd])
+
+
+        self.post_process(self, x.copy(),f)
+
+        return f, grad
 
 
 

@@ -21,15 +21,12 @@ import scikit_tt
 
 
 
-@dataclass
 class SimulationParameters:
-    T: float = 1
+    T: float = 5
     dt: float = 0.1
-    L: int = 4
     J: float = 1
     g: float = 0.5
-    gamma_rel: float = 0.1
-    gamma_deph: float = 0.1
+
     observables = ['x','y','z']
 
     threshold: float = 1e-6
@@ -39,6 +36,32 @@ class SimulationParameters:
     # For scikit_tt
     N:int = 100
     rank: int= 8
+
+
+    def __init__(self, L : int, gamma_rel : list | float, gamma_deph : list | float):
+
+        self.L = L
+
+        self.set_gammas(gamma_rel, gamma_deph)
+
+        
+
+    def set_gammas(self, gamma_rel : list | float, gamma_deph : list | float):
+
+        if isinstance(gamma_rel, list) and len(gamma_rel) != self.L:
+            raise ValueError("gamma_rel must be a list of length L.")
+        if isinstance(gamma_deph, list) and len(gamma_deph) != self.L:
+            raise ValueError("gamma_deph must be a list of length L.")
+
+        if isinstance(gamma_rel, float): 
+            self.gamma_rel = [gamma_rel] * self.L
+        else:
+            self.gamma_rel = gamma_rel
+
+        if isinstance(gamma_deph, float):
+            self.gamma_deph = [gamma_deph] * self.L
+        else:
+            self.gamma_deph = gamma_deph
 
 
 
@@ -80,12 +103,12 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
     # Relaxation operators
     for i in range(L):
-        c_ops.append(np.sqrt(gamma_rel) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
+        c_ops.append(np.sqrt(gamma_rel[i]) * qt.tensor([qt.destroy(2) if n==i else qt.qeye(2) for n in range(L)]))
         gammas.append(gamma_rel)
 
     # Dephasing operators
     for i in range(L):
-        c_ops.append(np.sqrt(gamma_deph) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
+        c_ops.append(np.sqrt(gamma_deph[i]) * qt.tensor([sz if n==i else qt.qeye(2) for n in range(L)]))
         gammas.append(gamma_deph)
 
     #c_ops = [rel0, rel1, rel2,... rel(L-1), deph0, deph1,..., deph(L-1)]
@@ -201,7 +224,10 @@ def tjm_traj(sim_params_class: SimulationParameters):
     # Define the noise model
     # gamma_relaxation = noise_params[0]
     # gamma_dephasing = noise_params[1]
-    noise_model = NoiseModel(['relaxation', 'dephasing'], [gamma_rel, gamma_deph])
+
+
+    noise_model = NoiseModel([{"name": "relaxation", "sites": [i], "strength": gamma_rel[i]} for i in range(L)] + [{"name": "dephasing", "sites": [i], "strength": gamma_deph[i]} for i in range(L)])
+
 
     sample_timesteps = True
 
@@ -260,6 +286,13 @@ def tjm_traj(sim_params_class: SimulationParameters):
 
 
     return t, original_exp_vals, d_On_d_gk
+
+
+
+
+
+
+
 
 
 
@@ -345,7 +378,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     hamiltonian = TT(cores)# jump operators and parameters
 
     jump_operator_list = [[L_1, L_2] for _ in range(L)]
-    jump_parameter_list = [[np.sqrt(gamma_rel), np.sqrt(gamma_deph)] for _ in range(L)]
+    jump_parameter_list = [[np.sqrt(gamma_rel[i]), np.sqrt(gamma_deph[i])] for i in range(L)]
 
 
     obs_list=[]
