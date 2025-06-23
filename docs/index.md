@@ -37,6 +37,7 @@ examples/physics_simulation
 examples/strong_circuit_simulation
 examples/weak_circuit_simulation
 examples/equivalence_checking
+examples/fermi_hubbard_simulation
 references
 ```
 

@@ -587,3 +587,201 @@ def two_site_tdvp(
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
+
+
+def local_dynamic_tdvp(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams,
+    numiter_lanczos: int = 25,
+) -> None:
+    """Perform a dynamic TDVP sweep: at each bond.
+
+    Local dynamic TDVP sweep. If the current bond dimension
+    exceeds max_bond_dim, apply a local single-site TDVP step; otherwise,
+    apply a two-site TDVP step.
+
+    Args:
+        state (MPS): MPS state to evolve.
+        hamiltonian (MPO): MPO Hamiltonian.
+        sim_params: Simulation parameters including dt and threshold.
+        max_bond_dim (int): Maximum allowed bond dimension for two-site updates.
+        numiter_lanczos (int): Lanczos iterations per local update.
+
+    Raises:
+        ValueError: If Hamiltonian is invalid length.
+    """
+    num_sites = hamiltonian.length
+    if num_sites != state.length:
+        msg = "State and Hamiltonian must have the same length"
+        raise ValueError(msg)
+
+    # Prepare environments
+    right_blocks = initialize_right_environments(state, hamiltonian)
+    left_blocks = [None] * num_sites
+    # build identity for left_blocks[0]
+    chi0 = state.tensors[0].shape[1]
+    mpo_dim = hamiltonian.tensors[0].shape[2]
+    eye = np.zeros((chi0, mpo_dim, chi0), dtype=right_blocks[0].dtype)
+    for i in range(chi0):
+        eye[i, :, i] = 1
+    left_blocks[0] = eye
+
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        sim_params.dt = 2
+
+    # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
+    lock_final_site = False
+    for i in range(num_sites):
+        # current bond dimension between i and i+1
+        bond_dim = state.tensors[i].shape[2]
+        if bond_dim >= sim_params.max_bond_dim or lock_final_site:
+            state.tensors[i] = update_site(
+                left_blocks[i],
+                right_blocks[i],
+                hamiltonian.tensors[i],
+                state.tensors[i],
+                0.5 * sim_params.dt,
+                numiter_lanczos,
+            )
+            if i != num_sites - 1:
+                tensor_shape = state.tensors[i].shape
+                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+                state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
+                left_blocks[i + 1] = update_left_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                )
+                bond_tensor = update_bond(
+                    left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+                )
+                state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
+            if i == num_sites - 2:
+                # Guarantees final site is 1TDVP
+                lock_final_site = True
+        # Will be encountered at final site in loop due to dummy dimension
+        elif i == num_sites - 1:
+            continue
+        elif i == num_sites - 2:
+            merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_tensor = update_site(
+                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+            )
+
+            state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=True)
+            right_blocks[i] = update_right_environment(
+                state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+            )
+            left_blocks[i + 1] = update_left_environment(
+                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+            )
+
+        else:
+            merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_tensor = update_site(
+                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+            )
+            state.tensors[i], state.tensors[i + 1] = split_mps_tensor(merged_tensor, "right", sim_params, dynamic=True)
+            left_blocks[i + 1] = update_left_environment(
+                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+            )
+            state.tensors[i + 1] = update_site(
+                left_blocks[i + 1],
+                right_blocks[i + 1],
+                hamiltonian.tensors[i + 1],
+                state.tensors[i + 1],
+                -0.5 * sim_params.dt,
+                numiter_lanczos,
+            )
+
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        return
+
+    # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
+    lock_final_site = False
+    for i in reversed(range(num_sites)):
+        bond_dim = state.tensors[i].shape[1]
+        if bond_dim >= sim_params.max_bond_dim or lock_final_site:
+            state.tensors[i] = update_site(
+                left_blocks[i],
+                right_blocks[i],
+                hamiltonian.tensors[i],
+                state.tensors[i],
+                0.5 * sim_params.dt,
+                numiter_lanczos,
+            )
+            if i != 0:
+                state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
+                tensor_shape = state.tensors[i].shape
+                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+                state.tensors[i] = site_tensor.reshape((
+                    tensor_shape[0],
+                    tensor_shape[1],
+                    site_tensor.shape[1],
+                )).transpose((
+                    0,
+                    2,
+                    1,
+                ))
+                right_blocks[i - 1] = update_right_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+                )
+                bond_tensor = bond_tensor.transpose()
+                bond_tensor = update_bond(
+                    left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+                )
+                state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
+
+                if i == 1:
+                    lock_final_site = True
+        elif i == 0:
+            # Will be encountered at final site in loop due to dummy dimension
+            continue
+        else:
+            merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
+            merged_tensor = update_site(
+                left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+            )
+            state.tensors[i - 1], state.tensors[i] = split_mps_tensor(merged_tensor, "left", sim_params, dynamic=True)
+            right_blocks[i - 1] = update_right_environment(
+                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+            )
+            # No backwards evolution at final site
+            if i != 1:
+                state.tensors[i - 1] = update_site(
+                    left_blocks[i - 1],
+                    right_blocks[i - 1],
+                    hamiltonian.tensors[i - 1],
+                    state.tensors[i - 1],
+                    -0.5 * sim_params.dt,
+                    numiter_lanczos,
+                )
+
+
+def global_dynamic_tdvp(
+    state: MPS, hamiltonian: MPO, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams
+) -> None:
+    """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
+
+    This function evolves the state by choosing between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP)
+    based on the current maximum bond dimension of the MPS. The decision is made by comparing the state's bond
+    dimension (obtained via `state.write_max_bond_dim()`) to the maximum allowed bond dimension specified in
+    `sim_params`.
+
+    Args:
+        state (MPS): The Matrix Product State representing the current state of the system.
+        hamiltonian (MPO): The Matrix Product Operator representing the Hamiltonian of the system.
+        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
+            such as the maximum allowable bond dimension for the MPS.
+    """
+    current_max_bond_dim = state.write_max_bond_dim()
+    if current_max_bond_dim < sim_params.max_bond_dim:
+        # Perform 2TDVP when the current bond dimension is within the allowed limit
+        two_site_tdvp(state, hamiltonian, sim_params, dynamic=True)
+    else:
+        # Perform 1TDVP when the bond dimension exceeds the allowed limit
+        single_site_tdvp(state, hamiltonian, sim_params)

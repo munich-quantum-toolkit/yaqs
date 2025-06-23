@@ -60,15 +60,15 @@ class Observable:
         Initializes the results and trajectories arrays based on the type of simulation parameters provided.
     """
 
-    def __init__(self, gate: BaseGate, site: int) -> None:
+    def __init__(self, gate: BaseGate, sites: int | list[int]) -> None:
         """Initializes an Observable instance.
 
         Parameters
         ----------
         gate : BaseGate
             The gate that will act as the observable.
-        site : int
-            The qubit or site index on which this observable is measured.
+        sites :
+            The qubit or site indices on which this observable is measured.
 
         Raises:
         ------
@@ -77,8 +77,8 @@ class Observable:
         """
         # assert name in ObservablesLibrary
         self.gate = copy.deepcopy(gate)
-        self.site = site
-        self.gate.set_sites(self.site)
+        self.sites = sites
+        self.gate.set_sites(self.sites)
         self.results: NDArray[np.float64] | None = None
         self.trajectories: NDArray[np.float64] | None = None
 
@@ -186,7 +186,9 @@ class PhysicsSimParams:
             If True, output MPS is returned.
         """
         self.observables = observables
-        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
+        self.sorted_observables = sorted(
+            observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        )
         self.elapsed_time = elapsed_time
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
@@ -371,7 +373,9 @@ class StrongSimParams:
             If True, output MPS is returned.
         """
         self.observables = observables
-        self.sorted_observables = sorted(observables, key=lambda obs: (obs.site))
+        self.sorted_observables = sorted(
+            observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        )
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.threshold = threshold
