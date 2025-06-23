@@ -244,8 +244,8 @@ def circuit_tjm(
                 apply_two_qubit_gate(state, node, sim_params)
                 # Jump process occurs after each two-qubit gate
                 if noise_model is not None:
-                    apply_dissipation(state, noise_model, dt=1)
-                    state = stochastic_process(state, noise_model, dt=1)
+                    apply_dissipation(state, noise_model, dt=1, sim_params=sim_params)
+                    state = stochastic_process(state, noise_model, dt=1, sim_params=sim_params)
                 else:
                     # Normalizes state
                     for i in reversed(range(state.length)):
@@ -253,7 +253,7 @@ def circuit_tjm(
                 dag.remove_op_node(node)
 
     if isinstance(sim_params, WeakSimParams):
-        if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
+        if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
             # All shots can be done at once in noise-free model
             if sim_params.get_state:
                 sim_params.output_state = state

@@ -68,7 +68,7 @@ def _run_strong_sim(
     """
     backend = circuit_tjm
 
-    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
+    if noise_model is None or not noise_model.processes:
         sim_params.num_traj = 1
     else:
         assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
@@ -126,7 +126,7 @@ def _run_weak_sim(
     """
     backend = circuit_tjm
 
-    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
+    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
         sim_params.num_traj = 1
     else:
         sim_params.num_traj = sim_params.shots
@@ -204,7 +204,7 @@ def _run_physics(
     """
     backend = physics_tjm_1 if sim_params.order == 1 else physics_tjm_2
 
-    if not noise_model or all(gamma == 0 for gamma in noise_model.strengths):
+    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
         sim_params.num_traj = 1
     else:
         assert not sim_params.get_state, "Cannot return state in noisy physics simulation due to stochastics."

@@ -53,7 +53,7 @@ def test_initialize() -> None:
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L)
-    noise_model = NoiseModel(["relaxation"], [0.1])
+    noise_model = NoiseModel([{"name": "relaxation", "sites": [i], "strength": 0.1} for i in range(L)])
     measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
@@ -70,8 +70,8 @@ def test_initialize() -> None:
         patch("mqt.yaqs.physics.physics_tjm.stochastic_process") as mock_stochastic_process,
     ):
         initialize(state, noise_model, sim_params)
-        mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt / 2)
-        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt)
+        mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt / 2, sim_params)
+        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
 
 
 def test_step_through() -> None:
@@ -88,7 +88,7 @@ def test_step_through() -> None:
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L)
-    noise_model = NoiseModel(["relaxation"], [0.1])
+    noise_model = NoiseModel([{"name": "relaxation", "sites": [i], "strength": 0.1} for i in range(L)])
     measurements = [Observable(X(), site) for site in range(L)]
     sim_params = PhysicsSimParams(
         measurements,
@@ -107,8 +107,8 @@ def test_step_through() -> None:
     ):
         step_through(state, H, noise_model, sim_params)
         mock_dynamic_tdvp(state, H, sim_params)
-        mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt)
-        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt)
+        mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
+        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
 
 
 def test_physics_tjm_2() -> None:

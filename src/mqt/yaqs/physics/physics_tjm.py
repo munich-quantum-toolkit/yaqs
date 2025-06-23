@@ -49,8 +49,8 @@ def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: PhysicsSi
     Returns:
         MPS: The initialized sampling MPS Phi(0).
     """
-    apply_dissipation(state, noise_model, sim_params.dt / 2)
-    return stochastic_process(state, noise_model, sim_params.dt)
+    apply_dissipation(state, noise_model, sim_params.dt / 2, sim_params)
+    return stochastic_process(state, noise_model, sim_params.dt, sim_params)
 
 
 def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, sim_params: PhysicsSimParams) -> MPS:
@@ -72,8 +72,8 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
         local_dynamic_tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
-    apply_dissipation(state, noise_model, sim_params.dt)
-    return stochastic_process(state, noise_model, sim_params.dt)
+    apply_dissipation(state, noise_model, sim_params.dt, sim_params)
+    return stochastic_process(state, noise_model, sim_params.dt, sim_params)
 
 
 def sample(
@@ -105,8 +105,8 @@ def sample(
         local_dynamic_tdvp(psi, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(psi, hamiltonian, sim_params)
-    apply_dissipation(psi, noise_model, sim_params.dt / 2)
-    psi = stochastic_process(psi, noise_model, sim_params.dt)
+    apply_dissipation(psi, noise_model, sim_params.dt / 2, sim_params)
+    psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params)
     if j == len(sim_params.times) - 1 and sim_params.get_state:
         sim_params.output_state = psi
 
@@ -215,8 +215,8 @@ def physics_tjm_1(args: tuple[int, MPS, NoiseModel | None, PhysicsSimParams, MPO
     for j, _ in enumerate(sim_params.times[1:], start=1):
         local_dynamic_tdvp(state, hamiltonian, sim_params)
         if noise_model is not None:
-            apply_dissipation(state, noise_model, sim_params.dt)
-            state = stochastic_process(state, noise_model, sim_params.dt)
+            apply_dissipation(state, noise_model, sim_params.dt, sim_params)
+            state = stochastic_process(state, noise_model, sim_params.dt, sim_params)
 
         if sim_params.sample_timesteps:
             temp_state = copy.deepcopy(state)

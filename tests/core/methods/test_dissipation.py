@@ -13,6 +13,7 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import PhysicsSimParams
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 
 rng = np.random.default_rng()
@@ -39,14 +40,14 @@ def test_apply_dissipation_site_canonical_0() -> None:
 
     state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
 
-    # 2) Create a minimal NoiseModel with a single process and a small strength.
-    noise_model = NoiseModel(processes=["relaxation"], strengths=[0.1])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["relaxation", "dephasing"]
+    ])
     dt = 0.1
+    sim_params = PhysicsSimParams(observables=[], elapsed_time=0.0, max_bond_dim=10, threshold=1e-10)
 
-    # 3) Apply dissipation to the MPS.
-    apply_dissipation(state, noise_model, dt)
+    apply_dissipation(state, noise_model, dt, sim_params)
 
-    # 4) Verify that the MPS is site-canonical at site 0.
     canonical_site = state.check_canonical_form()
     assert canonical_site[0] == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"

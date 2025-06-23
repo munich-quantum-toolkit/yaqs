@@ -15,62 +15,74 @@ and handles empty noise models appropriately.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
 def test_noise_model_creation() -> None:
-    """Test that NoiseModel is created correctly with valid processes and strengths.
+    """Test that NoiseModel is created correctly with valid process dicts.
 
-    This test constructs a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
+    This test constructs a NoiseModel with two single-site processes
+    ("relaxation" and "dephasing") and corresponding strengths.
     It verifies that:
-      - The processes and strengths are stored correctly.
-      - The number of jump operators equals the number of processes.
-      - The first jump operator has the expected shape (2x2), which is typical for the 'dephasing' process.
+      - Each process is stored as a dictionary with correct fields.
+      - The number of processes is correct.
+      - Each process contains a jump_operator with the expected shape (2x2).
     """
-    processes = ["relaxation", "dephasing"]
-    strengths = [0.1, 0.05]
+    processes: list[dict[str, Any]] = [
+        {"name": "relaxation", "sites": [0], "strength": 0.1},
+        {"name": "dephasing", "sites": [1], "strength": 0.05},
+    ]
 
-    model = NoiseModel(processes, strengths)
+    model = NoiseModel(processes)
 
-    assert model.processes == processes
-    assert model.strengths == strengths
-    assert len(model.jump_operators) == len(processes)
-    assert model.jump_operators[0].shape == (2, 2), "First jump operator should be 2x2 for 'dephasing'."
+    assert len(model.processes) == 2
+    assert model.processes[0]["name"] == "relaxation"
+    assert model.processes[1]["name"] == "dephasing"
+    assert model.processes[0]["strength"] == 0.1
+    assert model.processes[1]["strength"] == 0.05
+    assert model.processes[0]["sites"] == [0]
+    assert model.processes[1]["sites"] == [1]
+    assert model.processes[0]["jump_operator"].shape == (2, 2)
+    assert model.processes[1]["jump_operator"].shape == (2, 2)
 
 
 def test_noise_model_assertion() -> None:
-    """Test that NoiseModel raises an AssertionError when provided with mismatched process and strength lists.
+    """Test that NoiseModel raises an AssertionError when a process dict is missing required fields.
 
-    This test creates a scenario where the list of processes and the list of strengths have different lengths.
-    An AssertionError is expected in this case.
+    This test constructs a process list where one entry is missing the 'strength' field,
+    which should cause the NoiseModel initialization to fail.
     """
-    processes = ["relaxation", "dephasing"]
-    strengths = [0.1]
+    # Missing 'strength' in the second dict
+    processes: list[dict[str, Any]] = [
+        {"name": "relaxation", "sites": [0], "strength": 0.1},
+        {"name": "dephasing", "sites": [1]},  # Missing strength
+    ]
+
     with pytest.raises(AssertionError):
-        _ = NoiseModel(processes, strengths)
+        _ = NoiseModel(processes)
 
 
 def test_noise_model_empty() -> None:
-    """Test that NoiseModel handles an empty process list without error.
+    """Test that NoiseModel handles an empty list of processes without error.
 
-    This test initializes a NoiseModel with empty lists for processes and strengths, and verifies that the resulting
-    model has empty processes, strengths, and jump_operators lists.
+    This test initializes a NoiseModel with an empty list of process dictionaries and verifies that the resulting
+    model has empty `processes` and `jump_operators` lists.
     """
-    model = NoiseModel([], [])
+    model = NoiseModel()
+
     assert model.processes == []
-    assert model.strengths == []
-    assert model.jump_operators == []
 
 
 def test_noise_model_none() -> None:
     """Test that NoiseModel handles a None input without error.
 
-    This test initializes a NoiseModel with empty lists for processes and strengths, and verifies that the resulting
-    model has empty processes, strengths, and jump_operators lists.
+    This test initializes a NoiseModel with `None` and verifies that the resulting
+    model has no processes.
     """
-    model = NoiseModel(None, None)
+    model = NoiseModel(None)
+
     assert model.processes == []
-    assert model.strengths == []
-    assert model.jump_operators == []

@@ -151,7 +151,7 @@ def create_2d_ising_circuit(
 
 
 def create_heisenberg_circuit(
-    L: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int
+    L: int, Jx: float, Jy: float, Jz: float, h: float, dt: float, timesteps: int, *, periodic: bool = True
 ) -> QuantumCircuit:
     """Heisenberg Trotter circuit.
 
@@ -190,6 +190,11 @@ def create_heisenberg_circuit(
         if L % 2 != 0 and L != 1:
             circ.rzz(theta=theta_zz, qubit1=L - 2, qubit2=L - 1)
 
+        # If periodic, add an additional long-range gate between qubit L-1 and qubit 0.
+        # if periodic and L > 1:
+        #     circ.rzz(theta=theta_zz, qubit1=0, qubit2=L - 1)
+        #     circ.barrier()
+
         # XX application
         for site in range(L // 2):
             circ.rxx(theta=theta_xx, qubit1=2 * site, qubit2=2 * site + 1)
@@ -200,6 +205,10 @@ def create_heisenberg_circuit(
         if L % 2 != 0 and L != 1:
             circ.rxx(theta=theta_xx, qubit1=L - 2, qubit2=L - 1)
 
+        # if periodic and L > 1:
+        #     circ.rxx(theta=theta_xx, qubit1=0, qubit2=L - 1)
+        #     circ.barrier()
+
         # YY application
         for site in range(L // 2):
             circ.ryy(theta=theta_yy, qubit1=2 * site, qubit2=2 * site + 1)
@@ -209,6 +218,11 @@ def create_heisenberg_circuit(
 
         if L % 2 != 0 and L != 1:
             circ.ryy(theta=theta_yy, qubit1=L - 2, qubit2=L - 1)
+
+        if periodic and L > 1:
+            circ.rxx(theta=theta_xx, qubit1=0, qubit2=L - 1)
+            circ.ryy(theta=theta_yy, qubit1=0, qubit2=L - 1)
+            circ.rzz(theta=theta_zz, qubit1=0, qubit2=L - 1)
 
     return circ
 

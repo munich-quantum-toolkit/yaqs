@@ -61,7 +61,9 @@ def test_physics_simulation() -> None:
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
-    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma} for i in range(length) for name in ["relaxation", "dephasing"]
+    ])
 
     simulator.run(initial_state, H, sim_params, noise_model)
 
@@ -111,7 +113,9 @@ def test_physics_simulation_parallel_off() -> None:
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
-    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma} for i in range(length) for name in ["relaxation", "dephasing"]
+    ])
 
     simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
 
@@ -200,7 +204,11 @@ def test_strong_simulation() -> None:
     sim_params = StrongSimParams(measurements, num_traj, max_bond_dim)
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
-    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma}
+        for i in range(num_qubits)
+        for name in ["relaxation", "dephasing"]
+    ])
 
     simulator.run(state, circuit, sim_params, noise_model)
 
@@ -266,7 +274,11 @@ def test_strong_simulation_parallel_off() -> None:
     sim_params = StrongSimParams(measurements, num_traj, max_bond_dim)
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
-    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma}
+        for i in range(num_qubits)
+        for name in ["relaxation", "dephasing"]
+    ])
 
     simulator.run(state, circuit, sim_params, noise_model, parallel=False)
 
@@ -306,7 +318,11 @@ def test_weak_simulation_noise() -> None:
     sim_params = WeakSimParams(shots, max_bond_dim)
 
     gamma = 1e-3
-    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma}
+        for i in range(num_qubits)
+        for name in ["relaxation", "dephasing"]
+    ])
 
     simulator.run(initial_state, circuit, sim_params, noise_model)
 
@@ -391,7 +407,11 @@ def test_weak_simulation_get_state_noise() -> None:
     sim_params = WeakSimParams(shots, max_bond_dim, get_state=True)
 
     gamma = 1e-3
-    noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma}
+        for i in range(num_qubits)
+        for name in ["relaxation", "dephasing"]
+    ])
 
     with pytest.raises(AssertionError, match=r"Cannot return state in noisy circuit simulation due to stochastics."):
         simulator.run(initial_state, circuit, sim_params, noise_model)
