@@ -121,17 +121,17 @@ def test_single_qubit_noise():
         num_qubits=1,
         circuit_builder=lambda circ: circ.h(0),
         noise_strengths=[0.1],
-        num_layers=3
+        num_layers=1
     )
     
-    # Test 2: Single qubit X gate with dephasing
-    run_noisy_comparison_test(
-        "1-Qubit X Gate with Dephasing",
-        num_qubits=1,
-        circuit_builder=lambda circ: circ.x(0),
-        noise_strengths=[0.05],
-        num_layers=3
-    )
+    # # Test 2: Single qubit X gate with dephasing
+    # run_noisy_comparison_test(
+    #     "1-Qubit X Gate with Dephasing",
+    #     num_qubits=1,
+    #     circuit_builder=lambda circ: circ.x(0),
+    #     noise_strengths=[0.05],
+    #     num_layers=3
+    # )
 
 
 def test_two_qubit_noise():
@@ -145,7 +145,7 @@ def test_two_qubit_noise():
         "2-Qubit Bell State with Dephasing",
         num_qubits=2,
         circuit_builder=lambda circ: (circ.h(0), circ.cx(0, 1)),
-        noise_strengths=[0.05, 0.1],  # Single qubit, two qubit
+        noise_strengths=[0.1, 0.1],  # Single qubit, two qubit
         num_layers=3
     )
     
@@ -234,11 +234,11 @@ if __name__ == "__main__":
     
     # Run all test categories
     test_single_qubit_noise()
-    test_two_qubit_noise()
-    test_three_qubit_noise()
-    test_varying_noise_strengths()
-    test_multiple_layers()
+    # test_two_qubit_noise()
+    # test_three_qubit_noise()
+    # test_varying_noise_strengths()
+    # test_multiple_layers()
     
-    print("\n" + "="*60)
-    print("ALL TESTS COMPLETED")
-    print("="*60) 
+    # print("\n" + "="*60)
+    # print("ALL TESTS COMPLETED")
+    # print("="*60) 

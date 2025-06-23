@@ -1,7 +1,8 @@
 from qiskit import QuantumCircuit
 from qiskit_aer.noise import NoiseModel, depolarizing_error
 from qiskit.quantum_info import SparsePauliOp
-from qiskit_aer.primitives import Estimator
+from qiskit_aer.primitives import EstimatorV2
+from qiskit.primitives.containers.estimator_pub import EstimatorPub
 from qiskit_aer import Aer
 import numpy as np
 
@@ -15,7 +16,9 @@ def simulate_noisy_layers_with_estimator(base_circuit: QuantumCircuit,
 
     # Setup simulator and estimator
     backend = Aer.get_backend("aer_simulator")
-    estimator = Estimator(backend_options={"noise_model": noise_model})
+    estimator = EstimatorV2(options={
+        "backend_options": {"noise_model": noise_model}
+    })
 
     cumulative_circuit = QuantumCircuit(num_qubits)
 
@@ -25,37 +28,18 @@ def simulate_noisy_layers_with_estimator(base_circuit: QuantumCircuit,
 
         # For each qubit, define <Z_i>
         for qubit in range(num_qubits):
-            observable = SparsePauliOp(f'{"I"*qubit}Z{"I"*(num_qubits - qubit - 1)}')
-            result = estimator.run([cumulative_circuit], [observable], shots = None).result()
-            z_expectations[layer, qubit] = result.values[0]
+            pauli_str = "I"*qubit + "Z" + "I"*(num_qubits - qubit - 1)
+            observable = {pauli_str: 1.0}
+            pub = EstimatorPub(
+                circuit=cumulative_circuit,
+                observables=[observable],
+                parameter_values=[]
+            )
+            result = estimator.run([pub]).result()
+            z_expectations[layer, qubit] = result[0].data.evs[0]
 
     return z_expectations
 
-def simulate_noisy_layers_with_estimator(base_circuit: QuantumCircuit,
-                                         noise_model: NoiseModel,
-                                         num_layers: int) -> np.ndarray:
-    """Simulates a noisy quantum circuit using EstimatorV2 and returns Z expectations."""
-    
-    num_qubits = base_circuit.num_qubits
-    z_expectations = np.zeros((num_layers, num_qubits))
-
-    # Setup simulator and estimator
-    backend = Aer.get_backend("aer_simulator")
-    estimator = Estimator(backend_options={"noise_model": noise_model})
-
-    cumulative_circuit = QuantumCircuit(num_qubits)
-
-    for layer in range(num_layers):
-        # Compose another copy of the circuit
-        cumulative_circuit = cumulative_circuit.compose(base_circuit)
-
-        # For each qubit, define <Z_i>
-        for qubit in range(num_qubits):
-            observable = SparsePauliOp(f'{"I"*qubit}Z{"I"*(num_qubits - qubit - 1)}')
-            result = estimator.run([cumulative_circuit], [observable], shots = None).result()
-            z_expectations[layer, qubit] = result.values[0]
-
-    return z_expectations
 
 if __name__ == "__main__":
 

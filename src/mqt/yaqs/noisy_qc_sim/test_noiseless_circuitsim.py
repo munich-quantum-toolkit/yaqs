@@ -5,7 +5,7 @@ from qiskit_aer.noise.errors import PauliError
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_aer import Aer
 import numpy as np
-from .krauschannel_simulation import create_all_zero_density_matrix, evolve_noisy_circuit, circuit_to_unitary_list, z_expectations, get_qiskit_z_expectations
+from mqt.yaqs.noisy_qc_sim.krauschannel_simulation import create_all_zero_density_matrix, evolve_noisy_circuit, circuit_to_unitary_list, z_expectations, get_qiskit_z_expectations
 
 
 
@@ -27,9 +27,9 @@ def run_test(test_name, num_qubits, circuit_builder, expected_z_qiskit):
     difference = np.abs(z_vals_custom - np.flip(expected_z_qiskit))
 
     if np.max(difference) < 1e-6:
-        print(f"{test_name} Passed: Max difference = {np.max(difference)}")
+        print(f"{test_name} Passed ✅: Max difference = {np.max(difference)}")
     else: 
-        print(f"{test_name} Failed: Max difference = {np.max(difference)}")
+        print(f"{test_name} Failed ❌: Max difference = {np.max(difference)}")
 
     
     

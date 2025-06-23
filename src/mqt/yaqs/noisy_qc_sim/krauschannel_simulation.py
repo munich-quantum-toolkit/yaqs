@@ -8,22 +8,11 @@ from mqt.yaqs.circuits.utils.dag_utils import convert_dag_to_tensor_algorithm
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.libraries.noise_library import NoiseLibrary
 
-
-
 from qiskit_aer.primitives import Estimator
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_aer.backends.aer_simulator import AerSimulator
 import matplotlib.pyplot as plt
 
-
-def apply(self, rho):
-    """Apply the channel to a density matrix rho."""
-    result = np.zeros_like(rho, dtype=complex)
-    for k, prob in zip(self.kraus_ops, self.probabilities):
-        result += prob * k @ rho @ k.conj().T
-    return result
-
-import numpy as np
 
 def expand_operator(local_op, site, n_qubits):
     """Expand a single-qubit operator to act on 'site' in an n-qubit system."""
@@ -43,28 +32,38 @@ def KrausChannel(rho, noisemodel, sites):
     """
     if noisemodel is None or not noisemodel.processes:
         return rho
+    
     n_qubits = int(np.log2(rho.shape[0]))
     kraus_ops_global = []
-        
-    # For all processes in noisemodel, see if they should be applied
+    # For all processes in noisemodel, apply those that act on exactly these sites (for one- and two-site channels)
     for process in noisemodel.processes:
-        # Handle single-site noise
-        if len(sites) == 1 and process["sites"] == [sites[0]]:
+        if len(sites) == 1 and process["sites"] == sites:
+            # single-site channel
             local_K = np.sqrt(process["strength"]) * process["jump_operator"]
             global_K = expand_operator(local_K, sites[0], n_qubits)
             kraus_ops_global.append(global_K)
-        # Handle two-site case: only embed single-site operators
-        elif len(sites) == 2 and process["sites"] in ([sites[0]], [sites[1]]):
-            site_idx = process["sites"][0]  # either sites[0] or sites[1]
-            local_K = np.sqrt(process["strength"]) * process["jump_operator"]
-            global_K = expand_operator(local_K, site_idx, n_qubits)
-            kraus_ops_global.append(global_K)
+        elif len(sites) == 2:
+            # collect any process that acts exactly on [i], [j], or [i, j]
+            if process["sites"] == [sites[0]] or process["sites"] == [sites[1]]:
+                # single-site process, embed on correct site
+                site_idx = process["sites"][0]
+                local_K = np.sqrt(process["strength"]) * process["jump_operator"]
+                global_K = expand_operator(local_K, site_idx, n_qubits)
+                kraus_ops_global.append(global_K)
+            elif process["sites"] == sites:
+                # two-site process, acts on both sites simultaneously
+                local_K = np.sqrt(process["strength"]) * process["jump_operator"]
+                # You may need a different expand_operator for multi-site operators
+                # For example: expand_operator(local_K, sites, n_qubits)
+                global_K = expand_operator(local_K, sites, n_qubits)
+                kraus_ops_global.append(global_K)
         else:
             raise ValueError("This function currently supports only 1 or 2 sites.")
 
     # Kraus channel application
     result = np.zeros_like(rho, dtype=complex)
     for K in kraus_ops_global:
+        print(f"Applying Kraus operator {K} to density matrix {rho}")
         result += K @ rho @ K.conj().T
 
     return result
@@ -124,6 +123,7 @@ def evolve_noisy_circuit(rho0, gate_list, noisemodel):
             i = 0
             while i < n:
                 if len(gate.sites) == 2 and i == idx0:
+                    print(f"Applying gate {gate.name} to qubit {idx0}")
                     U = np.kron(U, gate.matrix)
                     i += 2  # skip both qubits (idx0, idx1)
                 else:

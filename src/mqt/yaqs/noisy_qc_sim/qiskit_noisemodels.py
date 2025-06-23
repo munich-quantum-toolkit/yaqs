@@ -21,9 +21,9 @@ def qiskit_dephasing_noise(num_qubits: int, noise_strengths: list) -> QiskitNois
     two_qubit_dephasing = PauliError([Pauli('II'), Pauli('ZZ')], [1-pair_qubit_strength, pair_qubit_strength])
 
     for qubit in range(num_qubits):
-        noise_model.add_quantum_error(single_qubit_dephasing, ['id'], [qubit])
+        noise_model.add_quantum_error(single_qubit_dephasing, ["id", "x", "y", "z", "h", "s", "sdg", "t", "tdg", "rx", "ry", "rz", "u1", "u2", "u3"], [qubit])
     for qubit in range(num_qubits - 1):
-        noise_model.add_quantum_error(two_qubit_dephasing, ['cx'], [qubit, qubit + 1])
+        noise_model.add_quantum_error(two_qubit_dephasing, ["cx", "cz", "swap", "rxx", "ryy", "rzz", "rzx"], [qubit, qubit + 1])
 
     return noise_model
 
