@@ -382,7 +382,7 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
     restart_dir = f.work_dir
 
     # Find the latest restart file in the restart_dir
-    if restart_file is None:
+    if restart_file is None and restart:
         if os.path.isdir(restart_dir):
             restart_files = [f for f in os.listdir(restart_dir) if f.startswith("restart_step_") and f.endswith(".pkl")]
             if restart_files:
@@ -410,7 +410,16 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
 
         print(f"Restarting from iteration {saved['iteration']}, loss={saved['loss']:.6f}")
 
+
     else:
+        # Remove all .pkl files in the folder
+        for fname in os.listdir(restart_dir):
+            if fname.endswith(".pkl"):
+                try:
+                    os.remove(os.path.join(restart_dir, fname))
+                except Exception as e:
+                    print(f"Warning: Could not remove {fname}: {e}")
+
         x = x_copy.copy()
         d = len(x)
         m = np.zeros(d)
