@@ -63,8 +63,8 @@ class loss_class:
         self.x_history.append(x)
         self.f_history.append(f)
 
-        self.compute_avg(self)
-        self.compute_diff_avg(self)
+        self.compute_avg()
+        self.compute_diff_avg()
 
         if self.print_to_file:
             self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1])
@@ -166,13 +166,18 @@ class loss_class_nd(loss_class):
         self.traj_der = traj_der
         self.sim_params = copy.deepcopy(sim_params)
 
-        self.d = len(self.sim_params.gamma_rel) + len(self.sim_params.gamma_deph)
+        self.n_gamma_rel=len(self.sim_params.gamma_rel)
+        self.n_gamma_deph=len(self.sim_params.gamma_deph)
+
+
+        self.d = self.n_gamma_rel + self.n_gamma_deph
 
         
 
     def __call__(self, x):
 
-        self.sim_params.set_gammas(x[:self.L], x[self.L:])
+
+        self.sim_params.set_gammas(x[:self.n_gamma_rel], x[self.n_gamma_rel:])
 
 
 
@@ -195,7 +200,7 @@ class loss_class_nd(loss_class):
         ##  returning a matrix of shape (n_jump_site, L) which I then flatten obtaining a vector of shape (n_jump_site*L) 
         grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,3)).flatten()
 
-        self.post_process(self, x.copy(),f)
+        self.post_process(x.copy(),f)
 
         return f, grad
 
