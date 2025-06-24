@@ -32,12 +32,15 @@ def KrausChannel(rho, noisemodel, sites):
     """
     if noisemodel is None or not noisemodel.processes:
         return rho
+    print(f"KrausChannel called with sites={sites}")
     
     n_qubits = int(np.log2(rho.shape[0]))
     kraus_ops_global = []
     total_strength = 0
+
     # For all processes in noisemodel, apply those that act on exactly these sites (for one- and two-site channels)
     for process in noisemodel.processes:
+        print('process', process)
         if len(sites) == 1 and process["sites"] == sites:
             total_strength += process["strength"]
             # single-site channel
@@ -60,8 +63,7 @@ def KrausChannel(rho, noisemodel, sites):
                 # For example: expand_operator(local_K, sites, n_qubits)
                 global_K = expand_operator(local_K, sites, n_qubits)
                 kraus_ops_global.append(global_K)
-        else:
-            raise ValueError("This function currently supports only 1 or 2 sites.")
+
 
     kraus_ops_global.append(np.sqrt(1-total_strength) * np.eye(rho.shape[0]))
     # Kraus channel application

@@ -11,7 +11,7 @@ from qiskit_aer import Aer
 
 
 
-from mqt.yaqs.noisy_qc_sim.noisy_QC_simulator_qiskit import simulate_noisy_layers_with_estimator
+from mqt.yaqs.noisy_qc_sim.noisy_QC_simulator_qiskit import qiskit_noisy_simulator
 from mqt.yaqs.noisy_qc_sim.krauschannel_simulation import (
     create_all_zero_density_matrix, 
     evolve_noisy_circuit, 
@@ -125,14 +125,14 @@ def test_single_qubit_noise():
         num_layers=1
     )
     
-    # # Test 2: Single qubit X gate with dephasing
-    # run_noisy_comparison_test(
-    #     "1-Qubit X Gate with Dephasing",
-    #     num_qubits=1,
-    #     circuit_builder=lambda circ: circ.x(0),
-    #     noise_strengths=[0.05],
-    #     num_layers=3
-    # )
+    # Test 2: Single qubit X gate with dephasing
+    run_noisy_comparison_test(
+        "1-Qubit X Gate with Dephasing",
+        num_qubits=1,
+        circuit_builder=lambda circ: circ.x(0),
+        noise_strengths=[0.05],
+        num_layers=3
+    )
 
 
 def test_two_qubit_noise():
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     
     # Run all test categories
     test_single_qubit_noise()
-    # test_two_qubit_noise()
+    test_two_qubit_noise()
     # test_three_qubit_noise()
     # test_varying_noise_strengths()
     # test_multiple_layers()
