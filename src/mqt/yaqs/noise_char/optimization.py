@@ -111,8 +111,6 @@ class loss_class:
 
 
 
-
-
 class loss_class_2d(loss_class):
 
     def __init__(self, sim_params, ref_traj, traj_der, print_to_file=False):
@@ -129,10 +127,7 @@ class loss_class_2d(loss_class):
 
     def __call__(self, x):
 
-        self.sim_params.gamma_rel = x[0]
-        self.sim_params.gamma_deph = x[1] 
-
-
+        self.sim_params.set_gammas(x[0], x[1])
 
         t, exp_vals_traj, d_On_d_gk = self.traj_der(self.sim_params) 
 
@@ -143,25 +138,15 @@ class loss_class_2d(loss_class):
         n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
 
 
-        f = 0.0
-
-        dJ_d_gr = 0
-        dJ_d_gd = 0
+        diff = exp_vals_traj - self.ref_traj
 
 
-        for i in range(n_obs_site):
-            for j in range(L):
-                for k in range(nt):
+        f = np.sum(diff**2)
 
-                    f += (exp_vals_traj[i,j,k] - self.ref_traj[i,j,k])**2
-
-                    # I have to add all the derivatives with respect to the same gamma_relaxation and gamma_dephasing
-                    dJ_d_gr += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[0,i,j,k]
-
-                    dJ_d_gd += 2*(exp_vals_traj[i,j,k] - self.ref_traj[i,j,k]) * d_On_d_gk[1,i,j,k]
-
-
-        grad = np.array([dJ_d_gr, dJ_d_gd])
+        ## I reshape diff so it has a shape compatible with d_On_d_gk (n_jump_site, n_obs_site, L, nt) to do elemtwise multiplication.
+        ## Then I sum over the n_obs_site, L and nt dimensions to get the gradient for each gamma,
+        ##  returning a vector of shape (n_jump_site)
+        grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,2,3))
 
 
         self.post_process(self, x.copy(),f)
@@ -187,10 +172,7 @@ class loss_class_nd(loss_class):
 
     def __call__(self, x):
 
-        self.sim_params.gamma_rel = x[0]
-        self.sim_params.gamma_deph = x[1] 
-
-        self.sim_params.set_gammas(list(x[:self.L]), list(x[self.L:]))
+        self.sim_params.set_gammas(x[:self.L], x[self.L:])
 
 
 
@@ -203,22 +185,15 @@ class loss_class_nd(loss_class):
         n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
 
 
-        f = 0.0
-
-        grad= np.zeros(self.d)
-
-
-
         diff = exp_vals_traj - self.ref_traj
 
 
         f = np.sum(diff**2)
 
-
-        ## I sum over the n_obs_site and time axis. 
-        grad[:self.L] = np.sum(2 * diff * d_On_d_gk[0,:,:,:], axis=(1,3))
-        grad[self.L:] = np.sum(2 * diff * d_On_d_gk[1,:,:,:], axis=(1,3))
-
+        ## I reshape diff so it has a shape compatible with d_On_d_gk (n_jump_site, n_obs_site, L, nt) to do elemtwise multiplication.
+        ## Then I sum over the n_obs_site and nt dimensions to get the gradient for each gamma for each site,
+        ##  returning a matrix of shape (n_jump_site, L) which I then flatten obtaining a vector of shape (n_jump_site*L) 
+        grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,3)).flatten()
 
         self.post_process(self, x.copy(),f)
 
@@ -226,17 +201,6 @@ class loss_class_nd(loss_class):
 
 
 
-
-
-
-#%%
-import numpy as np
-
-a = np.random.rand(2, 3, 4)
-
-np.sum(a, axis=1)  # → array([4, 6])
-
-#%%
 
 
 
@@ -472,8 +436,10 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
         update = alpha * m_hat / (np.sqrt(v_hat) + epsilon)
 
         # Update simulation parameters with Adam update (NEW)
-        x -= update    
+        x -= update   
 
+
+        # Ensure non-negativity for the parameters
         x[x < 0] = 0
 
 

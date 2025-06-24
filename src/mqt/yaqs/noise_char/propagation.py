@@ -56,12 +56,12 @@ class SimulationParameters:
         if isinstance(gamma_rel, float): 
             self.gamma_rel = [gamma_rel] * self.L
         else:
-            self.gamma_rel = gamma_rel
+            self.gamma_rel = list(gamma_rel)
 
         if isinstance(gamma_deph, float):
             self.gamma_deph = [gamma_deph] * self.L
         else:
-            self.gamma_deph = gamma_deph
+            self.gamma_deph = list(gamma_deph)
 
 
 
