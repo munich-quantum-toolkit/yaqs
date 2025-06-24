@@ -35,14 +35,17 @@ def KrausChannel(rho, noisemodel, sites):
     
     n_qubits = int(np.log2(rho.shape[0]))
     kraus_ops_global = []
+    total_strength = 0
     # For all processes in noisemodel, apply those that act on exactly these sites (for one- and two-site channels)
     for process in noisemodel.processes:
         if len(sites) == 1 and process["sites"] == sites:
+            total_strength += process["strength"]
             # single-site channel
             local_K = np.sqrt(process["strength"]) * process["jump_operator"]
             global_K = expand_operator(local_K, sites[0], n_qubits)
             kraus_ops_global.append(global_K)
         elif len(sites) == 2:
+            total_strength += process["strength"]
             # collect any process that acts exactly on [i], [j], or [i, j]
             if process["sites"] == [sites[0]] or process["sites"] == [sites[1]]:
                 # single-site process, embed on correct site
@@ -60,6 +63,7 @@ def KrausChannel(rho, noisemodel, sites):
         else:
             raise ValueError("This function currently supports only 1 or 2 sites.")
 
+    kraus_ops_global.append(np.sqrt(1-total_strength) * np.eye(rho.shape[0]))
     # Kraus channel application
     result = np.zeros_like(rho, dtype=complex)
     for K in kraus_ops_global:
@@ -104,6 +108,7 @@ def evolve_noisy_circuit(rho0, gate_list, noisemodel):
     """
     n = int(np.log2(rho0.shape[0]))
     rho = np.copy(rho0)
+    print(f"Evolving circuit with {len(gate_list)} gates")
     for gate in gate_list:
         # Expand gate to full Hilbert space
         if len(gate.sites) == 1:
@@ -123,7 +128,6 @@ def evolve_noisy_circuit(rho0, gate_list, noisemodel):
             i = 0
             while i < n:
                 if len(gate.sites) == 2 and i == idx0:
-                    print(f"Applying gate {gate.name} to qubit {idx0}")
                     U = np.kron(U, gate.matrix)
                     i += 2  # skip both qubits (idx0, idx1)
                 else:

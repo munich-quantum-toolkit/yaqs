@@ -6,6 +6,7 @@ from qiskit.quantum_info import SparsePauliOp
 from qiskit_aer import Aer
 import numpy as np
 from mqt.yaqs.noisy_qc_sim.krauschannel_simulation import create_all_zero_density_matrix, evolve_noisy_circuit, circuit_to_unitary_list, z_expectations, get_qiskit_z_expectations
+from mqt.yaqs.noisy_qc_sim.noisy_QC_simulator_qiskit import qiskit_noisy_simulator
 
 
 
@@ -21,10 +22,11 @@ def run_test(test_name, num_qubits, circuit_builder, expected_z_qiskit):
     rho0 = create_all_zero_density_matrix(num_qubits)
     
     # Run your custom simulator
-    rho_final = evolve_noisy_circuit(rho0, circuit_to_unitary_list(qc), None)
-    z_vals_custom = z_expectations(rho_final, num_qubits)
+    # rho_final = evolve_noisy_circuit(rho0, circuit_to_unitary_list(qc), None)
+    # z_vals_custom = z_expectations(rho_final, num_qubits)
+    z_vals_custom = qiskit_noisy_simulator(qc, None, num_qubits)
 
-    difference = np.abs(z_vals_custom - np.flip(expected_z_qiskit))
+    difference = np.abs(z_vals_custom - expected_z_qiskit)
 
     if np.max(difference) < 1e-6:
         print(f"{test_name} Passed ✅: Max difference = {np.max(difference)}")
@@ -34,7 +36,7 @@ def run_test(test_name, num_qubits, circuit_builder, expected_z_qiskit):
     
     
     print(f"Custom Simulator Z Expectations: {z_vals_custom}")
-    print(f"Qiskit Aer Expected Z Expectations: {np.flip(expected_z_qiskit)}")
+    print(f"Qiskit Aer Expected Z Expectations: {expected_z_qiskit}")
 
 
 

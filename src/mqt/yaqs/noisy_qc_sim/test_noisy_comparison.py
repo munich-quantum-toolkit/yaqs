@@ -65,34 +65,37 @@ def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder,
     qiskit_noise_model = qiskit_dephasing_noise(num_qubits, noise_strengths)
     yaqs_noise_model = create_yaqs_dephasing_noise(num_qubits, noise_strengths)
     
-    # Run Qiskit simulation
-    print("Running Qiskit simulation...")
-    qiskit_results = simulate_noisy_layers_with_estimator(qc, qiskit_noise_model, num_layers)
+    # Test Qiskit noiseless first
+    print("Running Qiskit noiseless simulation...")
+    qiskit_noiseless_results = qiskit_noisy_simulator(qc, None, num_qubits)
+    
+    # Run Qiskit simulation with noise
+    print("Running Qiskit simulation with noise...")
+    qiskit_results = qiskit_noisy_simulator(qc, qiskit_noise_model, num_qubits)
     
     # Run Kraus channel simulation
     print("Running Kraus channel simulation...")
     rho0 = create_all_zero_density_matrix(num_qubits)
     gate_list = circuit_to_unitary_list(qc)
     
-    kraus_results = np.zeros((num_layers, num_qubits))
-    cumulative_circuit = QuantumCircuit(num_qubits)
-    
-    for layer in range(num_layers):
-        # Compose another copy of the circuit
-        cumulative_circuit = cumulative_circuit.compose(qc)
-        
-        # Run the cumulative circuit through Kraus simulator
-        rho_final = evolve_noisy_circuit(rho0, circuit_to_unitary_list(cumulative_circuit), yaqs_noise_model)
-        kraus_results[layer, :] = z_expectations(rho_final, num_qubits)
+    rho_final = evolve_noisy_circuit(rho0, gate_list, yaqs_noise_model)
+    kraus_results = z_expectations(rho_final, num_qubits)
     
     # Compare results
+    print(f"\nResults comparison:")
+    print(f"Qiskit noiseless: {qiskit_noiseless_results}")
+    print(f"Qiskit with noise: {qiskit_results}")
+    print(f"Kraus with noise: {kraus_results}")
+    
+    # Check if noise is actually being applied
+    qiskit_noise_diff = np.abs(qiskit_results - qiskit_noiseless_results)
+    print(f"Qiskit noise effect: {qiskit_noise_diff}")
+    
+    # Compare Qiskit vs Kraus
     difference = np.abs(qiskit_results - kraus_results)
     max_diff = np.max(difference)
     
-    print(f"\nResults comparison:")
-    print(f"Qiskit results shape: {qiskit_results.shape}")
-    print(f"Kraus results shape: {kraus_results.shape}")
-    print(f"Max difference: {max_diff:.6f}")
+    print(f"Qiskit vs Kraus max difference: {max_diff:.6f}")
     print(f"Tolerance: {tolerance}")
     
     if max_diff < tolerance:
@@ -101,11 +104,9 @@ def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder,
     else:
         print(f"❌ {test_name} FAILED: Max difference = {max_diff:.6f}")
         print("\nDetailed comparison:")
-        for layer in range(num_layers):
-            print(f"Layer {layer}:")
-            print(f"  Qiskit: {qiskit_results[layer, :]}")
-            print(f"  Kraus:  {kraus_results[layer, :]}")
-            print(f"  Diff:   {difference[layer, :]}")
+        print(f"  Qiskit: {qiskit_results}")
+        print(f"  Kraus:  {kraus_results}")
+        print(f"  Diff:   {difference}")
         return False
 
 
