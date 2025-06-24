@@ -405,6 +405,9 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
 
         f.set_history(saved["x_history"], saved["f_history"], saved["x_avg_history"], saved["diff_avg_history"])
 
+        f.t = saved["t"].copy()
+        f.exp_vals_traj = saved["exp_vals_traj"].copy()
+
         print(f"Restarting from iteration {saved['iteration']}, loss={saved['loss']:.6f}")
 
     else:
