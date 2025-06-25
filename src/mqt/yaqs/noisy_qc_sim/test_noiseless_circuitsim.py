@@ -5,28 +5,34 @@ from qiskit_aer.noise.errors import PauliError
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_aer import Aer
 import numpy as np
-from mqt.yaqs.noisy_qc_sim.krauschannel_simulation import create_all_zero_density_matrix, evolve_noisy_circuit, circuit_to_unitary_list, z_expectations, get_qiskit_z_expectations
-from mqt.yaqs.noisy_qc_sim.noisy_QC_simulator_qiskit import qiskit_noisy_simulator
+from mqt.yaqs.noisy_qc_sim.densitymatrix_sim import create_all_zero_density_matrix, evolve_noisy_circuit, circuit_to_unitary_list, z_expectations
+from mqt.yaqs.noisy_qc_sim.qiskit_noiseless_sim import get_qiskit_z_expectations
+from mqt.yaqs.noisy_qc_sim.qiskit_noisy_sim import qiskit_noisy_simulator
 
 
 
-def run_test(test_name, num_qubits, circuit_builder, expected_z_qiskit):
+def run_test(test_name, num_qubits, circuit_builder, expected_z_qiskit, num_layers=1):
     print(f"\n--- Running Test: {test_name} ({num_qubits} qubits) ---")
     
     qc = QuantumCircuit(num_qubits)
     circuit_builder(qc)
     
-    # print("Circuit:")
-    # print(qc.draw(output='text'))
+    print("Circuit:")
+    print(qc.draw(output='text'))
     
     rho0 = create_all_zero_density_matrix(num_qubits)
     
     # Run your custom simulator
-    # rho_final = evolve_noisy_circuit(rho0, circuit_to_unitary_list(qc), None)
-    # z_vals_custom = z_expectations(rho_final, num_qubits)
-    z_vals_custom = qiskit_noisy_simulator(qc, None, num_qubits)
+    z_vals_custom = evolve_noisy_circuit(rho0, circuit_to_unitary_list(qc), None, num_layers)
+        # Flip each sublist (reverse the order of qubit values)
+    z_vals_flipped = [np.array(sublist[::-1]) for sublist in z_vals_custom]
 
-    difference = np.abs(z_vals_custom - expected_z_qiskit)
+    # Stack into a 2D numpy array (each row = a layer, columns = reversed qubits)
+    z_vals_array = np.stack(z_vals_flipped)
+
+    
+    difference = np.abs(z_vals_array - np.array(expected_z_qiskit))
+
 
     if np.max(difference) < 1e-6:
         print(f"{test_name} Passed ✅: Max difference = {np.max(difference)}")
@@ -44,36 +50,37 @@ def run_test(test_name, num_qubits, circuit_builder, expected_z_qiskit):
 
 if __name__ == "__main__":
     # Test Cases
+    num_layers = 10
 
     # 1. Single Qubit - H gate
     n1 = 1
     qc1 = QuantumCircuit(n1)
     qc1.h(0)
-    expected_z1 = get_qiskit_z_expectations(qc1, n1) # Should be ~0 for H|0>
-    run_test("1-Qubit H Gate", n1, lambda circ: circ.h(0), expected_z1)
+    expected_z1 = get_qiskit_z_expectations(qc1, n1, num_layers) # Should be ~0 for H|0>
+    run_test("1-Qubit H Gate", n1, lambda circ: circ.h(0), expected_z1, num_layers)
 
     # 2. Single Qubit - X gate
     n2 = 1
     qc2 = QuantumCircuit(n2)
     qc2.x(0)
-    expected_z2 = get_qiskit_z_expectations(qc2,n2) # Should be -1 for X|0> = |1>
-    run_test("1-Qubit X Gate", n2, lambda circ: circ.x(0), expected_z2)
+    expected_z2 = get_qiskit_z_expectations(qc2,n2,num_layers) # Should be -1 for X|0> = |1>
+    run_test("1-Qubit X Gate", n2, lambda circ: circ.x(0), expected_z2, num_layers)
 
     # 3. Two Qubits - Bell State (H CNOT)
     n3 = 2
     qc3 = QuantumCircuit(n3)
     qc3.h(0)
     qc3.cx(0, 1)
-    expected_z3 = get_qiskit_z_expectations(qc3,n3) # Should be 0, 0 for Bell state
-    run_test("2-Qubit Bell State (H CNOT)", n3, lambda circ: (circ.h(0), circ.cx(0, 1)), expected_z3)
+    expected_z3 = get_qiskit_z_expectations(qc3,n3,num_layers) # Should be 0, 0 for Bell state
+    run_test("2-Qubit Bell State (H CNOT)", n3, lambda circ: (circ.h(0), circ.cx(0, 1)), expected_z3, num_layers)
 
     # 4. Two Qubits - X on Qubit 0, Identity on Qubit 1
     n4 = 2
     qc4 = QuantumCircuit(n4)
     qc4.x(0)
     # No op on qubit 1
-    expected_z4 = get_qiskit_z_expectations(qc4,n4) # Should be -1 for Q0, 1 for Q1
-    run_test("2-Qubit X on Q0", n4, lambda circ: circ.x(0), expected_z4)
+    expected_z4 = get_qiskit_z_expectations(qc4,n4,num_layers) # Should be -1 for Q0, 1 for Q1
+    run_test("2-Qubit X on Q0", n4, lambda circ: circ.x(0), expected_z4, num_layers)
 
     # 5. Two Qubits - CX with reversed order (1,0) - this tests two_qubit_reverse
     # Note: This test requires `two_qubit_reverse` to correctly handle the matrix
@@ -82,8 +89,8 @@ if __name__ == "__main__":
     qc5 = QuantumCircuit(n5)
     qc5.h(0)
     qc5.cx(1, 0) # control 1, target 0
-    expected_z5 = get_qiskit_z_expectations(qc5,n5)
-    run_test("2-Qubit CX(1,0) (reversed)", n5, lambda circ: (circ.h(0), circ.cx(1,0)), expected_z5)
+    expected_z5 = get_qiskit_z_expectations(qc5,n5,num_layers)
+    run_test("2-Qubit CX(1,0) (reversed)", n5, lambda circ: (circ.h(0), circ.cx(1,0)), expected_z5, num_layers)
 
     # 6. Three Qubits - GHZ State preparation (H CX CX)
     n6 = 3
@@ -93,8 +100,8 @@ if __name__ == "__main__":
     qc6.cx(1, 2) # This is where the `evolve_noisy_circuit`'s 2-qubit `U` construction for non-adjacent original sites
                 # would be problematic if `gate.sites` were [0,2] but here it's [1,2] following [0,1].
                 # It relies on the current `U` construction handling sequential adjacent CX gates.
-    expected_z6 = get_qiskit_z_expectations(qc6,n6) # Should be 0,0,0 for GHZ state
-    run_test("3-Qubit GHZ State", n6, lambda circ: (circ.h(0), circ.cx(0,1), circ.cx(1,2)), expected_z6)
+    expected_z6 = get_qiskit_z_expectations(qc6,n6,num_layers) # Should be 0,0,0 for GHZ state
+    run_test("3-Qubit GHZ State", n6, lambda circ: (circ.h(0), circ.cx(0,1), circ.cx(1,2)), expected_z6, num_layers)
 
     # 7. Three Qubits - All Z gates
     n7 = 3
@@ -102,8 +109,8 @@ if __name__ == "__main__":
     qc7.z(0)
     qc7.z(1)
     qc7.z(2)
-    expected_z7 = get_qiskit_z_expectations(qc7,n7) # Should be 1,1,1 for Z|0>=|0>
-    run_test("3-Qubit All Z Gates", n7, lambda circ: (circ.z(0), circ.z(1), circ.z(2)), expected_z7)
+    expected_z7 = get_qiskit_z_expectations(qc7,n7,num_layers) # Should be 1,1,1 for Z|0>=|0>
+    run_test("3-Qubit All Z Gates", n7, lambda circ: (circ.z(0), circ.z(1), circ.z(2)), expected_z7, num_layers)
 
     # 8. Custom Circuit from previous run
     n_custom = 2
@@ -113,17 +120,17 @@ if __name__ == "__main__":
     qc_custom.y(1)
     qc_custom.cx(1,0)
     qc_custom.z(0)
-    expected_z_custom = get_qiskit_z_expectations(qc_custom,n_custom)
+    expected_z_custom = get_qiskit_z_expectations(qc_custom,n_custom,num_layers)
     run_test("Custom Circuit (Original Example)", n_custom, 
              lambda circ: (circ.h(0), circ.cx(0,1), circ.y(1), circ.cx(1,0), circ.z(0)), 
-             expected_z_custom)
+             expected_z_custom, num_layers)
     
     # 9. 2-Qubit one X Gate
     n9 = 2
     qc9 = QuantumCircuit(n9)
     qc9.x(0)
-    expected_z9 = get_qiskit_z_expectations(qc9,n9) # Should be 1,1,1 for Z|0>=|0>
-    run_test("2-Qubit one X Gate", n9, lambda circ: (circ.x(0)), expected_z9)
+    expected_z9 = get_qiskit_z_expectations(qc9,n9,num_layers) # Should be 1,1,1 for Z|0>=|0>
+    run_test("2-Qubit one X Gate", n9, lambda circ: (circ.x(0)), expected_z9, num_layers)
 
     
     # ===== NEW COMPLEX TEST CASES =====
@@ -136,10 +143,10 @@ if __name__ == "__main__":
     qc10.y(2)
     qc10.cx(0, 1)
     qc10.cz(1, 2)
-    expected_z10 = get_qiskit_z_expectations(qc10, n10)
+    expected_z10 = get_qiskit_z_expectations(qc10, n10, num_layers)
     run_test("3-Qubit Mixed Pauli + Entangling", n10, 
              lambda circ: (circ.h(0), circ.x(1), circ.y(2), circ.cx(0,1), circ.cz(1,2)), 
-             expected_z10)
+             expected_z10, num_layers)
 
     # 11. Four Qubits - Linear Chain Entanglement
     n11 = 4
@@ -150,11 +157,11 @@ if __name__ == "__main__":
     qc11.cx(2, 3)
     qc11.rz(np.pi/4, 1)
     qc11.ry(np.pi/3, 2)
-    expected_z11 = get_qiskit_z_expectations(qc11, n11)
+    expected_z11 = get_qiskit_z_expectations(qc11, n11, num_layers)
     run_test("4-Qubit Linear Chain + Rotations", n11, 
              lambda circ: (circ.h(0), circ.cx(0,1), circ.cx(1,2), circ.cx(2,3), 
                           circ.rz(np.pi/4, 1), circ.ry(np.pi/3, 2)), 
-             expected_z11)
+             expected_z11, num_layers)
 
     # 12. Three Qubits - W State Preparation
     n12 = 3
@@ -163,11 +170,11 @@ if __name__ == "__main__":
     qc12.cz(0, 1)
     qc12.cx(1, 2)
     qc12.x(0)
-    expected_z12 = get_qiskit_z_expectations(qc12, n12)
+    expected_z12 = get_qiskit_z_expectations(qc12, n12, num_layers)
     run_test("3-Qubit W State", n12, 
              lambda circ: (circ.ry(np.arccos(np.sqrt(2/3)), 0), circ.cz(0,1), 
                           circ.cx(1,2), circ.x(0)), 
-             expected_z12)
+             expected_z12, num_layers)
 
     # 13. Four Qubits - Star Connectivity
     n13 = 4
@@ -179,11 +186,11 @@ if __name__ == "__main__":
     qc13.rz(np.pi/6, 0)
     qc13.rx(np.pi/4, 1)
     qc13.ry(np.pi/8, 2)
-    expected_z13 = get_qiskit_z_expectations(qc13, n13)
+    expected_z13 = get_qiskit_z_expectations(qc13, n13, num_layers)
     run_test("4-Qubit Star Topology + Rotations", n13, 
              lambda circ: (circ.h(0), circ.cx(0,1), circ.cx(1,2), circ.cx(2,3), 
                           circ.rz(np.pi/6, 0), circ.rx(np.pi/4, 1), circ.ry(np.pi/8, 2)), 
-             expected_z13)
+             expected_z13, num_layers)
 
     # 14. Five Qubits - Complex Entangling Circuit
     n14 = 5

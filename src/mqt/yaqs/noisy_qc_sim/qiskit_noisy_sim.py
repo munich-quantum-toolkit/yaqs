@@ -8,7 +8,7 @@ from qiskit_aer.backends.aer_simulator import AerSimulator
 from qiskit_aer import Aer
 import numpy as np
 
-def qiskit_noisy_simulator(circuit, noise_model, num_qubits):
+def qiskit_noisy_simulator(circuit, noise_model, num_qubits, num_layers):
     """
     Helper function to get Z expectations using Qiskit's Aer simulator.
     """
@@ -18,21 +18,24 @@ def qiskit_noisy_simulator(circuit, noise_model, num_qubits):
         observable = SparsePauliOp.from_list([(pauli_str, 1.0)])
         observables.append(observable)
 
-    z_expectations = np.zeros(num_qubits)
-    qc_copy = circuit.copy()
+    z_expectations = []
+    for layer in range(num_layers):
+        qc_copy = circuit.copy()
+        print(f"Running layer {layer+1} of {num_layers}")
+        for j in range(layer-1):
+            qc_copy = qc_copy.compose(circuit)
+        # exact_estimator = Estimator()
+        noisy_estimator = Estimator(options=dict(backend_options=dict(noise_model=noise_model)))
+        pub = (qc_copy, observables)
+        job = noisy_estimator.run([pub])
+        result = job.result()
+        pub_result = result[0] 
 
-    # exact_estimator = Estimator()
-    noisy_estimator = Estimator(options=dict(backend_options=dict(noise_model=noise_model)))
-    pub = (qc_copy, observables)
-    job = noisy_estimator.run([pub])
-    result = job.result()
-    pub_result = result[0] 
+        # .data is a DataBin
+        data = pub_result.data
 
-    # .data is a DataBin
-    data = pub_result.data
-
-    # The Z expectation values
-    z_expectations = data.evs  # This is a numpy array of shape (num_qubits,)
+        # The Z expectation values
+        z_expectations.append(data.evs)  # This is a numpy array of shape (num_qubits,)
 
     return z_expectations
 

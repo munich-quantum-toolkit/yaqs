@@ -11,12 +11,13 @@ from qiskit_aer import Aer
 
 
 
-from mqt.yaqs.noisy_qc_sim.noisy_QC_simulator_qiskit import qiskit_noisy_simulator
-from mqt.yaqs.noisy_qc_sim.krauschannel_simulation import (
+from mqt.yaqs.noisy_qc_sim.qiskit_noisy_sim import qiskit_noisy_simulator
+from mqt.yaqs.noisy_qc_sim.densitymatrix_sim import (
     create_all_zero_density_matrix, 
     evolve_noisy_circuit, 
     circuit_to_unitary_list, 
-    z_expectations
+    z_expectations,
+    two_qubit_reverse
 )
 from mqt.yaqs.noisy_qc_sim.qiskit_noisemodels import qiskit_dephasing_noise
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -49,7 +50,7 @@ def create_yaqs_dephasing_noise(num_qubits: int, noise_strengths: list) -> Noise
 
 
 def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder, 
-                             noise_strengths: list, num_layers: int = 3, tolerance: float = 1e-3):
+                             noise_strengths: list, num_layers: int = 1, tolerance: float = 1e-3):
     """Run a comparison test between Qiskit and Kraus channel simulators."""
     print(f"\n--- Running Noisy Test: {test_name} ({num_qubits} qubits) ---")
     print(f"Noise strengths: {noise_strengths}")
@@ -67,19 +68,19 @@ def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder,
     
     # Test Qiskit noiseless first
     print("Running Qiskit noiseless simulation...")
-    qiskit_noiseless_results = qiskit_noisy_simulator(qc, None, num_qubits)
+    qiskit_noiseless_results = qiskit_noisy_simulator(qc, None, num_qubits, num_layers)
     
     # Run Qiskit simulation with noise
     print("Running Qiskit simulation with noise...")
-    qiskit_results = qiskit_noisy_simulator(qc, qiskit_noise_model, num_qubits)
+    qiskit_results = qiskit_noisy_simulator(qc, qiskit_noise_model, num_qubits, num_layers)
     
     # Run Kraus channel simulation
     print("Running Kraus channel simulation...")
     rho0 = create_all_zero_density_matrix(num_qubits)
+    print('rho shape', rho0.shape)
     gate_list = circuit_to_unitary_list(qc)
     
-    rho_final = evolve_noisy_circuit(rho0, gate_list, yaqs_noise_model)
-    kraus_results = z_expectations(rho_final, num_qubits)
+    kraus_results = evolve_noisy_circuit(rho0, gate_list, yaqs_noise_model, num_layers)
     
     # Compare results
     print(f"\nResults comparison:")
@@ -88,11 +89,11 @@ def run_noisy_comparison_test(test_name: str, num_qubits: int, circuit_builder,
     print(f"Kraus with noise: {kraus_results}")
     
     # Check if noise is actually being applied
-    qiskit_noise_diff = np.abs(qiskit_results - qiskit_noiseless_results)
+    qiskit_noise_diff = np.abs(np.array(qiskit_results) - np.array(qiskit_noiseless_results))
     print(f"Qiskit noise effect: {qiskit_noise_diff}")
     
     # Compare Qiskit vs Kraus
-    difference = np.abs(qiskit_results - kraus_results)
+    difference = np.abs(np.flip(qiskit_results) - kraus_results)
     max_diff = np.max(difference)
     
     print(f"Qiskit vs Kraus max difference: {max_diff:.6f}")
@@ -142,19 +143,27 @@ def test_two_qubit_noise():
     print("="*60)
     
     # Test 1: Bell state with dephasing
+    def bell_circuit(circ):
+        circ.h(0)
+        circ.cx(0, 1)
+    
     run_noisy_comparison_test(
         "2-Qubit Bell State with Dephasing",
         num_qubits=2,
-        circuit_builder=lambda circ: (circ.h(0), circ.cx(0, 1)),
+        circuit_builder=bell_circuit,
         noise_strengths=[0.1, 0.1],  # Single qubit, two qubit
         num_layers=3
     )
     
     # Test 2: Simple two qubit circuit
+    def xh_circuit(circ):
+        circ.x(0)
+        circ.h(1)
+    
     run_noisy_comparison_test(
         "2-Qubit X+H with Dephasing",
         num_qubits=2,
-        circuit_builder=lambda circ: (circ.x(0), circ.h(1)),
+        circuit_builder=xh_circuit,
         noise_strengths=[0.08, 0.12],
         num_layers=3
     )
@@ -229,16 +238,85 @@ def test_multiple_layers():
     )
 
 
+def debug_noiseless_results():
+    """Debug the noiseless results to understand the discrepancy."""
+    print("\n" + "="*60)
+    print("DEBUGGING NOISELESS RESULTS")
+    print("="*60)
+    
+    # Create a simple circuit: X on qubit 0, H on qubit 1
+    qc = QuantumCircuit(2)
+    qc.x(0)
+    qc.h(1)
+    
+    print("Circuit:")
+    print(qc.draw(output='text'))
+    
+    # Test Qiskit noiseless
+    print("\nQiskit noiseless results:")
+    qiskit_results = qiskit_noisy_simulator(qc, None, 2, 1)
+    print(f"Z expectations: {qiskit_results}")
+    
+    # Test Kraus noiseless
+    print("\nKraus noiseless results:")
+    rho0 = create_all_zero_density_matrix(2)
+    gate_list = circuit_to_unitary_list(qc)
+    print(f"Gate list: {gate_list}")
+    
+    # Apply gates without noise
+    rho = rho0.copy()
+    for gate in gate_list:
+        # Apply unitary without noise
+        if len(gate.sites) == 1:
+            U = np.eye(1)
+            for i in range(2):
+                U = np.kron(U, gate.matrix if i == gate.sites[0] else np.eye(2))
+        elif len(gate.sites) == 2:
+            # Handle two-qubit gate
+            idx0, idx1 = gate.sites[0], gate.sites[1]
+            if idx0 > idx1:
+                idx0, idx1 = idx1, idx0
+                gate.matrix = two_qubit_reverse(gate.matrix)
+            U = np.eye(1)
+            i = 0
+            while i < 2:
+                if i == idx0:
+                    U = np.kron(U, gate.matrix)
+                    i += 2
+                else:
+                    U = np.kron(U, np.eye(2))
+                    i += 1
+        
+        rho = U @ rho @ U.conj().T
+        print(f"After gate {gate.sites}: rho shape {rho.shape}")
+    
+    kraus_results = z_expectations(rho, 2)
+    print(f"Z expectations: {kraus_results}")
+    
+    # Theoretical expectation
+    print("\nTheoretical expectation:")
+    print("Starting from |00⟩:")
+    print("1. X on qubit 0: |00⟩ → |10⟩")
+    print("2. H on qubit 1: |10⟩ → |1⟩ ⊗ (|0⟩ + |1⟩)/√2 = (|10⟩ + |11⟩)/√2")
+    print("Z expectations: qubit 0 = -1, qubit 1 = 0")
+    print(f"Theoretical: [-1, 0]")
+    print(f"Kraus: {kraus_results}")
+    print(f"Qiskit: {qiskit_results}")
+
+
 if __name__ == "__main__":
     print("Starting noisy quantum circuit simulator comparison tests...")
     print("Comparing Qiskit Estimator vs Kraus Channel simulation")
     
+    # Debug noiseless results first
+    debug_noiseless_results()
+    
     # Run all test categories
     test_single_qubit_noise()
     test_two_qubit_noise()
-    # test_three_qubit_noise()
-    # test_varying_noise_strengths()
-    # test_multiple_layers()
+    test_three_qubit_noise()
+    test_varying_noise_strengths()
+    test_multiple_layers()
     
     # print("\n" + "="*60)
     # print("ALL TESTS COMPLETED")

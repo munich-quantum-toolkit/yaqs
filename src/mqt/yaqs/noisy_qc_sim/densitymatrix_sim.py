@@ -14,10 +14,14 @@ from qiskit_aer.backends.aer_simulator import AerSimulator
 import matplotlib.pyplot as plt
 
 
-def expand_operator(local_op, site, n_qubits):
+def expand_operator(local_op: np.ndarray, site: int | list[int], n_qubits: int) -> np.ndarray:
     """Expand a single-qubit operator to act on 'site' in an n-qubit system."""
     ops = [np.eye(2)] * n_qubits
-    ops[site] = local_op
+    if isinstance(site, list):
+        ops[site[0]] = local_op
+        ops.pop(site[1])
+    else:
+        ops[site] = local_op
     result = ops[0]
     for op in ops[1:]:
         result = np.kron(result, op)
@@ -37,10 +41,10 @@ def KrausChannel(rho, noisemodel, sites):
     n_qubits = int(np.log2(rho.shape[0]))
     kraus_ops_global = []
     total_strength = 0
+    
 
     # For all processes in noisemodel, apply those that act on exactly these sites (for one- and two-site channels)
     for process in noisemodel.processes:
-        print('process', process)
         if len(sites) == 1 and process["sites"] == sites:
             total_strength += process["strength"]
             # single-site channel
@@ -69,10 +73,36 @@ def KrausChannel(rho, noisemodel, sites):
     # Kraus channel application
     result = np.zeros_like(rho, dtype=complex)
     for K in kraus_ops_global:
-        print(f"Applying Kraus operator {K} to density matrix {rho}")
+        # print(f"Applying Kraus operator {K} to density matrix {rho}")
         result += K @ rho @ K.conj().T
 
     return result
+
+def z_expectations(rho, num_qubits):
+    """
+    Compute <Z> for each qubit for the given density matrix.
+    """
+    z_vals = []
+    sz = np.array([[1,0],[0,-1]])
+    I = np.eye(2)
+    for i in range(num_qubits):
+        op = 1
+        for j in range(num_qubits):
+            op = np.kron(op, sz if i == j else I)
+        z_vals.append(np.real(np.trace(rho @ op)))
+    return np.array(z_vals)
+
+def two_qubit_reverse(mat):
+    """
+    For a 4x4 gate acting on qubits (a, b), swap a and b.
+    Only needed if cx order is reversed.
+    """
+    SWAP = np.array([[1, 0, 0, 0],
+                   [0, 0, 1, 0],
+                   [0, 1, 0, 0],
+                   [0, 0, 0, 1]])
+    mat = SWAP @ mat @ SWAP 
+    return mat
 
     
 def create_all_zero_density_matrix(n_qubits):
@@ -101,7 +131,7 @@ def circuit_to_unitary_list(circuit):
 
 
 
-def evolve_noisy_circuit(rho0, gate_list, noisemodel):
+def evolve_noisy_circuit(rho0, gate_list, noisemodel, num_layers):
     """
     Evolve a density matrix rho0 through the list of gates,
     applying Kraus noise after every gate as specified in kraus_channel_map.
@@ -110,96 +140,45 @@ def evolve_noisy_circuit(rho0, gate_list, noisemodel):
     """
     n = int(np.log2(rho0.shape[0]))
     rho = np.copy(rho0)
+    z_expvals = []
     print(f"Evolving circuit with {len(gate_list)} gates")
-    for gate in gate_list:
-        # Expand gate to full Hilbert space
-        if len(gate.sites) == 1:
-            U = np.eye(1)
-            for i in range(n):
-                U = np.kron(U, gate.matrix if i == gate.sites[0] else np.eye(2))
-     
-        elif len(gate.sites) == 2:
-            if np.abs(gate.sites[-1] - gate.sites[0]) > 1:
-                raise ValueError("Non-adjacent two-qubit gates not supported")
+    for layer in range(num_layers):
+        for gate in gate_list:
+            # Expand gate to full Hilbert space
+            if len(gate.sites) == 1:
+                U = np.eye(1)
+                for i in range(n):
+                    U = np.kron(U, gate.matrix if i == gate.sites[0] else np.eye(2))
+        
+            elif len(gate.sites) == 2:
+                if np.abs(gate.sites[-1] - gate.sites[0]) > 1:
+                    raise ValueError("Non-adjacent two-qubit gates not supported")
 
-            idx0, idx1 = gate.sites[0], gate.sites[1]
-            if idx0 > idx1:
-                idx0, idx1 = idx1, idx0
-                gate.matrix = two_qubit_reverse(gate.matrix)
-            U = np.eye(1)
-            i = 0
-            while i < n:
-                if len(gate.sites) == 2 and i == idx0:
-                    U = np.kron(U, gate.matrix)
-                    i += 2  # skip both qubits (idx0, idx1)
-                else:
-                    U = np.kron(U, np.eye(2))
-                    i += 1
-        else:
-            raise ValueError("Only 1- and 2-qubit gates supported")
-        # Apply unitary    
-        rho = U @ rho @ U.conj().T
+                idx0, idx1 = gate.sites[0], gate.sites[1]
+                if idx0 > idx1:
+                    idx0, idx1 = idx1, idx0
+                    gate.matrix = two_qubit_reverse(gate.matrix)
+                U = np.eye(1)
+                i = 0
+                while i < n:
+                    if len(gate.sites) == 2 and i == idx0:
+                        U = np.kron(U, gate.matrix)
+                        i += 2  # skip both qubits (idx0, idx1)
+                    else:
+                        U = np.kron(U, np.eye(2))
+                        i += 1
+            else:
+                raise ValueError("Only 1- and 2-qubit gates supported")
+            # Apply unitary    
+            rho = U @ rho @ U.conj().T
 
-        # Apply noise
-        rho = KrausChannel(rho, noisemodel, gate.sites)
+            # Apply noise
+            rho = KrausChannel(rho, noisemodel, gate.sites)
 
-    return rho
+        z_expvals.append(z_expectations(rho, n))
 
-def z_expectations(rho, num_qubits):
-    """
-    Compute <Z> for each qubit for the given density matrix.
-    """
-    z_vals = []
-    sz = np.array([[1,0],[0,-1]])
-    I = np.eye(2)
-    for i in range(num_qubits):
-        op = 1
-        for j in range(num_qubits):
-            op = np.kron(op, sz if i == j else I)
-        z_vals.append(np.real(np.trace(rho @ op)))
-    return np.array(z_vals)
+    return z_expvals
 
-def two_qubit_reverse(mat):
-    """
-    For a 4x4 gate acting on qubits (a, b), swap a and b.
-    Only needed if cx order is reversed.
-    """
-    SWAP = np.array([[1, 0, 0, 0],
-                   [0, 0, 1, 0],
-                   [0, 1, 0, 0],
-                   [0, 0, 0, 1]])
-    mat = SWAP @ mat @ SWAP 
-    return mat
-
-def get_qiskit_z_expectations(circuit, num_qubits):
-    """
-    Helper function to get Z expectations using Qiskit's Aer simulator.
-    """
-    z_expectations = np.zeros(num_qubits)
-    simulator = AerSimulator(method='density_matrix')
-    qc_with_save = circuit.copy()
-    qc_with_save.save_density_matrix() 
-
-    # Run the circuit on the simulator
-    job = simulator.run(qc_with_save) 
-    result = job.result()
-
-    density_matrix = result.data(0)['density_matrix'].data
-
-    z_vals = []
-    sz = np.array([[1,0],[0,-1]])
-    I = np.eye(2)
-    
-    for i in range(num_qubits):
-        op = 1
-        for j in range(num_qubits):
-            # Construct the Z operator for the current qubit
-            op = np.kron(op, sz if i == j else I)
-    
-        # Compute the expectation value <Z_i>
-        z_val = np.real(np.trace(density_matrix @ op))
-        z_vals.append(z_val)
-    return np.array(z_vals)
 
 
 
