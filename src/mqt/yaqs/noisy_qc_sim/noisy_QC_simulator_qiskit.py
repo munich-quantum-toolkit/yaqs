@@ -54,7 +54,7 @@ if __name__ == "__main__":
    
     # noise_model = qiskit_dephasing_noise(num_qubits=2, noise_strengths=[0.2, 0.25])
     noise_model = None
-    depolarizing_prob = 0.01
+    depolarizing_prob = 0.5
     noise_model = NoiseModel()
     # noise_model.add_all_qubit_quantum_error(
     # depolarizing_error(depolarizing_prob, 2), ["cx"]
