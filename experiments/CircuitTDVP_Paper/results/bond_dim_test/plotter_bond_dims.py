@@ -85,7 +85,7 @@ def plot_bond_heatmaps(
 
         # (a) expectation
         ax0 = axes[0, col]
-        ax0.plot(ts1, obs1, '^--', label=m1, zorder=3, linewidth=1.5)
+        ax0.plot(ts1, obs1, '^--', label=m1, zorder=3, markeredgecolor='black', linewidth=1.5)
         ax0.plot(ts2, obs2, 'o-', label=m2, zorder=2,  markeredgecolor='black', linewidth=1.5)
         ax0.set_title(title, pad=6, fontsize=10)
 
@@ -162,7 +162,7 @@ def plot_bond_heatmaps(
         tot2 = np.nansum(mat2**3, axis=1)
         mask1 = (ts1 < cutoff) & (tot1 > 0)
         mask2 = (ts2 < cutoff) & (tot2 > 0)
-        ax2.plot(ts1[mask1], tot1[mask1], '^--', zorder=3, label="TEBD", linewidth=1.5)
+        ax2.plot(ts1[mask1], tot1[mask1], '^--', zorder=3, markeredgecolor='black', label="TEBD", linewidth=1.5)
         ax2.plot(ts2[mask2], tot2[mask2], 'o-', zorder=2, markeredgecolor='black', label="TDVP", linewidth=1.5)
         ax2.set_yscale('linear')
         ax2.set_xlim(0, cutoff)
