@@ -9,7 +9,7 @@ YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused
 YAQS is part of the _{doc}`Munich Quantum Toolkit (MQT) <mqt:index>`_ developed by the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the [Technical University of Munich](https://www.tum.de/).
 
 This documentation provides a comprehensive guide to the MQT YAQS library, including {doc}`installation instructions <installation>`, notebook-like examples, and detailed {doc}`API documentation <api/mqt/yaqs/index>`.
-The source code of MQT YAQS is publicly available on GitHub at [cda-tum/mqt-yaqs](https://github.com/cda-tum/mqt-yaqs), while pre-built binaries are available via [PyPI](https://pypi.org/project/mqt.yaqs/) for all major operating systems and all modern Python versions.
+The source code of MQT YAQS is publicly available on GitHub at [munich-quantum-toolkit/yaqs](https://github.com/munich-quantum-toolkit/yaqs), while pre-built binaries are available via [PyPI](https://pypi.org/project/mqt.yaqs/) for all major operating systems and all modern Python versions.
 
 ````{only} latex
 ```{note}

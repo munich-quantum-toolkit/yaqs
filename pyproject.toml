@@ -49,10 +49,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/cda-tum/mqt-yaqs"
+Homepage = "https://github.com/munich-quantum-toolkit/yaqs"
 Documentation = "https://mqt.readthedocs.io/projects/yaqs"
-Issues = "https://github.com/cda-tum/mqt-yaqs/issues"
-Discussions = "https://github.com/cda-tum/mqt-yaqs/discussions"
+Issues = "https://github.com/munich-quantum-toolkit/yaqs/issues"
+Discussions = "https://github.com/munich-quantum-toolkit/yaqs/discussions"
 
 
 [tool.hatch.version]
