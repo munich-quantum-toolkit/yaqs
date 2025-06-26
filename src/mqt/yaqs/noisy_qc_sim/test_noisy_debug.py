@@ -9,8 +9,8 @@ from qiskit_aer.primitives import Estimator
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_aer import Aer
 
-from .noisy_QC_simulator_qiskit import simulate_noisy_layers_with_estimator
-from .krauschannel_simulation import (
+from .qiskit_noisy_sim import simulate_noisy_layers_with_estimator
+from .densitymatrix_sim import (
     create_all_zero_density_matrix, 
     evolve_noisy_circuit, 
     circuit_to_unitary_list, 
