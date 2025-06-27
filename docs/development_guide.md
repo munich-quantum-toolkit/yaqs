@@ -22,7 +22,7 @@ Ready to contribute to the project? This guide will get you started.
    clone the repository locally.
 
    ```console
-   $ git clone git@github.com/munich-quantum-toolkit/yaqs.git
+   $ git clone git@github.com/munich-quantum-toolkit/yaqs.git mqt-yaqs
    ```
 
    :::
