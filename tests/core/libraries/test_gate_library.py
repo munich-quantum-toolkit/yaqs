@@ -81,9 +81,9 @@ def testextend_gate_no_identity() -> None:
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     sites = [0, 1]  # No gap, so no identity tensor should be added.
-    mpo = extend_gate(tensor, sites)
-    assert isinstance(mpo, MPO)
-    assert len(mpo.tensors) == 2
+    mpo_tensors = extend_gate(tensor, sites)
+    assert isinstance(mpo_tensors, list)
+    assert len(mpo_tensors) == 2
 
 
 def testextend_gate_with_identity() -> None:
@@ -95,10 +95,12 @@ def testextend_gate_with_identity() -> None:
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     sites = [0, 2]  # Gap present, one identity tensor inserted.
-    mpo = extend_gate(tensor, sites)
-    assert isinstance(mpo, MPO)
-    assert len(mpo.tensors) == 3
+    mpo_tensors = extend_gate(tensor, sites)
+    assert isinstance(mpo_tensors, list)
+    assert len(mpo_tensors) == 3
 
+    mpo = MPO()
+    mpo.init_custom(mpo_tensors, transpose=False)
     identity_tensor = mpo.tensors[1]
     prev_bond = mpo.tensors[0].shape[3]
     assert identity_tensor.shape == (2, 2, prev_bond, prev_bond)
@@ -113,8 +115,14 @@ def testextend_gate_reverse_order() -> None:
     and verifies that each tensor matches the transpose of the forward-order result on axes (0,1,3,2).
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
-    mpo_forward = extend_gate(tensor, [0, 1])
-    mpo_reverse = extend_gate(tensor, [1, 0])
+    mpo_forward_tensors = extend_gate(tensor, [0, 1])
+    mpo_reverse_tensors = extend_gate(tensor, [1, 0])
+
+    mpo_forward = MPO()
+    mpo_reverse = MPO()
+    mpo_forward.init_custom(mpo_forward_tensors, transpose=False)
+    mpo_reverse.init_custom(mpo_reverse_tensors, transpose=False)
+
     mpo_reverse.tensors.reverse()
     for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors):
         assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))
@@ -349,9 +357,9 @@ def test_gate_cx() -> None:
     gate.set_sites(0, 1)
     assert gate.sites == [0, 1]
     assert gate.tensor.shape == (2, 2, 2, 2)
-    assert hasattr(gate, "mpo")
-    assert isinstance(gate.mpo, MPO)
-    assert len(gate.mpo.tensors) >= 2
+    assert hasattr(gate, "mpo_tensors")
+    assert isinstance(gate.mpo_tensors, list)
+    assert len(gate.mpo_tensors) >= 2
 
     base_gate = BaseGate.cx()
     assert_array_equal(gate.matrix, base_gate.matrix)

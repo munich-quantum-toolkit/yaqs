@@ -24,7 +24,7 @@ import numpy as np
 import opt_einsum as oe
 from tqdm import tqdm
 
-from ..libraries.observables_library import ObservablesLibrary
+from ..libraries.gate_library import X, Y, Z
 from ..methods.decompositions import right_qr, two_site_svd
 
 if TYPE_CHECKING:
@@ -799,14 +799,14 @@ class MPO:
         physical_dimension = 2
         np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        x = ObservablesLibrary["x"]
+        x = X().matrix
         if length == 1:
             tensor: NDArray[np.complex128] = np.reshape(x, (2, 2, 1, 1))
             self.tensors = [tensor]
             self.length = length
             self.physical_dimension = physical_dimension
             return
-        z = ObservablesLibrary["z"]
+        z = Z().matrix
 
         left_bound = np.array([identity, -J * z, -g * x])[np.newaxis, :]
 
@@ -857,9 +857,9 @@ class MPO:
         physical_dimension = 2
         zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
         identity = np.eye(physical_dimension, dtype=complex)
-        x = ObservablesLibrary["x"]
-        y = ObservablesLibrary["y"]
-        z = ObservablesLibrary["z"]
+        x = X().matrix
+        y = Y().matrix
+        z = Z().matrix
 
         left_bound = np.array([identity, -Jx * x, -Jy * y, -Jz * z, -h * z])[np.newaxis, :]
 

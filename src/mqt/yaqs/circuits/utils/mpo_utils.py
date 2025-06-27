@@ -22,13 +22,13 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
+from ...core.data_structures.networks import MPO
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
     from qiskit.dagcircuit import DAGCircuit
 
-    from ...core.data_structures.networks import MPO
     from ...core.libraries.gate_library import BaseGate
 
 
@@ -272,7 +272,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     and node.qargs[0]._index == gate.qubits[0]._index  # noqa: SLF001
                     and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
                 ):
-                    gate_mpo = convert_dag_to_tensor_algorithm(node)[0].mpo
+                    gate_mpo = MPO()
+                    gate_mpo.init_custom(convert_dag_to_tensor_algorithm(node)[0].mpo_tensors, transpose=False)
                     if conjugate:
                         gate_mpo.rotate(conjugate=True)
                     dag.remove_op_node(node)

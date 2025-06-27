@@ -19,8 +19,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..data_structures.networks import MPO
-
 if TYPE_CHECKING:
     from numpy.typing import NDArray
     from qiskit.circuit import Parameter
@@ -62,7 +60,7 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     return [tensor1, tensor2]
 
 
-def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
+def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArray[np.complex128]]:
     """Extends gate to long-range MPO.
 
     Extends a given gate tensor to a Matrix Product Operator (MPO) by adding identity tensors
@@ -115,9 +113,7 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> MPO:
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[2])
 
-    mpo = MPO()
-    mpo.init_custom(mpo_tensors, transpose=False)
-    return mpo
+    return mpo_tensors
 
 
 class BaseGate:
@@ -921,7 +917,7 @@ class CX(BaseGate):
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: π/4 (I-Z ⊗ I-X)
         self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
-        self.mpo = extend_gate(self.tensor, self.sites)
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
         if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
@@ -973,7 +969,7 @@ class CZ(BaseGate):
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         # Generator: π/4 (I-Z ⊗ I-Z)
         self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
-        self.mpo = extend_gate(self.tensor, self.sites)
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
         if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
@@ -1031,7 +1027,7 @@ class CPhase(BaseGate):
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, 0]])]
-        self.mpo = extend_gate(self.tensor, self.sites)
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class SWAP(BaseGate):
@@ -1078,7 +1074,7 @@ class SWAP(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        self.mpo = extend_gate(self.tensor, self.sites)
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class Rxx(BaseGate):
@@ -1140,7 +1136,7 @@ class Rxx(BaseGate):
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.generator = [(self.theta / 2) * np.array([[0, 1], [1, 0]]), np.array([[0, 1], [1, 0]])]
-        self.mpo = extend_gate(self.tensor, self.sites)
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class Ryy(BaseGate):
@@ -1202,7 +1198,7 @@ class Ryy(BaseGate):
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.generator = [(self.theta / 2) * np.array([[0, -1j], [1j, 0]]), np.array([[0, -1j], [1j, 0]])]
-        self.mpo = extend_gate(self.tensor, self.sites)
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class Rzz(BaseGate):
@@ -1264,7 +1260,7 @@ class Rzz(BaseGate):
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
         self.generator = [(self.theta / 2) * np.array([[1, 0], [0, -1]]), np.array([[1, 0], [0, -1]])]
-        self.mpo = extend_gate(self.tensor, self.sites)
+        self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class XX(BaseGate):
