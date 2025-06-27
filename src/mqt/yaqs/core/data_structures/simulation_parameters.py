@@ -150,8 +150,9 @@ class PhysicsSimParams:
         elapsed_time: float,
         dt: float = 0.1,
         num_traj: int = 1000,
-        max_bond_dim: int = 2,
-        threshold: float = 1e-6,
+        max_bond_dim: int = 4096,
+        min_bond_dim: int = 2,
+        threshold: float = 1e-9,
         order: int = 1,
         *,
         sample_timesteps: bool = True,
@@ -174,6 +175,8 @@ class PhysicsSimParams:
             Number of simulation samples, by default 1000.
         max_bond_dim : int, optional
             Maximum bond dimension allowed, by default 2.
+        min_bond_dim:
+            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
         threshold : float, optional
             Threshold for simulation accuracy, by default 1e-6.
         order : int, optional
@@ -195,6 +198,7 @@ class PhysicsSimParams:
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
+        self.min_bond_dim = min_bond_dim
         self.threshold = threshold
         self.order = order
         self.evolution_mode = evolution_mode
@@ -248,9 +252,9 @@ class WeakSimParams:
     def __init__(
         self,
         shots: int,
-        max_bond_dim: int = 2,
-        threshold: float = 1e-6,
-        window_size: int | None = 0,
+        max_bond_dim: int = 4096,
+        min_bond_dim: int = 2,
+        threshold: float = 1e-9,
         *,
         get_state: bool = False,
     ) -> None:
@@ -264,18 +268,18 @@ class WeakSimParams:
             Number of measurement shots to simulate.
         max_bond_dim : int, optional
             Maximum bond dimension for simulation, by default 2.
+        min_bond_dim:
+            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
         threshold : float, optional
             Accuracy threshold for truncating tensors, by default 1e-6.
-        window_size : int or None, optional
-            Window size for the simulation algorithm, by default None.
         get_state:
             If True, output MPS is returned.
         """
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
+        self.min_bond_dim = min_bond_dim
         self.threshold = threshold
-        self.window_size = window_size
         self.get_state = get_state
 
     def aggregate_measurements(self) -> None:
@@ -323,6 +327,8 @@ class StrongSimParams:
         The number of trajectories to simulate. Default is 1000.
     max_bond_dim : int
         The maximum bond dimension for the simulation. Default is 2.
+    min_bond_dim:
+        The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
     threshold : float
         The threshold value for the simulation. Default is 1e-6.
     window_size : int or None
@@ -347,9 +353,9 @@ class StrongSimParams:
         self,
         observables: list[Observable],
         num_traj: int = 1000,
-        max_bond_dim: int = 2,
-        threshold: float = 1e-6,
-        window_size: int | None = 0,
+        max_bond_dim: int = 4096,
+        min_bond_dim: int = 2,
+        threshold: float = 1e-9,
         *,
         get_state: bool = False,
     ) -> None:
@@ -367,8 +373,6 @@ class StrongSimParams:
             Maximum bond dimension allowed in simulation, by default 2.
         threshold : float, optional
             Threshold for simulation accuracy, by default 1e-6.
-        window_size : int or None, optional
-            Window size for simulation, by default None.
         get_state:
             If True, output MPS is returned.
         """
@@ -378,8 +382,8 @@ class StrongSimParams:
         )
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
+        self.min_bond_dim = min_bond_dim
         self.threshold = threshold
-        self.window_size = window_size
         self.get_state = get_state
 
     def aggregate_trajectories(self) -> None:

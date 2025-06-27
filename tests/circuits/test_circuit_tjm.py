@@ -193,9 +193,9 @@ def test_apply_two_qubit_gate() -> None:
     num_traj = 1
     max_bond_dim = 4
     threshold = 1e-12
-    window_size = 0
+    min_bond_dim = 2
     observable = Observable(Z(), 0)
-    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, min_bond_dim, threshold)
     copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
@@ -221,10 +221,10 @@ def test_circuit_tjm_strong() -> None:
 
     num_traj = 1
     max_bond_dim = 4
+    min_bond_dim = 2
     threshold = 1e-12
-    window_size = 0
     observable = Observable(Z(), 0)
-    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, min_bond_dim, threshold)
     args = 0, mps0, None, sim_params, qc
     circuit_tjm(args)
 
@@ -243,9 +243,9 @@ def test_circuit_tjm_weak() -> None:
     qc.cx(1, 3)
 
     max_bond_dim = 4
+    min_bond_dim = 2
     threshold = 1e-12
-    window_size = 0
     shots = 10
-    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
+    sim_params = WeakSimParams(shots, max_bond_dim, min_bond_dim, threshold)
     args = 0, mps0, None, sim_params, qc
     circuit_tjm(args)

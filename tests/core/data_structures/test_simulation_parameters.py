@@ -82,8 +82,8 @@ def test_physics_simparams_defaults() -> None:
     # times should be np.arange(0, elapsed_time+dt, dt)
     assert np.isclose(params.times[-1], 2.0)
     assert params.num_traj == 1000
-    assert params.max_bond_dim == 2
-    assert params.threshold == 1e-6
+    assert params.max_bond_dim == 4096
+    assert params.threshold == 1e-9
     assert params.order == 1
 
 

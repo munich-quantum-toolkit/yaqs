@@ -25,7 +25,7 @@ from ..core.data_structures.networks import MPO, MPS
 from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import local_dynamic_tdvp, two_site_tdvp
+from ..core.methods.tdvp import two_site_tdvp
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -187,19 +187,13 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
     .
     """
-    gate = convert_dag_to_tensor_algorithm(node)[0]
-
     # Construct the MPO for the two-qubit gate.
+    gate = convert_dag_to_tensor_algorithm(node)[0]
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
-    if np.abs(first_site - last_site) == 1:
-        # Apply two-site TDVP for nearest-neighbor gates.
-        two_site_tdvp(short_state, short_mpo, sim_params)
-    else:
-        local_dynamic_tdvp(short_state, short_mpo, sim_params)
-
+    two_site_tdvp(short_state, short_mpo, sim_params)
     # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
@@ -230,7 +224,6 @@ def circuit_tjm(
     state = copy.deepcopy(initial_state)
 
     dag = circuit_to_dag(circuit)
-
     while dag.op_nodes():
         single_qubit_nodes, even_nodes, odd_nodes = process_layer(dag)
 
@@ -248,8 +241,8 @@ def circuit_tjm(
                     state = stochastic_process(state, noise_model, dt=1)
                 else:
                     # Normalizes state
-                    for i in reversed(range(state.length)):
-                        state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
+                    state.normalize(form="B", decomposition="QR")
+
                 dag.remove_op_node(node)
 
     if isinstance(sim_params, WeakSimParams):

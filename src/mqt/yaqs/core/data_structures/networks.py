@@ -25,7 +25,7 @@ import opt_einsum as oe
 from tqdm import tqdm
 
 from ..libraries.observables_library import ObservablesLibrary
-from ..methods.decompositions import right_qr, truncated_right_svd
+from ..methods.decompositions import right_qr, two_site_svd
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -298,18 +298,19 @@ class MPS:
                            Default is QR.
         """
         tensor = self.tensors[current_orthogonality_center]
-        if decomposition == "QR":
+        if decomposition == "QR" or current_orthogonality_center == self.length - 1:
             site_tensor, bond_tensor = right_qr(tensor)
-        elif decomposition == "SVD":
-            site_tensor, s_vec, v_mat = truncated_right_svd(tensor, threshold=1e-17, max_bond_dim=None)
-            bond_tensor = np.diag(s_vec) @ v_mat
-        self.tensors[current_orthogonality_center] = site_tensor
+            self.tensors[current_orthogonality_center] = site_tensor
 
-        # If normalizing, we just throw away the R
-        if current_orthogonality_center + 1 < self.length:
-            self.tensors[current_orthogonality_center + 1] = oe.contract(
-                "ij, ajc->aic", bond_tensor, self.tensors[current_orthogonality_center + 1]
-            )
+            # If normalizing, we just throw away the R
+            if current_orthogonality_center + 1 < self.length:
+                self.tensors[current_orthogonality_center + 1] = oe.contract(
+                    "ij, ajc->aic", bond_tensor, self.tensors[current_orthogonality_center + 1]
+                )
+        elif decomposition == "SVD":
+            a, b = self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1]
+            a_new, b_new = two_site_svd(a, b, threshold=1e-15, max_bond_dim=None)
+            self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1] = a_new, b_new
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center left.
@@ -368,44 +369,32 @@ class MPS:
             self.flip_network()
 
         self.set_canonical_form(orthogonality_center=self.length - 1, decomposition=decomposition)
-        self.shift_orthogonality_center_right(self.length - 1)
+        self.shift_orthogonality_center_right(self.length - 1, decomposition)
 
         if form == "B":
             self.flip_network()
 
     def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:
-        """Truncates the MPS in place.
+        """In-place MPS truncation via repeated two-site SVDs."""
+        orth_center = self.check_canonical_form()[0]
+        if self.length == 1:
+            return
 
-        Args:
-            state: The MPS.
-            sim_params: The truncation parameters.
-            threshold: The truncation threshold. Default
-            max_bond_dim: The maximum bond dimension allowed. Default None.
+        # ——— left­-to-­center sweep ———
+        for i in range(orth_center):
+            a, b = self.tensors[i], self.tensors[i + 1]
+            a_new, b_new = two_site_svd(a, b, threshold, max_bond_dim)
+            self.tensors[i], self.tensors[i + 1] = a_new, b_new
 
-        """
-        orthogonality_center = self.check_canonical_form()[0]
-        if self.length != 1:
-            for i in range(orthogonality_center):
-                u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
-                self.tensors[i] = u_tensor
+        # flip the network and sweep back
+        self.flip_network()
+        orth_flipped = self.length - 1 - orth_center
+        for i in range(orth_flipped):
+            a, b = self.tensors[i], self.tensors[i + 1]
+            a_new, b_new = two_site_svd(a, b, threshold, max_bond_dim)
+            self.tensors[i], self.tensors[i + 1] = a_new, b_new
 
-                # Pull v into left leg of next tensor.
-                bond = np.diag(s_vec) @ v_mat
-                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i + 1])
-                self.tensors[i + 1] = new_next
-
-            self.flip_network()
-
-            orthogonality_center_flipped = self.length - 1 - orthogonality_center
-            for i in range(orthogonality_center_flipped):
-                u_tensor, s_vec, v_mat = truncated_right_svd(self.tensors[i], threshold, max_bond_dim)
-                self.tensors[i] = u_tensor
-                # Pull v into left leg of next tensor.
-                bond = np.diag(s_vec) @ v_mat
-                new_next = oe.contract("ij, kjl ->kil", bond, self.tensors[i + 1])
-                self.tensors[i + 1] = new_next
-
-            self.flip_network()
+        self.flip_network()
 
     def scalar_product(self, other: MPS, sites: int | list[int] | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
@@ -447,7 +436,7 @@ class MPS:
             a = a_copy.tensors[i]
             b = b_copy.tensors[i]
             # sum over all three legs (p,l,r):
-            val = oe.contract("ijk,ijk->", a, b)
+            val = oe.contract("ijk,ijk", a, b)
             return np.complex128(val)
 
         if len(sites) == 2:
@@ -671,7 +660,7 @@ class MPS:
             assert tensor.shape[1] == right_bond
             right_bond = tensor.shape[2]
 
-    def check_canonical_form(self, epsilon: float = 1e-12) -> list[int]:
+    def check_canonical_form(self) -> list[int]:
         """Checks canonical form of MPS.
 
         Checks what canonical form a Matrix Product State (MPS) is in, if any.
@@ -692,36 +681,36 @@ class MPS:
         for i, tensor in enumerate(self.tensors):
             a[i] = np.conj(tensor)
         b = self.tensors
+        a_truth = [False for _ in range(self.length)]
+        b_truth = [False for _ in range(self.length)]
 
         # Find the first index where the left canonical form is not satisfied.
         # We choose the rightmost index in case even that one fulfills the condition
-        a_index = len(a) - 1
-        for i in range(len(a)):
+        for i in range(self.length):
             mat = oe.contract("ijk, ijl->kl", a[i], b[i])
-            mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
-            if not np.allclose(mat, test_identity):
-                a_index = i
-                break
+            if np.allclose(mat, test_identity):
+                a_truth[i] = True
 
         # Find the last index where the right canonical form is not satisfied.
         # We choose the leftmost index in case even that one fulfills the condition
-        b_index = 0
-        for i in reversed(range(len(a))):
+        for i in reversed(range(self.length)):
             mat = oe.contract("ijk, ilk->jl", b[i], a[i])
-            mat[epsilon > mat] = 0
             test_identity = np.eye(mat.shape[0], dtype=complex)
-            if not np.allclose(mat, test_identity):
-                b_index = i
-                break
+            if np.allclose(mat, test_identity):
+                b_truth[i] = True
 
-        if b_index == 0 and a_index == len(a) - 1:
-            # In this very special case the MPS is in all canonical forms.
-            return list(range(len(a)))
-        if a_index == b_index:
-            # The site at which both forms are satisfied is the orthogonality center.
-            return [a_index]
-        return [-1]
+        mixed_truth = [False for _ in range(self.length)]
+        for i in range(self.length):
+            if all(a_truth[:i]) and all(b_truth[i + 1 :]):
+                mixed_truth[i] = True
+
+        sites = []
+        for i, val in enumerate(mixed_truth):
+            if val:
+                sites.append(i)
+
+        return sites
 
     def to_vec(self) -> NDArray[np.complex128]:
         r"""Converts the MPS to a full state vector representation.

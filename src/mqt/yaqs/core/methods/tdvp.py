@@ -82,31 +82,42 @@ def split_mps_tensor(
     shape_transposed = tensor_transposed.shape  # (d0, D0, d1, D2)
 
     # Merge the first two and last two indices for SVD: matrix of shape (d0*D0) x (d1*D2)
-    matrix_for_svd = tensor_transposed.reshape(
+    theta_mat = tensor_transposed.reshape(
         shape_transposed[0] * shape_transposed[1],
         shape_transposed[2] * shape_transposed[3],
     )
-    u_mat, sigma, v_mat = np.linalg.svd(matrix_for_svd, full_matrices=False)
+    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
 
     # Handled by dynamic TDVP
-    cut_index = len(sigma) if dynamic else min(len(sigma), sim_params.max_bond_dim)
-    left_tensor = u_mat[:, :cut_index]
-    sigma = sigma[:cut_index]
-    right_tensor = v_mat[:cut_index, :]
+    keep = min(len(s_vec), sim_params.max_bond_dim)
+    if not dynamic:
+        discard = 0.0
+        min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
+        for idx, s in enumerate(reversed(s_vec)):
+            discard += s**2
+            if discard >= sim_params.threshold:
+                keep = max(len(s_vec) - idx, min_keep)
+                break
+        if sim_params.max_bond_dim is not None:
+            keep = min(keep, sim_params.max_bond_dim)
+
+    left_tensor = u_mat[:, :keep]
+    s_vec = s_vec[:keep]
+    right_tensor = v_mat[:keep, :]
 
     # Reshape U and Vh back to tensor form:
     # U to shape (d0, D0, num_sv)
-    left_tensor = left_tensor.reshape((shape_transposed[0], shape_transposed[1], cut_index))
+    left_tensor = left_tensor.reshape((shape_transposed[0], shape_transposed[1], keep))
     # Vh reshaped to (num_sv, d1, D2)
-    right_tensor = right_tensor.reshape((cut_index, shape_transposed[2], shape_transposed[3]))
+    right_tensor = right_tensor.reshape((keep, shape_transposed[2], shape_transposed[3]))
 
     # Distribute the singular values according to the chosen option
     if svd_distribution == "left":
-        left_tensor *= sigma
+        left_tensor *= s_vec
     elif svd_distribution == "right":
-        right_tensor *= sigma[:, None, None]
+        right_tensor *= s_vec[:, None, None]
     elif svd_distribution == "sqrt":
-        sqrt_sigma = np.sqrt(sigma)
+        sqrt_sigma = np.sqrt(s_vec)
         left_tensor *= sqrt_sigma
         right_tensor *= sqrt_sigma[:, None, None]
     else:
