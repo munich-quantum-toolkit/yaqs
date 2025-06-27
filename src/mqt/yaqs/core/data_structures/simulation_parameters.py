@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -75,7 +77,7 @@ class Observable:
         AssertionError
             If the provided `name` is not a valid attribute in the GateLibrary.
         """
-        # assert name in ObservablesLibrary
+        assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
         self.gate = copy.deepcopy(gate)
         self.sites = sites
         self.gate.set_sites(self.sites)
