@@ -18,6 +18,8 @@ import scikit_tt.tensor_train as tt
 from scikit_tt.tensor_train import TT
 import scikit_tt.solvers.ode as ode
 import scikit_tt
+import re
+
 
 
 
@@ -36,6 +38,9 @@ class SimulationParameters:
     # For scikit_tt
     N:int = 100
     rank: int= 8
+
+
+    scikit_tt_solver: dict = {"solver": 'tdvp1', "method": 'krylov', "dimension": 5}
 
 
     def __init__(self, L : int, gamma_rel : list | float, gamma_deph : list | float):
@@ -62,6 +67,26 @@ class SimulationParameters:
             self.gamma_deph = [gamma_deph] * self.L
         else:
             self.gamma_deph = list(gamma_deph)
+
+    def set_solver(self, solver: str = 'tdvp1', local_solver: str = 'krylov_5'):
+        if solver not in ('tdvp1', 'tdvp2'):
+            raise ValueError("solver can be only 'tdvp1' or 'tdvp2'")
+        self.scikit_tt_solver["solver"] = solver
+
+        if not re.match(r'^krylov_\d+$', local_solver) and not local_solver == 'exact':
+            raise ValueError("local_solver must match the pattern 'krylov_<number>' or be 'exact'")
+        
+        if local_solver == 'exact':
+            self.scikit_tt_solver["method"] = local_solver
+
+        if local_solver.startswith('krylov_'):
+            self.scikit_tt_solver["method"] = 'krylov'
+            self.scikit_tt_solver["dimension"] = int(local_solver.split('_')[-1])
+            if self.scikit_tt_solver["dimension"] < 1:
+                raise ValueError("local_solver must be a positive integer when using 'krylov_<number>' format")
+
+
+    
 
 
 
@@ -352,6 +377,8 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     rank = sim_params_class.rank
     N = sim_params_class.N
 
+    scikit_tt_solver = sim_params_class.scikit_tt_solver
+
 
     t = np.arange(0, T + dt, dt) 
     timesteps=len(t)-1
@@ -420,7 +447,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
         
         
         for i in range(timesteps):
-            initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1)[-1]
+            initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1, solver=scikit_tt_solver)[-1]
 
         #    for j in range(n_obs):                
         #        exp_vals[j,i+1] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
