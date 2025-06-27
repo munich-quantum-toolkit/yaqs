@@ -1,5 +1,5 @@
-from correlator_error import run_correlator_test
+from bond_dim_test import run_bond_dimension_test
 
 if __name__ == "__main__":
-    # 16 site Two-site correlator error
-    run_correlator_test()
+    # 49-site benchmarks, main result of paper
+    run_bond_dimension_test()
