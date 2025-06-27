@@ -13,7 +13,7 @@ Ready to contribute to the project? This guide will get you started.
    and clone your fork locally.
 
    ```console
-   $ git clone git@github.com:your_name_here/mqt-yaqs.git
+   $ git clone git@github.com:your_name_here/yaqs.git mqt-yaqs
    ```
 
    :::
