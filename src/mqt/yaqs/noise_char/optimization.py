@@ -6,6 +6,8 @@ from scipy.optimize import minimize
 import os
 import copy
 import pickle
+import gc
+from collections import Counter
 
 def trapezoidal(y, x):
 
@@ -66,6 +68,8 @@ class loss_class:
         self.compute_avg()
         self.compute_diff_avg()
 
+        self.log_garbage()
+
         if self.print_to_file:
             self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1])
             self.write_to_file(self.history_avg_file_name, self.f_history[-1], self.x_avg_history[-1])
@@ -100,6 +104,14 @@ class loss_class:
             if reset or not os.path.exists(self.history_avg_file_name):
                 with open(self.history_avg_file_name, "w") as file:
                     file.write("# iter  loss  " + "  ".join([f"x{i+1}_avg" for i in range(self.d)]) + "\n")
+        
+            self.garbage_file_name = self.work_dir + "/garbage.txt"
+            self.garbage_type_file_name = self.work_dir + "/garbage_type.txt"
+
+            if reset or not os.path.exists(self.garbage_file_name):
+                with open(self.garbage_file_name, "w") as file:
+                    file.write("# Time    Collected objects    Unreachable objects \n")
+
 
 
 
@@ -107,6 +119,34 @@ class loss_class:
         if self.print_to_file:
             with open(file_name, "a") as file:
                 file.write(f"{self.n_eval}    {f}  " + "  ".join([f"{x[j]:.6f}" for j in range(self.d)]) + "\n")
+
+    
+    def log_garbage(self):
+        """
+        Log garbage collection information to a file.
+        """
+        objs = gc.get_objects()
+        with open(self.garbage_file_name, "a") as file:
+
+            file.write(f" {self.n_eval}  {len(objs)} \n")
+        
+        with open(self.garbage_type_file_name, "a") as file:
+            # Get all tracked objects
+            
+
+            # Count by type name
+            type_counts = Counter(type(obj).__name__ for obj in objs)
+
+            # Show the top N most common types
+            top_n = 10
+            file.write(f"{self.n_eval}  ")
+            for typename, count in type_counts.most_common(top_n):
+                file.write(f"{typename}:{count}   ")
+            file.write("\n")
+
+
+
+
 
 
 
