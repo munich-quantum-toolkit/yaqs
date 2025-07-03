@@ -107,10 +107,17 @@ class loss_class:
         
             self.garbage_file_name = self.work_dir + "/garbage.txt"
             self.garbage_type_file_name = self.work_dir + "/garbage_type.txt"
+            self.unreachable_file_name = self.work_dir + "/unreachable.txt"
+
 
             if reset or not os.path.exists(self.garbage_file_name):
                 with open(self.garbage_file_name, "w") as file:
                     file.write("# Time    Collected objects    Unreachable objects \n")
+
+            if reset or not os.path.exists(self.unreachable_file_name):
+                with open(self.unreachable_file_name, "w") as file:
+                    file.write("# Step    Unreachable objects    Size \n")
+
 
 
 
@@ -143,6 +150,13 @@ class loss_class:
             for typename, count in type_counts.most_common(top_n):
                 file.write(f"{typename}:{count}   ")
             file.write("\n")
+
+        unreachable_objects = gc.garbage
+
+        total_unreachable_size = sum(obj.__sizeof__() for obj in unreachable_objects)
+
+        with open(self.unreachable_file_name, "a") as file:
+            file.write(f"{self.n_eval}  {len(unreachable_objects)}  {total_unreachable_size} \n")
 
 
 
