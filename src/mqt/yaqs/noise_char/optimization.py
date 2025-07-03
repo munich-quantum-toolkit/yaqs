@@ -118,6 +118,11 @@ class loss_class:
                 with open(self.unreachable_file_name, "w") as file:
                     file.write("# iter    Unreachable objects \n")
 
+            if reset or not os.path.exists(self.unreachable_file_name):
+                with open(self.unreachable_file_name, "w") as file:
+                    file.write("# Step    Unreachable objects    Size \n")
+
+
 
 
 
@@ -154,6 +159,13 @@ class loss_class:
 
         with open(self.unreachable_file_name, "a") as file:
             file.write(f"{self.n_eval}  {unreachable} \n")
+
+        unreachable_objects = gc.garbage
+
+        total_unreachable_size = sum(obj.__sizeof__() for obj in unreachable_objects)
+
+        with open(self.unreachable_file_name, "a") as file:
+            file.write(f"{self.n_eval}  {len(unreachable_objects)}  {total_unreachable_size} \n")
 
 
 
