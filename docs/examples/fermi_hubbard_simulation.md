@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 from mqt.yaqs.core.libraries.circuit_library import create_2d_fermi_hubbard_circuit
+from mqt.yaqs.core.libraries.gate_library import Z
 
 from mqt.yaqs import simulator
 ```
@@ -62,8 +63,7 @@ Define the simulation parameters
 N = 1
 max_bond_dim = 16
 threshold = 1e-6
-window_size = 0
-measurements = [Observable('z', site) for site in range(num_qubits)]
+measurements = [Observable(Z(), [site]) for site in range(num_qubits)]
 ```
 
 Run the simulation for the specified time
@@ -77,7 +77,7 @@ for timestep in range(timesteps):
                                               num_trotter_steps=num_trotter_steps,
                                               dt=dt, timesteps=1)
 
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
+    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, get_state=True)
 
     simulator.run(state, circuit, sim_params, None)
 

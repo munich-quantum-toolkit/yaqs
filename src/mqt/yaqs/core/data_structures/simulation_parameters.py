@@ -233,14 +233,12 @@ class WeakSimParams:
         The maximum bond dimension for the simulation.
     threshold : float
         The threshold value for the simulation.
-    window_size : int | None
-        The window size for the simulation.
     get_state:
         If True, output MPS is returned.
 
     Methods:
     --------
-    __init__(shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None) -> None
+    __init__(shots: int, max_bond_dim: int = 2, threshold: float = 1e-6) -> None
         Initializes the WeakSimParams with the given parameters.
     aggregate_measurements() -> None
         Aggregates the measurements from the simulation.
@@ -333,15 +331,13 @@ class StrongSimParams:
         The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
     threshold : float
         The threshold value for the simulation. Default is 1e-6.
-    window_size : int or None
-        The size of the window for the simulation. Default is None.
     get_state:
         If True, output MPS is returned.
 
     Methods:
     --------
     __init__(self, observables: list[Observable], num_traj: int = 1000, max_bond_dim: int = 2,
-             threshold: float = 1e-6, window_size: int | None = None, get_state: bool = False) -> None:
+             threshold: float = 1e-6, get_state: bool = False) -> None:
         Initializes the StrongSimParams with the given parameters.
     aggregate_trajectories(self) -> None:
         Aggregates the trajectories of the observables by computing the mean across all trajectories.

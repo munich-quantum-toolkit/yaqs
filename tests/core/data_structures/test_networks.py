@@ -797,9 +797,8 @@ def test_convert_to_vector_fidelity() -> None:
     N = 1
     max_bond_dim = 8
     threshold = 0
-    window_size = 0
     measurements = [Observable(Z(), site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
+    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, get_state=True)
     noise_model = None
     simulator.run(state, circ, sim_params, noise_model)
     assert sim_params.output_state is not None
@@ -825,9 +824,8 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     N = 1
     max_bond_dim = 8
     threshold = 0
-    window_size = 0
     measurements = [Observable(Z(), site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
+    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, get_state=True)
     noise_model = None
     simulator.run(state, circ, sim_params, noise_model)
     assert sim_params.output_state is not None
