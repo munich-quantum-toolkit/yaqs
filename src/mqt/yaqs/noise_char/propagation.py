@@ -359,9 +359,7 @@ def evaluate_Ank(A_nk, state):
     return A
 
 
-
-
-
+import multiprocessing
 
 def scikit_tt_traj(sim_params_class: SimulationParameters):
 
@@ -431,35 +429,47 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
     A_kn_numpy=np.zeros([n_jump, n_obs, L, timesteps+1],dtype=complex)
 
-    for k in range(N):
+
+
+    avail_num_cpus = multiprocessing.cpu_count()-1
+
+
+    def process_k(k):
         initial_state = tt.unit([2] * L, [0] * L)
         for i in range(rank - 1):
             initial_state += tt.unit([2] * L, [0] * L)
         initial_state = initial_state.ortho()
         initial_state = (1 / initial_state.norm()) * initial_state
 
+        A_kn_result = np.zeros_like(A_kn_numpy)
+        exp_result = np.zeros_like(exp_vals)
+
         
-        #for j in range(n_obs):
-        #    exp_vals[j,0] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
-        
-        A_kn_numpy[:,:,:,0] += evaluate_Ank(A_nk, initial_state)
+        for j in range(n_obs):
+           exp_result[j,0] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+
+        A_kn_result[:,:,:,0] = evaluate_Ank(A_nk, initial_state)
         
         
         
         for i in range(timesteps):
             initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1, solver=scikit_tt_solver)[-1]
 
-        #    for j in range(n_obs):                
-        #        exp_vals[j,i+1] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+            for j in range(n_obs):                
+                exp_result[j,i+1] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
 
-            A_kn_numpy[:,:,:,i+1] += evaluate_Ank(A_nk, initial_state)
-            
+            A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
 
 
-    exp_vals = (1/N)*exp_vals
+        return exp_result,A_kn_result
     
-    A_kn_numpy = (1/N)*A_kn_numpy
-    
+
+    with multiprocessing.Pool(processes=avail_num_cpus) as pool:
+        results = pool.map(process_k, range(N))
+
+
+    exp_vals = sum([res[0]/N for res in results])
+    A_kn_numpy = sum([res[1]/N for res in results])
 
 
     ## The .real part is added as a workaround 
