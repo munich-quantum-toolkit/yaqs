@@ -473,7 +473,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     
 
     with multiprocessing.Pool(processes=avail_num_cpus) as pool:
-        results = pool.map(process_k, args_list)
+        results = pool.starmap(process_k, args_list)
 
 
     exp_vals = sum([res[0]/N for res in results])
