@@ -361,6 +361,39 @@ def evaluate_Ank(A_nk, state):
 
 import multiprocessing
 
+
+def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver):
+        
+        initial_state = tt.unit([2] * L, [0] * L)
+        for i in range(rank - 1):
+            initial_state += tt.unit([2] * L, [0] * L)
+        initial_state = initial_state.ortho()
+        initial_state = (1 / initial_state.norm()) * initial_state
+
+        A_kn_result = np.zeros([n_jump, n_obs, L, timesteps+1],dtype=complex)
+        exp_result = np.zeros([len(obs_list),timesteps+1])
+
+        
+        for j in range(n_obs):
+           exp_result[j,0] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+
+        A_kn_result[:,:,:,0] = evaluate_Ank(A_nk, initial_state)
+        
+        
+        
+        for i in range(timesteps):
+            initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1, solver=scikit_tt_solver)[-1]
+
+            for j in range(n_obs):                
+                exp_result[j,i+1] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+
+            A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
+
+
+        return exp_result,A_kn_result
+
+
+
 def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
@@ -434,38 +467,13 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     avail_num_cpus = multiprocessing.cpu_count()-1
 
 
-    def process_k(k):
-        initial_state = tt.unit([2] * L, [0] * L)
-        for i in range(rank - 1):
-            initial_state += tt.unit([2] * L, [0] * L)
-        initial_state = initial_state.ortho()
-        initial_state = (1 / initial_state.norm()) * initial_state
-
-        A_kn_result = np.zeros_like(A_kn_numpy)
-        exp_result = np.zeros_like(exp_vals)
-
-        
-        for j in range(n_obs):
-           exp_result[j,0] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
-
-        A_kn_result[:,:,:,0] = evaluate_Ank(A_nk, initial_state)
-        
-        
-        
-        for i in range(timesteps):
-            initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1, solver=scikit_tt_solver)[-1]
-
-            for j in range(n_obs):                
-                exp_result[j,i+1] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
-
-            A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
-
-
-        return exp_result,A_kn_result
+    args_list = [
+    (k,  L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver)
+    for k in range(N) ]
     
 
     with multiprocessing.Pool(processes=avail_num_cpus) as pool:
-        results = pool.map(process_k, range(N))
+        results = pool.map(process_k, args_list)
 
 
     exp_vals = sum([res[0]/N for res in results])
