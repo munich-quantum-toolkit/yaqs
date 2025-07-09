@@ -360,6 +360,7 @@ def evaluate_Ank(A_nk, state):
 
 
 import multiprocessing
+import os
 
 
 def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver):
@@ -464,7 +465,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
 
-    avail_num_cpus = multiprocessing.cpu_count()-1
+    avail_num_cpus = max(1, int(os.environ.get("SLURM_CPUS_ON_NODE", multiprocessing.cpu_count())) - 1)
 
 
     args_list = [
