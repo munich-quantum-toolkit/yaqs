@@ -38,6 +38,8 @@ examples/weak_circuit_simulation
 examples/equivalence_checking
 examples/fermi_hubbard_simulation
 references
+CHANGELOG
+UPGRADING
 ```
 
 ````{only} not latex
