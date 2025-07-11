@@ -37,6 +37,8 @@ class SimulationParameters:
     N:int = 100
     rank: int= 8
 
+    req_cpus: int = 1
+
 
     scikit_tt_solver: dict = {"solver": 'tdvp1', "method": 'krylov', "dimension": 5}
 
@@ -214,9 +216,8 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 
 from memory_profiler import profile
-log = open("mem_report.txt", "w")
-@profile(stream=log)
 
+@profile
 def tjm_traj(sim_params_class: SimulationParameters):
 
     T = sim_params_class.T
@@ -409,6 +410,8 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     rank = sim_params_class.rank
     N = sim_params_class.N
 
+    req_cpus = sim_params_class.req_cpus
+
     scikit_tt_solver = sim_params_class.scikit_tt_solver
 
 
@@ -468,12 +471,20 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     avail_num_cpus = max(1, int(os.environ.get("SLURM_CPUS_ON_NODE", multiprocessing.cpu_count())) - 1)
 
 
+    if req_cpus > avail_num_cpus:
+        ncpus= avail_num_cpus
+        print(f"Requested {req_cpus} CPUs, but only {avail_num_cpus} are available. Using {avail_num_cpus} CPUs.")
+    else:
+        ncpus = req_cpus
+
+
+
     args_list = [
     (k,  L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver)
     for k in range(N) ]
     
 
-    with multiprocessing.Pool(processes=avail_num_cpus) as pool:
+    with multiprocessing.Pool(processes=ncpus) as pool:
         results = pool.starmap(process_k, args_list)
 
 
