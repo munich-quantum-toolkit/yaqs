@@ -395,7 +395,7 @@ def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operat
         return exp_result,A_kn_result
 
 
-
+@profile
 def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
