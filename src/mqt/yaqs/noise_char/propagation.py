@@ -21,8 +21,6 @@ import scikit_tt
 import re
 
 
-
-
 class SimulationParameters:
     T: float = 5
     dt: float = 0.1
@@ -215,7 +213,9 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 
 
-
+from memory_profiler import profile
+log = open("mem_report.txt", "w")
+@profile(stream=log)
 
 def tjm_traj(sim_params_class: SimulationParameters):
 
