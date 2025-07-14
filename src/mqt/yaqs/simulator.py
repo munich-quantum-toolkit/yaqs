@@ -42,6 +42,28 @@ if TYPE_CHECKING:
     from .core.data_structures.noise_model import NoiseModel
 
 
+
+import os
+
+def available_cpus():
+    slurm_cpus = int(os.environ["SLURM_CPUS_ON_NODE"]) if "SLURM_CPUS_ON_NODE" in os.environ else None
+    machine_cpus = multiprocessing.cpu_count()
+
+
+    print(f"SLURM_CPUS_ON_NODE: {slurm_cpus}, Machine CPU count: {machine_cpus}")
+
+    if slurm_cpus is None:
+
+        return machine_cpus
+    elif slurm_cpus > 0:
+
+        return min(slurm_cpus, machine_cpus)
+    else:
+        
+        return 1
+
+
+
 def _run_strong_sim(
     initial_state: MPS,
     operator: QuantumCircuit,
@@ -78,7 +100,7 @@ def _run_strong_sim(
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
     if parallel and sim_params.num_traj > 1:
-        max_workers = max(1, multiprocessing.cpu_count() - 1)
+        max_workers = max(1, available_cpus() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
@@ -135,7 +157,7 @@ def _run_weak_sim(
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
     if parallel and sim_params.num_traj > 1:
-        max_workers = max(1, multiprocessing.cpu_count() - 1)
+        max_workers = max(1, available_cpus() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
@@ -214,7 +236,7 @@ def _run_physics(
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
     if parallel and sim_params.num_traj > 1:
-        max_workers = max(1, multiprocessing.cpu_count() - 1)
+        max_workers = max(1, available_cpus() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
