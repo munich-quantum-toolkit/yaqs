@@ -5,7 +5,7 @@ import scipy as sp
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable,AnalogSimParams
 from mqt.yaqs import simulator
 from dataclasses import dataclass
 
@@ -286,7 +286,7 @@ def tjm_traj(sim_params_class: SimulationParameters):
 
 
 
-    sim_params = PhysicsSimParams(new_obs_list, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
+    sim_params = AnalogSimParams(new_obs_list, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
     simulator.run(state, H_0, sim_params, noise_model)
 
     exp_vals = []
