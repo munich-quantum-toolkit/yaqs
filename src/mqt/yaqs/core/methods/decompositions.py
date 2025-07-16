@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -108,10 +108,9 @@ def truncated_right_svd(
         max_bond_dim: Maximum bond dimension of MPS
 
     Returns:
-        u_tensor: The U tensor with the left virtual leg and the physical
+        a_new: The U tensor with the left virtual leg and the physical
             leg (phys,left,new).
-        s_vec: The S vector with the singular values.
-        v_mat: The V matrix with the right virtual leg (new,right).
+        b_new: The V matrix with the right virtual leg (new,right).
 
     """
     u_tensor, s_vec, v_mat = right_svd(mps_tensor)
@@ -128,3 +127,60 @@ def truncated_right_svd(
     s_vec = s_vec[:cut_index]
     v_mat = v_mat[:cut_index, :]
     return u_tensor, s_vec, v_mat
+
+
+def two_site_svd(
+    a: NDArray[np.complex128],
+    b: NDArray[np.complex128],
+    threshold: float,
+    max_bond_dim: int | None = None,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Two site SVD.
+
+    Performs the truncated singular value decomposition of two MPS tensors.
+
+    Args:
+        a: The left tensor to be decomposed.
+        b: The right tensor to be decomposed.
+        threshold: SVD threshold
+        max_bond_dim: Maximum bond dimension of MPS
+
+    Returns:
+        a_new: The U tensor with the left virtual leg and the physical
+            leg (phys,left,new).
+        b_new: The V matrix with the right virtual leg (new,right).
+
+    """
+    # 1) build the two-site tensor theta_{(phys_i,L),(phys_j,R)}
+    theta = np.tensordot(a, b, axes=(2, 1))
+    phys_i, left = a.shape[0], a.shape[1]
+    phys_j, right = b.shape[0], b.shape[2]
+
+    # 2) reshape to matrix M of shape (L*phys_i) x (phys_j*R)
+    theta_mat = theta.reshape(left * phys_i, phys_j * right)
+
+    # 3) full SVD
+    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+
+    # 4) decide how many singular values to keep:
+    #    sum of squares of discarded values ≤ threshold
+    discard = 0.0
+    keep = len(s_vec)
+    min_keep = 2  # Prevents pathological dimension-1 truncation
+    for idx, s in enumerate(reversed(s_vec)):
+        discard += s**2
+        if discard >= threshold:
+            keep = max(len(s_vec) - idx, min_keep)
+            break
+    if max_bond_dim is not None:
+        keep = min(keep, max_bond_dim)
+
+    # 5) build the truncated A' of shape (phys_i, L, keep)
+    a_new = u_mat[:, :keep].reshape(phys_i, left, keep)
+
+    # 6) absorb S into Vh and reshape to B' of shape (phys_j, keep, R)
+    v_tensor = np.diag(s_vec[:keep]) @ v_mat[:keep, :]  # shape (keep, phys_j*R)
+    v_tensor = v_tensor.reshape(keep, phys_j, right)  # (keep, phys_j, R)
+    b_new = v_tensor.transpose(1, 0, 2)  # (phys_j, keep, R)
+
+    return a_new, b_new

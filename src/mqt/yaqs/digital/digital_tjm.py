@@ -1,11 +1,11 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
 
-"""Circuit Tensor Jump Method.
+"""Digital Tensor Jump Method.
 
 This module provides functions for simulating quantum circuits using the Tensor Jump Method (TJM). It includes
 utilities for converting quantum circuits to DAG representations, processing gate layers, applying gates to
@@ -25,7 +25,7 @@ from ..core.data_structures.networks import MPO, MPS
 from ..core.data_structures.simulation_parameters import WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import local_dynamic_tdvp, two_site_tdvp
+from ..core.methods.tdvp import two_site_tdvp
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -185,30 +185,23 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
         sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior
         of the algorithm.
 
-    .
     """
-    gate = convert_dag_to_tensor_algorithm(node)[0]
-
     # Construct the MPO for the two-qubit gate.
+    gate = convert_dag_to_tensor_algorithm(node)[0]
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
-    if np.abs(first_site - last_site) == 1:
-        # Apply two-site TDVP for nearest-neighbor gates.
-        two_site_tdvp(short_state, short_mpo, sim_params)
-    else:
-        local_dynamic_tdvp(short_state, short_mpo, sim_params)
-
+    two_site_tdvp(short_state, short_mpo, sim_params)
     # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 
 
-def circuit_tjm(
+def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
 ) -> NDArray[np.float64]:
-    """Circuit Tensor Jump Method.
+    """Digital Tensor Jump Method.
 
     Simulates a quantum circuit using the Tensor Jump Method.
 
@@ -230,7 +223,6 @@ def circuit_tjm(
     state = copy.deepcopy(initial_state)
 
     dag = circuit_to_dag(circuit)
-
     while dag.op_nodes():
         single_qubit_nodes, even_nodes, odd_nodes = process_layer(dag)
 
@@ -243,13 +235,13 @@ def circuit_tjm(
             for node in group:
                 apply_two_qubit_gate(state, node, sim_params)
                 # Jump process occurs after each two-qubit gate
-                if noise_model is not None:
+                if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
+                    # Normalizes state
+                    state.normalize(form="B", decomposition="QR")
+                else:
                     apply_dissipation(state, noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, noise_model, dt=1, sim_params=sim_params)
-                else:
-                    # Normalizes state
-                    for i in reversed(range(state.length)):
-                        state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
+
                 dag.remove_op_node(node)
 
     if isinstance(sim_params, WeakSimParams):
@@ -262,19 +254,9 @@ def circuit_tjm(
         return state.measure_shots(shots=1)
     # StrongSimParams
     results = np.zeros((len(sim_params.observables), 1))
-    temp_state = copy.deepcopy(state)
+
+    state.evaluate_observables(sim_params, results)
     if sim_params.get_state:
         sim_params.output_state = state
 
-    last_site = 0
-    for obs_index, observable in enumerate(sim_params.sorted_observables):
-        if isinstance(observable.sites, list):
-            idx = observable.sites[0]
-        elif isinstance(observable.sites, int):
-            idx = observable.sites
-        if idx > last_site:
-            for site in range(last_site, idx):
-                temp_state.shift_orthogonality_center_right(site)
-            last_site = idx
-        results[obs_index, 0] = temp_state.expect(observable)
     return results

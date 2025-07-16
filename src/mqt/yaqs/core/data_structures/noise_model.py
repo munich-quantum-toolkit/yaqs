@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -26,15 +26,32 @@ if TYPE_CHECKING:
 class NoiseModel:
     """A class to represent a noise model with arbitrary-site jump operators.
 
-    Each process is a dict with:
-        - name (str): process name or identifier
-        - sites (list of int): indices of sites this process acts on
-        - strength (float): noise strength
-        - jump_operator (np.ndarray): matrix representing the operator on those sites
+     Attributes.
+    ----------
+    processes : list of str
+        A list of noise processes affecting the system.
+        Each process is a dict with:
+            - name: process name or identifier
+            - sites: indices of sites this process acts on
+            - strength: noise strength
+            - matrix: matrix representing the operator on those sites
+
+    Methods:
+    -------
+    __init__:
+        Initializes the NoiseModel with given processes.
+    get_operator:
+        Static method to retrieve the operator matrix for a given noise process name.
     """
 
     def __init__(self, processes: list[dict[str, Any]] | None = None) -> None:
-        """processes: list of dicts with keys 'name', 'sites', 'strength', and optionally 'jump_operator'."""
+        """Initializes the NoiseModel.
+
+        Parameters
+        ----------
+        processes :
+            A dict of noise processes affecting the quantum system. Default is None.
+        """
         self.processes: list[dict[str, Any]] = []
         if processes is not None:
             for proc in processes:
@@ -42,8 +59,8 @@ class NoiseModel:
                 assert "sites" in proc, "Each process must have a 'sites' key"
                 assert "strength" in proc, "Each process must have a 'strength' key"
                 # Try to look up the operator if not explicitly provided
-                if "jump_operator" not in proc:
-                    proc["jump_operator"] = self.get_operator(proc["name"])
+                if "matrix" not in proc:
+                    proc["matrix"] = self.get_operator(proc["name"])
                 self.processes.append(proc)
 
     @staticmethod
@@ -51,8 +68,7 @@ class NoiseModel:
         """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
 
         Args:
-            name (str): Name of the noise process (e.g., 'xx', 'zz').
-            num_sites (int): Number of sites this operator acts on.
+            name: Name of the noise process (e.g., 'xx', 'zz').
 
         Returns:
             np.ndarray: The matrix representation of the operator.

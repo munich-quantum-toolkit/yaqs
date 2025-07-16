@@ -12,11 +12,11 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Noisy Hamiltonian Simulation
+# Noisy Analog Simulation
 
-This module demonstrates how to run a Hamiltonian simulation using the YAQS simulator visualize the results.
+This module demonstrates how to run a analog simulation using the YAQS simulator visualize the results.
 In this example, an Ising Hamiltonian is initialized as an MPO, and an MPS state is prepared in the $\ket{0}$ state.
-A noise model is applied, and simulation parameters are defined for a physics simulation using the Tensor Jump Method (TJM).
+A noise model is applied, and simulation parameters are defined for an analog simulation using the Tensor Jump Method (TJM).
 After running the simulation, the expectation values of the $X$ observable are extracted and displayed as a heatmap.
 
 Define the system Hamiltonian
@@ -45,13 +45,15 @@ Define the noise model
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 gamma = 0.1
-noise_model = NoiseModel(["relaxation", "dephasing"], [gamma, gamma])
+noise_model = NoiseModel([
+      {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["relaxation", "dephasing"]
+  ])
 ```
 
 Define the simulation parameters
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, AnalogSimParams
 
 from mqt.yaqs.core.libraries.gate_library import X
 
@@ -63,7 +65,7 @@ max_bond_dim = 4
 threshold = 1e-6
 order = 2
 measurements = [Observable(X(), site) for site in range(L)]
-sim_params = PhysicsSimParams(measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
+sim_params = AnalogSimParams(measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps)
 ```
 
 Run the simulation

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -161,6 +161,46 @@ def test_create_ising_circuit_periodic_odd() -> None:
 
     # Without periodic: 4 rzz gates for L=5, periodic adds one more.
     assert rx_count == 5
+    assert rzz_count == 5
+
+
+def test_create_heisenberg_circuit_periodic_even() -> None:
+    """Test that create_heisenberg_circuit returns a valid periodic circuit for an even number of qubits.
+
+    This test creates a Heisenberg circuit with L=4 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
+    It verifies that the resulting circuit is a QuantumCircuit with 4 qubits and that it contains the expected gate
+    types (rz, rzz, rxx, and ryy).
+    """
+    circ = create_heisenberg_circuit(L=4, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1, periodic=True)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == 4
+
+    op_names = [instr.operation.name for instr in circ.data]
+    for gate in ["rz", "rzz", "rxx", "ryy"]:
+        assert gate in op_names, f"Gate {gate} not found in the circuit."
+
+    rzz_count = op_names.count("rzz")
+    assert rzz_count == 4
+
+
+def test_create_heisenberg_circuit_periodic_odd() -> None:
+    """Test that create_heisenberg_circuit returns a valid periodic circuit for an odd number of qubits.
+
+    This test creates a Heisenberg circuit with L=5 qubits using parameters Jx, Jy, Jz, h, dt, and timesteps.
+    It verifies that the resulting circuit is a QuantumCircuit with 5 qubits and that it contains the expected gate
+    types (rz, rzz, rxx, and ryy).
+    """
+    circ = create_heisenberg_circuit(L=5, Jx=1, Jy=1, Jz=1, h=0.5, dt=0.1, timesteps=1, periodic=True)
+
+    assert isinstance(circ, QuantumCircuit)
+    assert circ.num_qubits == 5
+
+    op_names = [instr.operation.name for instr in circ.data]
+    for gate in ["rz", "rzz", "rxx", "ryy"]:
+        assert gate in op_names, f"Gate {gate} not found in the circuit."
+
+    rzz_count = op_names.count("rzz")
     assert rzz_count == 5
 
 

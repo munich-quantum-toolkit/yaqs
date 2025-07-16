@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -31,8 +31,11 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
-from mqt.yaqs.circuits.utils.dag_utils import select_starting_point
-from mqt.yaqs.circuits.utils.mpo_utils import (
+from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.digital.utils.dag_utils import select_starting_point
+from mqt.yaqs.digital.utils.mpo_utils import (
     apply_gate,
     apply_layer,
     apply_long_range_layer,
@@ -40,9 +43,6 @@ from mqt.yaqs.circuits.utils.mpo_utils import (
     decompose_theta,
     update_mpo,
 )
-from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

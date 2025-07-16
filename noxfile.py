@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -46,6 +46,11 @@ def _run_tests(
     run_args: Sequence[str] = (),
 ) -> None:
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
+
+    if "--cov" in session.posargs:
+        # try to use the lighter-weight `sys.monitoring` coverage core
+        env["COVERAGE_CORE"] = "sysmon"
+
     session.run(
         "uv",
         "run",

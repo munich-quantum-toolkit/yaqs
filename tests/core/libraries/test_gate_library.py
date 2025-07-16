@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -81,9 +81,9 @@ def testextend_gate_no_identity() -> None:
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     sites = [0, 1]  # No gap, so no identity tensor should be added.
-    mpo = extend_gate(tensor, sites)
-    assert isinstance(mpo, MPO)
-    assert len(mpo.tensors) == 2
+    mpo_tensors = extend_gate(tensor, sites)
+    assert isinstance(mpo_tensors, list)
+    assert len(mpo_tensors) == 2
 
 
 def testextend_gate_with_identity() -> None:
@@ -95,10 +95,12 @@ def testextend_gate_with_identity() -> None:
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
     sites = [0, 2]  # Gap present, one identity tensor inserted.
-    mpo = extend_gate(tensor, sites)
-    assert isinstance(mpo, MPO)
-    assert len(mpo.tensors) == 3
+    mpo_tensors = extend_gate(tensor, sites)
+    assert isinstance(mpo_tensors, list)
+    assert len(mpo_tensors) == 3
 
+    mpo = MPO()
+    mpo.init_custom(mpo_tensors, transpose=False)
     identity_tensor = mpo.tensors[1]
     prev_bond = mpo.tensors[0].shape[3]
     assert identity_tensor.shape == (2, 2, prev_bond, prev_bond)
@@ -113,8 +115,14 @@ def testextend_gate_reverse_order() -> None:
     and verifies that each tensor matches the transpose of the forward-order result on axes (0,1,3,2).
     """
     tensor = np.eye(4).reshape(2, 2, 2, 2)
-    mpo_forward = extend_gate(tensor, [0, 1])
-    mpo_reverse = extend_gate(tensor, [1, 0])
+    mpo_forward_tensors = extend_gate(tensor, [0, 1])
+    mpo_reverse_tensors = extend_gate(tensor, [1, 0])
+
+    mpo_forward = MPO()
+    mpo_reverse = MPO()
+    mpo_forward.init_custom(mpo_forward_tensors, transpose=False)
+    mpo_reverse.init_custom(mpo_reverse_tensors, transpose=False)
+
     mpo_reverse.tensors.reverse()
     for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors):
         assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))
@@ -234,12 +242,12 @@ def test_gate_phase() -> None:
     is computed correctly. It also confirms that the tensor equals the matrix.
     """
     theta = np.pi / 3
-    gate = GateLibrary.phase([theta])
+    gate = GateLibrary.p([theta])
     gate.set_sites(4)
     assert gate.sites == [4]
     assert_array_equal(gate.tensor, gate.matrix)
 
-    base_gate = BaseGate.phase([theta])
+    base_gate = BaseGate.p([theta])
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 
@@ -293,16 +301,37 @@ def test_gate_rz() -> None:
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 
-def test_gate_u3() -> None:
-    """Test the U3 gate.
+def test_gate_u2() -> None:
+    """Test the U2 gate.
 
     This test sets the parameters (theta, phi, lambda) for the U3 gate and verifies that its tensor,
+    which is equivalent to the 2x2 unitary matrix representation, matches the expected matrix.
+    """
+    phi = np.pi / 4
+    lam = np.pi / 3
+    gate = GateLibrary.u2([phi, lam])
+    gate.set_sites(0)  # For a single-qubit gate, only one site is needed.
+
+    inv_sqrt2 = 1 / np.sqrt(2)
+    expected = inv_sqrt2 * np.array(
+        [[1, -np.exp(1j * lam)], [np.exp(1j * phi), np.exp(1j * (phi + lam))]], dtype=np.complex128
+    )
+    assert_allclose(gate.tensor, expected)
+
+    base_gate = BaseGate.u2([phi, lam])
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_u() -> None:
+    """Test the U gate.
+
+    This test sets the parameters (theta, phi, lambda) for the U gate and verifies that its tensor,
     which is equivalent to the 2x2 unitary matrix representation, matches the expected matrix.
     """
     theta = np.pi / 2
     phi = np.pi / 4
     lam = np.pi / 3
-    gate = GateLibrary.u3([theta, phi, lam])
+    gate = GateLibrary.u([theta, phi, lam])
     gate.set_sites(0)  # For a single-qubit gate, only one site is needed.
 
     expected = np.array([
@@ -312,7 +341,7 @@ def test_gate_u3() -> None:
 
     assert_allclose(gate.tensor, expected)
 
-    base_gate = BaseGate.u3([theta, phi, lam])
+    base_gate = BaseGate.u([theta, phi, lam])
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 
@@ -328,9 +357,9 @@ def test_gate_cx() -> None:
     gate.set_sites(0, 1)
     assert gate.sites == [0, 1]
     assert gate.tensor.shape == (2, 2, 2, 2)
-    assert hasattr(gate, "mpo")
-    assert isinstance(gate.mpo, MPO)
-    assert len(gate.mpo.tensors) >= 2
+    assert hasattr(gate, "mpo_tensors")
+    assert isinstance(gate.mpo_tensors, list)
+    assert len(gate.mpo_tensors) >= 2
 
     base_gate = BaseGate.cx()
     assert_array_equal(gate.matrix, base_gate.matrix)
@@ -435,12 +464,12 @@ def test_gate_cphase_forward() -> None:
     It verifies that the tensor, when reshaped to (2,2,2,2), matches the expected matrix.
     """
     theta = np.pi / 2
-    gate = GateLibrary.cphase([theta])
+    gate = GateLibrary.cp([theta])
     gate.set_sites(0, 1)  # Forward order
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     assert_array_equal(gate.tensor, expected)
 
-    base_gate = BaseGate.cphase([theta])
+    base_gate = BaseGate.cp([theta])
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 
@@ -451,7 +480,7 @@ def test_gate_cphase_reverse() -> None:
     It then verifies that the tensor is correctly transposed (axes (1,0,3,2)) relative to the forward order.
     """
     theta = np.pi / 2
-    gate = GateLibrary.cphase([theta])
+    gate = GateLibrary.cp([theta])
     gate.set_sites(1, 0)  # Reverse order; tensor should be transposed on (1,0,3,2)
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
     expected = np.transpose(expected, (1, 0, 3, 2))
@@ -481,14 +510,11 @@ def test_gate_constructor() -> None:
     # Testing error messages for invalid matrices
     non_square_matrix = np.array([[1, 2, 3], [4, 5, 6]])
 
-    non_power_of_2_matrix = np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
+    np.array([[1, 2, 3], [3, 4, 5], [5, 6, 7]])
 
     # Test for non-square matrix
     with pytest.raises(ValueError, match="Matrix must be square"):
         BaseGate(non_square_matrix)
-    # Test for matrix size not being a power of 2
-    with pytest.raises(ValueError, match="Matrix must have a size that is a power of 2"):
-        BaseGate(non_power_of_2_matrix)
 
 
 def test_set_sites() -> None:

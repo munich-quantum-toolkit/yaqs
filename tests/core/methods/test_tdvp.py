@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -36,7 +36,7 @@ import pytest
 from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
     global_dynamic_tdvp,
@@ -68,7 +68,7 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
     A = rng.random(size=(4, 3, 5))
     # Placeholder
     measurements = [Observable(Z(), site) for site in range(1)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements,
         elapsed_time=0.2,
         dt=0.1,
@@ -78,8 +78,11 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
         threshold=1e-16,
         order=1,
     )
+    physical_dimensions = [A.shape[0] // 2, A.shape[0] // 2]
     for distr in ["left", "right", "sqrt"]:
-        A0, A1 = split_mps_tensor(A, svd_distribution=distr, sim_params=sim_params, dynamic=False)
+        A0, A1 = split_mps_tensor(
+            A, svd_distribution=distr, sim_params=sim_params, physical_dimensions=physical_dimensions, dynamic=False
+        )
         # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5), where r is the effective rank.
         assert A0.ndim == 3
         assert A1.ndim == 3
@@ -102,7 +105,7 @@ def test_split_mps_tensor_invalid_shape() -> None:
     A = rng.random(size=(3, 3, 5))
     # Placeholder
     measurements = [Observable(Z(), site) for site in range(1)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements,
         elapsed_time=0.2,
         dt=0.1,
@@ -112,8 +115,13 @@ def test_split_mps_tensor_invalid_shape() -> None:
         threshold=1e-8,
         order=1,
     )
-    with pytest.raises(ValueError, match=r"The first dimension of the tensor must be divisible by 2."):
-        split_mps_tensor(A, svd_distribution="left", sim_params=sim_params, dynamic=False)
+    physical_dimensions = [3, 3]
+    with pytest.raises(
+        ValueError, match=r"The first dimension of the tensor must be a combination of the given physical dimensions."
+    ):
+        split_mps_tensor(
+            A, svd_distribution="left", sim_params=sim_params, physical_dimensions=physical_dimensions, dynamic=False
+        )
 
 
 def test_merge_mps_tensors() -> None:
@@ -233,7 +241,7 @@ def test_single_site_tdvp() -> None:
     """Test the single_site_TDVP function.
 
     This test initializes an Ising MPO and an MPS of length 5 (initialized to 'zeros'),
-    along with PhysicsSimParams configured for a single trajectory update.
+    along with AnalogSimParams configured for a single trajectory update.
     It runs single_site_TDVP and verifies that the MPS remains of the same length, all tensors are numpy arrays,
     and the MPS is left in a canonical form with the orthogonality center at site 0.
     """
@@ -244,7 +252,7 @@ def test_single_site_tdvp() -> None:
     H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
     measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements,
         elapsed_time=0.2,
         dt=0.1,
@@ -267,7 +275,7 @@ def test_single_site_tdvp() -> None:
 def test_two_site_tdvp() -> None:
     """Test the two_site_TDVP function.
 
-    This test initializes an Ising MPO and an MPS of length 5, sets up PhysicsSimParams,
+    This test initializes an Ising MPO and an MPS of length 5, sets up AnalogSimParams,
     and runs two_site_TDVP. It checks that the MPS retains the correct number of tensors,
     that all tensors remain numpy arrays, and that the MPS is in canonical form with the orthogonality center at site 0.
     """
@@ -279,7 +287,7 @@ def test_two_site_tdvp() -> None:
     state = MPS(L, state="zeros")
     ref_mps = deepcopy(state)
     measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements,
         elapsed_time=0.2,
         dt=0.1,
@@ -332,11 +340,20 @@ def test_dynamic_tdvp_one_site() -> None:
     sample_timesteps = False
     num_traj = 1
     max_bond_dim = 0  # Force condition for single_site_TDVP.
+    min_bond_dim = 2
     threshold = 1e-6
     order = 1
     measurements = [Observable(X(), site) for site in range(L)]
-    sim_params = PhysicsSimParams(
-        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+    sim_params = AnalogSimParams(
+        measurements,
+        elapsed_time,
+        dt,
+        num_traj,
+        max_bond_dim,
+        min_bond_dim,
+        threshold,
+        order,
+        sample_timesteps=sample_timesteps,
     )
 
     with patch("mqt.yaqs.core.methods.tdvp.single_site_tdvp") as mock_single_site:
@@ -369,11 +386,20 @@ def test_dynamic_tdvp_two_site() -> None:
     sample_timesteps = False
     num_traj = 1
     max_bond_dim = 8  # Force condition for two_site_tdvp.
+    min_bond_dim = 2
     threshold = 1e-6
     order = 1
     measurements = [Observable(X(), site) for site in range(L)]
-    sim_params = PhysicsSimParams(
-        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+    sim_params = AnalogSimParams(
+        measurements,
+        elapsed_time,
+        dt,
+        num_traj,
+        max_bond_dim,
+        min_bond_dim,
+        threshold,
+        order,
+        sample_timesteps=sample_timesteps,
     )
 
     with patch("mqt.yaqs.core.methods.tdvp.two_site_tdvp") as mock_two_site:

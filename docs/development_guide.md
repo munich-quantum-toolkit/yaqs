@@ -8,21 +8,21 @@ Ready to contribute to the project? This guide will get you started.
 
    ::::{tab-set}
    :::{tab-item} External Contribution
-   If you do not have write access to the [cda-tum/mqt-yaqs](https://github.com/cda-tum/mqt-yaqs) repository,
+   If you do not have write access to the [munich-quantum-toolkit/yaqs](https://github.com/munich-quantum-toolkit/yaqs) repository,
    fork the repository on GitHub (see <https://docs.github.com/en/get-started/quickstart/fork-a-repo>)
    and clone your fork locally.
 
    ```console
-   $ git clone git@github.com:your_name_here/mqt-yaqs.git
+   $ git clone git@github.com:your_name_here/yaqs.git mqt-yaqs
    ```
 
    :::
    :::{tab-item} Internal Contribution
-   If you do have write access to the [cda-tum/mqt-yaqs](https://github.com/cda-tum/mqt-yaqs) repository,
+   If you do have write access to the [munich-quantum-toolkit/yaqs](https://github.com/munich-quantum-toolkit/yaqs) repository,
    clone the repository locally.
 
    ```console
-   $ git clone git@github.com/cda-tum/mqt-yaqs.git
+   $ git clone git@github.com/munich-quantum-toolkit/yaqs.git mqt-yaqs
    ```
 
    :::

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -69,7 +69,7 @@ def lanczos_iteration(
         w_j = matrix_free_operator(lanczos_mat[j])
         alpha[j] = np.vdot(w_j, lanczos_mat[j]).real
         w_j -= alpha[j] * lanczos_mat[j] + (beta[j - 1] * lanczos_mat[j - 1] if j > 0 else 0)
-        beta[j] = np.linalg.norm(w_j)
+        beta[j] = np.linalg.norm(w_j).real
         if beta[j] < 100 * len(vec) * np.finfo(float).eps:
             # Terminate early if the next vector is (numerically) zero.
             lanczos_iterations = j + 1

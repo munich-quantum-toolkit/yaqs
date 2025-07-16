@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -42,9 +42,9 @@ except ModuleNotFoundError:
 release = version.split("+")[0]
 
 project = "MQT YAQS"
-author = "Chair for Design Automation, Technical University of Munich"
+author = "Chair for Design Automation, TUM"
 language = "en"
-project_copyright = "2025, Chair for Design Automation, Technical University of Munich"
+project_copyright = "2023 - 2025, Chair for Design Automation, TUM"
 
 master_doc = "index"
 
@@ -165,7 +165,7 @@ html_static_path = ["_static"]
 html_theme_options = {
     "light_logo": "mqt_dark.png",
     "dark_logo": "mqt_light.png",
-    "source_repository": "https://github.com/cda-tum/mqt-yaqs/",
+    "source_repository": "https://github.com/munich-quantum-toolkit/yaqs/",
     "source_branch": "main",
     "source_directory": "docs/",
     "navigation_with_keys": True,

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -20,11 +20,11 @@ import numpy as np
 
 
 class Excitation:
-    """Class representing the excitation noise operator for a two-level system.
+    """Class representing excitation noise.
 
     Attributes:
-        d (int): The dimension of the Hilbert space. Defaults to 2.
-        matrix (np.ndarray): A 2x2 matrix representing the excitation operator.
+        d: The dimension of the Hilbert space. Defaults to 2.
+        matrix: A 2x2 matrix representing the excitation operator.
             The matrix is constructed such that matrix[row, col] = 1 if row - col == 1, and 0 otherwise.
     """
 
@@ -37,7 +37,7 @@ class Excitation:
 
 
 class Relaxation:
-    """Class representing the relaxation noise operator for a two-level system.
+    """Class representing relaxation noise.
 
     Attributes:
         d (int): The dimension of the Hilbert space. Defaults to 2.
@@ -54,7 +54,7 @@ class Relaxation:
 
 
 class Dephasing:
-    """Class representing the dephasing noise operator for a two-level system.
+    """Class representing dephasing noise.
 
     Attributes:
         matrix (np.ndarray): A 2x2 matrix representing the dephasing operator,
@@ -64,8 +64,8 @@ class Dephasing:
     matrix = np.array([[1, 0], [0, -1]])
 
 
-class X:
-    """Class representing the Pauli-X (bit-flip) noise operator for a two-level system.
+class BitFlip:
+    """Class representing bitflip (Pauli-X) noise.
 
     Attributes:
         matrix (np.ndarray): A 2x2 matrix representing the Pauli-X operator,
@@ -75,8 +75,8 @@ class X:
     matrix = np.array([[0, 1], [1, 0]])
 
 
-class Y:
-    """Class representing the Pauli-Y noise operator for a two-level system.
+class BitPhaseFlip:
+    """Class representing bit-phase flip (Pauli-Y) noise.
 
     Attributes:
         matrix (np.ndarray): A 2x2 matrix representing the Pauli-Y operator,
@@ -86,8 +86,8 @@ class Y:
     matrix = np.array([[0, -1j], [1j, 0]])
 
 
-class DoubleExcitation:
-    """Class representing the double excitation noise operator acting on two neighboring sites.
+class TwoSiteExcitation:
+    """Class representing two-site excitation noise.
 
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Excitation ⊗ Excitation.
@@ -96,8 +96,8 @@ class DoubleExcitation:
     matrix = np.kron(Excitation.matrix, Excitation.matrix)
 
 
-class DoubleRelaxation:
-    """Class representing the double relaxation noise operator acting on two neighboring sites.
+class TwoSiteRelaxation:
+    """Class representing two-site relaxation noise.
 
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Relaxation ⊗ Relaxation.
@@ -106,8 +106,8 @@ class DoubleRelaxation:
     matrix = np.kron(Relaxation.matrix, Relaxation.matrix)
 
 
-class DoubleDephasing:
-    """Class representing the double dephasing noise operator acting on two neighboring sites.
+class CrossTalk:
+    """Class representing cross talk between neighboring sites along the z-axis.
 
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Dephasing ⊗ Dephasing.
@@ -116,49 +116,49 @@ class DoubleDephasing:
     matrix = np.kron(Dephasing.matrix, Dephasing.matrix)
 
 
-class XX:
-    """Class representing the two-qubit Pauli-XX noise operator.
+class CrossTalkX:
+    """Class representing cross talk between neighboring sites along the x-axis.
 
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product X ⊗ X.
     """
 
-    matrix = np.kron(X.matrix, X.matrix)
+    matrix = np.kron(BitFlip.matrix, BitFlip.matrix)
 
 
-class YY:
-    """Class representing the two-qubit Pauli-YY noise operator.
+class CrossTalkY:
+    """Class representing cross talk between neighboring sites along the y-axis.
 
     Attributes:
         matrix (np.ndarray): A 4x4 matrix representing the tensor product Y ⊗ Y.
     """
 
-    matrix = np.kron(Y.matrix, Y.matrix)
+    matrix = np.kron(BitPhaseFlip.matrix, BitPhaseFlip.matrix)
 
 
 class NoiseLibrary:
-    """A library of noise operator classes.
+    """A library of noise processes.
 
     Attributes:
-        excitation: Class representing the excitation noise operator.
-        relaxation: Class representing the relaxation noise operator.
-        dephasing: Class representing the dephasing noise operator.
-        x: Class representing the Pauli-X noise operator.
-        y: Class representing the Pauli-Y noise operator.
-        xx: Class representing the two-qubit Pauli-XX noise operator.
-        yy: Class representing the two-qubit Pauli-YY noise operator.
-        double_excitation: Class representing the double excitation noise operator.
-        double_relaxation: Class representing the double relaxation noise operator.
-        double_dephasing: Class representing the double dephasing noise operator.
+        excitation: Excitation noise (0 --> 1).
+        relaxation: Relaxation noise (1 --> 0).
+        dephasing: Dephasing noise.
+        bitflip: Bitflip (Pauli-X) noise (0 --> 1, 1 --> 0).
+        bitphaseflip: Bit-phase flip (Pauli-Y) noise.
+        excitation_two: Two-site excitation noise (00 --> 11).
+        relaxation_two: Two-site relaxation noise (11 --> 00).
+        crosstalk: Cross talk between neighboring sites along the z-axis.
+        crosstalk_x: Cross talk between neighboring sites along the x-axis.
+        crosstalk_y: Cross talk between neighboring sites along the y-axis.
     """
 
     excitation = Excitation
     relaxation = Relaxation
     dephasing = Dephasing
-    x = X
-    y = Y
-    xx = XX
-    yy = YY
-    double_excitation = DoubleExcitation
-    double_relaxation = DoubleRelaxation
-    double_dephasing = DoubleDephasing
+    bitflip = BitFlip
+    bitphaseflip = BitPhaseFlip
+    excitation_two = TwoSiteExcitation
+    relaxation_two = TwoSiteRelaxation
+    crosstalk = CrossTalk
+    crosstalk_x = CrossTalkX
+    crosstalk_y = CrossTalkY

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -21,6 +21,8 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -56,16 +58,16 @@ class Observable:
     -------
     __init__(name: str, site: int) -> None
         Initializes the Observable with a name and site, and checks if the name is valid in the GateLibrary.
-    initialize(sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None
+    initialize(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None
         Initializes the results and trajectories arrays based on the type of simulation parameters provided.
     """
 
-    def __init__(self, gate: BaseGate, sites: int | list[int]) -> None:
+    def __init__(self, gate: BaseGate | str, sites: int | list[int] | None = None) -> None:
         """Initializes an Observable instance.
 
         Parameters
         ----------
-        gate : BaseGate
+        gate :
             The gate that will act as the observable.
         sites :
             The qubit or site indices on which this observable is measured.
@@ -75,22 +77,26 @@ class Observable:
         AssertionError
             If the provided `name` is not a valid attribute in the GateLibrary.
         """
-        # assert name in ObservablesLibrary
+        if isinstance(gate, str):
+            gate = GateLibrary.pvm(gate)
+        assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
         self.gate = copy.deepcopy(gate)
-        self.sites = sites
-        self.gate.set_sites(self.sites)
+        if gate.name != "pvm":
+            assert sites is not None
+            self.sites = sites
+            self.gate.set_sites(self.sites)
         self.results: NDArray[np.float64] | None = None
         self.trajectories: NDArray[np.float64] | None = None
 
-    def initialize(self, sim_params: PhysicsSimParams | StrongSimParams | WeakSimParams) -> None:
+    def initialize(self, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
         """Observable initialization before simulation.
 
         Initialize the observables based on the type of simulation.
         Parameters:
-        sim_params (PhysicsSimParams | StrongSimParams | WeakSimParams): The simulation parameters object
-        which can be of type PhysicsSimParams, StrongSimParams, or WeakSimParams.
+        sim_params (AnalogSimParams | StrongSimParams | WeakSimParams): The simulation parameters object
+        which can be of type AnalogSimParams, StrongSimParams, or WeakSimParams.
         """
-        if isinstance(sim_params, PhysicsSimParams):
+        if isinstance(sim_params, AnalogSimParams):
             if sim_params.sample_timesteps:
                 self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=np.float64)
                 self.times = sim_params.times
@@ -106,34 +112,34 @@ class Observable:
             self.results = np.empty(1, dtype=np.float64)
 
 
-class PhysicsSimParams:
-    """Hamiltonian Simulation Parameters.
+class AnalogSimParams:
+    """Analog Simulation Parameters.
 
-    A class to represent the parameters for a physics simulation.
+    A class to represent the parameters for an analog simulation.
 
     Attributes:
     -----------
-    observables : list[Observable]
+    observables :
         A list of observables to be tracked during the simulation.
-    sorted_observables : list[Observable]
+    sorted_observables :
         A list of observables sorted by site and name.
-    elapsed_time : float
+    elapsed_time :
         The total time for the simulation.
-    dt : float, optional
+    dt :
         The time step for the simulation (default is 0.1).
-    times : numpy.ndarray
+    times :
         An array of time points from 0 to T with step dt.
-    sample_timesteps : bool, optional
+    sample_timesteps :
         A flag to indicate whether to sample timesteps (default is True).
-    num_traj : int, optional
+    num_traj :
         The number of samples to be taken (default is 1000).
-    max_bond_dim : int, optional
+    max_bond_dim :
         The maximum bond dimension (default is 2).
-    threshold : float, optional
+    threshold :
         The threshold value for the simulation (default is 1e-6).
-    order : int, optional
+    order :
         The order of the simulation (default is 1).
-    get_state: bool, optional
+    get_state:
         If True, output MPS is returned.
 
     Methods:
@@ -150,8 +156,9 @@ class PhysicsSimParams:
         elapsed_time: float,
         dt: float = 0.1,
         num_traj: int = 1000,
-        max_bond_dim: int = 2,
-        threshold: float = 1e-6,
+        max_bond_dim: int = 4096,
+        min_bond_dim: int = 2,
+        threshold: float = 1e-9,
         order: int = 1,
         *,
         sample_timesteps: bool = True,
@@ -164,37 +171,47 @@ class PhysicsSimParams:
 
         Parameters
         ----------
-        observables : list[Observable]
+        observables :
             List of observables to measure during the simulation.
-        elapsed_time : float
+        elapsed_time :
             Total simulation time.
-        dt : float, optional
+        dt :
             Time step interval, by default 0.1.
-        num_traj : int, optional
+        num_traj :
             Number of simulation samples, by default 1000.
-        max_bond_dim : int, optional
+        max_bond_dim :
             Maximum bond dimension allowed, by default 2.
-        threshold : float, optional
+        min_bond_dim:
+            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
+        threshold :
             Threshold for simulation accuracy, by default 1e-6.
-        order : int, optional
+        order :
             Order of approximation or numerical scheme, by default 1.
-        sample_timesteps : bool, optional
+        sample_timesteps :
             Flag indicating whether to sample at intermediate time steps, by default True.
-        tensorevol_mode : EvolutionMode, optional
+        tensorevol_mode :
             Mode of tensor evolution in the simulation, by default EvolutionMode.TDVP.
-        get_state : bool, optional
+        get_state :
             If True, output MPS is returned.
         """
-        self.observables = observables
-        self.sorted_observables = sorted(
-            observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        assert all(n.gate.name == "pvm" for n in observables) or all(n.gate.name != "pvm" for n in observables), (
+            "We currently have not implemented mixed observable and projective-measurement simulation."
         )
+        self.observables = observables
+        if self.observables and self.observables[0].gate.name != "pvm":
+            self.sorted_observables = sorted(
+                observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+            )
+        else:
+            self.sorted_observables = observables
+
         self.elapsed_time = elapsed_time
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
+        self.min_bond_dim = min_bond_dim
         self.threshold = threshold
         self.order = order
         self.evolution_mode = evolution_mode
@@ -248,9 +265,9 @@ class WeakSimParams:
     def __init__(
         self,
         shots: int,
-        max_bond_dim: int = 2,
-        threshold: float = 1e-6,
-        window_size: int | None = 0,
+        max_bond_dim: int = 4096,
+        min_bond_dim: int = 2,
+        threshold: float = 1e-9,
         *,
         get_state: bool = False,
     ) -> None:
@@ -264,18 +281,18 @@ class WeakSimParams:
             Number of measurement shots to simulate.
         max_bond_dim : int, optional
             Maximum bond dimension for simulation, by default 2.
+        min_bond_dim:
+            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
         threshold : float, optional
             Accuracy threshold for truncating tensors, by default 1e-6.
-        window_size : int or None, optional
-            Window size for the simulation algorithm, by default None.
         get_state:
             If True, output MPS is returned.
         """
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
+        self.min_bond_dim = min_bond_dim
         self.threshold = threshold
-        self.window_size = window_size
         self.get_state = get_state
 
     def aggregate_measurements(self) -> None:
@@ -323,6 +340,8 @@ class StrongSimParams:
         The number of trajectories to simulate. Default is 1000.
     max_bond_dim : int
         The maximum bond dimension for the simulation. Default is 2.
+    min_bond_dim:
+        The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
     threshold : float
         The threshold value for the simulation. Default is 1e-6.
     window_size : int or None
@@ -347,9 +366,9 @@ class StrongSimParams:
         self,
         observables: list[Observable],
         num_traj: int = 1000,
-        max_bond_dim: int = 2,
-        threshold: float = 1e-6,
-        window_size: int | None = 0,
+        max_bond_dim: int = 4096,
+        min_bond_dim: int = 2,
+        threshold: float = 1e-9,
         *,
         get_state: bool = False,
     ) -> None:
@@ -367,19 +386,23 @@ class StrongSimParams:
             Maximum bond dimension allowed in simulation, by default 2.
         threshold : float, optional
             Threshold for simulation accuracy, by default 1e-6.
-        window_size : int or None, optional
-            Window size for simulation, by default None.
         get_state:
             If True, output MPS is returned.
         """
-        self.observables = observables
-        self.sorted_observables = sorted(
-            observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        assert all(n.gate.name == "pvm" for n in observables) or all(n.gate.name != "pvm" for n in observables), (
+            "We currently have not implemented mixed observable and projective-measurement simulation."
         )
+        self.observables = observables
+        if self.observables and self.observables[0].gate.name != "pvm":
+            self.sorted_observables = sorted(
+                observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+            )
+        else:
+            self.sorted_observables = observables
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
+        self.min_bond_dim = min_bond_dim
         self.threshold = threshold
-        self.window_size = window_size
         self.get_state = get_state
 
     def aggregate_trajectories(self) -> None:
