@@ -19,45 +19,56 @@ jobs:
   python-tests:
     name: 🐍 Test
     needs: change-detection
-    if: fromJSON(needs.change-detection.outputs.run-python-tests)
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-ci.yml@v1.14
+    if: fromJSON(needs.change-detection.outputs.run-python-tests) && !contains(github.event.pull_request.labels.*.name, 'extensive-python-ci')
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on:
+          [ubuntu-24.04, ubuntu-24.04-arm, macos-13, macos-14, windows-2022]
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@v1.14
+    with:
+      runs-on: ${{ matrix.runs-on }}
+      setup-z3: true
     permissions:
       contents: read
       id-token: write
-    with:
-      # Runs to enable
-      enable-ubuntu2404: true
-      enable-ubuntu2404-arm: true
-      enable-macos13: true
-      enable-macos14: true
-      enable-windows2022: true
-      # Runs to disable
-      enable-ubuntu2204: false
-      enable-ubuntu2204-arm: false
-      enable-macos15: false
-      enable-windows2025: false
 
-  # run extensive Python tests whenever this is on a PR and the PR has the `extensive-python-ci` label
+  # run extensive Python tests on PRs labeled with the `extensive-python-ci` label
   python-tests-extensive:
     name: 🐍 Test (Extensive)
     needs: change-detection
     if: fromJSON(needs.change-detection.outputs.run-python-tests) && github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'extensive-python-ci')
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-ci.yml@v1.14
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on:
+          [
+            ubuntu-22.04,
+            ubuntu-24.04,
+            ubuntu-22.04-arm,
+            ubuntu-24.04-arm,
+            macos-13,
+            macos-14,
+            macos-15,
+            windows-2022,
+            windows-2025,
+          ]
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@v1.14
+    with:
+      runs-on: ${{ matrix.runs-on }}
+      setup-z3: true
     permissions:
       contents: read
       id-token: write
-    with:
-      # Runs to enable
-      enable-ubuntu2204: true
-      enable-ubuntu2204-arm: true
-      enable-macos15: true
-      enable-windows2025: true
-      # Runs to disable (these are already enabled in the non-extensive run)
-      enable-ubuntu2404: false
-      enable-ubuntu2404-arm: false
-      enable-macos13: false
-      enable-macos14: false
-      enable-windows2022: false
+
+  python-coverage:
+    name: 🐍 Coverage
+    needs: [change-detection, python-tests, python-tests-extensive]
+    if: fromJSON(needs.change-detection.outputs.run-python-tests) && ${{ always() && !failure() && !cancelled() }}
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-coverage.yml@v1.14
+    permissions:
+      contents: read
+      id-token: write
 
   python-linter:
     name: 🐍 Lint
@@ -71,13 +82,17 @@ jobs:
     if: fromJSON(needs.change-detection.outputs.run-code-ql)
     uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-code-ql-python.yml@v1.14
 
-  cd:
+  build-sdist:
     name: 🚀 CD
     needs: change-detection
     if: fromJSON(needs.change-detection.outputs.run-cd)
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging.yml@v1.14
-    with:
-      pure-python: true
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-sdist.yml@v1.14
+
+  build-wheel:
+    name: 🚀 CD
+    needs: change-detection
+    if: fromJSON(needs.change-detection.outputs.run-cd)
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-wheel-build.yml@v1.14
 
   required-checks-pass: # This job does nothing and is only used for branch protection
     name: 🚦 Check
@@ -86,9 +101,11 @@ jobs:
       - change-detection
       - python-tests
       - python-tests-extensive
+      - python-coverage
       - python-linter
       - code-ql
-      - cd
+      - build-sdist
+      - build-wheel
     runs-on: ubuntu-latest
     steps:
       - name: Decide whether the needed jobs succeeded or failed
@@ -96,12 +113,16 @@ jobs:
         with:
           allowed-skips: >-
             ${{
-              fromJSON(needs.change-detection.outputs.run-python-tests)
+              fromJSON(needs.change-detection.outputs.run-python-tests) && !contains(github.event.pull_request.labels.*.name, 'extensive-python-ci')
               && '' || 'python-tests,'
             }}
             ${{
               fromJSON(needs.change-detection.outputs.run-python-tests) && github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'extensive-python-ci')
               && '' || 'python-tests-extensive,'
+            }}
+            ${{
+              fromJSON(needs.change-detection.outputs.run-python-tests)
+              && '' || 'python-coverage,'
             }}
             ${{
               fromJSON(needs.change-detection.outputs.run-python-tests)
@@ -113,6 +134,6 @@ jobs:
             }}
             ${{
               fromJSON(needs.change-detection.outputs.run-cd)
-              && '' || 'cd,'
+              && '' || 'build-sdist,build-wheel,'
             }}
           jobs: ${{ toJSON(needs) }}
