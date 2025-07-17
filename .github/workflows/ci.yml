@@ -29,9 +29,6 @@ jobs:
     with:
       runs-on: ${{ matrix.runs-on }}
       setup-z3: true
-    permissions:
-      contents: read
-      id-token: write
 
   # run extensive Python tests on PRs labeled with the `extensive-python-ci` label
   python-tests-extensive:
@@ -57,9 +54,6 @@ jobs:
     with:
       runs-on: ${{ matrix.runs-on }}
       setup-z3: true
-    permissions:
-      contents: read
-      id-token: write
 
   python-coverage:
     name: 🐍 Coverage
