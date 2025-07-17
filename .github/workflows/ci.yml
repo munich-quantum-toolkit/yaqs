@@ -28,7 +28,7 @@ jobs:
     uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@v1.14
     with:
       runs-on: ${{ matrix.runs-on }}
-  
+
   python-coverage:
     name: 🐍 Coverage
     needs: [change-detection, python-tests]
@@ -45,13 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on:
-          [
-            ubuntu-22.04,
-            ubuntu-22.04-arm,
-            macos-15,
-            windows-2025,
-          ]
+        runs-on: [ubuntu-22.04, ubuntu-22.04-arm, macos-15, windows-2025]
     uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@v1.14
     with:
       runs-on: ${{ matrix.runs-on }}
