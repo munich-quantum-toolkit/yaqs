@@ -377,7 +377,7 @@ def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operat
 
     
     for j in range(n_obs):
-        exp_result[j,0] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+        exp_result[j,0] = np.real(initial_state.transpose(conjugate=True)@obs_list[j]@initial_state)
 
     A_kn_result[:,:,:,0] = evaluate_Ank(A_nk, initial_state)
     
@@ -387,7 +387,7 @@ def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operat
         initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1, solver=scikit_tt_solver)[-1]
 
         for j in range(n_obs):                
-            exp_result[j,i+1] = initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
+            exp_result[j,i+1] = np.real(initial_state.transpose(conjugate=True)@obs_list[j]@initial_state)
 
         A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
 
