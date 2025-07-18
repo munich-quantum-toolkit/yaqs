@@ -392,7 +392,7 @@ def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operat
         A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
 
 
-    print(f"scikit_tt_traj:: Finished trajectory {k}!!!!")
+    print(f"scikit_tt_traj:: Finished trajectory {k}!!!! \n", flush=True)
 
 
     return exp_result,A_kn_result
