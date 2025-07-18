@@ -362,10 +362,12 @@ def evaluate_Ank(A_nk, state):
 
 import multiprocessing
 import os
+import time
 
 
 def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver):
-        
+    start_time = time.time()
+
     initial_state = tt.unit([2] * L, [0] * L)
     for i in range(rank - 1):
         initial_state += tt.unit([2] * L, [0] * L)
@@ -391,8 +393,11 @@ def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operat
 
         A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
 
+    
+    end_time = time.time()
 
-    print(f"scikit_tt_traj:: Finished trajectory {k}!!!! \n", flush=True)
+
+    print(f"scikit_tt_traj:: Finished trajectory {k} in {end_time - start_time} seconds !!!! \n", flush=True)
 
 
     return exp_result,A_kn_result
