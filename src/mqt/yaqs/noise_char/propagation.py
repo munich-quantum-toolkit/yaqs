@@ -475,10 +475,10 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
     if req_cpus > avail_num_cpus:
-        ncpus= max(1, avail_num_cpus - 1)
+        nthreads= max(1, avail_num_cpus - 1)
         print(f"Requested {req_cpus} CPUs, but only {avail_num_cpus} are available. Using {avail_num_cpus} CPUs.")
     else:
-        ncpus = max(1, req_cpus - 1)
+        nthreads = max(1, req_cpus - 1)
 
 
 
@@ -487,7 +487,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     for k in range(N) ]
     
 
-    with multiprocessing.Pool(processes=ncpus) as pool:
+    with multiprocessing.Pool(processes=nthreads) as pool:
         results = pool.starmap(process_k, args_list)
 
 
