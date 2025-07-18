@@ -468,14 +468,14 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
 
-    avail_num_cpus = max(1, int(os.environ.get("SLURM_CPUS_ON_NODE", multiprocessing.cpu_count())) - 1)
+    avail_num_cpus = int(os.environ.get("SLURM_CPUS_ON_NODE", multiprocessing.cpu_count())) 
 
 
     if req_cpus > avail_num_cpus:
-        ncpus= avail_num_cpus
+        ncpus= max(1, avail_num_cpus - 1)
         print(f"Requested {req_cpus} CPUs, but only {avail_num_cpus} are available. Using {avail_num_cpus} CPUs.")
     else:
-        ncpus = req_cpus
+        ncpus = max(1, req_cpus - 1)
 
 
 
