@@ -10,11 +10,13 @@ permissions:
   id-token: write
 
 jobs:
-  python-packaging:
+  build-sdist:
     name: 🐍 Packaging
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging.yml@v1.12
-    with:
-      pure-python: true
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-sdist.yml@v1.14
+
+  build-wheel:
+    name: 🐍 Packaging
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-wheel-build.yml@v1.14
 
   # Downloads the previously generated artifacts and deploys to PyPI on published releases.
   deploy:
@@ -24,7 +26,7 @@ jobs:
     environment:
       name: pypi
       url: https://pypi.org/p/mqt.yaqs
-    needs: [python-packaging]
+    needs: [build-sdist, build-wheel]
     steps:
       - uses: actions/download-artifact@v4
         with:

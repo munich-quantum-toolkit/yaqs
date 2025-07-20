@@ -131,7 +131,7 @@ class BaseGate:
             Sets the sites on which the gate acts.
     """
 
-    name: str
+    name: str = "custom"
     matrix: NDArray[np.complex128]
     interaction: int
     tensor: NDArray[np.complex128]
@@ -1504,3 +1504,4 @@ class GateLibrary:
     p0 = P0
     p1 = P1
     pvm = PVM
+    custom = BaseGate
