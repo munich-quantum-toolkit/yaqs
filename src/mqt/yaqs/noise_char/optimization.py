@@ -201,7 +201,7 @@ class loss_class_2d(loss_class):
         grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,2,3))
 
 
-        self.post_process(self, x.copy(),f)
+        self.post_process(x.copy(),f)
 
         return f, grad
 
