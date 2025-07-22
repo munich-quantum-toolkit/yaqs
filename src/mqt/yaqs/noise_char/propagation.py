@@ -365,7 +365,7 @@ import os
 import time
 
 
-def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver):
+def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver):
     start_time = time.time()
 
     initial_state = tt.unit([2] * L, [0] * L)
@@ -374,8 +374,13 @@ def process_k(k, L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operat
     initial_state = initial_state.ortho()
     initial_state = (1 / initial_state.norm()) * initial_state
 
-    A_kn_result = np.zeros([n_jump, n_obs, L, timesteps+1],dtype=complex)
-    exp_result = np.zeros([len(obs_list),timesteps+1])
+
+    n_obs=len(obs_list)
+
+    n_t=timesteps+1
+
+    A_kn_result = np.zeros([n_jump_site, n_obs_site, L, n_t],dtype=complex)
+    exp_result = np.zeros([len(obs_list),n_t])
 
     
     for j in range(n_obs):
@@ -424,7 +429,8 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
     t = np.arange(0, T + dt, dt) 
-    timesteps=len(t)-1
+    n_t = len(t)
+    timesteps=n_t-1
 
 
     # Parameters
@@ -462,17 +468,19 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
     
 
-    n_obs= len(O_list)
-    n_jump= len(L_list)
+    n_obs_site= len(O_list) ## Number of observables per site. Should be 3
+    n_jump_site= len(L_list)  ## Number of jump operators per site. Should be 2
 
 
+    n_obs=len(obs_list)   ## Total number of observable. Should be n_obs_site*L 
 
-    exp_vals = np.zeros([len(obs_list),timesteps+1])
+
+    exp_vals = np.zeros([n_obs,n_t])
 
     A_nk=construct_Ank(O_list, L_list)
 
 
-    A_kn_numpy=np.zeros([n_jump, n_obs, L, timesteps+1],dtype=complex)
+    A_kn_numpy=np.zeros([n_jump_site, n_obs_site, L, n_t],dtype=complex)
 
 
 
@@ -488,7 +496,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
     args_list = [
-    (k,  L, rank, n_obs, n_jump, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver)
+    (k,  L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver)
     for k in range(N) ]
     
 
@@ -501,8 +509,11 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
     ## The .real part is added as a workaround 
-    d_On_d_gk = [ [[trapezoidal(A_kn_numpy[i,j,k].real,t) for k in range(L)] for j in range(n_obs)] for i in range(n_jump)  ]
+    d_On_d_gk = [ [[trapezoidal(A_kn_numpy[i,j,k].real,t) for k in range(L)] for j in range(n_obs_site)] for i in range(n_jump_site)  ]
 
+
+
+    exp_vals = np.array(exp_vals).reshape(n_obs_site, L, n_t)
 
 
 
