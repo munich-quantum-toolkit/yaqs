@@ -8,26 +8,21 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 def plot_bond_heatmaps(
     methods=("TEBD", "TDVP"),
     file_specs=(
-        ("heisenberg_bonds.pickle",       "Heisenberg\nmodel"),
-        ("periodic_heisenberg_bonds.pickle","Periodic Heisenberg\nmodel"),
-        ("2d_ising_bond.pickle",           "2D Ising\nmodel"),
-        ("qaoa_twolocal.pickle",           "QAOA\n($R_x + R_{zz}$)"),
-        ("u3_cx_twolocal.pickle",          "HEA\n($U3 + CX$)")
+        ("qaoa_twolocal.pickle", "Random Rotations"),
+        ("u3_cx_twolocal.pickle", "Hardware Efficient Ansatz"),
+        # ("full_twolocal.pickle", "Full")
     ),
     cmap="viridis",
     log_scale=False,
-    figsize=(7.2, 7.6)
+    figsize=(7.2, 6.5)
 ) -> None:
     # styling
     plt.rcParams.update({
-        "text.usetex": True,
-        "font.family": "serif",
-        "font.serif": ["Computer Modern Roman"],
-        "mathtext.fontset": "cm",
-        "text.latex.preamble": r"\usepackage{amsmath}\usepackage{newtxtext}\usepackage{newtxmath}",
+        'font.family': 'sans-serif',
+        'font.sans-serif': ['Arial'],
         'font.size': 8,
         'axes.titlesize': 9,
-        'axes.labelsize': 10,
+        'axes.labelsize': 8,
         'xtick.labelsize': 7,
         'ytick.labelsize': 7,
         'legend.fontsize': 7,
@@ -68,39 +63,11 @@ def plot_bond_heatmaps(
 
     # create the 3×N grid with tighter spacing
     ncols = len(file_specs)
-    # immediately after
     fig, axes = plt.subplots(
         3, ncols, figsize=figsize,
-        gridspec_kw={'hspace': 0.3, 'wspace': 0.5}   # increase wspace
+        # sharex='col',
+        gridspec_kw={'hspace': 0.3, 'wspace': 0.2}
     )
-
-    # --- ADD THIS BLOCK ---
-    # compute the x‐position (figure coords) halfway between col2 and col3
-    ax_left  = axes[0, 2].get_position()  # 3rd column
-    ax_right = axes[0, 3].get_position()  # 4th column
-    x_sep = 0.5*(ax_left.x1 + ax_right.x0)
-
-    # draw a vertical black line spanning most of the figure
-    # plt.vlines(x_sep,
-    #            ymin=0.05, ymax=0.93,
-    #            transform=fig.transFigure,
-    #            color='black',
-    #            linewidth=1)
-
-    # add big section titles
-    # Hamiltonian over columns 0–2
-    x_ham = 0.5*(axes[0,0].get_position().x0 + axes[0,2].get_position().x1)
-    fig.text(x_ham, 0.93, '$\\textbf{Hamiltonian}$',
-             ha='center', va='bottom',
-             fontsize=12, fontweight='bold',
-             transform=fig.transFigure)
-
-    # Non-Hamiltonian over columns 3–4
-    x_nonham = 0.5*(axes[0,3].get_position().x0 + axes[0,4].get_position().x1)
-    fig.text(x_nonham, 0.93, '$\\textbf{Non-Hamiltonian}$',
-             ha='center', va='bottom',
-             fontsize=12, fontweight='bold',
-             transform=fig.transFigure)
 
     for col, (fname, title) in enumerate(file_specs):
         with open(fname, 'rb') as f:
@@ -137,16 +104,16 @@ def plot_bond_heatmaps(
             ax0.set_xticks([5, 10, 15, 20, 25, 30])
             ax0.set_xticklabels([5, 10, 15, 20, 25, 30])
         # ax1.set_xlabel('Trotter steps')
-        ax0.set_xlim(1, cutoff)
+        if col == 2:
+            ax0.set_xlim(1, cutoff)
 
         # (b) heatmap
         ax1 = axes[1, col]
         combined = np.vstack([mat2.T, mat1.T]) if (mat1.size and mat2.size) else np.empty((0,0))
-        combined = np.vstack([np.ones((1, combined.shape[1])), combined])
         im = ax1.imshow(combined, origin='lower', aspect='auto',
                         cmap=cmap_obj, interpolation='none', vmin=2, vmax=512)
         ax1.axhline(mat1.shape[1]-0.5, color='white', lw=1)
-        ax1.set_xlim(1, cutoff)
+        ax1.set_xlim(0, cutoff)
         if col == 0:
             ax1.set_ylabel('Bond index')
             ax1.set_xticks([10, 20, 30, 40, 50, 60, 70])
@@ -201,11 +168,7 @@ def plot_bond_heatmaps(
         ax2.set_xlim(0, cutoff)
         if col == 0:
             ax2.set_ylabel('Runtime cost $\\sum_j \\chi_j^3$')
-
-        if col in [0, 1, 2]:
-            ax2.set_xlabel('Trotter steps')
-        elif col in [3, 4]:
-            ax2.set_xlabel('Repetitions')
+        ax2.set_xlabel('Trotter steps')
         ax2.axvline(cutoff_tebd, color='gray', linestyle='--', lw=1)
         if col == 0:
             ax2.set_xticks([10, 20, 30, 40, 50, 60, 70])
@@ -215,69 +178,24 @@ def plot_bond_heatmaps(
             ax2.set_xticks([5, 10, 15, 20, 25, 30])
             ax2.set_xticklabels([5, 10, 15, 20, 25, 30])
             # ax2.set_yticklabels([])
-        ax2.set_xlim(1, cutoff)
+        if col == 2:
+            ax2.set_xlim(1, cutoff)
             # ax2.set_yticklabels([])
         # ax1.set_xlabel('Trotter steps')
         # if col == 2:
         #     ax2.set_xticks([2, 4, 6, 8])
         #     ax2.set_xticklabels([2, 4, 6, 8])
         ax2.set_ylim(1, 4e9)
-        # determine tick spacing
-        if col == 0:
-            step = 20
-        elif col == 1:
-            step = 10
-        elif col == 2:
-            step = 5
-        elif col == 3:
-            step = 10
-        elif col == 4:
-            step = 5
 
-        # for every subplot that needs an x-axis (a) and (c), do:
-        ticks = np.arange(0, cutoff + 1, step)
-        ticks[0] = 1
-        labels = ticks.copy()
-
-        from matplotlib.ticker import FormatStrFormatter
-        ax0.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-
-        # (a) expectation plot
-        ax0.set_xticks(ticks)
-        ax0.set_xticklabels(labels)
-
-        # (b) heatmap — if you want the same, otherwise omit
-        ax1.set_xticks(ticks)
-        ax1.set_xticklabels(labels)
-
-        # (c) cost plot
-        ax2.set_xticks(ticks)
-        ax2.set_xticklabels(labels)
-    for col in range(1, ncols):
-        axes[2, col].sharey(axes[2, 0])
-    for col in range(1, ncols):
-        axes[1, col].tick_params(labelleft=False)
-    for col in range(1, ncols):
-        axes[2, col].tick_params(labelleft=False)
     # inset colorbar in the last heatmap without shifting anything
     ax_cb_target = axes[1, -1]
-    # cax = inset_axes(ax_cb_target,
-    #                  width="10%", height="90%",
-    #                  loc='upper right', borderpad=0.1)
-
-
-    # cb.ax.tick_params(direction='out', length=3)
-
-    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-
     cax = inset_axes(ax_cb_target,
-                    width="10%", height="90%",
-                    bbox_to_anchor=(1, 0., 1, 1),
-                    bbox_transform=ax_cb_target.transAxes,
-                    loc='center left')
-
+                     width="10%", height="90%",
+                     loc='upper right', borderpad=0.1)
     cb = fig.colorbar(im, cax=cax)
     cb.ax.set_title('$\\chi$')
+
+    cb.ax.tick_params(direction='out', length=3)
 
     # clean up spines & ticks
     for ax in axes.flat:
@@ -286,9 +204,9 @@ def plot_bond_heatmaps(
         ax.tick_params(direction='out', length=3, width=1)
 
     # panel letters
-    fig.text(0.02, 0.8, '\\textbf{(a)}', fontweight='bold', fontsize=10)
-    fig.text(0.02, 0.5, '\\textbf{(b)}', fontweight='bold', fontsize=10)
-    fig.text(0.02, 0.2, '\\textbf{(c)}', fontweight='bold', fontsize=10)
+    fig.text(0.02, 0.95, '(a)', fontweight='bold', fontsize=10)
+    fig.text(0.02, 0.62, '(b)', fontweight='bold', fontsize=10)
+    fig.text(0.02, 0.29, '(c)', fontweight='bold', fontsize=10)
 
     # squeeze margins just a bit tighter
     # plt.tight_layout(rect=[0,0,1,1], pad=1.0)

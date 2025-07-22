@@ -671,3 +671,15 @@ def nearest_neighbour_random_circuit(
 
         qc.barrier()
     return qc
+
+from qiskit.circuit.library.n_local import TwoLocal
+import copy
+def create_two_local(num_qubits, entanglement, depth) -> QuantumCircuit:
+    circ = QuantumCircuit(num_qubits)
+    # twolocal = TwoLocal(num_qubits, ['rz'], ["rxx", "ryy", "rzz"], entanglement=entanglement, reps=depth).decompose()   
+    twolocal = TwoLocal(num_qubits, ['rx'], ["rzz"], entanglement=entanglement, reps=depth).decompose()
+    # twolocal = TwoLocal(num_qubits, ['u3'], ["cx"], entanglement=entanglement, reps=depth).decompose()   
+    num_pars = len(twolocal.parameters)
+    values = np.random.rand(num_pars)
+    circ = copy.deepcopy(twolocal).assign_parameters(values)
+    return circ
