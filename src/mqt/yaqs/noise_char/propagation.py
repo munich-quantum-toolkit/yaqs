@@ -504,8 +504,8 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
         results = pool.starmap(process_k, args_list)
 
 
-    exp_vals = sum([res[0]/N for res in results])
-    A_kn_numpy = sum([res[1]/N for res in results])
+    exp_vals = sum([res[0] for res in results], axis=0)/N
+    A_kn_numpy = sum([res[1] for res in results], axis=0)/N
 
 
     ## The .real part is added as a workaround 
