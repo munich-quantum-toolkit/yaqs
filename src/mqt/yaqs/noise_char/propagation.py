@@ -206,8 +206,11 @@ def qutip_traj(sim_params_class: SimulationParameters):
     d_On_d_gk = np.array(d_On_d_gk).reshape(n_jump_site, n_obs_site, L, n_t)
     original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, L, n_t)
 
-    # return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
-    return t, original_exp_vals, d_On_d_gk
+
+    avg_min_max_traj_time = [None, None, None]
+
+
+    return t, original_exp_vals, d_On_d_gk, avg_min_max_traj_time
     
 
 
@@ -310,8 +313,10 @@ def tjm_traj(sim_params_class: SimulationParameters):
     original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, L, n_t)
 
 
+    avg_min_max_traj_time = [None, None, None]  # Placeholder for average, min, and max trajectory time
 
-    return t, original_exp_vals, d_On_d_gk
+
+    return t, original_exp_vals, d_On_d_gk, avg_min_max_traj_time
 
 
 
@@ -401,11 +406,9 @@ def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, j
     
     end_time = time.time()
 
+    traj_time = end_time - start_time
 
-    print(f"scikit_tt_traj:: Finished trajectory {k} in {end_time - start_time} seconds !!!! \n", flush=True)
-
-
-    return exp_result,A_kn_result
+    return exp_result, A_kn_result, traj_time
 
 
 
@@ -504,8 +507,8 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
         results = pool.starmap(process_k, args_list)
 
 
-    exp_vals = sum([res[0] for res in results], axis=0)/N
-    A_kn_numpy = sum([res[1] for res in results], axis=0)/N
+    exp_vals = np.sum([res[0] for res in results], axis=0)/N
+    A_kn_numpy = np.sum([res[1] for res in results], axis=0)/N
 
 
     ## The .real part is added as a workaround 
@@ -516,5 +519,8 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     exp_vals = np.array(exp_vals).reshape(n_obs_site, L, n_t)
 
 
+    traj_time_list = np.array([res[2] for res in results])
 
-    return t, exp_vals, d_On_d_gk
+    avg_min_max_traj_time = [np.mean(traj_time_list), np.min(traj_time_list), np.max(traj_time_list)]
+
+    return t, exp_vals, d_On_d_gk, avg_min_max_traj_time
