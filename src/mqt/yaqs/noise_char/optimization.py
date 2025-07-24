@@ -572,7 +572,7 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
         # Convergence check
         if len(f.diff_avg_history) > max_n_convergence and all(
                 diff < threshhold for diff in f.diff_avg_history[-max_n_convergence:]):
-            print(f"Gradient convergence reached at iteration {i}.")
+            print(f"Parameters convergence reached at iteration {i}.")
             break
         
 
