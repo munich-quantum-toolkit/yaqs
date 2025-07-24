@@ -531,6 +531,7 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
 
         # Ensure non-negativity for the parameters
         x[x < 0] = 0
+        x[x > 1] = 1
 
 
 
