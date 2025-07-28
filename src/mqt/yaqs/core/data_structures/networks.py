@@ -588,11 +588,7 @@ class MPS:
         temp_state = copy.deepcopy(self)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-<<<<<<< Updated upstream
-            if observable.gate.name not in {"pvm", "runtime_cost"}:
-=======
             if observable.gate.name not in  ["pvm", "runtime_cost", "max_bond", "total_bond"]:
->>>>>>> Stashed changes
                 idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
                 if idx > last_site:
                     for site in range(last_site, idx):
@@ -612,11 +608,7 @@ class MPS:
         Returns:
             np.float64: The real part of the expectation value of the observable.
         """
-<<<<<<< Updated upstream
-        if observable.gate.name not in {"pvm", "runtime_cost"}:
-=======
         if observable.gate.name not in ["pvm", "runtime_cost", "max_bond", "total_bond"]:
->>>>>>> Stashed changes
             sites_list = None
             if isinstance(observable.sites, int):
                 sites_list = [observable.sites]
