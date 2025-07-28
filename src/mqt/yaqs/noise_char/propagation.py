@@ -1,4 +1,5 @@
 import numpy as np
+
 import qutip as qt
 
 import scipy as sp
@@ -22,6 +23,34 @@ import re
 
 
 class SimulationParameters:
+    """
+    A class to encapsulate simulation parameters for open quantum system simulations.
+    Attributes:
+        T (float): Total simulation time. Default is 5.
+        dt (float): Time step for the simulation. Default is 0.1.
+        J (float): Coupling constant for the Ising Hamiltonian. Default is 1.
+        g (float): Transverse field strength. Default is 0.5.
+        observables (list): List of observables to measure (e.g., ['x', 'y', 'z']).
+        threshold (float): Threshold for truncation in tensor network simulations. Default is 1e-6.
+        max_bond_dim (int): Maximum bond dimension for tensor network simulations. Default is 4.
+        order (int): Order of the integration method. Default is 2.
+        N (int): Number of trajectories or samples for stochastic simulations. Default is 100.
+        rank (int): Rank for tensor train decompositions. Default is 8.
+        req_cpus (int): Number of CPUs requested for parallel simulations. Default is 1.
+        scikit_tt_solver (dict): Dictionary specifying the solver and method for scikit_tt simulations.
+    Args:
+        L (int): Number of sites in the system.
+        gamma_rel (list or float): Relaxation rates for each site, or a single float for all sites.
+        gamma_deph (list or float): Dephasing rates for each site, or a single float for all sites.
+    Methods:
+        set_gammas(gamma_rel, gamma_deph):
+            Sets the relaxation and dephasing rates for the system. Accepts either a list of length L or a single float.
+        set_solver(solver='tdvp1', local_solver='krylov_5'):
+            Sets the solver and local solver method for scikit_tt simulations.
+            Args:
+                solver (str): 'tdvp1' or 'tdvp2'.
+                local_solver (str): 'krylov_<number>' or 'exact'.
+    """
     T: float = 5
     dt: float = 0.1
     J: float = 1
@@ -52,6 +81,25 @@ class SimulationParameters:
         
 
     def set_gammas(self, gamma_rel : list | float, gamma_deph : list | float):
+        """
+        Set the relaxation (gamma_rel) and dephasing (gamma_deph) rates for the system.
+        Parameters
+        ----------
+        gamma_rel : list or float
+            Relaxation rates. If a float is provided, the same value is used for all sites (length L).
+            If a list is provided, it must have length L.
+        gamma_deph : list or float
+            Dephasing rates. If a float is provided, the same value is used for all sites (length L).
+            If a list is provided, it must have length L.
+        Raises
+        ------
+        ValueError
+            If gamma_rel or gamma_deph is a list and its length does not match L.
+        Notes
+        -----
+        This method sets the attributes `gamma_rel` and `gamma_deph` as lists of length L.
+        """
+
 
         if isinstance(gamma_rel, list) and len(gamma_rel) != self.L:
             raise ValueError("gamma_rel must be a list of length L.")
@@ -69,6 +117,26 @@ class SimulationParameters:
             self.gamma_deph = list(gamma_deph)
 
     def set_solver(self, solver: str = 'tdvp1', local_solver: str = 'krylov_5'):
+        """
+        Set the solver configuration for the propagation algorithm.
+        Parameters
+        ----------
+        solver : str, optional
+            The global solver to use. Must be either 'tdvp1' or 'tdvp2'. Default is 'tdvp1'.
+        local_solver : str, optional
+            The local solver method. Must be either 'exact' or match the pattern 'krylov_<number>',
+            where <number> is a positive integer (e.g., 'krylov_5'). Default is 'krylov_5'.
+        Raises
+        ------
+        ValueError
+            If `solver` is not 'tdvp1' or 'tdvp2'.
+            If `local_solver` does not match 'exact' or the pattern 'krylov_<number>'.
+            If the number in 'krylov_<number>' is not a positive integer.
+        Notes
+        -----
+        Updates the `scikit_tt_solver` dictionary with the selected solver and method.
+        """
+
         if solver not in ('tdvp1', 'tdvp2'):
             raise ValueError("solver can be only 'tdvp1' or 'tdvp2'")
         self.scikit_tt_solver["solver"] = solver
@@ -92,6 +160,43 @@ class SimulationParameters:
 
     
 def qutip_traj(sim_params_class: SimulationParameters):
+    """
+    Simulates the time evolution of an open quantum system using the Lindblad master equation with QuTiP.
+    This function constructs the system Hamiltonian and collapse operators for a spin chain with relaxation and dephasing noise,
+    initializes the system state, and computes the expectation values of specified observables and their derivatives with respect
+    to the noise parameters over time.
+    Parameters
+    ----------
+    sim_params_class : SimulationParameters
+        An instance of SimulationParameters containing simulation parameters:
+            - T (float): Total simulation time.
+            - dt (float): Time step.
+            - L (int): Number of sites (spins) in the chain.
+            - J (float): Ising coupling strength.
+            - g (float): Transverse field strength.
+            - gamma_rel (array-like): Relaxation rates for each site.
+            - gamma_deph (array-like): Dephasing rates for each site.
+            - observables (list of str): List of observables to measure ('x', 'y', 'z').
+    Returns
+    -------
+    t : numpy.ndarray
+        Array of time points at which the system was evolved.
+    original_exp_vals : numpy.ndarray
+        Expectation values of the specified observables at each site and time, shape (n_obs_site, L, n_t).
+    d_On_d_gk : numpy.ndarray
+        Derivatives of the observables with respect to the noise parameters, shape (n_jump_site, n_obs_site, L, n_t).
+    avg_min_max_traj_time : list
+        Placeholder list [None, None, None] for compatibility with other interfaces.
+    Notes
+    -----
+    - The function uses QuTiP for quantum object and solver operations.
+    - The system is initialized in the ground state |0>^{⊗L}.
+    - The Hamiltonian is an Ising model with a transverse field.
+    - Collapse operators are constructed for both relaxation and dephasing noise.
+    - The function computes both the expectation values of observables and their derivatives with respect to noise parameters
+      using the Lindblad master equation.
+    """
+
 
     T = sim_params_class.T
     dt = sim_params_class.dt
@@ -222,6 +327,43 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 # @profile
 def tjm_traj(sim_params_class: SimulationParameters):
+    """
+    Simulates the time evolution of an open quantum system using the Lindblad master equation with TJM.
+    This function constructs the system Hamiltonian and collapse operators for a spin chain with relaxation and dephasing noise,
+    initializes the system state, and computes the expectation values of specified observables and their derivatives with respect
+    to the noise parameters over time.
+    Parameters
+    ----------
+    sim_params_class : SimulationParameters
+        An instance of SimulationParameters containing simulation parameters:
+            - T (float): Total simulation time.
+            - dt (float): Time step.
+            - L (int): Number of sites (spins) in the chain.
+            - J (float): Ising coupling strength.
+            - g (float): Transverse field strength.
+            - gamma_rel (array-like): Relaxation rates for each site.
+            - gamma_deph (array-like): Dephasing rates for each site.
+            - observables (list of str): List of observables to measure ('x', 'y', 'z').
+    Returns
+    -------
+    t : numpy.ndarray
+        Array of time points at which the system was evolved.
+    original_exp_vals : numpy.ndarray
+        Expectation values of the specified observables at each site and time, shape (n_obs_site, L, n_t).
+    d_On_d_gk : numpy.ndarray
+        Derivatives of the observables with respect to the noise parameters, shape (n_jump_site, n_obs_site, L, n_t).
+    avg_min_max_traj_time : list
+        Placeholder list [None, None, None] for compatibility with other interfaces.
+    Notes
+    -----
+    - The function uses QuTiP for quantum object and solver operations.
+    - The system is initialized in the ground state |0>^{⊗L}.
+    - The Hamiltonian is an Ising model with a transverse field.
+    - Collapse operators are constructed for both relaxation and dephasing noise.
+    - The function computes both the expectation values of observables and their derivatives with respect to noise parameters
+      using the Lindblad master equation.
+    """
+
 
     T = sim_params_class.T
     dt = sim_params_class.dt
@@ -328,8 +470,18 @@ def tjm_traj(sim_params_class: SimulationParameters):
 
 
 
-def construct_Ank(O_list, L_list):
-    """Construct observable array (same for all sites)"""
+def construct_Akn(O_list, L_list):
+    """
+    This function computes the A_nk tensor based on lists of operator matrices O_list and L_list,
+    typically representing system and Lindblad operators, respectively. The construction involves
+    tensor contractions and combinations relevant for Lindblad master equation propagation.
+    Args:
+        O_list (array-like): List or array of operator matrices O_k (shape: [n_obs]).
+        L_list (array-like): List or array of Lindblad operators L_n (shape: [n_jump]).
+    Returns:
+        np.ndarray: The constructed A_nk tensor with shape (n_jump, n_obs, d, d).
+    """
+    
     # define necessary tensors for compact construction
     L = np.asarray(L_list)
     L_dag = np.conjugate(L).transpose([0,2,1])
@@ -337,19 +489,48 @@ def construct_Ank(O_list, L_list):
     O = np.asarray(O_list)
     I = np.eye(2)
     # define A_nk
-    A_nk = np.einsum('ijk,ilm->ijklm', L_dag, L) - 0.5*np.einsum('ij,klm->kijlm',I,L_prod) - 0.5*np.einsum('ijk,lm->ijklm',L_prod,I)
-    A_nk = np.einsum('ijklm,nkl->ijnm', A_nk, O)
-    return A_nk
+    A_kn = np.einsum('ijk,ilm->ijklm', L_dag, L) - 0.5*np.einsum('ij,klm->kijlm',I,L_prod) - 0.5*np.einsum('ijk,lm->ijklm',L_prod,I)
+    A_kn = np.einsum('ijklm,nkl->ijnm', A_kn, O)
+    return A_kn
 
 
-def evaluate_Ank(A_nk, state):
-    """Compute expected values of A_nk for each site (assuming that state is right-orthonormal)"""
-    n_jumps = A_nk.shape[0]
-    n_obs = A_nk.shape[2]
+def evaluate_Akn(A_kn, state):
+    """
+    Evaluates the observable A_kn for a given quantum state represented in tensor train (TT) or matrix product state (MPS) format.
+    This function computes the expectation values of the observable A_kn at each site of the quantum state by contracting the observable with the state tensors. It also applies singular value decomposition (SVD) to orthonormalize the state cores and updates the ranks accordingly.
+    Parameters
+    ----------
+    A_kn : np.ndarray
+        A 3D complex-valued array of shape (n_jumps, n_obs, n_sites) representing the observable(s) to be evaluated.
+    state : object
+        An object representing the quantum state in TT/MPS format. It must have the following attributes:
+            - cores: list of np.ndarray
+                The TT/MPS cores of the state.
+            - order: int
+                The number of sites (length of the TT/MPS chain).
+            - ranks: list of int
+                The TT/MPS ranks.
+            - row_dims: list of int
+                The physical dimensions of the rows for each core.
+            - col_dims: list of int
+                The physical dimensions of the columns for each core.
+    Returns
+    -------
+    A : np.ndarray
+        A complex-valued array of shape (n_jumps, n_obs, n_sites) containing the evaluated observable values at each site.
+    Notes
+    -----
+    - The function modifies the `state` object in-place by updating its cores and ranks.
+    - The contraction is performed using Einstein summation (`np.einsum`).
+    - SVD is used to maintain orthonormality of the TT/MPS cores during the evaluation.
+    """
+    
+    n_jumps = A_kn.shape[0]
+    n_obs = A_kn.shape[2]
     n_sites = state.order
     A = np.zeros([n_jumps, n_obs, n_sites], dtype=complex)
 
-    A[:,:,0] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[0][:,:,0,:]), A_nk, state.cores[0][:,:,0,:])
+    A[:,:,0] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[0][:,:,0,:]), A_kn, state.cores[0][:,:,0,:])
     
     for i in range(state.order-1):
         # apply SVD
@@ -360,7 +541,7 @@ def evaluate_Ank(A_nk, state):
         # shift non-orthonormal part to next core
         state.cores[i + 1] = np.tensordot(np.diag(s).dot(v), state.cores[i + 1], axes=(1, 0))
 
-        A[:,:,i+1] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[i+1][:,:,0,:]), A_nk, state.cores[i+1][:,:,0,:])
+        A[:,:,i+1] = np.einsum('ijk, mjnl, ilk -> mn', np.conjugate(state.cores[i+1][:,:,0,:]), A_kn, state.cores[i+1][:,:,0,:])
 
     return A
 
@@ -370,7 +551,29 @@ import os
 import time
 
 
-def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver):
+def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_kn, scikit_tt_solver):
+    """
+    Simulates the time evolution of a single open quantum system trajectory and computes expectation values and A_kn results, so they can be averaged later.
+    Args:
+        k (int): Index or identifier for the current trajectory or process.
+        L (int): Number of sites in the quantum system.
+        rank (int): Rank of the initial state tensor.
+        n_obs_site (int): Number of observable sites.
+        n_jump_site (int): Number of jump operator sites.
+        timesteps (int): Number of time steps for the simulation.
+        dt (float): Time step size.
+        hamiltonian: Hamiltonian operator for the system (in TT format).
+        jump_operator_list (list): List of jump operators (in TT format).
+        jump_parameter_list (list): List of parameters for each jump operator.
+        obs_list (list): List of observable operators (in TT format).
+        A_kn: Function or object used to evaluate A_kn for a given state.
+        scikit_tt_solver: ODE solver to use for time evolution (compatible with scikit-tt).
+    Returns:
+        exp_result (np.ndarray): Array of shape (len(obs_list), timesteps+1) containing the expectation values of observables at each time step.
+        A_kn_result (np.ndarray): Array of shape (n_jump_site, n_obs_site, L, timesteps+1) containing evaluated A_kn results at each time step.
+        traj_time (float): Total time taken to compute the trajectory (in seconds).
+    """
+
     start_time = time.time()
 
     initial_state = tt.unit([2] * L, [0] * L)
@@ -391,7 +594,7 @@ def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, j
     for j in range(n_obs):
         exp_result[j,0] = np.real(initial_state.transpose(conjugate=True)@obs_list[j]@initial_state)
 
-    A_kn_result[:,:,:,0] = evaluate_Ank(A_nk, initial_state)
+    A_kn_result[:,:,:,0] = evaluate_Akn(A_kn, initial_state)
     
     
     
@@ -401,7 +604,7 @@ def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, j
         for j in range(n_obs):                
             exp_result[j,i+1] = np.real(initial_state.transpose(conjugate=True)@obs_list[j]@initial_state)
 
-        A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
+        A_kn_result[:,:,:,i+1] = evaluate_Akn(A_kn, initial_state)
 
     
     end_time = time.time()
@@ -413,6 +616,42 @@ def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, j
 
 
 def scikit_tt_traj(sim_params_class: SimulationParameters):
+    """
+    Simulates the time evolution of an open quantum system using the Lindblad master equation with Scikit_tt.
+    This function constructs the system Hamiltonian and collapse operators for a spin chain with relaxation and dephasing noise,
+    initializes the system state, and computes the expectation values of specified observables and their derivatives with respect
+    to the noise parameters over time.
+    Parameters
+    ----------
+    sim_params_class : SimulationParameters
+        An instance of SimulationParameters containing simulation parameters:
+            - T (float): Total simulation time.
+            - dt (float): Time step.
+            - L (int): Number of sites (spins) in the chain.
+            - J (float): Ising coupling strength.
+            - g (float): Transverse field strength.
+            - gamma_rel (array-like): Relaxation rates for each site.
+            - gamma_deph (array-like): Dephasing rates for each site.
+            - observables (list of str): List of observables to measure ('x', 'y', 'z').
+    Returns
+    -------
+    t : numpy.ndarray
+        Array of time points at which the system was evolved.
+    original_exp_vals : numpy.ndarray
+        Expectation values of the specified observables at each site and time, shape (n_obs_site, L, n_t).
+    d_On_d_gk : numpy.ndarray
+        Derivatives of the observables with respect to the noise parameters, shape (n_jump_site, n_obs_site, L, n_t).
+    avg_min_max_traj_time : list
+        Placeholder list [None, None, None] for compatibility with other interfaces.
+    Notes
+    -----
+    - The function uses QuTiP for quantum object and solver operations.
+    - The system is initialized in the ground state |0>^{⊗L}.
+    - The Hamiltonian is an Ising model with a transverse field.
+    - Collapse operators are constructed for both relaxation and dephasing noise.
+    - The function computes both the expectation values of observables and their derivatives with respect to noise parameters
+      using the Lindblad master equation.
+    """
 
 
     T = sim_params_class.T
@@ -446,7 +685,6 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     O_list = [X, Y, Z]
     L_list = [L_1, L_2]
 
-    # A_nk = construct_Ank(O_list, L_list)
 
     
     cores = [None] * L
@@ -480,7 +718,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
     exp_vals = np.zeros([n_obs,n_t])
 
-    A_nk=construct_Ank(O_list, L_list)
+    A_kn=construct_Akn(O_list, L_list)
 
 
     A_kn_numpy=np.zeros([n_jump_site, n_obs_site, L, n_t],dtype=complex)
@@ -499,7 +737,7 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
 
     args_list = [
-    (k,  L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver)
+    (k,  L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_kn, scikit_tt_solver)
     for k in range(N) ]
     
 
