@@ -109,8 +109,7 @@ def _run_strong_sim(
                         i = futures.pop(future)
                         try:
                             result = future.result()
-                        except Exception as e:
-                            print(f"Trajectory {i} failed with unexpected error: {e}. Retrying...")
+                        except Exception:
                             new_future = executor.submit(backend, args[i])
                             futures[new_future] = i
                             continue
@@ -175,8 +174,7 @@ def _run_weak_sim(
                         i = futures.pop(future)
                         try:
                             result = future.result()
-                        except Exception as e:
-                            print(f"Trajectory {i} failed with unexpected error: {e}. Retrying...")
+                        except Exception:
                             new_future = executor.submit(backend, args[i])
                             futures[new_future] = i
                             continue
@@ -223,7 +221,6 @@ def _run_circuit(
     elif isinstance(sim_params, WeakSimParams):
         _run_weak_sim(initial_state, operator, sim_params, noise_model, parallel=parallel)
 
-import numpy as np
 
 def _run_analog(
     initial_state: MPS, operator: MPO, sim_params: AnalogSimParams, noise_model: NoiseModel | None, *, parallel: bool
@@ -267,8 +264,7 @@ def _run_analog(
                         i = futures.pop(future)
                         try:
                             result = future.result()
-                        except Exception as e:
-                            print(f"Trajectory {i} failed with unexpected error: {e}. Retrying...")
+                        except Exception:
                             new_future = executor.submit(backend, args[i])
                             futures[new_future] = i
                             continue

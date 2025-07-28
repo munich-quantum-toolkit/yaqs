@@ -144,8 +144,11 @@ def create_probability_distribution(
 
     # Normalize the probabilities
     dp: float = np.sum(dp_m_list)
-    jump_dict["probabilities"] = (np.array(dp_m_list) / dp).tolist() if dp > 0 else [1/len(dp_m_list)] * len(dp_m_list)
+    jump_dict["probabilities"] = (
+        (np.array(dp_m_list) / dp).tolist() if dp > 0 else [1 / len(dp_m_list)] * len(dp_m_list)
+    )
     return jump_dict
+
 
 def stochastic_process(
     state: MPS,

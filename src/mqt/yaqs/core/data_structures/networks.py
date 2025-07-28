@@ -286,7 +286,7 @@ class MPS:
         return sum(bonds)
 
     def get_cost(self) -> int:
-        cost = [tensor.shape[1]**3 for tensor in self.tensors[1::]]
+        cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1::]]
         return sum(cost)
 
     def flip_network(self) -> None:
@@ -586,9 +586,13 @@ class MPS:
             column_index: The time or trajectory index indicating which column of the result array to fill.
         """
         temp_state = copy.deepcopy(self)
-        last_site = 0 
+        last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.gate.name not in  ["pvm", "runtime_cost"]:
+<<<<<<< Updated upstream
+            if observable.gate.name not in {"pvm", "runtime_cost"}:
+=======
+            if observable.gate.name not in  ["pvm", "runtime_cost", "max_bond", "total_bond"]:
+>>>>>>> Stashed changes
                 idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
                 if idx > last_site:
                     for site in range(last_site, idx):
@@ -608,7 +612,11 @@ class MPS:
         Returns:
             np.float64: The real part of the expectation value of the observable.
         """
-        if observable.gate.name not in ["pvm", "runtime_cost"]:
+<<<<<<< Updated upstream
+        if observable.gate.name not in {"pvm", "runtime_cost"}:
+=======
+        if observable.gate.name not in ["pvm", "runtime_cost", "max_bond", "total_bond"]:
+>>>>>>> Stashed changes
             sites_list = None
             if isinstance(observable.sites, int):
                 sites_list = [observable.sites]

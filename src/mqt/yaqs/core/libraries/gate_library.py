@@ -1472,6 +1472,7 @@ class RuntimeCost(BaseGate):
         mat = np.array([[1, 0], [0, 1]])
         super().__init__(mat)
 
+
 class MaxBond(BaseGate):
     name = "max_bond"
 
@@ -1479,12 +1480,14 @@ class MaxBond(BaseGate):
         mat = np.array([[1, 0], [0, 1]])
         super().__init__(mat)
 
+
 class TotalBond(BaseGate):
     name = "total_bond"
 
     def __init__(self) -> None:
         mat = np.array([[1, 0], [0, 1]])
         super().__init__(mat)
+
 
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.

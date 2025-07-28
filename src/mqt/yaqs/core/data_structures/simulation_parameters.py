@@ -88,7 +88,7 @@ class Observable:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
         self.gate = copy.deepcopy(gate)
-        if gate.name not in ["pvm", "runtime_cost", "max_bond", "total_bond"]:
+        if gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
             assert sites is not None
             self.sites = sites
             self.gate.set_sites(self.sites)
@@ -207,10 +207,10 @@ class AnalogSimParams:
         self.observables = observables
         if self.observables:
             sortable = [
-                obs for obs in observables if obs.gate.name not in ["pvm", "runtime_cost", "max_bond", "total_bond"]
+                obs for obs in observables if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             unsorted = [
-                obs for obs in observables if obs.gate.name in ["pvm", "runtime_cost", "max_bond", "total_bond"]
+                obs for obs in observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             sorted_obs = sorted(
                 sortable,
@@ -219,7 +219,6 @@ class AnalogSimParams:
             self.sorted_observables = sorted_obs + unsorted
         else:
             self.sorted_observables = []
-
 
         self.elapsed_time = elapsed_time
         self.dt = dt
@@ -242,7 +241,7 @@ class AnalogSimParams:
         attribute with the mean value of their trajectories along the specified axis.
         """
         for observable in self.observables:
-            if observable.gate.name in ["runtime_cost", "total_bond"]:
+            if observable.gate.name in {"runtime_cost", "total_bond"}:
                 observable.results = np.sum(observable.trajectories, axis=0)
             else:
                 observable.results = np.mean(observable.trajectories, axis=0)
@@ -414,10 +413,10 @@ class StrongSimParams:
         self.observables = observables
         if self.observables:
             sortable = [
-                obs for obs in observables if obs.gate.name not in ["pvm", "runtime_cost", "max_bond", "total_bond"]
+                obs for obs in observables if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             unsorted = [
-                obs for obs in observables if obs.gate.name in ["pvm", "runtime_cost", "max_bond", "total_bond"]
+                obs for obs in observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             sorted_obs = sorted(
                 sortable,
@@ -440,7 +439,7 @@ class StrongSimParams:
         of their `trajectories` along the first axis.
         """
         for observable in self.observables:
-            if observable.gate.name in ["runtime_cost", "total_bond"]:
+            if observable.gate.name in {"runtime_cost", "total_bond"}:
                 observable.results = np.sum(observable.trajectories, axis=0)
             else:
                 observable.results = np.mean(observable.trajectories, axis=0)
