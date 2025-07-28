@@ -12,9 +12,9 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Strong Quantum Circuit Simulation (Observable)
+# Strong Circuit Simulation (Observable)
 
-This example demonstrates how to run a Hamiltonian simulation using the YAQS simulator with an Ising model.
+This example demonstrates how to run a circuit simulation using the YAQS simulator.
 An Ising circuit is created and an initial MPS is prepared in the $\ket{0}$ state.
 A noise model is applied and simulation parameters (using StrongSimParams) are defined.
 The simulation is run for a range of noise strengths (gamma values), and the expectation values of the $Z$ observable are recorded and displayed as a heatmap.
@@ -47,9 +47,8 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 num_traj = 100
 max_bond_dim = 4
 threshold = 1e-6
-window_size = 0
 measurements = [Observable(Z(), site) for site in range(num_qubits)]
-sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold, window_size)
+sim_params = StrongSimParams(measurements, num_traj, max_bond_dim, threshold)
 ```
 
 Run the simulations for a range of noise strengths
@@ -67,7 +66,9 @@ gammas = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 heatmap = np.empty((num_qubits, len(gammas)))
 for j, gamma in enumerate(gammas):
     # Define the noise model
-    noise_model = NoiseModel(["relaxation"], [gamma])
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["relaxation"]
+    ])
     simulator.run(state, circuit, sim_params, noise_model)
     for i, observable in enumerate(sim_params.observables):
         heatmap[i, j] = observable.results[0]

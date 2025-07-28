@@ -49,10 +49,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/cda-tum/mqt-yaqs"
+Homepage = "https://github.com/munich-quantum-toolkit/yaqs"
 Documentation = "https://mqt.readthedocs.io/projects/yaqs"
-Issues = "https://github.com/cda-tum/mqt-yaqs/issues"
-Discussions = "https://github.com/cda-tum/mqt-yaqs/discussions"
+Issues = "https://github.com/munich-quantum-toolkit/yaqs/issues"
+Discussions = "https://github.com/munich-quantum-toolkit/yaqs/discussions"
 
 
 [tool.hatch.version]
@@ -67,7 +67,12 @@ version-file = "src/mqt/yaqs/_version.py"
 
 [tool.pytest.ini_options]
 minversion = "7.2"
-addopts = ["-ra", "--strict-markers", "--strict-config"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--numprocesses=auto", # Automatically use all available CPU cores for parallel testing
+]
 xfail_strict = true
 filterwarnings = [
     "error",
@@ -89,7 +94,9 @@ report.exclude_also = [
     'def __dir__()',  # Ignore __dir__ method that exists mainly for better IDE support
     '@overload'  # Overloads are only for static typing
 ]
-
+run.disable_warnings = [
+    "no-sysmon",
+]
 
 [tool.mypy]
 files = ["src/mqt", "tests", "noxfile.py"]
@@ -151,6 +158,7 @@ isort.required-imports = ["from __future__ import annotations"]
 [tool.ruff.lint.per-file-ignores]
 "tests" = ["T20", "INP001"]
 "docs/**" = ["T20", "INP001"]
+"scripts" = ["T20", "INP001"]
 "noxfile.py" = ["T20", "TID251"]
 
 [tool.ruff.lint.pydocstyle]
@@ -178,6 +186,8 @@ docs = [
 test = [
     "pytest>=8.3.5",
     "pytest-cov>=6.0.0",
+    "pytest-sugar>=1.0.0",
+    "pytest-xdist>=3.7.0",
 ]
 dev = [
     {include-group = "docs"},

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
 
 """Tests for the simulator module in YAQS.
 
-This module verifies the functionality of the simulator by testing both physics (Hamiltonian)
+This module verifies the functionality of the simulator by testing both analog (Hamiltonian)
 and circuit simulation branches. It includes tests for identity circuits, two-qubit operations,
 long-range gate handling, weak and strong simulation modes, and error cases such as mismatched
 qubit counts.
@@ -18,6 +18,9 @@ qubit counts.
 
 from __future__ import annotations
 
+import importlib
+import multiprocessing
+
 import numpy as np
 import pytest
 
@@ -25,8 +28,8 @@ from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import (
+    AnalogSimParams,
     Observable,
-    PhysicsSimParams,
     StrongSimParams,
     WeakSimParams,
 )
@@ -34,12 +37,37 @@ from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 
 
-def test_physics_simulation() -> None:
-    """Test the branch for Hamiltonian simulation (physics simulation) using PhysicsSimParams.
+def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Path 1: SLURM_CPUS_ON_NODE *not* set.
+
+    Should return multiprocessing.cpu_count().
+    """
+    # Ensure the env var is absent
+    monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+
+    assert simulator.available_cpus() == multiprocessing.cpu_count()
+
+
+def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Path 2: SLURM_CPUS_ON_NODE is set.
+
+    Should return that exact value.
+    """
+    monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
+
+    # Reload the module only if available_cpus caches anything at import;
+    # here it's not necessary, but harmless:
+    importlib.reload(simulator)
+
+    assert simulator.available_cpus() == 8
+
+
+def test_analog_simulation() -> None:
+    """Test the branch for Hamiltonian simulation (analog simulation) using AnalogSimParams.
 
     This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
     It also creates a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
-    With PhysicsSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
+    With AnalogSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
     simulator.run is called. The test then verifies that for each observable the results and trajectories have been
     correctly initialized and that the measurement results are approximately as expected.
     """
@@ -57,7 +85,7 @@ def test_physics_simulation() -> None:
     order = 2
 
     measurements = [Observable(Z(), site) for site in range(length)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
@@ -68,10 +96,10 @@ def test_physics_simulation() -> None:
     simulator.run(initial_state, H, sim_params, noise_model)
 
     for i, observable in enumerate(sim_params.observables):
-        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
-        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for AnalogSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
         elif i == 1:
@@ -84,12 +112,12 @@ def test_physics_simulation() -> None:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
 
-def test_physics_simulation_parallel_off() -> None:
-    """Test the branch for Hamiltonian simulation (physics simulation) using PhysicsSimParams, parallelization off.
+def test_analog_simulation_parallel_off() -> None:
+    """Test the branch for Hamiltonian simulation (analog simulation) using AnalogSimParams, parallelization off.
 
     This test creates an MPS of length 5 initialized to the "zeros" state and an Ising MPO operator.
     It also creates a NoiseModel with two processes ("relaxation" and "dephasing") and corresponding strengths.
-    With PhysicsSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
+    With AnalogSimParams configured for a two-site evolution (order=2) and sample_timesteps False,
     simulator.run is called. The test then verifies that for each observable the results and trajectories have been
     correctly initialized and that the measurement results are approximately as expected.
 
@@ -109,7 +137,7 @@ def test_physics_simulation_parallel_off() -> None:
     order = 2
 
     measurements = [Observable(Z(), [site]) for site in range(length)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
     )
     gamma = 0.1
@@ -120,10 +148,10 @@ def test_physics_simulation_parallel_off() -> None:
     simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
 
     for i, observable in enumerate(sim_params.observables):
-        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
-        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for AnalogSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
         elif i == 1:
@@ -136,8 +164,8 @@ def test_physics_simulation_parallel_off() -> None:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
 
 
-def test_physics_simulation_get_state() -> None:
-    """Test the Hamiltonian simulation (physics simulation) using PhysicsSimParams without noise to get a statevector.
+def test_analog_simulation_get_state() -> None:
+    """Test the Hamiltonian simulation (analog simulation) using AnalogSimParams without noise to get a statevector.
 
     This test creates an MPS of length 2 initialized to the "zeros" state and an Ising MPO operator.
     With sample_timesteps set to False, the test verifies for two-site (order=2) and single-site (order=1) that the
@@ -157,7 +185,7 @@ def test_physics_simulation_get_state() -> None:
         threshold = 0
 
         measurements = [Observable(X(), length // 2)]
-        sim_params = PhysicsSimParams(
+        sim_params = AnalogSimParams(
             measurements,
             elapsed_time,
             dt,
@@ -168,7 +196,7 @@ def test_physics_simulation_get_state() -> None:
             sample_timesteps=sample_timesteps,
             get_state=True,
         )
-        simulator.run(initial_state, H, sim_params, noise_model=None, parallel=False)
+        simulator.run(initial_state, H, sim_params)
         assert sim_params.output_state is not None
         assert isinstance(sim_params.output_state, MPS)
         sv = sim_params.output_state.to_vec()
@@ -197,7 +225,7 @@ def test_strong_simulation() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
 
-    num_traj = 10
+    num_traj = 50
     max_bond_dim = 4
 
     measurements = [Observable(Z(), site) for site in range(num_qubits)]
@@ -213,10 +241,10 @@ def test_strong_simulation() -> None:
     simulator.run(state, circuit, sim_params, noise_model)
 
     for i, observable in enumerate(sim_params.observables):
-        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
-        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for AnalogSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
         elif i == 1:
@@ -240,10 +268,8 @@ def test_strong_simulation_no_noise() -> None:
 
     state = MPS(length=num_qubits)
     measurements = [Observable(X(), num_qubits // 2)]
-    sim_params = StrongSimParams(
-        measurements, num_traj=1, max_bond_dim=16, threshold=1e-12, window_size=0, get_state=True
-    )
-    simulator.run(state, circ, sim_params, noise_model=None)
+    sim_params = StrongSimParams(measurements, num_traj=1, max_bond_dim=16, threshold=1e-12, get_state=True)
+    simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
     assert isinstance(sim_params.output_state, MPS)
     sv = sim_params.output_state.to_vec()
@@ -283,10 +309,10 @@ def test_strong_simulation_parallel_off() -> None:
     simulator.run(state, circuit, sim_params, noise_model, parallel=False)
 
     for i, observable in enumerate(sim_params.observables):
-        assert observable.results is not None, "Results was not initialized for PhysicsSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for PhysicsSimParams 1."
-        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for PhysicsSimParams 2."
-        assert len(observable.results) == 1, "Results was not initialized for PhysicsSimParams."
+        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
+        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(observable.trajectories) == num_traj, "Trajectories was not initialized for AnalogSimParams 2."
+        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
         if i == 0:
             assert np.isclose(observable.results[0], 0.70, atol=1e-1)
         elif i == 1:
@@ -440,7 +466,7 @@ def test_mismatch() -> None:
 
 
 def test_two_site_correlator_left_boundary() -> None:
-    """Tests the expectation value of a two-site correlator in physics simulation at the left boundary.
+    """Tests the expectation value of a two-site correlator in analog simulation at the left boundary.
 
     This test initializes an MPS in the |0> state and computes the expectation value of a two-site correlator
     at the left boundary.
@@ -458,7 +484,7 @@ def test_two_site_correlator_left_boundary() -> None:
     sample_timesteps = True
     max_bond_dim = 4
     observables = [Observable(XX(), [0, 1]), Observable(YY(), [0, 1]), Observable(ZZ(), [0, 1])]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         observables=observables,
         elapsed_time=elapsed_time,
         dt=dt,
@@ -466,7 +492,7 @@ def test_two_site_correlator_left_boundary() -> None:
         sample_timesteps=sample_timesteps,
     )
 
-    simulator.run(state, H_0, sim_params, noise_model=None)
+    simulator.run(state, H_0, sim_params)
 
     # Expected results from qutip
     expected_xx = np.array([
@@ -607,7 +633,7 @@ def test_two_site_correlator_left_boundary() -> None:
 
 
 def test_two_site_correlator_center() -> None:
-    """Tests the expectation value of a two-site correlator in physics simulation at the center site.
+    """Tests the expectation value of a two-site correlator in analog simulation at the center site.
 
     This test initializes an MPS in the |0> state and computes the expectation value of a two-site correlator
     at the center of the chain.
@@ -629,7 +655,7 @@ def test_two_site_correlator_center() -> None:
         Observable(YY(), [L // 2, L // 2 + 1]),
         Observable(ZZ(), [L // 2, L // 2 + 1]),
     ]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         observables=observables,
         elapsed_time=elapsed_time,
         dt=dt,
@@ -637,7 +663,7 @@ def test_two_site_correlator_center() -> None:
         sample_timesteps=sample_timesteps,
     )
 
-    simulator.run(state, H_0, sim_params, noise_model=None)
+    simulator.run(state, H_0, sim_params)
 
     # Expected results from qutip
     expected_xx = np.array([
@@ -778,7 +804,7 @@ def test_two_site_correlator_center() -> None:
 
 
 def test_two_site_correlator_right_boundary() -> None:
-    """Tests the expectation value of a two-site correlator in physics simulation at the right boundary.
+    """Tests the expectation value of a two-site correlator in analog simulation at the right boundary.
 
     This test initializes an MPS in the |0> state and computes the expectation value of a two-site correlator
     at the right boundary.
@@ -796,7 +822,7 @@ def test_two_site_correlator_right_boundary() -> None:
     sample_timesteps = True
     max_bond_dim = 4
     observables = [Observable(XX(), [L - 2, L - 1]), Observable(YY(), [L - 2, L - 1]), Observable(ZZ(), [L - 2, L - 1])]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         observables=observables,
         elapsed_time=elapsed_time,
         dt=dt,
@@ -804,7 +830,7 @@ def test_two_site_correlator_right_boundary() -> None:
         sample_timesteps=sample_timesteps,
     )
 
-    simulator.run(state, H_0, sim_params, noise_model=None)
+    simulator.run(state, H_0, sim_params)
 
     # Expected results from qutip
     expected_xx = np.array([
@@ -964,7 +990,7 @@ def test_two_site_correlator_center_circuit() -> None:
     ]
     sim_params = StrongSimParams(observables=observables, max_bond_dim=max_bond_dim)
 
-    simulator.run(state, circ, sim_params, noise_model=None)
+    simulator.run(state, circ, sim_params)
 
     # Expected results from qutip
     expected_xx = np.array([1.63020588e-02])
@@ -976,3 +1002,72 @@ def test_two_site_correlator_center_circuit() -> None:
     np.testing.assert_allclose(sim_params.observables[0].results, expected_xx, atol=2e-3)
     np.testing.assert_allclose(sim_params.observables[1].results, expected_yy, atol=2e-3)
     np.testing.assert_allclose(sim_params.observables[2].results, expected_zz, atol=2e-3)
+
+
+def test_transmon_simulation() -> None:
+    """Tests if a SWAP gate is implemented correctly.
+
+    This test creates a mixed-dimensional coupled transmon system and implements a SWAP gate.
+    """
+    length = 3  # Qubit - resonator - qubit
+    qubit_dim = 3
+    resonator_dim = 3
+    w_q = 4 / (2 * np.pi)
+    w_r = 4 / (2 * np.pi)
+    alpha = -0.3 / (2 * np.pi)
+    g = 0.5 / (2 * np.pi)
+
+    H_0 = MPO()
+    H_0.init_coupled_transmon(
+        length=length,
+        qubit_dim=qubit_dim,
+        resonator_dim=resonator_dim,
+        qubit_freq=w_q,
+        resonator_freq=w_r,
+        anharmonicity=alpha,
+        coupling=g,
+    )
+
+    state = MPS(length, state="basis", basis_string="100", physical_dimensions=[qubit_dim, resonator_dim, qubit_dim])
+    elapsed_time = np.pi / (np.sqrt(2) * g)  # T_swap
+    dt = elapsed_time / 1000
+    sample_timesteps = False
+    num_traj = 1
+    max_bond_dim = 2**length
+    threshold = 0
+    order = 1
+
+    measurements = [Observable(bitstring) for bitstring in ["000", "001", "010", "011", "100", "101", "110", "111"]]
+
+    sim_params = AnalogSimParams(
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+    )
+    simulator.run(state, H_0, sim_params)
+
+    res0 = measurements[0].results
+    assert res0 is not None, "Expected results to be set by simulator.run"
+    # Initialize leakage as a numpy array of ones:
+    leakage = np.ones_like(res0)
+
+    for meas in measurements:
+        # Narrow results from Optional[...] to actual array
+        res = meas.results
+        assert hasattr(meas.gate, "bitstring")
+        assert res is not None, f"No results for bitstring {meas.gate.bitstring!r}"
+
+        # subtract elementwise
+        leakage -= res
+
+        # use meas.bitstring, not meas.gate.bitstring
+        if meas.gate.bitstring == "111":
+            # small pop in 111
+            np.testing.assert_array_less(np.max(res), 1e-2)
+        elif meas.gate.bitstring == "100":
+            np.testing.assert_allclose(res[-1], 0, atol=5e-2)
+        elif meas.gate.bitstring == "001":
+            np.testing.assert_allclose(res[-1], 1, atol=1e-1)
+        elif meas.gate.bitstring == "010":
+            np.testing.assert_allclose(res[-1], 0, atol=5e-2)
+
+    # finally check total leakage
+    np.testing.assert_array_less(leakage, 5e-2)

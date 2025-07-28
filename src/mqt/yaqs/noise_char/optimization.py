@@ -68,7 +68,7 @@ class loss_class:
         self.compute_avg()
         self.compute_diff_avg()
 
-        self.log_garbage()
+        # self.log_garbage()
 
         if self.print_to_file:
             self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1])
@@ -181,7 +181,12 @@ class loss_class_2d(loss_class):
 
         self.sim_params.set_gammas(x[0], x[1])
 
-        t, exp_vals_traj, d_On_d_gk = self.traj_der(self.sim_params) 
+
+        start_time = time.time()
+
+        t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params) 
+
+        end_time = time.time()
 
 
         self.t = t.copy()
@@ -201,9 +206,11 @@ class loss_class_2d(loss_class):
         grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,2,3))
 
 
-        self.post_process(self, x.copy(),f)
+        self.post_process(x.copy(),f)
 
-        return f, grad
+        sim_time = end_time - start_time ## Simulation time
+
+        return f, grad, sim_time, avg_min_max_traj_time
 
 
 
@@ -232,8 +239,12 @@ class loss_class_nd(loss_class):
         self.sim_params.set_gammas(x[:self.n_gamma_rel], x[self.n_gamma_rel:])
 
 
+        start_time = time.time()
 
-        t, exp_vals_traj, d_On_d_gk = self.traj_der(self.sim_params) 
+        t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params) 
+
+
+        end_time = time.time()
 
 
         self.t = t.copy()
@@ -254,7 +265,9 @@ class loss_class_nd(loss_class):
 
         self.post_process(x.copy(),f)
 
-        return f, grad
+        sim_time = end_time - start_time  ## Simulation time
+
+        return f, grad, sim_time, avg_min_max_traj_time
 
 
 
@@ -478,12 +491,20 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
         v = np.zeros(d)
         start_iter = 0
 
+        # Write a header to performance_metric.txt in f.work_dir
+        perf_file = os.path.join(f.work_dir, "performance_metric_sec.txt")
+        with open(perf_file, "w") as pf:
+            pf.write("# iter    opt_step_time    simulation_time    avg_traj_time    min_traj_time    max_traj_time\n")
+
     
 
 
     for i in range(start_iter,max_iterations):
         # Calculate loss and gradients (unchanged)
-        loss, grad = f(x)
+
+        start_time = time.time()
+
+        loss, grad, sim_time, avg_min_max_traj_time = f(x)
 
 
         if abs(loss) < tolerance:
@@ -510,6 +531,7 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
 
         # Ensure non-negativity for the parameters
         x[x < 0] = 0
+        x[x > 1] = 1
 
 
 
@@ -537,12 +559,20 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
             pickle.dump(restart_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         
 
+        end_time = time.time()
+
+
+        iter_time = end_time - start_time
+
+
+        with open(perf_file, "a") as pf:
+            pf.write(f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n")
         
 
         # Convergence check
         if len(f.diff_avg_history) > max_n_convergence and all(
                 diff < threshhold for diff in f.diff_avg_history[-max_n_convergence:]):
-            print(f"Gradient convergence reached at iteration {i}.")
+            print(f"Parameters convergence reached at iteration {i}.")
             break
         
 

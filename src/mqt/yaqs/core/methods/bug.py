@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..data_structures.networks import MPO, MPS
-    from ..data_structures.simulation_parameters import PhysicsSimParams
+    from ..data_structures.simulation_parameters import AnalogSimParams
 
 
 def prepare_canonical_site_tensors(
@@ -136,7 +136,7 @@ def local_update(
     canon_center_tensors: list[NDArray[np.complex128]],
     site: int,
     right_m_block: NDArray[np.complex128],
-    sim_params: PhysicsSimParams | WeakSimParams | StrongSimParams,
+    sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
     numiter_lanczos: int,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Single Site bug algorithm update.
@@ -173,7 +173,7 @@ def local_update(
 
 
 def bug(
-    state: MPS, mpo: MPO, sim_params: PhysicsSimParams | WeakSimParams | StrongSimParams, numiter_lanczos: int = 25
+    state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | StrongSimParams, numiter_lanczos: int = 25
 ) -> None:
     """Performs the Basis-Update and Galerkin Method for an MPS.
 

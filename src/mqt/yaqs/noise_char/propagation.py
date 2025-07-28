@@ -5,7 +5,7 @@ import scipy as sp
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable,AnalogSimParams
 from mqt.yaqs import simulator
 from dataclasses import dataclass
 
@@ -19,8 +19,6 @@ from scikit_tt.tensor_train import TT
 import scikit_tt.solvers.ode as ode
 import scikit_tt
 import re
-
-
 
 
 class SimulationParameters:
@@ -38,6 +36,8 @@ class SimulationParameters:
     # For scikit_tt
     N:int = 100
     rank: int= 8
+
+    req_cpus: int = 1
 
 
     scikit_tt_solver: dict = {"solver": 'tdvp1', "method": 'krylov', "dimension": 5}
@@ -206,8 +206,11 @@ def qutip_traj(sim_params_class: SimulationParameters):
     d_On_d_gk = np.array(d_On_d_gk).reshape(n_jump_site, n_obs_site, L, n_t)
     original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, L, n_t)
 
-    # return t, original_exp_vals, d_On_d_gk, A_kn_exp_vals
-    return t, original_exp_vals, d_On_d_gk
+
+    avg_min_max_traj_time = [None, None, None]
+
+
+    return t, original_exp_vals, d_On_d_gk, avg_min_max_traj_time
     
 
 
@@ -215,8 +218,9 @@ def qutip_traj(sim_params_class: SimulationParameters):
 
 
 
+# from memory_profiler import profile
 
-
+# @profile
 def tjm_traj(sim_params_class: SimulationParameters):
 
     T = sim_params_class.T
@@ -285,7 +289,7 @@ def tjm_traj(sim_params_class: SimulationParameters):
 
 
 
-    sim_params = PhysicsSimParams(new_obs_list, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
+    sim_params = AnalogSimParams(new_obs_list, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
     simulator.run(state, H_0, sim_params, noise_model)
 
     exp_vals = []
@@ -309,8 +313,10 @@ def tjm_traj(sim_params_class: SimulationParameters):
     original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, L, n_t)
 
 
+    avg_min_max_traj_time = [None, None, None]  # Placeholder for average, min, and max trajectory time
 
-    return t, original_exp_vals, d_On_d_gk
+
+    return t, original_exp_vals, d_On_d_gk, avg_min_max_traj_time
 
 
 
@@ -359,7 +365,50 @@ def evaluate_Ank(A_nk, state):
     return A
 
 
+import multiprocessing
+import os
+import time
 
+
+def process_k(k, L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver):
+    start_time = time.time()
+
+    initial_state = tt.unit([2] * L, [0] * L)
+    for i in range(rank - 1):
+        initial_state += tt.unit([2] * L, [0] * L)
+    initial_state = initial_state.ortho()
+    initial_state = (1 / initial_state.norm()) * initial_state
+
+
+    n_obs=len(obs_list)
+
+    n_t=timesteps+1
+
+    A_kn_result = np.zeros([n_jump_site, n_obs_site, L, n_t],dtype=complex)
+    exp_result = np.zeros([len(obs_list),n_t])
+
+    
+    for j in range(n_obs):
+        exp_result[j,0] = np.real(initial_state.transpose(conjugate=True)@obs_list[j]@initial_state)
+
+    A_kn_result[:,:,:,0] = evaluate_Ank(A_nk, initial_state)
+    
+    
+    
+    for i in range(timesteps):
+        initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1, solver=scikit_tt_solver)[-1]
+
+        for j in range(n_obs):                
+            exp_result[j,i+1] = np.real(initial_state.transpose(conjugate=True)@obs_list[j]@initial_state)
+
+        A_kn_result[:,:,:,i+1] = evaluate_Ank(A_nk, initial_state)
+
+    
+    end_time = time.time()
+
+    traj_time = end_time - start_time
+
+    return exp_result, A_kn_result, traj_time
 
 
 
@@ -377,11 +426,14 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
     rank = sim_params_class.rank
     N = sim_params_class.N
 
+    req_cpus = sim_params_class.req_cpus
+
     scikit_tt_solver = sim_params_class.scikit_tt_solver
 
 
     t = np.arange(0, T + dt, dt) 
-    timesteps=len(t)-1
+    n_t = len(t)
+    timesteps=n_t-1
 
 
     # Parameters
@@ -419,53 +471,56 @@ def scikit_tt_traj(sim_params_class: SimulationParameters):
 
     
 
-    n_obs= len(O_list)
-    n_jump= len(L_list)
+    n_obs_site= len(O_list) ## Number of observables per site. Should be 3
+    n_jump_site= len(L_list)  ## Number of jump operators per site. Should be 2
 
 
+    n_obs=len(obs_list)   ## Total number of observable. Should be n_obs_site*L 
 
-    exp_vals = np.zeros([len(obs_list),timesteps+1])
+
+    exp_vals = np.zeros([n_obs,n_t])
 
     A_nk=construct_Ank(O_list, L_list)
 
 
-    A_kn_numpy=np.zeros([n_jump, n_obs, L, timesteps+1],dtype=complex)
-
-    for k in range(N):
-        initial_state = tt.unit([2] * L, [0] * L)
-        for i in range(rank - 1):
-            initial_state += tt.unit([2] * L, [0] * L)
-        initial_state = initial_state.ortho()
-        initial_state = (1 / initial_state.norm()) * initial_state
-
-        
-        #for j in range(n_obs):
-        #    exp_vals[j,0] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
-        
-        A_kn_numpy[:,:,:,0] += evaluate_Ank(A_nk, initial_state)
-        
-        
-        
-        for i in range(timesteps):
-            initial_state = ode.tjm(hamiltonian, jump_operator_list, jump_parameter_list, initial_state, dt, 1, solver=scikit_tt_solver)[-1]
-
-        #    for j in range(n_obs):                
-        #        exp_vals[j,i+1] += initial_state.transpose(conjugate=True)@obs_list[j]@initial_state
-
-            A_kn_numpy[:,:,:,i+1] += evaluate_Ank(A_nk, initial_state)
-            
+    A_kn_numpy=np.zeros([n_jump_site, n_obs_site, L, n_t],dtype=complex)
 
 
-    exp_vals = (1/N)*exp_vals
+
+    avail_num_cpus = int(os.environ.get("SLURM_CPUS_ON_NODE", multiprocessing.cpu_count())) 
+
+
+    if req_cpus > avail_num_cpus:
+        nthreads= max(1, avail_num_cpus - 1)
+        print(f"Requested {req_cpus} CPUs, but only {avail_num_cpus} are available. Using {avail_num_cpus} CPUs.")
+    else:
+        nthreads = max(1, req_cpus - 1)
+
+
+
+    args_list = [
+    (k,  L, rank, n_obs_site, n_jump_site, timesteps, dt, hamiltonian, jump_operator_list, jump_parameter_list, obs_list, A_nk, scikit_tt_solver)
+    for k in range(N) ]
     
-    A_kn_numpy = (1/N)*A_kn_numpy
-    
+
+    with multiprocessing.Pool(processes=nthreads) as pool:
+        results = pool.starmap(process_k, args_list)
+
+
+    exp_vals = np.sum([res[0] for res in results], axis=0)/N
+    A_kn_numpy = np.sum([res[1] for res in results], axis=0)/N
 
 
     ## The .real part is added as a workaround 
-    d_On_d_gk = [ [[trapezoidal(A_kn_numpy[i,j,k].real,t) for k in range(L)] for j in range(n_obs)] for i in range(n_jump)  ]
+    d_On_d_gk = [ [[trapezoidal(A_kn_numpy[i,j,k].real,t) for k in range(L)] for j in range(n_obs_site)] for i in range(n_jump_site)  ]
 
 
 
+    exp_vals = np.array(exp_vals).reshape(n_obs_site, L, n_t)
 
-    return t, exp_vals, d_On_d_gk
+
+    traj_time_list = np.array([res[2] for res in results])
+
+    avg_min_max_traj_time = [np.mean(traj_time_list), np.min(traj_time_list), np.max(traj_time_list)]
+
+    return t, exp_vals, d_On_d_gk, avg_min_max_traj_time

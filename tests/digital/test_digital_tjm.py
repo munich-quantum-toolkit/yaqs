@@ -1,11 +1,11 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
 
-"""Tests for the circuuit tensor jump method implementation.
+"""Tests for the digital tensor jump method implementation.
 
 This module provides unit tests for the CircuitTJM functionality.
 The tests verify that various components of the CircuitTJM implementation work correctly,
@@ -31,17 +31,17 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
-from mqt.yaqs.circuits.circuit_tjm import (
-    apply_single_qubit_gate,
-    apply_two_qubit_gate,
-    apply_window,
-    circuit_tjm,
-    construct_generator_mpo,
-    process_layer,
-)
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Z
+from mqt.yaqs.digital.digital_tjm import (
+    apply_single_qubit_gate,
+    apply_two_qubit_gate,
+    apply_window,
+    construct_generator_mpo,
+    digital_tjm,
+    process_layer,
+)
 
 
 def test_process_layer() -> None:
@@ -193,9 +193,9 @@ def test_apply_two_qubit_gate() -> None:
     num_traj = 1
     max_bond_dim = 4
     threshold = 1e-12
-    window_size = 0
+    min_bond_dim = 2
     observable = Observable(Z(), 0)
-    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, min_bond_dim, threshold)
     copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
@@ -206,11 +206,11 @@ def test_apply_two_qubit_gate() -> None:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-15)
 
 
-def test_circuit_tjm_strong() -> None:
-    """Test the circuit_tjm function for strong simulation.
+def test_digital_tjm_strong() -> None:
+    """Test the digital_tjm function for strong simulation.
 
     This test creates a random MPS and a circuit with a CX gate, sets up strong simulation parameters,
-    and runs circuit_tjm. The test verifies that the simulation completes without errors.
+    and runs digital_tjm. The test verifies that the simulation completes without errors.
     """
     length = 4
     mps0 = MPS(length, state="random")
@@ -221,19 +221,19 @@ def test_circuit_tjm_strong() -> None:
 
     num_traj = 1
     max_bond_dim = 4
+    min_bond_dim = 2
     threshold = 1e-12
-    window_size = 0
     observable = Observable(Z(), 0)
-    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, threshold, window_size)
+    sim_params = StrongSimParams([observable], num_traj, max_bond_dim, min_bond_dim, threshold)
     args = 0, mps0, None, sim_params, qc
-    circuit_tjm(args)
+    digital_tjm(args)
 
 
-def test_circuit_tjm_weak() -> None:
-    """Test the circuit_tjm function for weak simulation.
+def test_digital_tjm_weak() -> None:
+    """Test the digital_tjm function for weak simulation.
 
     This test creates a random MPS and a circuit with a CX gate, sets up weak simulation parameters,
-    and runs circuit_tjm. The test verifies that the simulation completes and measurements are obtained.
+    and runs digital_tjm. The test verifies that the simulation completes and measurements are obtained.
     """
     length = 4
     mps0 = MPS(length, state="random")
@@ -243,9 +243,9 @@ def test_circuit_tjm_weak() -> None:
     qc.cx(1, 3)
 
     max_bond_dim = 4
+    min_bond_dim = 2
     threshold = 1e-12
-    window_size = 0
     shots = 10
-    sim_params = WeakSimParams(shots, max_bond_dim, threshold, window_size)
+    sim_params = WeakSimParams(shots, max_bond_dim, min_bond_dim, threshold)
     args = 0, mps0, None, sim_params, qc
-    circuit_tjm(args)
+    digital_tjm(args)

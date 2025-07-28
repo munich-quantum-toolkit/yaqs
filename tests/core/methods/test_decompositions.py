@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, PhysicsSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, truncated_right_svd
 
@@ -123,7 +123,7 @@ def test_truncated_right_svd_thresh() -> None:
     """Test that the tensor is correctly truncated."""
     # Placeholder
     measurements = [Observable(Z(), site) for site in range(0)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements,
         elapsed_time=0.2,
         dt=0.1,
@@ -154,7 +154,7 @@ def test_truncated_right_svd_maxbd() -> None:
     """Test that the tensor is correctly truncated."""
     # Placeholder
     measurements = [Observable(Z(), site) for site in range(0)]
-    sim_params = PhysicsSimParams(
+    sim_params = AnalogSimParams(
         measurements,
         elapsed_time=0.2,
         dt=0.1,

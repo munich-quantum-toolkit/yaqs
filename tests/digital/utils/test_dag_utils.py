@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -21,7 +21,7 @@ from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
 
-from mqt.yaqs.circuits.utils.dag_utils import (
+from mqt.yaqs.digital.utils.dag_utils import (
     check_longest_gate,
     convert_dag_to_tensor_algorithm,
     get_temporal_zone,

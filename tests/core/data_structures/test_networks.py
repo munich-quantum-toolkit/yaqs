@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -368,7 +368,7 @@ def test_check_if_identity() -> None:
 ##############################################################################
 
 
-@pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall"])
+@pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall", "basis"])
 def test_mps_initialization(state: str) -> None:
     """Test that MPS initializes with the correct chain length, physical dimensions, and tensor shapes.
 
@@ -380,17 +380,53 @@ def test_mps_initialization(state: str) -> None:
     """
     length = 4
     pdim = 2
-    mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state)
+    basis_string = "1001"
+
+    if state == "basis":
+        mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state, basis_string=basis_string)
+    else:
+        mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state)
 
     assert mps.length == length
     assert len(mps.tensors) == length
     assert all(d == pdim for d in mps.physical_dimensions)
 
-    for tensor in mps.tensors:
+    for i, tensor in enumerate(mps.tensors):
+        # Check tensor shape
         assert tensor.ndim == 3
-        assert tensor.shape[0] == pdim
-        assert tensor.shape[1] == 1
-        assert tensor.shape[2] == 1
+        assert tensor.shape == (pdim, 1, 1)
+
+        # Validate state-specific behavior
+        vec = tensor[:, 0, 0]
+        if state == "zeros":
+            expected = np.array([1, 0], dtype=complex)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "ones":
+            expected = np.array([0, 1], dtype=complex)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "x+":
+            expected = np.array([1, 1], dtype=complex) / np.sqrt(2)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "x-":
+            expected = np.array([1, -1], dtype=complex) / np.sqrt(2)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "y+":
+            expected = np.array([1, 1j], dtype=complex) / np.sqrt(2)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "y-":
+            expected = np.array([1, -1j], dtype=complex) / np.sqrt(2)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "Neel":
+            expected = np.array([1, 0], dtype=complex) if i % 2 else np.array([0, 1], dtype=complex)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "wall":
+            expected = np.array([1, 0], dtype=complex) if i < length // 2 else np.array([0, 1], dtype=complex)
+            np.testing.assert_allclose(vec, expected)
+        elif state == "basis":
+            bit = int(basis_string[i])
+            expected = np.zeros(pdim, dtype=complex)
+            expected[bit] = 1
+            np.testing.assert_allclose(vec, expected)
 
 
 def test_mps_custom_tensors() -> None:
@@ -659,7 +695,7 @@ def test_check_canonical_form_none() -> None:
     """Tests that no canonical form is detected for an MPS in a non-canonical state."""
     mps = random_mps([(2, 1, 2), (2, 2, 3), (2, 3, 1)], normalize=False)
     res = mps.check_canonical_form()
-    assert res == [-1]
+    assert res == []
 
 
 def test_check_canonical_form_left() -> None:
@@ -669,7 +705,7 @@ def test_check_canonical_form_left() -> None:
     tensors = [crandn(2, 1, 6), unitary_mid, unitary_right]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
-    assert res == [0]
+    assert 0 in res
 
 
 def test_check_canonical_form_right() -> None:
@@ -679,7 +715,7 @@ def test_check_canonical_form_right() -> None:
     tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
-    assert res == [2]
+    assert 2 in res
 
 
 def test_check_canonical_form_middle() -> None:
@@ -689,7 +725,7 @@ def test_check_canonical_form_middle() -> None:
     tensors = [unitary_left, crandn(2, 3, 3), unitary_right]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
-    assert res == [1]
+    assert 1 in res
 
 
 def test_check_canonical_form_full() -> None:
@@ -872,7 +908,7 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
     # do a "no-real" truncation (tiny threshold, generous max bond)
     mps.truncate(threshold=1e-16, max_bond_dim=100)
     after_center = mps.check_canonical_form()[0]
-    assert after_center == before_center
+    assert after_center == center
 
     # fidelity of state stays unity
     after_vec = mps.to_vec()
@@ -907,10 +943,12 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
     # put it into a known canonical form
     mps.set_canonical_form(2)
     # perform a truncation that will cut back to max_bond=3
-    mps.truncate(threshold=0.0, max_bond_dim=3)
+    mps.truncate(threshold=1e-12, max_bond_dim=3)
 
     # check validity and that every bond dim <= 3
     mps.check_if_valid_mps()
+    for _tensor in mps.tensors:
+        pass
     for T in mps.tensors:
         _, bond_left, bond_right = T.shape
         assert bond_left <= 3
