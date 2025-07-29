@@ -40,6 +40,7 @@ class loss_class:
     f_history = []
     x_avg_history = []
     diff_avg_history = []
+    grad_history = []
 
     n_avg = 20
     
@@ -60,10 +61,11 @@ class loss_class:
             self.diff_avg_history.append(diff)
 
 
-    def post_process(self, x, f):
+    def post_process(self, x, f, grad):
         self.n_eval += 1
         self.x_history.append(x)
         self.f_history.append(f)
+        self.grad_history.append(grad)
 
         self.compute_avg()
         self.compute_diff_avg()
@@ -71,8 +73,8 @@ class loss_class:
         # self.log_garbage()
 
         if self.print_to_file:
-            self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1])
-            self.write_to_file(self.history_avg_file_name, self.f_history[-1], self.x_avg_history[-1])
+            self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1], self.grad_history[-1])
+            self.write_to_file(self.history_avg_file_name, self.f_history[-1], self.x_avg_history[-1], self.grad_history[-1])
 
     def reset(self):
         self.n_eval = 0
@@ -100,32 +102,32 @@ class loss_class:
 
             if reset or not os.path.exists(self.history_file_name) :
                 with open(self.history_file_name, "w") as file:
-                    file.write("# iter  loss  " + "  ".join([f"x{i+1}" for i in range(self.d)]) + "\n")
+                    file.write("# iter  loss  " + "  ".join([f"x{i+1}" for i in range(self.d)]) + "    "  + "  ".join([f"grad_x{i+1}" for i in range(self.d)]) + "\n")
             if reset or not os.path.exists(self.history_avg_file_name):
                 with open(self.history_avg_file_name, "w") as file:
-                    file.write("# iter  loss  " + "  ".join([f"x{i+1}_avg" for i in range(self.d)]) + "\n")
+                    file.write("# iter  loss  " + "  ".join([f"x{i+1}_avg" for i in range(self.d)]) + "    " + "  ".join([f"grad_x{i+1}" for i in range(self.d)]) + "\n")
         
-            self.garbage_file_name = self.work_dir + "/garbage.txt"
-            self.garbage_type_file_name = self.work_dir + "/garbage_type.txt"
-            self.unreachable_file_name = self.work_dir + "/unreachable.txt"
+            # self.garbage_file_name = self.work_dir + "/garbage.txt"
+            # self.garbage_type_file_name = self.work_dir + "/garbage_type.txt"
+            # self.unreachable_file_name = self.work_dir + "/unreachable.txt"
 
 
-            if reset or not os.path.exists(self.garbage_file_name):
-                with open(self.garbage_file_name, "w") as file:
-                    file.write("# iter    Collected objects \n")
+            # if reset or not os.path.exists(self.garbage_file_name):
+            #     with open(self.garbage_file_name, "w") as file:
+            #         file.write("# iter    Collected objects \n")
 
-            if reset or not os.path.exists(self.unreachable_file_name):
-                with open(self.unreachable_file_name, "w") as file:
-                    file.write("# iter    Unreachable objects \n")
-
-
+            # if reset or not os.path.exists(self.unreachable_file_name):
+            #     with open(self.unreachable_file_name, "w") as file:
+            #         file.write("# iter    Unreachable objects \n")
 
 
 
-    def write_to_file(self, file_name, f, x):
+
+
+    def write_to_file(self, file_name, f, x, grad):
         if self.print_to_file:
             with open(file_name, "a") as file:
-                file.write(f"{self.n_eval}    {f}  " + "  ".join([f"{x[j]:.6f}" for j in range(self.d)]) + "\n")
+                file.write(f"{self.n_eval}    {f}  " + "  ".join([f"{x[j]:.6f}" for j in range(self.d)]) + "    " + "  ".join([f"{grad[j]:.6f}" for j in range(self.d)]) + "\n")
 
     
     def log_garbage(self):
@@ -206,7 +208,7 @@ class loss_class_2d(loss_class):
         grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,2,3))
 
 
-        self.post_process(x.copy(),f)
+        self.post_process(x.copy(),f, grad.copy())
 
         sim_time = end_time - start_time ## Simulation time
 
@@ -263,7 +265,7 @@ class loss_class_nd(loss_class):
         ##  returning a matrix of shape (n_jump_site, L) which I then flatten obtaining a vector of shape (n_jump_site*L) 
         grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,3)).flatten()
 
-        self.post_process(x.copy(),f)
+        self.post_process(x.copy(),f, grad.copy())
 
         sim_time = end_time - start_time  ## Simulation time
 
