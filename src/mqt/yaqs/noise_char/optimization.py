@@ -70,6 +70,9 @@ class loss_class:
         self.compute_avg()
         self.compute_diff_avg()
 
+
+        self.write_opt_traj()
+
         # self.log_garbage()
 
         if self.print_to_file:
@@ -159,6 +162,29 @@ class loss_class:
             file.write(f"{self.n_eval}  {unreachable} \n")
 
 
+    def write_opt_traj(self):
+        """
+        Write the reference trajectory to a file.
+        
+        Parameters:
+        - t: Time array.
+        - ref_traj: Reference trajectory data.
+        - file_name: Name of the output file.
+        """
+
+        n_obs_site, L, n_t = self.exp_vals_traj.shape
+
+        exp_vals_traj_reshaped = self.exp_vals_traj.reshape(-1, self.exp_vals_traj.shape[-1])
+
+        exp_vals_traj_with_t=np.concatenate([np.array([self.t]), exp_vals_traj_reshaped], axis=0)
+
+
+        ## Saving reference trajectory and gammas
+        header =   "t  " +  "  ".join([obs+str(i)   for obs in ["x","y","z"][:n_obs_site] for i in range(L) ])
+
+        np.savetxt(self.work_dir + f"/opt_traj_{self.n_eval}.txt" , exp_vals_traj_with_t.T, header=header, fmt='%.6f')
+
+
 
 
 
@@ -186,18 +212,18 @@ class loss_class_2d(loss_class):
 
         start_time = time.time()
 
-        t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params) 
+        self.t, self.exp_vals_traj, self.d_On_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params) 
 
         end_time = time.time()
 
 
-        self.t = t.copy()
-        self.exp_vals_traj = exp_vals_traj.copy() 
+        # self.t = t.copy()
+        # self.exp_vals_traj = exp_vals_traj.copy() 
 
-        n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
+        n_jump_site, n_obs_site, L, nt = np.shape(self.d_On_d_gk)
 
 
-        diff = exp_vals_traj - self.ref_traj
+        diff = self.exp_vals_traj - self.ref_traj
 
 
         f = np.sum(diff**2)
@@ -205,7 +231,7 @@ class loss_class_2d(loss_class):
         ## I reshape diff so it has a shape compatible with d_On_d_gk (n_jump_site, n_obs_site, L, nt) to do elemtwise multiplication.
         ## Then I sum over the n_obs_site, L and nt dimensions to get the gradient for each gamma,
         ##  returning a vector of shape (n_jump_site)
-        grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * d_On_d_gk, axis=(1,2,3))
+        grad = np.sum(2 * diff.reshape(1,n_obs_site, L, nt) * self.d_On_d_gk, axis=(1,2,3))
 
 
         self.post_process(x.copy(),f, grad.copy())
@@ -508,11 +534,6 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
 
         loss, grad, sim_time, avg_min_max_traj_time = f(x)
 
-
-        if abs(loss) < tolerance:
-            print(f"Loss converged after {i} iterations. Loss={loss}, tolerance={tolerance}")
-            break
-
     
         # Adam update steps (NEW)
         m = beta1 * m + (1 - beta1) * grad
@@ -570,6 +591,10 @@ def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-
         with open(perf_file, "a") as pf:
             pf.write(f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n")
         
+
+        if abs(loss) < tolerance:
+            print(f"Loss converged after {i} iterations. Loss={loss}, tolerance={tolerance}")
+            break
 
         # Convergence check
         if len(f.diff_avg_history) > max_n_convergence and all(
