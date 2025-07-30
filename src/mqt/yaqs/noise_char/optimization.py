@@ -9,7 +9,33 @@ import pickle
 import gc
 from collections import Counter
 
-def trapezoidal(y, x):
+def trapezoidal(y : np.ndarray | list, x : np.ndarray | list) -> np.ndarray:
+    """
+    Compute the cumulative integral of y with respect to x using the trapezoidal rule.
+
+    Parameters
+    ----------
+    y : array_like
+        Array of function values to be integrated.
+    x : array_like
+        Array of x-coordinates corresponding to the y values.
+
+    Returns
+    -------
+    integral : numpy.ndarray
+        Array of cumulative integral values at each point in x.
+
+    Raises
+    ------
+    ValueError
+        If the lengths of x and y do not match.
+
+    Notes
+    -----
+    The function returns the cumulative integral, i.e., the integral from x[0] up to each x[i].
+    """
+
+
 
     len_x = len(x)
     len_y = len(y)
