@@ -51,8 +51,6 @@ class SimulationParameters:
     J: float = 1
     g: float = 0.5
 
-    observables = ['x','y','z']
-
     threshold: float = 1e-6
     max_bond_dim: int = 4
     order: int = 2
