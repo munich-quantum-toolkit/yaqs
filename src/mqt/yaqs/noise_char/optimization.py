@@ -547,7 +547,51 @@ class loss_class_nd(loss_class):
 
 
 
-def ADAM_loss_class(f, x_copy, alpha=0.05, max_iterations=1000, threshhold = 5e-4, max_n_convergence = 50, tolerance=1e-8, beta1 = 0.5, beta2 = 0.999, epsilon = 1e-8, restart=False, restart_file=None):
+
+def adam_optimizer(
+        f: loss_class,
+        x_copy: np.ndarray,
+        alpha: float = 0.05,
+        max_iterations: int = 1000,
+        threshhold: float = 5e-4,
+        max_n_convergence: int = 50,
+        tolerance: float = 1e-8,
+        beta1: float = 0.5,
+        beta2: float = 0.999,
+        epsilon: float = 1e-8,
+        restart: bool = False,
+        restart_file: str = None):
+    """
+    Performs Adam optimization on a given loss function with support for checkpointing and restart.
+    Args:
+        f (loss_class): An instance of a loss function class that implements the required interface.
+        x_copy (np.ndarray): Initial parameter vector to optimize.
+        alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
+        max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
+        threshhold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
+        max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
+        tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
+        beta1 (float, optional): Exponential decay rate for the first moment estimates. Default is 0.5.
+        beta2 (float, optional): Exponential decay rate for the second moment estimates. Default is 0.999.
+        epsilon (float, optional): Small constant for numerical stability. Default is 1e-8.
+        restart (bool, optional): Whether to restart optimization from a checkpoint. Default is False.
+        restart_file (str, optional): Path to a specific checkpoint file to restart from. If None, the latest checkpoint in the working directory is used.
+    Returns:
+        Tuple[
+            List[float],      # f.f_history: History of loss values.
+            List[np.ndarray], # f.x_history: History of parameter vectors.
+            List[np.ndarray], # f.x_avg_history: History of averaged parameter vectors.
+            np.ndarray,       # f.t: Time array from the loss function.
+            np.ndarray        # f.exp_vals_traj: Optimized trajectory of expectation values.
+        ]
+    Raises:
+        ValueError: If restart is True but no valid checkpoint file is found.
+    Notes:
+        - The optimizer saves a checkpoint at every iteration in the working directory specified by `f.work_dir`.
+        - All parameter values are clipped to the [0, 1] range after each update.
+        - Performance metrics are logged to 'performance_metric_sec.txt' in the working directory.
+    """
+
 
 
     restart_dir = f.work_dir
