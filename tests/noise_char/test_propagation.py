@@ -1,10 +1,18 @@
-import pytest
+from __future__ import annotations
+
 import numpy as np
+import pytest
 
 from mqt.yaqs.noise_char import propagation
 
 
-def test_simulationparameters_set_gammas_float_and_list():
+def test_simulationparameters_set_gammas_float_and_list() -> None:
+    """Test the initialization of SimulationParameters with different types of gamma_rel and gamma_deph inputs.
+    This test covers the following cases:
+    1. When gamma_rel and gamma_deph are provided as floats, they should be expanded to lists of length `n`.
+    2. When gamma_rel and gamma_deph are provided as lists, they should be assigned directly.
+    3. When gamma_rel or gamma_deph lists have incorrect lengths, a ValueError should be raised.
+    """
     # Test with float
     sim = propagation.SimulationParameters(3, 0.1, 0.2)
     assert sim.gamma_rel == [0.1, 0.1, 0.1]
@@ -17,7 +25,14 @@ def test_simulationparameters_set_gammas_float_and_list():
     with pytest.raises(ValueError):
         propagation.SimulationParameters(3, [0.1, 0.2], [0.3, 0.4, 0.5])
 
-def test_simulationparameters_set_gammas_types():
+
+def test_simulationparameters_set_gammas_types() -> None:
+    """Test that SimulationParameters correctly sets gamma_rel and gamma_deph attributes
+    when provided with scalar or list inputs.
+    - When gamma_rel is a scalar and gamma_deph is a list, gamma_rel is broadcast to a list.
+    - When gamma_rel is a list and gamma_deph is a scalar, gamma_deph is broadcast to a list.
+    Asserts that the attributes are set to the expected list values.
+    """
     sim = propagation.SimulationParameters(2, 0.1, [0.2, 0.3])
     assert sim.gamma_rel == [0.1, 0.1]
     assert sim.gamma_deph == [0.2, 0.3]
@@ -26,9 +41,14 @@ def test_simulationparameters_set_gammas_types():
     assert sim.gamma_deph == [0.3, 0.3]
 
 
-
-def test_tjm_traj_runs(monkeypatch):
-    
+def test_tjm_traj_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test the `tjm_traj` function from the `propagation` module to ensure it runs
+    without errors and returns expected shapes. This test verifies that:
+    - The function can be called with a SimulationParameters instance.
+    - The returned time array `t`, original expectation values `original_exp_vals`,
+      and derivatives `d_On_d_gk` have the expected shapes.
+    - The average minimum and maximum trajectory time is returned as a list with None values.
+    """
     # Prepare SimulationParameters
     sim_params = propagation.SimulationParameters(2, 0.1, 0.2)
     sim_params.N = 2
