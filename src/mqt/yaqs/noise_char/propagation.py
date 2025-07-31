@@ -64,9 +64,6 @@ class SimulationParameters:
     req_cpus: int = 1
 
 
-    scikit_tt_solver: dict = {"solver": 'tdvp1', "method": 'krylov', "dimension": 5}
-
-
     def __init__(self, L : int, gamma_rel : list | float, gamma_deph : list | float):
 
         self.L = L
@@ -110,46 +107,6 @@ class SimulationParameters:
             self.gamma_deph = [gamma_deph] * self.L
         else:
             self.gamma_deph = list(gamma_deph)
-
-    def set_solver(self, solver: str = 'tdvp1', local_solver: str = 'krylov_5'):
-        """
-        Set the solver configuration for the propagation algorithm.
-        Parameters
-        ----------
-        solver : str, optional
-            The global solver to use. Must be either 'tdvp1' or 'tdvp2'. Default is 'tdvp1'.
-        local_solver : str, optional
-            The local solver method. Must be either 'exact' or match the pattern 'krylov_<number>',
-            where <number> is a positive integer (e.g., 'krylov_5'). Default is 'krylov_5'.
-        Raises
-        ------
-        ValueError
-            If `solver` is not 'tdvp1' or 'tdvp2'.
-            If `local_solver` does not match 'exact' or the pattern 'krylov_<number>'.
-            If the number in 'krylov_<number>' is not a positive integer.
-        Notes
-        -----
-        Updates the `scikit_tt_solver` dictionary with the selected solver and method.
-        """
-
-        if solver not in ('tdvp1', 'tdvp2'):
-            raise ValueError("solver can be only 'tdvp1' or 'tdvp2'")
-        self.scikit_tt_solver["solver"] = solver
-
-        if not re.match(r'^krylov_\d+$', local_solver) and not local_solver == 'exact':
-            raise ValueError("local_solver must match the pattern 'krylov_<number>' or be 'exact'")
-        
-        if local_solver == 'exact':
-            self.scikit_tt_solver["method"] = local_solver
-
-        if local_solver.startswith('krylov_'):
-            self.scikit_tt_solver["method"] = 'krylov'
-            self.scikit_tt_solver["dimension"] = int(local_solver.split('_')[-1])
-            if self.scikit_tt_solver["dimension"] < 1:
-                raise ValueError("local_solver must be a positive integer when using 'krylov_<number>' format")
-
-
-    
 
 
 def tjm_traj(sim_params_class: SimulationParameters) -> tuple:
