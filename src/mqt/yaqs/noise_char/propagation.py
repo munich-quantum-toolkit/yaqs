@@ -61,8 +61,6 @@ class SimulationParameters:
     N:int = 100
     rank: int= 8
 
-    req_cpus: int = 1
-
 
     def __init__(self, L : int, gamma_rel : list | float, gamma_deph : list | float):
 
