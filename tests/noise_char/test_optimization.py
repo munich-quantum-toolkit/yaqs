@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.noise_char import optimization
+from mqt.yaqs.noise_char.propagation import SimulationParameters
 
 
 def test_trapezoidal_basic() -> None:
@@ -180,8 +181,6 @@ def test_loss_class_2d_call(monkeypatch: pytest.MonkeyPatch) -> None:
     L = 2
     n_t = 5
 
-    class DummySimParams:
-        def set_gammas(self, a, b) -> None: pass
 
     def dummy_traj_der(sim_params):
         t = np.arange(n_t)
@@ -190,7 +189,8 @@ def test_loss_class_2d_call(monkeypatch: pytest.MonkeyPatch) -> None:
         avg_min_max_traj_time = [None, None, None]
         return t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time
 
-    sim_params = DummySimParams()
+    sim_params = SimulationParameters(L, 0.1, 0.1)
+
     ref_traj = np.ones((n_obs_site, L, n_t))
     loss = optimization.loss_class_2d(sim_params, ref_traj, dummy_traj_der)
     x = np.array([0.5, 0.5])
@@ -227,12 +227,6 @@ def test_loss_class_nd_call(monkeypatch: pytest.MonkeyPatch) -> None:
     L = 2
     n_t = 5
 
-    class DummySimParams:
-        def __init__(self) -> None:
-            self.gamma_rel = [0.1, 0.2]
-            self.gamma_deph = [0.3, 0.4]
-
-        def set_gammas(self, rel, deph) -> None: pass
 
     def dummy_traj_der(sim_params):
         t = np.arange(n_t)
@@ -240,7 +234,8 @@ def test_loss_class_nd_call(monkeypatch: pytest.MonkeyPatch) -> None:
         d_On_d_gk = np.ones((n_jump_sites, n_obs_site, L, n_t))
         avg_min_max_traj_time = [1, 2, 3]
         return t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time
-    sim_params = DummySimParams()
+    
+    sim_params = SimulationParameters(L,[0.1, 0.2], [0.3, 0.4])
     ref_traj = np.ones((n_obs_site, L, n_t))
     loss = optimization.loss_class_nd(sim_params, ref_traj, dummy_traj_der)
     x = np.array([0.5] * L * n_jump_sites)
