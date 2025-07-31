@@ -183,7 +183,7 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple:
 
     new_obs_list = obs_list + A_kn_site_list
 
-    sim_params = AnalogSimParams(new_obs_list, T, dt, N, max_bond_dim, threshold, order, sample_timesteps=True)
+    sim_params = AnalogSimParams(observables=new_obs_list, elapsed_time=T, dt=dt, num_traj=N, max_bond_dim=max_bond_dim, threshold=threshold, order=order, sample_timesteps=True)
     simulator.run(state, H_0, sim_params, noise_model)
 
     exp_vals = [observable.results for observable in sim_params.observables]
