@@ -181,7 +181,6 @@ def test_loss_class_2d_call(monkeypatch: pytest.MonkeyPatch) -> None:
     L = 2
     n_t = 5
 
-
     def dummy_traj_der(sim_params):
         t = np.arange(n_t)
         exp_vals_traj = np.ones((n_obs_site, L, n_t))
@@ -227,15 +226,14 @@ def test_loss_class_nd_call(monkeypatch: pytest.MonkeyPatch) -> None:
     L = 2
     n_t = 5
 
-
     def dummy_traj_der(sim_params):
         t = np.arange(n_t)
         exp_vals_traj = np.ones((n_obs_site, L, n_t))
         d_On_d_gk = np.ones((n_jump_sites, n_obs_site, L, n_t))
         avg_min_max_traj_time = [1, 2, 3]
         return t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time
-    
-    sim_params = SimulationParameters(L,[0.1, 0.2], [0.3, 0.4])
+
+    sim_params = SimulationParameters(L, [0.1, 0.2], [0.3, 0.4])
     ref_traj = np.ones((n_obs_site, L, n_t))
     loss = optimization.loss_class_nd(sim_params, ref_traj, dummy_traj_der)
     x = np.array([0.5] * L * n_jump_sites)
@@ -262,18 +260,17 @@ def test_adam_optimizer_runs(tmp_path: pathlib.Path) -> None:
         - The time array (`t`) is a numpy ndarray.
         - The expectation values trajectory (`exp_vals_traj`) is a numpy ndarray.
     """
-
-    L=2
-    T=0.3
-    dt=0.1
+    L = 2
+    T = 0.3
+    dt = 0.1
     sim_params = SimulationParameters(L=L, gamma_rel=[0.1, 0.2], gamma_deph=[0.3, 0.4])
     sim_params.T = T
     sim_params.dt = dt
     sim_params.N = 2
 
-    ref_traj = np.ones((3, L, int(T/dt) + 1))
+    ref_traj = np.ones((3, L, int(T / dt) + 1))
 
-    loss_function=optimization.loss_class_2d(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
+    loss_function = optimization.loss_class_2d(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
 
     x0 = np.array([0.5, 0.5, 0.5, 0.5])  # Initial guess for the parameters
     f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss_function, x0, max_iterations=3)

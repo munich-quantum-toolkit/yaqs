@@ -61,7 +61,7 @@ class SimulationParameters:
 
         self.set_gammas(gamma_rel, gamma_deph)
 
-    def set_gammas(self, gamma_rel: np.ndarray | list[float] | float, gamma_deph: np.ndarray |list[float] | float) -> None:
+    def set_gammas(self, gamma_rel: np.ndarray | list[float] | float, gamma_deph: np.ndarray | list[float] | float) -> None:
         """Set the relaxation (gamma_rel) and dephasing (gamma_deph) rates for the system.
         Parameters.
         ----------
