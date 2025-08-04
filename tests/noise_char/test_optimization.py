@@ -6,7 +6,7 @@ import pathlib
 import numpy as np
 import pytest
 
-from mqt.yaqs.noise_char import optimization
+from mqt.yaqs.noise_char import optimization, propagation
 from mqt.yaqs.noise_char.propagation import SimulationParameters
 
 
@@ -66,9 +66,9 @@ def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
     loss.reset()
     assert loss.n_eval == 0
     assert loss.x_history == []
-    loss.set_history([[1, 2]], [3], [[1, 2]], [0.1])
+    loss.set_history([np.array([1, 2])], [3], [np.array([1, 2])], [0.1])
     assert loss.n_eval == 1
-    assert loss.x_history == [[1, 2]]
+    assert loss.x_history == [np.array([1, 2])]
     assert loss.f_history == [3]
     assert loss.diff_avg_history == [0.1]
 
@@ -263,23 +263,20 @@ def test_adam_optimizer_runs(tmp_path: pathlib.Path) -> None:
         - The expectation values trajectory (`exp_vals_traj`) is a numpy ndarray.
     """
 
-    class DummyLoss(optimization.loss_class):
-        def __init__(self) -> None:
-            self.d = 2
-            self.print_to_file = False
-            self.work_dir = str(tmp_path)
-            self.f_history = []
-            self.x_history = []
-            self.x_avg_history = []
-            self.diff_avg_history = []
-            self.t = np.arange(3)
-            self.exp_vals_traj = np.ones((3, 2, 3))
+    L=2
+    T=0.3
+    dt=0.1
+    sim_params = SimulationParameters(L=L, gamma_rel=[0.1, 0.2], gamma_deph=[0.3, 0.4])
+    sim_params.T = T
+    sim_params.dt = dt
+    sim_params.N = 2
 
-        def __call__(self, x):
-            return 0.1, np.array([0.01, 0.01]), 0.01, [None, None, None]
-    loss = DummyLoss()
-    x0 = np.array([0.5, 0.5])
-    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss, x0, max_iterations=3)
+    ref_traj = np.ones((3, L, int(T/dt) + 1))
+
+    loss_function=optimization.loss_class_2d(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
+
+    x0 = np.array([0.5, 0.5, 0.5, 0.5])  # Initial guess for the parameters
+    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss_function, x0, max_iterations=3)
     assert isinstance(f_hist, list)
     assert isinstance(x_hist, list)
     assert isinstance(x_avg_hist, list)

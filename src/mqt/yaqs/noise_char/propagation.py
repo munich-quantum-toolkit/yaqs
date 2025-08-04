@@ -55,13 +55,13 @@ class SimulationParameters:
     N: int = 100
     rank: int = 8
 
-    def __init__(self, L: int, gamma_rel: list | float, gamma_deph: list | float) -> None:
+    def __init__(self, L: int, gamma_rel: list[float] | float, gamma_deph: list[float] | float) -> None:
 
         self.L = L
 
         self.set_gammas(gamma_rel, gamma_deph)
 
-    def set_gammas(self, gamma_rel: list | float, gamma_deph: list | float) -> None:
+    def set_gammas(self, gamma_rel: np.ndarray | list[float] | float, gamma_deph: np.ndarray |list[float] | float) -> None:
         """Set the relaxation (gamma_rel) and dephasing (gamma_deph) rates for the system.
         Parameters.
         ----------
@@ -99,7 +99,7 @@ class SimulationParameters:
             self.gamma_deph = list(gamma_deph)
 
 
-def tjm_traj(sim_params_class: SimulationParameters) -> tuple:
+def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:
     """Simulates the time evolution of an open quantum system using the Lindblad master equation with TJM.
     This function constructs the system Hamiltonian and collapse operators for a spin chain with relaxation and dephasing noise,
     initializes the system state, and computes the expectation values of specified observables and their derivatives with respect
@@ -172,7 +172,7 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple:
 
     obs_site_list = [X(), Y(), Z()]
 
-    A_kn_site_list = []
+    A_kn_site_list: list[Observable] = []
 
     n_jump_site = len(jump_site_list)
     n_obs_site = len(obs_site_list)
@@ -192,6 +192,7 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple:
     n_obs = len(obs_list)  # number of measurement operators (should be L * n_types)
     original_exp_vals = exp_vals[:n_obs]
     new_exp_vals = exp_vals[n_obs:]  # these correspond to the A_kn operators
+    assert all(v is not None for v in new_exp_vals)
 
     # Compute the integral of the new expectation values to obtain the derivatives
     d_On_d_gk = [trapezoidal(new_exp_vals[i], t) for i in range(len(A_kn_site_list))]

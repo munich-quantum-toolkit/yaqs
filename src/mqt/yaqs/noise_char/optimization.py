@@ -10,44 +10,34 @@ from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
+
+from typing import Union
+from numpy.typing import NDArray
+
+
 if TYPE_CHECKING:
     from mqt.yaqs.noise_char.propagation import SimulationParameters
 
 
-def trapezoidal(y: np.ndarray | list, x: np.ndarray | list) -> np.ndarray:
-    """Compute the cumulative integral of y with respect to x using the trapezoidal rule.
-
-    Parameters
-    ----------
-    y : array_like
-        Array of function values to be integrated.
-    x : array_like
-        Array of x-coordinates corresponding to the y values.
-
-    Returns:
-    -------
-    integral : numpy.ndarray
-        Array of cumulative integral values at each point in x.
-
-    Raises:
-    ------
-    ValueError
-        If the lengths of x and y do not match.
-
-    Notes:
-    -----
-    The function returns the cumulative integral, i.e., the integral from x[0] up to each x[i].
-    """
-    len_x = len(x)
-    len_y = len(y)
-
-    integral = np.zeros(len_y)
-
-    integral[0] = 0
-
-    if len_x != len_y:
-        msg = f"Mismatch in the number of elements between x and y. len(x) = {len_x} and len(y) = {len_y}"
+def trapezoidal(
+    y: Union[np.ndarray, list[float], None],
+    x: Union[np.ndarray, list[float], None]
+) -> NDArray[np.float64]:
+    """Compute the cumulative integral of y with respect to x using the trapezoidal rule."""
+    
+    if y is None or x is None:
+        msg = f"x or y is None. x = {x}, y = {y}"
         raise ValueError(msg)
+
+    y = np.asarray(y, dtype=np.float64)
+    x = np.asarray(x, dtype=np.float64)
+
+    if len(x) != len(y):
+        msg = f"Mismatch in the number of elements between x and y. len(x) = {len(x)} and len(y) = {len(y)}"
+        raise ValueError(msg)
+
+    integral = np.zeros(len(y), dtype=np.float64)
+    integral[0] = 0.0
 
     for i in range(1, len(y)):
         integral[i] = integral[i - 1] + 0.5 * (x[i] - x[i - 1]) * (y[i] + y[i - 1])
@@ -55,17 +45,32 @@ def trapezoidal(y: np.ndarray | list, x: np.ndarray | list) -> np.ndarray:
     return integral
 
 
+
+
 class loss_class:
+
 
     n_eval = 0
 
-    x_history = []
-    f_history = []
-    x_avg_history = []
-    diff_avg_history = []
-    grad_history = []
+    x_history: list[np.ndarray] = []
+    f_history: list[float] = []
+    x_avg_history: list[np.ndarray] = []
+    diff_avg_history: list[float] = []
+    grad_history: list[np.ndarray] = []
 
     n_avg = 20
+
+
+    t: np.ndarray 
+    exp_vals_traj: np.ndarray
+    work_dir: str
+    history_file_name: str    
+    history_avg_file_name: str
+
+    print_to_file: bool = False
+
+    d: int
+
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -90,7 +95,7 @@ class loss_class:
         over successive iterations.
         """
         if len(self.x_avg_history) > 1:
-            diff = np.max(np.abs(self.x_avg_history[-1] - self.x_avg_history[-2]))
+            diff: float = np.max(np.abs(self.x_avg_history[-1] - self.x_avg_history[-2]))
             self.diff_avg_history.append(diff)
 
     def post_process(self, x: np.ndarray, f: float, grad: np.ndarray) -> None:
@@ -138,7 +143,7 @@ class loss_class:
         self.x_avg_history = []
         self.diff_avg_history = []
 
-    def set_history(self, x_history: list | np.ndarray, f_history: list | np.ndarray, x_avg_history: list | np.ndarray, diff_avg_history: list | np.ndarray) -> None:
+    def set_history(self, x_history: list[np.ndarray] | np.ndarray, f_history: list[float] | np.ndarray, x_avg_history: list[np.ndarray] | np.ndarray, diff_avg_history: list[float] | np.ndarray) -> None:
         """Stores the optimization history data.
         Parameters.
         ----------
@@ -281,7 +286,7 @@ class loss_class_2d(loss_class):
             Average of the minimum and maximum trajectory times from the simulation.
     """
 
-    def __init__(self, sim_params: SimulationParameters, ref_traj: np.ndarray, traj_der: Callable[[SimulationParameters], tuple], print_to_file: bool = False) -> None:
+    def __init__(self, sim_params: SimulationParameters, ref_traj: np.ndarray, traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]], print_to_file: bool = False) -> None:
         """Initializes the optimization class for noise characterization.
 
         Args:
@@ -305,7 +310,7 @@ class loss_class_2d(loss_class):
         self.traj_der = traj_der
         self.sim_params = copy.deepcopy(sim_params)
 
-    def __call__(self, x: np.ndarray) -> tuple:
+    def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[ None ] | list[float]]:
         """Evaluates the objective function and its gradient for the given parameters.
         This method updates the simulation parameters with the provided gamma values,
         runs the trajectory simulation and its derivative, computes the loss (sum of squared
@@ -338,7 +343,7 @@ class loss_class_2d(loss_class):
 
         diff = self.exp_vals_traj - self.ref_traj
 
-        f = np.sum(diff**2)
+        f: float= np.sum(diff**2)
 
         # I reshape diff so it has a shape compatible with d_On_d_gk (n_jump_site, n_obs_site, L, nt) to do elemtwise multiplication.
         # Then I sum over the n_obs_site, L and nt dimensions to get the gradient for each gamma,
@@ -393,7 +398,7 @@ class loss_class_nd(loss_class):
             Average of the minimum and maximum trajectory times from the simulation.
     """
 
-    def __init__(self, sim_params: SimulationParameters, ref_traj: np.ndarray, traj_der: Callable[[SimulationParameters], tuple], print_to_file: bool = False) -> None:
+    def __init__(self, sim_params: SimulationParameters, ref_traj: np.ndarray, traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]], print_to_file: bool = False) -> None:
         """Initializes the optimization class for noise characterization.
 
         Args:
@@ -422,7 +427,7 @@ class loss_class_nd(loss_class):
 
         self.d = self.n_gamma_rel + self.n_gamma_deph
 
-    def __call__(self, x: np.ndarray) -> tuple:
+    def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[ None ] | list[float]]:
         """Evaluates the objective function and its gradient for the given parameters.
         This method updates the simulation parameters with the provided gamma values,
         runs the trajectory simulation and its derivatives, computes the difference
@@ -466,7 +471,7 @@ class loss_class_nd(loss_class):
 
         diff = exp_vals_traj - self.ref_traj
 
-        f = np.sum(diff**2)
+        f: float = np.sum(diff**2)
 
         # I reshape diff so it has a shape compatible with d_On_d_gk (n_jump_site, n_obs_site, L, nt) to do elemtwise multiplication.
         # Then I sum over the n_obs_site and nt dimensions to get the gradient for each gamma for each site,
@@ -481,7 +486,7 @@ class loss_class_nd(loss_class):
 
 
 def adam_optimizer(
-        f: loss_class,
+        f: loss_class_2d | loss_class_nd,
         x_copy: np.ndarray,
         alpha: float = 0.05,
         max_iterations: int = 1000,
@@ -492,7 +497,13 @@ def adam_optimizer(
         beta2: float = 0.999,
         epsilon: float = 1e-8,
         restart: bool = False,
-        restart_file: str | None = None):
+        restart_file: str | None = None) -> tuple[
+            list[float],      # f.f_history: History of loss values.
+            list[np.ndarray], # f.x_history: History of parameter vectors.
+            list[np.ndarray], # f.x_avg_history: History of averaged parameter vectors.
+            np.ndarray,       # f.t: Time array from the loss function.
+            np.ndarray        # f.exp_vals_traj: Optimized trajectory of expectation values.
+        ]:
     """Performs Adam optimization on a given loss function with support for checkpointing and restart.
 
     Args:
