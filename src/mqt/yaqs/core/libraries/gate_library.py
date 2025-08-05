@@ -550,6 +550,9 @@ class BaseGate:
     def entropy(cls) -> Entropy:
         return Entropy()
 
+    @classmethod
+    def schmidt_spectrum(cls) -> SchmidtSpectrum:
+        return SchmidtSpectrum()
 
 class X(BaseGate):
     """Class representing the Pauli-X (NOT) gate.
@@ -1519,6 +1522,14 @@ class Entropy(BaseGate):
         self.sites = sites_list
 
 
+class SchmidtSpectrum(BaseGate):
+    name = "schmidt_spectrum"
+
+    def __init__(self) -> None:
+        mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 
@@ -1574,4 +1585,5 @@ class GateLibrary:
     max_bond = MaxBond
     total_bond = TotalBond
     entropy = Entropy
+    schmidt_specturm = SchmidtSpectrum
     custom = BaseGate

@@ -294,6 +294,11 @@ class MPS:
         assert sites[0] + 1 == sites[1], "Entropy defined on long-range sites."
         i, j = sites
         a, b = self.tensors[i], self.tensors[j]
+
+        # Avoids NaN if product state
+        if a.shape[2] == 1:
+            return 0
+
         # 1) build the two-site tensor theta_{(phys_i,L),(phys_j,R)}
         theta = np.tensordot(a, b, axes=(2, 1))
         phys_i, left = a.shape[0], a.shape[1]
@@ -305,7 +310,34 @@ class MPS:
         # 3) full SVD
         _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
 
-        return -np.sum(s_vec**2 * np.log(s_vec**2))
+        entropy = -np.sum(s_vec**2 * np.log(s_vec**2))
+        if np.isnan(entropy):
+            return 0
+        return entropy
+
+    def get_schmidt_spectrum(self, sites: list[int]) -> list[float]:
+        assert len(sites) == 2, "Schmidt spectrum not defined on a bond."
+        assert sites[0] + 1 == sites[1], "Schmidt spectrum defined on long-range sites."
+        i, j = sites
+        a, b = self.tensors[i], self.tensors[j]
+
+        # Avoids NaN if product state
+        if a.shape[2] == 1:
+            return [1]
+
+        # 1) build the two-site tensor theta_{(phys_i,L),(phys_j,R)}
+        theta = np.tensordot(a, b, axes=(2, 1))
+        phys_i, left = a.shape[0], a.shape[1]
+        phys_j, right = b.shape[0], b.shape[2]
+
+        # 2) reshape to matrix M of shape (L*phys_i) x (phys_j*R)
+        theta_mat = theta.reshape(left * phys_i, phys_j * right)
+
+        # 3) full SVD
+        _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
+
+        schmidt_values = s_vec**2
+        return schmidt_values
 
     def flip_network(self) -> None:
         """Flip MPS.
@@ -643,6 +675,8 @@ class MPS:
             # Copying done to stop the state from messing up its own canonical form
             if observable.gate.name == "entropy":
                 exp = self.get_entropy(sites_list)
+            elif observable.gate.name == "schmidt_spectrum":
+                exp = self.get_schmidt_spectrum(sites_list)
             else:
                 exp = self.local_expect(observable, sites_list)
         elif observable.gate.name == "pvm":
