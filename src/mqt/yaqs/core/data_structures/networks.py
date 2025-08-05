@@ -291,7 +291,7 @@ class MPS:
 
     def get_entropy(self, sites: list[int]) -> int:
         assert len(sites) == 2, "Entropy not defined on a bond."
-        assert sites[0]+1 == sites[1], "Entropy defined on long-range sites."
+        assert sites[0] + 1 == sites[1], "Entropy defined on long-range sites."
         i, j = sites
         a, b = self.tensors[i], self.tensors[j]
         # 1) build the two-site tensor theta_{(phys_i,L),(phys_j,R)}
@@ -606,7 +606,7 @@ class MPS:
         temp_state = copy.deepcopy(self)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.gate.name not in  ["pvm", "runtime_cost", "max_bond", "total_bond"]:
+            if observable.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
                 idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
                 if idx > last_site:
                     for site in range(last_site, idx):
@@ -626,7 +626,7 @@ class MPS:
         Returns:
             np.float64: The real part of the expectation value of the observable.
         """
-        if observable.gate.name not in ["pvm", "runtime_cost", "max_bond", "total_bond"]:
+        if observable.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
             sites_list = None
             if isinstance(observable.sites, int):
                 sites_list = [observable.sites]
