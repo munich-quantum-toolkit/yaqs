@@ -84,6 +84,8 @@ class Observable:
                 gate = GateLibrary.max_bond()
             elif gate == "total_bond":
                 gate = GateLibrary.total_bond()
+            elif gate == "entropy":
+                gate = GateLibrary.entropy()
             else:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
@@ -241,10 +243,7 @@ class AnalogSimParams:
         attribute with the mean value of their trajectories along the specified axis.
         """
         for observable in self.observables:
-            if observable.gate.name in {"runtime_cost", "total_bond"}:
-                observable.results = np.sum(observable.trajectories, axis=0)
-            else:
-                observable.results = np.mean(observable.trajectories, axis=0)
+            observable.results = np.mean(observable.trajectories, axis=0)
 
 
 class WeakSimParams:
@@ -439,7 +438,4 @@ class StrongSimParams:
         of their `trajectories` along the first axis.
         """
         for observable in self.observables:
-            if observable.gate.name in {"runtime_cost", "total_bond"}:
-                observable.results = np.sum(observable.trajectories, axis=0)
-            else:
-                observable.results = np.mean(observable.trajectories, axis=0)
+            observable.results = np.mean(observable.trajectories, axis=0)

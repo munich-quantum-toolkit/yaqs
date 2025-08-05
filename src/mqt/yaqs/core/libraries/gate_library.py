@@ -546,6 +546,9 @@ class BaseGate:
     def total_bond(cls) -> TotalBond:
         return TotalBond()
 
+    @classmethod
+    def entropy(cls) -> Entropy:
+        return Entropy()
 
 class X(BaseGate):
     """Class representing the Pauli-X (NOT) gate.
@@ -1488,6 +1491,35 @@ class TotalBond(BaseGate):
         mat = np.array([[1, 0], [0, 1]])
         super().__init__(mat)
 
+class Entropy(BaseGate):
+    name = "entropy"
+
+    def __init__(self) -> None:
+        mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites: Variable-length argument list specifying site indices.
+
+        Raises:
+            ValueError: If the number of sites does not match the interaction level of the gate.
+        """
+        sites_list = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+
+        if len(sites_list) != self.interaction:
+            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
+            raise ValueError(msg)
+
+        self.sites = sites_list
+
 
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
@@ -1543,4 +1575,5 @@ class GateLibrary:
     runtime_cost = RuntimeCost
     max_bond = MaxBond
     total_bond = TotalBond
+    entropy = Entropy
     custom = BaseGate
