@@ -174,7 +174,9 @@ def test_loss_class_set_file_name_and_write_to_file(tmp_path: pathlib.Path) -> N
     assert pathlib.Path(file_name + ".txt").exists()
     loss.n_eval = 1
     loss.write_to_file(file_name + ".txt", 0.5, np.array([1.0, 2.0]), np.array([0.1, 0.2]))
-    with open(file_name + ".txt", encoding="utf-8") as f:
+
+    file_path = pathlib.Path(file_name + ".txt")
+    with file_path.open(encoding="utf-8") as f:
         lines = f.readlines()
     assert any("1" in line for line in lines)
 
