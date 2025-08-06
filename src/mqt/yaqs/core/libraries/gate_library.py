@@ -1548,6 +1548,7 @@ class SchmidtSpectrum(BaseGate):
 
         self.sites = sites_list
 
+
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 

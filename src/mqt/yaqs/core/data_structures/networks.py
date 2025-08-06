@@ -675,8 +675,7 @@ class MPS:
             if observable.gate.name == "entropy":
                 exp = self.get_entropy(sites_list)
             elif observable.gate.name == "schmidt_spectrum":
-                exp = self.get_schmidt_spectrum(sites_list)
-                return exp
+                return self.get_schmidt_spectrum(sites_list)
             else:
                 exp = self.local_expect(observable, sites_list)
         elif observable.gate.name == "pvm":

@@ -252,7 +252,6 @@ class AnalogSimParams:
                 observable.results = np.mean(observable.trajectories, axis=0)
 
 
-
 class WeakSimParams:
     """A class to represent the parameters for a weak simulation.
 
