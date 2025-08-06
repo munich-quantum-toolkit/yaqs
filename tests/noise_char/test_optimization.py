@@ -83,10 +83,13 @@ def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
 
 def test_loss_class_compute_avg_and_diff() -> None:
     """Test the computation of average and difference in the loss class.
+
     This test defines a dummy subclass of `optimization.loss_class` with preset history values.
     It verifies that:
-    - The `compute_avg()` method correctly computes and appends the average of the last `n_avg` entries in `x_history` to `x_avg_history`.
-    - The `compute_diff_avg()` method correctly computes and appends the maximum absolute difference between the last two averages in `x_avg_history` to `diff_avg_history`.
+    - The `compute_avg()` method correctly computes and appends
+    the average of the last `n_avg` entries in `x_history` to `x_avg_history`.
+    - The `compute_diff_avg()` method correctly computes and appends the maximum
+    absolute difference between the last two averages in `x_avg_history` to `diff_avg_history`.
     Assertions:
         - The last entry in `x_avg_history` matches the mean of the last `n_avg` entries in `x_history`.
         - The last entry in `diff_avg_history` matches the maximum absolute difference between the last two averages in `x_avg_history`.
@@ -108,8 +111,8 @@ def test_loss_class_compute_avg_and_diff() -> None:
 
 
 def test_loss_class_write_opt_traj(tmp_path: pathlib.Path) -> None:
-    """Test the `write_opt_traj` method of a loss class to ensure that the optimal trajectory
-    is correctly written to a file.
+    """Test the `write_opt_traj` method of a loss class to ensure that the optimal trajectory is correctly written to a file.
+
     This test creates a dummy loss class with predefined trajectory data, invokes the
     `write_opt_traj` method, and verifies that the output file is created in the specified
     temporary directory. It then loads the data from the file and checks that the shape
@@ -178,13 +181,15 @@ def test_loss_class_set_file_name_and_write_to_file(tmp_path: pathlib.Path) -> N
 
 def test_loss_class_2_call() -> None:
     """Unit test for the `optimization.loss_class_2d` function.
+
     This test verifies that the loss function returned by `loss_class_2d`:
     - Accepts a parameter vector `x` and returns a tuple `(f, grad, sim_time, avg)`.
     - Ensures the output `f` is a float.
     - Ensures the output `grad` is a numpy array of shape (1,).
     - Ensures the output `sim_time` is a float.
     - Ensures the output `avg` is a list.
-    The test uses dummy simulation parameters and a dummy trajectory derivative function to mock the behavior of the actual simulation.
+    The test uses dummy simulation parameters and a dummy trajectory derivative function
+    to mock the behavior of the actual simulation.
     """
     n_obs_site = 3
     n_jump_sites = 2
@@ -212,6 +217,7 @@ def test_loss_class_2_call() -> None:
 
 def test_loss_class_2l_call() -> None:
     """Test the `loss_class_2l` function from the `optimization` module.
+
     This test verifies that the loss function returned by `loss_class_2l`:
     - Accepts a parameter vector `x` of appropriate shape.
     - Returns a tuple containing:
