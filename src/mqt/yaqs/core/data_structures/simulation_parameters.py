@@ -86,6 +86,8 @@ class Observable:
                 gate = GateLibrary.total_bond()
             elif gate == "entropy":
                 gate = GateLibrary.entropy()
+            elif gate == "schmidt_spectrum":
+                gate = GateLibrary.schmidt_spectrum()
             else:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
@@ -110,7 +112,7 @@ class Observable:
                 self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=np.float64)
                 self.times = sim_params.times
             else:
-                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.float64)
+                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=object)
                 self.times = sim_params.elapsed_time
             self.results = np.empty(len(sim_params.times), dtype=np.float64)
         elif isinstance(sim_params, WeakSimParams):
@@ -243,9 +245,13 @@ class AnalogSimParams:
         attribute with the mean value of their trajectories along the specified axis.
         """
         for observable in self.observables:
-            observable.results = np.mean(observable.trajectories, axis=0)
             if observable.gate.name == "schmidt_spectrum":
-                observable.results = np.concatenate(observable.results, observable.trajectories)
+                all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
+                observable.results = np.concatenate(all_values)
+            else:
+                observable.results = np.mean(observable.trajectories, axis=0)
+
+
 
 class WeakSimParams:
     """A class to represent the parameters for a weak simulation.

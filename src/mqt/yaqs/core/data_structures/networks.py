@@ -315,7 +315,7 @@ class MPS:
             return 0
         return entropy
 
-    def get_schmidt_spectrum(self, sites: list[int]) -> list[float]:
+    def get_schmidt_spectrum(self, sites: list[int]) -> NDArray[float]:
         assert len(sites) == 2, "Schmidt spectrum not defined on a bond."
         assert sites[0] + 1 == sites[1], "Schmidt spectrum defined on long-range sites."
         i, j = sites
@@ -336,8 +336,7 @@ class MPS:
         # 3) full SVD
         _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
 
-        schmidt_values = s_vec**2
-        return schmidt_values
+        return s_vec[0:20]
 
     def flip_network(self) -> None:
         """Flip MPS.
@@ -677,6 +676,7 @@ class MPS:
                 exp = self.get_entropy(sites_list)
             elif observable.gate.name == "schmidt_spectrum":
                 exp = self.get_schmidt_spectrum(sites_list)
+                return exp
             else:
                 exp = self.local_expect(observable, sites_list)
         elif observable.gate.name == "pvm":
