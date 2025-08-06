@@ -103,13 +103,21 @@ def _run_strong_sim(
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
-                for future in concurrent.futures.as_completed(futures):
-                    i = futures[future]
-                    result = future.result()
-                    for obs_index, observable in enumerate(sim_params.sorted_observables):
-                        assert observable.trajectories is not None, "Trajectories should have been initialized"
-                        observable.trajectories[i] = result[obs_index]
-                    pbar.update(1)
+                while futures:
+                    done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                    for future in done:
+                        i = futures.pop(future)
+                        try:
+                            result = future.result()
+                        except Exception:
+                            new_future = executor.submit(backend, args[i])
+                            futures[new_future] = i
+                            continue
+
+                        for obs_index, observable in enumerate(sim_params.sorted_observables):
+                            assert observable.trajectories is not None, "Trajectories should have been initialized"
+                            observable.trajectories[i] = result[obs_index]
+                        pbar.update(1)
     else:
         for i, arg in enumerate(args):
             result = backend(arg)
@@ -160,11 +168,21 @@ def _run_weak_sim(
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
-                for future in concurrent.futures.as_completed(futures):
-                    i = futures[future]
-                    result = future.result()
-                    sim_params.measurements[i] = result
-                    pbar.update(1)
+                while futures:
+                    done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                    for future in done:
+                        i = futures.pop(future)
+                        try:
+                            result = future.result()
+                        except Exception:
+                            new_future = executor.submit(backend, args[i])
+                            futures[new_future] = i
+                            continue
+
+                        for obs_index, observable in enumerate(sim_params.sorted_observables):
+                            assert observable.trajectories is not None, "Trajectories should have been initialized"
+                            observable.trajectories[i] = result[obs_index]
+                        pbar.update(1)
     else:
         for i, arg in enumerate(args):
             result = backend(arg)
@@ -234,18 +252,27 @@ def _run_analog(
         observable.initialize(sim_params)
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(backend, arg): arg[0] for arg in args}
             with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
-                for future in concurrent.futures.as_completed(futures):
-                    i = futures[future]
-                    result = future.result()
-                    for obs_index, observable in enumerate(sim_params.sorted_observables):
-                        assert observable.trajectories is not None, "Trajectories should have been initialized"
-                        observable.trajectories[i] = result[obs_index]
-                    pbar.update(1)
+                while futures:
+                    done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                    for future in done:
+                        i = futures.pop(future)
+                        try:
+                            result = future.result()
+                        except Exception:
+                            new_future = executor.submit(backend, args[i])
+                            futures[new_future] = i
+                            continue
+
+                        for obs_index, observable in enumerate(sim_params.sorted_observables):
+                            assert observable.trajectories is not None, "Trajectories should have been initialized"
+                            observable.trajectories[i] = result[obs_index]
+                        pbar.update(1)
     else:
         for i, arg in enumerate(args):
             result = backend(arg)

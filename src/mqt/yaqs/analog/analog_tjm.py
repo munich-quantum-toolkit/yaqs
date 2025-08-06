@@ -182,9 +182,9 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
     state = copy.deepcopy(initial_state)
 
     if sim_params.sample_timesteps:
-        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
+        results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=object)
     else:
-        results = np.zeros((len(sim_params.sorted_observables), 1))
+        results = np.zeros((len(sim_params.sorted_observables), 1), dtype=object)
 
     if sim_params.sample_timesteps:
         for obs_index, observable in enumerate(sim_params.sorted_observables):

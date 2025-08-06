@@ -263,7 +263,7 @@ class MPS:
         # renormalise the state
         self.normalize()
 
-    def write_max_bond_dim(self) -> int:
+    def get_max_bond(self) -> int:
         """Write max bond dim.
 
         Calculate and return the maximum bond dimension of the tensors in the network.
@@ -280,6 +280,63 @@ class MPS:
             global_max = max(global_max, local_max)
 
         return global_max
+
+    def get_total_bond(self) -> int:
+        bonds = [tensor.shape[1] for tensor in self.tensors[1::]]
+        return sum(bonds)
+
+    def get_cost(self) -> int:
+        cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1::]]
+        return sum(cost)
+
+    def get_entropy(self, sites: list[int]) -> int:
+        assert len(sites) == 2, "Entropy not defined on a bond."
+        assert sites[0] + 1 == sites[1], "Entropy defined on long-range sites."
+        i, j = sites
+        a, b = self.tensors[i], self.tensors[j]
+
+        # Avoids NaN if product state
+        if a.shape[2] == 1:
+            return 0
+
+        # 1) build the two-site tensor theta_{(phys_i,L),(phys_j,R)}
+        theta = np.tensordot(a, b, axes=(2, 1))
+        phys_i, left = a.shape[0], a.shape[1]
+        phys_j, right = b.shape[0], b.shape[2]
+
+        # 2) reshape to matrix M of shape (L*phys_i) x (phys_j*R)
+        theta_mat = theta.reshape(left * phys_i, phys_j * right)
+
+        # 3) full SVD
+        _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
+
+        entropy = -np.sum(s_vec**2 * np.log(s_vec**2))
+        if np.isnan(entropy):
+            return 0
+        return entropy
+
+    def get_schmidt_spectrum(self, sites: list[int]) -> NDArray[float]:
+        assert len(sites) == 2, "Schmidt spectrum not defined on a bond."
+        assert sites[0] + 1 == sites[1], "Schmidt spectrum defined on long-range sites."
+        i, j = sites
+        a, b = self.tensors[i], self.tensors[j]
+
+        # Avoids NaN if product state
+        if a.shape[2] == 1:
+            return [1]
+
+        # 1) build the two-site tensor theta_{(phys_i,L),(phys_j,R)}
+        theta = np.tensordot(a, b, axes=(2, 1))
+        phys_i, left = a.shape[0], a.shape[1]
+        phys_j, right = b.shape[0], b.shape[2]
+
+        # 2) reshape to matrix M of shape (L*phys_i) x (phys_j*R)
+        theta_mat = theta.reshape(left * phys_i, phys_j * right)
+
+        # 3) full SVD
+        _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
+
+        return s_vec[0:20]
 
     def flip_network(self) -> None:
         """Flip MPS.
@@ -339,7 +396,7 @@ class MPS:
                 )
         elif decomposition == "SVD":
             a, b = self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1]
-            a_new, b_new = two_site_svd(a, b, threshold=1e-15, max_bond_dim=None)
+            a_new, b_new = two_site_svd(a, b, threshold=1e-13, max_bond_dim=None)
             self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1] = a_new, b_new
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
@@ -580,7 +637,7 @@ class MPS:
         temp_state = copy.deepcopy(self)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.gate.name != "pvm":
+            if observable.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
                 idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
                 if idx > last_site:
                     for site in range(last_site, idx):
@@ -600,7 +657,7 @@ class MPS:
         Returns:
             np.float64: The real part of the expectation value of the observable.
         """
-        if observable.gate.name != "pvm":
+        if observable.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
             sites_list = None
             if isinstance(observable.sites, int):
                 sites_list = [observable.sites]
@@ -615,10 +672,22 @@ class MPS:
                 assert s in range(self.length), f"Observable acting on non-existing site: {s}"
 
             # Copying done to stop the state from messing up its own canonical form
-            exp = self.local_expect(observable, sites_list)
+            if observable.gate.name == "entropy":
+                exp = self.get_entropy(sites_list)
+            elif observable.gate.name == "schmidt_spectrum":
+                return self.get_schmidt_spectrum(sites_list)
+            else:
+                exp = self.local_expect(observable, sites_list)
         elif observable.gate.name == "pvm":
             assert hasattr(observable.gate, "bitstring"), "Gate does not have attribute bitstring."
             exp = self.project_onto_bitstring(observable.gate.bitstring)
+        elif observable.gate.name == "runtime_cost":
+            exp = self.get_cost()
+        elif observable.gate.name == "max_bond":
+            exp = self.get_max_bond()
+        elif observable.gate.name == "total_bond":
+            exp = self.get_total_bond()
+
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 
