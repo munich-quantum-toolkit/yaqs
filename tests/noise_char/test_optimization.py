@@ -176,7 +176,7 @@ def test_loss_class_set_file_name_and_write_to_file(tmp_path: pathlib.Path) -> N
     assert any("1" in line for line in lines)
 
 
-def test_loss_class_2d_call(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_loss_class_2_call() -> None:
     """Unit test for the `optimization.loss_class_2d` function.
     This test verifies that the loss function returned by `loss_class_2d`:
     - Accepts a parameter vector `x` and returns a tuple `(f, grad, sim_time, avg)`.
@@ -188,20 +188,20 @@ def test_loss_class_2d_call(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     n_obs_site = 3
     n_jump_sites = 2
-    L = 2
+    sites = 2
     n_t = 5
 
-    def dummy_traj_der(sim_params):
+    def dummy_traj_der(sim_params: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:
         t = np.arange(n_t)
-        exp_vals_traj = np.ones((n_obs_site, L, n_t))
-        d_On_d_gk = np.ones((n_jump_sites, n_obs_site, L, n_t))
+        exp_vals_traj = np.ones((n_obs_site, sim_params.L, n_t))
+        d_on_d_gk = np.ones((n_jump_sites, n_obs_site, sim_params.L, n_t))
         avg_min_max_traj_time = [None, None, None]
-        return t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time
+        return t, exp_vals_traj, d_on_d_gk, avg_min_max_traj_time
 
-    sim_params = SimulationParameters(L, 0.1, 0.1)
+    sim_params = SimulationParameters(sites, 0.1, 0.1)
 
-    ref_traj = np.ones((n_obs_site, L, n_t))
-    loss = optimization.loss_class_2d(sim_params, ref_traj, dummy_traj_der)
+    ref_traj = np.ones((n_obs_site, sites, n_t))
+    loss = optimization.loss_class_2(sim_params, ref_traj, dummy_traj_der)
     x = np.array([0.5, 0.5])
     f, grad, sim_time, avg = loss(x)
     assert isinstance(f, float)
@@ -210,9 +210,9 @@ def test_loss_class_2d_call(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(avg, list)
 
 
-def test_loss_class_and_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test the `loss_class_and` function from the `optimization` module.
-    This test verifies that the loss function returned by `loss_class_and`:
+def test_loss_class_2l_call() -> None:
+    """Test the `loss_class_2l` function from the `optimization` module.
+    This test verifies that the loss function returned by `loss_class_2l`:
     - Accepts a parameter vector `x` of appropriate shape.
     - Returns a tuple containing:
         - A scalar loss value (`f`).
@@ -223,8 +223,6 @@ def test_loss_class_and_call(monkeypatch: pytest.MonkeyPatch) -> None:
     to mock the behavior of the underlying simulation. It asserts the types and shapes
     of the outputs to ensure correct functionality.
 
-    Args:
-        monkeypatch (pytest.MonkeyPatch): Pytest fixture for patching.
     Asserts:
         - The loss value is a float.
         - The gradient has the expected shape.
@@ -233,20 +231,20 @@ def test_loss_class_and_call(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     n_obs_site = 3
     n_jump_sites = 2
-    L = 2
+    sites = 2
     n_t = 5
 
-    def dummy_traj_der(sim_params):
+    def dummy_traj_der(sim_params: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:
         t = np.arange(n_t)
-        exp_vals_traj = np.ones((n_obs_site, L, n_t))
-        d_On_d_gk = np.ones((n_jump_sites, n_obs_site, L, n_t))
-        avg_min_max_traj_time = [1, 2, 3]
-        return t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time
+        exp_vals_traj = np.ones((n_obs_site, sim_params.L, n_t))
+        d_on_d_gk = np.ones((n_jump_sites, n_obs_site, sim_params.L, n_t))
+        avg_min_max_traj_time = [None, None, None]
+        return t, exp_vals_traj, d_on_d_gk, avg_min_max_traj_time
 
-    sim_params = SimulationParameters(L, [0.1, 0.2], [0.3, 0.4])
-    ref_traj = np.ones((n_obs_site, L, n_t))
-    loss = optimization.loss_class_and(sim_params, ref_traj, dummy_traj_der)
-    x = np.array([0.5] * L * n_jump_sites)
+    sim_params = SimulationParameters(sites, [0.1, 0.2], [0.3, 0.4])
+    ref_traj = np.ones((n_obs_site, sites, n_t))
+    loss = optimization.loss_class_2l(sim_params, ref_traj, dummy_traj_der)
+    x = np.array([0.5] * sites * n_jump_sites)
     f, grad, sim_time, avg = loss(x)
     assert isinstance(f, float)
     assert grad.shape == (4,)
@@ -254,15 +252,14 @@ def test_loss_class_and_call(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(avg, list)
 
 
-def test_adam_optimizer_runs(tmp_path: pathlib.Path) -> None:
+def test_adam_optimizer_runs() -> None:
     """Test that the Adam optimizer runs successfully with a dummy loss function.
+
     This test defines a DummyLoss class inheriting from `optimization.loss_class` and
     verifies that the `adam_optimizer` function from the `optimization` module executes
     without errors for a small number of iterations. It checks that the returned values
     have the expected types.
 
-    Args:
-        tmp_path (pathlib.Path): Temporary directory path provided by pytest for file operations.
     Asserts:
         - The function history (`f_hist`) is a list.
         - The parameter history (`x_hist`) is a list.
@@ -270,17 +267,17 @@ def test_adam_optimizer_runs(tmp_path: pathlib.Path) -> None:
         - The time array (`t`) is a numpy ndarray.
         - The expectation values trajectory (`exp_vals_traj`) is a numpy ndarray.
     """
-    L = 2
-    T = 0.3
+    sites = 2
+    sim_time = 0.3
     dt = 0.1
-    sim_params = SimulationParameters(L=L, gamma_rel=[0.1, 0.2], gamma_deph=[0.3, 0.4])
-    sim_params.T = T
+    sim_params = SimulationParameters(L=sites, gamma_rel=[0.1, 0.2], gamma_deph=[0.3, 0.4])
+    sim_params.T = sim_time
     sim_params.dt = dt
     sim_params.N = 2
 
-    ref_traj = np.ones((3, L, int(T / dt) + 1))
+    ref_traj = np.ones((3, sites, int(sim_time / dt) + 1))
 
-    loss_function = optimization.loss_class_2d(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
+    loss_function = optimization.loss_class_2(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
 
     x0 = np.array([0.5, 0.5, 0.5, 0.5])  # Initial guess for the parameters
     f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss_function, x0, max_iterations=3)

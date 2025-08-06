@@ -265,8 +265,8 @@ class loss_class:
         np.savetxt(self.work_dir + f"/opt_traj_{self.n_eval}.txt", exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
 
-class loss_class_2d(loss_class):
-    """loss_class_and is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
+class loss_class_2(loss_class):
+    """loss_class_2 is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
     This class encapsulates the objective function and its gradient computation for optimizing noise parameters (relaxation and dephasing rates) in quantum system simulations.
     It compares simulated trajectories to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
     It is designed for the case of the same noise parameters for each site, in total 2 parameters.
@@ -289,7 +289,7 @@ class loss_class_2d(loss_class):
 
     Methods:
     __init__(sim_params, ref_traj, traj_der, print_to_file=False)
-        Initializes the loss_class_and instance with simulation parameters, reference trajectory, and trajectory derivative function.
+        Initializes the loss_class_2 instance with simulation parameters, reference trajectory, and trajectory derivative function.
     __call__(x: np.ndarray) -> tuple
         Evaluates the objective function and its gradient for the given noise parameters.
         Updates the simulation parameters, runs the trajectory simulation and its derivatives,
@@ -383,7 +383,7 @@ class loss_class_2d(loss_class):
         return f, grad, sim_time, avg_min_max_traj_time
 
 
-class loss_class_and(loss_class):
+class loss_class_2l(loss_class):
     """loss_class_and is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
     This class encapsulates the objective function and its gradient computation for optimizing noise parameters (relaxation and dephasing rates) in quantum system simulations.
     It compares simulated trajectories to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
@@ -407,7 +407,7 @@ class loss_class_and(loss_class):
 
     Methods:
     __init__(sim_params, ref_traj, traj_der, print_to_file=False)
-        Initializes the loss_class_and instance with simulation parameters, reference trajectory, and trajectory derivative function.
+        Initializes the loss_class_2L instance with simulation parameters, reference trajectory, and trajectory derivative function.
     __call__(x: np.ndarray) -> tuple
         Evaluates the objective function and its gradient for the given noise parameters.
         Updates the simulation parameters, runs the trajectory simulation and its derivatives,
@@ -518,7 +518,7 @@ class loss_class_and(loss_class):
 
 
 def adam_optimizer(
-    f: loss_class_2d | loss_class_and,
+    f: loss_class_2 | loss_class_2l,
     x_copy: np.ndarray,
     alpha: float = 0.05,
     max_iterations: int = 1000,
