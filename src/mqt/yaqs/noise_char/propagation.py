@@ -1,3 +1,10 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 from __future__ import annotations
 
 import numpy as np
@@ -42,6 +49,7 @@ class SimulationParameters:
                 solver (str): 'tdvp1' or 'tdvp2'.
                 local_solver (str): 'krylov_<number>' or 'exact'.
     """
+
     T: float = 5
     dt: float = 0.1
     J: float = 1
@@ -56,12 +64,13 @@ class SimulationParameters:
     rank: int = 8
 
     def __init__(self, L: int, gamma_rel: list[float] | float, gamma_deph: list[float] | float) -> None:
-
         self.L = L
 
         self.set_gammas(gamma_rel, gamma_deph)
 
-    def set_gammas(self, gamma_rel: np.ndarray | list[float] | float, gamma_deph: np.ndarray | list[float] | float) -> None:
+    def set_gammas(
+        self, gamma_rel: np.ndarray | list[float] | float, gamma_deph: np.ndarray | list[float] | float
+    ) -> None:
         """Set the relaxation (gamma_rel) and dephasing (gamma_deph) rates for the system.
         Parameters.
         ----------
@@ -164,9 +173,16 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.nda
     # gamma_relaxation = noise_params[0]
     # gamma_dephasing = noise_params[1]
 
-    noise_model = NoiseModel([{"name": "relaxation", "sites": [i], "strength": gamma_rel[i]} for i in range(L)] + [{"name": "dephasing", "sites": [i], "strength": gamma_deph[i]} for i in range(L)])
+    noise_model = NoiseModel(
+        [{"name": "relaxation", "sites": [i], "strength": gamma_rel[i]} for i in range(L)]
+        + [{"name": "dephasing", "sites": [i], "strength": gamma_deph[i]} for i in range(L)]
+    )
 
-    obs_list = [Observable(X(), site) for site in range(L)] + [Observable(Y(), site) for site in range(L)] + [Observable(Z(), site) for site in range(L)]
+    obs_list = (
+        [Observable(X(), site) for site in range(L)]
+        + [Observable(Y(), site) for site in range(L)]
+        + [Observable(Z(), site) for site in range(L)]
+    )
 
     jump_site_list = [Destroy(), Z()]
 
@@ -179,11 +195,23 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.nda
 
     for lk in jump_site_list:
         for on in obs_site_list:
-            A_kn_site_list.extend(Observable(lk.dag() * on * lk - 0.5 * on * lk.dag() * lk - 0.5 * lk.dag() * lk * on, k) for k in range(L))
+            A_kn_site_list.extend(
+                Observable(lk.dag() * on * lk - 0.5 * on * lk.dag() * lk - 0.5 * lk.dag() * lk * on, k)
+                for k in range(L)
+            )
 
     new_obs_list = obs_list + A_kn_site_list
 
-    sim_params = AnalogSimParams(observables=new_obs_list, elapsed_time=T, dt=dt, num_traj=N, max_bond_dim=max_bond_dim, threshold=threshold, order=order, sample_timesteps=True)
+    sim_params = AnalogSimParams(
+        observables=new_obs_list,
+        elapsed_time=T,
+        dt=dt,
+        num_traj=N,
+        max_bond_dim=max_bond_dim,
+        threshold=threshold,
+        order=order,
+        sample_timesteps=True,
+    )
     simulator.run(state, H_0, sim_params, noise_model)
 
     exp_vals = [observable.results for observable in sim_params.observables]

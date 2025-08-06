@@ -1,3 +1,10 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 from __future__ import annotations
 
 import os
@@ -62,6 +69,7 @@ def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
             self.exp_vals_traj = np.zeros((3, 2, 5))
             self.t = np.arange(5)
             self.work_dir = str(tmp_path)
+
     loss = DummyLoss()
     loss.reset()
     assert loss.n_eval == 0
@@ -90,6 +98,7 @@ def test_loss_class_compute_avg_and_diff() -> None:
             self.x_history = [np.array([1, 2]), np.array([2, 3]), np.array([3, 4])]
             self.x_avg_history = []
             self.diff_avg_history = []
+
     loss = DummyLoss()
     loss.compute_avg()
     assert np.allclose(loss.x_avg_history[-1], np.mean(loss.x_history[2:], axis=0))
@@ -155,6 +164,7 @@ def test_loss_class_set_file_name_and_write_to_file(tmp_path: pathlib.Path) -> N
             self.d = 2
             self.print_to_file = True
             self.work_dir = str(tmp_path)
+
     loss = DummyLoss()
     file_name = os.path.join(loss.work_dir, "testfile")
     loss.set_file_name(file_name, reset=True)
@@ -200,9 +210,9 @@ def test_loss_class_2d_call(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(avg, list)
 
 
-def test_loss_class_nd_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test the `loss_class_nd` function from the `optimization` module.
-    This test verifies that the loss function returned by `loss_class_nd`:
+def test_loss_class_and_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test the `loss_class_and` function from the `optimization` module.
+    This test verifies that the loss function returned by `loss_class_and`:
     - Accepts a parameter vector `x` of appropriate shape.
     - Returns a tuple containing:
         - A scalar loss value (`f`).
@@ -235,7 +245,7 @@ def test_loss_class_nd_call(monkeypatch: pytest.MonkeyPatch) -> None:
 
     sim_params = SimulationParameters(L, [0.1, 0.2], [0.3, 0.4])
     ref_traj = np.ones((n_obs_site, L, n_t))
-    loss = optimization.loss_class_nd(sim_params, ref_traj, dummy_traj_der)
+    loss = optimization.loss_class_and(sim_params, ref_traj, dummy_traj_der)
     x = np.array([0.5] * L * n_jump_sites)
     f, grad, sim_time, avg = loss(x)
     assert isinstance(f, float)

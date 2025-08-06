@@ -1,3 +1,10 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 from __future__ import annotations
 
 import contextlib
@@ -16,10 +23,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.noise_char.propagation import SimulationParameters
 
 
-def trapezoidal(
-    y: np.ndarray | list[float] | None,
-    x: np.ndarray | list[float] | None
-) -> NDArray[np.float64]:
+def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
     """Compute the cumulative integral of y with respect to x using the trapezoidal rule."""
     if y is None or x is None:
         msg = f"x or y is None. x = {x}, y = {y}"
@@ -42,7 +46,6 @@ def trapezoidal(
 
 
 class loss_class:
-
     n_eval = 0
 
     x_history: list[np.ndarray] = []
@@ -75,7 +78,7 @@ class loss_class:
         if len(self.x_history) <= self.n_avg:
             x_avg = np.mean(self.x_history, axis=0)
         else:
-            x_avg = np.mean(self.x_history[self.n_avg:], axis=0)
+            x_avg = np.mean(self.x_history[self.n_avg :], axis=0)
 
         self.x_avg_history.append(x_avg.copy())
 
@@ -119,7 +122,9 @@ class loss_class:
 
         if self.print_to_file:
             self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1], self.grad_history[-1])
-            self.write_to_file(self.history_avg_file_name, self.f_history[-1], self.x_avg_history[-1], self.grad_history[-1])
+            self.write_to_file(
+                self.history_avg_file_name, self.f_history[-1], self.x_avg_history[-1], self.grad_history[-1]
+            )
 
     def reset(self) -> None:
         """Reset the optimization history and evaluation counter.
@@ -134,7 +139,13 @@ class loss_class:
         self.x_avg_history = []
         self.diff_avg_history = []
 
-    def set_history(self, x_history: list[np.ndarray] | np.ndarray, f_history: list[float] | np.ndarray, x_avg_history: list[np.ndarray] | np.ndarray, diff_avg_history: list[float] | np.ndarray) -> None:
+    def set_history(
+        self,
+        x_history: list[np.ndarray] | np.ndarray,
+        f_history: list[float] | np.ndarray,
+        x_avg_history: list[np.ndarray] | np.ndarray,
+        diff_avg_history: list[float] | np.ndarray,
+    ) -> None:
         """Stores the optimization history data.
         Parameters.
         ----------
@@ -181,10 +192,22 @@ class loss_class:
 
             if reset or not pathlib.Path(self.history_file_name).exists():
                 with open(self.history_file_name, "w", encoding="utf-8") as file:
-                    file.write("# iter  loss  " + "  ".join([f"x{i + 1}" for i in range(self.d)]) + "    " + "  ".join([f"grad_x{i + 1}" for i in range(self.d)]) + "\n")
+                    file.write(
+                        "# iter  loss  "
+                        + "  ".join([f"x{i + 1}" for i in range(self.d)])
+                        + "    "
+                        + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
+                        + "\n"
+                    )
             if reset or not pathlib.Path(self.history_avg_file_name).exists():
                 with open(self.history_avg_file_name, "w", encoding="utf-8") as file:
-                    file.write("# iter  loss  " + "  ".join([f"x{i + 1}_avg" for i in range(self.d)]) + "    " + "  ".join([f"grad_x{i + 1}" for i in range(self.d)]) + "\n")
+                    file.write(
+                        "# iter  loss  "
+                        + "  ".join([f"x{i + 1}_avg" for i in range(self.d)])
+                        + "    "
+                        + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
+                        + "\n"
+                    )
 
     def write_to_file(self, file_name: str, f: float, x: np.ndarray, grad: np.ndarray) -> None:
         """Writes the current evaluation data to a specified file if file output is enabled.
@@ -205,7 +228,13 @@ class loss_class:
         """
         if self.print_to_file:
             with open(file_name, "a", encoding="utf-8") as file:
-                file.write(f"{self.n_eval}    {f}  " + "  ".join([f"{x[j]:.6f}" for j in range(self.d)]) + "    " + "  ".join([f"{grad[j]:.6f}" for j in range(self.d)]) + "\n")
+                file.write(
+                    f"{self.n_eval}    {f}  "
+                    + "  ".join([f"{x[j]:.6f}" for j in range(self.d)])
+                    + "    "
+                    + "  ".join([f"{grad[j]:.6f}" for j in range(self.d)])
+                    + "\n"
+                )
 
     def write_opt_traj(self) -> None:
         """Saves the optimized trajectory of expectation values to a text file.
@@ -237,7 +266,7 @@ class loss_class:
 
 
 class loss_class_2d(loss_class):
-    """loss_class_nd is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
+    """loss_class_and is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
     This class encapsulates the objective function and its gradient computation for optimizing noise parameters (relaxation and dephasing rates) in quantum system simulations.
     It compares simulated trajectories to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
     It is designed for the case of the same noise parameters for each site, in total 2 parameters.
@@ -260,7 +289,7 @@ class loss_class_2d(loss_class):
 
     Methods:
     __init__(sim_params, ref_traj, traj_der, print_to_file=False)
-        Initializes the loss_class_nd instance with simulation parameters, reference trajectory, and trajectory derivative function.
+        Initializes the loss_class_and instance with simulation parameters, reference trajectory, and trajectory derivative function.
     __call__(x: np.ndarray) -> tuple
         Evaluates the objective function and its gradient for the given noise parameters.
         Updates the simulation parameters, runs the trajectory simulation and its derivatives,
@@ -277,7 +306,13 @@ class loss_class_2d(loss_class):
             Average of the minimum and maximum trajectory times from the simulation.
     """
 
-    def __init__(self, sim_params: SimulationParameters, ref_traj: np.ndarray, traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]], print_to_file: bool = False) -> None:
+    def __init__(
+        self,
+        sim_params: SimulationParameters,
+        ref_traj: np.ndarray,
+        traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]],
+        print_to_file: bool = False,
+    ) -> None:
         """Initializes the optimization class for noise characterization.
 
         Args:
@@ -348,8 +383,8 @@ class loss_class_2d(loss_class):
         return f, grad, sim_time, avg_min_max_traj_time
 
 
-class loss_class_nd(loss_class):
-    """loss_class_nd is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
+class loss_class_and(loss_class):
+    """loss_class_and is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
     This class encapsulates the objective function and its gradient computation for optimizing noise parameters (relaxation and dephasing rates) in quantum system simulations.
     It compares simulated trajectories to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
     It is designed for the case of independent noise parameters for each site, in total 2*L parameters.
@@ -372,7 +407,7 @@ class loss_class_nd(loss_class):
 
     Methods:
     __init__(sim_params, ref_traj, traj_der, print_to_file=False)
-        Initializes the loss_class_nd instance with simulation parameters, reference trajectory, and trajectory derivative function.
+        Initializes the loss_class_and instance with simulation parameters, reference trajectory, and trajectory derivative function.
     __call__(x: np.ndarray) -> tuple
         Evaluates the objective function and its gradient for the given noise parameters.
         Updates the simulation parameters, runs the trajectory simulation and its derivatives,
@@ -389,7 +424,13 @@ class loss_class_nd(loss_class):
             Average of the minimum and maximum trajectory times from the simulation.
     """
 
-    def __init__(self, sim_params: SimulationParameters, ref_traj: np.ndarray, traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]], print_to_file: bool = False) -> None:
+    def __init__(
+        self,
+        sim_params: SimulationParameters,
+        ref_traj: np.ndarray,
+        traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]],
+        print_to_file: bool = False,
+    ) -> None:
         """Initializes the optimization class for noise characterization.
 
         Args:
@@ -447,7 +488,7 @@ class loss_class_nd(loss_class):
             The average of the minimum and maximum trajectory times, as returned by
             the trajectory simulation.
         """
-        self.sim_params.set_gammas(x[:self.n_gamma_rel], x[self.n_gamma_rel:])
+        self.sim_params.set_gammas(x[: self.n_gamma_rel], x[self.n_gamma_rel :])
 
         start_time = time.time()
 
@@ -477,24 +518,25 @@ class loss_class_nd(loss_class):
 
 
 def adam_optimizer(
-        f: loss_class_2d | loss_class_nd,
-        x_copy: np.ndarray,
-        alpha: float = 0.05,
-        max_iterations: int = 1000,
-        threshhold: float = 5e-4,
-        max_n_convergence: int = 50,
-        tolerance: float = 1e-8,
-        beta1: float = 0.5,
-        beta2: float = 0.999,
-        epsilon: float = 1e-8,
-        restart: bool = False,
-        restart_file: str | None = None) -> tuple[
-            list[float],      # f.f_history: History of loss values.
-            list[np.ndarray],  # f.x_history: History of parameter vectors.
-            list[np.ndarray],  # f.x_avg_history: History of averaged parameter vectors.
-            np.ndarray,       # f.t: Time array from the loss function.
-            np.ndarray        # f.exp_vals_traj: Optimized trajectory of expectation values.
-        ]:
+    f: loss_class_2d | loss_class_and,
+    x_copy: np.ndarray,
+    alpha: float = 0.05,
+    max_iterations: int = 1000,
+    threshold: float = 5e-4,
+    max_n_convergence: int = 50,
+    tolerance: float = 1e-8,
+    beta1: float = 0.5,
+    beta2: float = 0.999,
+    epsilon: float = 1e-8,
+    restart: bool = False,
+    restart_file: str | None = None,
+) -> tuple[
+    list[float],  # f.f_history: History of loss values.
+    list[np.ndarray],  # f.x_history: History of parameter vectors.
+    list[np.ndarray],  # f.x_avg_history: History of averaged parameter vectors.
+    np.ndarray,  # f.t: Time array from the loss function.
+    np.ndarray,  # f.exp_vals_traj: Optimized trajectory of expectation values.
+]:
     """Performs Adam optimization on a given loss function with support for checkpointing and restart.
 
     Args:
@@ -502,7 +544,7 @@ def adam_optimizer(
         x_copy (np.ndarray): Initial parameter vector to optimize.
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
         max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
-        threshhold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
+        threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
         max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
         tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
         beta1 (float, optional): Exponential decay rate for the first moment estimates. Default is 0.5.
@@ -582,7 +624,7 @@ def adam_optimizer(
 
         # Adam update steps (NEW)
         m = beta1 * m + (1 - beta1) * grad
-        v = beta2 * v + (1 - beta2) * (grad ** 2)
+        v = beta2 * v + (1 - beta2) * (grad**2)
 
         beta1_t = beta1 ** (i + 1)
         beta2_t = beta2 ** (i + 1)
@@ -626,14 +668,17 @@ def adam_optimizer(
         iter_time = end_time - start_time
 
         with open(perf_file, "a", encoding="utf-8") as pf:
-            pf.write(f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n")
+            pf.write(
+                f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n"
+            )
 
         if abs(loss) < tolerance:
             break
 
         # Convergence check
         if len(f.diff_avg_history) > max_n_convergence and all(
-                diff < threshhold for diff in f.diff_avg_history[-max_n_convergence:]):
+            diff < threshold for diff in f.diff_avg_history[-max_n_convergence:]
+        ):
             break
 
     return f.f_history, f.x_history, f.x_avg_history, f.t, f.exp_vals_traj
