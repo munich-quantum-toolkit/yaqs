@@ -90,7 +90,7 @@ class TwoSiteExcitation:
     """Class representing two-site excitation noise.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Excitation ⊗ Excitation.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Excitation x Excitation.
     """
 
     matrix = np.kron(Excitation.matrix, Excitation.matrix)
@@ -100,40 +100,100 @@ class TwoSiteRelaxation:
     """Class representing two-site relaxation noise.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Relaxation ⊗ Relaxation.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Relaxation x Relaxation.
     """
 
     matrix = np.kron(Relaxation.matrix, Relaxation.matrix)
 
 
-class CrossTalk:
+class CrossTalkZZ:
     """Class representing cross talk between neighboring sites along the z-axis.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Dephasing ⊗ Dephasing.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Dephasing x Dephasing.
     """
 
     matrix = np.kron(Dephasing.matrix, Dephasing.matrix)
 
 
-class CrossTalkX:
+class CrossTalkXX:
     """Class representing cross talk between neighboring sites along the x-axis.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product X ⊗ X.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product X x X.
     """
 
     matrix = np.kron(BitFlip.matrix, BitFlip.matrix)
 
 
-class CrossTalkY:
+class CrossTalkYY:
     """Class representing cross talk between neighboring sites along the y-axis.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y ⊗ Y.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y x Y.
     """
 
     matrix = np.kron(BitPhaseFlip.matrix, BitPhaseFlip.matrix)
+
+
+class CrossTalkXY:
+    """Class representing cross talk between neighboring sites with X x Y.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product X x Y.
+    """
+
+    matrix = np.kron(BitFlip.matrix, BitPhaseFlip.matrix)
+
+
+class CrossTalkYX:
+    """Class representing cross talk between neighboring sites with Y x X.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y x X.
+    """
+
+    matrix = np.kron(BitPhaseFlip.matrix, BitFlip.matrix)
+
+
+class CrossTalkZY:
+    """Class representing cross talk between neighboring sites with Z x Y.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Z x Y.
+    """
+
+    matrix = np.kron(Dephasing.matrix, BitPhaseFlip.matrix)
+
+
+class CrossTalkZX:
+    """Class representing cross talk between neighboring sites with Z x X.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Z x X.
+    """
+
+    matrix = np.kron(Dephasing.matrix, BitFlip.matrix)
+
+
+class CrossTalkYZ:
+    """Class representing cross talk between neighboring sites with Y x Z.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y x Z.
+    """
+
+    matrix = np.kron(BitPhaseFlip.matrix, Dephasing.matrix)
+
+
+class CrossTalkXZ:
+    """Class representing cross talk between neighboring sites with X x Z.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product X x Z.
+    """
+
+    matrix = np.kron(BitFlip.matrix, Dephasing.matrix)
 
 
 class NoiseLibrary:
@@ -147,9 +207,15 @@ class NoiseLibrary:
         bitphaseflip: Bit-phase flip (Pauli-Y) noise.
         excitation_two: Two-site excitation noise (00 --> 11).
         relaxation_two: Two-site relaxation noise (11 --> 00).
-        crosstalk: Cross talk between neighboring sites along the z-axis.
-        crosstalk_x: Cross talk between neighboring sites along the x-axis.
+        crosstalk_zz: Cross talk between neighboring sites along the z-axis.
+        crosstalk_xx: Cross talk between neighboring sites along the x-axis.
         crosstalk_y: Cross talk between neighboring sites along the y-axis.
+        crosstalk_xy: Cross talk between neighboring sites with X x Y.
+        crosstalk_yx: Cross talk between neighboring sites with Y x X.
+        crosstalk_zy: Cross talk between neighboring sites with Z x Y.
+        crosstalk_zx: Cross talk between neighboring sites with Z x X.
+        crosstalk_yz: Cross talk between neighboring sites with Y x Z.
+        crosstalk_xz: Cross talk between neighboring sites with X x Z.
     """
 
     excitation = Excitation
@@ -159,6 +225,12 @@ class NoiseLibrary:
     bitphaseflip = BitPhaseFlip
     excitation_two = TwoSiteExcitation
     relaxation_two = TwoSiteRelaxation
-    crosstalk = CrossTalk
-    crosstalk_x = CrossTalkX
-    crosstalk_y = CrossTalkY
+    crosstalk_zz = CrossTalkZZ
+    crosstalk_xx = CrossTalkXX
+    crosstalk_yy = CrossTalkYY
+    crosstalk_xy = CrossTalkXY
+    crosstalk_yx = CrossTalkYX
+    crosstalk_zy = CrossTalkZY
+    crosstalk_zx = CrossTalkZX
+    crosstalk_yz = CrossTalkYZ
+    crosstalk_xz = CrossTalkXZ

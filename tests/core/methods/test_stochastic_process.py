@@ -187,7 +187,7 @@ def test_create_probability_distribution_two_site() -> None:
     # 2x2 identity operator (for simplicity, but normally should be 4x4, depends on your merge op!)
     np.eye(2)
     noise_model = NoiseModel([
-        {"name": "crosstalk", "sites": [0, 1], "strength": 0.2},
+        {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.2},
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=5, threshold=1e-10)
