@@ -214,5 +214,5 @@ def stochastic_process(
         raise ValueError(msg)
 
     # Normalize MPS after jump
-    state.normalize("B", decomposition="SVD")
+    state.normalize("B", decomposition="QR")
     return state

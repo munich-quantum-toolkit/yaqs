@@ -108,4 +108,4 @@ def apply_dissipation(
 
         # Shift orthogonality center
         if i != 0:
-            state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="SVD")
+            state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
