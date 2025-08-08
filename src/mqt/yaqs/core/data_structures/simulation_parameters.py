@@ -109,7 +109,7 @@ class Observable:
         """
         if isinstance(sim_params, AnalogSimParams):
             if sim_params.sample_timesteps:
-                self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=np.float64)
+                self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=object)
                 self.times = sim_params.times
             else:
                 self.trajectories = np.empty((sim_params.num_traj, 1), dtype=object)
