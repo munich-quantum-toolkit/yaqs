@@ -186,9 +186,9 @@ def test_loss_class_set_file_name_and_write_to_file(tmp_path: pathlib.Path) -> N
 
 
 def test_loss_class_2_call() -> None:
-    """Unit test for the `optimization.loss_class_2d` function.
+    """Unit test for the `optimization.LossClass2` function.
 
-    This test verifies that the loss function returned by `loss_class_2d`:
+    This test verifies that the loss function returned by `LossClass2`:
     - Accepts a parameter vector `x` and returns a tuple `(f, grad, sim_time, avg)`.
     - Ensures the output `f` is a float.
     - Ensures the output `grad` is a numpy array of shape (1,).
@@ -212,7 +212,7 @@ def test_loss_class_2_call() -> None:
     sim_params = SimulationParameters(sites, 0.1, 0.1)
 
     ref_traj = np.ones((n_obs_site, sites, n_t))
-    loss = optimization.loss_class_2(sim_params, ref_traj, dummy_traj_der)
+    loss = optimization.LossClass2(sim_params, ref_traj, dummy_traj_der)
     x = np.array([0.5, 0.5])
     f, grad, sim_time, avg = loss(x)
     assert isinstance(f, float)
@@ -222,9 +222,9 @@ def test_loss_class_2_call() -> None:
 
 
 def test_loss_class_2l_call() -> None:
-    """Test the `loss_class_2l` function from the `optimization` module.
+    """Test the `LossClass2L` function from the `optimization` module.
 
-    This test verifies that the loss function returned by `loss_class_2l`:
+    This test verifies that the loss function returned by `LossClass2L`:
     - Accepts a parameter vector `x` of appropriate shape.
     - Returns a tuple containing:
         - A scalar loss value (`f`).
@@ -255,7 +255,7 @@ def test_loss_class_2l_call() -> None:
 
     sim_params = SimulationParameters(sites, [0.1, 0.2], [0.3, 0.4])
     ref_traj = np.ones((n_obs_site, sites, n_t))
-    loss = optimization.loss_class_2l(sim_params, ref_traj, dummy_traj_der)
+    loss = optimization.LossClass2L(sim_params, ref_traj, dummy_traj_der)
     x = np.array([0.5] * sites * n_jump_sites)
     f, grad, sim_time, avg = loss(x)
     assert isinstance(f, float)
@@ -289,7 +289,7 @@ def test_adam_optimizer_runs() -> None:
 
     ref_traj = np.ones((3, sites, int(sim_time / dt) + 1))
 
-    loss_function = optimization.loss_class_2(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
+    loss_function = optimization.LossClass2(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
 
     x0 = np.array([0.5, 0.5, 0.5, 0.5])  # Initial guess for the parameters
     f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss_function, x0, max_iterations=3)

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import contextlib
 import copy
-import os
 import pathlib
 import pickle
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import numpy as np
@@ -45,14 +45,8 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
     return integral
 
 
-class loss_class:
-    n_eval = 0
-
-    x_history: list[np.ndarray] = []
-    f_history: list[float] = []
-    x_avg_history: list[np.ndarray] = []
-    diff_avg_history: list[float] = []
-    grad_history: list[np.ndarray] = []
+class LossClass:
+    """A base LossClass to track optimization history and compute averages."""
 
     n_avg = 20
 
@@ -62,18 +56,26 @@ class loss_class:
     history_file_name: str
     history_avg_file_name: str
 
-    print_to_file: bool = False
-
     d: int
+
+    def __init__(self) -> None:
+        """Initializes the LossClass with default values."""
+        self.n_eval = 0
+        self.x_history: list[np.ndarray] = []
+        self.f_history: list[float] = []
+        self.x_avg_history: list[np.ndarray] = []
+        self.diff_avg_history: list[float] = []
+        self.grad_history: list[np.ndarray] = []
+        self.print_to_file = False
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
+
         If the length of `x_history` is less than or equal to `n_avg`, computes the mean over the entire `x_history`.
         Otherwise, computes the mean over the entries in `x_history` starting from index `n_avg`.
         The computed average is appended to `x_avg_history`.
 
-        Returns:
-            None.
+
         """
         if len(self.x_history) <= self.n_avg:
             x_avg = np.mean(self.x_history, axis=0)
@@ -83,8 +85,7 @@ class loss_class:
         self.x_avg_history.append(x_avg.copy())
 
     def compute_diff_avg(self) -> None:
-        """Computes the maximum absolute difference between the last two entries in `x_avg_history`
-        and appends the result to `diff_avg_history.
+        """Computes the maximum absolute difference between the last two entries in `x_avg_history`.
 
         This method is intended to track the change in the average values stored in `x_avg_history`
         over successive iterations.
@@ -172,7 +173,7 @@ class loss_class:
         self.x_avg_history = list(x_avg_history)
         self.diff_avg_history = list(diff_avg_history)
 
-    def set_file_name(self, file_name: str, reset: bool) -> None:
+    def set_file_name(self, file_name: str, *, reset: bool) -> None:
         """Sets the base file name for storing optimization history and related files.
 
         Parameters:
@@ -190,14 +191,15 @@ class loss_class:
             - The number of variables (`self.d`) determines the number of columns in the headers.
             - File extensions and naming conventions are handled within the method.
         """
-        self.work_dir = file_name.rsplit("/", 1)[0]
+        file_path = Path(file_name)
+        self.work_dir = file_path.parent
 
         if self.print_to_file:
-            self.history_file_name = file_name + ".txt"
-            self.history_avg_file_name = file_name + "_avg.txt"
+            self.history_file_name = file_path.with_suffix(".txt")
+            self.history_avg_file_name = file_path.with_name(file_path.stem + "_avg.txt")
 
-            if reset or not pathlib.Path(self.history_file_name).exists():
-                with open(self.history_file_name, "w", encoding="utf-8") as file:
+            if reset or not self.history_file_name.exists():
+                with self.history_file_name.open("w", encoding="utf-8") as file:
                     file.write(
                         "# iter  loss  "
                         + "  ".join([f"x{i + 1}" for i in range(self.d)])
@@ -205,8 +207,8 @@ class loss_class:
                         + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
                         + "\n"
                     )
-            if reset or not pathlib.Path(self.history_avg_file_name).exists():
-                with open(self.history_avg_file_name, "w", encoding="utf-8") as file:
+            if reset or not self.history_avg_file_name.exists():
+                with self.history_avg_file_name.open("w", encoding="utf-8") as file:
                     file.write(
                         "# iter  loss  "
                         + "  ".join([f"x{i + 1}_avg" for i in range(self.d)])
@@ -215,11 +217,11 @@ class loss_class:
                         + "\n"
                     )
 
-    def write_to_file(self, file_name: str, f: float, x: np.ndarray, grad: np.ndarray) -> None:
+    def write_to_file(self, file_name: Path, f: float, x: np.ndarray, grad: np.ndarray) -> None:
         """Writes the current evaluation data to a specified file if file output is enabled.
 
         Parameters:
-            file_name (str): The path to the file where data will be appended.
+            file_name (Path): The path to the file where data will be appended.
             f (float): The function value at the current evaluation.
             x (np.ndarray): The current parameter vector.
             grad (np.ndarray): The gradient vector at the current evaluation.
@@ -234,7 +236,7 @@ class loss_class:
             The method only writes to the file if `self.print_to_file` is True.
         """
         if self.print_to_file:
-            with open(file_name, "a", encoding="utf-8") as file:
+            with file_name.open("a", encoding="utf-8") as file:
                 file.write(
                     f"{self.n_eval}    {f}  "
                     + "  ".join([f"{x[j]:.6f}" for j in range(self.d)])
@@ -263,19 +265,17 @@ class loss_class:
             {work_dir}/opt_traj_{n_eval}.txt.
         """
         n_obs_site, sites, _n_t = self.exp_vals_traj.shape
-
         exp_vals_traj_reshaped = self.exp_vals_traj.reshape(-1, self.exp_vals_traj.shape[-1])
-
         exp_vals_traj_with_t = np.concatenate([np.array([self.t]), exp_vals_traj_reshaped], axis=0)
 
-        # Saving reference trajectory and gammas
         header = "t  " + "  ".join([obs + str(i) for obs in ["x", "y", "z"][:n_obs_site] for i in range(sites)])
+        output_file = self.work_dir / f"opt_traj_{self.n_eval}.txt"
 
-        np.savetxt(self.work_dir + f"/opt_traj_{self.n_eval}.txt", exp_vals_traj_with_t.T, header=header, fmt="%.6f")
+        np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
 
-class loss_class_2(loss_class):
-    """loss_class_2 represents the loss for a Ising model with the same noise parameters for each site.
+class LossClass2(LossClass):
+    """LossClass2 represents the loss for a Ising model with the same noise parameters for each site.
 
     This class encapsulates the objective function and its gradient computation for optimizing noise parameters
     (relaxation and dephasing rates) in quantum system simulations. It compares simulated trajectories
@@ -324,6 +324,7 @@ class loss_class_2(loss_class):
         sim_params: SimulationParameters,
         ref_traj: np.ndarray,
         traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]],
+        *,
         print_to_file: bool = False,
     ) -> None:
         """Initializes the optimization class for noise characterization.
@@ -342,6 +343,8 @@ class loss_class_2(loss_class):
             traj_der (Callable): Function to compute trajectory derivative.
             sim_params (SimulationParameters): Deep copy of the simulation parameters.
         """
+        super().__init__()
+
         self.d = 2
 
         self.print_to_file = print_to_file
@@ -395,13 +398,14 @@ class loss_class_2(loss_class):
         return f, grad, sim_time, avg_min_max_traj_time
 
 
-class loss_class_2l(loss_class):
-    """loss_class_2l represents the loss for a Ising model with site-independent noise parameters.
+class LossClass2L(LossClass):
+    """LossClass2L represents the loss for a Ising model with site-independent noise parameters.
 
     This class encapsulates the objective function and its gradient computation for optimizing noise parameters
-    (relaxation and dephasing rates) in quantum system simulations. It compares simulated trajectories to a reference trajectory
-    and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
-    It is designed for the case of independent noise parameters for each site, in total 2*sites parameters.
+    (relaxation and dephasing rates) in quantum system simulations. It compares simulated trajectories
+    to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient
+    with respect to the noise parameters. It is designed for the case of independent noise parameters for each site,
+    in total 2*sites parameters.
 
     Attributes:
     print_to_file : bool
@@ -444,6 +448,7 @@ class loss_class_2l(loss_class):
         sim_params: SimulationParameters,
         ref_traj: np.ndarray,
         traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]],
+        *,
         print_to_file: bool = False,
     ) -> None:
         """Initializes the optimization class for noise characterization.
@@ -451,7 +456,8 @@ class loss_class_2l(loss_class):
         Args:
             sim_params (SimulationParameters): Simulation parameters containing relaxation and dephasing rates.
             ref_traj (np.ndarray): Reference trajectory data as a NumPy array.
-            traj_der (Callable[[SimulationParameters], tuple]): Callable that computes the trajectory derivative given simulation parameters.
+            traj_der (Callable[[SimulationParameters], tuple]): Callable that computes the trajectory derivative
+            given simulation parameters.
             print_to_file (bool, optional): If True, enables printing output to a file. Defaults to False.
 
         Attributes:
@@ -463,6 +469,8 @@ class loss_class_2l(loss_class):
             n_gamma_deph (int): Number of dephasing rates in the simulation parameters.
             d (int): Total number of noise parameters (relaxation + dephasing).
         """
+        super().__init__()
+
         self.print_to_file = print_to_file
 
         self.ref_traj = ref_traj.copy()
@@ -535,7 +543,7 @@ class loss_class_2l(loss_class):
 
 
 def adam_optimizer(
-    f: loss_class_2 | loss_class_2l,
+    f: LossClass2 | LossClass2L,
     x_copy: np.ndarray,
     alpha: float = 0.05,
     max_iterations: int = 1000,
@@ -545,6 +553,7 @@ def adam_optimizer(
     beta1: float = 0.5,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
+    *,
     restart: bool = False,
     restart_file: str | None = None,
 ) -> tuple[
@@ -592,19 +601,24 @@ def adam_optimizer(
 
     # Find the latest restart file in the restart_dir
     if restart_file is None and restart and pathlib.Path(restart_dir).is_dir():
-        restart_files = [f for f in os.listdir(restart_dir) if f.startswith("restart_step_") and f.endswith(".pkl")]
+        restart_files = [
+            file_path.name
+            for file_path in Path(restart_dir).iterdir()
+            if file_path.name.startswith("restart_step_") and file_path.suffix == ".pkl"
+        ]
         if restart_files:
             # Sort by step number
             restart_files.sort()
-            restart_file = os.path.join(restart_dir, restart_files[-1])
+            restart_file = Path(restart_dir) / restart_files[-1]
 
     # Initialization
     if restart:
         if restart_file is None or not pathlib.Path(restart_file).exists():
             msg = "Restart file not found or not specified."
             raise ValueError(msg)
-        with open(restart_file, "rb") as handle:
-            saved = pickle.load(handle)
+        # We only load restart files we created ourselves; no untrusted input here.
+        with Path(restart_file).open("rb") as handle:
+            saved = pickle.load(handle)  # noqa: S301
         x = saved["x"]
         m = saved["m"]
         v = saved["v"]
@@ -617,10 +631,11 @@ def adam_optimizer(
 
     else:
         # Remove all .pkl files in the folder
-        for fname in os.listdir(restart_dir):
-            if fname.endswith(".pkl"):
+        restart_path = Path(restart_dir)
+        for file_path in restart_path.iterdir():
+            if file_path.suffix == ".pkl":
                 with contextlib.suppress(Exception):
-                    pathlib.Path(os.path.join(restart_dir, fname)).unlink()
+                    file_path.unlink()
 
         x = x_copy.copy()
         d = len(x)
@@ -629,8 +644,8 @@ def adam_optimizer(
         start_iter = 0
 
         # Write a header to performance_metric.txt in f.work_dir
-        perf_file = os.path.join(f.work_dir, "performance_metric_sec.txt")
-        with open(perf_file, "w", encoding="utf-8") as pf:
+        perf_path = Path(f.work_dir) / "performance_metric_sec.txt"
+        with perf_path.open("w", encoding="utf-8") as pf:
             pf.write("# iter    opt_step_time    simulation_time    avg_traj_time    min_traj_time    max_traj_time\n")
 
     for i in range(start_iter, max_iterations):
@@ -678,14 +693,15 @@ def adam_optimizer(
             "exp_vals_traj": f.exp_vals_traj.copy(),
         }
 
-        with open(os.path.join(restart_dir, f"restart_step_{i + 1:04d}.pkl"), "wb") as handle:
+        restart_path = Path(restart_dir) / f"restart_step_{i + 1:04d}.pkl"
+        with restart_path.open("wb") as handle:
             pickle.dump(restart_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         end_time = time.time()
 
         iter_time = end_time - start_time
 
-        with open(perf_file, "a", encoding="utf-8") as pf:
+        with perf_path.open("a", encoding="utf-8") as pf:
             pf.write(f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}")
             pf.write(f"    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n")
 
