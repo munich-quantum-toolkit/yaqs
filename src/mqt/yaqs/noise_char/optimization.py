@@ -84,7 +84,8 @@ class loss_class:
 
     def compute_diff_avg(self) -> None:
         """Computes the maximum absolute difference between the last two entries in `x_avg_history`
-        and appends the result to `diff_avg_history`.
+        and appends the result to `diff_avg_history.
+
         This method is intended to track the change in the average values stored in `x_avg_history`
         over successive iterations.
         """
@@ -94,6 +95,7 @@ class loss_class:
 
     def post_process(self, x: np.ndarray, f: float, grad: np.ndarray) -> None:
         """Post-processes the results of an optimization step.
+
         This method updates the evaluation count and appends the current parameter values,
         function value, and gradient to their respective histories. It then computes the
         average and difference of the optimization trajectory, writes the optimization
@@ -128,6 +130,7 @@ class loss_class:
 
     def reset(self) -> None:
         """Reset the optimization history and evaluation counter.
+
         This method clears all stored histories related to the optimization process,
         including the number of function evaluations, parameter vectors, function values,
         averaged parameter vectors, and averaged differences. After calling this method,
@@ -147,6 +150,7 @@ class loss_class:
         diff_avg_history: list[float] | np.ndarray,
     ) -> None:
         """Stores the optimization history data.
+
         Parameters.
         ----------
         x_history : list or array-like
@@ -170,9 +174,11 @@ class loss_class:
 
     def set_file_name(self, file_name: str, reset: bool) -> None:
         """Sets the base file name for storing optimization history and related files.
+
         Parameters:
             file_name (str): The base file path (excluding extension) to use for output files.
-            reset (bool): If True, existing files will be overwritten; if False, files will only be created if they do not exist.
+            reset (bool): If True, existing files will be overwritten;
+              if False, files will only be created if they do not exist.
         Side Effects:
             - Sets the working directory (`self.work_dir`) based on the provided file name.
             - If `self.print_to_file` is True:
@@ -211,6 +217,7 @@ class loss_class:
 
     def write_to_file(self, file_name: str, f: float, x: np.ndarray, grad: np.ndarray) -> None:
         """Writes the current evaluation data to a specified file if file output is enabled.
+
         Parameters:
             file_name (str): The path to the file where data will be appended.
             f (float): The function value at the current evaluation.
@@ -238,38 +245,43 @@ class loss_class:
 
     def write_opt_traj(self) -> None:
         """Saves the optimized trajectory of expectation values to a text file.
+
         This method reshapes the `exp_vals_traj` array, concatenates the time array `self.t` as the first row,
         and writes the resulting data to a file named `opt_traj_{self.n_eval}.txt` in the working directory.
         The file includes a header with time and observable labels.
         The output file format:
             - Each column corresponds to a time point or an observable at a specific site.
             - The first column is time (`t`).
-            - Subsequent columns are labeled as `x0`, `y0`, `z0`, ..., up to the number of observed sites and system size.
+            - Subsequent columns are labeled as `x0`, `y0`, `z0`, ..., up to the number of observed
+            sites and system size.
         Attributes used:
-            exp_vals_traj (np.ndarray): Array of expectation values with shape (n_obs_site, L, n_t).
+            exp_vals_traj (np.ndarray): Array of expectation values with shape (n_obs_site, sites, n_t).
             t (np.ndarray): Array of time points.
             work_dir (str): Directory where the output file will be saved.
             n_eval (int): Evaluation index used in the output filename.
         File saved:
             {work_dir}/opt_traj_{n_eval}.txt.
         """
-        n_obs_site, L, _n_t = self.exp_vals_traj.shape
+        n_obs_site, sites, _n_t = self.exp_vals_traj.shape
 
         exp_vals_traj_reshaped = self.exp_vals_traj.reshape(-1, self.exp_vals_traj.shape[-1])
 
         exp_vals_traj_with_t = np.concatenate([np.array([self.t]), exp_vals_traj_reshaped], axis=0)
 
         # Saving reference trajectory and gammas
-        header = "t  " + "  ".join([obs + str(i) for obs in ["x", "y", "z"][:n_obs_site] for i in range(L)])
+        header = "t  " + "  ".join([obs + str(i) for obs in ["x", "y", "z"][:n_obs_site] for i in range(sites)])
 
         np.savetxt(self.work_dir + f"/opt_traj_{self.n_eval}.txt", exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
 
 class loss_class_2(loss_class):
-    """loss_class_2 is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
-    This class encapsulates the objective function and its gradient computation for optimizing noise parameters (relaxation and dephasing rates) in quantum system simulations.
-    It compares simulated trajectories to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
-    It is designed for the case of the same noise parameters for each site, in total 2 parameters.
+    """loss_class_2 represents the loss for a Ising model with the same noise parameters for each site.
+
+    This class encapsulates the objective function and its gradient computation for optimizing noise parameters
+    (relaxation and dephasing rates) in quantum system simulations. It compares simulated trajectories
+    to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient
+    with respect to the noise parameters. It is designed for the case of the same noise parameters for each site,
+      in total 2 parameters.
 
     Attributes:
     print_to_file : bool
@@ -289,7 +301,8 @@ class loss_class_2(loss_class):
 
     Methods:
     __init__(sim_params, ref_traj, traj_der, print_to_file=False)
-        Initializes the loss_class_2 instance with simulation parameters, reference trajectory, and trajectory derivative function.
+        Initializes the loss_class_2 instance with simulation parameters, reference trajectory,
+          and trajectory derivative function.
     __call__(x: np.ndarray) -> tuple
         Evaluates the objective function and its gradient for the given noise parameters.
         Updates the simulation parameters, runs the trajectory simulation and its derivatives,
@@ -318,7 +331,8 @@ class loss_class_2(loss_class):
         Args:
             sim_params (SimulationParameters): The simulation parameters to be used.
             ref_traj (np.ndarray): Reference trajectory as a NumPy array.
-            traj_der (Callable[[SimulationParameters], tuple]): A callable that computes the trajectory derivative given simulation parameters.
+            traj_der (Callable[[SimulationParameters], tuple]): A callable that computes the trajectory derivative
+            given simulation parameters.
             print_to_file (bool, optional): If True, output will be printed to a file. Defaults to False.
 
         Attributes:
@@ -338,6 +352,7 @@ class loss_class_2(loss_class):
 
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[None] | list[float]]:
         """Evaluates the objective function and its gradient for the given parameters.
+
         This method updates the simulation parameters with the provided gamma values,
         runs the trajectory simulation and its derivative, computes the loss (sum of squared
         differences between the simulated and reference trajectories), and calculates the gradient
@@ -352,29 +367,26 @@ class loss_class_2(loss_class):
                 - f (float): The value of the objective function (sum of squared differences).
                 - grad (np.ndarray): The gradient of the objective function with respect to gamma parameters.
                 - sim_time (float): The time taken to run the simulation (in seconds).
-                - avg_min_max_traj_time (Any): Average minimum and maximum trajectory times (type depends on `traj_der` output).
+                - avg_min_max_traj_time (Any): Average, minimum and maximum trajectory running times.
         """
         self.sim_params.set_gammas(x[0], x[1])
 
         start_time = time.time()
 
-        self.t, self.exp_vals_traj, self.d_On_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params)
+        self.t, self.exp_vals_traj, self.d_on_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params)
 
         end_time = time.time()
 
-        # self.t = t.copy()
-        # self.exp_vals_traj = exp_vals_traj.copy()
-
-        _n_jump_site, n_obs_site, L, nt = np.shape(self.d_On_d_gk)
+        _n_jump_site, n_obs_site, sites, nt = np.shape(self.d_on_d_gk)
 
         diff = self.exp_vals_traj - self.ref_traj
 
         f: float = np.sum(diff**2)
 
-        # I reshape diff so it has a shape compatible with d_On_d_gk (n_jump_site, n_obs_site, L, nt) to do elemtwise multiplication.
-        # Then I sum over the n_obs_site, L and nt dimensions to get the gradient for each gamma,
-        # returning a vector of shape (n_jump_site)
-        grad = np.sum(2 * diff.reshape(1, n_obs_site, L, nt) * self.d_On_d_gk, axis=(1, 2, 3))
+        # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump_site, n_obs_site, sites, nt)
+        #  to do elemtwise multiplication. Then I sum over the n_obs_site, sites and nt dimensions to
+        # get the gradient for each gamma, returning a vector of shape (n_jump_site)
+        grad = np.sum(2 * diff.reshape(1, n_obs_site, sites, nt) * self.d_on_d_gk, axis=(1, 2, 3))
 
         self.post_process(x.copy(), f, grad.copy())
 
@@ -384,10 +396,12 @@ class loss_class_2(loss_class):
 
 
 class loss_class_2l(loss_class):
-    """loss_class_and is a subclass of loss_class designed for optimization in noise characterization of open quantum systems.
-    This class encapsulates the objective function and its gradient computation for optimizing noise parameters (relaxation and dephasing rates) in quantum system simulations.
-    It compares simulated trajectories to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
-    It is designed for the case of independent noise parameters for each site, in total 2*L parameters.
+    """loss_class_2l represents the loss for a Ising model with site-independent noise parameters.
+
+    This class encapsulates the objective function and its gradient computation for optimizing noise parameters
+    (relaxation and dephasing rates) in quantum system simulations. It compares simulated trajectories to a reference trajectory
+    and provides the sum of squared differences as the loss, along with its gradient with respect to the noise parameters.
+    It is designed for the case of independent noise parameters for each site, in total 2*sites parameters.
 
     Attributes:
     print_to_file : bool
@@ -407,7 +421,8 @@ class loss_class_2l(loss_class):
 
     Methods:
     __init__(sim_params, ref_traj, traj_der, print_to_file=False)
-        Initializes the loss_class_2L instance with simulation parameters, reference trajectory, and trajectory derivative function.
+        Initializes the loss_class_2L instance with simulation parameters,
+        reference trajectory, and trajectory derivative function.
     __call__(x: np.ndarray) -> tuple
         Evaluates the objective function and its gradient for the given noise parameters.
         Updates the simulation parameters, runs the trajectory simulation and its derivatives,
@@ -461,6 +476,7 @@ class loss_class_2l(loss_class):
 
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[None] | list[float]]:
         """Evaluates the objective function and its gradient for the given parameters.
+
         This method updates the simulation parameters with the provided gamma values,
         runs the trajectory simulation and its derivatives, computes the difference
         between the simulated and reference trajectories, and calculates the objective
@@ -492,23 +508,24 @@ class loss_class_2l(loss_class):
 
         start_time = time.time()
 
-        t, exp_vals_traj, d_On_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params)
+        t, exp_vals_traj, d_on_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params)
 
         end_time = time.time()
 
         self.t = t.copy()
         self.exp_vals_traj = exp_vals_traj.copy()
 
-        _n_jump_site, n_obs_site, L, nt = np.shape(d_On_d_gk)
+        _n_jump_site, n_obs_site, sites, nt = np.shape(d_on_d_gk)
 
         diff = exp_vals_traj - self.ref_traj
 
         f: float = np.sum(diff**2)
 
-        # I reshape diff so it has a shape compatible with d_On_d_gk (n_jump_site, n_obs_site, L, nt) to do elemtwise multiplication.
-        # Then I sum over the n_obs_site and nt dimensions to get the gradient for each gamma for each site,
-        # returning a matrix of shape (n_jump_site, L) which I then flatten obtaining a vector of shape (n_jump_site*L)
-        grad = np.sum(2 * diff.reshape(1, n_obs_site, L, nt) * d_On_d_gk, axis=(1, 3)).flatten()
+        # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump_site, n_obs_site, sites, nt)
+        # to do elemtwise multiplication. Then I sum over the n_obs_site and nt dimensions to get
+        # the gradient for each gamma for each site, returning a matrix of shape (n_jump_site, sites)
+        # which I then flatten obtaining a vector of shape (n_jump_site*sites)
+        grad = np.sum(2 * diff.reshape(1, n_obs_site, sites, nt) * d_on_d_gk, axis=(1, 3)).flatten()
 
         self.post_process(x.copy(), f, grad.copy())
 
@@ -551,7 +568,8 @@ def adam_optimizer(
         beta2 (float, optional): Exponential decay rate for the second moment estimates. Default is 0.999.
         epsilon (float, optional): Small constant for numerical stability. Default is 1e-8.
         restart (bool, optional): Whether to restart optimization from a checkpoint. Default is False.
-        restart_file (str, optional): Path to a specific checkpoint file to restart from. If None, the latest checkpoint in the working directory is used.
+        restart_file (str, optional): Path to a specific checkpoint file to restart from.
+        If None, the latest checkpoint in the working directory is used.
 
     Returns:
         Tuple[
@@ -668,9 +686,8 @@ def adam_optimizer(
         iter_time = end_time - start_time
 
         with open(perf_file, "a", encoding="utf-8") as pf:
-            pf.write(
-                f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n"
-            )
+            pf.write(f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}")
+            pf.write(f"    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n")
 
         if abs(loss) < tolerance:
             break

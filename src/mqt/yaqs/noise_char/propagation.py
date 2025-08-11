@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+"""Performs the simulation of the Ising model and returns expectations values and  A_kn trahectories."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -13,7 +15,7 @@ from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import *
+from mqt.yaqs.core.libraries.gate_library import Destroy, X, Y, Z
 from mqt.yaqs.noise_char.optimization import trapezoidal
 
 
@@ -63,8 +65,21 @@ class SimulationParameters:
     N: int = 100
     rank: int = 8
 
-    def __init__(self, L: int, gamma_rel: list[float] | float, gamma_deph: list[float] | float) -> None:
-        self.L = L
+    def __init__(self, sites: int, gamma_rel: list[float] | float, gamma_deph: list[float] | float) -> None:
+        """Defines the system  with the number of sites and noise parameters.
+
+        Parameters
+        ----------
+        sites : int
+            The number of sites in the system
+        gamma_rel : list[float] | float | np.ndarray
+            Relaxation rates. If a float is provided, the same value is used for all sites (length L).
+            If a list or array is provided, it must have length L.
+        gamma_deph : list[float] | float | np.ndarray
+            Dephasing rates. If a float is provided, the same value is used for all sites (length L).
+            If a list or array is provided, it must have length L.
+        """
+        self.L = sites
 
         self.set_gammas(gamma_rel, gamma_deph)
 
@@ -72,28 +87,31 @@ class SimulationParameters:
         self, gamma_rel: np.ndarray | list[float] | float, gamma_deph: np.ndarray | list[float] | float
     ) -> None:
         """Set the relaxation (gamma_rel) and dephasing (gamma_deph) rates for the system.
-        Parameters.
+
+        Parameters
         ----------
-        gamma_rel : list or float
+        gamma_rel : list[float] | float | np.ndarray
             Relaxation rates. If a float is provided, the same value is used for all sites (length L).
-            If a list is provided, it must have length L.
-        gamma_deph : list or float
+            If a list or array is provided, it must have length L.
+        gamma_deph : list[float] | float | np.ndarray
             Dephasing rates. If a float is provided, the same value is used for all sites (length L).
-            If a list is provided, it must have length L.
+            If a list or array is provided, it must have length L.
 
         Raises:
         ------
         ValueError
-            If gamma_rel or gamma_deph is a list and its length does not match L.
+            If ``gamma_rel`` is a list or array and its length does not match ``L``.
+        ValueError
+            If ``gamma_deph`` is a list or array and its length does not match ``L``.
 
         Notes:
         -----
-        This method sets the attributes `gamma_rel` and `gamma_deph` as lists of length L.
+        This method sets the attributes ``gamma_rel`` and ``gamma_deph`` as lists of length L.
         """
-        if isinstance(gamma_rel, list) and len(gamma_rel) != self.L:
+        if (isinstance(gamma_rel, (list, np.ndarray))) and len(gamma_rel) != self.L:
             msg = "gamma_rel must be a list of length L."
             raise ValueError(msg)
-        if isinstance(gamma_deph, list) and len(gamma_deph) != self.L:
+        if (isinstance(gamma_deph, (list, np.ndarray))) and len(gamma_deph) != self.L:
             msg = "gamma_deph must be a list of length L."
             raise ValueError(msg)
 
@@ -110,9 +128,10 @@ class SimulationParameters:
 
 def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:
     """Simulates the time evolution of an open quantum system using the Lindblad master equation with TJM.
-    This function constructs the system Hamiltonian and collapse operators for a spin chain with relaxation and dephasing noise,
-    initializes the system state, and computes the expectation values of specified observables and their derivatives with respect
-    to the noise parameters over time.
+
+    This function constructs the system Hamiltonian and collapse operators for a spin chain with
+    relaxation and dephasing noise, initializes the system state, and computes the expectation values
+    of specified observables and their derivatives with respect to the noise parameters over time.
     Parameters.
     ----------
     sim_params_class : SimulationParameters
@@ -132,7 +151,7 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.nda
         Array of time points at which the system was evolved.
     original_exp_vals : numpy.ndarray
         Expectation values of the specified observables at each site and time, shape (n_obs_site, L, n_t).
-    d_On_d_gk : numpy.ndarray
+    d_on_d_gk : numpy.ndarray
         Derivatives of the observables with respect to the noise parameters, shape (n_jump_site, n_obs_site, L, n_t).
     avg_min_max_traj_time : list
         Placeholder list [None, None, None] for compatibility with other interfaces.
@@ -143,91 +162,88 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.nda
     - The system is initialized in the ground state |0>^{⊗L}.
     - The Hamiltonian is an Ising model with a transverse field.
     - Collapse operators are constructed for both relaxation and dephasing noise.
-    - The function computes both the expectation values of observables and their derivatives with respect to noise parameters
+    - The function computes both the expectation values of observables
+    and their derivatives with respect to noise parameters
       using the Lindblad master equation.
     """
-    T = sim_params_class.T
+    sim_time = sim_params_class.T
     dt = sim_params_class.dt
-    L = sim_params_class.L
-    J = sim_params_class.J
+    sites = sim_params_class.L
+    coupl = sim_params_class.J
     g = sim_params_class.g
     gamma_rel = sim_params_class.gamma_rel
     gamma_deph = sim_params_class.gamma_deph
-    N = sim_params_class.N
+    ntraj = sim_params_class.N
 
     threshold = sim_params_class.threshold
     max_bond_dim = sim_params_class.max_bond_dim
     order = sim_params_class.order
 
-    t = np.arange(0, T + dt, dt)
+    t = np.arange(0, sim_time + dt, dt)
     n_t = len(t)
 
     # Define the system Hamiltonian
-    H_0 = MPO()
+    h_0 = MPO()
 
-    H_0.init_ising(L, J, g)
+    h_0.init_ising(sites, coupl, g)
     # Define the initial state
-    state = MPS(L, state="zeros")
-
-    # Define the noise model
-    # gamma_relaxation = noise_params[0]
-    # gamma_dephasing = noise_params[1]
+    state = MPS(sites, state="zeros")
 
     noise_model = NoiseModel(
-        [{"name": "relaxation", "sites": [i], "strength": gamma_rel[i]} for i in range(L)]
-        + [{"name": "dephasing", "sites": [i], "strength": gamma_deph[i]} for i in range(L)]
+        [{"name": "relaxation", "sites": [i], "strength": gamma_rel[i]} for i in range(sites)]
+        + [{"name": "dephasing", "sites": [i], "strength": gamma_deph[i]} for i in range(sites)]
     )
 
     obs_list = (
-        [Observable(X(), site) for site in range(L)]
-        + [Observable(Y(), site) for site in range(L)]
-        + [Observable(Z(), site) for site in range(L)]
+        [Observable(X(), site) for site in range(sites)]
+        + [Observable(Y(), site) for site in range(sites)]
+        + [Observable(Z(), site) for site in range(sites)]
     )
 
     jump_site_list = [Destroy(), Z()]
 
     obs_site_list = [X(), Y(), Z()]
 
-    A_kn_site_list: list[Observable] = []
+    a_kn_site_list: list[Observable] = []
 
     n_jump_site = len(jump_site_list)
     n_obs_site = len(obs_site_list)
 
     for lk in jump_site_list:
         for on in obs_site_list:
-            A_kn_site_list.extend(
+            a_kn_site_list.extend(
                 Observable(lk.dag() * on * lk - 0.5 * on * lk.dag() * lk - 0.5 * lk.dag() * lk * on, k)
-                for k in range(L)
+                for k in range(sites)
             )
 
-    new_obs_list = obs_list + A_kn_site_list
+    new_obs_list = obs_list + a_kn_site_list
 
     sim_params = AnalogSimParams(
         observables=new_obs_list,
-        elapsed_time=T,
+        elapsed_time=sim_time,
         dt=dt,
-        num_traj=N,
+        num_traj=ntraj,
         max_bond_dim=max_bond_dim,
         threshold=threshold,
         order=order,
         sample_timesteps=True,
     )
-    simulator.run(state, H_0, sim_params, noise_model)
+    simulator.run(state, h_0, sim_params, noise_model)
 
     exp_vals = [observable.results for observable in sim_params.observables]
 
     # Separate original and new expectation values from result_lindblad.
-    n_obs = len(obs_list)  # number of measurement operators (should be L * n_types)
+    n_obs = len(obs_list)  # number of measurement operators (should be sites * n_types)
     original_exp_vals = exp_vals[:n_obs]
     new_exp_vals = exp_vals[n_obs:]  # these correspond to the A_kn operators
     assert all(v is not None for v in new_exp_vals)
 
     # Compute the integral of the new expectation values to obtain the derivatives
-    d_On_d_gk = [trapezoidal(new_exp_vals[i], t) for i in range(len(A_kn_site_list))]
+    d_on_d_gk = [trapezoidal(new_exp_vals[i], t) for i in range(len(a_kn_site_list))]
 
-    d_On_d_gk = np.array(d_On_d_gk).reshape(n_jump_site, n_obs_site, L, n_t)
-    original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, L, n_t)
+    d_on_d_gk = np.array(d_on_d_gk).reshape(n_jump_site, n_obs_site, sites, n_t)
+    original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, sites, n_t)
 
     avg_min_max_traj_time = [None, None, None]  # Placeholder for average, min, and max trajectory time
 
-    return t, original_exp_vals, d_On_d_gk, avg_min_max_traj_time
+    return t, original_exp_vals, d_on_d_gk, avg_min_max_traj_time

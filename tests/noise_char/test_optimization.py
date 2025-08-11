@@ -5,9 +5,10 @@
 #
 # Licensed under the MIT License
 
+"""Unit tests for the optimization module's noise characterization functionality."""
+
 from __future__ import annotations
 
-import os
 import pathlib
 
 import numpy as np
@@ -19,6 +20,7 @@ from mqt.yaqs.noise_char.propagation import SimulationParameters
 
 def test_trapezoidal_basic() -> None:
     """Test the basic functionality of the trapezoidal integration method.
+
     This test verifies that the `optimization.trapezoidal` function correctly computes
     the cumulative integral of y = x^2 over the interval [0, 1] using 5 sample points.
     It asserts that the final value of the cumulative integral is close to the analytical
@@ -33,27 +35,27 @@ def test_trapezoidal_basic() -> None:
 
 def test_trapezoidal_shape_and_error() -> None:
     """Test the `trapezoidal` function from the `optimization` module for correct output shape and error handling.
+
     This test verifies that:
     - The output of `optimization.trapezoidal(y, x)` has the same shape as the input array `y`.
     - A `ValueError` is raised when the lengths of `y` and `x` do not match.
-
-    Returns:
-        None.
     """
     x = np.linspace(0, 1, 10)
     y = np.sin(x)
     result = optimization.trapezoidal(y, x)
     assert result.shape == y.shape
     # Should raise ValueError if lengths mismatch
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Mismatch in the number of elements between x and y"):
         optimization.trapezoidal(y, x[:-1])
 
 
 def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
     """Tests the history management and reset functionality of a loss class.
+
     This test defines a DummyLoss class inheriting from `optimization.loss_class` and verifies:
     - The `reset()` method correctly initializes evaluation count and history attributes.
-    - The `set_history()` method updates the history attributes (`x_history`, `f_history`, `diff_avg_history`) and evaluation count (`n_eval`) as expected.
+    - The `set_history()` method updates the history attributes (`x_history`, `f_history`, `
+    diff_avg_history`) and evaluation count (`n_eval`) as expected.
 
     Args:
         tmp_path: pytest fixture providing a temporary directory for file operations.
@@ -92,7 +94,8 @@ def test_loss_class_compute_avg_and_diff() -> None:
     absolute difference between the last two averages in `x_avg_history` to `diff_avg_history`.
     Assertions:
         - The last entry in `x_avg_history` matches the mean of the last `n_avg` entries in `x_history`.
-        - The last entry in `diff_avg_history` matches the maximum absolute difference between the last two averages in `x_avg_history`.
+        - The last entry in `diff_avg_history` matches the maximum absolute difference
+        between the last two averages in `x_avg_history`.
     """
 
     class DummyLoss(optimization.loss_class):
@@ -111,7 +114,7 @@ def test_loss_class_compute_avg_and_diff() -> None:
 
 
 def test_loss_class_write_opt_traj(tmp_path: pathlib.Path) -> None:
-    """Test the `write_opt_traj` method of a loss class to ensure that the optimal trajectory is correctly written to a file.
+    """Test the `write_opt_traj` method of a loss class.
 
     This test creates a dummy loss class with predefined trajectory data, invokes the
     `write_opt_traj` method, and verifies that the output file is created in the specified
@@ -127,28 +130,29 @@ def test_loss_class_write_opt_traj(tmp_path: pathlib.Path) -> None:
     """
     n_obs_site = 3
     n_jump_sites = 2
-    L = 2
+    sites = 2
     n_t = 5
 
     class DummyLoss(optimization.loss_class):
         def __init__(self) -> None:
             self.d = 2
             self.print_to_file = False
-            self.ref_traj = np.ones((n_obs_site, L, n_t))
+            self.ref_traj = np.ones((n_obs_site, sites, n_t))
             self.t = np.arange(n_t)
             self.work_dir = str(tmp_path)
             self.n_eval = 1
 
     loss = DummyLoss()
     loss.write_opt_traj()
-    out_file = os.path.join(loss.work_dir, "opt_traj_1.txt")
-    assert pathlib.Path(out_file).exists()
+    out_file = pathlib.Path(loss.work_dir) / "opt_traj_1.txt"
+    assert out_file.exists()
     data = np.loadtxt(out_file)
     assert data.shape[1] == 1 + n_obs_site * n_jump_sites  # t + 3 obs * 2 sites
 
 
 def test_loss_class_set_file_name_and_write_to_file(tmp_path: pathlib.Path) -> None:
     """Tests the functionality of setting a file name and writing to a file in a custom loss class.
+
     This test defines a DummyLoss class inheriting from `optimization.loss_class`, sets up a working directory,
     and verifies that:
     - The file name is correctly set and the file is created.
@@ -169,13 +173,13 @@ def test_loss_class_set_file_name_and_write_to_file(tmp_path: pathlib.Path) -> N
             self.work_dir = str(tmp_path)
 
     loss = DummyLoss()
-    file_name = os.path.join(loss.work_dir, "testfile")
-    loss.set_file_name(file_name, reset=True)
-    assert pathlib.Path(file_name + ".txt").exists()
+    file_name = pathlib.Path(loss.work_dir) / "testfile"
+    loss.set_file_name(str(file_name), reset=True)
+    assert pathlib.Path(str(file_name) + ".txt").exists()
     loss.n_eval = 1
-    loss.write_to_file(file_name + ".txt", 0.5, np.array([1.0, 2.0]), np.array([0.1, 0.2]))
+    loss.write_to_file(str(file_name) + ".txt", 0.5, np.array([1.0, 2.0]), np.array([0.1, 0.2]))
 
-    file_path = pathlib.Path(file_name + ".txt")
+    file_path = pathlib.Path(str(file_name) + ".txt")
     with file_path.open(encoding="utf-8") as f:
         lines = f.readlines()
     assert any("1" in line for line in lines)
