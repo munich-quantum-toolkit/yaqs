@@ -88,25 +88,21 @@ class SimulationParameters:
     ) -> None:
         """Set the relaxation (gamma_rel) and dephasing (gamma_deph) rates for the system.
 
-        Parameters
-        ----------
-        gamma_rel : list[float] | float | np.ndarray
-            Relaxation rates. If a float is provided, the same value is used for all sites (length L).
-            If a list or array is provided, it must have length L.
-        gamma_deph : list[float] | float | np.ndarray
-            Dephasing rates. If a float is provided, the same value is used for all sites (length L).
-            If a list or array is provided, it must have length L.
+        Args:
+            gamma_rel (list[float] | float | np.ndarray): Relaxation rates. If a float is
+                provided, the same value is used for all sites (length L). If a list or array
+                is provided, it must have length L.
+            gamma_deph (list[float] | float | np.ndarray): Dephasing rates. If a float is
+                provided, the same value is used for all sites (length L). If a list or array
+                is provided, it must have length L.
 
         Raises:
-        ------
-        ValueError
-            If ``gamma_rel`` is a list or array and its length does not match ``L``.
-        ValueError
-            If ``gamma_deph`` is a list or array and its length does not match ``L``.
+            ValueError: If ``gamma_rel`` is a list or array and its length does not match ``L``.
+            ValueError: If ``gamma_deph`` is a list or array and its length does not match ``L``.
 
         Notes:
-        -----
-        This method sets the attributes ``gamma_rel`` and ``gamma_deph`` as lists of length L.
+            This method sets the attributes ``gamma_rel`` and ``gamma_deph`` as lists of
+            length L.
         """
         if (isinstance(gamma_rel, (list, np.ndarray))) and len(gamma_rel) != self.L:
             msg = "gamma_rel must be a list of length L."

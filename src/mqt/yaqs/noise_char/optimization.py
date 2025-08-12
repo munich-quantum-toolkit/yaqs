@@ -5,26 +5,62 @@
 #
 # Licensed under the MIT License
 
+"""This module contains the optimization routines for noise characterization."""
+
 from __future__ import annotations
 
 import contextlib
 import copy
 import pathlib
-import pickle
+import pickle  # noqa: S403
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from mqt.yaqs.noise_char.propagation import SimulationParameters
 
 
 def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
-    """Compute the cumulative integral of y with respect to x using the trapezoidal rule."""
+    """Compute the cumulative integral of `y` with respect to `x` using the trapezoidal rule.
+
+    This function applies the trapezoidal rule to compute the cumulative numerical
+    integration of discrete data points. The output array contains the running integral
+    from the first data point up to each index.
+
+    Args:
+        y (array_like of float or None): Dependent variable values at each point in `x`.
+            Must be the same length as `x`.
+        x (array_like of float or None): Independent variable values corresponding to `y`.
+            Must be the same length as `y`.
+
+    Returns:
+        numpy.ndarray of float64: Array of cumulative integral values.
+        `integral[i]` is the integral from `x[0]` to `x[i]`.
+
+    Raises:
+        ValueError: If either `x` or `y` is `None`.
+        ValueError: If `x` and `y` have different lengths.
+
+    Notes:
+        - The first value of the returned integral is always `0.0`.
+        - The trapezoidal rule approximates the area under the curve by summing the
+          areas of trapezoids formed between consecutive points.
+        - This method assumes that `x` is ordered and that the intervals may be non-uniform.
+
+    Examples:
+        >>> import numpy as np
+        >>> x = np.array([0, 1, 2, 3])
+        >>> y = np.array([0, 1, 4, 9])
+        >>> trapezoidal(y, x)
+        array([0. , 0.5, 2.5, 7. ])
+    """
     if y is None or x is None:
         msg = f"x or y is None. x = {x}, y = {y}"
         raise ValueError(msg)
@@ -52,9 +88,9 @@ class LossClass:
 
     t: np.ndarray
     exp_vals_traj: np.ndarray
-    work_dir: str
-    history_file_name: str
-    history_avg_file_name: str
+    work_dir: Path
+    history_file_name: Path
+    history_avg_file_name: Path
 
     d: int
 
@@ -67,6 +103,7 @@ class LossClass:
         self.diff_avg_history: list[float] = []
         self.grad_history: list[np.ndarray] = []
         self.print_to_file = False
+        self.work_dir: Path = Path()
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -173,49 +210,38 @@ class LossClass:
         self.x_avg_history = list(x_avg_history)
         self.diff_avg_history = list(diff_avg_history)
 
-    def set_file_name(self, file_name: str, *, reset: bool) -> None:
-        """Sets the base file name for storing optimization history and related files.
+    def set_work_dir(self, path: str | Path, *, reset: bool) -> None:
+        """Sets the base directory for storing optimization history and related files.
 
         Parameters:
-            file_name (str): The base file path (excluding extension) to use for output files.
-            reset (bool): If True, existing files will be overwritten;
-              if False, files will only be created if they do not exist.
+            path (str | Path): The base directory path to use for output files.
+            reset (bool):
+                If True, existing files matching the naming pattern will be deleted (reset).
+                If False, files will only be created if they do not exist.
+
         Side Effects:
-            - Sets the working directory (`self.work_dir`) based on the provided file name.
-            - If `self.print_to_file` is True:
-                - Sets file names for history and average history logs.
-                - Initializes or resets these files with appropriate headers if `reset` is True or files do not exist.
-            - (Commented out) Optionally sets up additional files for garbage collection and unreachable objects.
+            - Sets the working directory (`self.work_dir`) based on the provided path.
+            - Sets file names for history and average history logs.
+            - Deletes files matching the pattern in the working directory if `reset` is True.
+            - Initializes or resets history files with appropriate headers as needed.
 
         Notes:
             - The number of variables (`self.d`) determines the number of columns in the headers.
             - File extensions and naming conventions are handled within the method.
         """
-        file_path = Path(file_name)
-        self.work_dir = file_path.parent
+        self.work_dir = Path(path)
+        self.history_file_name = self.work_dir / "loss_x_history.txt"
+        self.history_avg_file_name = self.work_dir / "loss_x_history_avg.txt"
 
-        if self.print_to_file:
-            self.history_file_name = file_path.with_suffix(".txt")
-            self.history_avg_file_name = file_path.with_name(file_path.stem + "_avg.txt")
+        if reset:
+            # Delete all files matching the history file patterns in work_dir
+            for file_path in self.work_dir.glob("*.txt"):
+                with contextlib.suppress(Exception):
+                    file_path.unlink()
 
-            if reset or not self.history_file_name.exists():
-                with self.history_file_name.open("w", encoding="utf-8") as file:
-                    file.write(
-                        "# iter  loss  "
-                        + "  ".join([f"x{i + 1}" for i in range(self.d)])
-                        + "    "
-                        + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
-                        + "\n"
-                    )
-            if reset or not self.history_avg_file_name.exists():
-                with self.history_avg_file_name.open("w", encoding="utf-8") as file:
-                    file.write(
-                        "# iter  loss  "
-                        + "  ".join([f"x{i + 1}_avg" for i in range(self.d)])
-                        + "    "
-                        + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
-                        + "\n"
-                    )
+            for file_path in self.work_dir.glob("*.pkl"):
+                with contextlib.suppress(Exception):
+                    file_path.unlink()
 
     def write_to_file(self, file_name: Path, f: float, x: np.ndarray, grad: np.ndarray) -> None:
         """Writes the current evaluation data to a specified file if file output is enabled.
@@ -235,6 +261,26 @@ class LossClass:
             Each value is separated by spaces.
             The method only writes to the file if `self.print_to_file` is True.
         """
+        if self.print_to_file:
+            if not self.history_file_name.exists() or self.n_eval == 1:
+                with self.history_file_name.open("w", encoding="utf-8") as file:
+                    file.write(
+                        "# iter  loss  "
+                        + "  ".join([f"x{i + 1}" for i in range(self.d)])
+                        + "    "
+                        + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
+                        + "\n"
+                    )
+            if not self.history_avg_file_name.exists() or self.n_eval == 1:
+                with self.history_avg_file_name.open("w", encoding="utf-8") as file:
+                    file.write(
+                        "# iter  loss  "
+                        + "  ".join([f"x{i + 1}_avg" for i in range(self.d)])
+                        + "    "
+                        + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
+                        + "\n"
+                    )
+
         if self.print_to_file:
             with file_name.open("a", encoding="utf-8") as file:
                 file.write(
@@ -545,6 +591,7 @@ class LossClass2L(LossClass):
 def adam_optimizer(
     f: LossClass2 | LossClass2L,
     x_copy: np.ndarray,
+    *,
     alpha: float = 0.05,
     max_iterations: int = 1000,
     threshold: float = 5e-4,
@@ -553,9 +600,8 @@ def adam_optimizer(
     beta1: float = 0.5,
     beta2: float = 0.999,
     epsilon: float = 1e-8,
-    *,
     restart: bool = False,
-    restart_file: str | None = None,
+    restart_file: Path | None = None,
 ) -> tuple[
     list[float],  # f.f_history: History of loss values.
     list[np.ndarray],  # f.x_history: History of parameter vectors.
