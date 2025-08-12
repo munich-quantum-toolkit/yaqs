@@ -33,10 +33,10 @@ self
 :caption: User Guide
 installation
 examples/analog_simulation
+examples/transmon_emulation
 examples/strong_circuit_simulation
 examples/weak_circuit_simulation
 examples/equivalence_checking
-examples/fermi_hubbard_simulation
 references
 CHANGELOG
 UPGRADING

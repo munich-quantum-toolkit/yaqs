@@ -26,22 +26,22 @@ def test_noise_model_creation() -> None:
     """Test that NoiseModel is created correctly with valid process dicts.
 
     This test constructs a NoiseModel with two single-site processes
-    ("relaxation" and "dephasing") and corresponding strengths.
+    ("lowering" and "pauliz") and corresponding strengths.
     It verifies that:
       - Each process is stored as a dictionary with correct fields.
       - The number of processes is correct.
       - Each process contains a jump_operator with the expected shape (2x2).
     """
     processes: list[dict[str, Any]] = [
-        {"name": "relaxation", "sites": [0], "strength": 0.1},
-        {"name": "dephasing", "sites": [1], "strength": 0.05},
+        {"name": "lowering", "sites": [0], "strength": 0.1},
+        {"name": "pauliz", "sites": [1], "strength": 0.05},
     ]
 
     model = NoiseModel(processes)
 
     assert len(model.processes) == 2
-    assert model.processes[0]["name"] == "relaxation"
-    assert model.processes[1]["name"] == "dephasing"
+    assert model.processes[0]["name"] == "lowering"
+    assert model.processes[1]["name"] == "pauliz"
     assert model.processes[0]["strength"] == 0.1
     assert model.processes[1]["strength"] == 0.05
     assert model.processes[0]["sites"] == [0]
@@ -58,8 +58,8 @@ def test_noise_model_assertion() -> None:
     """
     # Missing 'strength' in the second dict
     processes: list[dict[str, Any]] = [
-        {"name": "relaxation", "sites": [0], "strength": 0.1},
-        {"name": "dephasing", "sites": [1]},  # Missing strength
+        {"name": "lowering", "sites": [0], "strength": 0.1},
+        {"name": "pauliz", "sites": [1]},  # Missing strength
     ]
 
     with pytest.raises(AssertionError):

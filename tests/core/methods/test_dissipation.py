@@ -41,7 +41,7 @@ def test_apply_dissipation_one_site_canonical_0() -> None:
     state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
 
     noise_model = NoiseModel([
-        {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["relaxation", "dephasing"]
+        {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["lowering", "pauliz"]
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=10, threshold=1e-10)
@@ -78,7 +78,7 @@ def test_apply_dissipation_two_site_canonical_0() -> None:
     noise_model = NoiseModel([
         {"name": name, "sites": [i, i + 1], "strength": 0.1}
         for i in range(length - 1)
-        for name in ["crosstalk", "crosstalk_y"]
+        for name in ["crosstalk_xx", "crosstalk_yy"]
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=10, threshold=1e-10)

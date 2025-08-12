@@ -8,7 +8,7 @@
 """Library of noise processes.
 
 This module defines noise operator classes for quantum systems.
-It includes implementations for excitation, relaxation, and dephasing noise operators,
+It includes implementations for raising, lowering, and pauliz, paulix, pauliy noise operators,
 each represented as a 2x2 numpy array. The module also provides a NoiseLibrary class
 that aggregates these noise operators for convenient access. Future improvements
 may extend these implementations to d-level systems.
@@ -19,7 +19,7 @@ from __future__ import annotations
 import numpy as np
 
 
-class Excitation:
+class Raising:
     """Class representing excitation noise.
 
     Attributes:
@@ -36,12 +36,12 @@ class Excitation:
                 matrix[row][col] = 1
 
 
-class Relaxation:
+class Lowering:
     """Class representing relaxation noise.
 
     Attributes:
         d (int): The dimension of the Hilbert space. Defaults to 2.
-        matrix (np.ndarray): A 2x2 matrix representing the relaxation operator.
+        matrix (np.ndarray): A 2x2 matrix representing the lowering operator.
             The matrix is constructed such that matrix[row, col] = 1 if col - row == 1, and 0 otherwise.
     """
 
@@ -53,8 +53,8 @@ class Relaxation:
                 matrix[row][col] = 1
 
 
-class Dephasing:
-    """Class representing dephasing noise.
+class PauliZ:
+    """Class representing PauliZ (dephasing) noise.
 
     Attributes:
         matrix (np.ndarray): A 2x2 matrix representing the dephasing operator,
@@ -64,8 +64,8 @@ class Dephasing:
     matrix = np.array([[1, 0], [0, -1]])
 
 
-class BitFlip:
-    """Class representing bitflip (Pauli-X) noise.
+class PauliX:
+    """Class representing PauliX (bitflip) noise.
 
     Attributes:
         matrix (np.ndarray): A 2x2 matrix representing the Pauli-X operator,
@@ -75,8 +75,8 @@ class BitFlip:
     matrix = np.array([[0, 1], [1, 0]])
 
 
-class BitPhaseFlip:
-    """Class representing bit-phase flip (Pauli-Y) noise.
+class PauliY:
+    """Class representing PauliY (bit-phase flip) noise.
 
     Attributes:
         matrix (np.ndarray): A 2x2 matrix representing the Pauli-Y operator,
@@ -86,79 +86,152 @@ class BitPhaseFlip:
     matrix = np.array([[0, -1j], [1j, 0]])
 
 
-class TwoSiteExcitation:
+class TwoSiteRaising:
     """Class representing two-site excitation noise.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Excitation ⊗ Excitation.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Excitation x Excitation.
     """
 
-    matrix = np.kron(Excitation.matrix, Excitation.matrix)
+    matrix = np.kron(Raising.matrix, Raising.matrix)
 
 
-class TwoSiteRelaxation:
+class TwoSiteLowering:
     """Class representing two-site relaxation noise.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Relaxation ⊗ Relaxation.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Lowering x Lowering.
     """
 
-    matrix = np.kron(Relaxation.matrix, Relaxation.matrix)
+    matrix = np.kron(Lowering.matrix, Lowering.matrix)
 
 
-class CrossTalk:
+class CrossTalkZZ:
     """Class representing cross talk between neighboring sites along the z-axis.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Dephasing ⊗ Dephasing.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product PauliZ x PauliZ.
     """
 
-    matrix = np.kron(Dephasing.matrix, Dephasing.matrix)
+    matrix = np.kron(PauliZ.matrix, PauliZ.matrix)
 
 
-class CrossTalkX:
+class CrossTalkXX:
     """Class representing cross talk between neighboring sites along the x-axis.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product X ⊗ X.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product X x X.
     """
 
-    matrix = np.kron(BitFlip.matrix, BitFlip.matrix)
+    matrix = np.kron(PauliX.matrix, PauliX.matrix)
 
 
-class CrossTalkY:
+class CrossTalkYY:
     """Class representing cross talk between neighboring sites along the y-axis.
 
     Attributes:
-        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y ⊗ Y.
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y x Y.
     """
 
-    matrix = np.kron(BitPhaseFlip.matrix, BitPhaseFlip.matrix)
+    matrix = np.kron(PauliY.matrix, PauliY.matrix)
+
+
+class CrossTalkXY:
+    """Class representing cross talk between neighboring sites with X x Y.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product X x Y.
+    """
+
+    matrix = np.kron(PauliX.matrix, PauliY.matrix)
+
+
+class CrossTalkYX:
+    """Class representing cross talk between neighboring sites with Y x X.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y x X.
+    """
+
+    matrix = np.kron(PauliY.matrix, PauliX.matrix)
+
+
+class CrossTalkZY:
+    """Class representing cross talk between neighboring sites with Z x Y.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Z x Y.
+    """
+
+    matrix = np.kron(PauliZ.matrix, PauliY.matrix)
+
+
+class CrossTalkZX:
+    """Class representing cross talk between neighboring sites with Z x X.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Z x X.
+    """
+
+    matrix = np.kron(PauliZ.matrix, PauliX.matrix)
+
+
+class CrossTalkYZ:
+    """Class representing cross talk between neighboring sites with Y x Z.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product Y x Z.
+    """
+
+    matrix = np.kron(PauliY.matrix, PauliZ.matrix)
+
+
+class CrossTalkXZ:
+    """Class representing cross talk between neighboring sites with X x Z.
+
+    Attributes:
+        matrix (np.ndarray): A 4x4 matrix representing the tensor product X x Z.
+    """
+
+    matrix = np.kron(PauliX.matrix, PauliZ.matrix)
 
 
 class NoiseLibrary:
     """A library of noise processes.
 
     Attributes:
-        excitation: Excitation noise (0 --> 1).
-        relaxation: Relaxation noise (1 --> 0).
-        dephasing: Dephasing noise.
-        bitflip: Bitflip (Pauli-X) noise (0 --> 1, 1 --> 0).
-        bitphaseflip: Bit-phase flip (Pauli-Y) noise.
-        excitation_two: Two-site excitation noise (00 --> 11).
-        relaxation_two: Two-site relaxation noise (11 --> 00).
-        crosstalk: Cross talk between neighboring sites along the z-axis.
-        crosstalk_x: Cross talk between neighboring sites along the x-axis.
+        raising: Raising noise (0 --> 1).
+        lowering: Lowering noise (1 --> 0).
+        pauliz: PauliZ (dephasing) noise.
+        paulix: PauliX (bitflip) noise (0 --> 1, 1 --> 0).
+        pauliy: PauliY (bit-phase flip) noise.
+        raising_two: Two-site raising noise (00 --> 11).
+        lowering_two: Two-site lowering noise (11 --> 00).
+        crosstalk_zz: Cross talk between neighboring sites along the z-axis.
+        crosstalk_xx: Cross talk between neighboring sites along the x-axis.
         crosstalk_y: Cross talk between neighboring sites along the y-axis.
+        crosstalk_xy: Cross talk between neighboring sites with X x Y.
+        crosstalk_yx: Cross talk between neighboring sites with Y x X.
+        crosstalk_zy: Cross talk between neighboring sites with Z x Y.
+        crosstalk_zx: Cross talk between neighboring sites with Z x X.
+        crosstalk_yz: Cross talk between neighboring sites with Y x Z.
+        crosstalk_xz: Cross talk between neighboring sites with X x Z.
     """
 
-    excitation = Excitation
-    relaxation = Relaxation
-    dephasing = Dephasing
-    bitflip = BitFlip
-    bitphaseflip = BitPhaseFlip
-    excitation_two = TwoSiteExcitation
-    relaxation_two = TwoSiteRelaxation
-    crosstalk = CrossTalk
-    crosstalk_x = CrossTalkX
-    crosstalk_y = CrossTalkY
+    # Canonical names
+    raising = Raising
+    lowering = Lowering
+    pauliz = PauliZ
+    paulix = PauliX
+    pauliy = PauliY
+    raising_two = TwoSiteRaising
+    lowering_two = TwoSiteLowering
+    crosstalk_zz = CrossTalkZZ
+    crosstalk_xx = CrossTalkXX
+    crosstalk_yy = CrossTalkYY
+    crosstalk_xy = CrossTalkXY
+    crosstalk_yx = CrossTalkYX
+    crosstalk_zy = CrossTalkZY
+    crosstalk_zx = CrossTalkZX
+    crosstalk_yz = CrossTalkYZ
+    crosstalk_xz = CrossTalkXZ
