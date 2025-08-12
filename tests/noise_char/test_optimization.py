@@ -9,12 +9,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import pathlib
 import re
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
-import contextlib
 
 import numpy as np
 import pytest
