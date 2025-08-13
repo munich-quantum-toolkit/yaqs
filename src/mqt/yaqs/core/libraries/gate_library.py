@@ -534,6 +534,26 @@ class BaseGate:
         """
         return PVM(bitstring)
 
+    @classmethod
+    def runtime_cost(cls) -> RuntimeCost:
+        return RuntimeCost()
+
+    @classmethod
+    def max_bond(cls) -> MaxBond:
+        return MaxBond()
+
+    @classmethod
+    def total_bond(cls) -> TotalBond:
+        return TotalBond()
+
+    @classmethod
+    def entropy(cls) -> Entropy:
+        return Entropy()
+
+    @classmethod
+    def schmidt_spectrum(cls) -> SchmidtSpectrum:
+        return SchmidtSpectrum()
+
 
 class X(BaseGate):
     """Class representing the Pauli-X (NOT) gate.
@@ -1453,6 +1473,82 @@ class PVM(BaseGate):
         super().__init__(mat)
 
 
+class RuntimeCost(BaseGate):
+    name = "runtime_cost"
+
+    def __init__(self) -> None:
+        mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+
+class MaxBond(BaseGate):
+    name = "max_bond"
+
+    def __init__(self) -> None:
+        mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+
+class TotalBond(BaseGate):
+    name = "total_bond"
+
+    def __init__(self) -> None:
+        mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+
+class Entropy(BaseGate):
+    name = "entropy"
+
+    def __init__(self) -> None:
+        mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites: Variable-length argument list specifying site indices.
+
+        Raises:
+            ValueError: If the number of sites does not match the interaction level of the gate.
+        """
+        sites_list = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+
+        self.sites = sites_list
+
+
+class SchmidtSpectrum(BaseGate):
+    name = "schmidt_spectrum"
+
+    def __init__(self) -> None:
+        mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate.
+
+        Args:
+            *sites: Variable-length argument list specifying site indices.
+
+        Raises:
+            ValueError: If the number of sites does not match the interaction level of the gate.
+        """
+        sites_list = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+
+        self.sites = sites_list
+
+
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 
@@ -1504,4 +1600,9 @@ class GateLibrary:
     p0 = P0
     p1 = P1
     pvm = PVM
+    runtime_cost = RuntimeCost
+    max_bond = MaxBond
+    total_bond = TotalBond
+    entropy = Entropy
+    schmidt_spectrum = SchmidtSpectrum
     custom = BaseGate

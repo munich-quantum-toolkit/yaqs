@@ -78,10 +78,21 @@ class Observable:
             If the provided `name` is not a valid attribute in the GateLibrary.
         """
         if isinstance(gate, str):
-            gate = GateLibrary.pvm(gate)
+            if gate == "runtime_cost":
+                gate = GateLibrary.runtime_cost()
+            elif gate == "max_bond":
+                gate = GateLibrary.max_bond()
+            elif gate == "total_bond":
+                gate = GateLibrary.total_bond()
+            elif gate == "entropy":
+                gate = GateLibrary.entropy()
+            elif gate == "schmidt_spectrum":
+                gate = GateLibrary.schmidt_spectrum()
+            else:
+                gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
         self.gate = copy.deepcopy(gate)
-        if gate.name != "pvm":
+        if gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
             assert sites is not None
             self.sites = sites
             self.gate.set_sites(self.sites)
@@ -101,7 +112,7 @@ class Observable:
                 self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=np.float64)
                 self.times = sim_params.times
             else:
-                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.float64)
+                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=object)
                 self.times = sim_params.elapsed_time
             self.results = np.empty(len(sim_params.times), dtype=np.float64)
         elif isinstance(sim_params, WeakSimParams):
@@ -204,12 +215,20 @@ class AnalogSimParams:
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
         self.observables = observables
-        if self.observables and self.observables[0].gate.name != "pvm":
-            self.sorted_observables = sorted(
-                observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        if self.observables:
+            sortable = [
+                obs for obs in observables if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+            ]
+            unsorted = [
+                obs for obs in observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+            ]
+            sorted_obs = sorted(
+                sortable,
+                key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,
             )
+            self.sorted_observables = sorted_obs + unsorted
         else:
-            self.sorted_observables = observables
+            self.sorted_observables = []
 
         self.elapsed_time = elapsed_time
         self.dt = dt
@@ -232,7 +251,11 @@ class AnalogSimParams:
         attribute with the mean value of their trajectories along the specified axis.
         """
         for observable in self.observables:
-            observable.results = np.mean(observable.trajectories, axis=0)
+            if observable.gate.name == "schmidt_spectrum":
+                all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
+                observable.results = np.concatenate(all_values)
+            else:
+                observable.results = np.mean(observable.trajectories, axis=0)
 
 
 class WeakSimParams:
@@ -401,12 +424,20 @@ class StrongSimParams:
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
         self.observables = observables
-        if self.observables and self.observables[0].gate.name != "pvm":
-            self.sorted_observables = sorted(
-                observables, key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        if self.observables:
+            sortable = [
+                obs for obs in observables if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+            ]
+            unsorted = [
+                obs for obs in observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+            ]
+            sorted_obs = sorted(
+                sortable,
+                key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,
             )
+            self.sorted_observables = sorted_obs + unsorted
         else:
-            self.sorted_observables = observables
+            self.sorted_observables = []
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.min_bond_dim = min_bond_dim

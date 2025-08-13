@@ -91,16 +91,15 @@ def split_mps_tensor(
 
     # Handled by dynamic TDVP
     keep = min(len(s_vec), sim_params.max_bond_dim)
-    if not dynamic:
-        discard = 0.0
-        min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
-        for idx, s in enumerate(reversed(s_vec)):
-            discard += s**2
-            if discard >= sim_params.threshold:
-                keep = max(len(s_vec) - idx, min_keep)
-                break
-        if sim_params.max_bond_dim is not None:
-            keep = min(keep, sim_params.max_bond_dim)
+    discard = 0.0
+    min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
+    for idx, s in enumerate(reversed(s_vec)):
+        discard += s**2
+        if discard >= sim_params.threshold:
+            keep = max(len(s_vec) - idx, min_keep)
+            break
+    if sim_params.max_bond_dim is not None:
+        keep = min(keep, sim_params.max_bond_dim)
 
     left_tensor = u_mat[:, :keep]
     s_vec = s_vec[:keep]
