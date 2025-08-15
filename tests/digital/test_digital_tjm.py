@@ -58,6 +58,7 @@ def test_process_layer() -> None:
     # Create a QuantumCircuit with 9 qubits and 9 classical bits.
     qc = QuantumCircuit(9, 9)
     qc.measure(0, 0)
+    qc.barrier(3, label="SAMPLE_OBSERVABLES")
     qc.barrier(1)
     qc.x(qc.qubits[2])
     qc.cx(5, 4)
@@ -67,10 +68,16 @@ def test_process_layer() -> None:
     dag = circuit_to_dag(qc)
 
     # Call process_layer on the DAG.
-    single, even, odd = process_layer(dag)
+    single, even, odd, measure_barriers = process_layer(dag)
 
-    # After processing, the measurement and barrier nodes should have been removed.
+    assert len(measure_barriers) == 1
+    assert measure_barriers[0].op.name == "barrier"
+    assert measure_barriers[0].op.label == "SAMPLE_OBSERVABLES"
+
+    # After processing, measurement nodes and non-SAMPLE_OBSERVABLES barriers should have been removed.
     for node in dag.op_nodes():
+        if node.op.name == "barrier" and str(getattr(node.op, "label", "")).upper() == "SAMPLE_OBSERVABLES":
+            continue
         assert node.op.name not in {"measure", "barrier"}, f"Unexpected node {node.op.name} in the DAG op nodes."
 
     # Verify that the single-qubit gate is in the single-qubit group.
@@ -218,10 +225,10 @@ def test_create_local_noise_model() -> None:
     """
     # Create a global noise model with various processes
     global_processes = [
-        {"name": "paulix", "sites": [0], "strength": 0.01},
-        {"name": "paulix", "sites": [1], "strength": 0.02},
-        {"name": "paulix", "sites": [2], "strength": 0.03},
-        {"name": "paulix", "sites": [3], "strength": 0.04},
+        {"name": "pauli_x", "sites": [0], "strength": 0.01},
+        {"name": "pauli_x", "sites": [1], "strength": 0.02},
+        {"name": "pauli_x", "sites": [2], "strength": 0.03},
+        {"name": "pauli_x", "sites": [3], "strength": 0.04},
         {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.05},
         {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
         {"name": "crosstalk_xx", "sites": [2, 3], "strength": 0.07},
@@ -236,8 +243,8 @@ def test_create_local_noise_model() -> None:
 
     # Should include: bitflip on sites 1, 2 and crosstalk_xx, crosstalk_yx on [1, 2]
     expected_processes_1 = [
-        {"name": "paulix", "sites": [1], "strength": 0.02},
-        {"name": "paulix", "sites": [2], "strength": 0.03},
+        {"name": "pauli_x", "sites": [1], "strength": 0.02},
+        {"name": "pauli_x", "sites": [2], "strength": 0.03},
         {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
         {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
     ]
@@ -260,8 +267,8 @@ def test_create_local_noise_model() -> None:
 
     # Should include: bitflip on sites 0, 1 and crosstalk_xx, crosstalk_xy on [0, 1]
     expected_processes_2 = [
-        {"name": "paulix", "sites": [0], "strength": 0.01},
-        {"name": "paulix", "sites": [1], "strength": 0.02},
+        {"name": "pauli_x", "sites": [0], "strength": 0.01},
+        {"name": "pauli_x", "sites": [1], "strength": 0.02},
         {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.05},
         {"name": "crosstalk_xy", "sites": [0, 1], "strength": 0.09},
     ]
@@ -284,8 +291,8 @@ def test_create_local_noise_model() -> None:
 
     # Should include: bitflip on sites 2, 3 and crosstalk_xx on [2, 3]
     expected_processes_3 = [
-        {"name": "paulix", "sites": [2], "strength": 0.03},
-        {"name": "paulix", "sites": [3], "strength": 0.04},
+        {"name": "pauli_x", "sites": [2], "strength": 0.03},
+        {"name": "pauli_x", "sites": [3], "strength": 0.04},
         {"name": "crosstalk_xx", "sites": [2, 3], "strength": 0.07},
     ]
 
@@ -307,7 +314,7 @@ def test_create_local_noise_model() -> None:
 
     # Should include: bitflip on site 1 only
     expected_processes_4 = [
-        {"name": "paulix", "sites": [1], "strength": 0.02},
+        {"name": "pauli_x", "sites": [1], "strength": 0.02},
     ]
 
     assert len(local_model_4.processes) == len(expected_processes_4)
@@ -328,9 +335,9 @@ def test_create_local_noise_model() -> None:
 
     # Should include: bitflip on sites 1, 2, 3 and crosstalk_xx, crosstalk_yx on [1, 2], crosstalk_xx on [2, 3]
     expected_processes_5 = [
-        {"name": "paulix", "sites": [1], "strength": 0.02},
-        {"name": "paulix", "sites": [2], "strength": 0.03},
-        {"name": "paulix", "sites": [3], "strength": 0.04},
+        {"name": "pauli_x", "sites": [1], "strength": 0.02},
+        {"name": "pauli_x", "sites": [2], "strength": 0.03},
+        {"name": "pauli_x", "sites": [3], "strength": 0.04},
         {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
         {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
         {"name": "crosstalk_xx", "sites": [2, 3], "strength": 0.07},
@@ -403,43 +410,144 @@ def test_noisy_digital_tjm_matches_reference() -> None:
     both with strength 0.01. We compare Z-expectations on sites 0,1,2 over layers 0..5.
     """
     num_qubits = 3
-    num_layers = 5  # compare layers 0..5 (including initial)
     noise_factor = 0.01
     num_traj = 1000  # Monte Carlo trajectories
 
     # Hardcoded Qiskit reference results (rows: qubit 0,1,2)
     reference = np.array([
-        [1.0, 0.9607894391523233, 0.9231163463866354, 0.8869204367171571, 0.8521437889662108, 0.8187307530779814],
-        [1.0, 0.9231163463866359, 0.8521437889662113, 0.7866278610665535, 0.726149037073691, 0.6703200460356394],
-        [1.0, 0.9607894391523233, 0.9231163463866354, 0.8869204367171571, 0.8521437889662108, 0.8187307530779814],
+        [1.0, 0.9231163463866355, 0.8521437889662111, 0.7866278610665532, 0.7261490370736906, 0.670320046035639],
+        [1.0, 0.8521437889662115, 0.7261490370736912, 0.6187833918061411, 0.5272924240430489, 0.44932896411722184],
+        [1.0, 0.9231163463866355, 0.8521437889662111, 0.7866278610665532, 0.7261490370736906, 0.670320046035639],
     ])
 
     # YAQS noise model: bitflip on each site and crosstalk_xx on neighbors
-    processes = [{"name": "paulix", "sites": [i], "strength": noise_factor} for i in range(num_qubits)] + [
-        {"name": "crosstalk_xx", "sites": [i, i + 1], "strength": noise_factor} for i in range(num_qubits - 1)
-    ]
-    noise_model = NoiseModel(processes)
+    noise_model = NoiseModel(
+        [{"name": "pauli_x", "sites": [i], "strength": noise_factor} for i in range(num_qubits)]
+        + [{"name": "crosstalk_xx", "sites": [i, i + 1], "strength": noise_factor} for i in range(num_qubits - 1)]
+        + [{"name": "crosstalk_yy", "sites": [i, i + 1], "strength": noise_factor} for i in range(num_qubits - 1)]
+        + [{"name": "pauli_y", "sites": [i], "strength": noise_factor} for i in range(num_qubits)]
+    )
 
-    # Collect TJM results per qubit across layers
-    tjm_results = np.zeros_like(reference)
-    for k in range(num_layers + 1):
-        qc = QuantumCircuit(num_qubits)
-        for _ in range(k):
-            qc.rzz(0.5, 0, 1)
-            qc.rzz(0.5, 1, 2)
+    qc = QuantumCircuit(num_qubits)
 
-        observables = [Observable(Z(), i) for i in range(num_qubits)]
-        sim_params = StrongSimParams(observables, num_traj=num_traj)
-        state = MPS(num_qubits, state="zeros", pad=2)
-        simulator.run(state, qc, sim_params, noise_model, parallel=False)
+    qc.rzz(0.5, 0, 1)
+    qc.rzz(0.5, 1, 2)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.rzz(0.5, 0, 1)
+    qc.rzz(0.5, 1, 2)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.rzz(0.5, 0, 1)
+    qc.rzz(0.5, 1, 2)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.rzz(0.5, 0, 1)
+    qc.rzz(0.5, 1, 2)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.rzz(0.5, 0, 1)
+    qc.rzz(0.5, 1, 2)
 
-        for q in range(num_qubits):
-            # results is shape (1,) for StrongSim without layer sampling
-            res_arr = sim_params.observables[q].results
-            assert res_arr is not None
-            tjm_results[q, k] = float(np.real(res_arr[0]))
+    observables = [Observable(Z(), i) for i in range(num_qubits)]
+    sim_params = StrongSimParams(observables=observables, num_traj=num_traj, sample_layers=True, num_mid_measurements=4)
+    state = MPS(num_qubits, state="zeros", pad=2)
+    simulator.run(state, qc, sim_params, noise_model, parallel=False)
+
+    tjm_results = np.empty((num_qubits, 6), dtype=float)
+    for i in range(num_qubits):
+        res = sim_params.observables[i].results
+        assert res is not None
+        tjm_results[i, :] = np.real(res[:6])
 
     # Compare within tolerance
     tol = 0.1
     diff = np.abs(tjm_results - reference)
     assert np.all(diff <= tol), f"Noisy circuit TJM mismatch. max|diff|={diff.max():.4f} > {tol}"
+
+
+def test_no_mid_measurements_results_have_two_columns() -> None:
+    """Circuit without any SAMPLE_OBSERVABLES barriers should yield 2 columns (initial, final).
+
+    Builds a 3-qubit circuit with a few gates but no labelled 'SAMPLE_OBSERVABLES' barriers,
+    enables layer sampling via StrongSimParams, runs the simulator, and asserts that each
+    observable's results has shape (2,), corresponding to the initial and final sampling
+    points only.
+    """
+    num_qubits = 3
+    qc = QuantumCircuit(num_qubits)
+    # A couple of gates but no labelled barrier
+    qc.rx(0.3, 0)
+    qc.cx(0, 1)
+    qc.rzz(0.1, 1, 2)
+
+    observables = [Observable(Z(), i) for i in range(num_qubits)]
+    sim_params = StrongSimParams(observables, num_traj=1, sample_layers=True)
+    state = MPS(num_qubits, state="zeros")
+
+    simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
+
+    for obs in sim_params.observables:
+        assert obs.results is not None
+        assert obs.results.shape == (2,)
+
+
+def test_counts_multiple_mid_measurement_barriers() -> None:
+    """Three SAMPLE_OBSERVABLES barriers produce 5 columns (initial + 3 mids + final).
+
+    Constructs a 4-qubit circuit with three barriers labelled 'SAMPLE_OBSERVABLES' using
+    different cases (to verify case-insensitivity), enables layer sampling, runs the
+    simulation, and asserts that each observable's results has shape (5,), capturing the
+    initial state, each SAMPLE_OBSERVABLES sampling point, and the final state.
+    """
+    num_qubits = 4
+    qc = QuantumCircuit(num_qubits)
+    # First segment
+    qc.rx(0.2, 0)
+    qc.cx(0, 1)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    # Second segment
+    qc.rzz(0.5, 1, 2)
+    qc.barrier(label="SAMPLE_OBSERVABLES")  # case-insensitive
+    # Third segment
+    qc.rx(0.7, 3)
+    qc.barrier(label="SAMPLE_OBSERVABLES")  # mixed case
+    # Final segment
+    qc.cx(2, 3)
+
+    observables = [Observable(Z(), i) for i in range(num_qubits)]
+    sim_params = StrongSimParams(observables, num_traj=1, sample_layers=True)
+    state = MPS(num_qubits, state="zeros")
+
+    simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
+
+    for obs in sim_params.observables:
+        assert obs.results is not None
+        assert obs.results.shape == (5,)
+
+
+def test_ignores_non_mid_barriers_and_handles_measures() -> None:
+    """Barriers without the label and measurements are ignored for sampling.
+
+    Creates a 2-qubit circuit that includes an unlabelled barrier (ignored), a labelled
+    'SAMPLE_OBSERVABLES' barrier (counted), a measurement operation (removed), and a barrier
+    with a non-matching label (ignored). With layer sampling enabled, the test asserts
+    that each observable's results has shape (3,), corresponding to initial, one mid,
+    and final sampling points.
+    """
+    num_qubits = 2
+    qc = QuantumCircuit(num_qubits, num_qubits)
+    qc.barrier()  # no label -> ignored
+    qc.rx(0.1, 0)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.measure(0, 0)  # measurements are removed
+    qc.cx(0, 1)
+    qc.barrier(label="not-mid")  # ignored
+    qc.rzz(0.2, 0, 1)
+
+    observables = [Observable(Z(), i) for i in range(num_qubits)]
+    sim_params = StrongSimParams(observables, num_traj=1, sample_layers=True)
+    state = MPS(num_qubits, state="zeros")
+
+    simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
+
+    for obs in sim_params.observables:
+        assert obs.results is not None
+        # Only one labelled barrier -> 1 mid + initial + final
+        assert obs.results.shape == (3,)

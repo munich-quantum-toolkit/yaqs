@@ -29,8 +29,8 @@ If you have any questions, feel free to create a [discussion](https://github.com
 ## Features
 
 - **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM) ([Large-scale stochastic simulation of open quantum systems](https://arxiv.org/abs/2501.17913v1))
+- **Noisy Quantum Circuit Simulation (Digital Simulation)**: Investigate the effect of noise on large quantum circuits ([Quantum circuit simulation with a local time-dependent variational principle](https://arxiv.org/abs/2508.10096))
 - **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method ([Equivalence Checking of Quantum Circuits via Intermediary Matrix Product Operator](https://arxiv.org/abs/2410.10946))
-- **Noisy Quantum Circuit Simulation (Digital Simulation)**: Investigate the effect of noise on large quantum circuits
 
 **Detailed documentation and examples are available at [ReadTheDocs](https://mqt.readthedocs.io/projects/yaqs).**
 

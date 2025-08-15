@@ -108,8 +108,14 @@ class Observable:
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
             self.results = np.empty(1, dtype=np.float64)
         elif isinstance(sim_params, StrongSimParams):
-            self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
-            self.results = np.empty(1, dtype=np.float64)
+            if sim_params.sample_layers:
+                self.trajectories = np.empty(
+                    (sim_params.num_traj, sim_params.num_mid_measurements + 2), dtype=np.complex128
+                )
+                self.results = np.empty(sim_params.num_mid_measurements + 2, dtype=np.float64)
+            else:
+                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
+                self.results = np.empty(1, dtype=np.float64)
 
 
 class AnalogSimParams:
@@ -371,6 +377,8 @@ class StrongSimParams:
         threshold: float = 1e-9,
         *,
         get_state: bool = False,
+        sample_layers: bool = False,
+        num_mid_measurements: int = 0,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -404,6 +412,8 @@ class StrongSimParams:
         self.min_bond_dim = min_bond_dim
         self.threshold = threshold
         self.get_state = get_state
+        self.sample_layers = sample_layers
+        self.num_mid_measurements = num_mid_measurements
 
     def aggregate_trajectories(self) -> None:
         """Aggregate trajectories for result.

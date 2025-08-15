@@ -8,7 +8,7 @@
 """Library of noise processes.
 
 This module defines noise operator classes for quantum systems.
-It includes implementations for raising, lowering, and pauliz, paulix, pauliy noise operators,
+It includes implementations for raising, lowering, and pauli_z, pauli_x, pauli_y noise operators,
 each represented as a 2x2 numpy array. The module also provides a NoiseLibrary class
 that aggregates these noise operators for convenient access. Future improvements
 may extend these implementations to d-level systems.
@@ -202,9 +202,9 @@ class NoiseLibrary:
     Attributes:
         raising: Raising noise (0 --> 1).
         lowering: Lowering noise (1 --> 0).
-        pauliz: PauliZ (dephasing) noise.
-        paulix: PauliX (bitflip) noise (0 --> 1, 1 --> 0).
-        pauliy: PauliY (bit-phase flip) noise.
+        pauli_z: PauliZ (dephasing) noise.
+        pauli_x: PauliX (bitflip) noise (0 --> 1, 1 --> 0).
+        pauli_y: PauliY (bit-phase flip) noise.
         raising_two: Two-site raising noise (00 --> 11).
         lowering_two: Two-site lowering noise (11 --> 00).
         crosstalk_zz: Cross talk between neighboring sites along the z-axis.
@@ -221,9 +221,9 @@ class NoiseLibrary:
     # Canonical names
     raising = Raising
     lowering = Lowering
-    pauliz = PauliZ
-    paulix = PauliX
-    pauliy = PauliY
+    pauli_z = PauliZ
+    pauli_x = PauliX
+    pauli_y = PauliY
     raising_two = TwoSiteRaising
     lowering_two = TwoSiteLowering
     crosstalk_zz = CrossTalkZZ
