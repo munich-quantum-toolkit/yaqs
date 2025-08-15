@@ -102,7 +102,6 @@ class LossClass:
         self.x_avg_history: list[np.ndarray] = []
         self.diff_avg_history: list[float] = []
         self.grad_history: list[np.ndarray] = []
-        self.print_to_file = False
         self.work_dir: Path = Path()
 
     def compute_avg(self) -> None:
