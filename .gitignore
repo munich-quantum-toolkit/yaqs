@@ -178,3 +178,5 @@ out/build
 
 node_modules/
 wheelhouse/
+
+.DS_Store

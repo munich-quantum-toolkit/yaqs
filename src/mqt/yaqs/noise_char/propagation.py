@@ -187,7 +187,7 @@ def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.nda
 
     noise_model = NoiseModel(
         [{"name": "lowering", "sites": [i], "strength": gamma_rel[i]} for i in range(sites)]
-        + [{"name": "pauliz", "sites": [i], "strength": gamma_deph[i]} for i in range(sites)]
+        + [{"name": "pauli_z", "sites": [i], "strength": gamma_deph[i]} for i in range(sites)]
     )
 
     obs_list = (
