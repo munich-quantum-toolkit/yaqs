@@ -209,10 +209,10 @@ class LossClass:
         This method updates the object's history attributes and sets the number of evaluations performed.
         """
         self.n_eval = len(x_history)
-        self.x_history = list(x_history)
-        self.f_history = list(f_history)
-        self.x_avg_history = list(x_avg_history)
-        self.diff_avg_history = list(diff_avg_history)
+        self.x_history = [np.copy(x) for x in x_history]
+        self.f_history = [float(f) for f in f_history]  # floats are immutable, so copy not needed
+        self.x_avg_history = [np.copy(x) for x in x_avg_history]
+        self.diff_avg_history = [float(d) for d in diff_avg_history]
 
     def set_work_dir(self, path: str | Path, *, reset: bool) -> None:
         """Sets the base directory for storing optimization history and related files.
@@ -645,6 +645,8 @@ def adam_optimizer(
     """
     restart_dir = f.work_dir
 
+    perf_path = Path(f.work_dir) / "performance_metric_sec.txt"
+
     # Find the latest restart file in the restart_dir
     if restart_file is None and restart and pathlib.Path(restart_dir).is_dir():
         restart_files = [
@@ -690,7 +692,7 @@ def adam_optimizer(
         start_iter = 0
 
         # Write a header to performance_metric.txt in f.work_dir
-        perf_path = Path(f.work_dir) / "performance_metric_sec.txt"
+
         with perf_path.open("w", encoding="utf-8") as pf:
             pf.write("# iter    opt_step_time    simulation_time    avg_traj_time    min_traj_time    max_traj_time\n")
 

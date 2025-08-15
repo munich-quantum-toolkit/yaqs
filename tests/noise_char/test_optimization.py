@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import pathlib
+import pickle  # noqa: S403
 import re
 import tempfile
 from pathlib import Path
@@ -497,3 +498,98 @@ def test_adam_optimizer_runs() -> None:
     for file_path in loss_function.work_dir.glob("performance*.txt"):
         with contextlib.suppress(Exception):
             file_path.unlink()
+
+
+def assert_list_of_arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]) -> None:
+    """Assert that two sequences of NumPy arrays are exactly equal element-wise.
+
+    This function checks:
+      1. That both lists have the same length.
+      2. That each corresponding array is exactly equal (no tolerance).
+
+    Args:
+        list1 (Sequence[np.ndarray]): The first list (or sequence) of arrays.
+        list2 (Sequence[np.ndarray]): The second list (or sequence) of arrays.
+
+    """
+    assert len(list1) == len(list2), f"Length mismatch: {len(list1)} != {len(list2)}"
+    for i, (arr1, arr2) in enumerate(zip(list1, list2)):
+        np.testing.assert_array_equal(arr1, arr2, err_msg=f"Arrays differ at index {i}")
+
+
+def test_restart_loads_x_m_v(tmp_path: Path) -> None:
+    """Test that adam_optimizer correctly loads x, m, and v from a restart file.
+
+    This test:
+      1. Creates a mock `.pkl` restart file with known values for x, m, v, and histories.
+      2. Calls adam_optimizer with restart=True.
+      3. Asserts that the optimizer's loaded values match what was saved.
+
+    Args:
+        tmp_path (Path): Temporary path fixture provided by pytest.
+    """
+    # Arrange: create mock restart file
+    iteration = 5
+    restart_file = tmp_path / f"restart_step_000{iteration}.pkl"
+
+    x_history = [np.array([0.2, 0.4])] * iteration
+    x_avg_history = [np.array([0.2, 0.4])] * iteration
+    diff_avg_history = [2] * iteration
+    f_history = [0] * iteration
+
+    expected_x = x_history[-1]
+    expected_m = np.array([0.01, 0.02])
+    expected_v = np.array([0.001, 0.002])
+
+    sites = 3
+    sim_time = 1
+    dt = 0.2
+    n_obs_site = 3
+    t = np.arange(0, sim_time + dt, dt)
+    n_t = len(t)
+    exp_vals_traj = np.zeros([n_obs_site, sites, n_t])
+
+    sim_params = SimulationParameters(sites, gamma_rel=0.0, gamma_deph=0.0)
+    sim_params.T = sim_time
+    sim_params.dt = dt
+    sim_params.order = 1
+    sim_params.threshold = 1e-4
+    sim_params.N = 2
+
+    saved_data = {
+        "iteration": iteration,
+        "x": expected_x,
+        "m": expected_m,
+        "v": expected_v,
+        "x_history": x_history,
+        "f_history": f_history,
+        "x_avg_history": x_avg_history,
+        "diff_avg_history": diff_avg_history,
+        "t": t,
+        "exp_vals_traj": exp_vals_traj,
+    }
+
+    with restart_file.open("wb") as handle:
+        pickle.dump(saved_data, handle)
+
+    # Create mock loss object
+    loss = optimization.LossClass2(
+        sim_params,
+        exp_vals_traj,
+        propagation.tjm_traj,
+        print_to_file=False,
+    )
+
+    # Act
+    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(
+        loss,
+        x_copy=np.array([1, 1]),  # ignored because restart=True
+        restart=True,
+        restart_file=restart_file,
+        max_iterations=7,  # keep short
+    )
+
+    # Assert
+    np.testing.assert_allclose(f_hist[:iteration], f_history, rtol=1e-7, atol=1e-9)
+    assert_list_of_arrays_equal(x_hist[:iteration], x_history)
+    assert_list_of_arrays_equal(x_avg_hist[:iteration], x_avg_history)
