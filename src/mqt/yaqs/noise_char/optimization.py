@@ -94,14 +94,19 @@ class LossClass:
 
     d: int
 
-    def __init__(self) -> None:
-        """Initializes the LossClass with default values."""
+    def __init__(self, *, print_to_file: bool = False) -> None:
+        """Initializes the LossClass with default values.
+
+        Args:
+            print_to_file (bool, optional): If True, enables printing output to a file. Defaults to False.
+        """
         self.n_eval = 0
         self.x_history: list[np.ndarray] = []
         self.f_history: list[float] = []
         self.x_avg_history: list[np.ndarray] = []
         self.diff_avg_history: list[float] = []
         self.grad_history: list[np.ndarray] = []
+        self.print_to_file: bool = print_to_file
         self.work_dir: Path = Path()
 
     def compute_avg(self) -> None:
@@ -388,11 +393,9 @@ class LossClass2(LossClass):
             traj_der (Callable): Function to compute trajectory derivative.
             sim_params (SimulationParameters): Deep copy of the simulation parameters.
         """
-        super().__init__()
+        super().__init__(print_to_file=print_to_file)
 
         self.d = 2
-
-        self.print_to_file = print_to_file
 
         self.ref_traj = ref_traj.copy()
         self.traj_der = traj_der
@@ -514,9 +517,7 @@ class LossClass2L(LossClass):
             n_gamma_deph (int): Number of dephasing rates in the simulation parameters.
             d (int): Total number of noise parameters (relaxation + dephasing).
         """
-        super().__init__()
-
-        self.print_to_file = print_to_file
+        super().__init__(print_to_file=print_to_file)
 
         self.ref_traj = ref_traj.copy()
         self.traj_der = traj_der
