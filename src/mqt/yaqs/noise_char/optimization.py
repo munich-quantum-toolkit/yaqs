@@ -660,12 +660,12 @@ def adam_optimizer(
             restart_file = Path(restart_dir) / restart_files[-1]
 
     # Initialization
-    if restart:
-        if restart_file is None or not pathlib.Path(restart_file).exists():
-            msg = "Restart file not found or not specified."
+    if restart and restart_file is not None:
+        if not restart_file.exists():
+            msg = "Restart file not found."
             raise ValueError(msg)
         # We only load restart files we created ourselves; no untrusted input here.
-        with Path(restart_file).open("rb") as handle:
+        with restart_file.open("rb") as handle:
             saved = pickle.load(handle)  # noqa: S301
         x = saved["x"]
         m = saved["m"]

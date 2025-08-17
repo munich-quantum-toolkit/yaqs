@@ -58,6 +58,11 @@ def test_trapezoidal_shape_and_error() -> None:
     with pytest.raises(ValueError, match="Mismatch in the number of elements between x and y"):
         optimization.trapezoidal(y, x[:-1])
 
+    with pytest.raises(ValueError, match="x or y is None"):
+        optimization.trapezoidal(None, np.array([0, 1, 2]))
+    with pytest.raises(ValueError, match="x or y is None"):
+        optimization.trapezoidal(np.array([0, 1, 2]), None)
+
 
 def arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]) -> bool:
     """Check if two lists of NumPy arrays are equal element-wise.
@@ -524,6 +529,7 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
       1. Creates a mock `.pkl` restart file with known values for x, m, v, and histories.
       2. Calls adam_optimizer with restart=True.
       3. Asserts that the optimizer's loaded values match what was saved.
+      4. Asserts if ValueError is raised when not existing restart file.
 
     Args:
         tmp_path (Path): Temporary path fixture provided by pytest.
@@ -593,3 +599,12 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     np.testing.assert_allclose(f_hist[:iteration], f_history, rtol=1e-7, atol=1e-9)
     assert_list_of_arrays_equal(x_hist[:iteration], x_history)
     assert_list_of_arrays_equal(x_avg_hist[:iteration], x_avg_history)
+
+    with pytest.raises(ValueError, match="Restart file not found"):
+        f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(
+            loss,
+            x_copy=np.array([1, 1]),  # ignored because restart=True
+            restart=True,
+            restart_file=Path("/dummy/restart/file"),
+            max_iterations=7,  # keep short
+        )
