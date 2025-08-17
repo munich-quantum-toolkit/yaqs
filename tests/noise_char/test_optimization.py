@@ -587,7 +587,7 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     )
 
     # Act
-    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(
+    f_hist, x_hist, x_avg_hist, _, _ = optimization.adam_optimizer(
         loss,
         x_copy=np.array([1, 1]),  # ignored because restart=True
         restart=True,
@@ -601,7 +601,7 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     assert_list_of_arrays_equal(x_avg_hist[:iteration], x_avg_history)
 
     with pytest.raises(ValueError, match="Restart file not found"):
-        f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(
+        _, _, _, _, _ = optimization.adam_optimizer(
             loss,
             x_copy=np.array([1, 1]),  # ignored because restart=True
             restart=True,
