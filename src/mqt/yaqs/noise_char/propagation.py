@@ -9,14 +9,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Destroy, X, Y, Z, GateLibrary
+from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, X, Y, Z
 from mqt.yaqs.noise_char.optimization import trapezoidal
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 class SimulationParameters:
@@ -122,12 +127,7 @@ class SimulationParameters:
             self.gamma_deph = list(gamma_deph)
 
 
-
-
-
-
 class Propagator:
-
     """A class to encapsulate the propagator for the Ising model with noise.
 
     This class provides methods to set the Hamiltonian, noise model, loss function,
@@ -140,104 +140,105 @@ class Propagator:
         loss_function (LossClass): The loss function for optimization.
     """
 
-    def __init__(self,*,sim_params: AnalogSimParams, hamiltonian: MPO, noise_model: NoiseModel, obs_list: list[Observable], init_state: MPS) -> None:
-        self.sim_params: AnalogSimParams | None = sim_params
-        self.hamiltonian: MPO | None = hamiltonian
-        self.noise_model: NoiseModel | None = noise_model
-        self.obs_list: list[Observable] | None = obs_list
-        self.init_state: MPS | None = init_state
+    def __init__(
+        self,
+        *,
+        sim_params: AnalogSimParams,
+        hamiltonian: MPO,
+        noise_model: NoiseModel,
+        obs_list: list[Observable],
+        init_state: MPS,
+    ) -> None:
+        self.sim_params: AnalogSimParams = sim_params
+        self.hamiltonian: MPO = hamiltonian
+        self.noise_model: NoiseModel = noise_model
+        self.obs_list: list[Observable] = obs_list
+        self.init_state: MPS = init_state
 
-        self.sites = self.hamiltonian.length 
+        self.n_t = len(self.sim_params.times)  # number of time steps
 
+        self.sites = self.hamiltonian.length  # number of sites in the chain
 
-        if max([obs.site for obs in self.obs_list]) >= self.sites:
-            raise ValueError("Observable site index exceeds number of sites in the Hamiltonian.")
-        
-    
-        self.obs_matrix=self.make_observable_matrix()
+        all_obs_sites = [
+            site for obs in obs_list for site in (obs.sites if isinstance(obs.sites, list) else [obs.sites])
+        ]
 
-        self.jump_matrix=self.make_jump_matrix()
+        if max(all_obs_sites) >= self.sites:
+            msg = "Observable site index exceeds number of sites in the Hamiltonian."
+            raise ValueError(msg)
 
+        all_jump_sites = [site for proc in self.noise_model.processes for site in proc["sites"]]
 
+        if max(all_jump_sites) >= self.sites:
+            msg = "Noise process site index exceeds number of sites in the Hamiltonian."
+            raise ValueError(msg)
 
-    def make_observable_matrix(self) -> np.ndarray:
+        self.obs_mat = self.make_observable_matrix()
+
+        self.jump_mat = self.make_jump_matrix()
+
+    def make_observable_matrix(self) -> NDArray[np.object_]:
         """Returns the observable matrix for the current observables.
 
         Returns:
-            np.ndarray: The observable matrix. The shape is (n_obs_site, sites). Entries are zero if the corresponding observable 
-            is not measured for that site.
+            np.ndarray: The observable matrix. The shape is (n_obs_site, sites).
+            Entries are zero if the corresponding observable is not measured for that site.
         """
-    
-        obs_site_set=list({obs.gate for obs in self.obs_list})
+        obs_site_set = list({obs.gate for obs in self.obs_list})
 
-        n_obs_site=len(obs_site_set)
+        self.n_obs_site = len(obs_site_set)
 
-        obs_matrix=np.zeros((n_obs_site,self.sites), dtype=object)
-
+        obs_matrix = np.zeros((self.n_obs_site, self.sites), dtype=object)
 
         for obs in self.obs_list:
-            site=obs.site
-            gate=obs.gate
+            if isinstance(obs.sites, int):
+                site_list = [obs.sites]
+            elif isinstance(obs.sites, list):
+                site_list = obs.sites
 
-            obs_idx=obs_site_set.index(gate)
+            for site in site_list:
+                gate = obs.gate
 
-            obs_matrix[obs_idx, site]=gate
+                obs_idx = obs_site_set.index(gate)
+                obs_matrix[obs_idx, site] = gate
 
         return obs_matrix
-    
 
-    def make_jump_matrix(self) -> np.ndarray:
+    def make_jump_matrix(self) -> NDArray[np.object_]:
+        jump_site_list = list({getattr(GateLibrary, proc["name"]) for proc in self.noise_model.processes})
 
-        jump_site_list = list({ getattr(GateLibrary, proc["name"]) for proc in self.noise_model.processes})
+        self.n_jump_site = len(jump_site_list)
 
-        n_jump_site = len(jump_site_list)
-
-        jump_matrix = np.zeros((n_jump_site, self.sites), dtype=object)
-
+        jump_matrix = np.zeros((self.n_jump_site, self.sites), dtype=object)
 
         for proc in self.noise_model.processes:
-            site = proc["sites"][0]
-            gate = getattr(GateLibrary, proc["name"])
+            for site in proc["sites"]:
+                gate = getattr(GateLibrary, proc["name"])
 
-            jump_idx = jump_site_list.index(gate)
+                jump_idx = jump_site_list.index(gate)
 
-            jump_matrix[jump_idx, site] = gate
+                jump_matrix[jump_idx, site] = gate
 
-        
         return jump_matrix
-        
-        
 
-
-
-
-    def __call__(self, noise_model: NoiseModel):
-
-
-        n_t = len(self.sim_params.times)  ## number of time steps
-        sites = self.hamiltonian.length  ## number of sites in the chain
-
-
-
-        jump_site_list = [Destroy(), Z()]
-
-        obs_site_list = [X(), Y(), Z()]
-
+    def __call__(self, noise_model: NoiseModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         a_kn_site_list: list[Observable] = []
 
-        n_jump_site = len(jump_site_list)
-        n_obs_site = len(obs_site_list)
-
-        for lk in jump_site_list:
-            for on in obs_site_list:
+        for i in range(self.n_jump_site):
+            for j in range(self.n_obs_site):
                 a_kn_site_list.extend(
-                    Observable(lk.dag() * on * lk - 0.5 * on * lk.dag() * lk - 0.5 * lk.dag() * lk * on, k)
-                    for k in range(sites)
+                    Observable(
+                        self.jump_mat[i, k].dag() * self.obs_mat[j, k] * self.jump_mat[i, k]
+                        - 0.5 * self.obs_mat[j, k] * self.jump_mat[i, k].dag() * self.jump_mat[i, k]
+                        - 0.5 * self.jump_mat[i, k].dag() * self.jump_mat[i, k] * self.obs_mat[j, k],
+                        k,
+                    )
+                    for k in range(self.sites)
                 )
 
-        new_obs_list = self.obs_list + a_kn_site_list
+        self.obs_list + a_kn_site_list
 
-        simulator.run(self.initial_state, self.hamiltonian, self.sim_params, noise_model)
+        simulator.run(self.init_state, self.hamiltonian, self.sim_params, noise_model)
 
         exp_vals = [observable.results for observable in self.sim_params.observables]
 
@@ -248,21 +249,12 @@ class Propagator:
         assert all(v is not None for v in new_exp_vals)
 
         # Compute the integral of the new expectation values to obtain the derivatives
-        d_on_d_gk = [trapezoidal(new_exp_vals[i], t) for i in range(len(a_kn_site_list))]
+        d_on_d_gk = [trapezoidal(new_exp_vals[i], self.sim_params.times) for i in range(len(a_kn_site_list))]
 
-        d_on_d_gk = np.array(d_on_d_gk).reshape(n_jump_site, n_obs_site, sites, n_t)
-        original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, sites, n_t)
+        d_on_d_gk = np.array(d_on_d_gk).reshape(self.n_jump_site, self.n_obs_site, self.sites, self.n_t)
+        original_exp_vals = np.array(original_exp_vals).reshape(self.n_obs_site, self.sites, self.n_t)
 
-        avg_min_max_traj_time = [None, None, None]  # Placeholder for average, min, and max trajectory time
-
-        return self.sim_params.times, original_exp_vals, d_on_d_gk, avg_min_max_traj_time
-
-
-
-
-
-
-
+        return self.sim_params.times, original_exp_vals, d_on_d_gk
 
 
 def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:

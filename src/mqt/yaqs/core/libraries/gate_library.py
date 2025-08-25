@@ -1506,7 +1506,6 @@ class GateLibrary:
     pvm = PVM
     custom = BaseGate
 
-
     raising = Create
     lowering = Destroy
     pauli_z = Z
