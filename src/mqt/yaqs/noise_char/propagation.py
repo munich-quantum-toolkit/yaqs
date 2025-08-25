@@ -122,6 +122,91 @@ class SimulationParameters:
             self.gamma_deph = list(gamma_deph)
 
 
+
+
+
+
+class Propagator:
+
+    """A class to encapsulate the propagator for the Ising model with noise.
+
+    This class provides methods to set the Hamiltonian, noise model, loss function,
+    and simulation parameters for the Ising model with noise.
+
+    Attributes:
+        sim_params (AnalogSimParams): Simulation parameters.
+        hamiltonian (MPO): The Hamiltonian of the system.
+        noise_model (NoiseModel): The noise model of the system.
+        loss_function (LossClass): The loss function for optimization.
+    """
+
+    def __init__(self,*,sim_params: AnalogSimParams, hamiltonian: MPO, noise_model: NoiseModel, obs_list: list[Observable], init_state: MPS) -> None:
+        self.sim_params: AnalogSimParams | None = None
+        self.hamiltonian: MPO | None = None
+        self.noise_model: NoiseModel | None = None
+        self.obs_list: list[Observable] | None = obs_list
+        self.init_state: MPS | None = None
+
+
+        
+
+
+
+
+    def __call__(self, noise_model: NoiseModel):
+
+
+        n_t = len(self.sim_params.times)  ## number of time steps
+        sites = self.hamiltonian.length  ## number of sites in the chain
+
+
+
+        jump_site_list = [Destroy(), Z()]
+
+        obs_site_list = [X(), Y(), Z()]
+
+        a_kn_site_list: list[Observable] = []
+
+        n_jump_site = len(jump_site_list)
+        n_obs_site = len(obs_site_list)
+
+        for lk in jump_site_list:
+            for on in obs_site_list:
+                a_kn_site_list.extend(
+                    Observable(lk.dag() * on * lk - 0.5 * on * lk.dag() * lk - 0.5 * lk.dag() * lk * on, k)
+                    for k in range(sites)
+                )
+
+        new_obs_list = self.obs_list + a_kn_site_list
+
+        simulator.run(self.initial_state, self.hamiltonian, self.sim_params, noise_model)
+
+        exp_vals = [observable.results for observable in self.sim_params.observables]
+
+        # Separate original and new expectation values from result_lindblad.
+        n_obs = len(self.obs_list)  # number of measurement operators (should be sites * n_types)
+        original_exp_vals = exp_vals[:n_obs]
+        new_exp_vals = exp_vals[n_obs:]  # these correspond to the A_kn operators
+        assert all(v is not None for v in new_exp_vals)
+
+        # Compute the integral of the new expectation values to obtain the derivatives
+        d_on_d_gk = [trapezoidal(new_exp_vals[i], t) for i in range(len(a_kn_site_list))]
+
+        d_on_d_gk = np.array(d_on_d_gk).reshape(n_jump_site, n_obs_site, sites, n_t)
+        original_exp_vals = np.array(original_exp_vals).reshape(n_obs_site, sites, n_t)
+
+        avg_min_max_traj_time = [None, None, None]  # Placeholder for average, min, and max trajectory time
+
+        return self.sim_params.times, original_exp_vals, d_on_d_gk, avg_min_max_traj_time
+
+
+
+
+
+
+
+
+
 def tjm_traj(sim_params_class: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:
     """Simulates the time evolution of an open quantum system using the Lindblad master equation with TJM.
 
