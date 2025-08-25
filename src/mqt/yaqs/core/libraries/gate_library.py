@@ -1505,3 +1505,10 @@ class GateLibrary:
     p1 = P1
     pvm = PVM
     custom = BaseGate
+
+
+    raising = Create
+    lowering = Destroy
+    pauli_z = Z
+    pauli_x = X
+    pauli_y = Y

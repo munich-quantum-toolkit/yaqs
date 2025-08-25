@@ -15,7 +15,7 @@ from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Destroy, X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import Destroy, X, Y, Z, GateLibrary
 from mqt.yaqs.noise_char.optimization import trapezoidal
 
 
@@ -141,13 +141,71 @@ class Propagator:
     """
 
     def __init__(self,*,sim_params: AnalogSimParams, hamiltonian: MPO, noise_model: NoiseModel, obs_list: list[Observable], init_state: MPS) -> None:
-        self.sim_params: AnalogSimParams | None = None
-        self.hamiltonian: MPO | None = None
-        self.noise_model: NoiseModel | None = None
+        self.sim_params: AnalogSimParams | None = sim_params
+        self.hamiltonian: MPO | None = hamiltonian
+        self.noise_model: NoiseModel | None = noise_model
         self.obs_list: list[Observable] | None = obs_list
-        self.init_state: MPS | None = None
+        self.init_state: MPS | None = init_state
+
+        self.sites = self.hamiltonian.length 
 
 
+        if max([obs.site for obs in self.obs_list]) >= self.sites:
+            raise ValueError("Observable site index exceeds number of sites in the Hamiltonian.")
+        
+    
+        self.obs_matrix=self.make_observable_matrix()
+
+        self.jump_matrix=self.make_jump_matrix()
+
+
+
+    def make_observable_matrix(self) -> np.ndarray:
+        """Returns the observable matrix for the current observables.
+
+        Returns:
+            np.ndarray: The observable matrix. The shape is (n_obs_site, sites). Entries are zero if the corresponding observable 
+            is not measured for that site.
+        """
+    
+        obs_site_set=list({obs.gate for obs in self.obs_list})
+
+        n_obs_site=len(obs_site_set)
+
+        obs_matrix=np.zeros((n_obs_site,self.sites), dtype=object)
+
+
+        for obs in self.obs_list:
+            site=obs.site
+            gate=obs.gate
+
+            obs_idx=obs_site_set.index(gate)
+
+            obs_matrix[obs_idx, site]=gate
+
+        return obs_matrix
+    
+
+    def make_jump_matrix(self) -> np.ndarray:
+
+        jump_site_list = list({ getattr(GateLibrary, proc["name"]) for proc in self.noise_model.processes})
+
+        n_jump_site = len(jump_site_list)
+
+        jump_matrix = np.zeros((n_jump_site, self.sites), dtype=object)
+
+
+        for proc in self.noise_model.processes:
+            site = proc["sites"][0]
+            gate = getattr(GateLibrary, proc["name"])
+
+            jump_idx = jump_site_list.index(gate)
+
+            jump_matrix[jump_idx, site] = gate
+
+        
+        return jump_matrix
+        
         
 
 
