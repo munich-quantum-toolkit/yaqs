@@ -14,14 +14,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from mqt.yaqs import simulator
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.noise_char.optimization import trapezoidal
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+    from mqt.yaqs.core.data_structures.networks import MPO, MPS
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
 class SimulationParameters:
@@ -127,7 +128,7 @@ class SimulationParameters:
             self.gamma_deph = list(gamma_deph)
 
 
-class Propagator:
+class PropagatorWithDerivatives:
     """A class to encapsulate the propagator for the Ising model with noise.
 
     This class provides methods to set the Hamiltonian, noise model, loss function,
@@ -222,6 +223,16 @@ class Propagator:
         return jump_matrix
 
     def __call__(self, noise_model: NoiseModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        
+        for i, proc in enumerate(noise_model.processes):
+            for j, site in enumerate(proc["sites"]):
+                if (
+                    proc["name"] != self.noise_model.processes[i]["name"]
+                    or site != self.noise_model.processes[i]["sites"][j]
+                ):
+                    msg = "Noise model processes or sites do not match the initialized noise model."
+                    raise ValueError(msg)
+
         a_kn_site_list: list[Observable] = []
 
         for i in range(self.n_jump_site):
@@ -255,4 +266,3 @@ class Propagator:
         original_exp_vals = np.array(original_exp_vals).reshape(self.n_obs_site, self.sites, self.n_t)
 
         return self.sim_params.times, original_exp_vals, d_on_d_gk
-
