@@ -97,11 +97,15 @@ def create_probability_distribution(
             if len(process["sites"]) == 1 and process["sites"][0] == site:
                 gamma = process["strength"]
                 jump_op = process["matrix"]
-
-                jumped_state = copy.deepcopy(state)
-                jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_op, state.tensors[site])
-                dp_m = dt * gamma * jumped_state.norm(site)
-                dp_m_list.append(float(dp_m.real))
+                if is_pauli(process):
+                    # print(f"state norm: {state.norm(site)}")
+                    dp_m = dt * gamma * state.norm(site)
+                    dp_m_list.append(float(dp_m.real))
+                else:
+                    jumped_state = copy.deepcopy(state)
+                    jumped_state.tensors[site] = oe.contract("ab, bcd->acd", jump_op, state.tensors[site])
+                    dp_m = dt * gamma * jumped_state.norm(site)
+                    dp_m_list.append(float(dp_m.real))
 
         # --- 2-site jumps starting at [site, site+1] ---
         if site < state.length - 1:
@@ -172,7 +176,9 @@ def stochastic_process(
     rng = np.random.default_rng()
     if noise_model is None or rng.random() >= dp:
         # No jump occurs; shift the state to canonical form at site 0.
+        print(f"ortho center no jump in stochastic process: {state.check_canonical_form()}")
         state.shift_orthogonality_center_left(0)
+        print(f"norm after no jump in stochastic process: {state.norm()}")
         return state
 
     # A jump occurs: create the probability distribution and select a jump operator.
