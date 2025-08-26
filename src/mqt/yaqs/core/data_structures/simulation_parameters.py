@@ -119,8 +119,14 @@ class Observable:
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
             self.results = np.empty(1, dtype=np.float64)
         elif isinstance(sim_params, StrongSimParams):
-            self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
-            self.results = np.empty(1, dtype=np.float64)
+            if sim_params.sample_layers:
+                self.trajectories = np.empty(
+                    (sim_params.num_traj, sim_params.num_mid_measurements + 2), dtype=np.complex128
+                )
+                self.results = np.empty(sim_params.num_mid_measurements + 2, dtype=np.float64)
+            else:
+                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
+                self.results = np.empty(1, dtype=np.float64)
 
 
 class AnalogSimParams:
@@ -246,6 +252,7 @@ class AnalogSimParams:
         """
         for observable in self.observables:
             if observable.gate.name == "schmidt_spectrum":
+                assert isinstance(observable.trajectories, list)
                 all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
                 observable.results = np.concatenate(all_values)
             else:
@@ -271,6 +278,8 @@ class WeakSimParams:
         The window size for the simulation.
     get_state:
         If True, output MPS is returned.
+    sample_layers:
+        If True, sample layers.
 
     Methods:
     --------
@@ -394,6 +403,8 @@ class StrongSimParams:
         threshold: float = 1e-9,
         *,
         get_state: bool = False,
+        sample_layers: bool = False,
+        num_mid_measurements: int = 0,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -435,13 +446,21 @@ class StrongSimParams:
         self.min_bond_dim = min_bond_dim
         self.threshold = threshold
         self.get_state = get_state
+        self.sample_layers = sample_layers
+        self.num_mid_measurements = num_mid_measurements
 
     def aggregate_trajectories(self) -> None:
-        """Aggregate trajectories for result.
+        """Aggregates trajectories for result.
 
-        Aggregates the trajectories of each observable by computing the mean across all trajectories.
-        This method iterates over all observables and replaces their `results` attribute with the mean
-        of their `trajectories` along the first axis.
+        Aggregates the trajectories of each observable by computing the mean
+        across all trajectories and storing the result in the observable's results.
+        This method iterates over all observables and updates their results
+        attribute with the mean value of their trajectories along the specified axis.
         """
         for observable in self.observables:
-            observable.results = np.mean(observable.trajectories, axis=0)
+            if observable.gate.name == "schmidt_spectrum":
+                assert isinstance(observable.trajectories, list)
+                all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
+                observable.results = np.concatenate(all_values)
+            else:
+                observable.results = np.mean(observable.trajectories, axis=0)

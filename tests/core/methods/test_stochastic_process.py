@@ -101,39 +101,41 @@ def test_create_probability_distribution_no_noise() -> None:
     """Test probability distribution is empty when no noise model is provided.
 
     This test passes an empty noise model to `create_probability_distribution` and verifies
-    that the resulting jump dictionary contains only empty lists for all fields, confirming
-    correct behavior for noiseless systems.
+    that the resulting tuple contains empty lists for both processes and probabilities,
+    confirming correct behavior for noiseless systems.
     """
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     noise_model = NoiseModel([])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=5, threshold=1e-10)
-    out = create_probability_distribution(state, noise_model, dt, sim_params)
-    assert all(len(v) == 0 for v in out.values()), "Output should be empty with no noise."
+    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    assert len(probabilities) == 0, "No probabilities should be computed with empty noise model."
 
 
 def test_create_probability_distribution_one_site() -> None:
     """Test probability distribution for a single 1-site jump operator.
 
     This test sets up a noise model with one local jump operator and checks that
-    `create_probability_distribution` returns a distribution with one jump, correct site,
+    `create_probability_distribution` returns one applicable process with correct site,
     correct probability normalization, and the correct strength.
     """
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     # Identity jump operator for simplicity
     id_op = np.eye(2)
     noise_model = NoiseModel([
-        {"name": "relaxation", "sites": [1], "strength": 0.5, "matrix": id_op},
+        {"name": "lowering", "sites": [1], "strength": 0.5, "matrix": id_op},
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=5, threshold=1e-10)
-    out = create_probability_distribution(state, noise_model, dt, sim_params)
-    # One jump, one site
-    assert len(out["jumps"]) == 1
-    assert len(out["sites"]) == 1
-    assert out["sites"][0] == [1]
-    assert np.isclose(sum(out["probabilities"]), 1.0)
-    assert out["strengths"][0] == 0.5
+    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    # One applicable process
+    assert len(probabilities) == 1
+    # Check process properties
+    process = noise_model.processes[0]
+    assert process["sites"] == [1]
+    assert process["strength"] == 0.5
+    # Check probability normalization
+    assert np.isclose(sum(probabilities), 1.0)
 
 
 def test_stochastic_process_no_jump() -> None:
@@ -163,7 +165,7 @@ def test_stochastic_process_jump() -> None:
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     state.tensors[0] *= 0.99
     noise_model = NoiseModel([
-        {"name": "bitflip", "sites": [0], "strength": 1000.0},
+        {"name": "pauli_x", "sites": [0], "strength": 1000.0},
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=5, threshold=1e-10)
@@ -180,18 +182,23 @@ def test_create_probability_distribution_two_site() -> None:
     """Test probability distribution for a single 2-site jump operator.
 
     This test uses a noise model containing a single two-site jump process and checks
-    that `create_probability_distribution` produces a dictionary with one jump on the
+    that `create_probability_distribution` produces one applicable process on the
     correct pair of sites and a normalized probability.
     """
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     # 2x2 identity operator (for simplicity, but normally should be 4x4, depends on your merge op!)
     np.eye(2)
     noise_model = NoiseModel([
-        {"name": "crosstalk", "sites": [0, 1], "strength": 0.2},
+        {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.2},
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=5, threshold=1e-10)
-    out = create_probability_distribution(state, noise_model, dt, sim_params)
-    assert len(out["jumps"]) == 1
-    assert out["sites"][0] == [0, 1]
-    assert np.isclose(sum(out["probabilities"]), 1.0)
+    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    # One applicable process
+    assert len(probabilities) == 1
+    # Check process properties
+    process = noise_model.processes[0]
+    assert process["sites"] == [0, 1]
+    assert process["strength"] == 0.2
+    # Check probability normalization
+    assert np.isclose(sum(probabilities), 1.0)

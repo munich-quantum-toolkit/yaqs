@@ -46,7 +46,7 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 gamma = 0.1
 noise_model = NoiseModel([
-      {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["relaxation", "dephasing"]
+      {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["lowering", "pauli_z"]
   ])
 ```
 

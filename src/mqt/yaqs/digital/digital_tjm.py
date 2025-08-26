@@ -22,7 +22,8 @@ import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO, MPS
-from ..core.data_structures.simulation_parameters import WeakSimParams
+from ..core.data_structures.noise_model import NoiseModel
+from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
@@ -33,12 +34,33 @@ if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
-    from ..core.data_structures.noise_model import NoiseModel
-    from ..core.data_structures.simulation_parameters import StrongSimParams
     from ..core.libraries.gate_library import BaseGate
 
 
-def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
+def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site: int) -> NoiseModel:
+    """Create local noise model.
+
+    Create a local noise model from a global noise model for a given gate.
+
+    Args:
+        noise_model (NoiseModel): The global noise model.
+        first_site (int): The first site of the gate.
+        last_site (int): The last site of the gate.
+
+    Returns:
+        NoiseModel: The local noise model.
+    """
+    affected_sites = [first_site, last_site]
+
+    local_processes = [
+        process
+        for process in noise_model.processes
+        if process["sites"] == affected_sites or process["sites"] == [first_site] or process["sites"] == [last_site]
+    ]
+    return NoiseModel(local_processes)
+
+
+def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
     """Process quantum circuit layer before applying to MPS.
 
     Processes the current layer of a DAGCircuit and categorizes nodes into single-qubit, even-indexed two-qubit,
@@ -48,10 +70,11 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         dag (DAGCircuit): The directed acyclic graph representing the quantum circuit.
 
     Returns:
-        tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]: A tuple containing three lists:
+        tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]: A tuple containing four lists:
             - single_qubit_nodes: Nodes corresponding to single-qubit gates.
             - even_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is even.
             - odd_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is odd.
+            - measure_barriers: Labelled barriers ("SAMPLE_OBSERVABLES") used as sampling points.
 
     Raises:
         NotImplementedError: If a node with more than two qubits is encountered.
@@ -63,12 +86,24 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     single_qubit_nodes = []
     even_nodes = []
     odd_nodes = []
+    measure_barriers = []
 
     # Separate the current layer into single-qubit and two-qubit gates.
     for node in current_layer:
-        # Remove measurement and barrier nodes.
-        if node.op.name in {"measure", "barrier"}:
+        name = node.op.name
+
+        # Drop measurements completely.
+        if name == "measure":
             dag.remove_op_node(node)
+            continue
+
+        # Keep ONLY barriers with label "SAMPLE_OBSERVABLES" (case-insensitive). Remove all other barriers.
+        if name == "barrier":
+            label = getattr(node.op, "label", None)
+            if label is not None and str(label).upper() == "SAMPLE_OBSERVABLES":
+                measure_barriers.append(node)
+            else:
+                dag.remove_op_node(node)
             continue
 
         if len(node.qargs) == 1:
@@ -83,7 +118,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         else:
             raise NotImplementedError
 
-    return single_qubit_nodes, even_nodes, odd_nodes
+    return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
@@ -174,7 +209,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     return short_state, short_mpo, window
 
 
-def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> None:
+def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
     """Apply two-qubit gate.
 
     Applies a two-qubit gate to the given Matrix Product State (MPS) with dynamic TDVP.
@@ -185,6 +220,8 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
         sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior
         of the algorithm.
 
+    Returns:
+        tuple[int, int]: A tuple containing the first site and last site indices of the quantum gate.
     """
     # Construct the MPO for the two-qubit gate.
     gate = convert_dag_to_tensor_algorithm(node)[0]
@@ -196,6 +233,8 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
+
+    return first_site, last_site
 
 
 def digital_tjm(
@@ -220,29 +259,51 @@ def digital_tjm(
         If WeakSimParams are used, the results are the measurement outcomes for each shot.
     """
     _i, initial_state, noise_model, sim_params, circuit = args
-    state = copy.deepcopy(initial_state)
 
+    state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)
+
+    # Initialize results depending on simulation type
+    if isinstance(sim_params, StrongSimParams):
+        if sim_params.sample_layers:
+            results = np.zeros((len(sim_params.sorted_observables), sim_params.num_mid_measurements + 2))
+            # Initial sampling (column 0)
+            state.evaluate_observables(sim_params, results, 0)
+        else:
+            results = np.zeros((len(sim_params.sorted_observables), 1))
+
+    col_idx = 0
+    canonical_form_lost = False
     while dag.op_nodes():
-        single_qubit_nodes, even_nodes, odd_nodes = process_layer(dag)
+        single_qubit_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
 
         for node in single_qubit_nodes:
             apply_single_qubit_gate(state, node)
             dag.remove_op_node(node)
+            if not dag.op_nodes():
+                canonical_form_lost = True
 
         # Process two-qubit gates in even/odd sweeps.
-        for group in [even_nodes, odd_nodes]:
+        for _, group in [("even", even_nodes), ("odd", odd_nodes)]:
             for node in group:
-                apply_two_qubit_gate(state, node, sim_params)
-                # Jump process occurs after each two-qubit gate
+                first_site, last_site = apply_two_qubit_gate(state, node, sim_params)
+
                 if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
                     # Normalizes state
                     state.normalize(form="B", decomposition="QR")
                 else:
-                    apply_dissipation(state, noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, noise_model, dt=1, sim_params=sim_params)
+                    local_noise_model = create_local_noise_model(noise_model, first_site, last_site)
+                    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
+                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params)
 
                 dag.remove_op_node(node)
+
+        # Process measurement barriers (only when sampling layers in strong sim)
+        if isinstance(sim_params, StrongSimParams) and sim_params.sample_layers:
+            for measure_barrier in measure_barriers:
+                dag.remove_op_node(measure_barrier)
+                col_idx += 1
+                state.evaluate_observables(sim_params, results, col_idx)
 
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
@@ -252,11 +313,12 @@ def digital_tjm(
             return state.measure_shots(sim_params.shots)
         # Each shot is an individual trajectory
         return state.measure_shots(shots=1)
-    # StrongSimParams
-    results = np.zeros((len(sim_params.observables), 1))
 
-    state.evaluate_observables(sim_params, results)
+    if canonical_form_lost:
+        state.normalize(form="B", decomposition="QR")
+
+    assert isinstance(sim_params, StrongSimParams)
     if sim_params.get_state:
         sim_params.output_state = state
-
+    state.evaluate_observables(sim_params, results, results.shape[1] - 1)
     return results

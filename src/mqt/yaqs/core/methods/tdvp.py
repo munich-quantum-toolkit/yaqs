@@ -102,6 +102,16 @@ def split_mps_tensor(
     #         break
     # if sim_params.max_bond_dim is not None:
     #     keep = min(keep, sim_params.max_bond_dim)
+    if not dynamic:
+        discard = 0.0
+        min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
+        for idx, s in enumerate(reversed(s_vec)):
+            discard += s**2
+            if discard >= sim_params.threshold:
+                keep = max(len(s_vec) - idx, min_keep)
+                break
+        if sim_params.max_bond_dim is not None:
+            keep = min(keep, sim_params.max_bond_dim)
 
     left_tensor = u_mat[:, :keep]
     s_vec = s_vec[:keep]
@@ -824,7 +834,7 @@ def global_dynamic_tdvp(
 
     This function evolves the state by choosing between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP)
     based on the current maximum bond dimension of the MPS. The decision is made by comparing the state's bond
-    dimension (obtained via `state.write_max_bond_dim()`) to the maximum allowed bond dimension specified in
+    dimension (obtained via `state.get_max_bond()`) to the maximum allowed bond dimension specified in
     `sim_params`.
 
     Args:
@@ -833,7 +843,7 @@ def global_dynamic_tdvp(
         sim_params (AnalogSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
             such as the maximum allowable bond dimension for the MPS.
     """
-    current_max_bond_dim = state.write_max_bond_dim()
+    current_max_bond_dim = state.get_max_bond()
     if current_max_bond_dim < sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_tdvp(state, hamiltonian, sim_params, dynamic=True)

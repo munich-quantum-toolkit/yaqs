@@ -321,7 +321,7 @@ def test_dynamic_tdvp_one_site() -> None:
     exceeds sim_params.max_bond_dim.
 
     In this test, sim_params.max_bond_dim is set to 0 so that the current maximum bond dimension of the MPS,
-    computed by state.write_max_bond_dim(), is greater than 0. Therefore, the else branch of dynamic_TDVP should be
+    computed by state.get_max_bond(), is greater than 0. Therefore, the else branch of dynamic_TDVP should be
     taken, and single_site_tdvp should be called exactly once.
     """
     # Define the system Hamiltonian.

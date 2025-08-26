@@ -62,7 +62,7 @@ gamma = 0.0  # No noise for this simulation
 noise_model = NoiseModel([
     {"name": name, "sites": [i], "strength": gamma}
     for i in range(length)
-    for name in ["relaxation"]
+    for name in ["lowering"]
 ])
 ```
 

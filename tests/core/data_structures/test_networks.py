@@ -28,14 +28,14 @@ from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
 from mqt.yaqs import simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import Id, X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id, X, Y, Z
 
 
 def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -447,22 +447,6 @@ def test_mps_custom_tensors() -> None:
     assert len(mps.tensors) == length
     for i, tensor in enumerate(mps.tensors):
         assert np.allclose(tensor, tensors[i])
-
-
-def test_write_max_bond_dim() -> None:
-    """Test that write_max_bond_dim returns the maximum bond dimension of an MPS.
-
-    Constructs an MPS with varying bond dimensions and checks that the maximum bond dimension is reported correctly.
-    """
-    length = 3
-    pdim = 2
-    t1 = rng.random(size=(pdim, 1, 2))
-    t2 = rng.random(size=(pdim, 4, 5))
-    t3 = rng.random(size=(pdim, 5, 2))
-    mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
-
-    max_bond = mps.write_max_bond_dim()
-    assert max_bond == 5
 
 
 def test_flip_network() -> None:
@@ -953,3 +937,237 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
         _, bond_left, bond_right = T.shape
         assert bond_left <= 3
         assert bond_right <= 3
+
+
+def _bell_pair_mps() -> MPS:
+    """Auxiliary function to create a Bell-pair MPS.
+
+    Construct a 2-site MPS for the Bell state (|00> + |11>)/√2.
+    Contracting the bond yields θ = diag(1/√2, 1/√2).
+
+    Shapes:
+        A: (phys=2, left=1, right=2)
+        B: (phys=2, left=2, right=1)
+
+    Returns:
+        MPS: The product-state MPS.
+    """
+    A = np.zeros((2, 1, 2), dtype=complex)
+    B = np.zeros((2, 2, 1), dtype=complex)
+
+    # A encodes 1/√2 on |0> with bond 0, and 1/√2 on |1> with bond 1
+    A[0, 0, 0] = 1 / np.sqrt(2)
+    A[1, 0, 1] = 1 / np.sqrt(2)
+
+    # B routes bond 0 -> |0>, bond 1 -> |1>
+    B[0, 0, 0] = 1.0
+    B[1, 1, 0] = 1.0
+
+    return MPS(length=2, tensors=[A, B], physical_dimensions=[2, 2])
+
+
+def _product_state_mps(length: int) -> MPS:
+    """Construct a product-state MPS |0…0⟩ with all bonds = 1.
+
+    Returns:
+        MPS: The product-state MPS.
+    """
+    pdim = 2
+    tensors = []
+    for _ in range(length):
+        T = np.zeros((pdim, 1, 1), dtype=complex)
+        T[0, 0, 0] = 1.0  # |0>
+        tensors.append(T)
+    return MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
+
+
+def test_get_max_bond() -> None:
+    """get_max_bond reports max over index-0/2 across tensors."""
+    # Shapes chosen so the per-tensor max(phys_dim, right_bond) are 3, 4, 2 → global 4
+    t1 = np.zeros((2, 1, 3), dtype=complex)
+    t2 = np.zeros((2, 3, 4), dtype=complex)
+    t3 = np.zeros((2, 4, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=[2, 2, 2])
+
+    assert mps.get_max_bond() == 4
+
+
+def test_get_total_bond() -> None:
+    """get_total_bond sums internal left bonds over tensors[1:]."""
+    # Left bonds (2nd index) of tensors[1:] are 3 and 4 → total 7
+    t1 = np.zeros((2, 1, 3), dtype=complex)
+    t2 = np.zeros((2, 3, 4), dtype=complex)
+    t3 = np.zeros((2, 4, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=[2, 2, 2])
+
+    assert mps.get_total_bond() == 7
+
+
+def test_get_cost() -> None:
+    """get_cost sums cubes of internal left bonds over tensors[1:]."""
+    # Cubes: 3^3 + 4^3 = 27 + 64 = 91
+    t1 = np.zeros((2, 1, 3), dtype=complex)
+    t2 = np.zeros((2, 3, 4), dtype=complex)
+    t3 = np.zeros((2, 4, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=[2, 2, 2])
+
+    assert mps.get_cost() == 91
+
+
+def test_get_entropy_zero_for_product_cut() -> None:
+    """get_entropy returns 0 on a product state (bond dim = 1)."""
+    mps = _product_state_mps(4)
+    ent = mps.get_entropy([1, 2])  # nearest-neighbor cut
+    assert isinstance(ent, np.float64)
+    assert np.isclose(ent, 0.0, atol=1e-12)
+
+
+def test_get_entropy_bell_pair_ln2() -> None:
+    """get_entropy across the Bell cut equals ln(2)."""
+    mps = _bell_pair_mps()
+    ent = mps.get_entropy([0, 1])
+    assert np.isclose(ent, np.log(2.0), atol=1e-12)
+
+
+def test_get_entropy_asserts_on_non_adjacent_or_wrong_len() -> None:
+    """get_entropy asserts on invalid site lists."""
+    mps = _product_state_mps(4)
+    with pytest.raises(AssertionError):
+        _ = mps.get_entropy([1])  # wrong length
+    with pytest.raises(AssertionError):
+        _ = mps.get_entropy([1, 3])  # non-adjacent
+
+
+def test_get_schmidt_spectrum_product_padding() -> None:
+    """get_schmidt_spectrum returns [1, nan, …] for product cut; length=500."""
+    mps = _product_state_mps(3)
+    spec = mps.get_schmidt_spectrum([0, 1])
+
+    assert isinstance(spec, np.ndarray)
+    assert spec.dtype == np.float64
+    assert spec.shape == (500,)
+    assert np.isclose(spec[0], 1.0, atol=1e-12)
+    # the remainder must be NaN
+    assert np.all(np.isnan(spec[1:]))
+
+
+def test_get_schmidt_spectrum_bell_pair_values_and_padding() -> None:
+    """get_schmidt_spectrum on Bell pair yields two equal singular values then NaNs."""
+    mps = _bell_pair_mps()
+    spec = mps.get_schmidt_spectrum([0, 1])
+
+    assert spec.shape == (500,)
+    # Two non-NaN entries ≈ 1/√2, rest NaN
+    non_nan = spec[~np.isnan(spec)]
+    assert non_nan.size == 2
+    assert np.allclose(non_nan, 1 / np.sqrt(2), atol=1e-12)
+    assert np.all(np.isnan(spec[2:]))
+
+
+def test_get_schmidt_spectrum_asserts_on_invalid_sites() -> None:
+    """get_schmidt_spectrum asserts on non-adjacent or wrong-length site lists."""
+    mps = _product_state_mps(5)
+    with pytest.raises(AssertionError):
+        _ = mps.get_schmidt_spectrum([2])  # wrong length
+    with pytest.raises(AssertionError):
+        _ = mps.get_schmidt_spectrum([1, 3])  # non-adjacent
+
+
+def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None:
+    """Evaluate diagnostics/meta (no PVM) and PVM in separate calls to satisfy params typing/rules.
+
+    For |0000⟩ product MPS:
+      - runtime_cost = Σ_{i≥1} bond_left(i)^3 = 1^3 * 3 = 3
+      - total_bond  = Σ_{i≥1} bond_left(i)   = 1   * 3 = 3
+      - max_bond    = max over (phys_dim/right_bond) = 2
+      - entropy(1,2) = 0
+      - schmidt_spectrum(1,2) = length-500 vector with [1, nan, ...]
+      - pvm("0000") = 1  (checked in a separate params object to avoid mixing)
+    """
+    mps = _product_state_mps(4)
+
+    # ---- diagnostics + meta (NO PVM here) ----
+    diagnostics_and_meta: list[Observable] = [
+        Observable(GateLibrary.runtime_cost(), 0),
+        Observable(GateLibrary.max_bond(), 0),
+        Observable(GateLibrary.total_bond(), 0),
+        Observable(GateLibrary.entropy(), [1, 2]),
+        Observable(GateLibrary.schmidt_spectrum(), [1, 2]),
+    ]
+    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.0, dt=0.1, num_traj=1)
+
+    results_diag: NDArray[np.object_] = np.empty((len(diagnostics_and_meta), 2), dtype=object)
+    mps.evaluate_observables(sim_diag, results_diag, column_index=0)
+
+    # Diagnostics
+    # Ordering based on sorted_observables
+    assert results_diag[2, 0] == 3  # runtime_cost
+    assert results_diag[3, 0] == 2  # max_bond
+    assert results_diag[4, 0] == 3  # total_bond
+
+    # Entropy
+    assert isinstance(results_diag[0, 0], (float, np.floating))
+    assert np.isclose(results_diag[0, 0], 0.0, atol=1e-12)
+
+    # Schmidt spectrum
+    spec = results_diag[1, 0]
+    assert isinstance(spec, np.ndarray)
+    assert spec.shape == (500,)
+    assert np.isclose(spec[0], 1.0, atol=1e-12)
+    assert np.all(np.isnan(spec[1:]))
+
+    # ---- PVM ONLY (no mixing) ----
+    pvm_only = [Observable(GateLibrary.pvm("0000"), 0)]
+    sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.0, dt=0.1, num_traj=1)
+
+    results_pvm: NDArray[np.object_] = np.empty((len(pvm_only), 1), dtype=object)
+    mps.evaluate_observables(sim_pvm, results_pvm, column_index=0)
+
+    assert results_pvm[0, 0] == 1
+
+
+def test_evaluate_observables_local_ops_and_center_shifts() -> None:
+    """Evaluate local observables over increasing sites to exercise rightward shifts.
+
+    For |0000⟩:
+      - ⟨Z⟩ at sites 0,1,3 is +1
+      - ⟨X⟩ at site 2 is 0
+    The observable order [Z(0), Z(1), X(2), Z(3)] forces center shifts 0→1→2→3.
+    """
+    mps = _product_state_mps(4)
+
+    obs_seq: list[Observable] = [
+        Observable(GateLibrary.z(), 0),
+        Observable(GateLibrary.z(), 1),
+        Observable(GateLibrary.x(), 2),
+        Observable(GateLibrary.z(), 3),
+    ]
+    sim_params = AnalogSimParams(obs_seq, elapsed_time=0.0, dt=0.1, num_traj=1)
+
+    results: NDArray[np.object_] = np.empty((len(obs_seq), 3), dtype=object)
+    mps.evaluate_observables(sim_params, results, column_index=2)
+
+    z0, z1, x2, z3 = (results[i, 2] for i in range(4))
+    assert np.isclose(z0, 1.0, atol=1e-12)
+    assert np.isclose(z1, 1.0, atol=1e-12)
+    assert np.isclose(x2, 0.0, atol=1e-12)
+    assert np.isclose(z3, 1.0, atol=1e-12)
+
+
+def test_evaluate_observables_meta_validation_errors() -> None:
+    """Meta-observable input validation: wrong length and non-adjacent sites must assert."""
+    mps = _product_state_mps(4)
+
+    # Wrong length (entropy expects exactly two adjacent indices)
+    sim_bad_len = AnalogSimParams([Observable(GateLibrary.entropy(), [1])], elapsed_time=0.0, dt=0.1, num_traj=1)
+    results_len: NDArray[np.object_] = np.empty((1, 1), dtype=object)
+    with pytest.raises(AssertionError):
+        mps.evaluate_observables(sim_bad_len, results_len, column_index=0)
+
+    # Non-adjacent Schmidt cut
+    sim_non_adj = AnalogSimParams(
+        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])], elapsed_time=0.0, dt=0.1, num_traj=1
+    )
+    results_adj: NDArray[np.object_] = np.empty((1, 1), dtype=object)
+    with pytest.raises(AssertionError):
+        mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)

@@ -67,7 +67,7 @@ heatmap = np.empty((num_qubits, len(gammas)))
 for j, gamma in enumerate(gammas):
     # Define the noise model
     noise_model = NoiseModel([
-        {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["relaxation"]
+        {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["lowering"]
     ])
     simulator.run(state, circuit, sim_params, noise_model)
     for i, observable in enumerate(sim_params.observables):

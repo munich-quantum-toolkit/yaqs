@@ -14,7 +14,7 @@ import numpy as np
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.dissipation import apply_dissipation
+from mqt.yaqs.core.methods.dissipation import apply_dissipation, is_adjacent, is_longrange
 
 rng = np.random.default_rng()
 
@@ -41,7 +41,7 @@ def test_apply_dissipation_one_site_canonical_0() -> None:
     state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
 
     noise_model = NoiseModel([
-        {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["relaxation", "dephasing"]
+        {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["lowering", "pauli_z"]
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=10, threshold=1e-10)
@@ -78,7 +78,7 @@ def test_apply_dissipation_two_site_canonical_0() -> None:
     noise_model = NoiseModel([
         {"name": name, "sites": [i, i + 1], "strength": 0.1}
         for i in range(length - 1)
-        for name in ["crosstalk", "crosstalk_y"]
+        for name in ["crosstalk_xx", "crosstalk_yy"]
     ])
     dt = 0.1
     sim_params = AnalogSimParams(observables=[], elapsed_time=0.0, max_bond_dim=10, threshold=1e-10)
@@ -89,3 +89,25 @@ def test_apply_dissipation_two_site_canonical_0() -> None:
     assert canonical_site[0] == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"
     )
+
+
+def test_is_adjacent_and_is_longrange() -> None:
+    """Test adjacency helpers for two-site processes.
+
+    Verifies that `is_adjacent` returns True for nearest neighbors and False otherwise,
+    and that `is_longrange` returns True only for non-neighbor pairs.
+    """
+    proc_adj = {"sites": [0, 1]}
+    proc_adj_unsorted = {"sites": [2, 1]}
+    proc_long = {"sites": [0, 2]}
+    proc_far = {"sites": [1, 3]}
+
+    assert is_adjacent(proc_adj) is True
+    assert is_adjacent(proc_adj_unsorted) is True
+    assert is_adjacent(proc_long) is False
+    assert is_adjacent(proc_far) is False
+
+    assert is_longrange(proc_adj) is False
+    assert is_longrange(proc_adj_unsorted) is False
+    assert is_longrange(proc_long) is True
+    assert is_longrange(proc_far) is True

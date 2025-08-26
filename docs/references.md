@@ -11,7 +11,8 @@
 
 If you use *YAQS* in your work, we would be thankful if you referred to it by citing the relevant publications:
 
-- {cite:p}`sander2025_TJM` for the simulation method for open quantum systems.
+- {cite:p}`sander2025_TJM` for simulating open analog quantum systems.
+- {cite:p}`sander2025_CircuitTDVP` for quantum circuit (digital) simulation.
 - {cite:p}`sander2025_EquivalenceChecking` for the equivalence checking algorithm,
 ```
 

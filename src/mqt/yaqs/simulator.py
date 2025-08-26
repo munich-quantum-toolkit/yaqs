@@ -24,12 +24,13 @@ All simulation results (e.g., observables, measurements) are aggregated and retu
 
 from __future__ import annotations
 
-import concurrent.futures
 import copy
 import multiprocessing
-from typing import TYPE_CHECKING
+from concurrent.futures import FIRST_COMPLETED, CancelledError, Future, ProcessPoolExecutor, wait
+from typing import TYPE_CHECKING, TypeVar
 
 from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
@@ -38,11 +39,16 @@ from .core.data_structures.simulation_parameters import AnalogSimParams, StrongS
 from .digital.digital_tjm import digital_tjm
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Sequence
+
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
 
 
 import os
+
+TArg = TypeVar("TArg")
+TRes = TypeVar("TRes")
 
 
 def available_cpus() -> int:
@@ -61,6 +67,47 @@ def available_cpus() -> int:
     if slurm_cpus is None:
         return machine_cpus
     return slurm_cpus
+
+
+def _run_parallel_with_retries(
+    backend: Callable[[TArg], TRes],
+    args: Sequence[TArg],
+    *,
+    max_workers: int,
+    desc: str,
+    total: int | None = None,
+    max_retries: int = 10,
+    retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
+) -> Iterator[tuple[int, TRes]]:
+    """Execute jobs in parallel with simple retry logic and a progress bar.
+
+    Yields:
+    ------
+    (i, result) for each trajectory index i in `args`.
+
+    Notes:
+    -----
+    - Only exceptions in `retry_exceptions` are retried (fixes blind-catch lint).
+    - Others propagate immediately (fail fast).
+    """
+    total = len(args) if total is None else total
+    with ProcessPoolExecutor(max_workers=max_workers) as ex, tqdm(total=total, desc=desc, ncols=80) as pbar:
+        retries = dict.fromkeys(range(len(args)), 0)
+        futures: dict[Future[TRes], int] = {ex.submit(backend, args[i]): i for i in range(len(args))}
+        while futures:
+            done, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for fut in done:
+                i = futures.pop(fut)
+                try:
+                    res = fut.result()
+                except retry_exceptions:
+                    if retries[i] < max_retries:
+                        retries[i] += 1
+                        futures[ex.submit(backend, args[i])] = i
+                        continue
+                    raise
+                yield i, res
+                pbar.update(1)
 
 
 def _run_strong_sim(
@@ -94,36 +141,40 @@ def _run_strong_sim(
     else:
         assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
 
+    if sim_params.sample_layers:
+        dag = circuit_to_dag(operator)
+        sim_params.num_mid_measurements = sum(
+            1
+            for n in dag.op_nodes()
+            if n.op.name == "barrier" and str(getattr(n.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
+        )
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(backend, arg): arg[0] for arg in args}
-            with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
-                while futures:
-                    done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
-                    for future in done:
-                        i = futures.pop(future)
-                        try:
-                            result = future.result()
-                        except Exception:
-                            new_future = executor.submit(backend, args[i])
-                            futures[new_future] = i
-                            continue
-
-                        for obs_index, observable in enumerate(sim_params.sorted_observables):
-                            assert observable.trajectories is not None, "Trajectories should have been initialized"
-                            observable.trajectories[i] = result[obs_index]
-                        pbar.update(1)
+        for i, result in _run_parallel_with_retries(
+            backend=backend,
+            args=args,
+            max_workers=max_workers,
+            desc="Running trajectories",
+            total=sim_params.num_traj,
+            max_retries=10,
+            # add other transient errors here if needed:
+            retry_exceptions=(CancelledError, TimeoutError, OSError),
+        ):
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
+                assert observable.trajectories is not None, "Trajectories should have been initialized"
+                observable.trajectories[i] = result[obs_index]
     else:
         for i, arg in enumerate(args):
             result = backend(arg)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]
+
     sim_params.aggregate_trajectories()
 
 
@@ -135,24 +186,7 @@ def _run_weak_sim(
     *,
     parallel: bool,
 ) -> None:
-    """Run weak simulation trajectories for a quantum circuit using a weak simulation scheme.
-
-    This function executes circuit-based simulation trajectories using the 'digital_tjm' backend,
-    adjusted for weak simulation parameters. If the noise model is absent or its strengths are all zero,
-    only a single trajectory is executed; otherwise, sim_params.num_traj is set to sim_params.shots and then shots
-    is set to 1. The trajectories are then executed (in parallel if specified) and the measurement results
-    are aggregated.
-
-    Args:
-        initial_state (MPS): The initial system state as an MPS.
-        operator (QuantumCircuit): The quantum circuit representing the operation to simulate.
-        sim_params (WeakSimParams): Simulation parameters for weak simulation,
-                                    including shot count and sorted observables.
-        noise_model (NoiseModel | None): The noise model applied during simulation.
-        parallel (bool): Flag indicating whether to run trajectories in parallel.
-
-
-    """
+    """Run weak simulation trajectories for a quantum circuit using a weak simulation scheme."""
     backend = digital_tjm
 
     if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
@@ -163,30 +197,24 @@ def _run_weak_sim(
         assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
 
     args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(backend, arg): arg[0] for arg in args}
-            with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
-                while futures:
-                    done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
-                    for future in done:
-                        i = futures.pop(future)
-                        try:
-                            result = future.result()
-                        except Exception:
-                            new_future = executor.submit(backend, args[i])
-                            futures[new_future] = i
-                            continue
-
-                        for obs_index, observable in enumerate(sim_params.sorted_observables):
-                            assert observable.trajectories is not None, "Trajectories should have been initialized"
-                            observable.trajectories[i] = result[obs_index]
-                        pbar.update(1)
+        for i, result in _run_parallel_with_retries(  # <- helper introduced earlier
+            backend=backend,
+            args=args,
+            max_workers=max_workers,
+            desc="Running trajectories",
+            total=sim_params.num_traj,
+            max_retries=10,
+            retry_exceptions=(CancelledError, TimeoutError, OSError),
+        ):
+            sim_params.measurements[i] = result
     else:
         for i, arg in enumerate(args):
             result = backend(arg)
             sim_params.measurements[i] = result
+
     sim_params.aggregate_measurements()
 
 
@@ -255,30 +283,26 @@ def _run_analog(
 
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(backend, arg): arg[0] for arg in args}
-            with tqdm(total=sim_params.num_traj, desc="Running trajectories", ncols=80) as pbar:
-                while futures:
-                    done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
-                    for future in done:
-                        i = futures.pop(future)
-                        try:
-                            result = future.result()
-                        except Exception:
-                            new_future = executor.submit(backend, args[i])
-                            futures[new_future] = i
-                            continue
-
-                        for obs_index, observable in enumerate(sim_params.sorted_observables):
-                            assert observable.trajectories is not None, "Trajectories should have been initialized"
-                            observable.trajectories[i] = result[obs_index]
-                        pbar.update(1)
+        for i, result in _run_parallel_with_retries(
+            backend=backend,
+            args=args,
+            max_workers=max_workers,
+            desc="Running trajectories",
+            total=sim_params.num_traj,
+            max_retries=10,
+            # add other transient errors here if needed:
+            retry_exceptions=(CancelledError, TimeoutError, OSError),
+        ):
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
+                assert observable.trajectories is not None, "Trajectories should have been initialized"
+                observable.trajectories[i] = result[obs_index]
     else:
         for i, arg in enumerate(args):
             result = backend(arg)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]
+
     sim_params.aggregate_trajectories()
 
 
