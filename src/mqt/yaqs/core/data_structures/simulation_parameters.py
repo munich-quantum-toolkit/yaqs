@@ -252,7 +252,7 @@ class AnalogSimParams:
         """
         for observable in self.observables:
             if observable.gate.name == "schmidt_spectrum":
-                assert isinstance(observable.trajectories, list)
+                assert isinstance(observable.trajectories, np.ndarray)
                 all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
                 observable.results = np.concatenate(all_values)
             else:
@@ -459,7 +459,7 @@ class StrongSimParams:
         """
         for observable in self.observables:
             if observable.gate.name == "schmidt_spectrum":
-                assert isinstance(observable.trajectories, list)
+                assert isinstance(observable.trajectories, np.ndarray)
                 all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
                 observable.results = np.concatenate(all_values)
             else:

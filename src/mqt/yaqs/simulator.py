@@ -157,19 +157,14 @@ THREAD_ENV_VARS: dict[str, str] = {
     # OpenMP default thread count (covers any library compiled with OpenMP,
     # e.g., MKL, SciPy routines, numba-parallel, some Qiskit internals).
     "OMP_NUM_THREADS": "1",
-
     # OpenBLAS thread pool size (most Linux NumPy/SciPy wheels link to OpenBLAS).
     "OPENBLAS_NUM_THREADS": "1",
-
     # Intel MKL thread pool size (common in conda distributions of NumPy/SciPy).
     "MKL_NUM_THREADS": "1",
-
     # NumExpr parallelism (used by pandas.eval/query and some NumPy expressions).
     "NUMEXPR_NUM_THREADS": "1",
-
     # Apple vecLib/Accelerate framework (only relevant on macOS).
     "VECLIB_MAXIMUM_THREADS": "1",
-
     # BLIS BLAS implementation (used in some NumPy builds instead of OpenBLAS/MKL).
     "BLIS_NUM_THREADS": "1",
 }
@@ -324,12 +319,15 @@ def _run_backend_parallel(
     ctx = _spawn_context()
 
     # Create a pool of worker processes with per-worker thread caps
-    with ProcessPoolExecutor(
-        max_workers=max_workers,
-        mp_context=ctx,
-        initializer=_limit_worker_threads,
-        initargs=(1,),  # enforce 1 thread per worker
-    ) as ex, tqdm(total=total, desc=desc, ncols=80) as pbar:
+    with (
+        ProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=ctx,
+            initializer=_limit_worker_threads,
+            initargs=(1,),  # enforce 1 thread per worker
+        ) as ex,
+        tqdm(total=total, desc=desc, ncols=80) as pbar,
+    ):
         # Retry bookkeeping per index
         retries = dict.fromkeys(range(len(args)), 0)
         # Submit all tasks upfront; map Future -> index

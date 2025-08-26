@@ -226,9 +226,9 @@ def test_aggregate_trajectories_schmidt_concatenation() -> None:
 
     # List of arrays (the method requires a list, not a single ndarray)
     a = np.array([0.8, 0.6], dtype=np.float64)
-    b = np.array([[0.4, 0.3]], dtype=np.float64)  # will ravel to [0.4, 0.3]
-    c = np.array([[0.2], [0.1]], dtype=np.float64)  # will ravel to [0.2, 0.1]
-    ss_obs.trajectories = [a, b, c]
+    b = np.array([0.4, 0.3], dtype=np.float64)  # will ravel to [0.4, 0.3]
+    c = np.array([0.2, 0.1], dtype=np.float64)  # will ravel to [0.2, 0.1]
+    ss_obs.trajectories = np.array([a, b, c])
 
     sim = AnalogSimParams([ss_obs], elapsed_time=0.1, dt=0.1, num_traj=3)
 
@@ -246,7 +246,7 @@ def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
 
     # Schmidt spectrum list
     ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
-    ss_obs.trajectories = [np.array([1.0], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)]
+    ss_obs.trajectories = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
     sim = AnalogSimParams([x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3)
 
@@ -256,15 +256,15 @@ def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
     np.testing.assert_allclose(x_obs.results, np.array([1.0, 1.0], dtype=np.float64))
 
     # Schmidt → concatenation
-    np.testing.assert_allclose(ss_obs.results, np.array([1.0, 0.5, 0.25], dtype=np.float64))
+    np.testing.assert_allclose(ss_obs.results, np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
 
 
-def test_aggregate_trajectories_schmidt_requires_list() -> None:
-    """For Schmidt spectrum, trajectories must be a *list*; ndarray should raise AssertionError."""
+def test_aggregate_trajectories_schmidt_requires_array() -> None:
+    """For Schmidt spectrum, trajectories must be a *array*; list should raise AssertionError."""
     ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[2, 3])
 
     # Wrong type: a single ndarray (method expects list[...] and asserts)
-    ss_obs.trajectories = np.array([0.9, 0.1], dtype=np.float64)
+    ss_obs.trajectories = [0.9, 0.1]
 
     sim = AnalogSimParams([ss_obs], elapsed_time=0.1, dt=0.1, num_traj=1)
 
@@ -363,11 +363,11 @@ def test_strong_aggregate_regular_mean() -> None:
 def test_strong_aggregate_schmidt_concat() -> None:
     """Schmidt spectrum: concatenation of raveled list entries."""
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
-    ssp.trajectories = [
+    ssp.trajectories = np.array([
         np.array([0.9, 0.8], dtype=np.float64),
-        np.array([[0.6], [0.4]], dtype=np.float64),  # ravel -> [0.6, 0.4]
-        np.array([[0.2, 0.1]], dtype=np.float64),  # ravel -> [0.2, 0.1]
-    ]
+        np.array([0.6, 0.4], dtype=np.float64),  # ravel -> [0.6, 0.4]
+        np.array([0.2, 0.1], dtype=np.float64),  # ravel -> [0.2, 0.1]
+    ])
 
     params = StrongSimParams([ssp], num_traj=3)
     params.aggregate_trajectories()
@@ -382,19 +382,19 @@ def test_strong_aggregate_mixed_regular_and_schmidt() -> None:
     z.trajectories = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)  # mean -> [2.0, 3.0]
 
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
-    ssp.trajectories = [np.array([1.0], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)]
+    ssp.trajectories = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
     params = StrongSimParams([z, ssp], num_traj=2)
     params.aggregate_trajectories()
 
     np.testing.assert_allclose(z.results, np.array([2.0, 3.0], dtype=np.float64))
-    np.testing.assert_allclose(ssp.results, np.array([1.0, 0.5, 0.25], dtype=np.float64))
+    np.testing.assert_allclose(ssp.results, np.array([1.0, 0.5, 0.5, 0.25], dtype=np.float64))
 
 
-def test_strong_aggregate_schmidt_requires_list() -> None:
-    """Schmidt branch must assert if trajectories is not a list."""
+def test_strong_aggregate_schmidt_requires_array() -> None:
+    """Schmidt branch must assert if trajectories is not an array."""
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
-    ssp.trajectories = np.array([0.9, 0.1], dtype=np.float64)  # wrong type
+    ssp.trajectories = [0.9, 0.1]
 
     params = StrongSimParams([ssp], num_traj=1)
 
