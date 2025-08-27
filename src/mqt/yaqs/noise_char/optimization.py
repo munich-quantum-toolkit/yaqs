@@ -379,7 +379,7 @@ class LossClass2(LossClass):
     def __init__(
         self,
         *,
-        ref_traj_tuple: List[Tuple[Observable, NDArray[Any]]],
+        ref_traj: List[Observable],
         traj_gradients: PropagatorWithGradients,
         print_to_file: bool = False,
     ) -> None:
@@ -403,9 +403,9 @@ class LossClass2(LossClass):
 
         self.d = 2
 
-        self.ref_traj = ref_traj.copy()
-        self.traj_der = traj_der
-        self.sim_params = copy.deepcopy(sim_params)
+        self.ref_traj = copy.deepcopy(ref_traj)
+        self.traj_gradients = traj_gradients
+
 
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[None] | list[float]]:
         """Evaluates the objective function and its gradient for the given parameters.
@@ -430,7 +430,7 @@ class LossClass2(LossClass):
 
         start_time = time.time()
 
-        self.t, self.exp_vals_traj, self.d_on_d_gk, avg_min_max_traj_time = self.traj_der(self.sim_params)
+        self.t, self.exp_vals_traj, self.d_on_d_gk, avg_min_max_traj_time = self.traj_gradients(self.sim_params)
 
         end_time = time.time()
 

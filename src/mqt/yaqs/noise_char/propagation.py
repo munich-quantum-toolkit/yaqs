@@ -15,8 +15,10 @@ import numpy as np
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id
 from mqt.yaqs.noise_char.optimization import trapezoidal
+import copy
+
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -73,6 +75,8 @@ class PropagatorWithGradients:
 
 
         self.noise_list: list[Observable] = noise_model_to_operator_list(noise_model)
+
+        self.n_jump=len(self.noise_list)  # number of jump operators
 
         all_noise_sites = [
             site for noise in self.noise_list for site in (noise.sites if isinstance(noise.sites, list) else [noise.sites])
@@ -135,9 +139,7 @@ class PropagatorWithGradients:
     
 
     def set_observable_list(self, obs_list: list[Observable]) -> None:
-        self.obs_list=obs_list
-        self.sim_params.observables = obs_list
-
+        self.obs_list=copy.deepcopy(obs_list)
 
         all_obs_sites = [
             site for obs in obs_list for site in (obs.sites if isinstance(obs.sites, list) else [obs.sites])
@@ -149,7 +151,6 @@ class PropagatorWithGradients:
         
 
         self.n_obs = len(obs_list)  # number of measurement operators   
-
 
         self.set_observables=True
 
@@ -189,6 +190,7 @@ class PropagatorWithGradients:
             for on in self.obs_list:
                 if lk.sites == on.sites:
                     a_kn_site_list.append(lk.dag()*on*lk - 0.5*on*lk.dag()*lk - 0.5*lk.dag()*lk*on)
+                    
 
 
         new_obs_list=self.obs_list + a_kn_site_list
@@ -200,10 +202,28 @@ class PropagatorWithGradients:
         # Separate original and new expectation values from result_lindblad.
         original_exp_vals = new_sim_params.observables[:self.n_obs]
 
-        d_on_d_gk = new_sim_params.observables[self.n_obs:]  # these correspond to the A_kn operators
+        d_on_d_gk_list = new_sim_params.observables[self.n_obs:]  # these correspond to the A_kn operators
 
-        for obs in d_on_d_gk:
+        for obs in d_on_d_gk_list:
             obs.results = trapezoidal(obs.results, self.sim_params.times)
+
+
+        zero_obs=Observable(Id(),0)
+        zero_obs.results = np.zeros(self.n_t)
+
+        d_on_d_gk = np.zeros((self.n_jump, self.n_obs), dtype=object)
+
+
+        count = 0
+        for i, lk in enumerate(self.noise_list):
+            for j, on in enumerate(self.obs_list):
+                if lk.sites == on.sites:
+                    d_on_d_gk[i, j] = d_on_d_gk_list[count]
+                    count += 1
+                else:
+                    d_on_d_gk[i, j] = zero_obs
+                
+                
 
         return self.sim_params.times, original_exp_vals, d_on_d_gk
 
