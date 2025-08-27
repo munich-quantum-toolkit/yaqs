@@ -137,8 +137,7 @@ class PropagatorWithGradients:
     def set_observable_list(self, obs_list: list[Observable]) -> None:
         self.obs_list=obs_list
         self.sim_params.observables = obs_list
-        self.obs_mat = self.make_observable_matrix(obs_list)
-        self.n_obs_site = len(self.obs_site_set)
+
 
         all_obs_sites = [
             site for obs in obs_list for site in (obs.sites if isinstance(obs.sites, list) else [obs.sites])
@@ -148,6 +147,10 @@ class PropagatorWithGradients:
             msg = "Observable site index exceeds number of sites in the Hamiltonian."
             raise ValueError(msg)
         
+
+        self.n_obs = len(obs_list)  # number of measurement operators   
+
+
         self.set_observables=True
 
 
@@ -195,10 +198,9 @@ class PropagatorWithGradients:
 
 
         # Separate original and new expectation values from result_lindblad.
-        n_obs = len(self.obs_list)  # number of measurement operators 
-        original_exp_vals = new_sim_params.observables[:n_obs]
+        original_exp_vals = new_sim_params.observables[:self.n_obs]
 
-        d_on_d_gk = new_sim_params.observables[n_obs:]  # these correspond to the A_kn operators
+        d_on_d_gk = new_sim_params.observables[self.n_obs:]  # these correspond to the A_kn operators
 
         for obs in d_on_d_gk:
             obs.results = trapezoidal(obs.results, self.sim_params.times)
