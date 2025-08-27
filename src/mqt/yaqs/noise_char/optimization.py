@@ -16,7 +16,9 @@ import pickle  # noqa: S403
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
-
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
+from typing import List, Tuple, Any
 import numpy as np
 
 if TYPE_CHECKING:
@@ -79,6 +81,11 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
         integral[i] = integral[i - 1] + 0.5 * (x[i] - x[i - 1]) * (y[i] + y[i - 1])
 
     return integral
+
+
+
+
+
 
 
 class LossClass:
@@ -371,10 +378,9 @@ class LossClass2(LossClass):
 
     def __init__(
         self,
-        sim_params: SimulationParameters,
-        ref_traj: np.ndarray,
-        traj_der: Callable[[SimulationParameters], tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]],
         *,
+        ref_traj_tuple: List[Tuple[Observable, NDArray[Any]]],
+        traj_gradients: PropagatorWithGradients,
         print_to_file: bool = False,
     ) -> None:
         """Initializes the optimization class for noise characterization.
@@ -763,3 +769,8 @@ def adam_optimizer(
             break
 
     return f.f_history, f.x_history, f.x_avg_history, f.t, f.exp_vals_traj
+
+
+
+
+
