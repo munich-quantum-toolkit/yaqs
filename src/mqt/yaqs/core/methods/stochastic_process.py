@@ -176,9 +176,9 @@ def stochastic_process(
     rng = np.random.default_rng()
     if noise_model is None or rng.random() >= dp:
         # No jump occurs; shift the state to canonical form at site 0.
-        print(f"ortho center no jump in stochastic process: {state.check_canonical_form()}")
+        # print(f"ortho center no jump in stochastic process: {state.check_canonical_form()}")
         state.shift_orthogonality_center_left(0)
-        print(f"norm after no jump in stochastic process: {state.norm()}")
+        # print(f"norm after no jump in stochastic process: {state.norm()}")
         return state
 
     # A jump occurs: create the probability distribution and select a jump operator.

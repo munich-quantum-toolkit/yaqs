@@ -180,3 +180,77 @@ def test_longrange_unknown_label_without_factors_raises() -> None:
         return
     msg = "Expected AssertionError for unknown long-range label without factors."
     raise AssertionError(msg)
+
+
+def test_unraveling_projector_one_site() -> None:
+    gamma = 0.2
+    nm = NoiseModel([
+        {"name": "pauli_z", "sites": [0], "strength": gamma, "unraveling": "projector"}
+    ])
+    assert len(nm.processes) == 2
+    mats = [p["matrix"] for p in nm.processes]
+    strs = [p["strength"] for p in nm.processes]
+    I = np.eye(2)
+    Z = PauliZ.matrix
+    # Order-independent check
+    assert any(np.allclose(m, I + Z) for m in mats)
+    assert any(np.allclose(m, I - Z) for m in mats)
+    assert all(np.isclose(s, gamma / 2.0) for s in strs)
+
+
+def test_unraveling_unitary_2pt_one_site() -> None:
+    gamma = 0.3
+    theta0 = 0.2
+    nm = NoiseModel([
+        {"name": "pauli_x", "sites": [1], "strength": gamma, "unraveling": "unitary_2pt", "theta0": theta0}
+    ])
+    assert len(nm.processes) == 2
+    strs = [p["strength"] for p in nm.processes]
+    lam = gamma / (np.sin(theta0) ** 2)
+    assert all(np.isclose(s, lam / 2.0) for s in strs)
+    # unitarity check: U^\dagger U = I
+    for p in nm.processes:
+        U = p["matrix"]
+        assert np.allclose(U.conj().T @ U, np.eye(U.shape[0]), atol=1e-10)
+
+
+def test_unraveling_unitary_gauss_one_site_strengths_sum() -> None:
+    gamma = 0.15
+    sigma = 0.25
+    M = 21
+    nm = NoiseModel([
+        {"name": "pauli_y", "sites": [0], "strength": gamma, "unraveling": "unitary_gauss", "sigma": sigma, "M": M}
+    ])
+    assert len(nm.processes) == M  # symmetric construction includes all grid points
+    strengths_sum = sum(p["strength"] for p in nm.processes)
+    # expected sum is lambda = gamma / E[sin^2(theta)] computed inside the constructor;
+    # since we don't expose it, verify all matrices are unitary and strengths positive
+    assert strengths_sum > 0
+    for p in nm.processes:
+        U = p["matrix"]
+        assert np.allclose(U.conj().T @ U, np.eye(U.shape[0]), atol=1e-10)
+        assert p["strength"] >= 0
+
+
+def test_unraveling_projector_two_site_adjacent() -> None:
+    gamma = 0.12
+    nm = NoiseModel([
+        {"name": "crosstalk_xy", "sites": [2, 3], "strength": gamma, "unraveling": "projector"}
+    ])
+    assert len(nm.processes) == 2
+    mats = [p["matrix"] for p in nm.processes]
+    I4 = np.eye(4)
+    X = PauliX.matrix
+    Y = PauliY.matrix
+    P = np.kron(X, Y)
+    assert any(np.allclose(m, I4 + P) for m in mats)
+    assert any(np.allclose(m, I4 - P) for m in mats)
+    assert all(np.isclose(p["strength"], gamma / 2.0) for p in nm.processes)
+
+
+def test_unraveling_unitary_2pt_invalid_theta_raises() -> None:
+    gamma = 0.3
+    with pytest.raises(AssertionError):
+        _ = NoiseModel([
+            {"name": "pauli_x", "sites": [0], "strength": gamma, "unraveling": "unitary_2pt", "theta0": 0.0}
+        ])
