@@ -21,6 +21,8 @@ from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
 from typing import List, Tuple, Any
 import numpy as np
 
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -101,7 +103,10 @@ class LossClass:
 
     d: int
 
-    def __init__(self, *, print_to_file: bool = False) -> None:
+    def __init__(self, *, 
+                 ref_traj: List[Observable],
+                traj_gradients: PropagatorWithGradients, 
+                print_to_file: bool = False) -> None:
         """Initializes the LossClass with default values.
 
         Args:
@@ -115,6 +120,11 @@ class LossClass:
         self.grad_history: list[np.ndarray] = []
         self.print_to_file: bool = print_to_file
         self.work_dir: Path = Path()
+
+        self.ref_traj = copy.deepcopy(ref_traj)
+        self.traj_gradients = traj_gradients
+
+        self.ref_traj_array = np.array([obs.results for obs in self.ref_traj])
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -331,6 +341,8 @@ class LossClass:
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
 
+
+
 class LossClass2(LossClass):
     """LossClass2 represents the loss for a Ising model with the same noise parameters for each site.
 
@@ -376,35 +388,22 @@ class LossClass2(LossClass):
             Average of the minimum and maximum trajectory times from the simulation.
     """
 
-    def __init__(
-        self,
-        *,
-        ref_traj: List[Observable],
-        traj_gradients: PropagatorWithGradients,
-        print_to_file: bool = False,
-    ) -> None:
-        """Initializes the optimization class for noise characterization.
+    def x_to_noise_model(self, x:np.ndarray, noise_model: NoiseModel) -> NoiseModel:
+        """Converts the optimization variable x to a NoiseModel instance.
 
-        Args:
-            sim_params (SimulationParameters): The simulation parameters to be used.
-            ref_traj (np.ndarray): Reference trajectory as a NumPy array.
-            traj_der (Callable[[SimulationParameters], tuple]): A callable that computes the trajectory derivative
-            given simulation parameters.
-            print_to_file (bool, optional): If True, output will be printed to a file. Defaults to False.
-
-        Attributes:
-            d (int): Dimensionality, set to 2.
-            print_to_file (bool): Indicates whether to print output to a file.
-            ref_traj (np.ndarray): Copy of the reference trajectory.
-            traj_der (Callable): Function to compute trajectory derivative.
-            sim_params (SimulationParameters): Deep copy of the simulation parameters.
         """
-        super().__init__(print_to_file=print_to_file)
 
-        self.d = 2
+        return_model = copy.deepcopy(noise_model)
 
-        self.ref_traj = copy.deepcopy(ref_traj)
-        self.traj_gradients = traj_gradients
+        for i, process in enumerate(return_model.processes):
+            if process["name"] == "relaxation":
+                return_model.processes[i]["strength"] = x[0]
+
+            if process["name"] == "dephasing":
+                return_model.processes[i]["strength"] = x[1]
+            
+        return return_model
+
 
 
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[None] | list[float]]:
@@ -426,30 +425,31 @@ class LossClass2(LossClass):
                 - sim_time (float): The time taken to run the simulation (in seconds).
                 - avg_min_max_traj_time (Any): Average, minimum and maximum trajectory running times.
         """
-        self.sim_params.set_gammas(x[0], x[1])
+
+        noise_model = self.x_to_noise_model(x, self.traj_gradients.noise_model)
 
         start_time = time.time()
 
-        self.t, self.exp_vals_traj, self.d_on_d_gk, avg_min_max_traj_time = self.traj_gradients(self.sim_params)
+        self.t, self.exp_vals_traj, self.d_on_d_gk = self.traj_gradients(noise_model)
 
         end_time = time.time()
 
-        _n_jump_site, n_obs_site, sites, nt = np.shape(self.d_on_d_gk)
+        n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
 
-        diff = self.exp_vals_traj - self.ref_traj
+        diff = self.exp_vals_traj - self.ref_traj_array
 
-        f: float = np.sum(diff**2)
+        loss: float = np.sum(diff**2)
 
         # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump_site, n_obs_site, sites, nt)
         #  to do elemtwise multiplication. Then I sum over the n_obs_site, sites and nt dimensions to
         # get the gradient for each gamma, returning a vector of shape (n_jump_site)
         grad = np.sum(2 * diff.reshape(1, n_obs_site, sites, nt) * self.d_on_d_gk, axis=(1, 2, 3))
 
-        self.post_process(x.copy(), f, grad.copy())
+        self.post_process(x.copy(), loss, grad.copy())
 
         sim_time = end_time - start_time  # Simulation time
 
-        return f, grad, sim_time, avg_min_max_traj_time
+        return loss, grad, sim_time
 
 
 class LossClass2L(LossClass):

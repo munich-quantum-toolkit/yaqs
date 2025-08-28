@@ -47,6 +47,36 @@ def noise_model_to_operator_list(noise_model: NoiseModel) -> list[Observable]:
 
 
 
+def flatten_noise_model(self, noise_model: NoiseModel) -> NoiseModel:
+    """Serializes the noise model.
+
+    Args:
+        noise_model (NoiseModel): The noise model to serialize.
+
+    Returns:
+        NoiseModel: The serialized noise model.
+    """
+
+    noise_list=[]
+
+    index_list=[]
+
+    for i, proc in enumerate(noise_model.processes):
+        for site in proc["sites"]:
+            noise_list.append({"name": proc["name"], "sites": [site], "strength": proc["strength"]})
+            index_list.append(i)
+
+    return noise_list, index_list
+
+
+
+
+
+
+    return copy.deepcopy(noise_model)
+
+
+
 class PropagatorWithGradients:
     """A class to encapsulate the propagator for the Ising model with noise.
 
@@ -91,6 +121,9 @@ class PropagatorWithGradients:
         self.sites = self.hamiltonian.length  # number of sites in the chain
 
         self.set_observables=False
+
+    
+    
 
 
     def make_observable_matrix(self, obs_list: list[Observable]) -> NDArray[np.object_]:
@@ -222,9 +255,12 @@ class PropagatorWithGradients:
                     count += 1
                 else:
                     d_on_d_gk[i, j] = zero_obs
-                
-                
+        
+        
+        obs_array = np.array([obs.results for obs in original_exp_vals])
 
-        return self.sim_params.times, original_exp_vals, d_on_d_gk
+        d_on_d_gk_array = np.array([[d_on_d_gk[i, j].results for j in range(self.n_obs)] for i in range(self.n_jump)])
+
+        return self.sim_params.times, obs_array, d_on_d_gk_array
 
 
