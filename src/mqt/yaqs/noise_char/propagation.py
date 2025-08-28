@@ -122,54 +122,6 @@ class PropagatorWithGradients:
         self.sites = self.hamiltonian.length  # number of sites in the chain
 
         self.set_observables=False
-
-    
-    
-
-
-    def make_observable_matrix(self, obs_list: list[Observable]) -> NDArray[np.object_]:
-        """Returns the observable matrix for the current observables.
-
-        Returns:
-            np.ndarray: The observable matrix. The shape is (n_obs_site, sites).
-            Entries are zero if the corresponding observable is not measured for that site.
-        """
-        self.obs_site_set = list({obs.gate for obs in obs_list})
-
-        self.n_obs_site = len(self.obs_site_set)
-
-        obs_matrix = np.zeros((self.n_obs_site, self.sites), dtype=object)
-
-        for obs in obs_list:
-            if isinstance(obs.sites, int):
-                site_list = [obs.sites]
-            elif isinstance(obs.sites, list):
-                site_list = obs.sites
-
-            for site in site_list:
-                gate = obs.gate
-
-                obs_idx = self.obs_site_set.index(gate)
-                obs_matrix[obs_idx, site] = gate
-
-        return obs_matrix
-
-    def make_jump_matrix(self, noise_model: NoiseModel) -> NDArray[np.object_]:
-        jump_site_set = list({getattr(GateLibrary, proc["name"]) for proc in noise_model.processes})
-
-        self.n_jump_site = len(jump_site_set)
-
-        jump_matrix = np.zeros((self.n_jump_site, self.sites), dtype=object)
-
-        for proc in noise_model.processes:
-            for site in proc["sites"]:
-                gate = getattr(GateLibrary, proc["name"])
-
-                jump_idx = jump_site_set.index(gate)
-
-                jump_matrix[jump_idx, site] = gate
-
-        return jump_matrix
     
 
     def set_observable_list(self, obs_list: list[Observable]) -> None:
