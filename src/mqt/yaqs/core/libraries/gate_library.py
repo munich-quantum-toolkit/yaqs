@@ -348,6 +348,15 @@ class BaseGate:
             Id: An instance of the Id gate.
         """
         return Id()
+    
+    @classmethod
+    def zero(cls) -> Zero:
+        """Returns the Zero gate.
+
+        Returns:
+            Zero: An instance of the Zero gate.
+        """
+        return Zero()
 
     @classmethod
     def sx(cls) -> SX:
@@ -696,6 +705,28 @@ class Id(BaseGate):
     def __init__(self) -> None:
         """Initializes the identity gate."""
         mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+
+class Zero(BaseGate):
+    """Class representing the Zero gate.
+
+    Attributes:
+        name: The name of the gate ("zero").
+        matrix: The 2x2 zero matrix.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "zero"
+
+    def __init__(self) -> None:
+        """Initializes the Zero gate."""
+        mat = np.array([[0, 0], [0, 0]])
         super().__init__(mat)
 
 
@@ -1505,6 +1536,7 @@ class GateLibrary:
     p1 = P1
     pvm = PVM
     custom = BaseGate
+    zero = Zero
 
     raising = Create
     lowering = Destroy

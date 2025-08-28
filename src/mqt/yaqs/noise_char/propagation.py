@@ -15,7 +15,7 @@ import numpy as np
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Zero
 from mqt.yaqs.noise_char.optimization import trapezoidal
 import copy
 
@@ -208,7 +208,7 @@ class PropagatorWithGradients:
             obs.results = trapezoidal(obs.results, self.sim_params.times)
 
 
-        zero_obs=Observable(Id(),0)
+        zero_obs=Observable(Zero(),0)
         zero_obs.results = np.zeros(self.n_t)
 
         d_on_d_gk = np.zeros((self.n_jump, self.n_obs), dtype=object)
