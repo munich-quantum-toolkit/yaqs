@@ -100,11 +100,12 @@ class PropagatorWithGradients:
     ) -> None:
         self.sim_params: AnalogSimParams = sim_params
         self.hamiltonian: MPO = hamiltonian
-        self.noise_model: NoiseModel = noise_model
+        self.input_noise_model: NoiseModel = noise_model
         self.init_state: MPS = init_state
 
 
-        self.noise_list: list[Observable] = noise_model_to_operator_list(noise_model)
+        self.flat_noise_model, self.index_list = flatten_noise_model(self.input_noise_model)
+        self.noise_list: list[Observable] = noise_model_to_operator_list(self.flat_noise_model)
 
         self.n_jump=len(self.noise_list)  # number of jump operators
 
@@ -210,8 +211,8 @@ class PropagatorWithGradients:
         for i, proc in enumerate(noise_model.processes):
             for j, site in enumerate(proc["sites"]):
                 if (
-                    proc["name"] != self.noise_model.processes[i]["name"]
-                    or site != self.noise_model.processes[i]["sites"][j]
+                    proc["name"] != self.input_noise_model.processes[i]["name"]
+                    or site != self.input_noise_model.processes[i]["sites"][j]
                 ):
                     msg = "Noise model processes or sites do not match the initialized noise model."
                     raise ValueError(msg)
