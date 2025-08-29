@@ -109,11 +109,7 @@ class PropagatorWithGradients:
 
         self.n_jump=len(self.noise_list)  # number of jump operators
 
-        all_noise_sites = [
-            site for noise in self.noise_list for site in (noise.sites if isinstance(noise.sites, list) else [noise.sites])
-        ]
-
-        if max(all_noise_sites) >= self.sites:
+        if max([ proc["sites"][0]  for proc in self.flat_noise_model]) >= self.sites:
             msg = "Noise site index exceeds number of sites in the Hamiltonian."
             raise ValueError(msg)
 
@@ -181,7 +177,10 @@ class PropagatorWithGradients:
 
         new_obs_list=self.obs_list + a_kn_site_list
 
-        new_sim_params = AnalogSimParams(observables=new_obs_list, elapsed_time=self.sim_params.elapsed_time, dt=self.sim_params.dt, num_traj=self.sim_params.num_traj, max_bond_dim=self.sim_params.max_bond_dim, threshold=self.sim_params.threshold, order=self.sim_params.order, sample_timesteps=True)
+        new_sim_params = AnalogSimParams(observables=new_obs_list, elapsed_time=self.sim_params.elapsed_time, 
+                                         dt=self.sim_params.dt, num_traj=self.sim_params.num_traj, 
+                                         max_bond_dim=self.sim_params.max_bond_dim, threshold=self.sim_params.threshold, 
+                                         order=self.sim_params.order, sample_timesteps=True)
         simulator.run(self.init_state, self.hamiltonian, new_sim_params, noise_model)
 
 

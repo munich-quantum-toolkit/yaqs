@@ -95,13 +95,7 @@ class LossClass:
 
     n_avg = 20
 
-    t: np.ndarray
-    exp_vals_traj: np.ndarray
-    work_dir: Path
-    history_file_name: Path
-    history_avg_file_name: Path
 
-    d: int
 
     def __init__(self, *, 
                  ref_traj: List[Observable],
@@ -122,9 +116,14 @@ class LossClass:
         self.work_dir: Path = Path()
 
         self.ref_traj = copy.deepcopy(ref_traj)
-        self.traj_gradients = traj_gradients
+        self.traj_gradients = copy.deepcopy(traj_gradients)
+
+        self.traj_gradients.set_observable_list(self.ref_traj)
 
         self.ref_traj_array = np.array([obs.results for obs in self.ref_traj])
+
+        self.d = len(self.traj_gradients.input_noise_model.processes)
+
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -340,70 +339,18 @@ class LossClass:
 
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
-
-
-
-class LossClass2(LossClass):
-    """LossClass2 represents the loss for a Ising model with the same noise parameters for each site.
-
-    This class encapsulates the objective function and its gradient computation for optimizing noise parameters
-    (relaxation and dephasing rates) in quantum system simulations. It compares simulated trajectories
-    to a reference trajectory and provides the sum of squared differences as the loss, along with its gradient
-    with respect to the noise parameters. It is designed for the case of the same noise parameters for each site,
-      in total 2 parameters.
-
-    Attributes:
-    print_to_file : bool
-        Flag indicating whether to print output to a file.
-    ref_traj : np.ndarray
-        Copy of the reference trajectory data.
-    traj_der : Callable[[SimulationParameters], tuple]
-        Function to compute trajectory derivatives given simulation parameters.
-    sim_params : SimulationParameters
-        Deep copy of the simulation parameters, including noise rates.
-    n_gamma_rel : int
-        Number of relaxation rates in the simulation parameters.
-    n_gamma_deph : int
-        Number of dephasing rates in the simulation parameters.
-    d : int
-        Total number of noise parameters (relaxation + dephasing).
-
-    Methods:
-    __init__(sim_params, ref_traj, traj_der, print_to_file=False)
-        Initializes the loss_class_2 instance with simulation parameters, reference trajectory,
-          and trajectory derivative function.
-    __call__(x: np.ndarray) -> tuple
-        Evaluates the objective function and its gradient for the given noise parameters.
-        Updates the simulation parameters, runs the trajectory simulation and its derivatives,
-        computes the difference between simulated and reference trajectories, and calculates:
-            - The objective function value (sum of squared differences)
-            - The gradient with respect to the noise parameters
-            - The simulation time
-            - The average of the minimum and maximum trajectory times
-            Array containing the noise parameters to be optimized. The first n_gamma_rel elements
-            correspond to relaxation rates, and the remaining elements correspond to dephasing rates.
-            Value of the objective function (sum of squared differences).
-            Gradient of the objective function with respect to the noise parameters.
-            Time taken to run the simulation, in seconds.
-            Average of the minimum and maximum trajectory times from the simulation.
-    """
-
-    def x_to_noise_model(self, x:np.ndarray, noise_model: NoiseModel) -> NoiseModel:
+    def x_to_noise_model(self, x:np.ndarray) -> NoiseModel:
         """Converts the optimization variable x to a NoiseModel instance.
 
         """
 
-        return_model = copy.deepcopy(noise_model)
+        return_model = copy.deepcopy(self.traj_gradients.input_noise_model)
 
-        for i, process in enumerate(return_model.processes):
-            if process["name"] == "relaxation":
-                return_model.processes[i]["strength"] = x[0]
+        for i in range(self.d):
+            return_model.processes[i]["strength"] = x[i]
 
-            if process["name"] == "dephasing":
-                return_model.processes[i]["strength"] = x[1]
-            
         return return_model
-
+    
 
 
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[None] | list[float]]:
@@ -426,11 +373,15 @@ class LossClass2(LossClass):
                 - avg_min_max_traj_time (Any): Average, minimum and maximum trajectory running times.
         """
 
-        noise_model = self.x_to_noise_model(x, self.traj_gradients.noise_model)
+        if len(x) != self.d:
+            raise ValueError(f"Input array must have length {self.d}, got {len(x)}")
+
+
+        noise_model = self.x_to_noise_model(x)
 
         start_time = time.time()
 
-        self.t, self.exp_vals_traj, self.d_on_d_gk = self.traj_gradients(noise_model)
+        _, self.exp_vals_traj, self.d_on_d_gk = self.traj_gradients(noise_model)
 
         end_time = time.time()
 
@@ -438,18 +389,27 @@ class LossClass2(LossClass):
 
         diff = self.exp_vals_traj - self.ref_traj_array
 
-        loss: float = np.sum(diff**2)
+        loss = np.sum(diff**2)
 
         # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump_site, n_obs_site, sites, nt)
         #  to do elemtwise multiplication. Then I sum over the n_obs_site, sites and nt dimensions to
         # get the gradient for each gamma, returning a vector of shape (n_jump_site)
-        grad = np.sum(2 * diff.reshape(1, n_obs_site, sites, nt) * self.d_on_d_gk, axis=(1, 2, 3))
+        grad_vec = np.sum(2 * diff.reshape(1, n_obs, nt) * self.d_on_d_gk, axis=(1, 2))
+
+
+        if len(grad_vec) != len(self.traj_gradients.index_list):
+            raise ValueError(f"Gradient vector length {len(grad_vec)} does not match index list length {len(self.traj_gradients.index_list)}")
+
+
+        grad=np.bincount(self.traj_gradients.index_list, weights=grad_vec)
 
         self.post_process(x.copy(), loss, grad.copy())
 
         sim_time = end_time - start_time  # Simulation time
 
         return loss, grad, sim_time
+
+
 
 
 class LossClass2L(LossClass):
