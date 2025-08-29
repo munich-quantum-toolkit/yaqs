@@ -1,4 +1,4 @@
-# MQT YAQS—A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
+# MQT YAQS — A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
 
 ```{raw} latex
 \begin{abstract}
@@ -29,8 +29,10 @@ self
 ```
 
 ```{toctree}
-:maxdepth: 2
 :caption: User Guide
+:hidden:
+:maxdepth: 1
+
 installation
 examples/analog_simulation
 examples/transmon_emulation
@@ -45,10 +47,10 @@ UPGRADING
 
 ````{only} not latex
 ```{toctree}
-:maxdepth: 2
-:titlesonly:
 :caption: Developers
-:glob:
+:hidden:
+:maxdepth: 1
+:titlesonly:
 
 contributing
 support
@@ -57,8 +59,10 @@ development_guide
 ````
 
 ```{toctree}
-:hidden:
 :caption: API Reference
+:hidden:
+:glob:
+:maxdepth: 1
 
 api/mqt/yaqs/index
 ```
