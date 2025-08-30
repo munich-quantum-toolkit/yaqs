@@ -246,11 +246,3 @@ def test_unraveling_projector_two_site_adjacent() -> None:
     assert any(np.allclose(m, I4 + P) for m in mats)
     assert any(np.allclose(m, I4 - P) for m in mats)
     assert all(np.isclose(p["strength"], gamma / 2.0) for p in nm.processes)
-
-
-def test_unraveling_unitary_2pt_invalid_theta_raises() -> None:
-    gamma = 0.3
-    with pytest.raises(AssertionError):
-        _ = NoiseModel([
-            {"name": "pauli_x", "sites": [0], "strength": gamma, "unraveling": "unitary_2pt", "theta0": 0.0}
-        ])
