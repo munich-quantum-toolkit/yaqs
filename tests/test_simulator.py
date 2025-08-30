@@ -451,7 +451,8 @@ def test_mismatch() -> None:
 
     with pytest.raises(AssertionError, match=r"State and circuit qubit counts do not match."):
         simulator.run(initial_state, circuit, sim_params, noise_model)
-        
+
+
 def test_two_site_correlator_left_boundary_reduced() -> None:
     """Tests the expectation value of a two-site correlator in analog simulation at the left boundary (reduced)."""
     L = 4
