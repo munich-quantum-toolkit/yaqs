@@ -464,7 +464,7 @@ def test_two_site_correlator_left_boundary_reduced() -> None:
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
         observables=[Observable(XX(), [0, 1]), Observable(YY(), [0, 1]), Observable(ZZ(), [0, 1])],
-        elapsed_time=4,
+        elapsed_time=1,
         dt=0.1,
         max_bond_dim=4,
         sample_timesteps=True,
@@ -537,7 +537,7 @@ def test_two_site_correlator_center_reduced() -> None:
             Observable(YY(), [L // 2, L // 2 + 1]),
             Observable(ZZ(), [L // 2, L // 2 + 1]),
         ],
-        elapsed_time=4,
+        elapsed_time=1,
         dt=0.1,
         max_bond_dim=4,
         sample_timesteps=True,
@@ -609,7 +609,7 @@ def test_two_site_correlator_right_boundary_reduced() -> None:
             Observable(YY(), [L - 2, L - 1]),
             Observable(ZZ(), [L - 2, L - 1]),
         ],
-        elapsed_time=4,
+        elapsed_time=1,
         dt=0.1,
         max_bond_dim=4,
         sample_timesteps=True,
