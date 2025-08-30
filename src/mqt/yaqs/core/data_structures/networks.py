@@ -51,7 +51,7 @@ class MPS:
         Initializes the MPS with given length, tensors, physical dimensions, and initial state.
     pad_bond_dimension():
         Pads bond dimension with zeros
-    write_max_bond_dim() -> int:
+    get_max_bond() -> int:
         Returns the maximum bond dimension in the MPS.
     flip_network() -> None:
         Flips the bond dimensions in the network to allow operations from right to left.
@@ -263,7 +263,7 @@ class MPS:
         # renormalise the state
         self.normalize()
 
-    def write_max_bond_dim(self) -> int:
+    def get_max_bond(self) -> int:
         """Write max bond dim.
 
         Calculate and return the maximum bond dimension of the tensors in the network.
@@ -280,6 +280,108 @@ class MPS:
             global_max = max(global_max, local_max)
 
         return global_max
+
+    def get_total_bond(self) -> int:
+        """Compute total bond dimension.
+
+        Calculates the sum of all internal bond dimensions of the network.
+        Specifically, this sums the second index (left bond dimension)
+        of each tensor except for the first tensor.
+
+        Returns:
+            int: The total bond dimension across all internal bonds.
+        """
+        bonds = [tensor.shape[1] for tensor in self.tensors[1:]]
+        return sum(bonds)
+
+    def get_cost(self) -> int:
+        """Estimate contraction cost.
+
+        Approximates the computational cost of simulating the network
+        by summing the cube of each internal bond dimension. This is a
+        heuristic metric for the cost of tensor contractions.
+
+        Returns:
+            int: The estimated contraction cost of the network.
+        """
+        cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1:]]
+        return sum(cost)
+
+    def get_entropy(self, sites: list[int]) -> np.float64:
+        """Compute bipartite entanglement entropy.
+
+        Calculates the von Neumann entropy of the reduced density matrix
+        across the bond between two adjacent sites. The entropy is obtained
+        from the Schmidt spectrum of the two-site state.
+
+        Args:
+            sites (list[int]): A list of exactly two adjacent site indices (i, i+1).
+
+        Returns:
+            np.float64: The entanglement entropy across the specified bond.
+
+        """
+        assert len(sites) == 2, "Entropy is defined on a bond (two adjacent sites)."
+        i, j = sites
+        assert i + 1 == j, "Entropy is only defined for nearest-neighbor cut."
+
+        a, b = self.tensors[i], self.tensors[j]
+
+        if a.shape[2] == 1:
+            return np.float64(0.0)
+
+        theta = np.tensordot(a, b, axes=(2, 1))
+        phys_i, left = a.shape[0], a.shape[1]
+        phys_j, right = b.shape[0], b.shape[2]
+        theta_mat = theta.reshape(left * phys_i, phys_j * right)
+
+        s = np.linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
+        s2 = (s.astype(np.float64)) ** 2
+        norm: np.float64 = np.sum(s2, dtype=np.float64)
+        if norm == np.float64(0.0):
+            return np.float64(0.0)
+
+        p = s2 / norm
+        eps = np.finfo(np.float64).tiny
+        ent = -1 * np.sum(p * np.log(p + eps), dtype=np.float64)
+
+        return np.float64(ent)
+
+    def get_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
+        """Compute Schmidt spectrum.
+
+        Calculates the singular values of the bipartition between two
+        adjacent sites (the Schmidt coefficients). The spectrum is padded
+        or truncated to length 500 for consistent output size.
+
+        Args:
+            sites (list[int]): A list of exactly two adjacent site indices (i, i+1).
+
+        Returns:
+            NDArray[np.float64]: The Schmidt spectrum (length 500),
+            with unused entries filled with NaN.
+        """
+        assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
+        assert sites[0] + 1 == sites[1], "Schmidt spectrum only defined for nearest-neighbor cut."
+        top_schmidt_vals = 500
+        i, j = sites
+        a, b = self.tensors[i], self.tensors[j]
+
+        if a.shape[2] == 1:
+            padded = np.full(top_schmidt_vals, np.nan)
+            padded[0] = 1.0
+            return padded
+
+        theta = np.tensordot(a, b, axes=(2, 1))
+        phys_i, left = a.shape[0], a.shape[1]
+        phys_j, right = b.shape[0], b.shape[2]
+        theta_mat = theta.reshape(left * phys_i, phys_j * right)
+
+        _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
+
+        padded = np.full(top_schmidt_vals, np.nan)
+        padded[: min(top_schmidt_vals, len(s_vec))] = s_vec[:top_schmidt_vals]
+        return padded
 
     def flip_network(self) -> None:
         """Flip MPS.
@@ -339,7 +441,7 @@ class MPS:
                 )
         elif decomposition == "SVD":
             a, b = self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1]
-            a_new, b_new = two_site_svd(a, b, threshold=1e-15, max_bond_dim=None)
+            a_new, b_new = two_site_svd(a, b, threshold=1e-12, max_bond_dim=None)
             self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1] = a_new, b_new
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
@@ -580,13 +682,36 @@ class MPS:
         temp_state = copy.deepcopy(self)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.gate.name != "pvm":
+            if observable.gate.name == "runtime_cost":
+                results[obs_index, column_index] = self.get_cost()
+            elif observable.gate.name == "max_bond":
+                results[obs_index, column_index] = self.get_max_bond()
+            elif observable.gate.name == "total_bond":
+                results[obs_index, column_index] = self.get_total_bond()
+            elif observable.gate.name in {"entropy", "schmidt_spectrum"}:
+                assert isinstance(observable.sites, list), "Given metric requires a list of sites"
+                assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
+                max_site = max(observable.sites)
+                min_site = min(observable.sites)
+                assert max_site - min_site == 1, "Entropy and Schmidt cuts must be nearest neighbor."
+                for s in observable.sites:
+                    assert s in range(self.length), f"Observable acting on non-existing site: {s}"
+                if observable.gate.name == "entropy":
+                    results[obs_index, column_index] = self.get_entropy(observable.sites)
+                elif observable.gate.name == "schmidt_spectrum":
+                    results[obs_index, column_index] = self.get_schmidt_spectrum(observable.sites)
+
+            elif observable.gate.name == "pvm":
+                assert hasattr(observable.gate, "bitstring"), "Gate does not have attribute bitstring."
+                results[obs_index, column_index] = self.project_onto_bitstring(observable.gate.bitstring)
+
+            else:
                 idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
                 if idx > last_site:
                     for site in range(last_site, idx):
                         temp_state.shift_orthogonality_center_right(site)
                     last_site = idx
-            results[obs_index, column_index] = temp_state.expect(observable)
+                results[obs_index, column_index] = temp_state.expect(observable)
 
     def expect(self, observable: Observable) -> np.float64:
         """Measurement of expectation value.
@@ -600,25 +725,21 @@ class MPS:
         Returns:
             np.float64: The real part of the expectation value of the observable.
         """
-        if observable.gate.name != "pvm":
-            sites_list = None
-            if isinstance(observable.sites, int):
-                sites_list = [observable.sites]
-            elif isinstance(observable.sites, list):
-                sites_list = observable.sites
+        sites_list = None
+        if isinstance(observable.sites, int):
+            sites_list = [observable.sites]
+        elif isinstance(observable.sites, list):
+            sites_list = observable.sites
 
-            assert sites_list is not None, f"Invalid type in expect {type(observable.sites).__name__}"
+        assert sites_list is not None, f"Invalid type in expect {type(observable.sites).__name__}"
 
-            assert len(sites_list) < 3, "Only one- and two-site observables are currently implemented."
+        assert len(sites_list) < 3, "Only one- and two-site observables are currently implemented."
 
-            for s in sites_list:
-                assert s in range(self.length), f"Observable acting on non-existing site: {s}"
+        for s in sites_list:
+            assert s in range(self.length), f"Observable acting on non-existing site: {s}"
 
-            # Copying done to stop the state from messing up its own canonical form
-            exp = self.local_expect(observable, sites_list)
-        elif observable.gate.name == "pvm":
-            assert hasattr(observable.gate, "bitstring"), "Gate does not have attribute bitstring."
-            exp = self.project_onto_bitstring(observable.gate.bitstring)
+        exp = self.local_expect(observable, sites_list)
+
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 

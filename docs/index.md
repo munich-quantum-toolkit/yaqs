@@ -1,4 +1,4 @@
-# MQT YAQS—A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
+# MQT YAQS — A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
 
 ```{raw} latex
 \begin{abstract}
@@ -29,8 +29,10 @@ self
 ```
 
 ```{toctree}
-:maxdepth: 2
 :caption: User Guide
+:hidden:
+:maxdepth: 1
+
 installation
 examples/analog_simulation
 examples/transmon_emulation
@@ -45,10 +47,10 @@ UPGRADING
 
 ````{only} not latex
 ```{toctree}
-:maxdepth: 2
-:titlesonly:
 :caption: Developers
-:glob:
+:hidden:
+:maxdepth: 1
+:titlesonly:
 
 contributing
 support
@@ -57,8 +59,10 @@ development_guide
 ````
 
 ```{toctree}
-:hidden:
 :caption: API Reference
+:hidden:
+:glob:
+:maxdepth: 1
 
 api/mqt/yaqs/index
 ```
@@ -84,5 +88,20 @@ Thank you to all the contributors who have helped make MQT YAQS a reality!
 <a href="https://github.com/munich-quantum-toolkit/yaqs/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=munich-quantum-toolkit/yaqs" />
 </a>
+</p>
+
+The MQT will remain free, open-source, and permissively licensed—now and in the future.
+We are firmly committed to keeping it open and actively maintained for the quantum computing community.
+
+To support this endeavor, please consider:
+
+- Starring and sharing our repositories: [https://github.com/munich-quantum-toolkit](https://github.com/munich-quantum-toolkit)
+- Contributing code, documentation, tests, or examples via issues and pull requests
+- Citing the MQT in your publications (see {doc}`References <references>`)
+- Using the MQT in research and teaching, and sharing feedback and use cases
+- Sponsoring us on GitHub: [https://github.com/sponsors/munich-quantum-toolkit](https://github.com/sponsors/munich-quantum-toolkit)
+
+<p align="center">
+<iframe src="https://github.com/sponsors/munich-quantum-toolkit/button" title="Sponsor munich-quantum-toolkit" height="32" width="114" style="border: 0; border-radius: 6px;"></iframe>
 </p>
 ```

@@ -609,3 +609,87 @@ def test_basegate_operations_with_different_interaction() -> None:
     # Test multiplication
     with pytest.raises(ValueError, match="Cannot multiply gates with different interaction"):
         _ = gate1 * gate2
+
+
+def _assert_identity_gate_like(g: BaseGate) -> None:
+    """Helper function to validate diagnostic/meta-observable gates.
+
+    This asserts that the given gate behaves like an identity placeholder:
+    it must be a 2x2 identity matrix, with matching tensor, and report
+    an interaction level of 1.
+
+    Parameters
+    ----------
+    g : BaseGate
+        The gate instance to be validated.
+    """
+    assert g.matrix.shape == (2, 2)
+    assert_array_equal(g.matrix, np.eye(2))
+    assert_array_equal(g.tensor, g.matrix)
+    assert g.interaction == 1  # because matrix is 2x2
+
+
+def test_diagnostic_runtime_cost() -> None:
+    """Test the runtime_cost diagnostic operator.
+
+    Ensures that the operator behaves like a single-qubit identity gate,
+    can be assigned to a site, and that its BaseGate factory produces
+    the same matrix.
+    """
+    g = GateLibrary.runtime_cost()
+    _assert_identity_gate_like(g)
+    g.set_sites(0)
+    assert g.sites == [0]
+    assert_array_equal(BaseGate.runtime_cost().matrix, g.matrix)
+
+
+def test_diagnostic_max_bond() -> None:
+    """Test the max_bond diagnostic operator.
+
+    Ensures that the operator behaves like a single-qubit identity gate,
+    can be bound to a site, and matches the BaseGate factory.
+    """
+    g = GateLibrary.max_bond()
+    _assert_identity_gate_like(g)
+    g.set_sites(1)
+    assert g.sites == [1]
+    assert_array_equal(BaseGate.max_bond().matrix, g.matrix)
+
+
+def test_diagnostic_total_bond() -> None:
+    """Test the total_bond diagnostic operator.
+
+    Ensures that the operator behaves like a single-qubit identity gate,
+    can be bound to a site, and matches the BaseGate factory.
+    """
+    g = GateLibrary.total_bond()
+    _assert_identity_gate_like(g)
+    g.set_sites(3)
+    assert g.sites == [3]
+    assert_array_equal(BaseGate.total_bond().matrix, g.matrix)
+
+
+def test_meta_entropy_sites_len_flexible() -> None:
+    """Test the entropy meta-observable operator.
+
+    Ensures that the operator behaves like an identity gate and that its
+    custom ``set_sites`` method accepts either one or two site indices.
+    """
+    g = GateLibrary.entropy()
+    _assert_identity_gate_like(g)
+    g.set_sites(4, 5)
+    assert g.sites == [4, 5]
+    assert_array_equal(BaseGate.entropy().matrix, g.matrix)
+
+
+def test_meta_schmidt_spectrum_sites_len_flexible() -> None:
+    """Test the schmidt_spectrum meta-observable operator.
+
+    Ensures that the operator behaves like an identity gate and that its
+    custom ``set_sites`` method accepts either one or two site indices.
+    """
+    g = GateLibrary.schmidt_spectrum()
+    _assert_identity_gate_like(g)
+    g.set_sites(7, 8)
+    assert g.sites == [7, 8]
+    assert_array_equal(BaseGate.schmidt_spectrum().matrix, g.matrix)

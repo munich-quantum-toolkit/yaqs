@@ -525,14 +525,76 @@ class BaseGate:
 
     @classmethod
     def pvm(cls, bitstring: str) -> PVM:
-        """Returns the projection-valued measurement projector.
+        """Create a projection-valued measurement (PVM) operator.
 
         Args:
-            bitstring: Computational state bitstring
+            bitstring: The computational basis bitstring (e.g., "0101") that the state
+                should be projected onto.
+
         Returns:
-            PVM: An instance of the PVM gate.
+            PVM: An instance of the PVM gate representing the projection.
         """
         return PVM(bitstring)
+
+    @classmethod
+    def runtime_cost(cls) -> RuntimeCost:
+        """Create a runtime cost diagnostic operator.
+
+        This is not a physical observable but a diagnostic metric that estimates
+        the computational cost of simulating the network.
+
+        Returns:
+            RuntimeCost: An instance of the runtime cost diagnostic gate.
+        """
+        return RuntimeCost()
+
+    @classmethod
+    def max_bond(cls) -> MaxBond:
+        """Create a maximum bond dimension diagnostic operator.
+
+        This is not a physical observable but a diagnostic metric that reports
+        the maximum bond dimension in the tensor network.
+
+        Returns:
+            MaxBond: An instance of the max bond dimension diagnostic gate.
+        """
+        return MaxBond()
+
+    @classmethod
+    def total_bond(cls) -> TotalBond:
+        """Create a total bond dimension diagnostic operator.
+
+        This is not a physical observable but a diagnostic metric that reports
+        the sum of internal bond dimensions in the tensor network.
+
+        Returns:
+            TotalBond: An instance of the total bond dimension diagnostic gate.
+        """
+        return TotalBond()
+
+    @classmethod
+    def entropy(cls) -> Entropy:
+        """Create an entropy diagnostic operator.
+
+        This is a meta-observable used to request the bipartite entanglement
+        entropy across a given nearest-neighbor cut.
+
+        Returns:
+            Entropy: An instance of the entropy diagnostic gate.
+        """
+        return Entropy()
+
+    @classmethod
+    def schmidt_spectrum(cls) -> SchmidtSpectrum:
+        """Create a Schmidt spectrum diagnostic operator.
+
+        This is a meta-observable used to request the Schmidt coefficients
+        across a given nearest-neighbor cut, padded or truncated to a fixed length.
+
+        Returns:
+            SchmidtSpectrum: An instance of the Schmidt spectrum diagnostic gate.
+        """
+        return SchmidtSpectrum()
 
 
 class X(BaseGate):
@@ -1453,28 +1515,161 @@ class PVM(BaseGate):
         super().__init__(mat)
 
 
+class RuntimeCost(BaseGate):
+    """Diagnostic gate representing an estimated runtime/contraction cost.
+
+    This is not a physical observable. It exposes a simulation-level metric
+    (e.g., sum of internal bond dimensions cubed) via the measurement interface.
+    """
+
+    name = "runtime_cost"
+
+    def __init__(self) -> None:
+        """Creates a no-op placeholder matrix for BaseGate compatibility."""
+        mat = np.array([[1, 0], [0, 1]], dtype=complex)
+        super().__init__(mat)
+
+
+class MaxBond(BaseGate):
+    """Diagnostic gate for the maximum bond dimension in the MPS.
+
+    Not a physical observable; provides simulation diagnostics through the
+    same interface used for operator expectation values.
+    """
+
+    name = "max_bond"
+
+    def __init__(self) -> None:
+        """Creates a no-op placeholder matrix for BaseGate compatibility."""
+        mat = np.array([[1, 0], [0, 1]], dtype=complex)
+        super().__init__(mat)
+
+
+class TotalBond(BaseGate):
+    """Diagnostic gate for the total (summed) internal bond dimension.
+
+    Not a physical observable; returns the sum of internal bond dimensions
+    as a scalar diagnostic of network complexity.
+    """
+
+    name = "total_bond"
+
+    def __init__(self) -> None:
+        """Creates a no-op placeholder matrix for BaseGate compatibility."""
+        mat = np.array([[1, 0], [0, 1]], dtype=complex)
+        super().__init__(mat)
+
+
+class Entropy(BaseGate):
+    """Meta-observable for bipartite entanglement entropy across a cut.
+
+    The actual entropy is computed from the MPS; this gate serves as a
+    typed handle so that high-level code can request this diagnostic via
+    the same measurement interface.
+    """
+
+    name = "entropy"
+
+    def __init__(self) -> None:
+        """Creates a no-op placeholder matrix for BaseGate compatibility."""
+        mat = np.array([[1, 0], [0, 1]], dtype=complex)
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites defining the bipartition (i, i+1).
+
+        Args:
+            *sites: One or two integers or a list of two integers indicating the cut.
+        """
+        sites_list: list[int] = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+        self.sites = sites_list
+
+
+class SchmidtSpectrum(BaseGate):
+    """Meta-observable for the Schmidt spectrum across a nearest-neighbor cut.
+
+    The spectrum (singular values) is computed from the MPS around the specified
+    bond and returned as a fixed-length vector (padded/truncated as needed).
+    """
+
+    name = "schmidt_spectrum"
+
+    def __init__(self) -> None:
+        """Creates a no-op placeholder matrix for BaseGate compatibility."""
+        mat = np.array([[1, 0], [0, 1]], dtype=complex)
+        super().__init__(mat)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites defining the bipartition (i, i+1).
+
+        Args:
+            *sites: One or two integers or a list of two integers indicating the cut.
+        """
+        sites_list: list[int] = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+        self.sites = sites_list
+
+
 class GateLibrary:
     """A collection of quantum gate classes for use in simulations.
 
+    This library exposes gate **classes** (not instances). Each attribute points to
+    a concrete `BaseGate` subclass implementing the corresponding operator. Use
+    them like `GateLibrary.rx(theta)` or `GateLibrary.cz()` (depending on your
+    constructors), or via any factory utilities you provide.
+
     Attributes:
-        x: Class for the X gate.
-        y: Class for the Y gate.
-        z: Class for the Z gate.
-        sx: Class for the square-root X gate.
+        x: Class for the Pauli-X gate.
+        y: Class for the Pauli-Y gate.
+        z: Class for the Pauli-Z gate.
+        sx: Class for the √X (SX) gate.
         h: Class for the Hadamard gate.
         id: Class for the identity gate.
-        rx: Class for the rotation gate about the x-axis.
-        ry: Class for the rotation gate about the y-axis.
-        rz: Class for the rotation gate about the z-axis.
-        u: Class for the U3 gate.
-        cx: Class for the controlled-NOT gate.
+
+        rx: Class for rotation about the X-axis.
+        ry: Class for rotation about the Y-axis.
+        rz: Class for rotation about the Z-axis.
+        u:  Class for the generic single-qubit U gate.
+        u2: Class for the U2 (fixed-θ,φ) single-qubit gate.
+
+        cx: Class for the controlled-NOT (CNOT) gate.
         cz: Class for the controlled-Z gate.
         swap: Class for the SWAP gate.
-        rxx: Class for the rotation gate about the xx-axis.
-        ryy: Class for the rotation gate about the yy-axis.
-        rzz: Class for the rotation gate about the zz-axis.
-        cp: Class for the controlled phase gate.
-        p: Class for the phase gate.
+
+        rxx: Class for two-qubit rotation about XX.
+        ryy: Class for two-qubit rotation about YY.
+        rzz: Class for two-qubit rotation about ZZ.
+
+        cp: Class for the controlled-phase gate.
+        p:  Class for the single-qubit phase gate.
+
+        destroy: Class for the annihilation operator (ladder operator a).
+        create:  Class for the creation operator (ladder operator a†).
+
+        xx: Class for the XX interaction (non-parameterized).
+        yy: Class for the YY interaction (non-parameterized).
+        zz: Class for the ZZ interaction (non-parameterized).
+
+        p0: Class for projector |0⟩⟨0|.
+        p1: Class for projector |1⟩⟨1|.
+        pvm: Class for projection-valued measurement onto a given bitstring.
+
+        runtime_cost: Class representing a diagnostic "runtime/contraction cost" metric.
+        max_bond:     Class representing a diagnostic for maximum bond dimension.
+        total_bond:   Class representing a diagnostic for the sum of internal bond dimensions.
+        entropy:      Class representing a request for bipartite entanglement entropy across a cut.
+        schmidt_spectrum: Class representing a request for the Schmidt spectrum across a cut.
+
+        custom: Base class hook for defining custom gates (falls back to `BaseGate`).
     """
 
     x = X
@@ -1483,25 +1678,39 @@ class GateLibrary:
     sx = SX
     h = H
     id = Id
+
     rx = Rx
     ry = Ry
     rz = Rz
     u = U
     u2 = U2
+
     cx = CX
     cz = CZ
     swap = SWAP
+
     rxx = Rxx
     ryy = Ryy
     rzz = Rzz
+
     cp = CPhase
     p = Phase
+
     destroy = Destroy
     create = Create
+
     xx = XX
     yy = YY
     zz = ZZ
+
     p0 = P0
     p1 = P1
     pvm = PVM
+
+    runtime_cost = RuntimeCost
+    max_bond = MaxBond
+    total_bond = TotalBond
+    entropy = Entropy
+    schmidt_spectrum = SchmidtSpectrum
+
     custom = BaseGate

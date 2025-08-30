@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-### layer sampling with digital TJM
+### Strong Circuit Simulation (Observable) with sampling
 
 This example demonstrates how to use labelled barriers to sample observables at intermediate layers of a circuit using the digital Tensor Jump Method (TJM). Any `barrier` with label `"SAMPLE_OBSERVABLES"` (case-insensitive) is treated as a sampling point.
 
@@ -78,6 +78,8 @@ observables = [Observable(Z(), i) for i in range(num_qubits)]
 
 # Enable sampling at intermediate layers via labelled barriers
 # Note: num_traj=1000 provides good agreement with reference; adjust if runtime is a concern
+#       Typically, 100 trajectories gets you pretty far for prototyping.
+
 num_traj = 1000
 sim_params = StrongSimParams(observables, num_traj=num_traj, sample_layers=True)
 ```
