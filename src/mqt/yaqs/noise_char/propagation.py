@@ -9,23 +9,19 @@
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from mqt.yaqs import simulator
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Zero
 from mqt.yaqs.noise_char.optimization import trapezoidal
-import copy
-
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
     from mqt.yaqs.core.data_structures.networks import MPO, MPS
-    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-
 
 
 def noise_model_to_operator_list(noise_model: NoiseModel) -> list[Observable]:
@@ -41,13 +37,11 @@ def noise_model_to_operator_list(noise_model: NoiseModel) -> list[Observable]:
 
     for proc in noise_model.processes:
         gate = getattr(GateLibrary, proc["name"])
-        for site in proc["sites"]:
-            noise_list.append(Observable(gate, site))
+        noise_list.extend(Observable(gate, site) for site in proc["sites"])
     return noise_list
 
 
-
-def flatten_noise_model(self, noise_model: NoiseModel) -> NoiseModel:
+def flatten_noise_model(noise_model: NoiseModel) -> tuple[NoiseModel, list[int]]:
     """Serializes the noise model.
 
     Args:
@@ -56,25 +50,16 @@ def flatten_noise_model(self, noise_model: NoiseModel) -> NoiseModel:
     Returns:
         NoiseModel: The serialized noise model.
     """
+    noise_list = []
 
-    noise_list=[]
-
-    index_list=[]
+    index_list = []
 
     for i, proc in enumerate(noise_model.processes):
         for site in proc["sites"]:
             noise_list.append({"name": proc["name"], "sites": [site], "strength": proc["strength"]})
             index_list.append(i)
 
-    return noise_list, index_list
-
-
-
-
-
-
-    return copy.deepcopy(noise_model)
-
+    return NoiseModel(noise_list), index_list
 
 
 class PropagatorWithGradients:
@@ -103,25 +88,23 @@ class PropagatorWithGradients:
         self.input_noise_model: NoiseModel = noise_model
         self.init_state: MPS = init_state
 
-
         self.flat_noise_model, self.index_list = flatten_noise_model(self.input_noise_model)
         self.noise_list: list[Observable] = noise_model_to_operator_list(self.flat_noise_model)
 
-        self.n_jump=len(self.noise_list)  # number of jump operators
+        self.n_jump: int = len(self.noise_list)  # number of jump operators
 
-        if max([ proc["sites"][0]  for proc in self.flat_noise_model]) >= self.sites:
+        self.n_t: int = len(self.sim_params.times)  # number of time steps
+
+        self.sites: int = self.hamiltonian.length  # number of sites in the chain
+
+        self.set_observables: bool = False
+
+        if max(proc["sites"][0] for proc in self.flat_noise_model.processes) >= self.sites:
             msg = "Noise site index exceeds number of sites in the Hamiltonian."
             raise ValueError(msg)
 
-        self.n_t = len(self.sim_params.times)  # number of time steps
-
-        self.sites = self.hamiltonian.length  # number of sites in the chain
-
-        self.set_observables=False
-    
-
     def set_observable_list(self, obs_list: list[Observable]) -> None:
-        self.obs_list=copy.deepcopy(obs_list)
+        self.obs_list = copy.deepcopy(obs_list)
 
         all_obs_sites = [
             site for obs in obs_list for site in (obs.sites if isinstance(obs.sites, list) else [obs.sites])
@@ -130,31 +113,21 @@ class PropagatorWithGradients:
         if max(all_obs_sites) >= self.sites:
             msg = "Observable site index exceeds number of sites in the Hamiltonian."
             raise ValueError(msg)
-        
 
-        self.n_obs = len(obs_list)  # number of measurement operators   
+        self.n_obs = len(obs_list)  # number of measurement operators
 
-        self.set_observables=True
+        self.set_observables = True
 
-
-    def set_time(self, *, elapsed_time: float, dt: float = 0.1):
-
+    def set_time(self, *, elapsed_time: float, dt: float = 0.1) -> None:
         self.sim_params.elapsed_time = elapsed_time
         self.sim_params.dt = dt
         self.sim_params.times = np.arange(0, elapsed_time + dt, dt)
         self.n_t = len(self.sim_params.times)
 
-        print(f"Simulation time set to {elapsed_time} with time step {dt}. Number of time steps: {self.n_t}")
-
-
-
     def __call__(self, noise_model: NoiseModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-
-        if self.set_observables==False:
+        if not self.set_observables:
             msg = "Observable list not set. Please use the set_observable_list method to set the observables."
             raise ValueError(msg)
-        
-
 
         for i, proc in enumerate(noise_model.processes):
             for j, site in enumerate(proc["sites"]):
@@ -167,37 +140,44 @@ class PropagatorWithGradients:
 
         a_kn_site_list: list[Observable] = []
 
-
         for lk in self.noise_list:
-            for on in self.obs_list:
-                if lk.sites == on.sites:
-                    a_kn_site_list.append(lk.dag()*on*lk - 0.5*on*lk.dag()*lk - 0.5*lk.dag()*lk*on)
-                    
+            a_kn_site_list.extend(
+                Observable(
+                    lk.gate.dag() * on.gate * lk.gate
+                    - 0.5 * on.gate * lk.gate.dag() * lk.gate
+                    - 0.5 * lk.gate.dag() * lk.gate * on.gate,
+                    lk.sites,
+                )
+                for on in self.obs_list
+                if lk.sites == on.sites
+            )
 
+        new_obs_list = self.obs_list + a_kn_site_list
 
-        new_obs_list=self.obs_list + a_kn_site_list
-
-        new_sim_params = AnalogSimParams(observables=new_obs_list, elapsed_time=self.sim_params.elapsed_time, 
-                                         dt=self.sim_params.dt, num_traj=self.sim_params.num_traj, 
-                                         max_bond_dim=self.sim_params.max_bond_dim, threshold=self.sim_params.threshold, 
-                                         order=self.sim_params.order, sample_timesteps=True)
+        new_sim_params = AnalogSimParams(
+            observables=new_obs_list,
+            elapsed_time=self.sim_params.elapsed_time,
+            dt=self.sim_params.dt,
+            num_traj=self.sim_params.num_traj,
+            max_bond_dim=self.sim_params.max_bond_dim,
+            threshold=self.sim_params.threshold,
+            order=self.sim_params.order,
+            sample_timesteps=True,
+        )
         simulator.run(self.init_state, self.hamiltonian, new_sim_params, noise_model)
 
-
         # Separate original and new expectation values from result_lindblad.
-        original_exp_vals = new_sim_params.observables[:self.n_obs]
+        original_exp_vals = new_sim_params.observables[: self.n_obs]
 
-        d_on_d_gk_list = new_sim_params.observables[self.n_obs:]  # these correspond to the A_kn operators
+        d_on_d_gk_list = new_sim_params.observables[self.n_obs :]  # these correspond to the A_kn operators
 
         for obs in d_on_d_gk_list:
             obs.results = trapezoidal(obs.results, self.sim_params.times)
 
-
-        zero_obs=Observable(Zero(),0)
+        zero_obs = Observable(Zero(), 0)
         zero_obs.results = np.zeros(self.n_t)
 
         d_on_d_gk = np.zeros((self.n_jump, self.n_obs), dtype=object)
-
 
         count = 0
         for i, lk in enumerate(self.noise_list):
@@ -207,12 +187,9 @@ class PropagatorWithGradients:
                     count += 1
                 else:
                     d_on_d_gk[i, j] = zero_obs
-        
-        
+
         obs_array = np.array([obs.results for obs in original_exp_vals])
 
         d_on_d_gk_array = np.array([[d_on_d_gk[i, j].results for j in range(self.n_obs)] for i in range(self.n_jump)])
 
         return self.sim_params.times, obs_array, d_on_d_gk_array
-
-

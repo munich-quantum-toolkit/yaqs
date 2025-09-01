@@ -348,7 +348,7 @@ class BaseGate:
             Id: An instance of the Id gate.
         """
         return Id()
-    
+
     @classmethod
     def zero(cls) -> Zero:
         """Returns the Zero gate.

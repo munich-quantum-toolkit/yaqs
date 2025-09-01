@@ -10,50 +10,50 @@
 from __future__ import annotations
 
 
-class Characterizer:
+# class Characterizer:
 
 
-    sim_params: AnalogSimParams
+#     sim_params: AnalogSimParams
 
-    hamiltonian: MPO
+#     hamiltonian: MPO
 
-    noise_model: NoiseModel
+#     noise_model: NoiseModel
 
-    loss_function: LossClass
-
-
-    def set_hamiltonian():
+#     loss_function: LossClass
 
 
-    def set_noise_model():
+#     def set_hamiltonian():
 
 
-    def set_loss_function(*, ):
-        loss_function = LossFunction(
-            observables=observables,
-            target_values=target_values,
-            weights=weights,
-            noise_model=noise_model,
-        )
+#     def set_noise_model():
 
 
-    def set_propagator():
+#     def set_loss_function(*, ):
+#         loss_function = LossFunction(
+#             observables=observables,
+#             target_values=target_values,
+#             weights=weights,
+#             noise_model=noise_model,
+#         )
 
 
-    def set_sim_params(*, ):
-        sim_params = AnalogSimParams(
-        observables=new_obs_list,
-        elapsed_time=sim_time,
-        dt=dt,
-        num_traj=ntraj,
-        max_bond_dim=max_bond_dim,
-        threshold=threshold,
-        order=order,
-        sample_timesteps=True,
-    )
+#     def set_propagator():
 
 
-    def set_adam_optimizer():
+#     def set_sim_params(*, ):
+#         sim_params = AnalogSimParams(
+#         observables=new_obs_list,
+#         elapsed_time=sim_time,
+#         dt=dt,
+#         num_traj=ntraj,
+#         max_bond_dim=max_bond_dim,
+#         threshold=threshold,
+#         order=order,
+#         sample_timesteps=True,
+#     )
 
 
-    def run():
+#     def set_adam_optimizer():
+
+
+#     def run():

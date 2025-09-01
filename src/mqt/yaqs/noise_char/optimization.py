@@ -16,19 +16,15 @@ import pickle  # noqa: S403
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
-from typing import List, Tuple, Any
+
 import numpy as np
 
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from numpy.typing import NDArray
 
-    from mqt.yaqs.noise_char.propagation import SimulationParameters
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+    from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
 
 
 def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
@@ -85,26 +81,34 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
     return integral
 
 
-
-
-
-
-
 class LossClass:
     """A base LossClass to track optimization history and compute averages."""
 
     n_avg = 20
 
-
-
-    def __init__(self, *, 
-                 ref_traj: List[Observable],
-                traj_gradients: PropagatorWithGradients, 
-                print_to_file: bool = False) -> None:
-        """Initializes the LossClass with default values.
+    def __init__(
+        self, *, ref_traj: list[Observable], traj_gradients: PropagatorWithGradients, print_to_file: bool = False
+    ) -> None:
+        """Initializes the optimization class for noise characterization.
 
         Args:
+            ref_traj (List[Observable]): A list of Observable objects representing the reference trajectory.
+            traj_gradients (PropagatorWithGradients): An object that provides trajectory gradients and supports setting the observable list.
             print_to_file (bool, optional): If True, enables printing output to a file. Defaults to False.
+
+        Attributes:
+            n_eval (int): Counter for the number of evaluations performed.
+            x_history (list[np.ndarray]): History of parameter vectors evaluated.
+            f_history (list[float]): History of function values evaluated.
+            x_avg_history (list[np.ndarray]): History of averaged parameter vectors.
+            diff_avg_history (list[float]): History of differences between averages.
+            grad_history (list[np.ndarray]): History of gradient vectors.
+            print_to_file (bool): Indicates whether to print output to a file.
+            work_dir (Path): Working directory for file output.
+            ref_traj (List[Observable]): Deep copy of the reference trajectory.
+            traj_gradients (PropagatorWithGradients): Deep copy of the trajectory gradients object.
+            ref_traj_array (np.ndarray): Array of results from the reference trajectory.
+            d (int): Dimensionality of the input noise model's processes.
         """
         self.n_eval = 0
         self.x_history: list[np.ndarray] = []
@@ -123,7 +127,6 @@ class LossClass:
         self.ref_traj_array = np.array([obs.results for obs in self.ref_traj])
 
         self.d = len(self.traj_gradients.input_noise_model.processes)
-
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -339,21 +342,16 @@ class LossClass:
 
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
-    def x_to_noise_model(self, x:np.ndarray) -> NoiseModel:
-        """Converts the optimization variable x to a NoiseModel instance.
-
-        """
-
+    def x_to_noise_model(self, x: np.ndarray) -> NoiseModel:
+        """Converts the optimization variable x to a NoiseModel instance."""
         return_model = copy.deepcopy(self.traj_gradients.input_noise_model)
 
         for i in range(self.d):
             return_model.processes[i]["strength"] = x[i]
 
         return return_model
-    
 
-
-    def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float, list[None] | list[float]]:
+    def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
         """Evaluates the objective function and its gradient for the given parameters.
 
         This method updates the simulation parameters with the provided gamma values,
@@ -372,36 +370,34 @@ class LossClass:
                 - sim_time (float): The time taken to run the simulation (in seconds).
                 - avg_min_max_traj_time (Any): Average, minimum and maximum trajectory running times.
         """
-
         if len(x) != self.d:
-            raise ValueError(f"Input array must have length {self.d}, got {len(x)}")
-
+            msg = f"Input array must have length {self.d}, got {len(x)}"
+            raise ValueError(msg)
 
         noise_model = self.x_to_noise_model(x)
 
         start_time = time.time()
 
-        _, self.exp_vals_traj, self.d_on_d_gk = self.traj_gradients(noise_model)
+        self.t, self.exp_vals_traj, self.d_on_d_gk = self.traj_gradients(noise_model)
 
         end_time = time.time()
 
-        n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
+        _n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
 
         diff = self.exp_vals_traj - self.ref_traj_array
 
-        loss = np.sum(diff**2)
+        loss: float = np.sum(diff**2)
 
         # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump_site, n_obs_site, sites, nt)
         #  to do elemtwise multiplication. Then I sum over the n_obs_site, sites and nt dimensions to
         # get the gradient for each gamma, returning a vector of shape (n_jump_site)
         grad_vec = np.sum(2 * diff.reshape(1, n_obs, nt) * self.d_on_d_gk, axis=(1, 2))
 
-
         if len(grad_vec) != len(self.traj_gradients.index_list):
-            raise ValueError(f"Gradient vector length {len(grad_vec)} does not match index list length {len(self.traj_gradients.index_list)}")
+            msg = f"Gradient vector length {len(grad_vec)} does not match index list length {len(self.traj_gradients.index_list)}"
+            raise ValueError(msg)
 
-
-        grad=np.bincount(self.traj_gradients.index_list, weights=grad_vec)
+        grad = np.bincount(self.traj_gradients.index_list, weights=grad_vec)
 
         self.post_process(x.copy(), loss, grad.copy())
 
@@ -434,7 +430,7 @@ def adam_optimizer(
     """Performs Adam optimization on a given loss function with support for checkpointing and restart.
 
     Args:
-        f (loss_class): An instance of a loss function class that implements the required interface.
+        f (loss_class): An instance of a loss function class.
         x_copy (np.ndarray): Initial parameter vector to optimize.
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
         max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
@@ -523,7 +519,7 @@ def adam_optimizer(
 
         start_time = time.time()
 
-        loss, grad, sim_time, avg_min_max_traj_time = f(x)
+        loss, grad, sim_time = f(x)
 
         # Adam update steps (NEW)
         m = beta1 * m + (1 - beta1) * grad
@@ -572,8 +568,7 @@ def adam_optimizer(
         iter_time = end_time - start_time
 
         with perf_path.open("a", encoding="utf-8") as pf:
-            pf.write(f"  {i}    {iter_time}    {sim_time}    {avg_min_max_traj_time[0]}")
-            pf.write(f"    {avg_min_max_traj_time[1]}    {avg_min_max_traj_time[2]}\n")
+            pf.write(f"  {i}    {iter_time}    {sim_time}  \n")
 
         if abs(loss) < tolerance:
             break
@@ -585,8 +580,3 @@ def adam_optimizer(
             break
 
     return f.f_history, f.x_history, f.x_avg_history, f.t, f.exp_vals_traj
-
-
-
-
-

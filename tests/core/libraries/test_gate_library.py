@@ -184,6 +184,7 @@ def test_gate_id() -> None:
     base_gate = BaseGate.id()
     assert_array_equal(gate.matrix, base_gate.matrix)
 
+
 def test_gate_zero() -> None:
     """Test the zero gate from GateLibrary.
 
