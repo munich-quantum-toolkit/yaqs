@@ -124,7 +124,9 @@ class PropagatorWithGradients:
         self.sim_params.times = np.arange(0, elapsed_time + dt, dt)
         self.n_t = len(self.sim_params.times)
 
-    def __call__(self, noise_model: NoiseModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+
+    def run(self, noise_model: NoiseModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if not self.set_observables:
             msg = "Observable list not set. Please use the set_observable_list method to set the observables."
             raise ValueError(msg)
@@ -167,7 +169,7 @@ class PropagatorWithGradients:
         simulator.run(self.init_state, self.hamiltonian, new_sim_params, noise_model)
 
         # Separate original and new expectation values from result_lindblad.
-        original_exp_vals = new_sim_params.observables[: self.n_obs]
+        self.obs_traj = new_sim_params.observables[: self.n_obs]
 
         d_on_d_gk_list = new_sim_params.observables[self.n_obs :]  # these correspond to the A_kn operators
 
@@ -188,8 +190,8 @@ class PropagatorWithGradients:
                 else:
                     d_on_d_gk[i, j] = zero_obs
 
-        obs_array = np.array([obs.results for obs in original_exp_vals])
+        self.times=self.sim_params.times
 
-        d_on_d_gk_array = np.array([[d_on_d_gk[i, j].results for j in range(self.n_obs)] for i in range(self.n_jump)])
+        self.obs_array = np.array([obs.results for obs in self.obs_traj])
 
-        return self.sim_params.times, obs_array, d_on_d_gk_array
+        self.d_on_d_gk_array = np.array([[d_on_d_gk[i, j].results for j in range(self.n_obs)] for i in range(self.n_jump)])

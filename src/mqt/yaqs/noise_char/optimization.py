@@ -385,13 +385,19 @@ class LossClass:
 
         start_time = time.time()
 
-        self.t, self.exp_vals_traj, self.d_on_d_gk = self.traj_gradients(noise_model)
+        self.traj_gradients.run(noise_model)
+
+        self.t = copy.deepcopy(self.traj_gradients.times)
+
+        self.obs_array = copy.deepcopy(self.traj_gradients.obs_array)
+
+        self.d_on_d_gk = copy.deepcopy(self.traj_gradients.d_on_d_gk_array)
 
         end_time = time.time()
 
         _n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
 
-        diff = self.exp_vals_traj - self.ref_traj_array
+        diff = self.obs_array - self.ref_traj_array
 
         loss: float = np.sum(diff**2)
 
