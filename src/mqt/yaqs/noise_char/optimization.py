@@ -351,6 +351,13 @@ class LossClass:
 
         return return_model
 
+    def noise_model_to_x(self, noise_model: NoiseModel) -> np.ndarray:
+        """Converts a NoiseModel instance to the optimization variable x."""
+        x: np.ndarray = np.zeros(self.d, dtype=np.float64)
+        for i in range(self.d):
+            x[i] = noise_model.processes[i]["strength"]
+        return x
+
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
         """Evaluates the objective function and its gradient for the given parameters.
 
