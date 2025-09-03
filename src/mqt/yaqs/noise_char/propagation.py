@@ -37,7 +37,8 @@ def noise_model_to_operator_list(noise_model: NoiseModel) -> list[Observable]:
 
     for proc in noise_model.processes:
         gate = getattr(GateLibrary, proc["name"])
-        noise_list.extend(Observable(gate, site) for site in proc["sites"])
+        for site in proc["sites"]:
+            noise_list.append(Observable(gate(), site))
     return noise_list
 
 
@@ -83,10 +84,10 @@ class PropagatorWithGradients:
         noise_model: NoiseModel,
         init_state: MPS,
     ) -> None:
-        self.sim_params: AnalogSimParams = sim_params
-        self.hamiltonian: MPO = hamiltonian
-        self.input_noise_model: NoiseModel = noise_model
-        self.init_state: MPS = init_state
+        self.sim_params: AnalogSimParams = copy.deepcopy(sim_params)
+        self.hamiltonian: MPO = copy.deepcopy(hamiltonian)
+        self.input_noise_model: NoiseModel = copy.deepcopy(noise_model)
+        self.init_state: MPS = copy.deepcopy(init_state)
 
         self.flat_noise_model, self.index_list = flatten_noise_model(self.input_noise_model)
         self.noise_list: list[Observable] = noise_model_to_operator_list(self.flat_noise_model)
@@ -166,10 +167,21 @@ class PropagatorWithGradients:
             order=self.sim_params.order,
             sample_timesteps=True,
         )
+
+
+        # print("Propagator before run Reftraj results:", self.obs_list[0].results)
+        # print("Object type: ", type(self.obs_list[0].results))
+        # print("Propagator before run Reftraj results:", self.obs_list[0].results[3])
+
+        print("Running simulation with noise model:", noise_model.processes)
         simulator.run(self.init_state, self.hamiltonian, new_sim_params, noise_model)
 
         # Separate original and new expectation values from result_lindblad.
         self.obs_traj = new_sim_params.observables[: self.n_obs]
+
+        # print("Propagator after run Reftraj results:", new_sim_params.observables[0].results)
+        # print("Propagator after run Reftraj results:", self.obs_traj[0].results)
+
 
         d_on_d_gk_list = new_sim_params.observables[self.n_obs :]  # these correspond to the A_kn operators
 

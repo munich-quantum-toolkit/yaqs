@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from mqt.yaqs.noise_char.optimization import LossClass, adam_optimizer
 from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
+import copy 
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -43,6 +44,8 @@ class Characterizer:
 
     observable_traj: np.ndarray
 
+    optimal_model: NoiseModel
+
     def __init__(
         self,
         *,
@@ -51,15 +54,16 @@ class Characterizer:
         init_guess: NoiseModel,
         init_state: MPS,
         ref_traj: list[Observable],
+        work_dir:  str | Path = '.',
         print_to_file: bool = True,
     ) -> None:
-        self.init_guess = init_guess
+        self.init_guess = copy.deepcopy(init_guess)
 
         self.traj_gradients = PropagatorWithGradients(
             sim_params=sim_params, hamiltonian=hamiltonian, noise_model=init_guess, init_state=init_state
         )
 
-        self.loss = LossClass(ref_traj=ref_traj, traj_gradients=self.traj_gradients, print_to_file=print_to_file)
+        self.loss = LossClass(ref_traj=ref_traj, traj_gradients=self.traj_gradients, working_dir=work_dir, print_to_file=print_to_file)
 
         self.init_x = self.loss.noise_model_to_x(self.init_guess)
 
@@ -91,3 +95,5 @@ class Characterizer:
             restart=restart,
             restart_file=restart_file,
         )
+
+        self.optimal_model = self.loss.x_to_noise_model(self.x_avg_history[-1])

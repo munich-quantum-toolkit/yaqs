@@ -87,7 +87,7 @@ class LossClass:
     n_avg = 20
 
     def __init__(
-        self, *, ref_traj: list[Observable], traj_gradients: PropagatorWithGradients, print_to_file: bool = False
+        self, *, ref_traj: list[Observable], traj_gradients: PropagatorWithGradients, working_dir: str | Path = '.', print_to_file: bool = False
     ) -> None:
         """Initializes the optimization class for noise characterization.
 
@@ -117,16 +117,18 @@ class LossClass:
         self.diff_avg_history: list[float] = []
         self.grad_history: list[np.ndarray] = []
         self.print_to_file: bool = print_to_file
-        self.work_dir: Path = Path()
+
 
         self.ref_traj = copy.deepcopy(ref_traj)
         self.traj_gradients = copy.deepcopy(traj_gradients)
 
-        self.traj_gradients.set_observable_list(self.ref_traj)
+        self.traj_gradients.set_observable_list(ref_traj)
 
-        self.ref_traj_array = np.array([obs.results for obs in self.ref_traj])
+        self.ref_traj_array = copy.deepcopy(np.array([obs.results for obs in self.ref_traj]))
 
         self.d = len(self.traj_gradients.input_noise_model.processes)
+
+        self.set_work_dir(path=working_dir)
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -233,38 +235,19 @@ class LossClass:
         self.x_avg_history = [np.copy(x) for x in x_avg_history]
         self.diff_avg_history = [float(d) for d in diff_avg_history]
 
-    def set_work_dir(self, path: str | Path, *, reset: bool) -> None:
+    def set_work_dir(self, *, path: str | Path = '.') -> None:
         """Sets the base directory for storing optimization history and related files.
 
         Parameters:
             path (str | Path): The base directory path to use for output files.
-            reset (bool):
-                If True, existing files matching the naming pattern will be deleted (reset).
-                If False, files will only be created if they do not exist.
 
         Side Effects:
             - Sets the working directory (`self.work_dir`) based on the provided path.
             - Sets file names for history and average history logs.
-            - Deletes files matching the pattern in the working directory if `reset` is True.
-            - Initializes or resets history files with appropriate headers as needed.
-
-        Notes:
-            - The number of variables (`self.d`) determines the number of columns in the headers.
-            - File extensions and naming conventions are handled within the method.
         """
-        self.work_dir = Path(path)
+        self.work_dir: Path = Path(path)
         self.history_file_name = self.work_dir / "loss_x_history.txt"
         self.history_avg_file_name = self.work_dir / "loss_x_history_avg.txt"
-
-        if reset:
-            # Delete all files matching the history file patterns in work_dir
-            for file_path in self.work_dir.glob("*.txt"):
-                with contextlib.suppress(Exception):
-                    file_path.unlink()
-
-            for file_path in self.work_dir.glob("*.pkl"):
-                with contextlib.suppress(Exception):
-                    file_path.unlink()
 
     def write_to_file(self, file_name: Path, f: float, x: np.ndarray, grad: np.ndarray) -> None:
         """Writes the current evaluation data to a specified file if file output is enabled.
@@ -333,11 +316,10 @@ class LossClass:
         File saved:
             {work_dir}/opt_traj_{n_eval}.txt.
         """
-        n_obs_site, sites, _n_t = self.exp_vals_traj.shape
-        exp_vals_traj_reshaped = self.exp_vals_traj.reshape(-1, self.exp_vals_traj.shape[-1])
-        exp_vals_traj_with_t = np.concatenate([np.array([self.t]), exp_vals_traj_reshaped], axis=0)
+        n_obs, _n_t = self.obs_array.shape
+        exp_vals_traj_with_t = np.concatenate([np.array([self.t]), self.obs_array], axis=0)
 
-        header = "t  " + "  ".join([obs + str(i) for obs in ["x", "y", "z"][:n_obs_site] for i in range(sites)])
+        header = "t  " + "  ".join(["obs_" + str(i) for i in range(n_obs)])
         output_file = self.work_dir / f"opt_traj_{self.n_eval}.txt"
 
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
@@ -381,7 +363,11 @@ class LossClass:
             msg = f"Input array must have length {self.d}, got {len(x)}"
             raise ValueError(msg)
 
+        print("x: ", x)
+
         noise_model = self.x_to_noise_model(x)
+
+        print("Noise model:", noise_model.processes)
 
         start_time = time.time()
 
@@ -506,7 +492,7 @@ def adam_optimizer(
         f.set_history(saved["x_history"], saved["f_history"], saved["x_avg_history"], saved["diff_avg_history"])
 
         f.t = saved["t"].copy()
-        f.exp_vals_traj = saved["exp_vals_traj"].copy()
+        f.obs_array = saved["obs_traj"].copy()
 
     else:
         # Remove all .pkl files in the folder
@@ -533,6 +519,8 @@ def adam_optimizer(
         start_time = time.time()
 
         loss, grad, sim_time = f(x)
+
+        print(i,loss)
 
         # Adam update steps (NEW)
         m = beta1 * m + (1 - beta1) * grad
@@ -569,7 +557,7 @@ def adam_optimizer(
             "x_avg_history": f.x_avg_history.copy(),
             "diff_avg_history": f.diff_avg_history.copy(),
             "t": f.t.copy(),
-            "exp_vals_traj": f.exp_vals_traj.copy(),
+            "obs_traj": f.obs_array.copy(),
         }
 
         restart_path = Path(restart_dir) / f"restart_step_{i + 1:04d}.pkl"
@@ -584,12 +572,14 @@ def adam_optimizer(
             pf.write(f"  {i}    {iter_time}    {sim_time}  \n")
 
         if abs(loss) < tolerance:
+            print(f"Stopping optimization because loss {loss} < tolerance {tolerance}")
             break
 
         # Convergence check
         if len(f.diff_avg_history) > max_n_convergence and all(
             diff < threshold for diff in f.diff_avg_history[-max_n_convergence:]
         ):
+            print(f"Stopping optimization because differences {f.diff_avg_history[-max_n_convergence:]} < threshold {threshold}")
             break
 
-    return f.f_history, f.x_history, f.x_avg_history, f.t, f.exp_vals_traj
+    return f.f_history, f.x_history, f.x_avg_history, f.t, f.obs_array
