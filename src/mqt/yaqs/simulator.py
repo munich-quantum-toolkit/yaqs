@@ -116,16 +116,38 @@ def _run_strong_sim(
                 for future in concurrent.futures.as_completed(futures):
                     i = futures[future]
                     result = future.result()
+                    # result may be (obs, bond_dims) if logging enabled
+                    if isinstance(result, tuple):
+                        obs_results, bond_dims = result
+                    else:
+                        obs_results, bond_dims = result, None
                     for obs_index, observable in enumerate(sim_params.sorted_observables):
                         assert observable.trajectories is not None, "Trajectories should have been initialized"
-                        observable.trajectories[i] = result[obs_index]
+                        observable.trajectories[i] = obs_results[obs_index]
+                    if getattr(sim_params, "log_bond_dims", False) and bond_dims is not None:
+                        if sim_params.bond_dim_trajectories is None:
+                            # allocate on first receipt to correct shape
+                            cols = len(bond_dims)
+                            import numpy as _np
+                            sim_params.bond_dim_trajectories = _np.empty((sim_params.num_traj, cols), dtype=_np.int32)
+                        sim_params.bond_dim_trajectories[i] = bond_dims
                     pbar.update(1)
     else:
         for i, arg in enumerate(args):
             result = backend(arg)
+            if isinstance(result, tuple):
+                obs_results, bond_dims = result
+            else:
+                obs_results, bond_dims = result, None
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
-                observable.trajectories[i] = result[obs_index]
+                observable.trajectories[i] = obs_results[obs_index]
+            if getattr(sim_params, "log_bond_dims", False) and bond_dims is not None:
+                if sim_params.bond_dim_trajectories is None:
+                    cols = len(bond_dims)
+                    import numpy as _np
+                    sim_params.bond_dim_trajectories = _np.empty((sim_params.num_traj, cols), dtype=_np.int32)
+                sim_params.bond_dim_trajectories[i] = bond_dims
 
     sim_params.aggregate_trajectories()
 

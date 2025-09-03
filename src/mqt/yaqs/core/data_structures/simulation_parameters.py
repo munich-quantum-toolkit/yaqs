@@ -416,6 +416,9 @@ class StrongSimParams:
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
+        # Optional logging of per-trajectory bond dimensions across checkpoints
+        self.log_bond_dims: bool = False
+        self.bond_dim_trajectories: NDArray[np.int32] | None = None
 
     def aggregate_trajectories(self) -> None:
         """Aggregate trajectories for result.
