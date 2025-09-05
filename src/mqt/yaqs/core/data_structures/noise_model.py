@@ -372,7 +372,7 @@ class NoiseModel:
         hazard_gain: float = 5.0,       # Λ_target ≈ hazard_gain * sum(γ) for analog group(s)
         hazard_cap: float = 0.25,       # but not above this absolute cap per layer
         # Gaussian discretization settings
-        gauss_M: int = 31,
+        gauss_M: int = 11,
         gauss_k: float = 4.0,           # theta_max = gauss_k * sigma
     ) -> None:
         self.processes: list[dict[str, Any]] = []
