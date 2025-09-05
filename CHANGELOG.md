@@ -9,6 +9,10 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+### Changed
+
+- 🔥 Stop testing on x86 macOS systems ([#175]) ([**@denialhaag**])
+
 ## [0.3.0] - 2025-07-04
 
 _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-toolkit/yaqs/releases) for previous changelogs._
@@ -20,7 +24,11 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#175]: https://github.com/munich-quantum-toolkit/qecc/pull/175
+
 <!-- Contributor -->
+
+[**@denialhaag**]: https://github.com/denialhaag
 
 <!-- General links -->
 
