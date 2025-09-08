@@ -152,12 +152,16 @@ class AnalogSimParams:
         The number of samples to be taken (default is 1000).
     max_bond_dim :
         The maximum bond dimension (default is 2).
+    trunc_mode :
+        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
     threshold :
         The threshold value for the simulation (default is 1e-6).
     order :
         The order of the simulation (default is 1).
     get_state:
         If True, output MPS is returned.
+    how_progress:
+        If True, a progress bar is printed as trajectories finish.
 
     Methods:
     --------
@@ -175,12 +179,14 @@ class AnalogSimParams:
         num_traj: int = 1000,
         max_bond_dim: int = 4096,
         min_bond_dim: int = 2,
+        trunc_mode: str = "discarded_weight",
         threshold: float = 1e-9,
         order: int = 1,
         *,
         sample_timesteps: bool = True,
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
+        show_progress: bool = True,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -200,6 +206,8 @@ class AnalogSimParams:
             Maximum bond dimension allowed, by default 2.
         min_bond_dim:
             The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
+        trunc_mode :
+            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
         threshold :
             Threshold for simulation accuracy, by default 1e-6.
         order :
@@ -210,6 +218,8 @@ class AnalogSimParams:
             Mode of tensor evolution in the simulation, by default EvolutionMode.TDVP.
         get_state :
             If True, output MPS is returned.
+        show_progress:
+            If True, a progress bar is printed as trajectories finish.
         """
         assert all(n.gate.name == "pvm" for n in observables) or all(n.gate.name != "pvm" for n in observables), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -237,10 +247,12 @@ class AnalogSimParams:
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.min_bond_dim = min_bond_dim
+        self.trunc_mode = trunc_mode
         self.threshold = threshold
         self.order = order
         self.evolution_mode = evolution_mode
         self.get_state = get_state
+        self.show_progress = show_progress
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
@@ -272,6 +284,10 @@ class WeakSimParams:
         The number of shots for the simulation.
     max_bond_dim : int
         The maximum bond dimension for the simulation.
+    min_bond_dim:
+        The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
+    trunc_mode :
+        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
     threshold : float
         The threshold value for the simulation.
     window_size : int | None
@@ -280,6 +296,8 @@ class WeakSimParams:
         If True, output MPS is returned.
     sample_layers:
         If True, sample layers.
+    show_progress:
+        If True, a progress bar is printed as trajectories finish.
 
     Methods:
     --------
@@ -299,9 +317,11 @@ class WeakSimParams:
         shots: int,
         max_bond_dim: int = 4096,
         min_bond_dim: int = 2,
+        trunc_mode: str = "discarded_weight",
         threshold: float = 1e-9,
         *,
         get_state: bool = False,
+        show_progress: bool = True,
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -315,17 +335,23 @@ class WeakSimParams:
             Maximum bond dimension for simulation, by default 2.
         min_bond_dim:
             The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
+        trunc_mode:
+            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
         threshold : float, optional
             Accuracy threshold for truncating tensors, by default 1e-6.
         get_state:
             If True, output MPS is returned.
+        show_progress:
+            If True, a progress bar is printed as trajectories finish.
         """
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.min_bond_dim = min_bond_dim
+        self.trunc_mode = trunc_mode
         self.threshold = threshold
         self.get_state = get_state
+        self.show_progress = show_progress
 
     def aggregate_measurements(self) -> None:
         """Aggregates shots into final result.
@@ -374,12 +400,16 @@ class StrongSimParams:
         The maximum bond dimension for the simulation. Default is 2.
     min_bond_dim:
         The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
+    trunc_mode :
+        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
     threshold : float
         The threshold value for the simulation. Default is 1e-6.
     window_size : int or None
         The size of the window for the simulation. Default is None.
     get_state:
         If True, output MPS is returned.
+    show_progress:
+        If True, a progress bar is printed as trajectories finish.
 
     Methods:
     --------
@@ -400,11 +430,13 @@ class StrongSimParams:
         num_traj: int = 1000,
         max_bond_dim: int = 4096,
         min_bond_dim: int = 2,
+        trunc_mode: str = "discarded_weight",
         threshold: float = 1e-9,
         *,
         get_state: bool = False,
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
+        show_progress: bool = True,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -418,10 +450,14 @@ class StrongSimParams:
             Number of trajectories to simulate, by default 1000.
         max_bond_dim : int, optional
             Maximum bond dimension allowed in simulation, by default 2.
+        trunc_mode :
+            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
         threshold : float, optional
             Threshold for simulation accuracy, by default 1e-6.
         get_state:
             If True, output MPS is returned.
+        show_progress:
+            If True, a progress bar is printed as trajectories finish.
         """
         assert all(n.gate.name == "pvm" for n in observables) or all(n.gate.name != "pvm" for n in observables), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -444,10 +480,12 @@ class StrongSimParams:
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.min_bond_dim = min_bond_dim
+        self.trunc_mode = trunc_mode
         self.threshold = threshold
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
+        self.show_progress = show_progress
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.

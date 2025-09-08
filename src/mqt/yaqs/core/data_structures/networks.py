@@ -441,7 +441,7 @@ class MPS:
                 )
         elif decomposition == "SVD":
             a, b = self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1]
-            a_new, b_new = two_site_svd(a, b, threshold=1e-15, max_bond_dim=None)
+            a_new, b_new = two_site_svd(a, b, threshold=1e-12, max_bond_dim=None)
             self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1] = a_new, b_new
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:

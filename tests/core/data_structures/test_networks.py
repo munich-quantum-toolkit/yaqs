@@ -778,14 +778,10 @@ def test_convert_to_vector_fidelity() -> None:
     state = MPS(num_qubits, state="zeros")
 
     # Define the simulation parameters
-    N = 1
-    max_bond_dim = 8
-    threshold = 0
-    window_size = 0
-    measurements = [Observable(Z(), site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
-    noise_model = None
-    simulator.run(state, circ, sim_params, noise_model)
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), site) for site in range(num_qubits)], get_state=True, show_progress=False
+    )
+    simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
     tdvp_state = sim_params.output_state.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
@@ -806,14 +802,10 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     state = MPS(num_qubits, state="zeros")
 
     # Define the simulation parameters
-    N = 1
-    max_bond_dim = 8
-    threshold = 0
-    window_size = 0
-    measurements = [Observable(Z(), site) for site in range(num_qubits)]
-    sim_params = StrongSimParams(measurements, N, max_bond_dim, threshold, window_size, get_state=True)
-    noise_model = None
-    simulator.run(state, circ, sim_params, noise_model)
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), site) for site in range(num_qubits)], get_state=True, show_progress=False
+    )
+    simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
     tdvp_state = sim_params.output_state.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
@@ -1094,7 +1086,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
         Observable(GateLibrary.entropy(), [1, 2]),
         Observable(GateLibrary.schmidt_spectrum(), [1, 2]),
     ]
-    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.0, dt=0.1, num_traj=1)
+    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1, show_progress=False)
 
     results_diag: NDArray[np.object_] = np.empty((len(diagnostics_and_meta), 2), dtype=object)
     mps.evaluate_observables(sim_diag, results_diag, column_index=0)
@@ -1118,7 +1110,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
 
     # ---- PVM ONLY (no mixing) ----
     pvm_only = [Observable(GateLibrary.pvm("0000"), 0)]
-    sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.0, dt=0.1, num_traj=1)
+    sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.1, dt=0.1, show_progress=False)
 
     results_pvm: NDArray[np.object_] = np.empty((len(pvm_only), 1), dtype=object)
     mps.evaluate_observables(sim_pvm, results_pvm, column_index=0)
@@ -1142,7 +1134,7 @@ def test_evaluate_observables_local_ops_and_center_shifts() -> None:
         Observable(GateLibrary.x(), 2),
         Observable(GateLibrary.z(), 3),
     ]
-    sim_params = AnalogSimParams(obs_seq, elapsed_time=0.0, dt=0.1, num_traj=1)
+    sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1, show_progress=False)
 
     results: NDArray[np.object_] = np.empty((len(obs_seq), 3), dtype=object)
     mps.evaluate_observables(sim_params, results, column_index=2)
@@ -1159,14 +1151,16 @@ def test_evaluate_observables_meta_validation_errors() -> None:
     mps = _product_state_mps(4)
 
     # Wrong length (entropy expects exactly two adjacent indices)
-    sim_bad_len = AnalogSimParams([Observable(GateLibrary.entropy(), [1])], elapsed_time=0.0, dt=0.1, num_traj=1)
+    sim_bad_len = AnalogSimParams(
+        [Observable(GateLibrary.entropy(), [1])], elapsed_time=0.1, dt=0.1, show_progress=False
+    )
     results_len: NDArray[np.object_] = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
         mps.evaluate_observables(sim_bad_len, results_len, column_index=0)
 
     # Non-adjacent Schmidt cut
     sim_non_adj = AnalogSimParams(
-        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])], elapsed_time=0.0, dt=0.1, num_traj=1
+        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])], elapsed_time=0.1, dt=0.1, show_progress=False
     )
     results_adj: NDArray[np.object_] = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):

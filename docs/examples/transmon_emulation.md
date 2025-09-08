@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Transmon-Resonator Chain Simulation
+# Transmon-Resonator Chain Emulation
 
 This example demonstrates how to run an analog simulation of a chain consisting of transmon qubits and resonators using YAQS.
 
@@ -30,7 +30,7 @@ resonator_dim = 2
 w_q = 4/(2*np.pi)
 w_r = 4/(2*np.pi)
 alpha = 0
-g = 0.5/(2*np.pi)
+g = 2/(2*np.pi)
 
 H_0 = MPO()
 H_0.init_coupled_transmon(
@@ -71,21 +71,13 @@ noise_model = NoiseModel([
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, AnalogSimParams
 
-elapsed_time = np.pi/(2*g) # T_swap
-dt = elapsed_time/100
-sample_timesteps = True
-num_traj = 1
-max_bond_dim = 2**length
-threshold = 0
-order = 1
+T_swap = np.pi/(2*g)
 
 # Measure all computational basis states
 bitstrings = ["000", "001", "010", "011", "100", "101", "110", "111"]
-measurements = [Observable(bstr) for bstr in bitstrings]
-
 sim_params = AnalogSimParams(
-    measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order,
-    sample_timesteps=sample_timesteps
+    observables=[Observable(bstr) for bstr in bitstrings], elapsed_time=T_swap, dt=T_swap/1000,
+    sample_timesteps=True
 )
 ```
 

@@ -58,16 +58,14 @@ def test_initialize() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
-    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = AnalogSimParams(
-        measurements,
+        observables=[Observable(X(), site) for site in range(L)],
         elapsed_time=0.2,
         dt=0.2,
-        sample_timesteps=False,
         num_traj=1,
         max_bond_dim=2,
-        threshold=1e-6,
-        order=1,
+        sample_timesteps=False,
+        show_progress=False,
     )
     with (
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
@@ -93,16 +91,14 @@ def test_step_through() -> None:
     H.init_ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
-    measurements = [Observable(X(), site) for site in range(L)]
     sim_params = AnalogSimParams(
-        measurements,
+        observables=[Observable(X(), site) for site in range(L)],
         elapsed_time=0.2,
         dt=0.2,
-        sample_timesteps=False,
         num_traj=1,
         max_bond_dim=2,
-        threshold=1e-6,
-        order=1,
+        sample_timesteps=False,
+        show_progress=False,
     )
     with (
         patch("mqt.yaqs.analog.analog_tjm.local_dynamic_tdvp") as mock_dynamic_tdvp,
@@ -131,14 +127,14 @@ def test_analog_tjm_2() -> None:
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = AnalogSimParams(
-        measurements,
+        observables=measurements,
         elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=False,
+        dt=0.2,
         num_traj=1,
-        max_bond_dim=4,
-        threshold=1e-6,
+        max_bond_dim=2,
         order=2,
+        sample_timesteps=False,
+        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_2(args)
@@ -161,14 +157,14 @@ def test_analog_tjm_2_sample_timesteps() -> None:
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = AnalogSimParams(
-        measurements,
+        observables=measurements,
         elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=True,
+        dt=0.2,
         num_traj=1,
-        max_bond_dim=4,
-        threshold=1e-6,
+        max_bond_dim=2,
         order=2,
+        sample_timesteps=True,
+        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_2(args)
@@ -191,14 +187,14 @@ def test_analog_tjm_1() -> None:
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = AnalogSimParams(
-        measurements,
+        observables=measurements,
         elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=False,
+        dt=0.2,
         num_traj=1,
-        max_bond_dim=4,
-        threshold=1e-6,
+        max_bond_dim=2,
         order=1,
+        sample_timesteps=False,
+        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_1(args)
@@ -221,14 +217,14 @@ def test_analog_tjm_1_sample_timesteps() -> None:
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
     sim_params = AnalogSimParams(
-        measurements,
+        observables=measurements,
         elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=True,
+        dt=0.2,
         num_traj=1,
-        max_bond_dim=4,
-        threshold=1e-6,
+        max_bond_dim=2,
         order=1,
+        sample_timesteps=True,
+        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_1(args)
@@ -254,26 +250,21 @@ def test_analog_simulation_twositeprocesses() -> None:
     g = 0.5
     gamma_single = 0.02
     gamma_pair = 0.01
-    T = 1.0
-    dt = 0.05
-    num_traj = 400
 
     # Setup YAQS simulation
     H = MPO()
     H.init_ising(L, J, g)
     state = MPS(L, state="zeros")
-    observables = [Observable(Z(), i) for i in range(L)]
+
     sim_params = AnalogSimParams(
-        observables=observables,
-        elapsed_time=T,
-        dt=dt,
-        num_traj=num_traj,
-        max_bond_dim=64,
-        min_bond_dim=2,
-        threshold=1e-10,
+        observables=[Observable(Z(), site) for site in range(L)],
+        elapsed_time=1,
+        dt=0.05,
+        num_traj=100,
+        max_bond_dim=8,
         order=2,
         sample_timesteps=True,
-        get_state=False,
+        show_progress=False,
     )
 
     # Setup noise model with single-site and two-site crosstalk processes
@@ -359,7 +350,7 @@ def test_analog_simulation_twositeprocesses() -> None:
 
     # Collect YAQS results
     yaqs_results = np.zeros((L, len(sim_params.times)))
-    for _idx, obs in enumerate(sim_params.sorted_observables):
+    for _, obs in enumerate(sim_params.sorted_observables):
         site = obs.sites if isinstance(obs.sites, int) else obs.sites[0]
         yaqs_results[site, :] = obs.results
 
@@ -390,18 +381,15 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
     H = MPO()
     H.init_ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
-    observables = [Observable(Z(), i) for i in range(L)]
     sim_params = AnalogSimParams(
-        observables=observables,
-        elapsed_time=1.0,
+        observables=[Observable(Z(), site) for site in range(L)],
+        elapsed_time=1,
         dt=0.05,
-        num_traj=200,
-        max_bond_dim=64,
-        min_bond_dim=2,
-        threshold=1e-10,
+        num_traj=100,
+        max_bond_dim=8,
         order=2,
         sample_timesteps=True,
-        get_state=False,
+        show_progress=False,
     )
 
     gamma_single = 0.02
@@ -416,7 +404,7 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
 
     # Collect YAQS results per site (site-major layout)
     yaqs_results = np.zeros((L, len(sim_params.times)))
-    for _idx, obs in enumerate(sim_params.sorted_observables):
+    for _, obs in enumerate(sim_params.sorted_observables):
         site = obs.sites if isinstance(obs.sites, int) else obs.sites[0]
         yaqs_results[site, :] = obs.results
 

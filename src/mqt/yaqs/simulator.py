@@ -278,6 +278,7 @@ def _run_backend_parallel(
     args: Sequence[TArg],
     *,
     max_workers: int,
+    show_progress: bool = True,
     desc: str,
     total: int | None = None,
     max_retries: int = 10,
@@ -293,6 +294,7 @@ def _run_backend_parallel(
         backend : The backend function to call.
         args: Sequence of argument objects, one per job.
         max_workers: Maximum number of worker processes.
+        show_progress: Whether to show a progress bar.
         desc: Description to display in the tqdm progress bar.
         total: Expected total jobs for progress bar.
             Defaults to ``len(args)`` if None.
@@ -326,7 +328,7 @@ def _run_backend_parallel(
             initializer=_limit_worker_threads,
             initargs=(1,),  # enforce 1 thread per worker
         ) as ex,
-        tqdm(total=total, desc=desc, ncols=80) as pbar,
+        tqdm(total=total, desc=desc, ncols=80, disable=show_progress) as pbar,
     ):
         # Retry bookkeeping per index
         retries = dict.fromkeys(range(len(args)), 0)
@@ -509,6 +511,10 @@ def _run_weak_sim(
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg)
             sim_params.measurements[i] = result
+
+    # Reset shots back from trajectories
+    if not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes)):
+        sim_params.shots = sim_params.num_traj
 
     # Aggregate individual measurements into the requested statistics/histograms
     sim_params.aggregate_measurements()
