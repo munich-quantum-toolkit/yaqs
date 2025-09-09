@@ -46,8 +46,8 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 gamma = 0.1
 noise_model = NoiseModel([
-      {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["lowering", "pauli_z"]
-  ])
+    {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["lowering", "pauli_z"]
+])
 ```
 
 Define the simulation parameters
@@ -57,7 +57,16 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Anal
 
 from mqt.yaqs.core.libraries.gate_library import X
 
-sim_params = AnalogSimParams(observables=[Observable(X(), site) for site in range(L)], elapsed_time=10, dt=0.1, num_traj=100, max_bond_dim=4, threshold=1e-6, order=2, sample_timesteps=True)
+sim_params = AnalogSimParams(
+    observables=[Observable(X(), site) for site in range(L)],
+    elapsed_time=10,
+    dt=0.1,
+    num_traj=100,
+    max_bond_dim=4,
+    threshold=1e-6,
+    order=2,
+    sample_timesteps=True,
+)
 ```
 
 Run the simulation
@@ -65,6 +74,8 @@ Run the simulation
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
+mystnb:
+  execution_timeout: 600
 ---
 from mqt.yaqs import simulator
 
