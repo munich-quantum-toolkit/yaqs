@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Removed
 
-- 🔥 Drop support for Python 3.9 ([#176]) ([**@denialhaag**])
+- 🔥 Drop support for Python 3.9 ([#180]) ([**@denialhaag**])
 - 🔥 Stop testing on x86 macOS systems ([#175]) ([**@denialhaag**])
 
 ## [0.3.0] - 2025-07-04
@@ -25,7 +25,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
-[#176]: https://github.com/munich-quantum-toolkit/qecc/pull/176
+[#180]: https://github.com/munich-quantum-toolkit/qecc/pull/180
 [#175]: https://github.com/munich-quantum-toolkit/qecc/pull/175
 
 <!-- Contributor -->
