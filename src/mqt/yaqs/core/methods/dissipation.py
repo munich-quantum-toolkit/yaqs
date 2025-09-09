@@ -15,8 +15,7 @@ noise strengths are zero, the MPS is simply shifted to its canonical form.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
@@ -28,6 +27,42 @@ if TYPE_CHECKING:
     from ..data_structures.networks import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+
+
+def is_adjacent(proc: dict[str, Any]) -> bool:
+    """Return True if the two-site process targets nearest neighbors.
+
+    Assumes the process is two-site and checks |i-j| == 1.
+    """
+    s = proc["sites"]
+    return bool(abs(s[1] - s[0]) == 1)
+
+
+def is_longrange(proc: dict[str, Any]) -> bool:
+    """Return True if the two-site process is long-range (non-neighbor)."""
+    s = proc["sites"]
+    return bool(abs(s[1] - s[0]) > 1)
+
+
+def is_pauli(proc: dict[str, Any]) -> bool:
+    """Return True if the process is a Pauli process."""
+    return bool(
+        proc["name"]
+        in {
+            "pauli_x",
+            "pauli_y",
+            "pauli_z",
+            "crosstalk_xx",
+            "crosstalk_yy",
+            "crosstalk_zz",
+            "crosstalk_xy",
+            "crosstalk_yx",
+            "crosstalk_zy",
+            "crosstalk_zx",
+            "crosstalk_yz",
+            "crosstalk_xz",
+        }
+    )
 
 
 def apply_dissipation(
@@ -64,47 +99,52 @@ def apply_dissipation(
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
         return
 
-    # Prepare: For each bond, collect all 2-site processes acting on that bond
-    two_site_on_bond = defaultdict(list)
-    for process in noise_model.processes:
-        if len(process["sites"]) == 2:
-            bond = tuple(sorted(process["sites"]))  # e.g. (i-1, i)
-            two_site_on_bond[bond].append(process)
-
     for i in reversed(range(state.length)):
         # 1. Apply all 1-site dissipators on site i
         for process in noise_model.processes:
             if len(process["sites"]) == 1 and process["sites"][0] == i:
                 gamma = process["strength"]
-                jump_op_mat = process["matrix"]
-                mat = np.conj(jump_op_mat).T @ jump_op_mat
-                dissipative_op = expm(-0.5 * dt * gamma * mat)
-                state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
+                if is_pauli(process):
+                    dissipative_factor = np.exp(-0.5 * dt * gamma)
+                    state.tensors[i] *= dissipative_factor
+                else:
+                    jump_op_mat = process["matrix"]
+                    mat = np.conj(jump_op_mat).T @ jump_op_mat
+                    dissipative_op = expm(-0.5 * dt * gamma * mat)
+                    state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
 
-            bond = (i - 1, i)
-            processes_here = two_site_on_bond.get(bond, [])
-
+            processes_here = [
+                process for process in noise_model.processes if len(process["sites"]) == 2 and process["sites"][1] == i
+            ]
         # 2. Apply all 2-site dissipators acting on sites (i-1, i)
         if i != 0:
             for process in processes_here:
                 gamma = process["strength"]
-                jump_op_mat = process["matrix"]
-                mat = np.conj(jump_op_mat).T @ jump_op_mat
-                dissipative_op = expm(-0.5 * dt * gamma * mat)
+                if is_pauli(process):
+                    dissipative_factor = np.exp(-0.5 * dt * gamma)
+                    state.tensors[i] *= dissipative_factor
 
-                merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
-                merged_tensor = oe.contract("ab, bcd->acd", dissipative_op, merged_tensor)
+                elif is_longrange(process):
+                    msg = "Non-Pauli Long-range processes are not implemented yet"
+                    raise NotImplementedError(msg)
+                else:
+                    jump_op_mat = process["matrix"]
+                    mat = np.conj(jump_op_mat).T @ jump_op_mat
+                    dissipative_op = expm(-0.5 * dt * gamma * mat)
 
-                # singular values always contracted right
-                # since ortho center is shifted to the left after loop
-                tensor_left, tensor_right = split_mps_tensor(
-                    merged_tensor,
-                    "right",
-                    sim_params,
-                    [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
-                    dynamic=False,
-                )
-                state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
+                    merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
+                    merged_tensor = oe.contract("ab, bcd->acd", dissipative_op, merged_tensor)
+
+                    # singular values always contracted right
+                    # since ortho center is shifted to the left after loop
+                    tensor_left, tensor_right = split_mps_tensor(
+                        merged_tensor,
+                        "right",
+                        sim_params,
+                        [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
+                        dynamic=False,
+                    )
+                    state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
 
         # Shift orthogonality center
         if i != 0:

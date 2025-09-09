@@ -216,6 +216,8 @@ class NoiseLibrary:
         crosstalk_zx: Cross talk between neighboring sites with Z x X.
         crosstalk_yz: Cross talk between neighboring sites with Y x Z.
         crosstalk_xz: Cross talk between neighboring sites with X x Z.
+        Note: Long-range crosstalk is handled by NoiseModel by attaching per-site
+        factors for non-adjacent pairs based on the process name (e.g., 'crosstalk_xy').
     """
 
     # Canonical names

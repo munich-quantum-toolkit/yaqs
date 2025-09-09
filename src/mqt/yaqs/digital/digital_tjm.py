@@ -50,14 +50,12 @@ def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site
     Returns:
         NoiseModel: The local noise model.
     """
-    gate_sites = [[i] for i in range(first_site, last_site + 1)]
-    neighbor_pairs = [[i, i + 1] for i in range(first_site, last_site)]
-    noise_model_copy = copy.deepcopy(noise_model)
+    affected_sites = [first_site, last_site]
 
     local_processes = [
         process
-        for process in noise_model_copy.processes
-        if process["sites"] in neighbor_pairs or process["sites"] in gate_sites
+        for process in noise_model.processes
+        if process["sites"] == affected_sites or process["sites"] == [first_site] or process["sites"] == [last_site]
     ]
     return NoiseModel(local_processes)
 
