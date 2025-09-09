@@ -152,7 +152,7 @@ def test_stochastic_process_no_jump() -> None:
     # Should still be the same type
     assert isinstance(new_state, MPS)
     # Should not modify tensors (deepcopy not strictly guaranteed but should be unchanged)
-    for a, b in zip(new_state.tensors, state.tensors):
+    for a, b in zip(new_state.tensors, state.tensors, strict=False):
         np.testing.assert_allclose(a, b)
 
 
@@ -174,7 +174,7 @@ def test_stochastic_process_jump() -> None:
     # Should still be the same type
     assert isinstance(new_state, MPS)
     # Check that at least one tensor changed (jump applied)
-    different = any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors))
+    different = any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
     assert different, "At least one tensor should have changed after jump."
 
 

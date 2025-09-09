@@ -14,7 +14,7 @@ maintainers = [
   { name="Lukas Burgholzer", email = "burgholzer@me.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -25,7 +25,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -77,9 +76,6 @@ addopts = [
 xfail_strict = true
 filterwarnings = [
     "error",
-    # Qiskit 2.1 starts to warn about the upcoming Python 3.9 removal in Qiskit 2.3.
-    # We will drop 3.9 support around the same time, at which point this warning filter can be removed
-    'ignore:.*Using Qiskit with Python 3.9 is deprecated as of the 2.1.0 release.*:DeprecationWarning:',
 ]
 log_cli_level = "INFO"
 testpaths = ["tests"]
@@ -102,7 +98,7 @@ run.disable_warnings = [
 [tool.mypy]
 files = ["src/mqt", "tests", "noxfile.py"]
 mypy_path = ["$MYPY_CONFIG_FILE_DIR/src"]
-python_version = "3.9"
+python_version = "3.10"
 warn_unused_configs = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 strict = true
@@ -180,8 +176,7 @@ docs = [
     "sphinxcontrib-svg2pdfconverter>=1.3.0",
     "sphinxext-opengraph>=0.9.1",
     "qiskit[visualization]>=1.0.0",
-    "sphinx>=7.4.7",
-    "sphinx>=8.1.3; python_version >= '3.10'",
+    "sphinx>=8.1.3",
     "sphinx>=8.2.3; python_version >= '3.11'",
 ]
 test = [
