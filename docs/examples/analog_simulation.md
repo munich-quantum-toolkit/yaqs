@@ -24,7 +24,7 @@ Define the system Hamiltonian
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.networks import MPO
 
-L = 10
+L = 5
 J = 1
 g = 0.5
 H_0 = MPO()
