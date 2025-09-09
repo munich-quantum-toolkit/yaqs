@@ -141,7 +141,7 @@ def available_cpus() -> int:
 
     # 2) Respect Linux affinity / cgroup limits if available
     try:
-        return len(os.sched_getaffinity(0)) 
+        return len(os.sched_getaffinity(0))
     except AttributeError:
         pass
 
