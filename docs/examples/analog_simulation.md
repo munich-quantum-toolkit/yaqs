@@ -4,7 +4,7 @@ kernelspec:
   name: python3
 mystnb:
   number_source_lines: true
-  execution_timeout: 300
+  execution_timeout: 600
 ---
 
 ```{code-cell} ipython3
@@ -74,8 +74,6 @@ Run the simulation
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
-mystnb:
-  execution_timeout: 600
 ---
 from mqt.yaqs import simulator
 
