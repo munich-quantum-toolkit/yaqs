@@ -4,7 +4,7 @@ kernelspec:
   name: python3
 mystnb:
   number_source_lines: true
-  execution_timeout: 600
+  execution_timeout: 300
 ---
 
 ```{code-cell} ipython3
@@ -54,7 +54,6 @@ Define the simulation parameters
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, AnalogSimParams
-
 from mqt.yaqs.core.libraries.gate_library import X
 
 sim_params = AnalogSimParams(
@@ -94,7 +93,7 @@ import matplotlib.pyplot as plt
 heatmap = [observable.results for observable in sim_params.observables]
 
 fig, ax = plt.subplots(1, 1)
-im = plt.imshow(heatmap, aspect="auto", extent=(0, elapsed_time, L, 0), vmin=0, vmax=0.5)
+im = plt.imshow(heatmap, aspect="auto", extent=(0, 10, L, 0), vmin=0, vmax=0.5)
 plt.xlabel("Site")
 plt.yticks([x - 0.5 for x in list(range(1, L + 1))], [str(x) for x in range(1, L + 1)])
 plt.ylabel("t")
