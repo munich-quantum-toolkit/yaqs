@@ -9,7 +9,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
-### Changed
+### Removed
 
 - 🔥 Drop support for Python 3.9 ([#176]) ([**@denialhaag**])
 - 🔥 Stop testing on x86 macOS systems ([#175]) ([**@denialhaag**])
