@@ -112,8 +112,8 @@ class Observable:
                 self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=np.float64)
                 self.times = sim_params.times
             else:
-                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=object)
-                self.times = sim_params.elapsed_time
+                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
+                self.times = np.asarray(sim_params.elapsed_time, dtype=np.float64)
             self.results = np.empty(len(sim_params.times), dtype=np.float64)
         elif isinstance(sim_params, WeakSimParams):
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
@@ -268,6 +268,7 @@ class AnalogSimParams:
                 all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
                 observable.results = np.concatenate(all_values)
             else:
+                assert observable.trajectories is not None
                 observable.results = np.mean(observable.trajectories, axis=0)
 
 
@@ -501,4 +502,5 @@ class StrongSimParams:
                 all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
                 observable.results = np.concatenate(all_values)
             else:
+                assert observable.trajectories is not None
                 observable.results = np.mean(observable.trajectories, axis=0)

@@ -24,16 +24,14 @@ from typing import TYPE_CHECKING
 from qiskit.converters import dag_to_circuit
 from qiskit.dagcircuit import DAGOpNode
 
-from ...core.libraries.gate_library import GateLibrary
+from ...core.libraries.gate_library import BaseGate, GateLibrary
 
 if TYPE_CHECKING:
-    import numpy as np
-    from numpy.typing import NDArray
     from qiskit.circuit import Qubit
     from qiskit.dagcircuit import DAGCircuit
 
 
-def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[NDArray[np.complex128]]:
+def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
     """Convert a DAGCircuit into a list of gate objects from the GateLibrary.
 
     This function traverses the input DAGCircuit (or a single DAGOpNode) and creates a list of gate objects.
@@ -41,10 +39,10 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[NDArray[np.complex1
     parameters if present, and assigns the qubit indices (sites) on which the gate acts.
 
     Args:
-        dag (DAGCircuit or DAGOpNode): The DAGCircuit (or a single DAGOpNode) representing a quantum operation.
+        dag: The DAGCircuit (or a single DAGOpNode) representing a quantum operation.
 
     Returns:
-        list[NDArray[np.complex128]]: A list of gate objects, each with attributes such as .tensor and .sites.
+        A list of gate objects, each with attributes such as .tensor and .sites.
     """
     algorithm = []
 

@@ -611,9 +611,17 @@ def test_two_site_correlator_left_boundary() -> None:
         0.98467569,
     ])
 
-    np.testing.assert_allclose(sim_params.observables[0].results, expected_xx, atol=1e-3)
-    np.testing.assert_allclose(sim_params.observables[1].results, expected_yy, atol=1e-3)
-    np.testing.assert_allclose(sim_params.observables[2].results, expected_zz, atol=1e-3)
+    results_xx = sim_params.observables[0].results
+    assert results_xx is not None
+    np.testing.assert_allclose(results_xx, expected_xx, atol=1e-3)
+
+    results_yy = sim_params.observables[1].results
+    assert results_yy is not None
+    np.testing.assert_allclose(results_yy, expected_yy, atol=1e-3)
+
+    results_zz = sim_params.observables[2].results
+    assert results_zz is not None
+    np.testing.assert_allclose(results_zz, expected_zz, atol=1e-3)
 
 
 def test_two_site_correlator_center() -> None:
@@ -778,9 +786,17 @@ def test_two_site_correlator_center() -> None:
         0.99155592,
     ])
 
-    np.testing.assert_allclose(sim_params.observables[0].results, expected_xx, atol=1e-3)
-    np.testing.assert_allclose(sim_params.observables[1].results, expected_yy, atol=1e-3)
-    np.testing.assert_allclose(sim_params.observables[2].results, expected_zz, atol=1e-3)
+    results_xx = sim_params.observables[0].results
+    assert results_xx is not None
+    np.testing.assert_allclose(results_xx, expected_xx, atol=1e-3)
+
+    results_yy = sim_params.observables[1].results
+    assert results_yy is not None
+    np.testing.assert_allclose(results_yy, expected_yy, atol=1e-3)
+
+    results_zz = sim_params.observables[2].results
+    assert results_zz is not None
+    np.testing.assert_allclose(results_zz, expected_zz, atol=1e-3)
 
 
 def test_two_site_correlator_right_boundary() -> None:
@@ -944,9 +960,17 @@ def test_two_site_correlator_right_boundary() -> None:
         0.98467569,
     ])
 
-    np.testing.assert_allclose(sim_params.observables[0].results, expected_xx, atol=1e-3)
-    np.testing.assert_allclose(sim_params.observables[1].results, expected_yy, atol=1e-3)
-    np.testing.assert_allclose(sim_params.observables[2].results, expected_zz, atol=1e-3)
+    results_xx = sim_params.observables[0].results
+    assert results_xx is not None
+    np.testing.assert_allclose(results_xx, expected_xx, atol=1e-3)
+
+    results_yy = sim_params.observables[1].results
+    assert results_yy is not None
+    np.testing.assert_allclose(results_yy, expected_yy, atol=1e-3)
+
+    results_zz = sim_params.observables[2].results
+    assert results_zz is not None
+    np.testing.assert_allclose(results_zz, expected_zz, atol=1e-3)
 
 
 def test_two_site_correlator_center_circuit() -> None:
@@ -975,14 +999,20 @@ def test_two_site_correlator_center_circuit() -> None:
 
     # Expected results from qutip
     expected_xx = np.array([1.63020588e-02])
-
     expected_yy = np.array([-0.0091608])
-
     expected_zz = np.array([0.99155592])
 
-    np.testing.assert_allclose(sim_params.observables[0].results, expected_xx, atol=2e-3)
-    np.testing.assert_allclose(sim_params.observables[1].results, expected_yy, atol=2e-3)
-    np.testing.assert_allclose(sim_params.observables[2].results, expected_zz, atol=2e-3)
+    results_xx = sim_params.observables[0].results
+    assert results_xx is not None
+    np.testing.assert_allclose(results_xx, expected_xx, atol=2e-3)
+
+    results_yy = sim_params.observables[1].results
+    assert results_yy is not None
+    np.testing.assert_allclose(results_yy, expected_yy, atol=2e-3)
+
+    results_zz = sim_params.observables[2].results
+    assert results_zz is not None
+    np.testing.assert_allclose(results_zz, expected_zz, atol=2e-3)
 
 
 def test_transmon_simulation() -> None:

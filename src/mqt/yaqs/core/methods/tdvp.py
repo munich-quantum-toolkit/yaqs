@@ -148,7 +148,7 @@ def merge_mps_tensors(
         NDArray[np.complex128]: The merged MPS tensor.
     """
     # Contract over the common bond (index 2 in A0 and index 0 in A1) using specified contraction pattern.
-    merged_tensor = oe.contract("abc,dce->adbe", left_tensor, right_tensor)
+    merged_tensor = np.asarray(oe.contract("abc,dce->adbe", left_tensor, right_tensor), dtype=np.complex128)
     merged_shape = merged_tensor.shape
     # Reshape to combine the two physical dimensions.
     return merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
@@ -169,7 +169,9 @@ def merge_mpo_tensors(
     Returns:
         NDArray[np.complex128]: The merged MPO tensor.
     """
-    merged_tensor = oe.contract("acei,bdif->abcdef", left_tensor, right_tensor, optimize=True)
+    merged_tensor = np.asarray(
+        oe.contract("acei,bdif->abcdef", left_tensor, right_tensor, optimize=True), dtype=np.complex128
+    )
     dims = merged_tensor.shape
     return merged_tensor.reshape((dims[0] * dims[1], dims[2] * dims[3], dims[4], dims[5]))
 
@@ -255,7 +257,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
         msg = "The lengths of the state and the operator must match."
         raise ValueError(msg)
 
-    right_blocks = [None for _ in range(num_sites)]
+    right_blocks = np.empty(num_sites, dtype=object)
     right_virtual_dim = psi.tensors[num_sites - 1].shape[2]
     mpo_right_dim = op.tensors[num_sites - 1].shape[3]
     right_identity = np.zeros((right_virtual_dim, mpo_right_dim, right_virtual_dim), dtype=complex)
@@ -294,7 +296,7 @@ def project_site(
     tensor = np.tensordot(ket, right_env, axes=1)
     tensor = np.tensordot(op, tensor, axes=((1, 3), (0, 2)))
     tensor = np.tensordot(tensor, left_env, axes=((2, 1), (0, 1)))
-    return tensor.transpose((0, 2, 1))
+    return np.asarray(tensor.transpose((0, 2, 1)), dtype=np.complex128)
 
 
 def project_bond(
@@ -413,7 +415,7 @@ def single_site_tdvp(
 
     right_blocks = initialize_right_environments(state, hamiltonian)
 
-    left_blocks = [None for _ in range(num_sites)]
+    left_blocks = np.empty(num_sites, dtype=object)
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -529,7 +531,7 @@ def two_site_tdvp(
 
     right_blocks = initialize_right_environments(state, hamiltonian)
 
-    left_blocks = [None for _ in range(num_sites)]
+    left_blocks = np.empty(num_sites, dtype=object)
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -656,7 +658,7 @@ def local_dynamic_tdvp(
 
     # Prepare environments
     right_blocks = initialize_right_environments(state, hamiltonian)
-    left_blocks = [None] * num_sites
+    left_blocks = np.empty(num_sites, dtype=object)
     # build identity for left_blocks[0]
     chi0 = state.tensors[0].shape[1]
     mpo_dim = hamiltonian.tensors[0].shape[2]

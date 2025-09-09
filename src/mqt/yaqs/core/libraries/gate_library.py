@@ -85,7 +85,7 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArra
         mpo_tensors = [tensors[0]]
         for _ in range(np.abs(sites[0] - sites[1]) - 1):
             previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
+            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
             for i in range(previous_right_bond):
                 identity_tensor[:, :, i, i] = np.identity(2)
             mpo_tensors.append(identity_tensor)
@@ -100,16 +100,16 @@ def extend_gate(tensor: NDArray[np.complex128], sites: list[int]) -> list[NDArra
         mpo_tensors = [tensors[0]]
         for _ in range(np.abs(sites[0] - sites[1]) - 1):
             previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
+            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
             for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2)
+                identity_tensor[:, :, i, i] = np.identity(2, dtype=np.complex128)
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[1])
         for _ in range(np.abs(sites[1] - sites[2]) - 1):
             previous_right_bond = mpo_tensors[-1].shape[3]
-            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond))
+            identity_tensor = np.zeros((2, 2, previous_right_bond, previous_right_bond), dtype=np.complex128)
             for i in range(previous_right_bond):
-                identity_tensor[:, :, i, i] = np.identity(2)
+                identity_tensor[:, :, i, i] = np.identity(2, dtype=np.complex128)
             mpo_tensors.append(identity_tensor)
         mpo_tensors.append(tensors[2])
 
@@ -779,7 +779,7 @@ class SX(BaseGate):
 
     def __init__(self) -> None:
         """Initializes the square-root X gate."""
-        mat = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]])
+        mat = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]], dtype=np.complex128)
         super().__init__(mat)
 
 
@@ -1027,8 +1027,11 @@ class CX(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        # Generator: π/4 (I-Z ⊗ I-X)
-        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
+        # Generator: π / 4 * ((I - Z) ⊗ (I - X))
+        self.generator = [
+            (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
+            np.array([[1, -1], [-1, 1]], dtype=np.complex128),
+        ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
         if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
@@ -1079,8 +1082,11 @@ class CZ(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        # Generator: π/4 (I-Z ⊗ I-Z)
-        self.generator = [(np.pi / 4) * np.array([[0, 0], [0, 2]]), np.array([[1, -1], [-1, 1]])]
+        # Generator: π/4 * ((I - Z) ⊗ (I - X))
+        self.generator = [
+            (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
+            np.array([[1, -1], [-1, 1]], dtype=np.complex128),
+        ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
         if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
             self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
@@ -1396,8 +1402,8 @@ class XX(BaseGate):
     def __init__(self) -> None:
         """Initializes the XX gate."""
         x = X().matrix
-        # two-site operator X⊗X
-        mat = np.kron(x, x)
+        # two-site operator X ⊗ X
+        mat = np.kron(x, x).astype(np.complex128)
         super().__init__(mat)
 
 
@@ -1422,8 +1428,8 @@ class YY(BaseGate):
     def __init__(self) -> None:
         """Initializes the YY gate."""
         y = Y().matrix
-        # two-site operator Y⊗Y
-        mat = np.kron(y, y)
+        # two-site operator Y ⊗ Y
+        mat = np.kron(y, y).astype(np.complex128)
         super().__init__(mat)
 
 
@@ -1448,8 +1454,8 @@ class ZZ(BaseGate):
     def __init__(self) -> None:
         """Initializes the ZZ gate."""
         z = Z().matrix
-        # two-site operator Z⊗Z
-        mat = np.kron(z, z)
+        # two-site operator Z ⊗ Z
+        mat = np.kron(z, z).astype(np.complex128)
         super().__init__(mat)
 
 

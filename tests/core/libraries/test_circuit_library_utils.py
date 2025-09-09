@@ -35,17 +35,17 @@ from mqt.yaqs.core.libraries.circuit_library_utils import (
 def test_extract_u_parameters_invalid_shape() -> None:
     """extract_u_parameters must reject non-2x2 inputs."""
     with pytest.raises(AssertionError):
-        extract_u_parameters(np.eye(3))
+        extract_u_parameters(np.eye(3, dtype=np.complex128))
 
 
 def test_extract_u_parameters_identity() -> None:
     """extract_u_parameters on I or -I returns (0,0,0)."""
-    theta, phi, lam = extract_u_parameters(np.eye(2))
+    theta, phi, lam = extract_u_parameters(np.eye(2, dtype=np.complex128))
     assert theta == pytest.approx(0.0)
     assert phi == pytest.approx(0.0)
     assert lam == pytest.approx(0.0)
 
-    theta, phi, lam = extract_u_parameters(-np.eye(2))
+    theta, phi, lam = extract_u_parameters(-np.eye(2, dtype=np.complex128))
     assert theta == pytest.approx(0.0)
     assert phi == pytest.approx(0.0)
     assert lam == pytest.approx(0.0)
