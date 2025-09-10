@@ -369,8 +369,8 @@ class NoiseModel:
         processes: list[dict[str, Any]] | None = None,
         *,
         # Hazard policy: relative boost with a cap (good defaults)
-        hazard_gain: float = 5.0,       # Λ_target ≈ hazard_gain * sum(γ) for analog group(s)
-        hazard_cap: float = 0.25,       # but not above this absolute cap per layer
+        hazard_gain: float = 3.0,       # Λ_target ≈ hazard_gain * sum(γ) for analog group(s)
+        hazard_cap: float = 0.0,       # but not above this absolute cap per layer
         # Gaussian discretization settings
         gauss_M: int = 11,
         gauss_k: float = 4.0,           # theta_max = gauss_k * sigma
