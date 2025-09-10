@@ -328,7 +328,7 @@ def _run_backend_parallel(
             initializer=_limit_worker_threads,
             initargs=(1,),  # enforce 1 thread per worker
         ) as ex,
-        tqdm(total=total, desc=desc, ncols=80, disable=show_progress) as pbar,
+        tqdm(total=total, desc=desc, ncols=80, disable=not show_progress) as pbar,
     ):
         # Retry bookkeeping per index
         retries = dict.fromkeys(range(len(args)), 0)
