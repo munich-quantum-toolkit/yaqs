@@ -4,7 +4,7 @@ kernelspec:
   name: python3
 mystnb:
   number_source_lines: true
-  execution_timeout: 600
+  execution_timeout: 300
 ---
 
 ```{code-cell} ipython3
@@ -24,7 +24,7 @@ Define the system Hamiltonian
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.networks import MPO
 
-L = 5
+L = 3
 J = 1
 g = 0.5
 H_0 = MPO()
