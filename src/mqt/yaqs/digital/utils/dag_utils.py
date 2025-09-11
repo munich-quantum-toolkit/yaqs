@@ -24,11 +24,13 @@ from typing import TYPE_CHECKING
 from qiskit.converters import dag_to_circuit
 from qiskit.dagcircuit import DAGOpNode
 
-from ...core.libraries.gate_library import BaseGate, GateLibrary
+from ...core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
     from qiskit.circuit import Qubit
     from qiskit.dagcircuit import DAGCircuit
+
+    from ...core.libraries.gate_library import BaseGate
 
 
 def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:

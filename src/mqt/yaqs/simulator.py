@@ -51,7 +51,6 @@ import multiprocessing
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
-    Future,
     ProcessPoolExecutor,
     wait,
 )
@@ -96,6 +95,9 @@ from .digital.digital_tjm import digital_tjm
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
+    from concurrent.futures import (
+        Future,
+    )
 
     import numpy as np
     from numpy.typing import NDArray
@@ -141,7 +143,7 @@ def available_cpus() -> int:
 
     # 2) Respect Linux affinity / cgroup limits if available
     try:
-        return len(os.sched_getaffinity(0))
+        return len(os.sched_getaffinity(0))  # type: ignore [attr-defined]
     except AttributeError:
         pass
 

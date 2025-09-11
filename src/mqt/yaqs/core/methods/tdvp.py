@@ -25,13 +25,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
-from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..data_structures.networks import MPO, MPS
+    from ..data_structures.simulation_parameters import AnalogSimParams
 
 
 def split_mps_tensor(
