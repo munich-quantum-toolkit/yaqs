@@ -74,7 +74,7 @@ To support this endeavor, please consider:
 
 ## Getting Started
 
-`mqt.yaqs` is available via [PyPI](https://pypi.org/project/mqt.problemsolver/).
+`mqt.yaqs` is available via [PyPI](https://pypi.org/project/mqt.yaqs/).
 
 ```console
 (.venv) $ pip install mqt.yaqs
