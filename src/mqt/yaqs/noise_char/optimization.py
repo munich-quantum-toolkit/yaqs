@@ -128,7 +128,12 @@ class LossClass:
 
         self.d = len(self.traj_gradients.input_noise_model.processes)
 
+        self.t = copy.deepcopy(self.traj_gradients.sim_params.times)
+
         self.set_work_dir(path=working_dir)
+
+        self.write_traj(obs_array = self.ref_traj_array, output_file = self.work_dir / "ref_traj.txt")
+
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -183,7 +188,7 @@ class LossClass:
         self.compute_avg()
         self.compute_diff_avg()
 
-        self.write_opt_traj()
+        self.write_traj(obs_array = self.obs_array, output_file = self.work_dir / f"opt_traj_{self.n_eval}.txt")
 
         if self.print_to_file:
             self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1], self.grad_history[-1])
@@ -246,6 +251,9 @@ class LossClass:
             - Sets file names for history and average history logs.
         """
         self.work_dir: Path = Path(path)
+
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+
         self.history_file_name = self.work_dir / "loss_x_history.txt"
         self.history_avg_file_name = self.work_dir / "loss_x_history_avg.txt"
 
@@ -297,7 +305,7 @@ class LossClass:
                     + "\n"
                 )
 
-    def write_opt_traj(self) -> None:
+    def write_traj(self, obs_array: np.array, output_file: Path) -> None:
         """Saves the optimized trajectory of expectation values to a text file.
 
         This method reshapes the `exp_vals_traj` array, concatenates the time array `self.t` as the first row,
@@ -316,13 +324,13 @@ class LossClass:
         File saved:
             {work_dir}/opt_traj_{n_eval}.txt.
         """
-        n_obs, _n_t = self.obs_array.shape
-        exp_vals_traj_with_t = np.concatenate([np.array([self.t]), self.obs_array], axis=0)
+        n_obs, _n_t = np.shape(obs_array)
+        exp_vals_traj_with_t = np.concatenate([np.array([self.t]), obs_array], axis=0)
 
         header = "t  " + "  ".join(["obs_" + str(i) for i in range(n_obs)])
-        output_file = self.work_dir / f"opt_traj_{self.n_eval}.txt"
 
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
+
 
     def x_to_noise_model(self, x: np.ndarray) -> NoiseModel:
         """Converts the optimization variable x to a NoiseModel instance."""
@@ -372,8 +380,6 @@ class LossClass:
         start_time = time.time()
 
         self.traj_gradients.run(noise_model)
-
-        self.t = copy.deepcopy(self.traj_gradients.times)
 
         self.obs_array = copy.deepcopy(self.traj_gradients.obs_array)
 
