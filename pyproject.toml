@@ -71,8 +71,7 @@ minversion = "7.2"
 addopts = [
     "-ra",
     "--strict-markers",
-    "--strict-config",
-    "--numprocesses=auto", # Automatically use all available CPU cores for parallel testing
+    "--strict-config"
 ]
 xfail_strict = true
 filterwarnings = [
