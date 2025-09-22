@@ -190,6 +190,7 @@ class LossClass:
 
         self.write_traj(obs_array = self.obs_array, output_file = self.work_dir / f"opt_traj_{self.n_eval}.txt")
 
+        print(f"post_process: n_eval = {self.n_eval} x = {self.x_history[-1]} loss = {self.f_history[-1]}")
         if self.print_to_file:
             self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1], self.grad_history[-1])
             self.write_to_file(
@@ -276,8 +277,8 @@ class LossClass:
             The method only writes to the file if `self.print_to_file` is True.
         """
         if self.print_to_file:
-            if not self.history_file_name.exists() or self.n_eval == 1:
-                with self.history_file_name.open("w", encoding="utf-8") as file:
+            if not file_name.exists():
+                with file_name.open("w", encoding="utf-8") as file:
                     file.write(
                         "# iter  loss  "
                         + "  ".join([f"x{i + 1}" for i in range(self.d)])
@@ -285,17 +286,7 @@ class LossClass:
                         + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
                         + "\n"
                     )
-            if not self.history_avg_file_name.exists() or self.n_eval == 1:
-                with self.history_avg_file_name.open("w", encoding="utf-8") as file:
-                    file.write(
-                        "# iter  loss  "
-                        + "  ".join([f"x{i + 1}_avg" for i in range(self.d)])
-                        + "    "
-                        + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
-                        + "\n"
-                    )
-
-        if self.print_to_file:
+ 
             with file_name.open("a", encoding="utf-8") as file:
                 file.write(
                     f"{self.n_eval}    {f}  "
