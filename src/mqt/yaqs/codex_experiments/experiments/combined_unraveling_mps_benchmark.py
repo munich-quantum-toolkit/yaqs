@@ -28,10 +28,10 @@ if _HERE not in sys.path:
 
 if __name__ == "__main__":
 
-    L = 4
+    L = 10
     num_layers = 10
     noise_strength = 0.1
-    num_traj = 10
+    num_traj = 1024
 
 
 
