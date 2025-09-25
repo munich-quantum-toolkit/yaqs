@@ -1,105 +1,160 @@
-import copy
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from __future__ import annotations
 
-from qiskit import QuantumCircuit
-from qiskit_aer import AerSimulator
+import os
+import pickle
+import sys
+from pathlib import Path
+from typing import Callable
+
+
+# Support running as a script from the repository root
+_HERE = os.path.dirname(__file__)
+_PARENT = os.path.dirname(_HERE)
+for path in (_HERE, _PARENT):
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
 from qiskit.quantum_info import Pauli
 from qiskit_aer.noise import NoiseModel as QiskitNoiseModel
 from qiskit_aer.noise.errors import PauliLindbladError
 
-
 import numpy as np
-from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit, create_heisenberg_circuit
-from worker_functions.circuits import build_basis_noncommuting, x_commuting_brickwork, noncommuting_layer
-from worker_functions.plotting import plot_series_against_exact, plot_avg_bond_dims, plot_stochastic_variances, pick_subplot_indices
-from worker_functions.qiskit_simulators import collect_expectations_and_mps_bond_dims, run_qiskit_exact, run_qiskit_mps, BenchmarkConfig
+from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
+from worker_functions.circuits import noncommuting_layer, x_commuting_brickwork
 from worker_functions.mean_error import print_mean_errors_against_exact
-from worker_functions.yaqs_simulator import run_yaqs, build_noise_models
+from worker_functions.plotting import (
+    plot_avg_bond_dims,
+    plot_series_against_exact,
+    plot_stochastic_variances,
+)
+from worker_functions.qiskit_simulators import run_qiskit_exact, run_qiskit_mps
+from worker_functions.yaqs_simulator import build_noise_models, run_yaqs
 
 
-# Support running as a script from the repository root
-import os
-import sys
-_HERE = os.path.dirname(__file__)
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
+RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
 
 
-if __name__ == "__main__":
-
-    L = 8
-    num_layers = 10
-    noise_strength = 0.01
-    num_traj = 1024
-
-
-
-    basis_circuit = create_heisenberg_circuit(L, 1, 0.5, 0.5, 0.1, 0.1, 1)
-    # basis_circuit = noncommuting_layer(L)
-    # basis_circuit = x_commuting_brickwork(L, 1, add_barriers=False)
-    # for i in range(L):
-    #     basis_circuit.rx(np.pi/2, i)
-    #     basis_circuit.barrier()
-    # for i in range(L-1):
-    #     basis_circuit.rzz(np.pi/2, i, i+1)
-    #     basis_circuit.barrier()
-    print("circuit initialized")
-
-    
-
+def _setup_noise_models(num_qubits: int, noise_strength: float) -> tuple[
+    QiskitNoiseModel,
+    tuple[object, object, object, object],
+]:
     processes = [
         {"name": "pauli_x", "sites": [i], "strength": noise_strength}
-        for i in range(L)] + [{"name": "crosstalk_xx", "sites": [i, i+1], "strength": noise_strength}
-        for i in range(L-1) 
-        ]
-    noise_model_normal, noise_model_projector, noise_model_unitary_2pt, noise_model_unitary_gauss = build_noise_models(processes)
+        for i in range(num_qubits)
+    ] + [
+        {"name": "crosstalk_xx", "sites": [i, i + 1], "strength": noise_strength}
+        for i in range(num_qubits - 1)
+    ]
+    noise_models = build_noise_models(processes)
 
     qiskit_noise_model = QiskitNoiseModel()
-    TwoQubit_XX_error = PauliLindbladError([Pauli("IX"), Pauli("XI"), Pauli("XX")], [noise_strength, noise_strength, noise_strength])
-    #TwoQubit_YY_error = PauliLindbladError([Pauli("IY"), Pauli("YI"), Pauli("YY")], [noise_strength, noise_strength, noise_strength])
-    #TwoQubit_ZZ_error = PauliLindbladError([Pauli("IZ"), Pauli("ZI"), Pauli("ZZ")], [noise_strength, noise_strength, noise_strength])
-    for qubit in range(L-1):
-        qiskit_noise_model.add_quantum_error(TwoQubit_XX_error, ["cx", "cz", "swap", "rxx", "ryy", "rzz", "rzx"], [qubit, qubit + 1])
-        # qiskit_noise_model.add_quantum_error(TwoQubit_YY_error, ["cx", "cz", "swap", "rxx", "ryy", "rzz", "rzx"], [qubit, qubit + 1])
-        # qiskit_noise_model.add_quantum_error(TwoQubit_ZZ_error, ["cx", "cz", "swap", "rxx", "ryy", "rzz", "rzx"], [qubit, qubit + 1])
-
-    print("noise models initialized")
-    exact = run_qiskit_exact(L, num_layers, basis_circuit, qiskit_noise_model, method="density_matrix")
-    print("qiskit exact initialized, starting qiskit mps")
-    qiskit_mps_expvals, qiskit_mps_bonds, qiskit_mps_var = run_qiskit_mps(L, num_layers, basis_circuit, qiskit_noise_model, num_traj=num_traj)
-    print("qiskit mps initialized, starting yaqs")
-    yaqs_results_normal, yaqs_bonds_normal, yaqs_var_normal = run_yaqs(basis_circuit, L, num_layers, noise_model_normal, num_traj=num_traj)
-    print("yaqs normal initialized, starting yaqs projector")
-    yaqs_results_projector, yaqs_bonds_projector, yaqs_var_projector = run_yaqs(basis_circuit, L, num_layers, noise_model_projector, num_traj=num_traj)
-    print("yaqs projector initialized, starting yaqs unitary 2pt")
-    yaqs_results_unitary_2pt, yaqs_bonds_unitary_2pt, yaqs_var_unitary_2pt = run_yaqs(basis_circuit, L, num_layers, noise_model_unitary_2pt, num_traj=num_traj)
-    print("yaqs unitary 2pt initialized, starting yaqs unitary gauss")
-    yaqs_results_unitary_gauss, yaqs_bonds_unitary_gauss, yaqs_var_unitary_gauss = run_yaqs(basis_circuit, L, num_layers, noise_model_unitary_gauss, num_traj=num_traj)
+    two_qubit_xx_error = PauliLindbladError(
+        [Pauli("IX"), Pauli("XI"), Pauli("XX")],
+        [noise_strength, noise_strength, noise_strength],
+    )
+    for qubit in range(num_qubits - 1):
+        qiskit_noise_model.add_quantum_error(
+            two_qubit_xx_error,
+            ["cx", "cz", "swap", "rxx", "ryy", "rzz", "rzx"],
+            [qubit, qubit + 1],
+        )
+    return qiskit_noise_model, noise_models
 
 
-    series_by_label = {
-    "standard": yaqs_results_normal,
-    "projector": yaqs_results_projector,
-    "unitary_2pt": yaqs_results_unitary_2pt,
-    "unitary_gauss": yaqs_results_unitary_gauss,
-    "qiskit_mps": qiskit_mps_expvals,
+def run_benchmark(
+    *,
+    circuit_name: str,
+    basis_builder: Callable[[int], "QuantumCircuit"],
+    num_qubits: int,
+    num_layers: int,
+    noise_strength: float,
+    num_traj: int,
+    output_dir: Path,
+) -> Path:
+    """Run the benchmark for a single circuit and persist the results."""
+    print(f"=== Running benchmark for {circuit_name} ===")
+    basis_circuit = basis_builder(num_qubits)
+    qiskit_noise_model, (
+        noise_model_normal,
+        noise_model_projector,
+        noise_model_unitary_2pt,
+        noise_model_unitary_gauss,
+    ) = _setup_noise_models(num_qubits, noise_strength)
+
+    print("  → running qiskit exact")
+    exact = run_qiskit_exact(
+        num_qubits,
+        num_layers,
+        basis_circuit,
+        qiskit_noise_model,
+        method="density_matrix",
+    )
+    print("  → running qiskit mps")
+    qiskit_mps_expvals, qiskit_mps_bonds, qiskit_mps_var = run_qiskit_mps(
+        num_qubits,
+        num_layers,
+        basis_circuit,
+        qiskit_noise_model,
+        num_traj=num_traj,
+    )
+    print("  → running yaqs (standard)")
+    yaqs_kwargs = {"num_traj": num_traj, "parallel": False}
+
+    yaqs_results_normal, yaqs_bonds_normal, yaqs_var_normal = run_yaqs(
+        basis_circuit,
+        num_qubits,
+        num_layers,
+        noise_model_normal,
+        **yaqs_kwargs,
+    )
+    print("  → running yaqs (projector)")
+    yaqs_results_projector, yaqs_bonds_projector, yaqs_var_projector = run_yaqs(
+        basis_circuit,
+        num_qubits,
+        num_layers,
+        noise_model_projector,
+        **yaqs_kwargs,
+    )
+    print("  → running yaqs (unitary 2pt)")
+    (
+        yaqs_results_unitary_2pt,
+        yaqs_bonds_unitary_2pt,
+        yaqs_var_unitary_2pt,
+    ) = run_yaqs(
+        basis_circuit,
+        num_qubits,
+        num_layers,
+        noise_model_unitary_2pt,
+        **yaqs_kwargs,
+    )
+    print("  → running yaqs (unitary gauss)")
+    (
+        yaqs_results_unitary_gauss,
+        yaqs_bonds_unitary_gauss,
+        yaqs_var_unitary_gauss,
+    ) = run_yaqs(
+        basis_circuit,
+        num_qubits,
+        num_layers,
+        noise_model_unitary_gauss,
+        **yaqs_kwargs,
+    )
+
+    series_by_label: dict[str, np.ndarray] = {
+        "standard": yaqs_results_normal,
+        "projector": yaqs_results_projector,
+        "unitary_2pt": yaqs_results_unitary_2pt,
+        "unitary_gauss": yaqs_results_unitary_gauss,
+        "qiskit_mps": qiskit_mps_expvals,
     }
-
-    # print variances (lower is better)
-    # removed variance-vs-exact; instead use stochastic variances below
-    # print mean absolute errors (lower is better)
     mean_errors = print_mean_errors_against_exact(exact, series_by_label)
 
-    # plot results vs exact
     plot_series_against_exact(
         exact,
         series_by_label,
-        num_qubits=L,
+        num_qubits=num_qubits,
         num_layers=num_layers,
     )
-
-
     plot_stochastic_variances(
         num_layers=num_layers,
         qiskit_var=qiskit_mps_var,
@@ -121,7 +176,72 @@ if __name__ == "__main__":
         },
     )
 
+    payload = {
+        "circuit_name": circuit_name,
+        "num_qubits": num_qubits,
+        "num_layers": num_layers,
+        "noise_strength": noise_strength,
+        "num_traj": num_traj,
+        "exact": exact,
+        "series_by_label": series_by_label,
+        "qiskit_mps_bonds": qiskit_mps_bonds,
+        "yaqs_bonds": {
+            "standard": yaqs_bonds_normal,
+            "projector": yaqs_bonds_projector,
+            "unitary_2pt": yaqs_bonds_unitary_2pt,
+            "unitary_gauss": yaqs_bonds_unitary_gauss,
+        },
+        "stochastic_variances": {
+            "qiskit_mps": qiskit_mps_var,
+            "standard": yaqs_var_normal,
+            "projector": yaqs_var_projector,
+            "unitary_2pt": yaqs_var_unitary_2pt,
+            "unitary_gauss": yaqs_var_unitary_gauss,
+        },
+        "mean_abs_errors": mean_errors,
+    }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{circuit_name}_L{num_qubits}_layers{num_layers}.pkl"
+    with output_path.open("wb") as f:
+        pickle.dump(payload, f)
+    print(f"  → saved results to {output_path}")
+    return output_path
 
 
+def main() -> None:
+    num_qubits = 6
+    num_layers = 8
+    noise_strength = 0.1
+    num_traj = 64
+
+    circuits: dict[str, Callable[[int], "QuantumCircuit"]] = {
+        "noncommuting_layer": noncommuting_layer,
+        "x_commuting_brickwork": lambda nq: x_commuting_brickwork(nq, 1, add_barriers=False),
+        "ising_trotter": lambda nq: create_ising_circuit(nq, 1.0, 0.5, 0.1, 1, periodic=False),
+    }
+
+    saved_files: list[Path] = []
+    for circuit_name, builder in circuits.items():
+        try:
+            saved_files.append(
+                run_benchmark(
+                    circuit_name=circuit_name,
+                    basis_builder=builder,
+                    num_qubits=num_qubits,
+                    num_layers=num_layers,
+                    noise_strength=noise_strength,
+                    num_traj=num_traj,
+                    output_dir=RESULTS_DIR,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic output
+            print(f"Benchmark for {circuit_name} failed: {exc}")
+
+    print("=== Saved benchmark files ===")
+    for path in saved_files:
+        print(f"  • {path}")
 
 
+if __name__ == "__main__":
+    main()
