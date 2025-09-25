@@ -28,15 +28,15 @@ if _HERE not in sys.path:
 
 if __name__ == "__main__":
 
-    L = 10
+    L = 8
     num_layers = 10
-    noise_strength = 0.1
+    noise_strength = 0.01
     num_traj = 1024
 
 
 
-    # basis_circuit = create_heisenberg_circuit(L, 1, 0.5, 0.5, 0.1, 0.1, 1)
-    basis_circuit = noncommuting_layer(L)
+    basis_circuit = create_heisenberg_circuit(L, 1, 0.5, 0.5, 0.1, 0.1, 1)
+    # basis_circuit = noncommuting_layer(L)
     # basis_circuit = x_commuting_brickwork(L, 1, add_barriers=False)
     # for i in range(L):
     #     basis_circuit.rx(np.pi/2, i)
