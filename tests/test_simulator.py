@@ -473,7 +473,6 @@ def test_two_site_correlator_left_boundary_reduced() -> None:
 
     simulator.run(state, H_0, sim_params)
 
-    # Expected results from QuTiP (L=4, T=1.0)
     expected_xx = np.array([
         0.0,
         0.00000067,
@@ -546,7 +545,6 @@ def test_two_site_correlator_center_reduced() -> None:
 
     simulator.run(state, H_0, sim_params)
 
-    # Expected results from QuTiP (identical to left for L=4)
     expected_xx = np.array([
         0.0,
         0.00000067,
@@ -617,7 +615,6 @@ def test_two_site_correlator_right_boundary_reduced() -> None:
     )
     simulator.run(state, H_0, sim_params)
 
-    # Expected results from QuTiP (identical to left for L=4)
     expected_xx = np.array([
         0.0,
         0.00000067,
@@ -684,12 +681,10 @@ def test_two_site_correlator_center_circuit_reduced() -> None:
 
     simulator.run(state, circ, sim_params)
 
-    # Expected results from QuTiP (final sample)
     expected_xx = np.array([0.00502562])
     expected_yy = np.array([0.00314186])
     expected_zz = np.array([0.98190829])
 
-    # Allow a slightly looser tolerance due to first-order Trotterization vs. continuous-time reference
     np.testing.assert_allclose(sim_params.observables[0].results, expected_xx, atol=5e-3)
     np.testing.assert_allclose(sim_params.observables[1].results, expected_yy, atol=5e-3)
     np.testing.assert_allclose(sim_params.observables[2].results, expected_zz, atol=5e-3)
