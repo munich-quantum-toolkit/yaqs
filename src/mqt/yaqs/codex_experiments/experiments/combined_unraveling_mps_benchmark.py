@@ -1,12 +1,4 @@
 from __future__ import annotations
-<<<<<<< ours
-
-import os
-import pickle
-import sys
-from pathlib import Path
-from typing import Callable
-=======
 
 import os
 import pickle
@@ -30,7 +22,6 @@ from qiskit_aer.noise.errors import PauliLindbladError
 import numpy as np
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 import matplotlib.pyplot as plt
->>>>>>> theirs
 
 from worker_functions.circuits import noncommuting_layer, x_commuting_brickwork
 from worker_functions.mean_error import print_mean_errors_against_exact
@@ -42,21 +33,8 @@ from worker_functions.plotting import (
 from worker_functions.qiskit_simulators import run_qiskit_exact, run_qiskit_mps
 from worker_functions.yaqs_simulator import build_noise_models, run_yaqs
 
-<<<<<<< ours
-# Support running as a script from the repository root
-_HERE = os.path.dirname(__file__)
-_PARENT = os.path.dirname(_HERE)
-for path in (_HERE, _PARENT):
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
-from qiskit.quantum_info import Pauli
-from qiskit_aer.noise import NoiseModel as QiskitNoiseModel
-from qiskit_aer.noise.errors import PauliLindbladError
-=======
 
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
->>>>>>> theirs
 
 import numpy as np
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
@@ -74,15 +52,11 @@ from worker_functions.yaqs_simulator import build_noise_models, run_yaqs
 class BenchmarkConfig:
     """Container describing a single circuit configuration."""
 
-<<<<<<< ours
-RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
-=======
     circuit_name: str
     basis_builder: Callable[[int], "QuantumCircuit"]
     num_qubits: int
     num_layers: int
     noise_strengths: tuple[float, ...]
->>>>>>> theirs
 
 
 def _setup_noise_models(num_qubits: int, noise_strength: float) -> tuple[
@@ -227,75 +201,6 @@ def run_benchmark(
         },
     )
 
-<<<<<<< ours
-    payload = {
-        "circuit_name": circuit_name,
-        "num_qubits": num_qubits,
-        "num_layers": num_layers,
-        "noise_strength": noise_strength,
-        "num_traj": num_traj,
-        "exact": exact,
-        "series_by_label": series_by_label,
-        "qiskit_mps_bonds": qiskit_mps_bonds,
-        "yaqs_bonds": {
-            "standard": yaqs_bonds_normal,
-            "projector": yaqs_bonds_projector,
-            "unitary_2pt": yaqs_bonds_unitary_2pt,
-            "unitary_gauss": yaqs_bonds_unitary_gauss,
-        },
-        "stochastic_variances": {
-            "qiskit_mps": qiskit_mps_var,
-            "standard": yaqs_var_normal,
-            "projector": yaqs_var_projector,
-            "unitary_2pt": yaqs_var_unitary_2pt,
-            "unitary_gauss": yaqs_var_unitary_gauss,
-        },
-        "mean_abs_errors": mean_errors,
-    }
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{circuit_name}_L{num_qubits}_layers{num_layers}.pkl"
-    with output_path.open("wb") as f:
-        pickle.dump(payload, f)
-    print(f"  → saved results to {output_path}")
-    return output_path
-
-
-def main() -> None:
-    num_qubits = 6
-    num_layers = 8
-    noise_strength = 0.1
-    num_traj = 64
-
-    circuits: dict[str, Callable[[int], "QuantumCircuit"]] = {
-        "noncommuting_layer": noncommuting_layer,
-        "x_commuting_brickwork": lambda nq: x_commuting_brickwork(nq, 1, add_barriers=False),
-        "ising_trotter": lambda nq: create_ising_circuit(nq, 1.0, 0.5, 0.1, 1, periodic=False),
-    }
-
-    saved_files: list[Path] = []
-    for circuit_name, builder in circuits.items():
-        try:
-            saved_files.append(
-                run_benchmark(
-                    circuit_name=circuit_name,
-                    basis_builder=builder,
-                    num_qubits=num_qubits,
-                    num_layers=num_layers,
-                    noise_strength=noise_strength,
-                    num_traj=num_traj,
-                    output_dir=RESULTS_DIR,
-                )
-            )
-        except Exception as exc:  # pragma: no cover - diagnostic output
-            print(f"Benchmark for {circuit_name} failed: {exc}")
-
-    print("=== Saved benchmark files ===")
-    for path in saved_files:
-        print(f"  • {path}")
-
-
-=======
     plt.close("all")
 
     payload = {
@@ -410,6 +315,5 @@ def main() -> None:
         print(f"  • {path}")
 
 
->>>>>>> theirs
 if __name__ == "__main__":
     main()
