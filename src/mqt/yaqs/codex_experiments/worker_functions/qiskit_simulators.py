@@ -17,7 +17,8 @@ class BenchmarkConfig:
     seed: Optional[int] = None
 
 def collect_expectations_and_mps_bond_dims(
-    basis: QuantumCircuit,
+    init_circuit: QuantumCircuit,
+    trotter_step: QuantumCircuit,
     num_qubits: int,
     num_layers: int,
     noise_model: QiskitNoiseModel,
@@ -45,19 +46,21 @@ def collect_expectations_and_mps_bond_dims(
 
     from qiskit.quantum_info import Pauli
 
-    # Build a single circuit with both types of saves
-    qc = QuantumCircuit(num_qubits)
+    # Build a single circuit: init once, then repeat Trotter steps
+    qc = init_circuit.copy()
     if include_initial:
         for q in range(num_qubits):
             # Save initial expval per-shot for stochastic variance
-            qc.save_expectation_value(Pauli("Z"), qubits=[q], label=f"z_q{q}_t0", pershot=True)
+            qc.save_expectation_value(Pauli("Z"), qubits=[q], label=f"z_q{q}_t0", pershot=True)  # type: ignore[attr-defined]
     for t in range(num_layers):
-        qc = qc.compose(basis, qubits=range(num_qubits))
+        composed = qc.compose(trotter_step, qubits=range(num_qubits))
+        assert composed is not None
+        qc = composed
         # Save Z on all qubits
         for q in range(num_qubits):
-            qc.save_expectation_value(Pauli("Z"), qubits=[q], label=f"z_q{q}_t{t+1}", pershot=True)
+            qc.save_expectation_value(Pauli("Z"), qubits=[q], label=f"z_q{q}_t{t+1}", pershot=True)  # type: ignore[attr-defined]
         # Save per-shot MPS to extract bond dims
-        qc.save_matrix_product_state(pershot=True, label=_save_label(t))
+        qc.save_matrix_product_state(pershot=True, label=_save_label(t))  # type: ignore[attr-defined]
 
     sim = AerSimulator(method=method, noise_model=noise_model)
     if mps_options:
@@ -111,26 +114,27 @@ def collect_expectations_and_mps_bond_dims(
 
 
 
-def run_qiskit_exact(num_qubits: int, num_layers: int, basis, noise_model: QiskitNoiseModel, method = "density_matrix") -> np.ndarray:
+def run_qiskit_exact(num_qubits: int, num_layers: int, init_circuit, trotter_step, noise_model: Optional[QiskitNoiseModel], method = "density_matrix") -> np.ndarray:
     from .qiskit_noisy_sim import qiskit_noisy_simulator
 
-    baseline = [[1.0] for _ in range(num_qubits)]
-    for i in range(num_layers):
-        qc = basis.copy()
+    baseline = [[] for _ in range(num_qubits)]
+    # Start from i=1 to apply at least 1 Trotter step (initial state is handled separately)
+    for i in range(1, num_layers + 1):
+        qc = init_circuit.copy()
         for _ in range(i):
-            qc = qc.compose(basis)
+            qc = qc.compose(trotter_step)
         vals = np.real(np.asarray(qiskit_noisy_simulator(qc, noise_model, num_qubits, 1, method=method))).flatten()
         for q in range(num_qubits):
             baseline[q].append(float(vals[q]))
     arr = np.stack([np.asarray(b) for b in baseline])
-    # drop initial t=0 → 1..num_layers
-    return arr[:, 1:]
+    return arr
 
 
 def run_qiskit_mps(
     num_qubits: int,
     num_layers: int,
-    basis: QuantumCircuit,
+    init_circuit: QuantumCircuit,
+    trotter_step: QuantumCircuit,
     noise_model: QiskitNoiseModel,
     *,
     num_traj: int = 1024,
@@ -139,14 +143,15 @@ def run_qiskit_mps(
     mps_options: Optional[Dict[str, Any]] = None,
 ) -> Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]:
     """
-    Run Qiskit MPS on a layered basis circuit and return expectation values and bond stats.
+    Run Qiskit MPS on a layered circuit and return expectation values and bond stats.
 
     Returns:
       - expvals: np.ndarray shape (num_qubits, num_layers)
       - bonds: dict with per-shot/per-layer max bond dims and aggregates
     """
     combined = collect_expectations_and_mps_bond_dims(
-        basis,
+        init_circuit,
+        trotter_step,
         num_qubits,
         num_layers,
         noise_model,

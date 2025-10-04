@@ -51,7 +51,7 @@ class Observable:
         The site (or qubit) on which the observable is measured.
     results : NDArray[np.float64] | None
         The results of the simulation, initialized to None.
-    trajectories : NDArray[np.float64] | None
+    trajectories : NDArray[np.float64] | NDArray[np.complex128] | None
         The trajectories of the simulation, initialized to None.
 
     Methods:
@@ -86,7 +86,7 @@ class Observable:
             self.sites = sites
             self.gate.set_sites(self.sites)
         self.results: NDArray[np.float64] | None = None
-        self.trajectories: NDArray[np.float64] | None = None
+        self.trajectories: NDArray[np.float64] | NDArray[np.complex128] | None = None
 
     def initialize(self, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
         """Observable initialization before simulation.
@@ -232,7 +232,8 @@ class AnalogSimParams:
         attribute with the mean value of their trajectories along the specified axis.
         """
         for observable in self.observables:
-            observable.results = np.mean(observable.trajectories, axis=0)
+            if observable.trajectories is not None:
+                observable.results = np.mean(observable.trajectories, axis=0)
 
 
 class WeakSimParams:
@@ -428,4 +429,5 @@ class StrongSimParams:
         of their `trajectories` along the first axis.
         """
         for observable in self.observables:
-            observable.results = np.mean(observable.trajectories, axis=0)
+            if observable.trajectories is not None:
+                observable.results = np.mean(observable.trajectories, axis=0)

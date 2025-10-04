@@ -34,7 +34,7 @@ def qiskit_noisy_simulator_stepwise(circuit, noise_model, num_qubits, method="au
     data = pub_result.data
 
     # The Z expectation values
-    evs = np.array(data.evs).squeeze()  # This is a numpy array of shape (num_qubits,)
+    evs = np.array(data.evs).squeeze()  # type: ignore[attr-defined]  # This is a numpy array of shape (num_qubits,)
     evs = evs.reshape(-1)
 
     return evs[::-1]

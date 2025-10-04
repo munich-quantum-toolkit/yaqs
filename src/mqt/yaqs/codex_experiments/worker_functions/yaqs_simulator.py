@@ -10,7 +10,8 @@ from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs import simulator
 
 def run_yaqs(
-    basis,
+    init_circuit,
+    trotter_step,
     num_qubits: int,
     num_layers: int,
     nm: NoiseModel,
@@ -19,11 +20,12 @@ def run_yaqs(
     num_traj = 1024,
     max_bond_dim = 256,
 ) -> tuple[np.ndarray, np.ndarray | None, np.ndarray]:
-    circ = basis.copy()
-    # sample after the first layer
+    # Build circuit: init once, then repeat Trotter steps
+    circ = init_circuit.copy()
+    circ.compose(trotter_step, qubits=range(num_qubits), inplace=True)
     circ.barrier(label="SAMPLE_OBSERVABLES")
     for _ in range(1, num_layers):
-        circ.compose(basis, qubits=range(num_qubits), inplace=True)
+        circ.compose(trotter_step, qubits=range(num_qubits), inplace=True)
         circ.barrier(label="SAMPLE_OBSERVABLES")
 
     obs = [Observable(Z(), i) for i in range(num_qubits)]

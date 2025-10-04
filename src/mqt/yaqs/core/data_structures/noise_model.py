@@ -370,7 +370,7 @@ class NoiseModel:
         *,
         # Hazard policy: relative boost with a cap (good defaults)
         hazard_gain: float = 3.0,       # Λ_target ≈ hazard_gain * sum(γ) for analog group(s)
-        hazard_cap: float = 0.0,       # but not above this absolute cap per layer
+        hazard_cap: float = 0.5,       # but not above this absolute cap per layer
         # Gaussian discretization settings
         gauss_M: int = 11,
         gauss_k: float = 4.0,           # theta_max = gauss_k * sigma
@@ -458,7 +458,8 @@ class NoiseModel:
                     theta0 = float(proc.get("theta0", group_defaults.get(unravel, group_defaults.get("analog_auto", {})).get("theta0", 0.0)))
                     if theta0 <= 0.0:
                         # fall back to group s*
-                        s_use = float(group_defaults.get(unravel, group_defaults.get("analog_auto"))["s_star"])
+                        defaults = group_defaults.get(unravel, group_defaults.get("analog_auto", {}))
+                        s_use = float(defaults["s_star"])
                         theta0 = float(np.arcsin(np.sqrt(s_use)))
                     add_unitary_2pt_expansion(self.processes, proc, P, gamma, theta0)
                     continue
@@ -467,7 +468,8 @@ class NoiseModel:
                 if unravel == "unitary_gauss" or (unravel == "analog_auto" and group_defaults.get("analog_auto", {}).get("scheme") == "unitary_gauss"):
                     sigma = float(proc.get("sigma", group_defaults.get(unravel, group_defaults.get("analog_auto", {})).get("sigma", 0.0)))
                     if sigma <= 0.0:
-                        s_use = float(group_defaults.get(unravel, group_defaults.get("analog_auto"))["s_star"])
+                        defaults = group_defaults.get(unravel, group_defaults.get("analog_auto", {}))
+                        s_use = float(defaults["s_star"])
                         # require s_use < 1/2
                         s_use = min(s_use, 0.5 - 1e-6)
                         sigma = float(np.sqrt(-0.5 * np.log(1.0 - 2.0 * s_use)))

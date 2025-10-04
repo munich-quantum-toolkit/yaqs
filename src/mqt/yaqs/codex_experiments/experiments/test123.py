@@ -88,9 +88,11 @@ if __name__ == "__main__":
             plt.plot(t, mps_qiskit_results_list[i][:num_layers], label=f"qiskit mps qubit {i}", marker="o", linestyle="solid")
             plt.plot(t, dm_qiskit_results_list[i][:num_layers], label=f"Exact qubit {i}", marker="x", linestyle="solid")
             plt.plot(t, np.abs(np.asarray(dm_qiskit_results_list[i][:num_layers]) - np.asarray(mps_qiskit_results_list[i][:num_layers])), label=f"DIFF: qiskit MPS to exact qubit {i} ", linestyle="dashed")
-        plt.plot(t, complete_sim_params.observables[i].results.real[:num_layers], label=f"YAQS qubit {i}", linestyle="dashed")
-        if args.with_qiskit:
-            plt.plot(t, np.abs(np.asarray(complete_sim_params.observables[i].results.real[:num_layers]) - np.asarray(dm_qiskit_results_list[i][:num_layers])), label=f"DIFF: YAQS to exact qubit {i}", linestyle="solid")
+        obs_results = complete_sim_params.observables[i].results
+        if obs_results is not None:
+            plt.plot(t, obs_results.real[:num_layers], label=f"YAQS qubit {i}", linestyle="dashed")
+            if args.with_qiskit:
+                plt.plot(t, np.abs(np.asarray(obs_results.real[:num_layers]) - np.asarray(dm_qiskit_results_list[i][:num_layers])), label=f"DIFF: YAQS to exact qubit {i}", linestyle="solid")
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.show()
