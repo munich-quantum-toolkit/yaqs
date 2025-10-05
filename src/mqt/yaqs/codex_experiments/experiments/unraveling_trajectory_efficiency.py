@@ -5,6 +5,7 @@ from qutip import sigmax, sigmay, sigmaz, qeye, tensor, sesolve, basis
 from ..worker_functions.qiskit_simulators import run_qiskit_exact, run_qiskit_mps
 from ..worker_functions.yaqs_simulator import run_yaqs, build_noise_models
 from ..worker_functions.qiskit_noisy_sim import qiskit_noisy_simulator
+from ..worker_functions.plotting import plot_avg_bond_dims
 
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli
@@ -110,7 +111,7 @@ if __name__ == "__main__":
     num_layers = 50
     tau = 0.1
     noise_strength = 0.1
-    threshold_mse = 5e-2  # Target MSE threshold
+    threshold_mse = 5e-4  # Target MSE threshold
     
     print("="*70)
     print("Trajectory Efficiency Comparison for Unraveling Methods")
@@ -278,61 +279,54 @@ if __name__ == "__main__":
     
     print("="*70)
 
-    # Process bond dimension data
-    # For each method, compute average max bond dimension per layer
-    print("\nProcessing bond dimensions...")
-    bond_dim_avg = {}
-    for method, data in results.items():
-        bonds = data.get("bonds")
-        print(f"  {method}: bonds type = {type(bonds)}")
-        if bonds is not None and isinstance(bonds, dict):
-            # Qiskit format: check for the correct key names
-            print(f"    Keys: {bonds.keys()}")
-            if "per_layer_mean_across_shots" in bonds:
-                bond_dim_avg[method] = bonds["per_layer_mean_across_shots"]
-                print(f"    ✓ Extracted bond dims shape: {bond_dim_avg[method].shape}")
-            elif "per_shot_per_layer_max_bond_dim" in bonds:
-                # Compute average from per-shot data
-                bond_dim_avg[method] = np.mean(bonds["per_shot_per_layer_max_bond_dim"], axis=0)
-                print(f"    ✓ Computed bond dims shape: {bond_dim_avg[method].shape}")
-        elif bonds is not None:
-            # YAQS format: might be numpy array or list
-            if isinstance(bonds, np.ndarray):
-                print(f"    Array shape: {bonds.shape}")
-                # Assume shape (num_traj, num_layers) or (num_layers,)
-                if bonds.ndim == 2:
-                    bond_dim_avg[method] = np.mean(bonds, axis=0)
-                    print(f"    ✓ Averaged bond dims shape: {bond_dim_avg[method].shape}")
-                elif bonds.ndim == 1:
-                    bond_dim_avg[method] = bonds
-                    print(f"    ✓ Bond dims shape: {bond_dim_avg[method].shape}")
-            elif isinstance(bonds, list):
-                # List of bond dims per trajectory
-                try:
-                    bond_array = np.array(bonds)
-                    print(f"    List converted to array shape: {bond_array.shape}")
-                    if bond_array.ndim == 2:
-                        bond_dim_avg[method] = np.mean(bond_array, axis=0)
-                        print(f"    ✓ Averaged bond dims shape: {bond_dim_avg[method].shape}")
-                    elif bond_array.ndim == 1:
-                        bond_dim_avg[method] = bond_array
-                        print(f"    ✓ Bond dims shape: {bond_array.shape}")
-                except Exception as e:
-                    print(f"    ✗ Error processing: {e}")
+    # Organize bond dimension data in the format expected by plot_avg_bond_dims
+    qiskit_bonds = results["Qiskit MPS"]["bonds"]
+    yaqs_bonds_by_label = {
+        "standard": results["YAQS Standard"]["bonds"],
+        "projector": results["YAQS Projector"]["bonds"],
+        "unitary_2pt": results["YAQS Unitary 2pt"]["bonds"],
+        "unitary_gauss": results["YAQS Unitary Gauss"]["bonds"],
+    }
+    
+    # Process bond dimensions for plotting (using same logic as plot_avg_bond_dims)
+    layers = np.arange(1, num_layers + 1)
+    bond_data_for_plot = {}
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+    method_names = list(results.keys())
+    
+    # Process Qiskit MPS bonds
+    if qiskit_bonds is not None and "per_layer_mean_across_shots" in qiskit_bonds:
+        q_mean = np.asarray(qiskit_bonds["per_layer_mean_across_shots"])
+        bond_data_for_plot["Qiskit MPS"] = q_mean[:num_layers]
+    
+    # Process YAQS bonds (mean across trajectories; drop initial and final columns)
+    yaqs_method_map = {
+        "standard": "YAQS Standard",
+        "projector": "YAQS Projector",
+        "unitary_2pt": "YAQS Unitary 2pt",
+        "unitary_gauss": "YAQS Unitary Gauss",
+    }
+    
+    for label, arr in yaqs_bonds_by_label.items():
+        method_name = yaqs_method_map[label]
+        if arr is None:
+            continue
+        mean_per_col = np.mean(arr, axis=0)
+        if mean_per_col.size >= 2:
+            mean_layers = mean_per_col[1:-1]
         else:
-            print(f"    ✗ No bond dimension data")
+            mean_layers = mean_per_col
+        bond_data_for_plot[method_name] = mean_layers[:num_layers]
 
     # Create visualization with 3 subplots
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
     
     # Subplot 1: Bar chart of required trajectories
-    methods = list(results.keys())
-    trajectories = [results[m]["trajectories"] for m in methods]
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+    trajectories = [results[m]["trajectories"] for m in method_names]
     
-    bars = ax1.bar(range(len(methods)), trajectories, color=colors, alpha=0.8, edgecolor='black')
-    ax1.set_xticks(range(len(methods)))
-    ax1.set_xticklabels(methods, rotation=45, ha='right')
+    bars = ax1.bar(range(len(method_names)), trajectories, color=colors, alpha=0.8, edgecolor='black')
+    ax1.set_xticks(range(len(method_names)))
+    ax1.set_xticklabels(method_names, rotation=45, ha='right')
     ax1.set_ylabel("Number of Trajectories", fontsize=12)
     ax1.set_title(f"Trajectories Required to Reach MSE < {threshold_mse:.2e}", fontsize=13)
     ax1.grid(True, axis='y', linestyle='--', alpha=0.5)
@@ -359,20 +353,17 @@ if __name__ == "__main__":
     ax2.legend(fontsize=8, loc='best')
     ax2.grid(True, linestyle="--", alpha=0.5)
     
-    # Subplot 3: Bond dimension growth
-    layer_indices = np.arange(1, num_layers + 1)
-    for i, (method, data) in enumerate(results.items()):
-        if method in bond_dim_avg:
-            bond_avg = bond_dim_avg[method]
-            # bond_avg should have num_layers elements
-            if len(bond_avg) == num_layers:
-                ax3.plot(layer_indices, bond_avg, '-o', label=f"{method}", 
-                         alpha=0.8, markersize=4, color=colors[i])
+    # Subplot 3: Bond dimension growth (using same logic as plot_avg_bond_dims)
+    for i, method in enumerate(method_names):
+        if method in bond_data_for_plot:
+            bond_avg = bond_data_for_plot[method]
+            ax3.plot(layers, bond_avg[:num_layers], '-o', label=method, 
+                     alpha=0.8, markersize=4, color=colors[i], linewidth=2)
     
-    ax3.set_xlabel("Trotter Step", fontsize=12)
-    ax3.set_ylabel("Average Max Bond Dimension", fontsize=12)
+    ax3.set_xlabel("Layer", fontsize=12)
+    ax3.set_ylabel("avg max bond dim", fontsize=12)
     ax3.set_title("Bond Dimension Growth", fontsize=13)
-    ax3.legend(fontsize=8, loc='best')
+    ax3.legend(fontsize=8, loc='upper left')
     ax3.grid(True, linestyle="--", alpha=0.5)
     
     plt.tight_layout()
