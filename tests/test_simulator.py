@@ -753,3 +753,64 @@ def test_transmon_simulation() -> None:
 
     # finally check total leakage
     np.testing.assert_array_less(leakage, 5e-2)
+
+
+def test_strong_simulation_unraveling_projector() -> None:
+    """Strong sim with projector-unraveling Pauli-Z noise (sanity/shape test)."""
+    num_qubits = 3
+    state = MPS(num_qubits, state="zeros")
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.3, dt=0.1, timesteps=1)
+    circuit.measure_all()
+
+    measurements = [Observable(Z(), site) for site in range(num_qubits)]
+    sim_params = StrongSimParams(measurements, num_traj=8, max_bond_dim=32)
+
+    gamma = 1e-2
+    noise_model = NoiseModel([
+        {"name": "pauli_z", "sites": [i], "strength": gamma, "unraveling": "projector"}
+        for i in range(num_qubits)
+    ])
+
+    simulator.run(state, circuit, sim_params, noise_model, parallel=False)
+    for observable in sim_params.observables:
+        assert observable.results is not None
+        assert observable.trajectories is not None
+        assert observable.trajectories.shape == (8, 1)
+        assert observable.results.shape == (1,)
+        # bounded expectation
+        assert -1.01 <= float(np.real(observable.results[0])) <= 1.01
+
+
+def test_analog_simulation_unraveling_unitary_2pt() -> None:
+    """Analog sim with unitary_2pt unraveling on adjacent 2-site Pauli string (sanity/shape test)."""
+    length = 3
+    initial_state = MPS(length, state="zeros")
+
+    H = MPO()
+    H.init_ising(length, J=1, g=0.5)
+    elapsed_time = 0.2
+    dt = 0.1
+    sample_timesteps = False
+    num_traj = 4
+    max_bond_dim = 16
+    threshold = 0
+    order = 1
+
+    measurements = [Observable(Z(), i) for i in range(length)]
+    sim_params = AnalogSimParams(
+        measurements, elapsed_time, dt, num_traj, max_bond_dim, threshold, order, sample_timesteps=sample_timesteps
+    )
+
+    gamma = 5e-3
+    theta0 = 0.2
+    noise_model = NoiseModel([
+        {"name": "crosstalk_xx", "sites": [0, 1], "strength": gamma, "unraveling": "unitary_2pt", "theta0": theta0},
+        {"name": "pauli_z", "sites": [2], "strength": gamma, "unraveling": "projector"},
+    ])
+
+    simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
+    for observable in sim_params.observables:
+        assert observable.results is not None
+        assert observable.trajectories is not None
+        assert observable.trajectories.shape == (num_traj, 1)
+        assert observable.results.shape == (1,)

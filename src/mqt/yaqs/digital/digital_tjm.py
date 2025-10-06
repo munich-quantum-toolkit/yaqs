@@ -60,7 +60,7 @@ def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site
     return NoiseModel(local_processes)
 
 
-def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
+def process_layer(dag):
     """Process quantum circuit layer before applying to MPS.
 
     Processes the current layer of a DAGCircuit and categorizes nodes into single-qubit, even-indexed two-qubit,
@@ -70,7 +70,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         dag (DAGCircuit): The directed acyclic graph representing the quantum circuit.
 
     Returns:
-        tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]: A tuple containing four lists:
+        tuple: A tuple containing four lists:
             - single_qubit_nodes: Nodes corresponding to single-qubit gates.
             - even_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is even.
             - odd_nodes: Nodes corresponding to two-qubit gates where the lower qubit index is odd.
@@ -121,7 +121,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
 
-def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
+def apply_single_qubit_gate(state: MPS, node) -> None:
     """Apply single qubit gate.
 
     This function applies a single-qubit gate to the MPS, used during circuit simulation.
@@ -209,7 +209,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     return short_state, short_mpo, window
 
 
-def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
+def apply_two_qubit_gate(state: MPS, node, sim_params):
     """Apply two-qubit gate.
 
     Applies a two-qubit gate to the given Matrix Product State (MPS) with dynamic TDVP.
@@ -269,6 +269,9 @@ def digital_tjm(
             results = np.zeros((len(sim_params.sorted_observables), sim_params.num_mid_measurements + 2))
             # Initial sampling (column 0)
             state.evaluate_observables(sim_params, results, 0)
+            # Optional: initialize bond-dimension log with initial state
+            if getattr(sim_params, "log_bond_dims", False):
+                bond_dims: list[int] = [int(state.write_max_bond_dim())]
         else:
             results = np.zeros((len(sim_params.sorted_observables), 1))
 
@@ -304,6 +307,8 @@ def digital_tjm(
                 dag.remove_op_node(measure_barrier)
                 col_idx += 1
                 state.evaluate_observables(sim_params, results, col_idx)
+                if getattr(sim_params, "log_bond_dims", False):
+                    bond_dims.append(int(state.write_max_bond_dim()))
 
     if isinstance(sim_params, WeakSimParams):
         if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
@@ -321,4 +326,8 @@ def digital_tjm(
     if sim_params.get_state:
         sim_params.output_state = state
     state.evaluate_observables(sim_params, results, results.shape[1] - 1)
+    if sim_params.sample_layers and getattr(sim_params, "log_bond_dims", False):
+        # Append final state's bond dimension to align with results last column
+        bond_dims.append(int(state.write_max_bond_dim()))
+        return results, np.asarray(bond_dims, dtype=int)
     return results

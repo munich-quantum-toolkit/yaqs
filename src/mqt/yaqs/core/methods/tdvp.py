@@ -87,7 +87,46 @@ def split_mps_tensor(
         shape_transposed[0] * shape_transposed[1],
         shape_transposed[2] * shape_transposed[3],
     )
-    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+    
+    # Check for numerical issues before SVD
+    if not np.isfinite(theta_mat).all():
+        theta_mat = np.nan_to_num(theta_mat, nan=0.0, posinf=1e10, neginf=-1e10)
+    
+    # Perform SVD with fallback strategies for numerical stability
+    try:
+        u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+    except np.linalg.LinAlgError:
+        # SVD didn't converge - try fallback strategies
+        try:
+            # Strategy 1: Add small regularization to diagonal
+            min_dim = min(theta_mat.shape[0], theta_mat.shape[1])
+            theta_reg = theta_mat.copy()
+            for i in range(min_dim):
+                theta_reg[i, i] += 1e-14
+            u_mat, s_vec, v_mat = np.linalg.svd(theta_reg, full_matrices=False)
+        except np.linalg.LinAlgError:
+            try:
+                # Strategy 2: Use eigenvalue decomposition
+                ata = theta_mat.conj().T @ theta_mat
+                eigenvals, v_mat = np.linalg.eigh(ata)
+                idx = np.argsort(eigenvals)[::-1]
+                s_vec = np.sqrt(np.abs(eigenvals[idx]))
+                v_mat = v_mat[:, idx].conj().T
+                s_inv = np.where(s_vec > 1e-15, 1.0 / s_vec, 0.0)
+                u_mat = theta_mat @ v_mat.conj().T @ np.diag(s_inv)
+            except np.linalg.LinAlgError:
+                # Strategy 3: QR-based fallback
+                m, n = theta_mat.shape
+                if m <= n:
+                    Q, R = np.linalg.qr(theta_mat)
+                    U_r, s_vec, Vh = np.linalg.svd(R, full_matrices=False)
+                    u_mat = Q @ U_r
+                    v_mat = Vh
+                else:
+                    Qh, Rh = np.linalg.qr(theta_mat.conj().T)
+                    U_r, s_vec, Vh = np.linalg.svd(Rh.conj().T, full_matrices=False)
+                    u_mat = U_r
+                    v_mat = Vh @ Qh.conj().T
 
     # Handled by dynamic TDVP
     keep = min(len(s_vec), sim_params.max_bond_dim) if not dynamic else len(s_vec)

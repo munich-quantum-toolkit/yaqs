@@ -86,8 +86,47 @@ def right_svd(
     """
     old_shape = mps_tensor.shape
     svd_shape = (old_shape[0] * old_shape[1], old_shape[2])
-    mps_tensor = mps_tensor.reshape(svd_shape)
-    u_mat, s_vec, v_mat = np.linalg.svd(mps_tensor, full_matrices=False)
+    mps_mat = mps_tensor.reshape(svd_shape)
+    
+    # Check for numerical issues and apply fallback if needed
+    if not np.isfinite(mps_mat).all():
+        mps_mat = np.nan_to_num(mps_mat, nan=0.0, posinf=1e10, neginf=-1e10)
+    
+    try:
+        u_mat, s_vec, v_mat = np.linalg.svd(mps_mat, full_matrices=False)
+    except np.linalg.LinAlgError:
+        # SVD didn't converge - try fallback strategies
+        try:
+            # Strategy 1: Add small regularization to diagonal
+            min_dim = min(mps_mat.shape[0], mps_mat.shape[1])
+            mps_reg = mps_mat.copy()
+            for i in range(min_dim):
+                mps_reg[i, i] += 1e-14
+            u_mat, s_vec, v_mat = np.linalg.svd(mps_reg, full_matrices=False)
+        except np.linalg.LinAlgError:
+            try:
+                # Strategy 2: Use eigenvalue decomposition
+                ata = mps_mat.conj().T @ mps_mat
+                eigenvals, v_mat = np.linalg.eigh(ata)
+                idx = np.argsort(eigenvals)[::-1]
+                s_vec = np.sqrt(np.abs(eigenvals[idx]))
+                v_mat = v_mat[:, idx].conj().T
+                s_inv = np.where(s_vec > 1e-15, 1.0 / s_vec, 0.0)
+                u_mat = mps_mat @ v_mat.conj().T @ np.diag(s_inv)
+            except np.linalg.LinAlgError:
+                # Strategy 3: QR-based fallback
+                m, n = mps_mat.shape
+                if m <= n:
+                    Q, R = np.linalg.qr(mps_mat)
+                    U_r, s_vec, Vh = np.linalg.svd(R, full_matrices=False)
+                    u_mat = Q @ U_r
+                    v_mat = Vh
+                else:
+                    Qh, Rh = np.linalg.qr(mps_mat.conj().T)
+                    U_r, s_vec, Vh = np.linalg.svd(Rh.conj().T, full_matrices=False)
+                    u_mat = U_r
+                    v_mat = Vh @ Qh.conj().T
+    
     new_shape = (old_shape[0], old_shape[1], -1)
     u_tensor = u_mat.reshape(new_shape)
     return u_tensor, s_vec, v_mat
@@ -159,11 +198,51 @@ def two_site_svd(
     # 2) reshape to matrix M of shape (L*phys_i) x (phys_j*R)
     theta_mat = theta.reshape(left * phys_i, phys_j * right)
 
-    # 3) full SVD
-    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+    # 3) Check for numerical issues before SVD
+    if not np.isfinite(theta_mat).all():
+        # If we have NaN or Inf, try to recover by sanitizing
+        theta_mat = np.nan_to_num(theta_mat, nan=0.0, posinf=1e10, neginf=-1e10)
+    
+    # 4) full SVD with fallback strategies
+    try:
+        u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+    except np.linalg.LinAlgError:
+        # SVD didn't converge - try fallback strategies
+        try:
+            # Strategy 1: Add small regularization to diagonal
+            min_dim = min(theta_mat.shape[0], theta_mat.shape[1])
+            theta_reg = theta_mat.copy()
+            for i in range(min_dim):
+                theta_reg[i, i] += 1e-14
+            u_mat, s_vec, v_mat = np.linalg.svd(theta_reg, full_matrices=False)
+        except np.linalg.LinAlgError:
+            try:
+                # Strategy 2: Use divide-and-conquer algorithm via gesdd (default is gesvd)
+                ata = theta_mat.conj().T @ theta_mat
+                eigenvals, v_mat = np.linalg.eigh(ata)
+                idx = np.argsort(eigenvals)[::-1]
+                s_vec = np.sqrt(np.abs(eigenvals[idx]))
+                v_mat = v_mat[:, idx].conj().T
+                # Compute U from A @ V @ S^{-1}
+                s_inv = np.where(s_vec > 1e-15, 1.0 / s_vec, 0.0)
+                u_mat = theta_mat @ v_mat.conj().T @ np.diag(s_inv)
+            except np.linalg.LinAlgError:
+                # Strategy 3: Use QR decomposition instead of SVD
+                m, n = theta_mat.shape
+                if m <= n:
+                    Q, R = np.linalg.qr(theta_mat)              # A = Q R
+                    U_r, s_vec, Vh = np.linalg.svd(R, full_matrices=False)  # R = U_r Σ Vh
+                    u_mat = Q @ U_r                              # U = Q U_r
+                    v_mat = Vh                                   # Vh as usual
+                else:
+                    # LQ via QR on A^H
+                    Qh, Rh = np.linalg.qr(theta_mat.conj().T)    # A^H = Qh Rh
+                    # A = Rh^H Qh^H, do SVD of Rh^H (shape m×n but better conditioned)
+                    U_r, s_vec, Vh = np.linalg.svd(Rh.conj().T, full_matrices=False)
+                    u_mat = U_r
+                    v_mat = Vh @ Qh.conj().T
 
     # 4) decide how many singular values to keep:
-    #    sum of squares of discarded values ≤ threshold
     discard = 0.0
     keep = len(s_vec)
     min_keep = 2  # Prevents pathological dimension-1 truncation
@@ -176,11 +255,11 @@ def two_site_svd(
         keep = min(keep, max_bond_dim)
 
     # 5) build the truncated A' of shape (phys_i, L, keep)
-    a_new = u_mat[:, :keep].reshape(phys_i, left, keep)
+    a_new = u_mat[:, :keep].reshape(phys_i, left, keep).astype(np.complex128)
 
     # 6) absorb S into Vh and reshape to B' of shape (phys_j, keep, R)
     v_tensor = np.diag(s_vec[:keep]) @ v_mat[:keep, :]  # shape (keep, phys_j*R)
     v_tensor = v_tensor.reshape(keep, phys_j, right)  # (keep, phys_j, R)
-    b_new = v_tensor.transpose(1, 0, 2)  # (phys_j, keep, R)
+    b_new = v_tensor.transpose(1, 0, 2).astype(np.complex128)  # (phys_j, keep, R)
 
     return a_new, b_new

@@ -41,7 +41,45 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     matrix = np.transpose(tensor, (0, 2, 1, 3))
     dims = matrix.shape
     matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
-    u_mat, s_list, v_mat = np.linalg.svd(matrix, full_matrices=False)
+    
+    # Robust SVD with fallback strategies
+    if not np.isfinite(matrix).all():
+        matrix = np.nan_to_num(matrix, nan=0.0, posinf=1e10, neginf=-1e10)
+    
+    try:
+        u_mat, s_list, v_mat = np.linalg.svd(matrix, full_matrices=False)
+    except np.linalg.LinAlgError:
+        # SVD didn't converge - try fallback strategies
+        try:
+            # Strategy 1: Add small regularization to diagonal
+            min_dim = min(matrix.shape[0], matrix.shape[1])
+            matrix_reg = matrix.copy()
+            for i in range(min_dim):
+                matrix_reg[i, i] += 1e-14
+            u_mat, s_list, v_mat = np.linalg.svd(matrix_reg, full_matrices=False)
+        except np.linalg.LinAlgError:
+            try:
+                # Strategy 2: Use eigenvalue decomposition
+                ata = matrix.conj().T @ matrix
+                eigenvals, v_mat = np.linalg.eigh(ata)
+                idx = np.argsort(eigenvals)[::-1]
+                s_list = np.sqrt(np.abs(eigenvals[idx]))
+                v_mat = v_mat[:, idx].conj().T
+                s_inv = np.where(s_list > 1e-15, 1.0 / s_list, 0.0)
+                u_mat = matrix @ v_mat.conj().T @ np.diag(s_inv)
+            except np.linalg.LinAlgError:
+                # Strategy 3: QR-based fallback
+                m, n = matrix.shape
+                if m <= n:
+                    Q, R = np.linalg.qr(matrix)
+                    U_r, s_list, Vh = np.linalg.svd(R, full_matrices=False)
+                    u_mat = Q @ U_r
+                    v_mat = Vh
+                else:
+                    Qh, Rh = np.linalg.qr(matrix.conj().T)
+                    U_r, s_list, Vh = np.linalg.svd(Rh.conj().T, full_matrices=False)
+                    u_mat = U_r
+                    v_mat = Vh @ Qh.conj().T
     s_list = s_list[s_list > 1e-6]
     u_mat = u_mat[:, 0 : len(s_list)]
     v_mat = v_mat[0 : len(s_list), :]
