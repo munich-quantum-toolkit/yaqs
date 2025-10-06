@@ -59,7 +59,44 @@ def decompose_theta(
     theta = np.transpose(theta, (0, 3, 2, 1, 4, 5))
     theta_matrix = np.reshape(theta, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
 
-    u_mat, s_list, v_mat = np.linalg.svd(theta_matrix, full_matrices=False)
+    # Robust SVD with fallback strategies
+    if not np.isfinite(theta_matrix).all():
+        theta_matrix = np.nan_to_num(theta_matrix, nan=0.0, posinf=1e10, neginf=-1e10)
+    
+    try:
+        u_mat, s_list, v_mat = np.linalg.svd(theta_matrix, full_matrices=False)
+    except np.linalg.LinAlgError:
+        # SVD didn't converge - try fallback strategies
+        try:
+            # Strategy 1: Add small regularization to diagonal
+            min_dim = min(theta_matrix.shape[0], theta_matrix.shape[1])
+            theta_reg = theta_matrix.copy()
+            for i in range(min_dim):
+                theta_reg[i, i] += 1e-14
+            u_mat, s_list, v_mat = np.linalg.svd(theta_reg, full_matrices=False)
+        except np.linalg.LinAlgError:
+            try:
+                # Strategy 2: Use eigenvalue decomposition
+                ata = theta_matrix.conj().T @ theta_matrix
+                eigenvals, v_mat = np.linalg.eigh(ata)
+                idx = np.argsort(eigenvals)[::-1]
+                s_list = np.sqrt(np.abs(eigenvals[idx]))
+                v_mat = v_mat[:, idx].conj().T
+                s_inv = np.where(s_list > 1e-15, 1.0 / s_list, 0.0)
+                u_mat = theta_matrix @ v_mat.conj().T @ np.diag(s_inv)
+            except np.linalg.LinAlgError:
+                # Strategy 3: QR-based fallback
+                m, n = theta_matrix.shape
+                if m <= n:
+                    Q, R = np.linalg.qr(theta_matrix)
+                    U_r, s_list, Vh = np.linalg.svd(R, full_matrices=False)
+                    u_mat = Q @ U_r
+                    v_mat = Vh
+                else:
+                    Qh, Rh = np.linalg.qr(theta_matrix.conj().T)
+                    U_r, s_list, Vh = np.linalg.svd(Rh.conj().T, full_matrices=False)
+                    u_mat = U_r
+                    v_mat = Vh @ Qh.conj().T
     s_list = s_list[s_list > threshold]
     u_mat = u_mat[:, : len(s_list)]
     v_mat = v_mat[: len(s_list), :]

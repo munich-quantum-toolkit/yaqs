@@ -67,7 +67,7 @@ def find_required_trajectories(
     
     Args:
         method_name: Name of the method for logging
-        simulator_func: Function to run simulation (run_yaqs or run_qiskit_mps)
+        simulator_func: Function to run simulation (run_yaqs or run_qiskit_mps) (None if not running)
         exact_stag: Exact staggered magnetization reference (None if unavailable)
         threshold_mse: Target MSE threshold (None if no exact reference)
         fixed_traj: If set, run exactly this many trajectories (for large systems)
@@ -199,15 +199,20 @@ def find_required_trajectories(
 
 if __name__ == "__main__":
     # Simulation parameters
-    num_qubits = 20
+    num_qubits = 40
     num_layers = 30
     tau = 0.1
-    noise_strength = 0.001
+    noise_strength = 0.01
     
     # ========== MODE SELECTION ==========
     # For small systems: Set run_density_matrix=True and specify threshold_mse
     # For large systems: Set run_density_matrix=False and specify fixed_trajectories
     run_density_matrix = False  # Set to False for large systems (>12 qubits)
+    enable_qiskit_mps = False
+    enable_yaqs_standard = False
+    enable_yaqs_projector = True
+    enable_yaqs_unitary_2pt = False
+    enable_yaqs_unitary_gauss = False
     threshold_mse = 5e-4  # Target MSE threshold (only used if run_density_matrix=True)
     fixed_trajectories = 50  # Number of trajectories for large systems (only used if run_density_matrix=False)
     # ====================================
@@ -286,99 +291,104 @@ if __name__ == "__main__":
     print("-"*70)
     
     # Qiskit MPS
-    print("\n1. Qiskit MPS (Standard Unraveling)")
-    num_traj_mps, mse_mps, stag_mps, bonds_mps = find_required_trajectories(
-        "Qiskit MPS",
-        run_qiskit_mps,
-        exact_stag,
-        threshold_mse if run_density_matrix else None,
-        init_circuit,
-        trotter_step,
-        num_qubits,
-        num_layers,
-        None,
-        qiskit_noise_model,
-        stag_initial,
-        max_traj=1000,
-        fixed_traj=None if run_density_matrix else fixed_trajectories
-    )
-    results["Qiskit MPS"] = {"trajectories": num_traj_mps, "mse": mse_mps, "stag": stag_mps, "bonds": bonds_mps}
+    if enable_qiskit_mps:
+        print("\n1. Qiskit MPS (Standard Unraveling)")
+        num_traj_mps, mse_mps, stag_mps, bonds_mps = find_required_trajectories(
+            "Qiskit MPS",
+            run_qiskit_mps,
+            exact_stag,
+            threshold_mse,
+            init_circuit,
+            trotter_step,
+            num_qubits,
+            num_layers,
+            None,
+            qiskit_noise_model,
+            stag_initial,
+            max_traj=1000,
+            fixed_traj=None if run_density_matrix else fixed_trajectories
+        )
+        results["Qiskit MPS"] = {"trajectories": num_traj_mps, "mse": mse_mps, "stag": stag_mps, "bonds": bonds_mps}
     
     # YAQS Standard
-    print("\n2. YAQS Standard Unraveling")
-    num_traj_std, mse_std, stag_std, bonds_std = find_required_trajectories(
-        "YAQS Standard",
-        run_yaqs,
-        exact_stag,
-        threshold_mse if run_density_matrix else None,
-        init_circuit,
-        trotter_step,
-        num_qubits,
-        num_layers,
-        noise_model_normal,
-        None,
-        stag_initial,
-        max_traj=1000,
-        fixed_traj=None if run_density_matrix else fixed_trajectories
-    )
-    results["YAQS Standard"] = {"trajectories": num_traj_std, "mse": mse_std, "stag": stag_std, "bonds": bonds_std}
-    
+    if enable_yaqs_standard:
+        print("\n2. YAQS Standard Unraveling")
+        num_traj_std, mse_std, stag_std, bonds_std = find_required_trajectories(
+            "YAQS Standard",
+            run_yaqs,
+            exact_stag,
+            threshold_mse if run_density_matrix else None,
+            init_circuit,
+            trotter_step,
+            num_qubits,
+            num_layers,
+            noise_model_normal,
+            None,
+            stag_initial,
+            max_traj=1000,
+            fixed_traj=None if run_density_matrix else fixed_trajectories
+        )
+        results["YAQS Standard"] = {"trajectories": num_traj_std, "mse": mse_std, "stag": stag_std, "bonds": bonds_std}
+        
     # YAQS Projector
-    print("\n3. YAQS Projector Unraveling")
-    num_traj_proj, mse_proj, stag_proj, bonds_proj = find_required_trajectories(
-        "YAQS Projector",
-        run_yaqs,
-        exact_stag,
-        threshold_mse if run_density_matrix else None,
-        init_circuit,
-        trotter_step,
-        num_qubits,
-        num_layers,
-        noise_model_projector,
-        None,
-        stag_initial,
-        max_traj=1000,
-        fixed_traj=None if run_density_matrix else fixed_trajectories
-    )
-    results["YAQS Projector"] = {"trajectories": num_traj_proj, "mse": mse_proj, "stag": stag_proj, "bonds": bonds_proj}
-    
+    if enable_yaqs_projector:
+        print("\n3. YAQS Projector Unraveling")
+        num_traj_proj, mse_proj, stag_proj, bonds_proj = find_required_trajectories(
+            "YAQS Projector",
+            run_yaqs,
+            exact_stag,
+            threshold_mse if run_density_matrix else None,
+            init_circuit,
+            trotter_step,
+            num_qubits,
+            num_layers,
+            noise_model_projector,
+            None,
+            stag_initial,
+            max_traj=1000,
+            fixed_traj=None if run_density_matrix else fixed_trajectories
+        )
+        results["YAQS Projector"] = {"trajectories": num_traj_proj, "mse": mse_proj, "stag": stag_proj, "bonds": bonds_proj}
+        
     # YAQS Unitary 2pt
-    print("\n4. YAQS Unitary 2pt Unraveling")
-    num_traj_2pt, mse_2pt, stag_2pt, bonds_2pt = find_required_trajectories(
-        "YAQS Unitary 2pt",
-        run_yaqs,
-        exact_stag,
-        threshold_mse if run_density_matrix else None,
-        init_circuit,
-        trotter_step,
-        num_qubits,
-        num_layers,
-        noise_model_unitary_2pt,
-        None,
-        stag_initial,
-        max_traj=1000,
-        fixed_traj=None if run_density_matrix else fixed_trajectories
-    )
-    results["YAQS Unitary 2pt"] = {"trajectories": num_traj_2pt, "mse": mse_2pt, "stag": stag_2pt, "bonds": bonds_2pt}
-    
+    if enable_yaqs_unitary_2pt:
+        print("\n4. YAQS Unitary 2pt Unraveling")
+        num_traj_2pt, mse_2pt, stag_2pt, bonds_2pt = find_required_trajectories(
+            "YAQS Unitary 2pt",
+            run_yaqs,
+            exact_stag,
+            threshold_mse if run_density_matrix else None,
+            init_circuit,
+            trotter_step,
+            num_qubits,
+            num_layers,
+            noise_model_unitary_2pt,
+            None,
+            stag_initial,
+            max_traj=1000,
+            fixed_traj=None if run_density_matrix else fixed_trajectories
+        )
+        results["YAQS Unitary 2pt"] = {"trajectories": num_traj_2pt, "mse": mse_2pt, "stag": stag_2pt, "bonds": bonds_2pt}
+        
     # YAQS Unitary Gauss
-    print("\n5. YAQS Unitary Gauss Unraveling")
-    num_traj_gauss, mse_gauss, stag_gauss, bonds_gauss = find_required_trajectories(
-        "YAQS Unitary Gauss",
-        run_yaqs,
-        exact_stag,
-        threshold_mse if run_density_matrix else None,
-        init_circuit,
-        trotter_step,
-        num_qubits,
-        num_layers,
-        noise_model_unitary_gauss,
-        None,
-        stag_initial,
-        max_traj=1000,
-        fixed_traj=None if run_density_matrix else fixed_trajectories
-    )
-    results["YAQS Unitary Gauss"] = {"trajectories": num_traj_gauss, "mse": mse_gauss, "stag": stag_gauss, "bonds": bonds_gauss}
+    if enable_yaqs_unitary_gauss:
+        print("\n5. YAQS Unitary Gauss Unraveling")
+        num_traj_gauss, mse_gauss, stag_gauss, bonds_gauss = find_required_trajectories(
+            "YAQS Unitary Gauss",
+            run_yaqs,
+            exact_stag,
+            threshold_mse if run_density_matrix else None,
+            init_circuit,
+            trotter_step,
+            num_qubits,
+            num_layers,
+            noise_model_unitary_gauss,
+            None,
+            stag_initial,
+            max_traj=1000,
+            fixed_traj=None if run_density_matrix else fixed_trajectories
+        )
+        results["YAQS Unitary Gauss"] = {"trajectories": num_traj_gauss, "mse": mse_gauss, "stag": stag_gauss, "bonds": bonds_gauss}
 
     # Print summary
     print("\n" + "="*70)
@@ -406,13 +416,17 @@ if __name__ == "__main__":
     print("="*70)
 
     # Organize bond dimension data in the format expected by plot_avg_bond_dims
-    qiskit_bonds = results["Qiskit MPS"]["bonds"]
-    yaqs_bonds_by_label = {
-        "standard": results["YAQS Standard"]["bonds"],
-        "projector": results["YAQS Projector"]["bonds"],
-        "unitary_2pt": results["YAQS Unitary 2pt"]["bonds"],
-        "unitary_gauss": results["YAQS Unitary Gauss"]["bonds"],
-    }
+    # Only include methods that were actually run
+    qiskit_bonds = results.get("Qiskit MPS", {}).get("bonds", None) if "Qiskit MPS" in results else None
+    yaqs_bonds_by_label = {}
+    if "YAQS Standard" in results:
+        yaqs_bonds_by_label["standard"] = results["YAQS Standard"]["bonds"]
+    if "YAQS Projector" in results:
+        yaqs_bonds_by_label["projector"] = results["YAQS Projector"]["bonds"]
+    if "YAQS Unitary 2pt" in results:
+        yaqs_bonds_by_label["unitary_2pt"] = results["YAQS Unitary 2pt"]["bonds"]
+    if "YAQS Unitary Gauss" in results:
+        yaqs_bonds_by_label["unitary_gauss"] = results["YAQS Unitary Gauss"]["bonds"]
     
     # Process bond dimensions for plotting (using same logic as plot_avg_bond_dims)
     layers = np.arange(1, num_layers + 1)
