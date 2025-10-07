@@ -334,6 +334,9 @@ def bug_second_order(
     bug(state, mpo, sim_params, numiter_lanczos)
     
     # ===== Second half-step: left-to-right sweep with dt/2 =====
+    # Restore left-canonical form before flipping
+    state.set_canonical_form(0)
+    
     # Flip network to do the reverse sweep
     state.flip_network()
     mpo.flip_network()
