@@ -1395,3 +1395,21 @@ class MPO:
                 self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
             else:
                 self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
+
+    def flip_network(self) -> None:
+        """Flip MPO.
+
+        Flips the bond dimensions in the network so that the MPO can be applied
+        in reverse order (useful for symmetric splitting schemes).
+        MPO tensors have shape (sigma, sigma', chi_left, chi_right).
+        This transposes to (sigma, sigma', chi_right, chi_left) and reverses the list.
+
+        """
+        new_tensors = []
+        for tensor in self.tensors:
+            # Swap left and right bond dimensions: (sigma, sigma', chi_left, chi_right) -> (sigma, sigma', chi_right, chi_left)
+            new_tensor = np.transpose(tensor, (0, 1, 3, 2))
+            new_tensors.append(new_tensor)
+
+        new_tensors.reverse()
+        self.tensors = new_tensors

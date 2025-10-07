@@ -64,7 +64,7 @@ def prepare_canonical_site_tensors(
 
 
 def choose_stack_tensor(
-    site: int, canon_center_tensors: list[NDArray[np.complex128]], state: MPS
+    site: int, canon_center_tensors: list[NDArray[np.complex128]], state: MPS, *, is_forward_sweep: bool = True
 ) -> NDArray[np.complex128]:
     """Return the non-update tensor that should be used for the stacking step.
 
@@ -76,13 +76,22 @@ def choose_stack_tensor(
         site: The site to be updated.
         canon_center_tensors: The canonical site tensors.
         state: The MPS.
+        is_forward_sweep: True if sweeping in the natural direction (right-to-left on non-flipped network),
+                          False if sweeping on a flipped network.
 
     Returns:
         NDArray[np.complex128]: The tensor to be stacked.
 
     """
-    if site == state.length - 1:  # noqa: SIM108
-        # This is the only leaf case.
+    # For a right-to-left sweep on the original (non-flipped) network,
+    # or for a right-to-left sweep on a flipped network (which is physically left-to-right),
+    # we need to check if we're at the "leaf" site.
+    # The leaf is at index state.length-1 for forward sweeps,
+    # and at index 0 for backward sweeps (on flipped network).
+    is_leaf = (site == state.length - 1) if is_forward_sweep else (site == 0)
+    
+    if is_leaf:
+        # This is the leaf case - use the current state tensor
         old_stack_tensor = state.tensors[site]
     else:
         old_stack_tensor = canon_center_tensors[site]
@@ -104,6 +113,22 @@ def find_new_q(
     """
     stacked_tensor = np.concatenate((old_stack_tensor, updated_tensor), axis=1)
     new_q, _ = left_qr(stacked_tensor)
+    return new_q
+
+def find_new_q_fixed(
+    updated_tensor: NDArray[np.complex128]
+) -> NDArray[np.complex128]:
+    """Finds the new Q tensor after the update with enlarged left virtual leg.
+
+    Args:
+        old_stack_tensor: The tensor to be stacked with the updated tensor.
+        updated_tensor: The tensor after the update.
+
+    Returns:
+        new_q: The new Q tensor with MPS leg order (phys, left, right).
+
+    """
+    new_q, _ = left_qr(updated_tensor)
     return new_q
 
 
@@ -138,6 +163,8 @@ def local_update(
     right_m_block: NDArray[np.complex128],
     sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
     numiter_lanczos: int,
+    *,
+    is_forward_sweep: bool = True,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Single Site bug algorithm update.
 
@@ -153,6 +180,7 @@ def local_update(
         right_m_block: The basis update matrix of the site to the right.
         sim_params: Simulation parameters.
         numiter_lanczos: Number of Lanczos iterations.
+        is_forward_sweep: True if sweeping in natural direction, False if on flipped network.
 
     Returns:
         basis_change_m: The basis update matrix of this site.
@@ -162,8 +190,55 @@ def local_update(
     updated_tensor = update_site(
         left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt, numiter_lanczos
     )
-    old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state)
+    old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state, is_forward_sweep=is_forward_sweep)
     new_q = find_new_q(old_stack_tensor, updated_tensor)
+    old_q = state.tensors[site]
+    basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
+    state.tensors[site] = new_q
+    canon_center_tensors[site - 1] = np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0))
+    new_right_block = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
+    return basis_change_m, new_right_block
+
+
+def local_update_fixed(
+    state: MPS,
+    mpo: MPO,
+    left_blocks: list[NDArray[np.complex128]],
+    right_block: NDArray[np.complex128],
+    canon_center_tensors: list[NDArray[np.complex128]],
+    site: int,
+    right_m_block: NDArray[np.complex128],
+    sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
+    numiter_lanczos: int,
+    *,
+    is_forward_sweep: bool = True,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Single Site bug algorithm update.
+
+    Updates a single site of the MPS.
+
+    Args:
+        state: The MPS.
+        mpo: The MPO.
+        left_blocks: The left environments.
+        right_block: The right environment.
+        canon_center_tensors: The canonical site tensors.
+        site: The site to be updated.
+        right_m_block: The basis update matrix of the site to the right.
+        sim_params: Simulation parameters.
+        numiter_lanczos: Number of Lanczos iterations.
+        is_forward_sweep: True if sweeping in natural direction, False if on flipped network.
+
+    Returns:
+        basis_change_m: The basis update matrix of this site.
+        new_right_block: The right environment of this site.
+    """
+    old_tensor = canon_center_tensors[site]
+    updated_tensor = update_site(
+        left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt, numiter_lanczos
+    )
+    old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state, is_forward_sweep=is_forward_sweep)
+    new_q = find_new_q_fixed(updated_tensor)
     old_q = state.tensors[site]
     basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
     state.tensors[site] = new_q
@@ -215,3 +290,63 @@ def bug(
     state.tensors[0] = updated_tensor
     # Truncation
     state.truncate(sim_params.threshold, sim_params.max_bond_dim)
+
+
+
+def bug_second_order(
+    state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | StrongSimParams, numiter_lanczos: int = 25
+) -> None:
+    """Performs the second-order Basis-Update and Galerkin Method for an MPS using Strang splitting.
+
+    Implements O(dt^2) time evolution by performing two half-time-step sweeps in opposite directions:
+    1. Right-to-left sweep with dt/2
+    2. Left-to-right sweep with dt/2
+    
+    This is more accurate than simply calling bug() twice with dt/2 because the two sweeps
+    act as time-symmetric operators, achieving second-order accuracy through Strang splitting.
+
+    Args:
+        mpo: Hamiltonian represented as an MPO.
+        state: The initial state represented as an MPS.
+        sim_params: Simulation parameters containing time step 'dt' and SVD threshold.
+        numiter_lanczos: Number of Lanczos iterations for each local update.
+
+    Raises:
+        ValueError: If the state and Hamiltonian have different numbers of sites.
+
+    """
+    num_sites = mpo.length
+    if num_sites != state.length:
+        msg = "State and Hamiltonian must have the same number of sites"
+        raise ValueError(msg)
+
+    # Store original dt and use half time-step
+    original_dt = sim_params.dt
+    dt_half = 0.5 * original_dt
+    
+    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
+        dt_half = 1.0
+
+    # ===== First half-step: right-to-left sweep with dt/2 =====
+    sim_params.dt = dt_half
+    
+    # Perform standard right-to-left BUG sweep
+    bug(state, mpo, sim_params, numiter_lanczos)
+    
+    # ===== Second half-step: left-to-right sweep with dt/2 =====
+    # Flip network to do the reverse sweep
+    state.flip_network()
+    mpo.flip_network()
+    
+    # Perform right-to-left sweep on flipped network (= left-to-right on original)
+    bug(state, mpo, sim_params, numiter_lanczos)
+    
+    # Flip back to original orientation
+    state.flip_network()
+    mpo.flip_network()
+    
+    # Restore original dt
+    sim_params.dt = original_dt
+
+
+
