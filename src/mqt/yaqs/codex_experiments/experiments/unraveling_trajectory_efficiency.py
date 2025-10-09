@@ -199,7 +199,7 @@ def find_required_trajectories(
 
 if __name__ == "__main__":
     # Simulation parameters
-    num_qubits = 40
+    num_qubits = 10
     num_layers = 30
     tau = 0.1
     noise_strength = 0.01
