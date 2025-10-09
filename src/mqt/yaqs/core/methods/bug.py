@@ -199,54 +199,6 @@ def local_update(
     new_right_block = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
     return basis_change_m, new_right_block
 
-
-def local_update_fixed(
-    state: MPS,
-    mpo: MPO,
-    left_blocks: list[NDArray[np.complex128]],
-    right_block: NDArray[np.complex128],
-    canon_center_tensors: list[NDArray[np.complex128]],
-    site: int,
-    right_m_block: NDArray[np.complex128],
-    sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
-    numiter_lanczos: int,
-    *,
-    is_forward_sweep: bool = True,
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Single Site bug algorithm update.
-
-    Updates a single site of the MPS.
-
-    Args:
-        state: The MPS.
-        mpo: The MPO.
-        left_blocks: The left environments.
-        right_block: The right environment.
-        canon_center_tensors: The canonical site tensors.
-        site: The site to be updated.
-        right_m_block: The basis update matrix of the site to the right.
-        sim_params: Simulation parameters.
-        numiter_lanczos: Number of Lanczos iterations.
-        is_forward_sweep: True if sweeping in natural direction, False if on flipped network.
-
-    Returns:
-        basis_change_m: The basis update matrix of this site.
-        new_right_block: The right environment of this site.
-    """
-    old_tensor = canon_center_tensors[site]
-    updated_tensor = update_site(
-        left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt, numiter_lanczos
-    )
-    old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state, is_forward_sweep=is_forward_sweep)
-    new_q = find_new_q_fixed(updated_tensor)
-    old_q = state.tensors[site]
-    basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
-    state.tensors[site] = new_q
-    canon_center_tensors[site - 1] = np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0))
-    new_right_block = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
-    return basis_change_m, new_right_block
-
-
 def bug(
     state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | StrongSimParams, numiter_lanczos: int = 25
 ) -> None:
