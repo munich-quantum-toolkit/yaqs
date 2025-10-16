@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+import copy
+
 from ..libraries.noise_library import NoiseLibrary
 
 if TYPE_CHECKING:
@@ -160,3 +162,34 @@ class NoiseModel:
         """
         operator_class = getattr(NoiseLibrary, name)
         return operator_class().matrix
+
+
+
+
+class CompactNoiseModel:
+
+    def __init__(self, compact_processes: list[dict[str, Any]] | None = None) -> None:
+
+
+        self.compact_processes: list[dict[str, Any]] = copy.deepcopy(compact_processes) if compact_processes is not None else []
+
+        self.expanded_processes: list[dict[str, Any]] = []
+
+        self.index_list: list[int] = []
+
+
+
+        for i, proc in enumerate(self.compact_processes):
+
+            assert "name" in proc, "Each process must have a 'name' key"
+            assert "sites" in proc, "Each process must have a 'sites' key"
+            assert "strength" in proc, "Each process must have a 'strength' key"
+
+
+            for site in proc["sites"]:
+                self.expanded_processes.append({"name": proc["name"], "sites": [site], "strength": proc["strength"]})
+                self.index_list.append(i)
+   
+
+        self.expanded_noise_model: NoiseModel = NoiseModel(self.expanded_processes)
+
