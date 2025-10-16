@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from mqt.yaqs import simulator
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel, CompactNoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Zero
 from mqt.yaqs.noise_char.optimization import trapezoidal
@@ -42,26 +42,6 @@ def noise_model_to_operator_list(noise_model: NoiseModel) -> list[Observable]:
     return noise_list
 
 
-def flatten_noise_model(noise_model: NoiseModel) -> tuple[NoiseModel, list[int]]:
-    """Serializes the noise model.
-
-    Args:
-        noise_model (NoiseModel): The noise model to serialize.
-
-    Returns:
-        NoiseModel: The serialized noise model.
-    """
-    noise_list = []
-
-    index_list = []
-
-    for i, proc in enumerate(noise_model.processes):
-        for site in proc["sites"]:
-            noise_list.append({"name": proc["name"], "sites": [site], "strength": proc["strength"]})
-            index_list.append(i)
-
-    return NoiseModel(noise_list), index_list
-
 
 class PropagatorWithGradients:
     """A class to encapsulate the propagator for the Ising model with noise.
@@ -81,16 +61,17 @@ class PropagatorWithGradients:
         *,
         sim_params: AnalogSimParams,
         hamiltonian: MPO,
-        noise_model: NoiseModel,
+        compact_noise_model: CompactNoiseModel,
         init_state: MPS,
     ) -> None:
         self.sim_params: AnalogSimParams = copy.deepcopy(sim_params)
         self.hamiltonian: MPO = copy.deepcopy(hamiltonian)
-        self.input_noise_model: NoiseModel = copy.deepcopy(noise_model)
+        self.compact_noise_model: CompactNoiseModel = copy.deepcopy(compact_noise_model)
         self.init_state: MPS = copy.deepcopy(init_state)
 
-        self.flat_noise_model, self.index_list = flatten_noise_model(self.input_noise_model)
-        self.noise_list: list[Observable] = noise_model_to_operator_list(self.flat_noise_model)
+        self.expanded_noise_model = copy.deepcopy(self.compact_noise_model.expanded_noise_model) 
+ 
+        self.noise_list: list[Observable] = noise_model_to_operator_list(self.expanded_noise_model)
 
         self.n_jump: int = len(self.noise_list)  # number of jump operators
 
@@ -100,7 +81,7 @@ class PropagatorWithGradients:
 
         self.set_observables: bool = False
 
-        if max(proc["sites"][0] for proc in self.flat_noise_model.processes) >= self.sites:
+        if max(proc["sites"][0] for proc in self.expanded_noise_model.processes) >= self.sites:
             msg = "Noise site index exceeds number of sites in the Hamiltonian."
             raise ValueError(msg)
 
@@ -127,16 +108,16 @@ class PropagatorWithGradients:
 
 
 
-    def run(self, noise_model: NoiseModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def run(self, noise_model: CompactNoiseModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if not self.set_observables:
             msg = "Observable list not set. Please use the set_observable_list method to set the observables."
             raise ValueError(msg)
 
-        for i, proc in enumerate(noise_model.processes):
+        for i, proc in enumerate(noise_model.compact_processes):
             for j, site in enumerate(proc["sites"]):
                 if (
-                    proc["name"] != self.input_noise_model.processes[i]["name"]
-                    or site != self.input_noise_model.processes[i]["sites"][j]
+                    proc["name"] != self.compact_noise_model.compact_processes[i]["name"]
+                    or site != self.compact_noise_model.compact_processes[i]["sites"][j]
                 ):
                     msg = "Noise model processes or sites do not match the initialized noise model."
                     raise ValueError(msg)
@@ -169,18 +150,10 @@ class PropagatorWithGradients:
         )
 
 
-        # print("Propagator before run Reftraj results:", self.obs_list[0].results)
-        # print("Object type: ", type(self.obs_list[0].results))
-        # print("Propagator before run Reftraj results:", self.obs_list[0].results[3])
-
-        print("Running simulation with noise model:", noise_model.processes)
-        simulator.run(self.init_state, self.hamiltonian, new_sim_params, noise_model)
+        simulator.run(self.init_state, self.hamiltonian, new_sim_params, noise_model.expanded_noise_model)
 
         # Separate original and new expectation values from result_lindblad.
         self.obs_traj = new_sim_params.observables[: self.n_obs]
-
-        # print("Propagator after run Reftraj results:", new_sim_params.observables[0].results)
-        # print("Propagator after run Reftraj results:", self.obs_traj[0].results)
 
 
         d_on_d_gk_list = new_sim_params.observables[self.n_obs :]  # these correspond to the A_kn operators

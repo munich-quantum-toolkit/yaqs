@@ -182,6 +182,7 @@ class CompactNoiseModel:
         for i, proc in enumerate(self.compact_processes):
 
             assert "name" in proc, "Each process must have a 'name' key"
+            assert getattr(NoiseLibrary, proc["name"])().interaction == 1, "Only 1-site noise processes are supported in CompactNoiseModel"
             assert "sites" in proc, "Each process must have a 'sites' key"
             assert "strength" in proc, "Each process must have a 'strength' key"
 

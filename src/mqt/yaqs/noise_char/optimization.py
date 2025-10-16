@@ -22,7 +22,7 @@ import numpy as np
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel, CompactNoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
     from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
 
@@ -126,7 +126,7 @@ class LossClass:
 
         self.ref_traj_array = copy.deepcopy(np.array([obs.results for obs in self.ref_traj]))
 
-        self.d = len(self.traj_gradients.input_noise_model.processes)
+        self.d = len(self.traj_gradients.compact_noise_model.compact_processes)
 
         self.t = copy.deepcopy(self.traj_gradients.sim_params.times)
 
@@ -323,20 +323,20 @@ class LossClass:
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
 
-    def x_to_noise_model(self, x: np.ndarray) -> NoiseModel:
-        """Converts the optimization variable x to a NoiseModel instance."""
-        return_model = copy.deepcopy(self.traj_gradients.input_noise_model)
+    def x_to_noise_model(self, x: np.ndarray) -> CompactNoiseModel:
+        """Converts the optimization variable x to a CompactNoiseModel instance."""
+        return_processes = copy.deepcopy(self.traj_gradients.compact_noise_model.compact_processes)
 
         for i in range(self.d):
-            return_model.processes[i]["strength"] = x[i]
+            return_processes[i]["strength"] = x[i]
 
-        return return_model
+        return CompactNoiseModel(return_processes)
 
-    def noise_model_to_x(self, noise_model: NoiseModel) -> np.ndarray:
-        """Converts a NoiseModel instance to the optimization variable x."""
+    def noise_model_to_x(self, noise_model: CompactNoiseModel) -> np.ndarray:
+        """Converts a CompactNoiseModel instance to the optimization variable x."""
         x: np.ndarray = np.zeros(self.d, dtype=np.float64)
         for i in range(self.d):
-            x[i] = noise_model.processes[i]["strength"]
+            x[i] = noise_model.compact_processes[i]["strength"]
         return x
 
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
@@ -362,11 +362,8 @@ class LossClass:
             msg = f"Input array must have length {self.d}, got {len(x)}"
             raise ValueError(msg)
 
-        print("x: ", x)
 
         noise_model = self.x_to_noise_model(x)
-
-        print("Noise model:", noise_model.processes)
 
         start_time = time.time()
 
@@ -384,16 +381,22 @@ class LossClass:
 
         loss: float = np.sum(diff**2)
 
-        # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump_site, n_obs_site, sites, nt)
-        #  to do elemtwise multiplication. Then I sum over the n_obs_site, sites and nt dimensions to
-        # get the gradient for each gamma, returning a vector of shape (n_jump_site)
+        # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump, n_obs, nt)
+        #  to do elemtwise multiplication. Then I sum over the n_obs and nt dimensions to
+        # get the gradient for each gamma, returning a vector of shape (n_jump)
         grad_vec = np.sum(2 * diff.reshape(1, n_obs, nt) * self.d_on_d_gk, axis=(1, 2))
 
-        if len(grad_vec) != len(self.traj_gradients.index_list):
-            msg = f"Gradient vector length {len(grad_vec)} does not match index list length {len(self.traj_gradients.index_list)}"
+        # grad_vec gives me the gradient for each individual gamma in the expanded noise model.
+
+        if len(grad_vec) != len(self.traj_gradients.compact_noise_model.index_list):
+            msg = f"Gradient vector length {len(grad_vec)} does not match index list length {len(self.traj_gradients.compact_noise_model.index_list)}"
             raise ValueError(msg)
 
-        grad = np.bincount(self.traj_gradients.index_list, weights=grad_vec)
+
+        ## To get the gradients for each gamma in the compact noise model, I sum the gradients
+        ## corresponding to the same gamma using np.bincount.
+
+        grad = np.bincount(self.traj_gradients.compact_noise_model.index_list, weights=grad_vec)
 
         self.post_process(x.copy(), loss, grad.copy())
 
