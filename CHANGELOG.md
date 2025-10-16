@@ -9,7 +9,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
-## [0.4.0] - 2025-10-16
+## [0.3.2] - 2025-10-16
 
 _If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#040)._
 
@@ -25,15 +25,15 @@ _If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#040)._
 
 - 🐛 Fix project bar of simulator ([#213]) ([**@aaronleesander**])
 
-## [0.3.0] - 2025-07-04
+## [0.3.1] - 2025-08-29
 
 _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-toolkit/yaqs/releases) for previous changelogs._
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
-[0.3.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.0
+[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
+[0.3.1]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.1
 
 <!-- PR links -->
 
