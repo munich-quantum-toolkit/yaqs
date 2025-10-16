@@ -19,6 +19,7 @@ These tests ensure that the MPS class functions as expected in various simulatio
 from __future__ import annotations
 
 import copy
+import re
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -207,6 +208,76 @@ def test_init_heisenberg() -> None:
             assert tensor.shape == (2, 2, 5, 1)
         else:
             assert tensor.shape == (2, 2, 5, 5)
+
+
+def test_init_1d_fermi_hubbard() -> None:
+    """Test that init_1d_fermi_hubbard creates the correct MPO for the 1D Fermi-Hubbard model.
+
+    This test initializes a 1D Fermi-Hubbard MPO with given parameters (u, t).
+    It verifies that:
+      - The MPO has the expected length and physical dimension.
+      - Inner and right boundary tensors have the expected shapes.
+      - After contracting the MPO, the resulting matrix will have the correct shape.
+    """
+    mpo = MPO()
+    length = 5
+    u, t = 0.5, 1.0
+
+    mpo.init_1d_fermi_hubbard(length, t, u)
+
+    assert mpo.length == length
+    assert mpo.physical_dimension == 4
+    assert len(mpo.tensors) == length
+
+    left_block = untranspose_block(mpo.tensors[0])
+    assert left_block.shape == (1, 6, 4, 4)
+
+    for i, tensor in enumerate(mpo.tensors):
+        if i == 0:
+            assert tensor.shape == (4, 4, 1, 6)
+        elif i == length - 1:
+            assert tensor.shape == (4, 4, 6, 1)
+        else:
+            assert tensor.shape == (4, 4, 6, 6)
+
+    assert mpo.to_matrix().shape == (4**length, 4**length)
+
+
+def test_init_1d_fermi_hubbard_jw() -> None:
+    """Test that init_1d_fermi_hubbard_jw creates the correct MPO for the 1D JW-transformed Fermi-Hubbard model.
+
+    This test initializes a 1D Fermi-Hubbard MPO after Jordan-Wigner transformation with given parameters (u, t).
+    It verifies that:
+      - The MPO has the expected length and physical dimension.
+      - Inner and right boundary tensors have the expected shapes.
+      - After contracting the MPO, the resulting matrix will have the correct shape.
+      - The function raises an exception when the given length is not even.
+    """
+    mpo = MPO()
+    length = 6
+    u, t = 0.5, 1.0
+
+    mpo.init_1d_fermi_hubbard_jw_pauli(length, t, u)
+
+    assert mpo.length == length
+    assert mpo.physical_dimension == 2
+    assert len(mpo.tensors) == length
+
+    left_block = untranspose_block(mpo.tensors[0])
+    assert left_block.shape == (1, 7, 2, 2)
+
+    for i, tensor in enumerate(mpo.tensors):
+        if i == 0:
+            assert tensor.shape == (2, 2, 1, 7)
+        elif i == length - 1:
+            assert tensor.shape == (2, 2, 7, 1)
+        else:
+            assert tensor.shape == (2, 2, 7, 7)
+
+    assert mpo.to_matrix().shape == (2**length, 2**length)
+
+    with pytest.raises(ValueError, match=re.escape("length must be an even integer ≥ 2 (ordering: 1↑,1↓,2↑,2↓,...).")):
+        mpo.init_1d_fermi_hubbard_jw_pauli(length=5, t=t, u=u)  # odd length - must fail
 
 
 def test_init_identity() -> None:
