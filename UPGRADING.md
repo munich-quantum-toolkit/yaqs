@@ -4,6 +4,8 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### End of support for Python 3.9
 
 Starting with this release, MQT YAQS no longer supports Python 3.9.
@@ -12,4 +14,5 @@ As a result, MQT YAQS is no longer tested under Python 3.9 and requires Python 3
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.0...v0.4.0

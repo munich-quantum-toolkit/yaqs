@@ -9,6 +9,10 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-10-16
+
+_If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#040)._
+
 ### Added
 
 - 👷 Enable testing on Python 3.14 ([#212]) ([**@denialhaag**])
@@ -17,23 +21,30 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 - 🔥 Drop support for Python 3.9 ([#180]) ([**@denialhaag**])
 
+### Fixed
+
+- 🐛 Fix project bar of simulator ([#213]) ([**@aaronleesander**])
+
 ## [0.3.0] - 2025-07-04
 
 _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-toolkit/yaqs/releases) for previous changelogs._
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
 [0.3.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.0
 
 <!-- PR links -->
 
+[#213]: https://github.com/munich-quantum-toolkit/yaqs/pull/213
 [#212]: https://github.com/munich-quantum-toolkit/yaqs/pull/212
 [#180]: https://github.com/munich-quantum-toolkit/yaqs/pull/180
 
 <!-- Contributor -->
 
 [**@denialhaag**]: https://github.com/denialhaag
+[**@aaronleesander**]: https://github.com/aaronleesander
 
 <!-- General links -->
 
