@@ -15,6 +15,7 @@ _If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#032)._
 
 ### Added
 
+- ✨ Make it possible to return final state without setting dummy observables ([#214]) ([**@aaronleesander**])
 - 👷 Enable testing on Python 3.14 ([#212]) ([**@denialhaag**])
 
 ### Removed
@@ -37,6 +38,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#214]: https://github.com/munich-quantum-toolkit/yaqs/pull/214
 [#213]: https://github.com/munich-quantum-toolkit/yaqs/pull/213
 [#212]: https://github.com/munich-quantum-toolkit/yaqs/pull/212
 [#180]: https://github.com/munich-quantum-toolkit/yaqs/pull/180
