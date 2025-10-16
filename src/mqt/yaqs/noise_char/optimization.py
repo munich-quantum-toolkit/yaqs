@@ -19,12 +19,16 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel, CompactNoiseModel
+
+
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from mqt.yaqs.core.data_structures.noise_model import NoiseModel, CompactNoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
     from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
+        
 
 
 def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
@@ -519,8 +523,6 @@ def adam_optimizer(
         start_time = time.time()
 
         loss, grad, sim_time = f(x)
-
-        print(i,loss)
 
         # Adam update steps (NEW)
         m = beta1 * m + (1 - beta1) * grad

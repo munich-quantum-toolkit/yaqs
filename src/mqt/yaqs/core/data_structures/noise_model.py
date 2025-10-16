@@ -22,6 +22,7 @@ import numpy as np
 import copy
 
 from ..libraries.noise_library import NoiseLibrary
+from ..libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -182,7 +183,7 @@ class CompactNoiseModel:
         for i, proc in enumerate(self.compact_processes):
 
             assert "name" in proc, "Each process must have a 'name' key"
-            assert getattr(NoiseLibrary, proc["name"])().interaction == 1, "Only 1-site noise processes are supported in CompactNoiseModel"
+            assert getattr(GateLibrary, proc["name"])().interaction == 1, "Only 1-site noise processes are supported in CompactNoiseModel"
             assert "sites" in proc, "Each process must have a 'sites' key"
             assert "strength" in proc, "Each process must have a 'strength' key"
 

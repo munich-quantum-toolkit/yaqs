@@ -60,7 +60,7 @@ class Characterizer:
         self.init_guess = copy.deepcopy(init_guess)
 
         self.traj_gradients = PropagatorWithGradients(
-            sim_params=sim_params, hamiltonian=hamiltonian, noise_model=init_guess, init_state=init_state
+            sim_params=sim_params, hamiltonian=hamiltonian, compact_noise_model=init_guess, init_state=init_state
         )
 
         self.loss = LossClass(ref_traj=ref_traj, traj_gradients=self.traj_gradients, working_dir=work_dir, print_to_file=print_to_file)
