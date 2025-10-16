@@ -11,8 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [0.3.2] - 2025-10-16
 
-_If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#040)._
-
+_If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#032)._
 ### Added
 
 - 👷 Enable testing on Python 3.14 ([#212]) ([**@denialhaag**])
