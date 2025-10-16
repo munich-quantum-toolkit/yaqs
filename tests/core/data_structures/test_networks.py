@@ -19,6 +19,7 @@ These tests ensure that the MPS class functions as expected in various simulatio
 from __future__ import annotations
 
 import copy
+from functools import reduce
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -285,6 +286,66 @@ def test_init_custom() -> None:
     for original, created in zip(tensors, mpo.tensors, strict=False):
         assert original.shape == created.shape
         assert np.allclose(original, created)
+
+
+def test_init_from_terms_sum_of_pauli_strings() -> None:
+    """Test that init_from_terms correctly sets up an MPO from a sum of Pauli strings.
+
+    This test generates a Hamiltonian from a list of sum operators, initializes an MPO from
+    that list, and verifies that the reconstructed matrix matches the original one.
+    """
+    H_terms = [
+        (1.0 + 0j, ["Z", "Z", "I", "I"]),
+        (0.5 + 0j, ["X", "I", "X", "I"]),
+        (-0.2 + 0j, ["I", "Y", "Y", "I"]),
+    ]
+    L = len(H_terms[0][1])
+
+    mpo = MPO()
+    mpo.init_from_terms(length=L, terms=H_terms, physical_dimension=2, tol=1e-10, max_bond_dim=None, n_sweeps=2)
+    H_matrix = mpo.to_matrix()
+
+    # Static tests
+    assert mpo.length == L
+    assert mpo.physical_dimension == 2
+    assert len(mpo.tensors) == L
+
+    # Validate on small N by comparing to reconstructed matrix
+    PAULI_OPS = {
+        "I": np.array([[1, 0], [0, 1]], dtype=complex),
+        "X": np.array([[0, 1], [1, 0]], dtype=complex),
+        "Y": np.array([[0, -1j], [1j, 0]], dtype=complex),
+        "Z": np.array([[1, 0], [0, -1]], dtype=complex),
+    }
+
+    H_ref = np.zeros_like(H_matrix)
+    for coeff, s in H_terms:
+        matrices = [PAULI_OPS[ch] for ch in s]
+        H_ref += coeff * reduce(np.kron, matrices)
+
+    assert np.allclose(H_matrix, H_ref)
+
+
+def test_init_from_terms_single_site() -> None:
+    """Test that init_from_terms correctly sets up an MPO from a single Pauli matrix.
+
+    This test generates MPO from a single Pauli matrix and verifies that the reconstructed
+    matrix matches exactly the input.
+    """
+    H_terms = [(2.0 + 0j, ["Z"])]
+    L = 1
+
+    mpo = MPO()
+    mpo.init_from_terms(length=L, terms=H_terms, physical_dimension=2, tol=1e-10, max_bond_dim=None, n_sweeps=2)
+    H_matrix = mpo.to_matrix()
+
+    # Static tests
+    assert mpo.length == L
+    assert mpo.physical_dimension == 2
+    assert len(mpo.tensors) == L
+
+    Z = np.array([[1, 0], [0, -1]], dtype=complex)
+    assert np.allclose(H_matrix, 2 * Z)
 
 
 def test_to_mps() -> None:
