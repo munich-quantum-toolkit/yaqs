@@ -19,16 +19,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel, CompactNoiseModel
-
-
+from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
     from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
-        
 
 
 def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
@@ -91,13 +88,18 @@ class LossClass:
     n_avg = 20
 
     def __init__(
-        self, *, ref_traj: list[Observable], traj_gradients: PropagatorWithGradients, working_dir: str | Path = '.', print_to_file: bool = False
+        self, *, ref_traj: list[Observable],
+        traj_gradients: PropagatorWithGradients,
+        working_dir: str | Path = ".",
+        print_to_file: bool = False
     ) -> None:
         """Initializes the optimization class for noise characterization.
 
         Args:
             ref_traj (List[Observable]): A list of Observable objects representing the reference trajectory.
-            traj_gradients (PropagatorWithGradients): An object that provides trajectory gradients and supports setting the observable list.
+            traj_gradients (PropagatorWithGradients): An object that provides trajectory gradients
+                                                    and supports setting the observable list.
+            working_dir (str | Path, optional): The directory where output files will be stored.
             print_to_file (bool, optional): If True, enables printing output to a file. Defaults to False.
 
         Attributes:
@@ -122,7 +124,6 @@ class LossClass:
         self.grad_history: list[np.ndarray] = []
         self.print_to_file: bool = print_to_file
 
-
         self.ref_traj = copy.deepcopy(ref_traj)
         self.traj_gradients = copy.deepcopy(traj_gradients)
 
@@ -136,8 +137,7 @@ class LossClass:
 
         self.set_work_dir(path=working_dir)
 
-        self.write_traj(obs_array = self.ref_traj_array, output_file = self.work_dir / "ref_traj.txt")
-
+        self.write_traj(obs_array=self.ref_traj_array, output_file=self.work_dir / "ref_traj.txt")
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -192,9 +192,8 @@ class LossClass:
         self.compute_avg()
         self.compute_diff_avg()
 
-        self.write_traj(obs_array = self.obs_array, output_file = self.work_dir / f"opt_traj_{self.n_eval}.txt")
+        self.write_traj(obs_array=self.obs_array, output_file=self.work_dir / f"opt_traj_{self.n_eval}.txt")
 
-        print(f"post_process: n_eval = {self.n_eval} x = {self.x_history[-1]} loss = {self.f_history[-1]}")
         if self.print_to_file:
             self.write_to_file(self.history_file_name, self.f_history[-1], self.x_history[-1], self.grad_history[-1])
             self.write_to_file(
@@ -245,7 +244,7 @@ class LossClass:
         self.x_avg_history = [np.copy(x) for x in x_avg_history]
         self.diff_avg_history = [float(d) for d in diff_avg_history]
 
-    def set_work_dir(self, *, path: str | Path = '.') -> None:
+    def set_work_dir(self, *, path: str | Path = ".") -> None:
         """Sets the base directory for storing optimization history and related files.
 
         Parameters:
@@ -290,7 +289,7 @@ class LossClass:
                         + "  ".join([f"grad_x{i + 1}" for i in range(self.d)])
                         + "\n"
                     )
- 
+
             with file_name.open("a", encoding="utf-8") as file:
                 file.write(
                     f"{self.n_eval}    {f}  "
@@ -300,7 +299,7 @@ class LossClass:
                     + "\n"
                 )
 
-    def write_traj(self, obs_array: np.array, output_file: Path) -> None:
+    def write_traj(self, obs_array: np.ndarray, output_file: Path) -> None:
         """Saves the optimized trajectory of expectation values to a text file.
 
         This method reshapes the `exp_vals_traj` array, concatenates the time array `self.t` as the first row,
@@ -326,9 +325,15 @@ class LossClass:
 
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
 
-
     def x_to_noise_model(self, x: np.ndarray) -> CompactNoiseModel:
-        """Converts the optimization variable x to a CompactNoiseModel instance."""
+        """Converts the optimization variable x to a CompactNoiseModel instance.
+
+        Args:
+            x (np.ndarray): The optimization variable representing noise strengths.
+
+        Returns:
+            CompactNoiseModel: The corresponding noise model with updated strengths.
+        """
         return_processes = copy.deepcopy(self.traj_gradients.compact_noise_model.compact_processes)
 
         for i in range(self.d):
@@ -337,7 +342,14 @@ class LossClass:
         return CompactNoiseModel(return_processes)
 
     def noise_model_to_x(self, noise_model: CompactNoiseModel) -> np.ndarray:
-        """Converts a CompactNoiseModel instance to the optimization variable x."""
+        """Converts a CompactNoiseModel instance to the optimization variable x.
+
+        Args:
+            noise_model (CompactNoiseModel): The noise model to convert.
+
+        Returns:
+            np.ndarray: The optimization variable x representing noise strengths.
+        """
         x: np.ndarray = np.zeros(self.d, dtype=np.float64)
         for i in range(self.d):
             x[i] = noise_model.compact_processes[i]["strength"]
@@ -355,6 +367,9 @@ class LossClass:
         Args:
             x (np.ndarray): Array of gamma parameters to be set in the simulation.
 
+        Raises:
+            ValueError: If the length of the input array `x` does not match the expected dimensionality `self.d`.
+
         Returns:
             tuple:
                 - f (float): The value of the objective function (sum of squared differences).
@@ -365,7 +380,6 @@ class LossClass:
         if len(x) != self.d:
             msg = f"Input array must have length {self.d}, got {len(x)}"
             raise ValueError(msg)
-
 
         noise_model = self.x_to_noise_model(x)
 
@@ -393,12 +407,14 @@ class LossClass:
         # grad_vec gives me the gradient for each individual gamma in the expanded noise model.
 
         if len(grad_vec) != len(self.traj_gradients.compact_noise_model.index_list):
-            msg = f"Gradient vector length {len(grad_vec)} does not match index list length {len(self.traj_gradients.compact_noise_model.index_list)}"
+            msg = (
+                f"Gradient vector length {len(grad_vec)} does not match "
+                f"index list length {len(self.traj_gradients.compact_noise_model.index_list)}"
+            )
             raise ValueError(msg)
 
-
-        ## To get the gradients for each gamma in the compact noise model, I sum the gradients
-        ## corresponding to the same gamma using np.bincount.
+        # To get the gradients for each gamma in the compact noise model, I sum the gradients
+        # corresponding to the same gamma using np.bincount.
 
         grad = np.bincount(self.traj_gradients.compact_noise_model.index_list, weights=grad_vec)
 
@@ -574,14 +590,12 @@ def adam_optimizer(
             pf.write(f"  {i}    {iter_time}    {sim_time}  \n")
 
         if abs(loss) < tolerance:
-            print(f"Stopping optimization because loss {loss} < tolerance {tolerance}")
             break
 
         # Convergence check
         if len(f.diff_avg_history) > max_n_convergence and all(
             diff < threshold for diff in f.diff_avg_history[-max_n_convergence:]
         ):
-            print(f"Stopping optimization because differences {f.diff_avg_history[-max_n_convergence:]} < threshold {threshold}")
             break
 
     return f.f_history, f.x_history, f.x_avg_history, f.t, f.obs_array
