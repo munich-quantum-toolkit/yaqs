@@ -22,10 +22,81 @@ import pytest
 
 from mqt.yaqs.noise_char import optimization, propagation
 from mqt.yaqs.noise_char.optimization import LossClass
-from mqt.yaqs.noise_char.propagation import SimulationParameters
+
+from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.libraries.gate_library import X, Y, Z
+
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+class Parameters:
+    def __init__(self) -> None:
+        self.sites = 1
+        self.sim_time = 0.6
+        self.dt = 0.2
+        self.order = 1
+        self.threshold = 1e-4
+        self.ntraj = 1
+        self.max_bond_dim = 4
+        self.j = 1
+        self.g = 0.5
+
+
+        self.times = np.arange(0, self.sim_time + self.dt, self.dt)
+
+        self.n_obs = self.sites * 3  # x, y, z for each site
+        self.n_jump = self.sites * 2  # lowering and pauli_z for each site
+        self.n_t = len(self.times)
+
+        self.gamma_rel = 0.1
+        self.gamma_deph = 0.15
+
+
+
+def create_loss_instance(tmp_path: Path, test: Parameters) -> optimization.LossClass:
+    """Helper function to create a LossClass instance for testing."""
+
+
+    h_0 = MPO()
+    h_0.init_ising(test.sites, test.j, test.g)
+
+
+    # Define the initial state
+    init_state = MPS(test.sites, state='zeros')
+
+
+    obs_list = [Observable(X(), site) for site in range(test.sites)]  + [Observable(Y(), site) for site in range(test.sites)] + [Observable(Z(), site) for site in range(test.sites)]
+
+
+    sim_params = AnalogSimParams(observables=obs_list, elapsed_time=test.sim_time, dt=test.dt, num_traj=test.ntraj, max_bond_dim=test.max_bond_dim, threshold=test.threshold, order=test.order, sample_timesteps=True)
+
+
+    ref_noise_model =  CompactNoiseModel([{"name": "lowering", "sites": [i for i in range(test.sites)], "strength": test.gamma_rel}]+[{"name": "pauli_z", "sites": [i for i in range(test.sites)], "strength": test.gamma_deph}])
+
+
+
+    propagator = propagation.PropagatorWithGradients(
+            sim_params=sim_params,
+            hamiltonian=h_0,
+            compact_noise_model=ref_noise_model,
+            init_state=init_state
+        )
+    
+    propagator.set_observable_list(obs_list)
+    propagator.run(ref_noise_model)
+
+    loss = optimization.LossClass(
+        ref_traj=propagator.obs_traj,
+        traj_gradients=propagator,
+        working_dir=tmp_path,
+        print_to_file=False,
+    )
+
+    return loss
 
 
 def test_trapezoidal_basic() -> None:
@@ -104,15 +175,14 @@ def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
         - After setting history, `n_eval` is incremented, and history attributes match the provided values.
     """
 
-    class DummyLoss(optimization.LossClass):
-        def __init__(self) -> None:
-            self.d = 2
-            self.print_to_file = False
-            self.exp_vals_traj = np.zeros((3, 2, 5))
-            self.t = np.arange(5)
-            self.work_dir = tmp_path
 
-    loss = DummyLoss()
+
+    test = Parameters()
+    loss = create_loss_instance(tmp_path, test)
+
+    loss.n_eval = 5  # Set to non-zero to test reset
+    loss.x_history = [np.array([0, 1])]
+
     loss.reset()
     assert loss.n_eval == 0
     assert loss.x_history == []
@@ -123,7 +193,7 @@ def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
     assert loss.diff_avg_history == [0.1]
 
 
-def test_loss_class_compute_avg_and_diff() -> None:
+def test_loss_class_compute_avg_and_diff(tmp_path: pathlib.Path) -> None:
     """Test the computation of average and difference in the loss class.
 
     This test defines a dummy subclass of `optimization.LossClass` with preset history values.
@@ -138,14 +208,15 @@ def test_loss_class_compute_avg_and_diff() -> None:
         between the last two averages in `x_avg_history`.
     """
 
-    class DummyLoss(optimization.LossClass):
-        def __init__(self) -> None:
-            self.n_avg = 2
-            self.x_history = [np.array([1, 2]), np.array([2, 3]), np.array([3, 4])]
-            self.x_avg_history = []
-            self.diff_avg_history = []
+    test = Parameters()
+    loss = create_loss_instance(tmp_path, test)
 
-    loss = DummyLoss()
+
+    loss.n_avg = 2
+    loss.x_history = [np.array([1, 2]), np.array([2, 3]), np.array([3, 4])]
+    loss.x_avg_history = []
+    loss.diff_avg_history = []
+
     loss.compute_avg()
     assert np.allclose(loss.x_avg_history[-1], np.mean(loss.x_history[2:], axis=0))
     loss.x_avg_history.append(np.array([2, 3]))
@@ -153,7 +224,7 @@ def test_loss_class_compute_avg_and_diff() -> None:
     assert loss.diff_avg_history[-1] == np.max(np.abs(loss.x_avg_history[-1] - loss.x_avg_history[-2]))
 
 
-def test_write_opt_traj_creates_correct_file_and_content() -> None:
+def test_write_opt_traj_creates_correct_file_and_content(tmp_path: pathlib.Path) -> None:
     """Test for the LossClass.write_opt_traj method.
 
     The test verifies that:
@@ -167,61 +238,44 @@ def test_write_opt_traj_creates_correct_file_and_content() -> None:
     This ensures that the trajectory data is saved properly for later analysis or visualization.
     """
     # Create an instance
-    loss = LossClass()
+    test = Parameters()
+    loss = create_loss_instance(tmp_path, test)
 
-    # Setup dimension parameters
-    n_obs_site = 2  # e.g. x and y observables
-    sites = 3  # number of sites
-    n_t = 5  # number of time points
-    loss.d = sites  # just to set d consistent for other methods if needed
+    obs_traj = np.zeros([test.n_obs, test.n_t])
 
-    # Setup the exp_vals_traj with shape (n_obs_site, sites, n_t)
-    rng = np.random.default_rng()
-    loss.exp_vals_traj = rng.random((n_obs_site, sites, n_t))
 
-    # Setup the time vector
-    loss.t = np.linspace(0, 1, n_t)
+    loss.n_eval = 7  # evaluation index for filename
 
-    # Use a temporary directory as work_dir
-    with tempfile.TemporaryDirectory() as tmpdir:
-        loss.work_dir = Path(tmpdir)
-        loss.n_eval = 7  # evaluation index for filename
+    output_file = loss.work_dir / f"opt_traj_{loss.n_eval}.txt"
 
-        # Call the method
-        loss.write_opt_traj()
+    # Call the method
+    loss.write_traj(obs_traj, output_file)
 
-        # Check that the file was created
-        output_file = loss.work_dir / f"opt_traj_{loss.n_eval}.txt"
-        assert output_file.exists()
+    assert output_file.exists()
 
-        # Read the file content using Path.read_text()
-        file_content = output_file.read_text(encoding="utf-8")
-        lines = file_content.splitlines(keepends=True)
+    # Read the file content using Path.read_text()
+    file_content = output_file.read_text(encoding="utf-8")
+    lines = file_content.splitlines(keepends=True)
 
-        # The first line should be the header starting with 't'
-        header = lines[0].strip()
-        expected_header_prefix = "# t"
-        assert header.startswith(expected_header_prefix)
+    # The first line should be the header starting with 't'
+    header = lines[0].strip()
+    expected_header_prefix = "# t"
+    print("!!!!!!!Header is:  ",header)
+    assert header.startswith(expected_header_prefix)
 
-        # Check header contains correct observable labels like x0, y0 (depending on n_obs_site and sites)
-        # Construct expected header pattern
-        expected_labels = [obs + str(i) for obs in ["x", "y", "z"][:n_obs_site] for i in range(sites)]
-        for label in expected_labels:
-            assert label in header
+    # Check header contains correct observable labels like x0, y0 (depending on n_obs_site and sites)
+    # Construct expected header pattern
+    expected_labels = ["obs_" + str(i) for i in range(test.n_obs)]
+    for label in expected_labels:
+        assert label in header
 
-        # The data lines count should match number of time points
-        data_lines = lines[1:]
-        assert len(data_lines) == n_t
+    expected_data = np.concatenate([np.array([test.times]), obs_traj], axis=0).T
 
-        # Check that each data line has expected number of columns: 1 (time) + n_obs_site * sites
-        expected_cols = 1 + n_obs_site * sites
-        for line in data_lines:
-            cols = re.split(r"\s+", line.strip())
-            assert len(cols) == expected_cols
+    loaded_data = np.genfromtxt(output_file, skip_header=1)
 
-        # Check the time column matches the time vector in file (within precision)
-        file_times = [float(line.split()[0]) for line in data_lines]
-        np.testing.assert_allclose(file_times, loss.t, rtol=1e-6)
+    # Check that the loaded data matches the expected data
+    assert np.allclose(loaded_data, expected_data)
+
 
 
 def test_loss_class_set_work_dir(tmp_path: pathlib.Path) -> None:
@@ -237,39 +291,18 @@ def test_loss_class_set_work_dir(tmp_path: pathlib.Path) -> None:
         - The file with the expected name exists after calling `set_work_dir`.
     """
 
-    class DummyLoss(optimization.LossClass):
-        def __init__(self) -> None:
-            self.d = 2
-            self.print_to_file = True
-
-    loss = DummyLoss()
+    loss = create_loss_instance(tmp_path, Parameters())
 
     loss_file = tmp_path / "loss_x_history.txt"
     loss_file_avg = tmp_path / "loss_x_history_avg.txt"
 
-    loss.set_work_dir(tmp_path, reset=True)
+    loss.set_work_dir(path=tmp_path)
     assert loss.history_file_name == loss_file
     assert loss.history_avg_file_name == loss_file_avg
 
 
-@pytest.fixture
-def setup_loss_class_files() -> Generator[Path, None, None]:
-    """Pytest fixture that provides a temporary directory as a Path object for use in tests.
 
-    The temporary directory is created before the test runs and automatically cleaned up
-    after the test finishes, ensuring no leftover files or directories.
-
-    Yields:
-    -------
-    Path
-        A Path object pointing to the temporary directory for test file operations.
-    """
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        base_path = Path(tmp_dir)
-        yield base_path
-
-
-def test_write_to_file_creates_and_appends(setup_loss_class_files: Path) -> None:
+def test_write_to_file_creates_and_appends(tmp_path: Path) -> None:
     """Test for  the `write_to_file` method.
 
     This test verifies:
@@ -280,7 +313,7 @@ def test_write_to_file_creates_and_appends(setup_loss_class_files: Path) -> None
 
     Parameters:
     -----------
-    setup_loss_class_files : pytest fixture
+    tmp_path : pytest fixture
         Provides a temporary directory path used for file operations during testing.
 
     Procedure:
@@ -290,22 +323,22 @@ def test_write_to_file_creates_and_appends(setup_loss_class_files: Path) -> None
     - Call `write_to_file` to write to the history file.
     - Read and assert the contents of the history and average history files.
 
-    Expected outcome:
+    Expected outcome:   
     -----------------
     - Both history and average history files exist.
     - Files contain correctly formatted headers and data lines.
     """
-    base_path = setup_loss_class_files
+    
 
     # Instantiate LossClass and configure attributes
-    loss_obj = LossClass()
-    loss_obj.print_to_file = True
-    loss_obj.n_eval = 1
-    loss_obj.d = 3  # dimensionality
+    loss = create_loss_instance(tmp_path, Parameters())
+    loss.print_to_file = True
+    loss.n_eval = 1
+    loss.d = 3  # dimensionality
 
     # Set the file paths inside the temp directory
-    loss_obj.history_file_name = base_path / "loss_x_history.txt"
-    loss_obj.history_avg_file_name = base_path / "loss_x_history_avg.txt"
+    loss.history_file_name = tmp_path / "loss_x_history.txt"
+    loss.history_avg_file_name = tmp_path / "loss_x_history_avg.txt"
 
     # Data for the test
     f = 1.2345
@@ -313,10 +346,11 @@ def test_write_to_file_creates_and_appends(setup_loss_class_files: Path) -> None
     grad = np.array([0.01, 0.02, 0.03])
 
     # Call the method with the main output file (can be history_file_name for example)
-    loss_obj.write_to_file(loss_obj.history_file_name, f, x, grad)
+    loss.write_to_file(loss.history_file_name, f, x, grad)
+
 
     # Read all lines from history file using Path.read_text()
-    history_text = loss_obj.history_file_name.read_text(encoding="utf-8")
+    history_text = loss.history_file_name.read_text(encoding="utf-8")
     lines = history_text.splitlines(keepends=True)
 
     # First line: header
@@ -324,18 +358,11 @@ def test_write_to_file_creates_and_appends(setup_loss_class_files: Path) -> None
     assert lines[0] == expected_header
 
     # Second line: data line, should contain n_eval, f, x, grad formatted
-    expected_line = f"{loss_obj.n_eval}    {f}  0.100000  0.200000  0.300000    0.010000  0.020000  0.030000\n"
+    expected_line = f"{loss.n_eval}    {f}  0.100000  0.200000  0.300000    0.010000  0.020000  0.030000\n"
     assert lines[1] == expected_line
 
-    # Read first line from average history file using Path.read_text()
-    avg_text = loss_obj.history_avg_file_name.read_text(encoding="utf-8")
-    avg_header = avg_text.splitlines(keepends=True)[0]
 
-    expected_avg_header = "# iter  loss  x1_avg  x2_avg  x3_avg    grad_x1  grad_x2  grad_x3\n"
-    assert avg_header == expected_avg_header
-
-
-def test_write_to_file_does_nothing_when_disabled(setup_loss_class_files: Path) -> None:
+def test_write_to_file_does_nothing_when_disabled(tmp_path: Path) -> None:
     """Test for the `write_to_file` method.
 
     This ensures that disabling file output correctly prevents any file I/O operations.
@@ -356,103 +383,24 @@ def test_write_to_file_does_nothing_when_disabled(setup_loss_class_files: Path) 
     -----------------
     - The history files should not exist after calling `write_to_file` with output disabled.
     """
-    base_path = setup_loss_class_files
+    loss = create_loss_instance(tmp_path, Parameters())
 
-    loss_obj = LossClass()
-    loss_obj.print_to_file = False  # Writing disabled
-    loss_obj.n_eval = 1
-    loss_obj.d = 2
-    loss_obj.history_file_name = base_path / "loss_x_history.txt"
-    loss_obj.history_avg_file_name = base_path / "loss_x_history_avg.txt"
+    loss.print_to_file = False  # Writing disabled
+    loss.n_eval = 1
+    loss.d = 2
+    loss.history_file_name = tmp_path / "loss_x_history.txt"
+    loss.history_avg_file_name = tmp_path / "loss_x_history_avg.txt"
 
     f = 0.5
     x = np.array([0.1, 0.2])
     grad = np.array([0.01, 0.02])
 
-    loss_obj.write_to_file(loss_obj.history_file_name, f, x, grad)
+    loss.write_to_file(loss.history_file_name, f, x, grad)
 
     # Files should not exist because print_to_file=False
-    assert not loss_obj.history_file_name.exists()
-    assert not loss_obj.history_avg_file_name.exists()
+    assert not loss.history_file_name.exists()
+    assert not loss.history_avg_file_name.exists()
 
-
-def test_loss_class_2_call() -> None:
-    """Unit test for the `optimization.LossClass2` function.
-
-    This test verifies that the loss function returned by `LossClass2`:
-    - Accepts a parameter vector `x` and returns a tuple `(f, grad, sim_time, avg)`.
-    - Ensures the output `f` is a float.
-    - Ensures the output `grad` is a numpy array of shape (1,).
-    - Ensures the output `sim_time` is a float.
-    - Ensures the output `avg` is a list.
-    The test uses dummy simulation parameters and a dummy trajectory derivative function
-    to mock the behavior of the actual simulation.
-    """
-    n_obs_site = 3
-    n_jump_sites = 2
-    sites = 2
-    n_t = 5
-
-    def dummy_traj_der(sim_params: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:
-        t = np.arange(n_t)
-        exp_vals_traj = np.ones((n_obs_site, sim_params.L, n_t))
-        d_on_d_gk = np.ones((n_jump_sites, n_obs_site, sim_params.L, n_t))
-        avg_min_max_traj_time = [None, None, None]
-        return t, exp_vals_traj, d_on_d_gk, avg_min_max_traj_time
-
-    sim_params = SimulationParameters(sites, 0.1, 0.1)
-
-    ref_traj = np.ones((n_obs_site, sites, n_t))
-    loss = optimization.LossClass2(sim_params, ref_traj, dummy_traj_der)
-    x = np.array([0.5, 0.5])
-    f, grad, sim_time, avg = loss(x)
-    assert isinstance(f, float)
-    assert grad.shape == (2,)
-    assert isinstance(sim_time, float)
-    assert isinstance(avg, list)
-
-
-def test_loss_class_2l_call() -> None:
-    """Test the `LossClass2L` function from the `optimization` module.
-
-    This test verifies that the loss function returned by `LossClass2L`:
-    - Accepts a parameter vector `x` of appropriate shape.
-    - Returns a tuple containing:
-        - A scalar loss value (`f`).
-        - A gradient array (`grad`) of expected shape.
-        - A simulation time value (`sim_time`).
-        - An average trajectory time list (`avg`).
-    The test uses dummy simulation parameters and a dummy trajectory derivative function
-    to mock the behavior of the underlying simulation. It asserts the types and shapes
-    of the outputs to ensure correct functionality.
-
-    Asserts:
-        - The loss value is a float.
-        - The gradient has the expected shape.
-        - The simulation time is a float.
-        - The average trajectory time is a list.
-    """
-    n_obs_site = 3
-    n_jump_sites = 2
-    sites = 2
-    n_t = 5
-
-    def dummy_traj_der(sim_params: SimulationParameters) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[None]]:
-        t = np.arange(n_t)
-        exp_vals_traj = np.ones((n_obs_site, sim_params.L, n_t))
-        d_on_d_gk = np.ones((n_jump_sites, n_obs_site, sim_params.L, n_t))
-        avg_min_max_traj_time = [None, None, None]
-        return t, exp_vals_traj, d_on_d_gk, avg_min_max_traj_time
-
-    sim_params = SimulationParameters(sites, [0.1, 0.2], [0.3, 0.4])
-    ref_traj = np.ones((n_obs_site, sites, n_t))
-    loss = optimization.LossClass2L(sim_params, ref_traj, dummy_traj_der)
-    x = np.array([0.5] * sites * n_jump_sites)
-    f, grad, sim_time, avg = loss(x)
-    assert isinstance(f, float)
-    assert grad.shape == (4,)
-    assert isinstance(sim_time, float)
-    assert isinstance(avg, list)
 
 
 def test_adam_optimizer_runs() -> None:
@@ -470,19 +418,8 @@ def test_adam_optimizer_runs() -> None:
         - The time array (`t`) is a numpy ndarray.
         - The expectation values trajectory (`exp_vals_traj`) is a numpy ndarray.
     """
-    sites = 2
-    sim_time = 0.3
-    dt = 0.1
-    sim_params = SimulationParameters(sites=sites, gamma_rel=[0.1, 0.2], gamma_deph=[0.3, 0.4])
-    sim_params.T = sim_time
-    sim_params.dt = dt
-    sim_params.N = 2
-
-    t_list = np.arange(0, sim_time + dt, dt)
-
-    ref_traj = np.ones((3, sites, len(t_list)))
-
-    loss_function = optimization.LossClass2(sim_params, ref_traj, propagation.tjm_traj, print_to_file=False)
+    test= Parameters()
+    loss_function = create_loss_instance(pathlib.Path(tempfile.mkdtemp()), test)
 
     x0 = np.array([0.5, 0.5])  # Initial guess for the parameters
     f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss_function, x0, max_iterations=3)
@@ -547,20 +484,11 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     expected_m = np.array([0.01, 0.02])
     expected_v = np.array([0.001, 0.002])
 
-    sites = 3
-    sim_time = 1
-    dt = 0.2
-    n_obs_site = 3
-    t = np.arange(0, sim_time + dt, dt)
-    n_t = len(t)
-    exp_vals_traj = np.zeros([n_obs_site, sites, n_t])
 
-    sim_params = SimulationParameters(sites, gamma_rel=0.0, gamma_deph=0.0)
-    sim_params.T = sim_time
-    sim_params.dt = dt
-    sim_params.order = 1
-    sim_params.threshold = 1e-4
-    sim_params.N = 2
+    test = Parameters()
+
+
+    obs_traj = np.zeros([test.n_obs, test.n_t])
 
     saved_data = {
         "iteration": iteration,
@@ -571,20 +499,15 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
         "f_history": f_history,
         "x_avg_history": x_avg_history,
         "diff_avg_history": diff_avg_history,
-        "t": t,
-        "exp_vals_traj": exp_vals_traj,
+        "t": test.times,
+        "obs_traj": obs_traj,
     }
 
     with restart_file.open("wb") as handle:
         pickle.dump(saved_data, handle)
 
-    # Create mock loss object
-    loss = optimization.LossClass2(
-        sim_params,
-        exp_vals_traj,
-        propagation.tjm_traj,
-        print_to_file=False,
-    )
+
+    loss = create_loss_instance(tmp_path, test)
 
     # Act
     f_hist, x_hist, x_avg_hist, _, _ = optimization.adam_optimizer(
