@@ -104,6 +104,7 @@ mystnb:
 
 import matplotlib.pyplot as plt
 
+measurements = sim_params.observables
 leakage = [1 for _ in measurements[0].results]
 for measurement in measurements:
     leakage -= measurement.results

@@ -86,42 +86,31 @@ class MPS:
     ) -> None:
         """Initializes a Matrix Product State (MPS).
 
-        Parameters
-        ----------
-        length :
-            Number of sites (qubits) in the MPS.
-        tensors :
-            Predefined tensors representing the MPS. Must match `length` if provided.
-            If None, tensors are initialized according to `state`.
-        physical_dimensions :
-            Physical dimension for each site. Defaults to qubit systems (dimension 2) if None.
-        state :
-            Initial state configuration. Valid options include:
-            - "zeros": Initializes all qubits to |0⟩.
-            - "ones": Initializes all qubits to |1⟩.
-            - "x+": Initializes each qubit to (|0⟩ + |1⟩)/√2.
-            - "x-": Initializes each qubit to (|0⟩ - |1⟩)/√2.
-            - "y+": Initializes each qubit to (|0⟩ + i|1⟩)/√2.
-            - "y-": Initializes each qubit to (|0⟩ - i|1⟩)/√2.
-            - "Neel": Alternating pattern |0101...⟩.
-            - "wall": Domain wall at given site |000111>
-            - "random": Initializes each qubit randomly.
-            - "basis": Initializes a qubit in an input computational basis.
-            Default is "zeros".
-        pad:
-            Pads the state with extra zeros to increase bond dimension. Can increase numerical stability.
-        basis_string:
-            String used to initialize the state in a specific computational basis.
-            This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
-            For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
+        Args:
+            length: Number of sites (qubits) in the MPS.
+            tensors: Predefined tensors representing the MPS. Must match `length` if provided.
+                If None, tensors are initialized according to `state`.
+            physical_dimensions: Physical dimension for each site. Defaults to qubit systems (dimension 2) if None.
+            state: Initial state configuration. Valid options include:
+                - "zeros": Initializes all qubits to |0⟩.
+                - "ones": Initializes all qubits to |1⟩.
+                - "x+": Initializes each qubit to (|0⟩ + |1⟩)/√2.
+                - "x-": Initializes each qubit to (|0⟩ - |1⟩)/√2.
+                - "y+": Initializes each qubit to (|0⟩ + i|1⟩)/√2.
+                - "y-": Initializes each qubit to (|0⟩ - i|1⟩)/√2.
+                - "Neel": Alternating pattern |0101...⟩.
+                - "wall": Domain wall at given site |000111>
+                - "random": Initializes each qubit randomly.
+                - "basis": Initializes a qubit in an input computational basis.
+                Default is "zeros".
+            pad: Pads the state with extra zeros to increase bond dimension. Can increase numerical stability.
+            basis_string: String used to initialize the state in a specific computational basis.
+                This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
+                For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
 
         Raises:
-        ------
-        AssertionError
-            If `tensors` is provided and its length does not match `length`.
-        ValueError
-            If the provided `state` parameter does not match any valid initialization string.
-        """  # noqa: DOC501
+            ValueError: If the provided `state` parameter does not match any valid initialization string.
+        """
         self.flipped = False
         if tensors is not None:
             assert len(tensors) == length
@@ -558,6 +547,7 @@ class MPS:
                 theta = oe.contract("abc,ade->bdce", a_copy.tensors[idx], b_copy.tensors[idx])
                 result = theta if idx == 0 else oe.contract("abcd,cdef->abef", result, theta)
             # squeeze down to scalar
+            assert result is not None
             return np.complex128(np.squeeze(result))
 
         if isinstance(sites, int) or len(sites) == 1:
@@ -665,7 +655,7 @@ class MPS:
         return self.scalar_product(temp_state, sites)
 
     def evaluate_observables(
-        self, sim_params: AnalogSimParams | StrongSimParams, results: NDArray, column_index: int = 0
+        self, sim_params: AnalogSimParams | StrongSimParams, results: NDArray[np.float64], column_index: int = 0
     ) -> None:
         """Evaluate and record expectation values of observables for a given MPS state.
 
@@ -1231,7 +1221,7 @@ class MPO:
         length (int): The number of identity matrices to initialize.
         physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
         """
-        mat = np.eye(2)
+        mat = np.eye(2, dtype=np.complex128)
         mat = np.expand_dims(mat, (2, 3))
         self.length = length
         self.physical_dimension = physical_dimension
@@ -1271,22 +1261,14 @@ class MPO:
         """Custom MPO from tensors.
 
         Initialize the custom MPO (Matrix Product Operator) with the given tensors.
-        Parameters.
-        ----------
-        tensors : list[NDArray[np.complex128]]
-            A list of tensors to initialize the MPO.
-        transpose : bool, optional
-            If True, transpose each tensor to the order (2, 3, 0, 1). Default is True.
 
-        Raises:
-        ------
-        AssertionError
-            If the MPO is initialized incorrectly.
+        Args:
+            tensors: A list of tensors to initialize the MPO.
+            transpose: If True, transpose each tensor to the order (2, 3, 0, 1). Default is True.
 
         Notes:
-        -----
-        This method sets the tensors, optionally transposes them, checks if the MPO is valid,
-        and initializes the length and physical dimension of the MPO.
+            This method sets the tensors, optionally transposes them, checks if the MPO is valid,
+            and initializes the length and physical dimension of the MPO.
         """
         self.tensors = tensors
         if transpose:
@@ -1325,7 +1307,7 @@ class MPO:
         right bonds are 1.
 
         Returns:
-            NDArray[np.complex128]: The resulting matrix after tensor contractions and reshaping.
+            The resulting matrix after tensor contractions and reshaping.
         """
         for i, tensor in enumerate(self.tensors):
             if i == 0:

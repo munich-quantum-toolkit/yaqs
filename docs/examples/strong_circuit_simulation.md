@@ -24,7 +24,7 @@ Define the circuit
 ```{code-cell} ipython3
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
-num_qubits = 10
+num_qubits = 5
 circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
 circuit.measure_all()
 circuit.draw(output="mpl")

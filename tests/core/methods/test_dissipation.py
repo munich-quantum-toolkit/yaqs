@@ -44,7 +44,7 @@ def test_apply_dissipation_one_site_canonical_0() -> None:
         {"name": name, "sites": [i], "strength": 0.1} for i in range(length) for name in ["lowering", "pauli_z"]
     ])
     dt = 0.1
-    sim_params = AnalogSimParams(observables=[], elapsed_time=0.0)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
 
     apply_dissipation(state, noise_model, dt, sim_params)
 
@@ -81,7 +81,7 @@ def test_apply_dissipation_two_site_canonical_0() -> None:
         for name in ["crosstalk_xx", "crosstalk_yy"]
     ])
     dt = 0.1
-    sim_params = AnalogSimParams(observables=[], elapsed_time=0.0)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
 
     apply_dissipation(state, noise_model, dt, sim_params)
 

@@ -26,6 +26,8 @@ from ..libraries.noise_library import NoiseLibrary
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from mqt.yaqs.core.libraries.gate_library import BaseGate
+
 
 CROSSTALK_PREFIX = "longrange_crosstalk_"
 PAULI_MAP = {
@@ -151,7 +153,7 @@ class NoiseModel:
         self.processes = filled_processes
 
     @staticmethod
-    def get_operator(name: str) -> NDArray[Any]:
+    def get_operator(name: str) -> NDArray[np.complex128]:
         """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
 
         Args:
@@ -161,7 +163,8 @@ class NoiseModel:
             np.ndarray: The matrix representation of the operator.
         """
         operator_class = getattr(NoiseLibrary, name)
-        return operator_class().matrix
+        operator: BaseGate = operator_class()
+        return operator.matrix
 
 
 class CompactNoiseModel:

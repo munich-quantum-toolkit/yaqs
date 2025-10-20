@@ -27,7 +27,7 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 ## Key Features
 
-- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a paralellized implementation using the Tensor Jump Method (TJM) [2]
+- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a parallelized implementation using the Tensor Jump Method (TJM) [2]
 - **Noisy Quantum Circuit Simulation (Digital Simulation)**: Investigate the effect of noise on large quantum circuits [3]
 - **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method [1]
 - **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
@@ -74,7 +74,7 @@ To support this endeavor, please consider:
 
 ## Getting Started
 
-`mqt.yaqs` is available via [PyPI](https://pypi.org/project/mqt.problemsolver/).
+`mqt.yaqs` is available via [PyPI](https://pypi.org/project/mqt.yaqs/).
 
 ```console
 (.venv) $ pip install mqt.yaqs
@@ -84,7 +84,7 @@ To support this endeavor, please consider:
 
 ## System Requirements
 
-MQT YAQS can be installed on all major operating systems with all supported Python versions.
+MQT YAQS can be installed on all major operating systems with all [officially supported Python versions](https://devguide.python.org/versions/).
 Building (and running) is continuously tested under Linux, macOS, and Windows using the [latest available system versions for GitHub Actions](https://github.com/actions/runner-images).
 
 ## Cite This

@@ -24,7 +24,7 @@ Define the system Hamiltonian
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.networks import MPO
 
-L = 10
+L = 3
 J = 1
 g = 0.5
 H_0 = MPO()
@@ -46,18 +46,26 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 gamma = 0.1
 noise_model = NoiseModel([
-      {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["lowering", "pauli_z"]
-  ])
+    {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["lowering", "pauli_z"]
+])
 ```
 
 Define the simulation parameters
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, AnalogSimParams
-
 from mqt.yaqs.core.libraries.gate_library import X
 
-sim_params = AnalogSimParams(observables=[Observable(X(), site) for site in range(L)], elapsed_time=10, dt=0.1, num_traj=100, max_bond_dim=4, threshold=1e-6, order=2, sample_timesteps=True)
+sim_params = AnalogSimParams(
+    observables=[Observable(X(), site) for site in range(L)],
+    elapsed_time=10,
+    dt=0.1,
+    num_traj=100,
+    max_bond_dim=4,
+    threshold=1e-6,
+    order=2,
+    sample_timesteps=True,
+)
 ```
 
 Run the simulation
@@ -85,7 +93,7 @@ import matplotlib.pyplot as plt
 heatmap = [observable.results for observable in sim_params.observables]
 
 fig, ax = plt.subplots(1, 1)
-im = plt.imshow(heatmap, aspect="auto", extent=(0, elapsed_time, L, 0), vmin=0, vmax=0.5)
+im = plt.imshow(heatmap, aspect="auto", extent=(0, 10, L, 0), vmin=0, vmax=0.5)
 plt.xlabel("Site")
 plt.yticks([x - 0.5 for x in list(range(1, L + 1))], [str(x) for x in range(1, L + 1)])
 plt.ylabel("t")

@@ -138,14 +138,14 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
     """Construct Generator MPO.
 
     Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a
-      specified length.
+    specified length.
 
     Args:
-        gate (BaseGate): The gate containing the generator and the sites it acts on.
-        length (int): The total number of sites in the system.
+        gate: The gate containing the generator and the sites it acts on.
+        length: The total number of sites in the system.
 
     Returns:
-        tuple[MPO, int, int]: A tuple containing the constructed MPO, the first site index, and the last site index.
+        A tuple containing the constructed MPO, the first site index, and the last site index.
     """
     tensors = []
 
@@ -239,26 +239,25 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
-) -> NDArray[np.float64]:
+) -> NDArray[np.float64] | dict[int, int]:
     """Digital Tensor Jump Method.
 
     Simulates a quantum circuit using the Tensor Jump Method.
 
     Args:
-        args (tuple): A tuple containing the following elements:
-            - int: An index or identifier, primarily for parallelization
-            - MPS: The initial state of the system represented as a Matrix Product State.
-            - NoiseModel | None: The noise model to be applied during the simulation, or None if no noise is
-                to be applied.
-            - StrongSimParams | WeakSimParams: Parameters for the simulation, either for strong or weak simulation.
-            - QuantumCircuit: The quantum circuit to be simulated.
+        args: A tuple containing the following elements:
+            - An index or identifier, primarily for parallelization
+            - The initial state of the system represented as a Matrix Product State.
+            - The noise model to be applied during the simulation, or None if no noise is to be applied.
+            - Parameters for the simulation, either for strong or weak simulation.
+            - The quantum circuit to be simulated.
 
     Returns:
-        NDArray[np.float64]: The results of the simulation. If StrongSimParams are used, the results
-        are the measured observables.
+        The results of the simulation.
+        If StrongSimParams are used, the results are the measured observables.
         If WeakSimParams are used, the results are the measurement outcomes for each shot.
     """
-    _i, initial_state, noise_model, sim_params, circuit = args
+    _, initial_state, noise_model, sim_params, circuit = args
 
     state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)

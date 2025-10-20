@@ -41,13 +41,13 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     at site 0.
 
     Args:
-        state (MPS): The Matrix Product State representing the current state of the system.
-                     The state should be in mixed canonical form at site 0 or B normalized.
+        state: The Matrix Product State representing the current state of the system.
+            The state should be in mixed canonical form at site 0 or B normalized.
 
     Returns:
-        NDArray[np.float64]: The calculated stochastic factor as a float.
+        The calculated stochastic factor as a float.
     """
-    return 1 - state.norm(0)
+    return np.asarray(1 - state.norm(0), dtype=np.float64)
 
 
 def create_probability_distribution(
@@ -74,13 +74,13 @@ def create_probability_distribution(
     Args:
         state: The Matrix Product State, assumed left-canonical at site 0 on entry.
         noise_model: The noise model as a list of process dicts, each with keys
-        "name", "strength", "sites", and "matrix" (for 1-site and adjacent 2-site processes)
-        or "factors" (for long-range 2-site processes).
-        dt : Time step for the evolution, used to scale the jump probabilities.
+            "name", "strength", "sites", and "matrix" (for 1-site and adjacent 2-site processes)
+            or "factors" (for long-range 2-site processes).
+        dt: Time step for the evolution, used to scale the jump probabilities.
         sim_params: Simulation parameters, needed for splitting merged tensors (e.g., SVD threshold, bond dimension).
 
     Returns:
-        list[float]: Normalized probabilities corresponding to applicable processes
+        Normalized probabilities corresponding to applicable processes
     """
     if noise_model is None or not noise_model.processes:
         return []
