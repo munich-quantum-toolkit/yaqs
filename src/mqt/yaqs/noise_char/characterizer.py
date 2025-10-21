@@ -212,7 +212,7 @@ class Characterizer:
         self.loss = LossClass(ref_traj=ref_traj, traj_gradients=self.traj_gradients,
                               working_dir=work_dir, print_to_file=print_to_file)
 
-        self.init_x = self.loss.noise_model_to_x(self.init_guess)
+        self.init_x = self.init_guess.strength_list.copy()
 
     def adam_optimize(
         self,

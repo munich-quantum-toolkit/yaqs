@@ -341,20 +341,6 @@ class LossClass:
 
         return CompactNoiseModel(return_processes)
 
-    def noise_model_to_x(self, noise_model: CompactNoiseModel) -> np.ndarray:
-        """Converts a CompactNoiseModel instance to the optimization variable x.
-
-        Args:
-            noise_model (CompactNoiseModel): The noise model to convert.
-
-        Returns:
-            np.ndarray: The optimization variable x representing noise strengths.
-        """
-        x: np.ndarray = np.zeros(self.d, dtype=np.float64)
-        for i in range(self.d):
-            x[i] = noise_model.compact_processes[i]["strength"]
-        return x
-
     def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
         """Evaluates the objective function and its gradient for the given parameters.
 

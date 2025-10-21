@@ -210,6 +210,8 @@ class CompactNoiseModel:
             process in self.compact_processes.
         self.expanded_noise_model : NoiseModel
             NoiseModel constructed from self.expanded_processes.
+        self.strength_list : np.ndarray
+            Array of strengths corresponding to each compact process.
 
         Raises:
         ------
@@ -245,5 +247,7 @@ class CompactNoiseModel:
             for site in proc["sites"]:
                 self.expanded_processes.append({"name": proc["name"], "sites": [site], "strength": proc["strength"]})
                 self.index_list.append(i)
+        
+        self.strength_list: np.ndarray = np.array([proc["strength"] for proc in self.compact_processes])
 
         self.expanded_noise_model: NoiseModel = NoiseModel(self.expanded_processes)
