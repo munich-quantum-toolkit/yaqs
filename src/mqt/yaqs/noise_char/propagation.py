@@ -236,35 +236,6 @@ class PropagatorWithGradients:
 
         self.set_observables = True
 
-    def set_time(self, *, elapsed_time: float, dt: float = 0.1) -> None:
-        """Configure the simulation time grid and related parameters.
-
-        Parameters.
-        ----------
-        elapsed_time : float
-            Total simulation time (non-negative). This is the final time value the grid is intended
-            to reach.
-        dt : float, optional
-            Time step size (positive). Default is 0.1. The time grid is built with this spacing.
-        Side effects
-        -----------
-        Sets the following attributes on self.sim_params:
-        - elapsed_time: updated to the provided elapsed_time
-        - dt: updated to the provided dt
-        - times: a numpy.ndarray produced by np.arange(0, elapsed_time + dt, dt)
-        Also sets self.n_t to the length of the generated time array.
-
-        Notes:
-        -----
-        The times array is constructed using np.arange(0, elapsed_time + dt, dt) so that the final
-        value is intended to include elapsed_time when it is an integer multiple of dt. Due to
-        floating-point rounding, the last element may be slightly different from elapsed_time.
-        """
-        self.sim_params.elapsed_time = elapsed_time
-        self.sim_params.dt = dt
-        self.sim_params.times = np.arange(0, elapsed_time + dt, dt)
-        self.n_t = len(self.sim_params.times)
-
     def run(self, noise_model: CompactNoiseModel) -> None:
         """Run the propagation routine with augmented Lindblad-derived operators.
 
