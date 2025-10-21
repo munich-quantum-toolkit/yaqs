@@ -166,7 +166,7 @@ class Characterizer:
         init_guess: CompactNoiseModel,
         init_state: MPS,
         ref_traj: list[Observable],
-        work_dir:  str | Path = ".",
+        work_dir: str | Path = ".",
         print_to_file: bool = True,
     ) -> None:
         """Initialize the noise characterizer.
@@ -209,8 +209,9 @@ class Characterizer:
             sim_params=sim_params, hamiltonian=hamiltonian, compact_noise_model=init_guess, init_state=init_state
         )
 
-        self.loss = LossClass(ref_traj=ref_traj, traj_gradients=self.traj_gradients,
-                              working_dir=work_dir, print_to_file=print_to_file)
+        self.loss = LossClass(
+            ref_traj=ref_traj, traj_gradients=self.traj_gradients, working_dir=work_dir, print_to_file=print_to_file
+        )
 
         self.init_x = self.init_guess.strength_list.copy()
 

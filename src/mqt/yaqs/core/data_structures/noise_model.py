@@ -227,9 +227,7 @@ class CompactNoiseModel:
           code can work with single-site noise process descriptions.
         """
         self.compact_processes: list[dict[str, Any]] = (
-            copy.deepcopy(compact_processes)
-            if compact_processes is not None
-            else []
+            copy.deepcopy(compact_processes) if compact_processes is not None else []
         )
 
         self.expanded_processes: list[dict[str, Any]] = []
@@ -237,7 +235,6 @@ class CompactNoiseModel:
         self.index_list: list[int] = []
 
         for i, proc in enumerate(self.compact_processes):
-
             assert "name" in proc, "Each process must have a 'name' key"
             msg = "Only 1-site noise processes are supported in CompactNoiseModel"
             assert getattr(GateLibrary, proc["name"])().interaction == 1, msg
@@ -247,7 +244,7 @@ class CompactNoiseModel:
             for site in proc["sites"]:
                 self.expanded_processes.append({"name": proc["name"], "sites": [site], "strength": proc["strength"]})
                 self.index_list.append(i)
-        
+
         self.strength_list: np.ndarray = np.array([proc["strength"] for proc in self.compact_processes])
 
         self.expanded_noise_model: NoiseModel = NoiseModel(self.expanded_processes)

@@ -343,6 +343,5 @@ class PropagatorWithGradients:
         self.obs_array = np.array([obs.results for obs in self.obs_traj])
 
         self.d_on_d_gk_array = np.array([
-            [d_on_d_gk[i, j].results for j in range(self.n_obs)]
-            for i in range(self.n_jump)
-])
+            [d_on_d_gk[i, j].results for j in range(self.n_obs)] for i in range(self.n_jump)
+        ])

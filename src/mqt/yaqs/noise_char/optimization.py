@@ -88,10 +88,12 @@ class LossClass:
     n_avg = 20
 
     def __init__(
-        self, *, ref_traj: list[Observable],
+        self,
+        *,
+        ref_traj: list[Observable],
         traj_gradients: PropagatorWithGradients,
         working_dir: str | Path = ".",
-        print_to_file: bool = False
+        print_to_file: bool = False,
     ) -> None:
         """Initializes the optimization class for noise characterization.
 
@@ -499,7 +501,6 @@ def adam_optimizer(
 
         f.t = saved["t"].copy()
         f.obs_array = saved["obs_traj"].copy()
-
 
     else:
         # Remove all .pkl files in the folder

@@ -12,29 +12,75 @@ from __future__ import annotations
 import contextlib
 import pathlib
 import pickle  # noqa: S403
-import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 
-from mqt.yaqs.noise_char import optimization, propagation
-from mqt.yaqs.noise_char.optimization import LossClass
-
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
-
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
-
+from mqt.yaqs.noise_char import optimization, propagation
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from mqt.yaqs.noise_char.optimization import LossClass
+
 
 class Parameters:
+    """Container for default test parameters used in a lightweight open-quantum-system propagation test."""
+
     def __init__(self) -> None:
+        """Initialize default parameters for the test optimization.
+
+        This constructor sets up default simulation and model parameters used by the
+        test case, including system size, time discretization, numerical tolerances,
+        noise rates, and derived quantities (time grid and counts of observables/jumps).
+
+        Parameters
+        ----------
+        None
+
+        Attributes:
+        ----------
+        sites : int
+            Number of sites in the system.
+        sim_time : float
+            Total simulation time.
+        dt : float
+            Time step size.
+        order : int
+            Numerical order (e.g., integration or algorithm order).
+        threshold : float
+            Convergence or truncation threshold (tolerance).
+        ntraj : int
+            Number of trajectories (for stochastic/unraveled simulations).
+        max_bond_dim : int
+            Maximum bond dimension for tensor network methods.
+        j : float
+            Hamiltonian coupling constant (e.g., exchange or hopping strength).
+        g : float
+            System parameter (e.g., field or coupling strength).
+
+        times : numpy.ndarray
+            1D array of time points from 0 to ``sim_time`` inclusive with spacing ``dt``.
+        n_obs : int
+            Number of observables tracked (here 3 per site: x, y, z).
+        n_jump : int
+            Number of jump operators per site (here lowering and pauli_z per site).
+        n_t : int
+            Number of time points (length of ``times``).
+
+        gamma_rel : float
+            Relaxation (dissipative) rate.
+        gamma_deph : float
+            Dephasing rate.
+
+        d : int
+            Local Hilbert space dimension (e.g., spin-1/2 -> 2).
+        """
         self.sites = 1
         self.sim_time = 0.6
         self.dt = 0.2
@@ -45,7 +91,6 @@ class Parameters:
         self.j = 1
         self.g = 0.5
 
-
         self.times = np.arange(0, self.sim_time + self.dt, self.dt)
 
         self.n_obs = self.sites * 3  # x, y, z for each site
@@ -55,51 +100,69 @@ class Parameters:
         self.gamma_rel = 0.1
         self.gamma_deph = 0.15
 
-
         self.d = 2
 
 
-
 def create_loss_instance(tmp_path: Path, test: Parameters) -> LossClass:
-    """Helper function to create a LossClass instance for testing."""
+    """Create a LossClass instance for testing.
 
+    Helper that builds a minimal simulation (Hamiltonian, initial state, observables,
+    propagator) and returns an initialized LossClass ready for tests.
 
+    Parameters
+    ----------
+    tmp_path : Path
+        Temporary directory used as the working directory for the loss instance.
+    test : Parameters
+        Test parameter container with simulation settings.
+
+    Returns:
+    -------
+    LossClass
+        An instance of optimization.LossClass initialized with a reference trajectory
+        and propagator for use in tests.
+    """
     h_0 = MPO()
     h_0.init_ising(test.sites, test.j, test.g)
 
-
     # Define the initial state
-    init_state = MPS(test.sites, state='zeros')
+    init_state = MPS(test.sites, state="zeros")
 
+    obs_list = (
+        [Observable(X(), site) for site in range(test.sites)]
+        + [Observable(Y(), site) for site in range(test.sites)]
+        + [Observable(Z(), site) for site in range(test.sites)]
+    )
 
-    obs_list = [Observable(X(), site) for site in range(test.sites)]  + [Observable(Y(), site) for site in range(test.sites)] + [Observable(Z(), site) for site in range(test.sites)]
+    sim_params = AnalogSimParams(
+        observables=obs_list,
+        elapsed_time=test.sim_time,
+        dt=test.dt,
+        num_traj=test.ntraj,
+        max_bond_dim=test.max_bond_dim,
+        threshold=test.threshold,
+        order=test.order,
+        sample_timesteps=True,
+    )
 
-
-    sim_params = AnalogSimParams(observables=obs_list, elapsed_time=test.sim_time, dt=test.dt, num_traj=test.ntraj, max_bond_dim=test.max_bond_dim, threshold=test.threshold, order=test.order, sample_timesteps=True)
-
-
-    ref_noise_model =  CompactNoiseModel([{"name": "lowering", "sites": [i for i in range(test.sites)], "strength": test.gamma_rel}]+[{"name": "pauli_z", "sites": [i for i in range(test.sites)], "strength": test.gamma_deph}])
-
-
+    ref_noise_model = CompactNoiseModel([
+        {"name": "lowering", "sites": list(range(test.sites)), "strength": test.gamma_rel},
+        {"name": "pauli_z", "sites": list(range(test.sites)), "strength": test.gamma_deph},
+    ])
 
     propagator = propagation.PropagatorWithGradients(
-            sim_params=sim_params,
-            hamiltonian=h_0,
-            compact_noise_model=ref_noise_model,
-            init_state=init_state
-        )
-    
+        sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
+    )
+
     propagator.set_observable_list(obs_list)
     propagator.run(ref_noise_model)
 
-    loss = optimization.LossClass(
+    return optimization.LossClass(
         ref_traj=propagator.obs_traj,
         traj_gradients=propagator,
         working_dir=tmp_path,
         print_to_file=False,
     )
-
-    return loss
 
 
 def test_trapezoidal_basic() -> None:
@@ -177,9 +240,6 @@ def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
         - After reset, `n_eval` is 0 and `x_history` is an empty list.
         - After setting history, `n_eval` is incremented, and history attributes match the provided values.
     """
-
-
-
     test = Parameters()
     loss = create_loss_instance(tmp_path, test)
 
@@ -210,10 +270,8 @@ def test_loss_class_compute_avg_and_diff(tmp_path: pathlib.Path) -> None:
         - The last entry in `diff_avg_history` matches the maximum absolute difference
         between the last two averages in `x_avg_history`.
     """
-
     test = Parameters()
     loss = create_loss_instance(tmp_path, test)
-
 
     loss.n_avg = 2
     loss.x_history = [np.array([1, 2]), np.array([2, 3]), np.array([3, 4])]
@@ -246,7 +304,6 @@ def test_write_opt_traj_creates_correct_file_and_content(tmp_path: pathlib.Path)
 
     obs_traj = np.zeros([test.n_obs, test.n_t])
 
-
     loss.n_eval = 7  # evaluation index for filename
 
     output_file = loss.work_dir / f"opt_traj_{loss.n_eval}.txt"
@@ -263,7 +320,6 @@ def test_write_opt_traj_creates_correct_file_and_content(tmp_path: pathlib.Path)
     # The first line should be the header starting with 't'
     header = lines[0].strip()
     expected_header_prefix = "# t"
-    print("!!!!!!!Header is:  ",header)
     assert header.startswith(expected_header_prefix)
 
     # Check header contains correct observable labels like x0, y0 (depending on n_obs_site and sites)
@@ -280,7 +336,6 @@ def test_write_opt_traj_creates_correct_file_and_content(tmp_path: pathlib.Path)
     assert np.allclose(loaded_data, expected_data)
 
 
-
 def test_loss_class_set_work_dir(tmp_path: pathlib.Path) -> None:
     """Tests the functionality of setting a file name and writing to a file in a custom loss class.
 
@@ -293,7 +348,6 @@ def test_loss_class_set_work_dir(tmp_path: pathlib.Path) -> None:
     Asserts:
         - The file with the expected name exists after calling `set_work_dir`.
     """
-
     loss = create_loss_instance(tmp_path, Parameters())
 
     loss_file = tmp_path / "loss_x_history.txt"
@@ -302,7 +356,6 @@ def test_loss_class_set_work_dir(tmp_path: pathlib.Path) -> None:
     loss.set_work_dir(path=tmp_path)
     assert loss.history_file_name == loss_file
     assert loss.history_avg_file_name == loss_file_avg
-
 
 
 def test_write_to_file_creates_and_appends(tmp_path: Path) -> None:
@@ -326,13 +379,11 @@ def test_write_to_file_creates_and_appends(tmp_path: Path) -> None:
     - Call `write_to_file` to write to the history file.
     - Read and assert the contents of the history and average history files.
 
-    Expected outcome:   
+    Expected outcome:
     -----------------
     - Both history and average history files exist.
     - Files contain correctly formatted headers and data lines.
     """
-    
-
     # Instantiate LossClass and configure attributes
     loss = create_loss_instance(tmp_path, Parameters())
     loss.print_to_file = True
@@ -350,7 +401,6 @@ def test_write_to_file_creates_and_appends(tmp_path: Path) -> None:
 
     # Call the method with the main output file (can be history_file_name for example)
     loss.write_to_file(loss.history_file_name, f, x, grad)
-
 
     # Read all lines from history file using Path.read_text()
     history_text = loss.history_file_name.read_text(encoding="utf-8")
@@ -405,7 +455,6 @@ def test_write_to_file_does_nothing_when_disabled(tmp_path: Path) -> None:
     assert not loss.history_avg_file_name.exists()
 
 
-
 def test_adam_optimizer_runs() -> None:
     """Test that the Adam optimizer runs successfully with a dummy loss function.
 
@@ -421,7 +470,7 @@ def test_adam_optimizer_runs() -> None:
         - The time array (`t`) is a numpy ndarray.
         - The expectation values trajectory (`exp_vals_traj`) is a numpy ndarray.
     """
-    test= Parameters()
+    test = Parameters()
     loss_function = create_loss_instance(pathlib.Path(tempfile.mkdtemp()), test)
 
     x0 = np.array([0.5, 0.5])  # Initial guess for the parameters
@@ -458,7 +507,7 @@ def assert_list_of_arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]
 
     """
     assert len(list1) == len(list2), f"Length mismatch: {len(list1)} != {len(list2)}"
-    for i, (arr1, arr2) in enumerate(zip(list1, list2)):
+    for i, (arr1, arr2) in enumerate(zip(list1, list2, strict=False)):
         np.testing.assert_array_equal(arr1, arr2, err_msg=f"Arrays differ at index {i}")
 
 
@@ -474,25 +523,20 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     Args:
         tmp_path (Path): Temporary path fixture provided by pytest.
     """
-
     test = Parameters()
-
 
     # Arrange: create mock restart file
     iteration = 5
     restart_file = tmp_path / f"restart_step_000{iteration}.pkl"
 
-    x_history = [np.array([0.2]*test.d)] * iteration
-    x_avg_history = [np.array([0.4]*test.d)] * iteration
+    x_history = [np.array([0.2] * test.d)] * iteration
+    x_avg_history = [np.array([0.4] * test.d)] * iteration
     diff_avg_history = [2] * iteration
     f_history = [0] * iteration
 
     expected_x = x_history[-1]
-    expected_m = np.array([0.01]*test.d)
-    expected_v = np.array([0.02]*test.d)
-
-
-
+    expected_m = np.array([0.01] * test.d)
+    expected_v = np.array([0.02] * test.d)
 
     obs_traj = np.zeros([test.n_obs, test.n_t])
 
@@ -511,7 +555,6 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
 
     with restart_file.open("wb") as handle:
         pickle.dump(saved_data, handle)
-
 
     loss = create_loss_instance(tmp_path, test)
 
@@ -540,30 +583,58 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
 
 
 def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
+    """Test that adam_optimizer selects the latest restart file when restarting is enabled.
 
+    This test performs two related checks using a pytest tmp_path fixture:
+    1. Latest-restart-file selection
+        - Creates several restart .pkl files in tmp_path with different iteration/t/obs_traj
+          values, deliberately writing them in a non-chronological order on disk.
+        - Calls optimization.adam_optimizer with restart=True and restart_file=None and
+          max_iterations=1 so the optimizer does not proceed beyond loading the restart.
+        - Verifies that the optimizer loaded the restart file corresponding to the largest
+          iteration (the "latest" file) by asserting returned_t and returned_obs match the
+          values stored in that file.
+    2. .pkl file cleanup when restart is disabled
+        - Leaves a non-.pkl file in tmp_path to ensure non-restart files are not touched.
+        - Recreates the loss instance and calls optimization.adam_optimizer with restart=False
+          and restart_file=None (again with max_iterations=1).
+        - Verifies that the optimizer removed the expected restart .pkl files according to
+          the behavior under test (only the expected baseline .pkl remains) and that the
+          non-.pkl file is preserved with its original contents.
+    Parameters
+    ----------
+    tmp_path : Path
+         Temporary directory provided by pytest for creating restart and other files.
+
+    Notes:
+    -----
+    - The test encodes the expected t and obs_traj values for the "latest" restart file
+      and asserts exact array equality.
+    - The test also asserts the precise set of remaining .pkl files after calling the
+      optimizer with restart=False and that non-.pkl files remain untouched.
+    """
     test = Parameters()
     loss = create_loss_instance(tmp_path, test)
 
-
-    def make_saved(step, t_value):
+    def make_saved(step: int) -> dict[str, Any]:
         return {
             "iteration": step,
-            "x": np.array([0.0]*test.d),
-            "m": np.array([0.0]*test.d),
-            "v": np.array([0.0]*test.d),
-            "x_history": [np.array([0.0]*test.d)],
+            "x": np.array([0.0] * test.d),
+            "m": np.array([0.0] * test.d),
+            "v": np.array([0.0] * test.d),
+            "x_history": [np.array([0.0] * test.d)],
             "f_history": [0.0],
-            "x_avg_history": [np.array([0.0]*test.d)],
+            "x_avg_history": [np.array([0.0] * test.d)],
             "diff_avg_history": [0.0],
-            "t": np.array([t_value]),
-            "obs_traj": np.array([[t_value + 1.0]]),
+            "t": np.array([step]),
+            "obs_traj": np.array([[step + 1.0]]),
         }
 
     # create files in non-sorted creation order to ensure sorting in code matters
     files_info = [
-        ("restart_step_0001.pkl", make_saved(0, 1.0)),
-        ("restart_step_0003.pkl", make_saved(2, 3.0)),  # this should be picked as latest
-        ("restart_step_0002.pkl", make_saved(1, 2.0)),
+        ("restart_step_0001.pkl", make_saved(0)),
+        ("restart_step_0003.pkl", make_saved(3)),  # this should be picked as latest
+        ("restart_step_0002.pkl", make_saved(2)),
     ]
 
     for name, saved in files_info:
@@ -572,14 +643,14 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
 
     # Call optimizer with restart enabled and restart_file=None.
     # Set max_iterations=1 so that after loading the restart file the optimizer loop does not run.
-    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(loss, np.array([0.0]*test.d), restart=True, restart_file=None, max_iterations=1)
+    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(
+        loss, np.array([0.0] * test.d), restart=True, restart_file=None, max_iterations=1
+    )
 
     # The optimizer should have loaded the latest restart file (restart_step_0003.pkl)
     # which contains t = [3.0] and obs_traj = [[4.0]]
     assert np.array_equal(returned_t, np.array([3.0]))
     assert np.array_equal(returned_obs, np.array([[4.0]]))
-
-
 
     non_pkl = tmp_path / "keep.txt"
     non_pkl.write_text("should stay")
@@ -587,12 +658,16 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
     loss = create_loss_instance(tmp_path, test)
 
     # Testing all .pkl files are deleted if restart is False
-    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(loss, np.array([0.0]*test.d), restart=False, restart_file=None, max_iterations=1)
+    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(
+        loss, np.array([0.0] * test.d), restart=False, restart_file=None, max_iterations=1
+    )
 
     # Assert all .pkl files were removed
     remaining_pkls = list(tmp_path.glob("*.pkl"))
     assert len(remaining_pkls) == 1, f"Expected 1 .pkl files, found: {remaining_pkls}"
-    assert remaining_pkls[0] == tmp_path / "restart_step_0001.pkl", f"Expected {tmp_path}/restart_step_0001.pkl, found: {remaining_pkls[0]}"
+    assert remaining_pkls[0] == tmp_path / "restart_step_0001.pkl", (
+        f"Expected {tmp_path}/restart_step_0001.pkl, found: {remaining_pkls[0]}"
+    )
 
     # Non-.pkl file should remain
     assert non_pkl.exists()
