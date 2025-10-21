@@ -236,8 +236,12 @@ class CompactNoiseModel:
 
         for i, proc in enumerate(self.compact_processes):
             assert "name" in proc, "Each process must have a 'name' key"
+            name = proc["name"]
+            if not hasattr(GateLibrary, name):
+                msg = f"Gate '{name}' not found in GateLibrary"
+                raise ValueError(msg)
             msg = "Only 1-site noise processes are supported in CompactNoiseModel"
-            assert getattr(GateLibrary, proc["name"])().interaction == 1, msg
+            assert getattr(GateLibrary, name)().interaction == 1, msg
             assert "sites" in proc, "Each process must have a 'sites' key"
             assert "strength" in proc, "Each process must have a 'strength' key"
 
