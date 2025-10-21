@@ -1753,6 +1753,7 @@ class GateLibrary:
     custom = BaseGate
     zero = Zero
 
+    # Added aliases to be compatible with naming conventions in noise models
     raising = Create
     lowering = Destroy
     pauli_z = Z
