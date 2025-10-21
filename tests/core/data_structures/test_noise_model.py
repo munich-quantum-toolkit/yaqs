@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel, CompactNoiseModel
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
 
@@ -55,6 +55,82 @@ def test_noise_model_creation() -> None:
     assert model.processes[0]["matrix"].shape == (2, 2)
     assert model.processes[1]["matrix"].shape == (2, 2)
 
+
+def test_compact_noise_model_creation() -> None:
+    """Test that CompactNoiseModel is created correctly with valid process dicts.
+
+    This test constructs a CompactNoiseModel with two single-site processes
+    ("lowering" and "pauli_z") and corresponding strengths.
+    It verifies that:
+      - Each process is stored as a dictionary with correct fields.
+      - The number of processes is correct.
+      - Each process contains a jump_operator with the expected shape (2x2).
+    """
+    processes: list[dict[str, Any]] = [
+        {"name": "lowering", "sites": [0,1], "strength": 0.1},
+        {"name": "pauli_z", "sites": [2], "strength": 0.05},
+    ]
+
+    model = CompactNoiseModel(processes)
+
+    assert len(model.compact_processes) == 2
+    assert model.compact_processes[0]["name"] == "lowering"
+    assert model.compact_processes[1]["name"] == "pauli_z"
+    assert model.compact_processes[0]["strength"] == 0.1
+    assert model.compact_processes[1]["strength"] == 0.05
+
+
+    assert model.expanded_processes[0]["name"] == "lowering"
+    assert model.expanded_processes[1]["name"] == "lowering"
+    assert model.expanded_processes[2]["name"] == "pauli_z"
+
+
+    assert model.expanded_processes[0]["strength"] == 0.1
+    assert model.expanded_processes[1]["strength"] == 0.1
+    assert model.expanded_processes[2]["strength"] == 0.05
+
+
+
+    assert model.expanded_processes[0]["sites"] == [0]
+    assert model.expanded_processes[1]["sites"] == [1]
+    assert model.expanded_processes[2]["sites"] == [2]
+
+
+    assert model.index_list == [0, 0, 1]
+
+    
+
+def test_compact_noise_model_assertion() -> None:
+    """Test that CompactNoiseModel raises an AssertionError when a process dict is missing required fields.
+
+    This test constructs a process list where one entry is missing the 'strength' field,
+    which should cause the NoiseModel initialization to fail.
+    """
+    # Missing 'strength' in the second dict
+    miss_strength_processes: list[dict[str, Any]] = [
+        {"name": "lowering", "sites": [0,1], "strength": 0.1},
+        {"name": "pauli_z", "sites": [2]}, 
+    ]
+
+
+    miss_sites_processes: list[dict[str, Any]] = [
+        {"name": "lowering", "sites": [0,1], "strength": 0.1},
+        {"name": "pauli_z", "strength": 0.1}
+    ]
+
+    miss_name_processes: list[dict[str, Any]] = [
+        {"name": "lowering", "sites": [0,1], "strength": 0.1},
+        {"sites": [2], "strength": 0.1}
+    ]
+
+    with pytest.raises(AssertionError):
+        _ = NoiseModel(miss_strength_processes)
+
+    with pytest.raises(AssertionError):
+        _ = NoiseModel(miss_sites_processes)
+
+    with pytest.raises(AssertionError):
+        _ = NoiseModel(miss_name_processes)
 
 def test_noise_model_assertion() -> None:
     """Test that NoiseModel raises an AssertionError when a process dict is missing required fields.

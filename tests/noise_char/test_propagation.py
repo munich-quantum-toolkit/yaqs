@@ -74,6 +74,9 @@ def create_propagator_instance(test: Parameters) -> tuple[MPO, MPS, list[Observa
             compact_noise_model=ref_noise_model,
             init_state=init_state
         )
+    
+    propagator.set_observable_list(obs_list)
+    propagator.run(ref_noise_model)
 
 
     return h_0, init_state, obs_list, sim_params, ref_noise_model, propagator
@@ -113,7 +116,7 @@ def test_propagatorwithgradients_runs() -> None:
 
 
 
-def test_raises_num_sites_hamiltonian() -> None:
+def test_raises_errors() -> None:
     """Test that `PropagatorWithGradients` raises a ValueError when the number of sites in the Hamiltonian does not match the initial state.
 
     This test verifies that:
@@ -123,25 +126,24 @@ def test_raises_num_sites_hamiltonian() -> None:
     test = Parameters()
 
 
-    h_0, init_state, _, sim_params, _, _ = create_propagator_instance(test)
+    h_0, init_state, obs_list, sim_params, ref_noise_model, _ = create_propagator_instance(test)
     
 
 
-    ref_noise_model =  CompactNoiseModel([{"name": "lowering", "sites": [i for i in range(test.sites+1)], "strength": test.gamma_rel}] + [{"name": "pauli_z", "sites": [i for i in range(test.sites)], "strength": test.gamma_deph}])
+    exced_ref_noise_model =  CompactNoiseModel([{"name": "lowering", "sites": [i for i in range(test.sites+1)], "strength": test.gamma_rel}] + [{"name": "pauli_z", "sites": [i for i in range(test.sites)], "strength": test.gamma_deph}])
 
 
     with pytest.raises(ValueError, match="Noise site index exceeds number of sites in the Hamiltonian."):
         propagator = propagation.PropagatorWithGradients(
             sim_params=sim_params,
             hamiltonian=h_0,
-            compact_noise_model=ref_noise_model,
+            compact_noise_model=exced_ref_noise_model,
             init_state=init_state
         )
 
-    ref_noise_model =  CompactNoiseModel([{"name": "lowering", "sites": [i for i in range(test.sites)], "strength": test.gamma_rel}] + [{"name": "pauli_z", "sites": [i for i in range(test.sites)], "strength": test.gamma_deph}])
 
-    obj_list = [Observable(X(), site) for site in range(test.sites)]  + [Observable(Y(), site) for site in range(test.sites)] + [Observable(Z(), site) for site in range(test.sites+1)] 
 
+    exced_obs_list = [Observable(X(), site) for site in range(test.sites)]  + [Observable(Y(), site) for site in range(test.sites)] + [Observable(Z(), site) for site in range(test.sites+1)] 
 
     with pytest.raises(ValueError, match="Observable site index exceeds number of sites in the Hamiltonian."):
         propagator = propagation.PropagatorWithGradients(
@@ -151,5 +153,27 @@ def test_raises_num_sites_hamiltonian() -> None:
             init_state=init_state
         )
 
-        propagator.set_observable_list(obj_list)
+        propagator.set_observable_list(exced_obs_list)
     
+
+    with pytest.raises(ValueError, match="Observable list not set. Please use the set_observable_list method to set the observables."):
+        propagator = propagation.PropagatorWithGradients(
+            sim_params=sim_params,
+            hamiltonian=h_0,
+            compact_noise_model=ref_noise_model,
+            init_state=init_state
+        )
+        propagator.run(ref_noise_model)
+
+    
+    wrong_ref_noise_model =  CompactNoiseModel([{"name": "lowering", "sites": [i for i in range(test.sites)], "strength": test.gamma_rel}] + [{"name": "pauli_x", "sites": [i for i in range(test.sites)], "strength": test.gamma_deph}])   
+    with pytest.raises(ValueError, match="Noise model processes or sites do not match the initialized noise model."):
+        propagator = propagation.PropagatorWithGradients(
+            sim_params=sim_params,
+            hamiltonian=h_0,
+            compact_noise_model=ref_noise_model,
+            init_state=init_state
+        )
+        propagator.set_observable_list(obs_list)
+
+        propagator.run(wrong_ref_noise_model)

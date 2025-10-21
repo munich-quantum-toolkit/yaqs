@@ -60,7 +60,7 @@ class Parameters:
 
 
 
-def create_loss_instance(tmp_path: Path, test: Parameters) -> optimization.LossClass:
+def create_loss_instance(tmp_path: Path, test: Parameters) -> LossClass:
     """Helper function to create a LossClass instance for testing."""
 
 
