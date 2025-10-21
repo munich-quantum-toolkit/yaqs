@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import contextlib
 import copy
-import pathlib
 import pickle  # noqa: S403
 import time
 from pathlib import Path
@@ -473,7 +472,7 @@ def adam_optimizer(
     perf_path = Path(f.work_dir) / "performance_metric_sec.txt"
 
     # Find the latest restart file in the restart_dir
-    if restart_file is None and restart and pathlib.Path(restart_dir).is_dir():
+    if restart_file is None and restart and Path(restart_dir).is_dir():
         restart_files = [
             file_path.name
             for file_path in Path(restart_dir).iterdir()
