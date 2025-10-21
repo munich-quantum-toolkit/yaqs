@@ -168,7 +168,7 @@ def test_propagatorwithgradients_runs() -> None:
     # Prepare SimulationParameters
     test = Parameters()
 
-    _, _, obs_list, _, ref_noise_model, propagator = create_propagator_instance(test)
+    _, _, _obs_list, _, ref_noise_model, propagator = create_propagator_instance(test)
 
     propagator.run(ref_noise_model)
 
