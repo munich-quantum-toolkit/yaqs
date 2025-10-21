@@ -208,7 +208,7 @@ def test_raises_errors() -> None:
         )
 
     # Test that PropagatorWithGradients raises a ValueError when
-    # observale list exceeds the number of sites of the Hamiltonian.
+    # observable list exceeds the number of sites of the Hamiltonian.
     exceed_obs_list = (
         [Observable(X(), site) for site in range(test.sites)]
         + [Observable(Y(), site) for site in range(test.sites)]
@@ -222,7 +222,7 @@ def test_raises_errors() -> None:
         propagator.set_observable_list(exceed_obs_list)
 
     # Test that PropagatorWithGradients raises a ValueError when
-    # observale list is not set.
+    # observable list is not set.
     propagator = propagation.PropagatorWithGradients(
         sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
     )
