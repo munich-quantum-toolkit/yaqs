@@ -152,7 +152,6 @@ def create_propagator_instance(
     )
 
     propagator.set_observable_list(obs_list)
-    propagator.run(ref_noise_model)
 
     return h_0, init_state, obs_list, sim_params, ref_noise_model, propagator
 
@@ -171,7 +170,6 @@ def test_propagatorwithgradients_runs() -> None:
 
     _, _, obs_list, _, ref_noise_model, propagator = create_propagator_instance(test)
 
-    propagator.set_observable_list(obs_list)
     propagator.run(ref_noise_model)
 
     assert isinstance(propagator.times, np.ndarray)
