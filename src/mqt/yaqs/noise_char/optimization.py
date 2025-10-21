@@ -500,6 +500,7 @@ def adam_optimizer(
         f.t = saved["t"].copy()
         f.obs_array = saved["obs_traj"].copy()
 
+
     else:
         # Remove all .pkl files in the folder
         restart_path = Path(restart_dir)

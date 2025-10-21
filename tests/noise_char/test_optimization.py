@@ -56,6 +56,9 @@ class Parameters:
         self.gamma_deph = 0.15
 
 
+        self.d = 2
+
+
 
 def create_loss_instance(tmp_path: Path, test: Parameters) -> optimization.LossClass:
     """Helper function to create a LossClass instance for testing."""
@@ -471,21 +474,24 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     Args:
         tmp_path (Path): Temporary path fixture provided by pytest.
     """
+
+    test = Parameters()
+
+
     # Arrange: create mock restart file
     iteration = 5
     restart_file = tmp_path / f"restart_step_000{iteration}.pkl"
 
-    x_history = [np.array([0.2, 0.4])] * iteration
-    x_avg_history = [np.array([0.2, 0.4])] * iteration
+    x_history = [np.array([0.2]*test.d)] * iteration
+    x_avg_history = [np.array([0.4]*test.d)] * iteration
     diff_avg_history = [2] * iteration
     f_history = [0] * iteration
 
     expected_x = x_history[-1]
-    expected_m = np.array([0.01, 0.02])
-    expected_v = np.array([0.001, 0.002])
+    expected_m = np.array([0.01]*test.d)
+    expected_v = np.array([0.02]*test.d)
 
 
-    test = Parameters()
 
 
     obs_traj = np.zeros([test.n_obs, test.n_t])
@@ -531,3 +537,63 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
             restart_file=Path("/dummy/restart/file"),
             max_iterations=7,  # keep short
         )
+
+
+def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
+
+    test = Parameters()
+    loss = create_loss_instance(tmp_path, test)
+
+
+    def make_saved(step, t_value):
+        return {
+            "iteration": step,
+            "x": np.array([0.0]*test.d),
+            "m": np.array([0.0]*test.d),
+            "v": np.array([0.0]*test.d),
+            "x_history": [np.array([0.0]*test.d)],
+            "f_history": [0.0],
+            "x_avg_history": [np.array([0.0]*test.d)],
+            "diff_avg_history": [0.0],
+            "t": np.array([t_value]),
+            "obs_traj": np.array([[t_value + 1.0]]),
+        }
+
+    # create files in non-sorted creation order to ensure sorting in code matters
+    files_info = [
+        ("restart_step_0001.pkl", make_saved(0, 1.0)),
+        ("restart_step_0003.pkl", make_saved(2, 3.0)),  # this should be picked as latest
+        ("restart_step_0002.pkl", make_saved(1, 2.0)),
+    ]
+
+    for name, saved in files_info:
+        with (tmp_path / name).open("wb") as fh:
+            pickle.dump(saved, fh, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Call optimizer with restart enabled and restart_file=None.
+    # Set max_iterations=1 so that after loading the restart file the optimizer loop does not run.
+    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(loss, np.array([0.0]*test.d), restart=True, restart_file=None, max_iterations=1)
+
+    # The optimizer should have loaded the latest restart file (restart_step_0003.pkl)
+    # which contains t = [3.0] and obs_traj = [[4.0]]
+    assert np.array_equal(returned_t, np.array([3.0]))
+    assert np.array_equal(returned_obs, np.array([[4.0]]))
+
+
+
+    non_pkl = tmp_path / "keep.txt"
+    non_pkl.write_text("should stay")
+
+    loss = create_loss_instance(tmp_path, test)
+
+    # Testing all .pkl files are deleted if restart is False
+    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(loss, np.array([0.0]*test.d), restart=False, restart_file=None, max_iterations=1)
+
+    # Assert all .pkl files were removed
+    remaining_pkls = list(tmp_path.glob("*.pkl"))
+    assert len(remaining_pkls) == 1, f"Expected 1 .pkl files, found: {remaining_pkls}"
+    assert remaining_pkls[0] == tmp_path / "restart_step_0001.pkl", f"Expected {tmp_path}/restart_step_0001.pkl, found: {remaining_pkls[0]}"
+
+    # Non-.pkl file should remain
+    assert non_pkl.exists()
+    assert non_pkl.read_text() == "should stay"
