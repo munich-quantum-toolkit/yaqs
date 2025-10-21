@@ -76,11 +76,6 @@ class PropagatorWithGradients:
         referenced by the observables is within the range [0, sites-1]. Sets
         n_obs and flips set_observables to True. Raises ValueError for empty lists
         or out-of-range site indices.
-    set_time(*, elapsed_time: float, dt: float = 0.1) -> None
-        Configure the internal time grid (sim_params.times) using
-        np.arange(0, elapsed_time + dt, dt) and update n_t. elapsed_time must be
-        non-negative and dt positive (no automatic validation is performed here
-        beyond assignment).
     run(noise_model: CompactNoiseModel) -> None
         Execute the propagation. Requires that set_observables has been called.
         Validates that the provided compact noise_model matches the one used to
