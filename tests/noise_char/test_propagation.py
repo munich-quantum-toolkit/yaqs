@@ -182,11 +182,13 @@ def test_propagatorwithgradients_runs() -> None:
 
 
 def test_raises_errors() -> None:
-    """Test that `PropagatorWithGradients` raises a ValueError.
+    """Test that `PropagatorWithGradients` raises expected ValueErrors.
 
-    This test verifies that:
-    - A ValueError is raised when the Hamiltonian's number of sites differs from that of the initial state.
-    - The error message contains the expected text indicating the mismatch.
+    Verifies errors for:
+    - Noise model referencing sites beyond the Hamiltonian.
+    - Observable list referencing sites beyond the Hamiltonian.
+    - Running without setting observables.
+    - Mismatched compact noise model (names/sites) at run-time.
     """
     test = Parameters()
 
