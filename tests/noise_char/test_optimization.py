@@ -169,7 +169,7 @@ def test_trapezoidal_basic() -> None:
     """Test the basic functionality of the trapezoidal integration method.
 
     This test verifies that the `optimization.trapezoidal` function correctly computes
-    the cumulative integral of y = x^2 over the interval [0, 1] using 5 sample points.
+    the cumulative integral of y = x^2 over the interval [0, 1] using a discretized grid.
     It asserts that the final value of the cumulative integral is close to the analytical
     result of the definite integral of x^2 from 0 to 1, which is 1/3, within a tolerance of 1e-2.
     """
