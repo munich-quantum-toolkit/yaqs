@@ -646,7 +646,6 @@ def local_dynamic_tdvp(
         state (MPS): MPS state to evolve.
         hamiltonian (MPO): MPO Hamiltonian.
         sim_params: Simulation parameters including dt and threshold.
-        max_bond_dim (int): Maximum allowed bond dimension for two-site updates.
         numiter_lanczos (int): Lanczos iterations per local update.
 
     Raises:
