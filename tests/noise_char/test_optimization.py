@@ -10,9 +10,7 @@
 from __future__ import annotations
 
 import contextlib
-import pathlib
 import pickle  # noqa: S403
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -226,7 +224,7 @@ def arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]) -> bool:
     return all(map(np.array_equal, list1, list2))
 
 
-def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
+def test_loss_class_history_and_reset(tmp_path: Path) -> None:
     """Tests the history management and reset functionality of a loss class.
 
     This test defines a DummyLoss class inheriting from `optimization.LossClass` and verifies:
@@ -256,7 +254,7 @@ def test_loss_class_history_and_reset(tmp_path: pathlib.Path) -> None:
     assert loss.diff_avg_history == [0.1]
 
 
-def test_loss_class_compute_avg_and_diff(tmp_path: pathlib.Path) -> None:
+def test_loss_class_compute_avg_and_diff(tmp_path: Path) -> None:
     """Test the computation of average and difference in the loss class.
 
     This test defines a dummy subclass of `optimization.LossClass` with preset history values.
@@ -285,7 +283,7 @@ def test_loss_class_compute_avg_and_diff(tmp_path: pathlib.Path) -> None:
     assert loss.diff_avg_history[-1] == np.max(np.abs(loss.x_avg_history[-1] - loss.x_avg_history[-2]))
 
 
-def test_write_opt_traj_creates_correct_file_and_content(tmp_path: pathlib.Path) -> None:
+def test_write_opt_traj_creates_correct_file_and_content(tmp_path: Path) -> None:
     """Test for the LossClass.write_opt_traj method.
 
     The test verifies that:
@@ -336,7 +334,7 @@ def test_write_opt_traj_creates_correct_file_and_content(tmp_path: pathlib.Path)
     assert np.allclose(loaded_data, expected_data)
 
 
-def test_loss_class_set_work_dir(tmp_path: pathlib.Path) -> None:
+def test_loss_class_set_work_dir(tmp_path: Path) -> None:
     """Tests the functionality of setting a file name and writing to a file in a custom loss class.
 
     This test defines a DummyLoss class inheriting from `optimization.LossClass`, sets up a working directory,
@@ -344,7 +342,7 @@ def test_loss_class_set_work_dir(tmp_path: pathlib.Path) -> None:
     - The file name is correctly set and the file is created.
 
     Args:
-        tmp_path (pathlib.Path): Temporary directory provided by pytest for file operations.
+        tmp_path (Path): Temporary directory provided by pytest for file operations.
     Asserts:
         - The file with the expected name exists after calling `set_work_dir`.
     """
@@ -422,7 +420,7 @@ def test_write_to_file_does_nothing_when_disabled(tmp_path: Path) -> None:
 
     Parameters:
     -----------
-    setup_loss_class_files : pytest fixture
+    tmp_path : pytest fixture
         Provides a temporary directory path used for file operations during testing.
 
     Steps:
@@ -455,13 +453,21 @@ def test_write_to_file_does_nothing_when_disabled(tmp_path: Path) -> None:
     assert not loss.history_avg_file_name.exists()
 
 
-def test_adam_optimizer_runs() -> None:
+def test_adam_optimizer_runs(tmp_path: Path) -> None:
     """Test that the Adam optimizer runs successfully with a dummy loss function.
 
     This test defines a DummyLoss class inheriting from `optimization.LossClass` and
     verifies that the `adam_optimizer` function from the `optimization` module executes
     without errors for a small number of iterations. It checks that the returned values
     have the expected types.
+
+
+    Parameters:
+    -----------
+    tmp_path : pytest fixture
+        Provides a temporary directory path used for file operations during testing.
+
+
 
     Asserts:
         - The function history (`f_hist`) is a list.
@@ -471,7 +477,7 @@ def test_adam_optimizer_runs() -> None:
         - The expectation values trajectory (`exp_vals_traj`) is a numpy ndarray.
     """
     test = Parameters()
-    loss_function = create_loss_instance(pathlib.Path(tempfile.mkdtemp()), test)
+    loss_function = create_loss_instance(tmp_path, test)
 
     x0 = np.array([0.5, 0.5])  # Initial guess for the parameters
     f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss_function, x0, max_iterations=3)
