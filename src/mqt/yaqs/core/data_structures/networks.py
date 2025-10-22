@@ -773,7 +773,6 @@ class MPS:
         mapping basis states (represented as integers) to the number of times they were observed.
 
         Args:
-            state (MPS): The Matrix Product State to be measured.
             shots (int): The number of measurement shots to perform.
 
         Returns:
@@ -987,6 +986,10 @@ class MPO:
     rotate(conjugate: bool = False) -> None
         Rotates the MPO tensors by swapping physical dimensions.
     """
+
+    def __init__(self) -> None:
+        """Initialize an empty MPO."""
+        self.flipped: bool = False
 
     def init_ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
         """Ising MPO.
@@ -1377,3 +1380,19 @@ class MPO:
                 self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
             else:
                 self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
+
+    def flip_network(self) -> None:
+        """Flip MPP.
+
+        Flips the bond dimensions in the network so that we can do operations
+        from right to left rather than coding it twice.
+
+        """
+        new_tensors = []
+        for tensor in self.tensors:
+            new_tensor = np.transpose(tensor, (0, 1, 3, 2))
+            new_tensors.append(new_tensor)
+
+        new_tensors.reverse()
+        self.tensors = new_tensors
+        self.flipped = not self.flipped
