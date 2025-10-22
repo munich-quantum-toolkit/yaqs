@@ -190,7 +190,7 @@ class CompactNoiseModel:
             - Must contain the keys "name", "sites", and "strength".
             - The GateLibrary entry for the given "name" must exist and represent a
               1-site interaction (GateLibrary.<name>().interaction == 1).
-          Violations raise AssertionError.
+          Violations raise AssertionError or ValueError.
         - The compact processes are expanded into single-site process entries:
             - For each site in a compact process, an expanded dict
               {"name": name, "sites": [site], "strength": strength} is appended to
@@ -215,9 +215,8 @@ class CompactNoiseModel:
 
         Raises:
         ------
-        AssertionError
-            If a process dict is missing required keys or if the named GateLibrary
-            process is not a 1-site interaction.
+        ValueError: If the named gate is not found in GateLibrary. The exception message is:
+                    "Gate '<name>' not found in GateLibrary".
 
         Notes:
         -----
