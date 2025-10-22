@@ -199,29 +199,21 @@ def test_trapezoidal_shape_and_error() -> None:
         optimization.trapezoidal(np.array([0, 1, 2]), None)
 
 
-def arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]) -> bool:
-    """Check if two lists of NumPy arrays are equal element-wise.
+def assert_list_of_arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]) -> None:
+    """Assert that two sequences of NumPy arrays are exactly equal element-wise.
 
-    Compares two lists of numpy arrays by:
-    - Checking if they have the same length.
-    - Verifying that each corresponding pair of arrays is equal using `np.array_equal`.
+    This function checks:
+      1. That both lists have the same length.
+      2. That each corresponding array is exactly equal (no tolerance).
 
-    Parameters
-    ----------
-    list1 : List[np.ndarray]
-        The first list of numpy arrays to compare.
-    list2 : List[np.ndarray]
-        The second list of numpy arrays to compare.
+    Args:
+        list1 (Sequence[np.ndarray]): The first list (or sequence) of arrays.
+        list2 (Sequence[np.ndarray]): The second list (or sequence) of arrays.
 
-    Returns:
-    -------
-    bool
-        True if both lists have the same length and all corresponding arrays are equal,
-        False otherwise.
     """
-    if len(list1) != len(list2):
-        return False
-    return all(map(np.array_equal, list1, list2))
+    assert len(list1) == len(list2), f"Length mismatch: {len(list1)} != {len(list2)}"
+    for i, (arr1, arr2) in enumerate(zip(list1, list2, strict=False)):
+        np.testing.assert_array_equal(arr1, arr2, err_msg=f"Arrays differ at index {i}")
 
 
 def test_loss_class_history_and_reset(tmp_path: Path) -> None:
@@ -249,7 +241,7 @@ def test_loss_class_history_and_reset(tmp_path: Path) -> None:
     assert loss.x_history == []
     loss.set_history([np.array([1, 2])], [3], [np.array([1, 2])], [0.1])
     assert loss.n_eval == 1
-    assert arrays_equal(loss.x_history, [np.array([1, 2])])
+    assert_list_of_arrays_equal(loss.x_history, [np.array([1, 2])])
     assert loss.f_history == [3]
     assert loss.diff_avg_history == [0.1]
 
@@ -284,7 +276,7 @@ def test_loss_class_compute_avg_and_diff(tmp_path: Path) -> None:
 
 
 def test_write_opt_traj_creates_correct_file_and_content(tmp_path: Path) -> None:
-    """Test for the LossClass.write_opt_traj method.
+    """Test for the LossClass.write_traj method.
 
     The test verifies that:
     - The output file `opt_traj_{n_eval}.txt` is created in the specified work directory.
@@ -498,23 +490,6 @@ def test_adam_optimizer_runs(tmp_path: Path) -> None:
     for file_path in loss_function.work_dir.glob("performance*.txt"):
         with contextlib.suppress(Exception):
             file_path.unlink()
-
-
-def assert_list_of_arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]) -> None:
-    """Assert that two sequences of NumPy arrays are exactly equal element-wise.
-
-    This function checks:
-      1. That both lists have the same length.
-      2. That each corresponding array is exactly equal (no tolerance).
-
-    Args:
-        list1 (Sequence[np.ndarray]): The first list (or sequence) of arrays.
-        list2 (Sequence[np.ndarray]): The second list (or sequence) of arrays.
-
-    """
-    assert len(list1) == len(list2), f"Length mismatch: {len(list1)} != {len(list2)}"
-    for i, (arr1, arr2) in enumerate(zip(list1, list2, strict=False)):
-        np.testing.assert_array_equal(arr1, arr2, err_msg=f"Arrays differ at index {i}")
 
 
 def test_restart_loads_x_m_v(tmp_path: Path) -> None:
