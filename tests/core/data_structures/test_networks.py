@@ -362,6 +362,24 @@ def test_check_if_identity() -> None:
     fidelity_threshold = 0.9
     assert mpo.check_if_identity(fidelity_threshold) is True
 
+def test_flip_network_mpo() -> None:
+    """Test the flipping of an MPO."""
+    pdim = 2
+    tensors = [
+        rng.random(size=(1, 3, pdim, pdim)).astype(np.complex128),
+        rng.random(size=(3, 4, pdim, pdim)).astype(np.complex128),
+        rng.random(size=(4, 1, pdim, pdim)).astype(np.complex128),
+    ]
+
+    mpo = MPO()
+    mpo.init_custom(tensors)
+    mpo.flip_network()
+
+    assert len(mpo.tensors) == len(tensors)
+    assert mpo.tensors[0].shape == (pdim, pdim, 1, 4)
+    assert mpo.tensors[1].shape == (pdim, pdim, 4, 3)
+    assert mpo.tensors[2].shape == (pdim, pdim, 3, 1)
+
 
 ##############################################################################
 # Tests for the MPS class
