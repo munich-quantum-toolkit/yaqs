@@ -1382,17 +1382,16 @@ class MPO:
                 self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
 
     def flip_network(self) -> None:
-        """Flip MPP.
+        """Flip MPO.
 
         Flips the bond dimensions in the network so that we can do operations
         from right to left rather than coding it twice.
 
         """
         new_tensors = []
-        for tensor in self.tensors:
+        for tensor in reversed(self.tensors):
             new_tensor = np.transpose(tensor, (0, 1, 3, 2))
             new_tensors.append(new_tensor)
 
-        new_tensors.reverse()
         self.tensors = new_tensors
         self.flipped = not self.flipped

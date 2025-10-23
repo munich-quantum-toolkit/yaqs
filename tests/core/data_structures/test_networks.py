@@ -362,6 +362,7 @@ def test_check_if_identity() -> None:
     fidelity_threshold = 0.9
     assert mpo.check_if_identity(fidelity_threshold) is True
 
+
 def test_flip_network_mpo() -> None:
     """Test the flipping of an MPO."""
     pdim = 2
