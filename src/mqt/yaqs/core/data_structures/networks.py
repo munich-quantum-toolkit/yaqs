@@ -773,12 +773,10 @@ class MPS:
         mapping basis states (represented as integers) to the number of times they were observed.
 
         Args:
-            state (MPS): The Matrix Product State to be measured.
-            shots (int): The number of measurement shots to perform.
+            shots: The number of measurement shots to perform.
 
         Returns:
-            dict[int, int]: A dictionary where keys are measured basis states (as integers) and values are
-            the corresponding counts.
+            A dictionary where keys are measured basis states (as integers) and values are the corresponding counts.
 
         Notes:
             - When more than one shot is requested, measurements are parallelized using a ProcessPoolExecutor.

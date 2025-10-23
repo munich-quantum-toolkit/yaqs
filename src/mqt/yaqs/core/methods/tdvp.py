@@ -643,11 +643,10 @@ def local_dynamic_tdvp(
     apply a two-site TDVP step.
 
     Args:
-        state (MPS): MPS state to evolve.
-        hamiltonian (MPO): MPO Hamiltonian.
+        state: MPS state to evolve.
+        hamiltonian: MPO Hamiltonian.
         sim_params: Simulation parameters including dt and threshold.
-        max_bond_dim (int): Maximum allowed bond dimension for two-site updates.
-        numiter_lanczos (int): Lanczos iterations per local update.
+        numiter_lanczos: Lanczos iterations per local update.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
