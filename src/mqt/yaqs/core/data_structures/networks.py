@@ -929,6 +929,8 @@ class MPS:
             if val:
                 sites.append(i)
 
+        if len(sites) == 0:
+            return [-1]
         return sites
 
     def to_vec(self) -> NDArray[np.complex128]:
