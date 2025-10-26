@@ -217,9 +217,6 @@ class MPS:
         Args:
         target_dim : int
             The desired bond dimension for the internal bonds.
-
-        Raises:
-        ValueError: target_dim must be at least current bond dim.
         """
         length = self.length
 
@@ -240,15 +237,24 @@ class MPS:
                 exp_right = min(i + 1, length - 1 - i)  # bond index = i
                 right_target = min(target_dim, 2**exp_right)
 
-            # sanity-check — we must never shrink an existing bond
-            if chi_l > left_target or chi_r > right_target:
-                msg = "Target bond dim must be at least current bond dim."
-                raise ValueError(msg)
+            if chi_l < left_target:
+                expand_left = True
+            else:
+                expand_left = False
+                left_target = chi_l
+            if chi_r < right_target:
+                expand_right = True
+            else:
+                expand_right = False
+                right_target = chi_r
 
-            # allocate new tensor and copy original data
-            new_tensor = np.zeros((phys, left_target, right_target), dtype=tensor.dtype)
-            new_tensor[:, :chi_l, :chi_r] = tensor
-            self.tensors[i] = new_tensor
+            # sanity-check — we must never shrink an existing bond
+            if expand_left or expand_right:
+                # allocate new tensor and copy original data
+                new_tensor = np.zeros((phys, left_target, right_target), dtype=tensor.dtype)
+                new_tensor[:, :chi_l, :chi_r] = tensor
+                self.tensors[i] = new_tensor
+
         # renormalise the state
         self.normalize()
 

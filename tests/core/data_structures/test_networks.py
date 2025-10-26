@@ -870,18 +870,19 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
         assert chi_r == right_expected, f"site {i}: right {chi_r} vs {right_expected}"
 
 
-def test_pad_raises_on_shrink() -> None:
-    """Test that pad_bond_dimension raises a ValueError when trying to shrink the bond dimension.
-
-    Calling pad_bond_dimension with a *smaller* target than an existing
-    bond must raise a ValueError.
+def test_pad_does_not_shrink() -> None:
+    """Test that pad_bond_dimension does not allow shrinking the bond dimensions.
     """
     mps = MPS(length=5, state="zeros")
     mps.pad_bond_dimension(4)  # enlarge first
-
-    with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
-        mps.pad_bond_dimension(2)  # would shrink - must fail
-
+    mps.pad_bond_dimension(2)  # would shrink
+    desired_shapes = [(2,1,2),
+                      (2,2,4),
+                      (2,4,4),
+                      (2,4,2),
+                      (2,2,1)]
+    for i, T in enumerate(mps.tensors):
+        assert T.shape == desired_shapes[i]
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
 def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> None:
