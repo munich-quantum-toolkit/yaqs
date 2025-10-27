@@ -840,12 +840,14 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
       ( powers-of-two "staircase" capped by target_dim )
     """
     mps = MPS(length=length, state="zeros")  # all bonds = 1
-    norm_before = mps.norm()
+    ref = copy.deepcopy(mps)
 
     mps.pad_bond_dimension(target)
 
     # invariants
-    assert np.isclose(mps.norm(), norm_before, atol=1e-12)
+    np.testing.assert_allclose(mps.to_vec(),
+                               ref.to_vec(),
+                                 atol=1e-12)
     assert mps.check_canonical_form()[0] == 0
 
     # expected staircase
