@@ -12,17 +12,16 @@ from __future__ import annotations
 import copy
 from typing import TYPE_CHECKING
 
-from mqt.yaqs.noise_char.optimization import LossClass, adam_optimizer
-from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
+from mqt.yaqs.noise_char.optimization import adam_optimizer
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import numpy as np
 
-    from mqt.yaqs.core.data_structures.networks import MPO, MPS
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
-    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+    from mqt.yaqs.noise_char.optimization import LossClass
+    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
 
 
 class Characterizer:
@@ -161,57 +160,32 @@ class Characterizer:
     def __init__(
         self,
         *,
-        sim_params: AnalogSimParams,
-        hamiltonian: MPO,
+        traj_gradients: PropagatorWithGradients,
         init_guess: CompactNoiseModel,
-        init_state: MPS,
-        ref_traj: list[Observable],
-        work_dir: str | Path = ".",
-        print_to_file: bool = True,
+        loss: LossClass,
     ) -> None:
         """Initialize the noise characterizer.
 
-        This constructor prepares the object for noise-model parameter estimation by:
-        - storing a deep copy of the provided initial compact noise model,
-        - creating a PropagatorWithGradients instance that can simulate trajectories
-            and compute gradients with respect to the compact noise parameters,
-        - creating a LossClass instance that compares simulated trajectories to a
-            reference trajectory and provides utilities for converting between the
-            compact noise model and an optimization vector,
-        - converting the initial noise model into the internal optimization vector
-            representation (self.init_x).
+        Parameters
+        ----------
+        traj_gradients : PropagatorWithGradients
+            Propagator capable of producing trajectories and gradients with respect
+            to the compact noise-model parameters.
+        init_guess : CompactNoiseModel
+            Initial guess for the compact noise model. A deep copy of this object
+            will be stored on the instance.
+        loss : LossClass
+            Loss object that compares simulated trajectories to a reference and
+            provides utilities to convert between compact noise models and flat
+            optimization vectors.
 
-        Args:
-                sim_params (AnalogSimParams): Simulation parameters used by the propagator.
-                hamiltonian (MPO): Hamiltonian (MPO) describing the system dynamics.
-                init_guess (CompactNoiseModel): Initial guess for the compact noise model;
-                        a deep copy of this object will be stored on the instance.
-                init_state (MPS): Initial many-body state (MPS) for trajectory simulation.
-                ref_traj (list[Observable]): Reference trajectory (list of observables)
-                        that the loss will compare against simulated trajectories.
-                work_dir (str | Path, optional): Directory used by the LossClass for
-                        output and temporary files. Defaults to ".".
-                print_to_file (bool, optional): If True, instructs the LossClass to write
-                        detailed output to files in work_dir. Defaults to True.
-
-        Attributes set:
-                init_guess (CompactNoiseModel): Deep-copied initial noise model.
-                traj_gradients (PropagatorWithGradients): Propagator capable of computing
-                        trajectories and their gradients w.r.t. compact noise parameters.
-                loss (LossClass): Loss object that evaluates mismatch to ref_traj and
-                        handles conversion between noise models and optimization vectors.
-                init_x (numpy.ndarray | list): Optimization-vector representation of the
-                        initial noise model produced by loss.noise_model_to_x.
+        The constructor stores a deep copy of init_guess, assigns traj_gradients
+        and loss, and initializes self.init_x from init_guess.strength_list.
         """
         self.init_guess = copy.deepcopy(init_guess)
+        self.traj_gradients = traj_gradients
 
-        self.traj_gradients = PropagatorWithGradients(
-            sim_params=sim_params, hamiltonian=hamiltonian, compact_noise_model=init_guess, init_state=init_state
-        )
-
-        self.loss = LossClass(
-            ref_traj=ref_traj, traj_gradients=self.traj_gradients, working_dir=work_dir, print_to_file=print_to_file
-        )
+        self.loss = loss
 
         self.init_x = self.init_guess.strength_list.copy()
 
