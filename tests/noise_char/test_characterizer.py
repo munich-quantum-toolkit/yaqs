@@ -102,8 +102,8 @@ class Parameters:
 
 
 def create_instances(
-    test: Parameters,
-) -> tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, PropagatorWithGradients]:
+    test: Parameters, tmp_path: Path
+) -> tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, PropagatorWithGradients, LossClass]:
     """Create and initialize objects required for an analog open-quantum-system simulation.
 
     This helper constructs an Ising Hamiltonian MPO, an initial MPS, a list of single-site
@@ -126,6 +126,8 @@ def create_instances(
         - order (int): integrator order (if applicable)
         - gamma_rel (float): relaxation (lowering) noise strength
         - gamma_deph (float): dephasing (Pauli-Z) noise strength
+    tmp_path : Path
+        Temporary directory path for any required output (not used in current implementation).
 
     Returns:
     -------
@@ -189,23 +191,21 @@ def create_instances(
     propagator.set_observable_list(obs_list)
     propagator.run(ref_noise_model)
 
-    return h_0, init_state, obs_list, sim_params, ref_noise_model, propagator
+    loss = LossClass(ref_traj=propagator.obs_traj, traj_gradients=propagator, working_dir=tmp_path, print_to_file=False)
+
+    return h_0, init_state, obs_list, sim_params, ref_noise_model, propagator, loss
 
 
 def test_characterizer_init(tmp_path: Path) -> None:
     """Test that Characterizer initializes correctly with given parameters."""
     test = Parameters()
 
-    h_0, init_state, _obs_list, sim_params, ref_noise_model, propagator = create_instances(test)
+    _h_0, _init_state, _obs_list, _sim_params, ref_noise_model, propagator, loss = create_instances(test, tmp_path)
 
     characterizer = Characterizer(
-        sim_params=sim_params,
-        hamiltonian=h_0,
+        traj_gradients=propagator,
         init_guess=ref_noise_model,
-        init_state=init_state,
-        ref_traj=propagator.obs_traj,
-        work_dir=tmp_path,
-        print_to_file=False,
+        loss=loss,
     )
 
     assert isinstance(characterizer.init_guess, CompactNoiseModel)
