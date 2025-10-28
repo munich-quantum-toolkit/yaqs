@@ -25,116 +25,30 @@ if TYPE_CHECKING:
 
 
 class Characterizer:
-    """Characterizer.
+    """High-level helper to estimate parameters of a compact noise model.
 
-    High-level helper that wraps a trajectory propagator and loss evaluator to
-    estimate parameters of a compact noise model via gradient-based optimization.
-    This class bundles together:
-    - a deep-copied initial CompactNoiseModel (init_guess),
-    - a PropagatorWithGradients configured for the simulation and initial state,
-    - a LossClass instance that evaluates mismatch to a reference observable
-        trajectory and provides conversions between noise models and a flat
-        optimization vector,
-    - utilities to run an ADAM optimizer and collect optimization history, and
-    - reconstruction of an optimal CompactNoiseModel from optimized parameters.
-    sim_params : AnalogSimParams
-            Simulation parameters passed to PropagatorWithGradients (time step,
-            integrator options, truncation tolerances, etc.).
-    hamiltonian : MPO
-            Many-body Hamiltonian (MPO) describing the coherent dynamics.
-    init_guess : CompactNoiseModel
-            Initial guess for the compact noise model. The instance stores a deep
-            copy of this object and uses it to initialize the optimizer.
-    init_state : MPS
-            Initial many-body state (MPS) used to generate simulated observable
-            trajectories during loss/gradient evaluations.
-    ref_traj : list[Observable]
-            Reference observable trajectory (list of observables) that the loss
-            function will compare simulated trajectories against.
-    work_dir : str | Path, optional
-            Directory used by the LossClass for output and temporary files. Default
-            is the current directory.
-    print_to_file : bool, optional
-            If True, instructs the LossClass to write detailed output to files in
-            work_dir. Default is True.
+    This class wraps a trajectory propagator and a loss evaluator to perform
+    gradient-based optimization of a compact noise model's parameters.
 
-    Attributes:
-    init_guess : CompactNoiseModel
-            Deep-copied initial noise model used as a starting point for inference.
-    traj_gradients : PropagatorWithGradients
-            Simulator capable of producing trajectories and their gradients with
-            respect to the compact noise model parameters.
-    loss : LossClass
-            Callable loss object that compares simulated trajectories to ref_traj,
-            computes gradients via traj_gradients and converts between parameter
-            vectors and CompactNoiseModel instances.
-    init_x : numpy.ndarray
-            Flattened optimization-vector representation of init_guess (as returned
-            by loss.noise_model_to_x).
-    loss_history : list[float]
-            Recorded loss values during optimization (set after calling adam_optimize).
-    x_history : list[numpy.ndarray]
-            Raw parameter vectors visited during optimization (set after calling
-            adam_optimize).
-    x_avg_history : list[numpy.ndarray]
-            Averaged parameter vectors (e.g., ADAM's moving-average or iterate
-            averaging) recorded during optimization.
-    times : numpy.ndarray
-            Time stamps or elapsed times for iterations recorded by the optimizer.
-    observable_traj : numpy.ndarray
-            Trajectories of observables evaluated for parameters visited during
-            optimization.
-    optimal_model : CompactNoiseModel
-            Reconstructed CompactNoiseModel from the final averaged parameter vector
-            (set after calling adam_optimize).
+    Stored objects
+    - traj_gradients (PropagatorWithGradients): Propagator that can produce
+      observable trajectories and gradients with respect to compact noise-model
+      parameters.
+    - init_guess (CompactNoiseModel): Deep copy of the initial noise-model
+      guess used to initialize the optimizer.
+    - loss (LossClass): Loss object that compares simulated trajectories to a
+      reference and provides conversions between CompactNoiseModel and a flat
+      optimization vector.
 
-    Methods:
-    adam_optimize(*, alpha=0.05, max_iterations=100, threshold=5e-4, max_n_convergence=50,
-                                tolerance=1e-8, beta1=0.5, beta2=0.999, epsilon=1e-8, restart=False,
-                                restart_file=None)
-            Run an ADAM-based optimization that minimizes self.loss w.r.t. the flattened
-            noise-parameter vector starting from self.init_x. On completion, populates
-            loss_history, x_history, x_avg_history, times, observable_traj and sets
-            optimal_model by converting the final averaged vector back into a
-            CompactNoiseModel via loss.x_to_noise_model.
-            alpha : float
-                    Learning rate (step size) for ADAM.
-            max_iterations : int
-                    Maximum number of optimization iterations.
-            threshold : float
-                    Convergence threshold on loss improvement to detect stagnation.
-            max_n_convergence : int
-                    Required number of consecutive iterations satisfying the convergence
-                    criterion to stop early.
-            tolerance : float
-                    Absolute tolerance for parameter updates; used to avoid meaningless
-                    tiny steps.
-            beta1, beta2 : float
-                    ADAM exponential decay rates for first and second moment estimates.
-            epsilon : float
-                    Small constant for numerical stability in ADAM updates.
-            restart : bool
-                    If True, attempt to restart optimizer from a saved state.
-            restart_file : Path | None
-                    Path to saved optimizer state used when restart is True.
-                    If numeric hyperparameters are outside valid ranges (for example,
-                    If restart is requested but the provided restart_file does not exist.
-                    If the underlying optimizer reports a failure that is surfaced as an
-                    exception.
-    - This class delegates numerical optimization to an external ADAM routine
-        (adam_optimizer) and relies on LossClass to provide a compatible callable
-        interface (value and gradient) as well as conversion utilities between the
-        compact noise model and flat parameter vectors.
-    - The optimizer may evaluate many simulator trajectories; ensure PropagatorWithGradients
-        and LossClass are configured for acceptable performance and numerical stability.
-    - After optimization, optimal_model contains the learned CompactNoiseModel
-        reconstructed from the last averaged parameters and can be used for further
-        validation or simulation.
-    >>> # Typical usage flow (illustrative):
-    >>> char = Characterizer(sim_params=sim_params, hamiltonian=H, init_guess=noise0,
-    ...                      init_state=psi0, ref_traj=observables, work_dir="out")
-    >>> char.adam_optimize(alpha=0.01, max_iterations=500)
-    >>> learned_noise = char.optimal_model
+    Key attributes populated by optimization
+    - init_x: flattened parameter vector derived from init_guess
+    - loss_history, x_history, x_avg_history, times, observable_traj: optimizer
+      histories produced by adam_optimize
+    - optimal_model: CompactNoiseModel reconstructed from the final averaged
+      parameter vector via loss.x_to_noise_model
+
+    The actual numerical optimization is delegated to the external
+    adam_optimizer routine. See adam_optimize for usage and available options.
     """
 
     loss: LossClass
@@ -145,17 +59,17 @@ class Characterizer:
 
     init_x: np.ndarray
 
-    loss_history: list[float]
+    loss_history: list[float] | None = None
 
-    x_history: list[np.ndarray]
+    x_history: list[np.ndarray] | None = None
 
-    x_avg_history: list[np.ndarray]
+    x_avg_history: list[np.ndarray] | None = None
 
-    times: np.ndarray
+    times: np.ndarray | None = None
 
-    observable_traj: np.ndarray
+    observable_traj: np.ndarray | None = None
 
-    optimal_model: CompactNoiseModel
+    optimal_model: CompactNoiseModel | None = None
 
     def __init__(
         self,
@@ -211,34 +125,17 @@ class Characterizer:
         optimizer history and the recovered optimal noise model.
         Parameters.
         ----------
-        alpha : float, optional
-            The learning rate (step size) used by the ADAM optimizer. Default is 0.05.
-        max_iterations : int, optional
-            Maximum number of optimization iterations/steps. Default is 100.
-        threshold : float, optional
-            Convergence threshold on the loss improvement used to detect
-            stagnation. Default is 5e-4.
-        max_n_convergence : int, optional
-            Number of consecutive iterations satisfying the convergence
-            criterion required to stop early. Default is 50.
-        tolerance : float, optional
-            Absolute tolerance for parameter updates (smallest meaningful step).
-            Default is 1e-8.
-        beta1 : float, optional
-            Exponential decay rate for the first moment estimates (ADAM hyperparameter).
-            Default is 0.5.
-        beta2 : float, optional
-            Exponential decay rate for the second moment estimates (ADAM hyperparameter).
-            Default is 0.999.
-        epsilon : float, optional
-            Small constant for numerical stability in ADAM. Default is 1e-8.
-        restart : bool, optional
-            If True, attempt to restart the optimizer from a previously saved
-            state (provided via `restart_file`). Default is False.
-        restart_file : Path or None, optional
-            Path to a file containing saved optimizer state to restore when
-            `restart` is True. If None and `restart` is True, behavior depends on
-            the underlying `adam_optimizer` implementation. Default is None.
+        alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
+        max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
+        threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
+        max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
+        tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
+        beta1 (float, optional): Exponential decay rate for the first moment estimates. Default is 0.5.
+        beta2 (float, optional): Exponential decay rate for the second moment estimates. Default is 0.999.
+        epsilon (float, optional): Small constant for numerical stability. Default is 1e-8.
+        restart (bool, optional): Whether to restart optimization from a checkpoint. Default is False.
+        restart_file (str, optional): Path to a specific checkpoint file to restart from.
+        If None, the latest checkpoint in the working directory is used.
 
         Notes:
         -----

@@ -103,7 +103,9 @@ if __name__ == "__main__":
     # Optimizing the model
     gamma_guess = 0.4
 
-    sim_params.num_traj = 300  # Reducing the number of trajectories for the optimization
+    sim_params.num_traj = (
+        300  # Reducing the number of trajectories for the optimization
+    )
 
     guess_noise_model = CompactNoiseModel(
         [
