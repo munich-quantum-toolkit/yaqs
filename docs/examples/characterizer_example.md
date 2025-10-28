@@ -13,7 +13,6 @@ This document contains the example script `characterizer_example.py` converted t
 Copy the Python code block below into a `.py` file and run it, or execute the cells if using a notebook.
 
 ```python
-
 import numpy as np
 from pathlib import Path
 
@@ -23,11 +22,14 @@ from mqt.yaqs.noise_char.characterizer import Characterizer
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    AnalogSimParams,
+    Observable,
+)
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z, Create, Destroy
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     work_dir = "test/scikit_characterizer/"
     work_dir_path = Path(work_dir)
     work_dir_path.mkdir(parents=True, exist_ok=True)
@@ -41,7 +43,7 @@ if __name__ == '__main__':
     H_0.init_ising(L, J, g)
 
     # Define the initial state
-    init_state = MPS(L, state='zeros')
+    init_state = MPS(L, state="zeros")
 
     obs_list = [Observable(X(), site) for site in range(L)]
 
@@ -70,11 +72,19 @@ if __name__ == '__main__':
     gamma_reference = 0.1
 
     ref_noise_model = CompactNoiseModel(
-        [{"name": noise_operator, "sites": [i for i in range(L)], "strength": gamma_reference}]
+        [
+            {
+                "name": noise_operator,
+                "sites": [i for i in range(L)],
+                "strength": gamma_reference,
+            }
+        ]
     )
 
     # Write reference gammas to file
-    np.savetxt(work_dir + "gammas.txt", ref_noise_model.strength_list, header="##", fmt="%.6f")
+    np.savetxt(
+        work_dir + "gammas.txt", ref_noise_model.strength_list, header="##", fmt="%.6f"
+    )
 
     propagator = PropagatorWithGradients(
         sim_params=sim_params,
@@ -93,10 +103,16 @@ if __name__ == '__main__':
     # Optimizing the model
     gamma_guess = 0.4
 
-    sim_params.num_traj = 300 # Reducing the number of trajectories for the optimzation
+    sim_params.num_traj = 300  # Reducing the number of trajectories for the optimization
 
     guess_noise_model = CompactNoiseModel(
-        [{"name": noise_operator, "sites": [i for i in range(L)], "strength": gamma_guess}]
+        [
+            {
+                "name": noise_operator,
+                "sites": [i for i in range(L)],
+                "strength": gamma_guess,
+            }
+        ]
     )
 
     opt_propagator = PropagatorWithGradients(
@@ -106,12 +122,18 @@ if __name__ == '__main__':
         init_state=init_state,
     )
 
-    loss = LossClass(ref_traj=ref_traj, traj_gradients=opt_propagator, working_dir=work_dir, print_to_file=True)
+    loss = LossClass(
+        ref_traj=ref_traj,
+        traj_gradients=opt_propagator,
+        working_dir=work_dir,
+        print_to_file=True,
+    )
 
-    characterizer = Characterizer(traj_gradients=opt_propagator, init_guess=guess_noise_model, loss=loss)
+    characterizer = Characterizer(
+        traj_gradients=opt_propagator, init_guess=guess_noise_model, loss=loss
+    )
 
     print("Optimizing ... ")
     characterizer.adam_optimize(max_iterations=50)
     print("Optimization completed.")
-
 ```
