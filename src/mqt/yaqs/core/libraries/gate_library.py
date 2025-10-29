@@ -192,7 +192,7 @@ class BaseGate:
             ValueError: If the gates have different interaction levels.
 
         Returns:
-            BaseGate: A new gate representing the sum of the two gates.
+            A new gate representing the sum of the two gates.
         """
         if self.interaction != other.interaction:
             msg = "Cannot add gates with different interaction"
@@ -209,7 +209,7 @@ class BaseGate:
             ValueError: If the gates have different interaction levels.
 
         Returns:
-            BaseGate: A new gate representing the difference between the two gates.
+            A new gate representing the difference between the two gates.
         """
         if self.interaction != other.interaction:
             msg = "Cannot subtract gates with different interaction"
@@ -226,7 +226,7 @@ class BaseGate:
             ValueError: If the gates have different interaction levels (when multiplying two gates).
 
         Returns:
-            BaseGate: A new gate representing the product of the two gates or the scaled gate.
+            A new gate representing the product of the two gates or the scaled gate.
         """
         if isinstance(other, BaseGate):
             if self.interaction != other.interaction:
@@ -243,7 +243,7 @@ class BaseGate:
             other: The gate or scalar to multiply.
 
         Returns:
-            BaseGate: A new gate representing the product.
+            A new gate representing the product.
         """
         return self.__mul__(other)
 
@@ -254,7 +254,7 @@ class BaseGate:
             other: The other gate to multiply.
 
         Returns:
-            BaseGate: A new BaseGate resulting from matrix multiplication.
+            A new BaseGate resulting from matrix multiplication.
         """
         return BaseGate(self.matrix @ other.matrix)
 
@@ -262,7 +262,7 @@ class BaseGate:
         """Returns the conjugate transpose (dagger) of the gate.
 
         Returns:
-            BaseGate: A new gate representing the conjugate transpose of this gate.
+            A new gate representing the conjugate transpose of this gate.
         """
         return BaseGate(np.conj(self.matrix).T)
 
@@ -270,7 +270,7 @@ class BaseGate:
         """Returns the complex conjugate of the gate.
 
         Returns:
-            BaseGate: A new gate representing the complex conjugate of this gate.
+            A new gate representing the complex conjugate of this gate.
         """
         return BaseGate(np.conj(self.matrix))
 
@@ -278,7 +278,7 @@ class BaseGate:
         """Returns the transpose of the gate.
 
         Returns:
-            BaseGate: A new gate representing the transpose of this gate.
+            A new gate representing the transpose of this gate.
         """
         return BaseGate(self.matrix.T)
 
@@ -287,7 +287,7 @@ class BaseGate:
         """Returns the X gate.
 
         Returns:
-            X: An instance of the X gate.
+            An instance of the X gate.
         """
         return X()
 
@@ -296,7 +296,7 @@ class BaseGate:
         """Returns the Y gate.
 
         Returns:
-            Y: An instance of the Y gate.
+            An instance of the Y gate.
         """
         return Y()
 
@@ -305,7 +305,7 @@ class BaseGate:
         """Returns the Z gate.
 
         Returns:
-            Z: An instance of the Z gate.
+            An instance of the Z gate.
         """
         return Z()
 
@@ -314,7 +314,7 @@ class BaseGate:
         """Returns the H gate.
 
         Returns:
-            H: An instance of the H gate.
+            An instance of the H gate.
         """
         return H()
 
@@ -324,8 +324,9 @@ class BaseGate:
 
         Args:
             d: number of levels
+
         Returns:
-            Destroy: An instance of the Destroy gate.
+            An instance of the Destroy gate.
         """
         return Destroy(d)
 
@@ -335,8 +336,9 @@ class BaseGate:
 
         Args:
             d: number of levels
+
         Returns:
-            Create: An instance of the Create gate.
+            An instance of the Create gate.
         """
         return Create(d)
 
@@ -345,7 +347,7 @@ class BaseGate:
         """Returns the Id gate.
 
         Returns:
-            Id: An instance of the Id gate.
+            An instance of the Id gate.
         """
         return Id()
 
@@ -363,7 +365,7 @@ class BaseGate:
         """Returns the SX gate.
 
         Returns:
-            SX: An instance of the SX gate.
+            An instance of the SX gate.
         """
         return SX()
 
@@ -375,7 +377,7 @@ class BaseGate:
             params (list[Parameter]): The rotation angle parameter.
 
         Returns:
-            Rx: An instance of the RX gate.
+            An instance of the RX gate.
         """
         return Rx(params)
 
@@ -387,7 +389,7 @@ class BaseGate:
             params: The rotation angle parameter.
 
         Returns:
-            Ry: An instance of the RY gate.
+            An instance of the RY gate.
         """
         return Ry(params)
 
@@ -399,7 +401,7 @@ class BaseGate:
             params: The rotation angle parameter.
 
         Returns:
-            Rz: An instance of the RZ gate.
+            An instance of the RZ gate.
         """
         return Rz(params)
 
@@ -411,7 +413,7 @@ class BaseGate:
             params: The rotation angle parameter.
 
         Returns:
-            Phase: An instance of the Phase gate.
+            An instance of the Phase gate.
         """
         return Phase(params)
 
@@ -423,7 +425,7 @@ class BaseGate:
             params: The rotation angle parameters.
 
         Returns:
-            U: An instance of the U gate.
+            An instance of the U gate.
         """
         return U(params)
 
@@ -435,7 +437,7 @@ class BaseGate:
             params (list[Parameter]): The rotation angle parameters.
 
         Returns:
-            U2: An instance of the U2 gate.
+            An instance of the U2 gate.
         """
         return U2(params)
 
@@ -444,7 +446,7 @@ class BaseGate:
         """Returns the CX gate.
 
         Returns:
-            CX: An instance of the CX gate.
+            An instance of the CX gate.
         """
         return CX()
 
@@ -453,7 +455,7 @@ class BaseGate:
         """Returns the CZ gate.
 
         Returns:
-            CZ: An instance of the CZ gate.
+            An instance of the CZ gate.
         """
         return CZ()
 
@@ -465,7 +467,7 @@ class BaseGate:
             params: The rotation angle parameter.
 
         Returns:
-            CPhase: An instance of the CPhase gate.
+            An instance of the CPhase gate.
         """
         return CPhase(params)
 
@@ -474,7 +476,7 @@ class BaseGate:
         """Returns the SWAP gate.
 
         Returns:
-            SWAP: An instance of the SWAP gate.
+            An instance of the SWAP gate.
         """
         return SWAP()
 
@@ -486,7 +488,7 @@ class BaseGate:
             params: The rotation angle parameter.
 
         Returns:
-            Rxx: An instance of the RXX gate.
+            An instance of the RXX gate.
         """
         return Rxx(params)
 
@@ -498,7 +500,7 @@ class BaseGate:
             params: The rotation angle parameter.
 
         Returns:
-            Ryy: An instance of the RYY gate.
+            An instance of the RYY gate.
         """
         return Ryy(params)
 
@@ -510,7 +512,7 @@ class BaseGate:
             params: The rotation angle parameter.
 
         Returns:
-            Rzz: An instance of the RZZ gate.
+            An instance of the RZZ gate.
         """
         return Rzz(params)
 
@@ -519,7 +521,7 @@ class BaseGate:
         """Returns the P0 projector.
 
         Returns:
-            P0: An instance of the P0 gate.
+            An instance of the P0 gate.
         """
         return P0()
 
@@ -528,7 +530,7 @@ class BaseGate:
         """Returns the P1 projector.
 
         Returns:
-            P1: An instance of the P1 gate.
+            An instance of the P1 gate.
         """
         return P1()
 
@@ -541,7 +543,7 @@ class BaseGate:
                 should be projected onto.
 
         Returns:
-            PVM: An instance of the PVM gate representing the projection.
+            An instance of the PVM gate representing the projection.
         """
         return PVM(bitstring)
 
@@ -553,7 +555,7 @@ class BaseGate:
         the computational cost of simulating the network.
 
         Returns:
-            RuntimeCost: An instance of the runtime cost diagnostic gate.
+            An instance of the runtime cost diagnostic gate.
         """
         return RuntimeCost()
 
@@ -565,7 +567,7 @@ class BaseGate:
         the maximum bond dimension in the tensor network.
 
         Returns:
-            MaxBond: An instance of the max bond dimension diagnostic gate.
+            An instance of the max bond dimension diagnostic gate.
         """
         return MaxBond()
 
@@ -577,7 +579,7 @@ class BaseGate:
         the sum of internal bond dimensions in the tensor network.
 
         Returns:
-            TotalBond: An instance of the total bond dimension diagnostic gate.
+            An instance of the total bond dimension diagnostic gate.
         """
         return TotalBond()
 
@@ -589,7 +591,7 @@ class BaseGate:
         entropy across a given nearest-neighbor cut.
 
         Returns:
-            Entropy: An instance of the entropy diagnostic gate.
+            An instance of the entropy diagnostic gate.
         """
         return Entropy()
 
@@ -601,7 +603,7 @@ class BaseGate:
         across a given nearest-neighbor cut, padded or truncated to a fixed length.
 
         Returns:
-            SchmidtSpectrum: An instance of the Schmidt spectrum diagnostic gate.
+            An instance of the Schmidt spectrum diagnostic gate.
         """
         return SchmidtSpectrum()
 
