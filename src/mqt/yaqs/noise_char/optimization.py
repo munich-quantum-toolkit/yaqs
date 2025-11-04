@@ -93,6 +93,7 @@ class LossClass:
         traj_gradients: PropagatorWithGradients,
         working_dir: str | Path = ".",
         print_to_file: bool = False,
+        return_gradients: bool =True
     ) -> None:
         """Initializes the optimization class for noise characterization.
 
@@ -139,6 +140,8 @@ class LossClass:
         self.set_work_dir(path=working_dir)
 
         self.write_traj(obs_array=self.ref_traj_array, output_file=self.work_dir / "ref_traj.txt")
+
+        self.return_gradients = return_gradients
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -376,40 +379,46 @@ class LossClass:
 
         self.obs_array = copy.deepcopy(self.traj_gradients.obs_array)
 
-        self.d_on_d_gk = copy.deepcopy(self.traj_gradients.d_on_d_gk_array)
-
         end_time = time.time()
-
-        _n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
 
         diff = self.obs_array - self.ref_traj_array
 
         loss: float = np.sum(diff**2)
 
-        # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump, n_obs, nt)
-        #  to do elemtwise multiplication. Then I sum over the n_obs and nt dimensions to
-        # get the gradient for each gamma, returning a vector of shape (n_jump)
-        grad_vec = np.sum(2 * diff.reshape(1, n_obs, nt) * self.d_on_d_gk, axis=(1, 2))
+        
 
-        # grad_vec gives me the gradient for each individual gamma in the expanded noise model.
+        if self.return_gradients: 
 
-        if len(grad_vec) != len(self.traj_gradients.compact_noise_model.index_list):
-            msg = (
-                f"Gradient vector length {len(grad_vec)} does not match "
-                f"index list length {len(self.traj_gradients.compact_noise_model.index_list)}"
-            )
-            raise ValueError(msg)
+            self.d_on_d_gk = copy.deepcopy(self.traj_gradients.d_on_d_gk_array)
 
-        # To get the gradients for each gamma in the compact noise model, I sum the gradients
-        # corresponding to the same gamma using np.bincount.
+            _n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
 
-        grad = np.bincount(self.traj_gradients.compact_noise_model.index_list, weights=grad_vec)
+            # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump, n_obs, nt)
+            #  to do elemtwise multiplication. Then I sum over the n_obs and nt dimensions to
+            # get the gradient for each gamma, returning a vector of shape (n_jump)
+            grad_vec = np.sum(2 * diff.reshape(1, n_obs, nt) * self.d_on_d_gk, axis=(1, 2))
 
-        self.post_process(x.copy(), loss, grad.copy())
+            # grad_vec gives me the gradient for each individual gamma in the expanded noise model.
 
-        sim_time = end_time - start_time  # Simulation time
+            if len(grad_vec) != len(self.traj_gradients.compact_noise_model.index_list):
+                msg = (
+                    f"Gradient vector length {len(grad_vec)} does not match "
+                    f"index list length {len(self.traj_gradients.compact_noise_model.index_list)}"
+                )
+                raise ValueError(msg)
 
-        return loss, grad, sim_time
+            # To get the gradients for each gamma in the compact noise model, I sum the gradients
+            # corresponding to the same gamma using np.bincount.
+
+            grad = np.bincount(self.traj_gradients.compact_noise_model.index_list, weights=grad_vec)
+
+            self.post_process(x.copy(), loss, grad.copy())
+
+            sim_time = end_time - start_time  # Simulation time
+
+            return loss, grad, sim_time
+
+        return loss
 
 
 def adam_optimizer(
