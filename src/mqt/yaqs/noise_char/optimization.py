@@ -418,6 +418,8 @@ class LossClass:
 
             return loss, grad, sim_time
 
+        self.post_process(x.copy(), loss, [0]*self.d)
+
         return loss
 
 
