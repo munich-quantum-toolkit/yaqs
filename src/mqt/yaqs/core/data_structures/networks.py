@@ -1096,6 +1096,167 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
+    def init_1d_fermi_hubbard(self, length: int, t: float, u: float) -> None:
+        """1D Fermi-Hubbard MPO.
+
+        Initialize the 1D Fermi-Hubbard model as a Matrix Product Operator (MPO).
+
+        Left boundary: shape (1, 6, d, d)
+        [U*n↑*n↓, t*c↑, t*c↓, -t*c↑†, -t*c↓†, I]
+
+        Inner tensor: shape (6, 6, d, d)
+        W = [[ I,          0,    0,    0,    0,    0 ],
+              [ c↑†,       0,    0,    0,    0,    0 ],
+              [ c↓†,       0,    0,    0,    0,    0 ],
+              [ c↑,        0,    0,    0,    0,    0 ],
+              [ c↓,        0,    0,    0,    0,    0 ],
+              [ U*n↑*n↓,  t*c↑, t*c↓, -t*c↑†, -t*c↓†, I ]]
+
+        Right boundary: shape (6, 1, d, d)
+        [I, c↑†, c↓†, c↑, c↓, U*n↑*n↓]^T
+
+        Parameters:
+        length (int): The number of sites in the chain.
+        t (float): The hopping strength.
+        u (float): The onsite interaction.
+        """
+        physical_dimension = 4
+        np.zeros((physical_dimension, physical_dimension), dtype=complex)
+        identity = np.eye(physical_dimension, dtype=complex)
+        # fermionic creation and annihilation operators
+        c = np.array([[0, 1], [0, 0]])
+        c__d = np.array([[0, 0], [1, 0]])
+        c_up = np.kron(c, np.eye(2))
+        c_down = np.kron(np.eye(2), c)
+        c_up__d = np.kron(c__d, np.eye(2))
+        c_down__d = np.kron(np.eye(2), c__d)
+        n_up = np.kron(c__d @ c, np.eye(2))
+        n_down = np.kron(np.eye(2), c__d @ c)
+        d = u * n_up @ n_down
+
+        left_bound = np.array([d, t * c_up, t * c_down, -t * c_up__d, -t * c_down__d, identity])[np.newaxis, :]
+
+        inner = np.zeros((6, 6, physical_dimension, physical_dimension), dtype=complex)
+        inner[0, 0] = identity
+        inner[1, 0] = c_up__d
+        inner[2, 0] = c_down__d
+        inner[3, 0] = c_up
+        inner[4, 0] = c_down
+        inner[5, 0] = d
+        inner[5, 1] = t * c_up
+        inner[5, 2] = t * c_down
+        inner[5, 3] = -t * c_up__d
+        inner[5, 4] = -t * c_down__d
+        inner[5, 5] = identity
+
+        right_bound = np.array([identity, c_up__d, c_down__d, c_up, c_down, d])[:, np.newaxis]
+
+        # Construct the MPO
+        self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
+        for i, tensor in enumerate(self.tensors):
+            # left, right, sigma, sigma'
+            self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
+        self.length = length
+        self.physical_dimension = physical_dimension
+
+    def init_1d_fermi_hubbard_jw_pauli(self, length: int, t: float, u: float) -> None:
+        """Interleaved-spin MPO for the JW-Pauli Hamiltonian.
+
+        Initialize the MPO for the Jordan-Wigner transformed 1D Fermi-Hubbard model:
+
+            H = (u/4) * sum_i Z_{i,up} Z_{i,down}
+            - (t/2) * sum_i [ X_up(i) Z_dn(i) X_up(i+1) + Y_up(i) Z_dn(i) Y_up(i+1) ]
+            - (t/2) * sum_i [ X_dn(i) Z_up(i+1) X_dn(i+1) + Y_dn(i) Z_up(i+1) Y_dn(i+1) ]
+
+        Chain order: 1↑, 1↓, 2↑, 2↓, ...  (so length must be even).
+
+        Left boundary: shape (1, 7, d, d)
+        [0, (u/4)*Z, 0, X, 0, Y, I]
+
+        Inner tensor: shape (7, 7, d, d)
+        inner_up = [ [ I,           0,    0,    0,    0,    0,    0],
+                 [ Z,           0,    0,    0,    0,    0,    0],
+                 [ -(t/2)*X,    0,    0,    0,    0,    0,    0],
+                 [ 0,           0,    0,    0,    0,    0,    0],
+                 [ -(t/2)*Y,    0,    0,    0,    0,    0,    0],
+                 [ 0,           0,    0,    X,    0,    Y,    I] ]
+
+        inner_down = [ [ I,           0,    0,    0,    0,    0,    0],
+                   [ -(t/2)*X,    0,    0,    0,    0,    0,    0],
+                   [ 0,           0,    0,    0,    0,    0,    0],
+                   [ -(t/2)*Y,    0,    0,    0,    0,    0,    0],
+                   [ (u/4)*Z,     0,    0,    0,    0,    0,    0],
+                   [ 0,           0,    0,    X,    0,    Y,    I] ]
+
+        Right boundary: shape (7, 1, d, d)
+        [I, -(t/2)*X, 0, -(t/2)*Y, 0, (u/4)*Z, 0]^T
+
+        Parameters:
+            length (int): The number of sites in the chain.
+            t (float): The hopping strength.
+            u (float): The onsite interaction.
+
+        Raises:
+            ValueError: If the provided length is not even.
+        """
+        if length % 2 != 0 or length < 2:
+            msg = "length must be an even integer ≥ 2 (ordering: 1↑,1↓,2↑,2↓,...)."
+            raise ValueError(msg)
+
+        # Local 2x2 Pauli operators on each spin site
+        physical_dimension = 2
+        zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
+        identity = np.eye(physical_dimension, dtype=complex)
+        x = X().matrix
+        y = Y().matrix
+        z = Z().matrix
+
+        inner_up = np.zeros((7, 7, physical_dimension, physical_dimension), dtype=complex)
+        inner_up[0, 0] = identity
+        inner_up[1, 0] = zero
+        inner_up[2, 0] = -(t / 2) * x
+        inner_up[4, 0] = -(t / 2) * y
+        inner_up[6, 1] = (u / 4) * z
+        inner_up[3, 2] = z
+        inner_up[6, 3] = x
+        inner_up[5, 4] = z
+        inner_up[6, 5] = y
+        inner_up[6, 6] = identity
+
+        inner_down = np.zeros((7, 7, physical_dimension, physical_dimension), dtype=complex)
+        inner_down[0, 0] = identity
+        inner_down[1, 0] = z
+        inner_down[2, 0] = -(t / 2) * x
+        inner_down[4, 0] = -(t / 2) * y
+        inner_down[6, 1] = zero
+        inner_down[3, 2] = z
+        inner_down[6, 3] = x
+        inner_down[5, 4] = z
+        inner_down[6, 5] = y
+        inner_down[6, 6] = identity
+
+        left_bound = np.array([zero, (u / 4) * z, zero, x, zero, y, identity])[np.newaxis, :]
+        right_bound = np.array([identity, z, -(t / 2) * x, zero, -(t / 2) * y, zero, zero])[:, np.newaxis]
+
+        # Construct the MPO
+        tensors = []
+        for s in range(length):
+            is_even = s % 2 == 0  # 0-based: 0,2,4,... are ↑ sites
+            if s == 0:
+                inner_tensor = left_bound
+            elif s == length - 1:
+                inner_tensor = right_bound
+            else:
+                inner_tensor = inner_up if is_even else inner_down
+            tensors.append(inner_tensor)
+
+        self.tensors = tensors
+        for i, tensor in enumerate(self.tensors):
+            self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
+
+        self.length = length
+        self.physical_dimension = physical_dimension
+
     def init_coupled_transmon(
         self,
         length: int,
