@@ -92,6 +92,7 @@ class LossClass:
         ref_traj: list[Observable],
         traj_gradients: PropagatorWithGradients,
         working_dir: str | Path = ".",
+        exponent: int = 2,
         print_to_file: bool = False,
         return_gradients: bool =True
     ) -> None:
@@ -142,6 +143,8 @@ class LossClass:
         self.write_traj(obs_array=self.ref_traj_array, output_file=self.work_dir / "ref_traj.txt")
 
         self.return_gradients = return_gradients
+
+        self.exponent = exponent
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -383,7 +386,7 @@ class LossClass:
 
         diff = self.obs_array - self.ref_traj_array
 
-        loss: float = np.sum(diff**2)
+        loss: float = np.sum(diff**self.exponent)
 
         
 
