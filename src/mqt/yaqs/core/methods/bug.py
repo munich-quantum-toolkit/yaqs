@@ -200,6 +200,7 @@ def fixed_local_update(
     right_block: NDArray[np.complex128],
     canon_center_tensors: list[NDArray[np.complex128]],
     site: int,
+    right_m_block: NDArray[np.complex128],
     sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
     numiter_lanczos: int
 ) -> NDArray[np.complex128]:
@@ -214,6 +215,7 @@ def fixed_local_update(
         right_block: The right environment.
         canon_center_tensors: The canonical site tensors.
         site: The site to be updated.
+        right_m_block: The basis update matrix of the site to the right.
         sim_params: Simulation parameters.
         numiter_lanczos: Number of Lanczos iterations.
 
@@ -225,8 +227,12 @@ def fixed_local_update(
         left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt, numiter_lanczos
     )
     new_q = find_new_q_fixed(updated_tensor)
+    old_q = state.tensors[site] # Still unchanged in the original state
+    basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
     state.tensors[site] = new_q
-    return update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
+    canon_center_tensors[site - 1] = np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0))
+    right_env = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
+    return right_env, basis_change_m
 
 
 def bug(
@@ -305,10 +311,11 @@ def fixed_bug(state: MPS,
     right_end_dimension = state.tensors[-1].shape[2]
     init_shape = (right_end_dimension, 1, right_end_dimension)
     right_block = np.eye(right_end_dimension, dtype=np.complex128).reshape(init_shape)
+    right_m_block = np.eye(right_end_dimension, dtype=np.complex128)
     # Sweep from right to left.
     for site in range(num_sites - 1, 0, -1):
-        right_block = fixed_local_update(
-            state, mpo, left_envs, right_block, canon_center_tensors, site, sim_params, numiter_lanczos
+        right_block, right_m_block = fixed_local_update(
+            state, mpo, left_envs, right_block, canon_center_tensors, site, right_m_block, sim_params, numiter_lanczos
         )
     # Update the first site.
     updated_tensor = update_site(
