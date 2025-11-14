@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
+    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients, Propagator
 
 
 def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
@@ -90,7 +90,7 @@ class LossClass:
         self,
         *,
         ref_traj: list[Observable],
-        traj_gradients: PropagatorWithGradients,
+        propagator: PropagatorWithGradients | Propagator,
         working_dir: str | Path = ".",
         exponent: int = 2,
         print_to_file: bool = False,
@@ -100,7 +100,7 @@ class LossClass:
 
         Args:
             ref_traj (List[Observable]): A list of Observable objects representing the reference trajectory.
-            traj_gradients (PropagatorWithGradients): An object that provides trajectory gradients
+            propagator (PropagatorWithGradients): An object that provides trajectory gradients
                                                     and supports setting the observable list.
             working_dir (str | Path, optional): The directory where output files will be stored.
             print_to_file (bool, optional): If True, enables printing output to a file. Defaults to False.
@@ -115,7 +115,7 @@ class LossClass:
             print_to_file (bool): Indicates whether to print output to a file.
             work_dir (Path): Working directory for file output.
             ref_traj (List[Observable]): Deep copy of the reference trajectory.
-            traj_gradients (PropagatorWithGradients): Deep copy of the trajectory gradients object.
+            propagator (PropagatorWithGradients): Deep copy of the trajectory gradients object.
             ref_traj_array (np.ndarray): Array of results from the reference trajectory.
             d (int): Dimensionality of the input noise model's processes.
         """
@@ -128,15 +128,15 @@ class LossClass:
         self.print_to_file: bool = print_to_file
 
         self.ref_traj = copy.deepcopy(ref_traj)
-        self.traj_gradients = copy.deepcopy(traj_gradients)
+        self.propagator = copy.deepcopy(propagator)
 
-        self.traj_gradients.set_observable_list(ref_traj)
+        self.propagator.set_observable_list(ref_traj)
 
         self.ref_traj_array = copy.deepcopy(np.array([obs.results for obs in self.ref_traj]))
 
-        self.d = len(self.traj_gradients.compact_noise_model.compact_processes)
+        self.d = len(self.propagator.compact_noise_model.compact_processes)
 
-        self.t = copy.deepcopy(self.traj_gradients.sim_params.times)
+        self.t = copy.deepcopy(self.propagator.sim_params.times)
 
         self.set_work_dir(path=working_dir)
 
@@ -341,7 +341,7 @@ class LossClass:
         Returns:
             CompactNoiseModel: The corresponding noise model with updated strengths.
         """
-        return_processes = copy.deepcopy(self.traj_gradients.compact_noise_model.compact_processes)
+        return_processes = copy.deepcopy(self.propagator.compact_noise_model.compact_processes)
 
         for i in range(self.d):
             return_processes[i]["strength"] = x[i]
@@ -378,9 +378,9 @@ class LossClass:
 
         start_time = time.time()
 
-        self.traj_gradients.run(noise_model)
+        self.propagator.run(noise_model)
 
-        self.obs_array = copy.deepcopy(self.traj_gradients.obs_array)
+        self.obs_array = copy.deepcopy(self.propagator.obs_array)
 
         end_time = time.time()
 
@@ -392,7 +392,7 @@ class LossClass:
 
         if self.return_gradients: 
 
-            self.d_on_d_gk = copy.deepcopy(self.traj_gradients.d_on_d_gk_array)
+            self.d_on_d_gk = copy.deepcopy(self.propagator.d_on_d_gk_array)
 
             _n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
 
@@ -403,17 +403,17 @@ class LossClass:
 
             # grad_vec gives me the gradient for each individual gamma in the expanded noise model.
 
-            if len(grad_vec) != len(self.traj_gradients.compact_noise_model.index_list):
+            if len(grad_vec) != len(self.propagator.compact_noise_model.index_list):
                 msg = (
                     f"Gradient vector length {len(grad_vec)} does not match "
-                    f"index list length {len(self.traj_gradients.compact_noise_model.index_list)}"
+                    f"index list length {len(self.propagator.compact_noise_model.index_list)}"
                 )
                 raise ValueError(msg)
 
             # To get the gradients for each gamma in the compact noise model, I sum the gradients
             # corresponding to the same gamma using np.bincount.
 
-            grad = np.bincount(self.traj_gradients.compact_noise_model.index_list, weights=grad_vec)
+            grad = np.bincount(self.propagator.compact_noise_model.index_list, weights=grad_vec)
 
             self.post_process(x.copy(), loss, grad.copy())
 
