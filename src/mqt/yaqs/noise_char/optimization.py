@@ -94,7 +94,7 @@ class LossClass:
         working_dir: str | Path = ".",
         exponent: int = 2,
         print_to_file: bool = False,
-        return_gradients: bool =True
+        return_gradients: bool =False
     ) -> None:
         """Initializes the optimization class for noise characterization.
 
@@ -146,6 +146,14 @@ class LossClass:
 
         self.exponent = exponent
 
+        self.converged = False
+
+        self.n_avg = 100
+
+        self.n_conv = 20
+
+        self.avg_tol = 1e-6
+
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
 
@@ -171,6 +179,14 @@ class LossClass:
         if len(self.x_avg_history) > 1:
             diff: float = np.max(np.abs(self.x_avg_history[-1] - self.x_avg_history[-2]))
             self.diff_avg_history.append(diff)
+
+    def check_convergence(self):
+
+        if len(self.diff_avg_history) > self.n_conv and all(
+            diff < self.avg_tol for diff in self.diff_avg_history[-self.n_conv:]
+        ):
+            
+            self.converged = True
 
     def post_process(self, x: np.ndarray, f: float, grad: np.ndarray) -> None:
         """Post-processes the results of an optimization step.
@@ -206,6 +222,8 @@ class LossClass:
             self.write_to_file(
                 self.history_avg_file_name, self.f_history[-1], self.x_avg_history[-1], self.grad_history[-1]
             )
+
+        self.check_convergence()
 
     def reset(self) -> None:
         """Reset the optimization history and evaluation counter.

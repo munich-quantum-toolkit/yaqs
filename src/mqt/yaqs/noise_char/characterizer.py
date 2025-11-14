@@ -13,6 +13,9 @@ import copy
 from typing import TYPE_CHECKING
 
 from mqt.yaqs.noise_char.optimization import adam_optimizer, gradient_descent_optimizer
+from mqt.yaqs.noise_char.algorithms.cma import cma_opt
+from mqt.yaqs.noise_char.algorithms.bayesian_optimization import bayesian_opt
+
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,7 +24,7 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
     from mqt.yaqs.noise_char.optimization import LossClass
-    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
+    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients, Propagator
 
 
 class Characterizer:
@@ -31,7 +34,7 @@ class Characterizer:
     gradient-based optimization of a compact noise model's parameters.
 
     Stored objects
-    - traj_gradients (PropagatorWithGradients): Propagator that can produce
+    - propagator (PropagatorWithGradients): Propagator that can produce
       observable trajectories and gradients with respect to compact noise-model
       parameters.
     - init_guess (CompactNoiseModel): Deep copy of the initial noise-model
@@ -53,7 +56,7 @@ class Characterizer:
 
     loss: LossClass
 
-    traj_gradients: PropagatorWithGradients
+    propagator: PropagatorWithGradients | Propagator
 
     init_guess: CompactNoiseModel
 
@@ -74,7 +77,7 @@ class Characterizer:
     def __init__(
         self,
         *,
-        traj_gradients: PropagatorWithGradients,
+        propagator: PropagatorWithGradients | Propagator,
         init_guess: CompactNoiseModel,
         loss: LossClass,
     ) -> None:
@@ -82,7 +85,7 @@ class Characterizer:
 
         Parameters
         ----------
-        traj_gradients : PropagatorWithGradients
+        propagator : PropagatorWithGradients
             Propagator capable of producing trajectories and gradients with respect
             to the compact noise-model parameters.
         init_guess : CompactNoiseModel
@@ -93,11 +96,11 @@ class Characterizer:
             provides utilities to convert between compact noise models and flat
             optimization vectors.
 
-        The constructor stores a deep copy of init_guess, assigns traj_gradients
+        The constructor stores a deep copy of init_guess, assigns propagator
         and loss, and initializes self.init_x from init_guess.strength_list.
         """
         self.init_guess = copy.deepcopy(init_guess)
-        self.traj_gradients = traj_gradients
+        self.propagator = propagator
 
         self.loss = loss
 
@@ -248,3 +251,54 @@ class Characterizer:
         )
 
         self.optimal_model = self.loss.x_to_noise_model(self.x_avg_history[-1])
+
+
+    def cma_optimize(
+        self,
+        *,
+        x_low, 
+        x_up, 
+        sigma0=0.01, 
+        popsize=4, 
+        max_iter=500
+    ) -> None:
+
+      x_best, loss_best = cma_opt(
+          self.loss, 
+          self.init_x, 
+          x_low=x_low, 
+          x_up=x_up, 
+          sigma0=sigma0, 
+          popsize=popsize, 
+          max_iter=max_iter
+          )
+
+      self.optimal_model = self.loss.x_to_noise_model(x_best)
+
+
+    def bayesian_optimize(
+        self,
+        *,
+        x_low,
+        x_up,
+        n_init=5,
+        n_iter=500,
+        acq_name="UCB",
+        std=0.01,
+        beta=100,
+        device="cpu"
+    ) -> None:
+
+      x_best, loss_best, _, _=bayesian_opt(
+          self.loss,
+          x_low = x_low,
+          x_up = x_up,
+          n_init=n_init,
+          n_iter=n_iter,
+          acq_name=acq_name,
+          std=std,
+          beta=beta,
+          device=device
+      )
+
+      self.optimal_model = self.loss.x_to_noise_model(x_best)
