@@ -84,6 +84,8 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
 def lineal_function_2(i):
     return 100 + 2*i
 
+def lineal_function_400_2(i):
+    return 400 + 2*i
 
 class LossClass:
     """A base LossClass to track optimization history and compute averages."""
@@ -96,7 +98,7 @@ class LossClass:
         ref_traj: list[Observable],
         propagator: PropagatorWithGradients | Propagator,
         working_dir: str | Path = ".",
-        num_traj = lineal_function_2, 
+        num_traj = lineal_function_400_2, 
         print_to_file: bool = False,
         return_gradients: bool =False
     ) -> None:

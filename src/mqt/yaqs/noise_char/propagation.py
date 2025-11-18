@@ -334,6 +334,8 @@ class Propagator:
             sample_timesteps=True,
         )
 
+        print("Propagator: num_traj = ", sim_params.num_traj)
+
         simulator.run(self.init_state, self.hamiltonian, sim_params, noise_model.expanded_noise_model)
 
         # Separate original and new expectation values from result_lindblad.
