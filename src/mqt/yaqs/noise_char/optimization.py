@@ -81,6 +81,10 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
     return integral
 
 
+def lineal_function_2(i):
+    return 100 + 2*i
+
+
 class LossClass:
     """A base LossClass to track optimization history and compute averages."""
 
@@ -92,7 +96,7 @@ class LossClass:
         ref_traj: list[Observable],
         propagator: PropagatorWithGradients | Propagator,
         working_dir: str | Path = ".",
-        exponent: int = 2,
+        num_traj = lineal_function_2, 
         print_to_file: bool = False,
         return_gradients: bool =False
     ) -> None:
@@ -144,8 +148,6 @@ class LossClass:
 
         self.return_gradients = return_gradients
 
-        self.exponent = exponent
-
         self.converged = False
 
         self.n_avg = 100
@@ -153,6 +155,8 @@ class LossClass:
         self.n_conv = 20
 
         self.avg_tol = 1e-6
+
+        self.num_traj = num_traj
 
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
@@ -396,6 +400,8 @@ class LossClass:
 
         start_time = time.time()
 
+        self.propagator.sim_params.num_traj = self.num_traj(self.n_eval)
+
         self.propagator.run(noise_model)
 
         self.obs_array = copy.deepcopy(self.propagator.obs_array)
@@ -404,7 +410,7 @@ class LossClass:
 
         diff = self.obs_array - self.ref_traj_array
 
-        loss: float = np.sum(diff**self.exponent)
+        loss: float = np.sum(diff**2)
 
         
 
