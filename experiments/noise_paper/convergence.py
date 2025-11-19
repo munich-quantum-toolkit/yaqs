@@ -49,9 +49,8 @@ if __name__ == "__main__":
 
     # Unraveling 2
     noise_model = NoiseModel([
-        {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["measure_0", "measure_1", "measure_x_0", "measure_x_1", "measure_y_0", "measure_y_1"]
+        {"name": name, "sites": [i], "strength": 2*gamma} for i in range(L) for name in ["measure_0", "measure_1", "measure_x_0", "measure_x_1", "measure_y_0", "measure_y_1"]
     ])
-    gamma = 2*gamma
     cost = tdvp_simulator(H_0, noise_model)
     results2.append(cost)
 
