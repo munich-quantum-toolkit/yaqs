@@ -4,7 +4,6 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams,
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 
