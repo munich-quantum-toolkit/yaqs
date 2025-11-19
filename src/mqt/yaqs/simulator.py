@@ -51,7 +51,6 @@ import multiprocessing
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
-    Future,
     ProcessPoolExecutor,
     wait,
 )
@@ -62,12 +61,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 threadpool_limits: Callable[..., Any] | None
 threadpool_info: Callable[[], Any] | None
 try:
-    from threadpoolctl import (  # type: ignore[import-not-found]
-        threadpool_info as _threadpool_info,
-    )
-    from threadpoolctl import (
-        threadpool_limits as _threadpool_limits,
-    )
+    from threadpoolctl import threadpool_info as _threadpool_info  # type: ignore[import-not-found]
+    from threadpoolctl import threadpool_limits as _threadpool_limits
 except ImportError:  # pragma: no cover - optional dependency
     threadpool_limits = None
     threadpool_info = None
@@ -96,6 +91,10 @@ from .digital.digital_tjm import digital_tjm
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
+    from concurrent.futures import Future
+
+    import numpy as np
+    from numpy.typing import NDArray
 
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
@@ -328,7 +327,7 @@ def _run_backend_parallel(
             initializer=_limit_worker_threads,
             initargs=(1,),  # enforce 1 thread per worker
         ) as ex,
-        tqdm(total=total, desc=desc, ncols=80, disable=show_progress) as pbar,
+        tqdm(total=total, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
     ):
         # Retry bookkeeping per index
         retries = dict.fromkeys(range(len(args)), 0)
@@ -385,9 +384,9 @@ def _run_strong_sim(
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
     """
-    # digital_tjm signature: (traj_idx, MPS, NoiseModel|None, StrongSimParams, QuantumCircuit) -> list[obs_results]
-    # We type as list[object] to keep mypy happy without over-constraining element types.
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], list[object]] = digital_tjm
+    # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
+    # We type as Any to keep mypy happy without over-constraining element types.
+    backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # If there's no noise at all, we don't need multiple trajectories
     if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
@@ -477,7 +476,7 @@ def _run_weak_sim(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # digital_tjm returns a measurement outcome structure for weak sim
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], dict[int, int]] = digital_tjm
+    backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # Trajectory count policy
     if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
@@ -580,15 +579,12 @@ def _run_analog(
     Args:
         initial_state: The initial system state as an MPS.
         operator: The Hamiltonian operator represented as an MPO.
-        sim_params: Simulation parameters for analog simulation,
-                                       including time step and evolution order.
+        sim_params: Simulation parameters for analog simulation, including time step and evolution order.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
-
-
     """
     # Choose integrator order (1 or 2) for the analog TJM backend
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]], list[object]] = (
+    backend: Callable[[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]], NDArray[np.float64]] = (
         analog_tjm_1 if sim_params.order == 1 else analog_tjm_2
     )
 

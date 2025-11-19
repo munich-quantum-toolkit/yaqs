@@ -47,8 +47,8 @@ def crandn(
     elif isinstance(size, int):
         size = (size,)
     rng = np.random.default_rng(seed)
-    # 1/sqrt(2) is a normalization factor
-    return (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2)
+    # 1 / sqrt(2) is a normalization factor
+    return np.asarray((rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2), dtype=np.complex128)
 
 
 def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) -> MPS:
@@ -107,7 +107,7 @@ def test_create_probability_distribution_no_noise() -> None:
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     noise_model = NoiseModel([])
     dt = 0.1
-    sim_params = AnalogSimParams(observables=[], elapsed_time=0.0)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
     assert len(probabilities) == 0, "No probabilities should be computed with empty noise model."
 
@@ -126,7 +126,7 @@ def test_create_probability_distribution_one_site() -> None:
         {"name": "lowering", "sites": [1], "strength": 0.5, "matrix": id_op},
     ])
     dt = 0.1
-    sim_params = AnalogSimParams(observables=[], elapsed_time=0.0)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
     # One applicable process
     assert len(probabilities) == 1
@@ -147,12 +147,12 @@ def test_stochastic_process_no_jump() -> None:
     state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
     noise_model = None
     dt = 0.1
-    sim_params = AnalogSimParams(observables=[], elapsed_time=0.0)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     new_state = stochastic_process(state, noise_model, dt, sim_params)
     # Should still be the same type
     assert isinstance(new_state, MPS)
     # Should not modify tensors (deepcopy not strictly guaranteed but should be unchanged)
-    for a, b in zip(new_state.tensors, state.tensors):
+    for a, b in zip(new_state.tensors, state.tensors, strict=False):
         np.testing.assert_allclose(a, b)
 
 
@@ -168,13 +168,13 @@ def test_stochastic_process_jump() -> None:
         {"name": "pauli_x", "sites": [0], "strength": 1000.0},
     ])
     dt = 0.1
-    sim_params = AnalogSimParams(observables=[], elapsed_time=0.0)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
     new_state = stochastic_process(state_copy, noise_model, dt, sim_params)
     # Should still be the same type
     assert isinstance(new_state, MPS)
     # Check that at least one tensor changed (jump applied)
-    different = any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors))
+    different = any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
     assert different, "At least one tensor should have changed after jump."
 
 
@@ -192,7 +192,7 @@ def test_create_probability_distribution_two_site() -> None:
         {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.2},
     ])
     dt = 0.1
-    sim_params = AnalogSimParams(observables=[], elapsed_time=0.0)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
     # One applicable process
     assert len(probabilities) == 1

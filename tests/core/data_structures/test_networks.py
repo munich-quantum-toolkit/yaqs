@@ -60,20 +60,20 @@ def crandn(
     """Draw random samples from the standard complex normal distribution.
 
     Args:
-        size (int |Tuple[int,...]): The size/shape of the output array.
-        *args (int): Additional dimensions for the output array.
-        seed (Generator | int): The seed for the random number generator.
+        size: The size/shape of the output array.
+        args: Additional dimensions for the output array.
+        seed: The seed for the random number generator.
 
     Returns:
-        NDArray[np.complex128]: The array of random complex numbers.
+        The array of random complex numbers.
     """
     if isinstance(size, int) and len(args) > 0:
         size = (size, *list(args))
     elif isinstance(size, int):
         size = (size,)
     rng = np.random.default_rng(seed)
-    # 1/sqrt(2) is a normalization factor
-    return (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2)
+    # 1 / sqrt(2) is a normalization factor
+    return np.asarray((rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2), dtype=np.complex128)
 
 
 def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) -> MPS:
@@ -240,9 +240,9 @@ def test_init_custom_hamiltonian() -> None:
     length = 4
     pdim = 2
 
-    left_bound = rng.random(size=(1, 2, pdim, pdim))
-    inner = rng.random(size=(2, 2, pdim, pdim))
-    right_bound = rng.random(size=(2, 1, pdim, pdim))
+    left_bound = rng.random(size=(1, 2, pdim, pdim)).astype(np.complex128)
+    inner = rng.random(size=(2, 2, pdim, pdim)).astype(np.complex128)
+    right_bound = rng.random(size=(2, 1, pdim, pdim)).astype(np.complex128)
 
     mpo = MPO()
     mpo.init_custom_hamiltonian(length, left_bound, inner, right_bound)
@@ -270,9 +270,9 @@ def test_init_custom() -> None:
     length = 3
     pdim = 2
     tensors = [
-        rng.random(size=(1, 2, pdim, pdim)),
-        rng.random(size=(2, 2, pdim, pdim)),
-        rng.random(size=(2, 1, pdim, pdim)),
+        rng.random(size=(1, 2, pdim, pdim)).astype(np.complex128),
+        rng.random(size=(2, 2, pdim, pdim)).astype(np.complex128),
+        rng.random(size=(2, 1, pdim, pdim)).astype(np.complex128),
     ]
 
     mpo = MPO()
@@ -282,7 +282,7 @@ def test_init_custom() -> None:
     assert mpo.physical_dimension == pdim
     assert len(mpo.tensors) == length
 
-    for original, created in zip(tensors, mpo.tensors):
+    for original, created in zip(tensors, mpo.tensors, strict=False):
         assert original.shape == created.shape
         assert np.allclose(original, created)
 
@@ -339,7 +339,7 @@ def test_rotate() -> None:
     original_tensors = [t.copy() for t in mpo.tensors]
 
     mpo.rotate(conjugate=False)
-    for orig, rotated in zip(original_tensors, mpo.tensors):
+    for orig, rotated in zip(original_tensors, mpo.tensors, strict=False):
         assert rotated.shape == (orig.shape[1], orig.shape[0], orig.shape[2], orig.shape[3])
         np.testing.assert_allclose(rotated, np.transpose(orig, (1, 0, 2, 3)))
 
@@ -437,9 +437,9 @@ def test_mps_custom_tensors() -> None:
     """
     length = 3
     pdim = 2
-    t1 = rng.random(size=(pdim, 1, 2))
-    t2 = rng.random(size=(pdim, 2, 2))
-    t3 = rng.random(size=(pdim, 2, 2))
+    t1 = rng.random(size=(pdim, 1, 2)).astype(np.complex128)
+    t2 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
+    t3 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
     tensors = [t1, t2, t3]
 
     mps = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
@@ -457,9 +457,9 @@ def test_flip_network() -> None:
     """
     length = 3
     pdim = 2
-    t1 = rng.random(size=(pdim, 1, 2))
-    t2 = rng.random(size=(pdim, 2, 2))
-    t3 = rng.random(size=(pdim, 2, 1))
+    t1 = rng.random(size=(pdim, 1, 2)).astype(np.complex128)
+    t2 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
+    t3 = rng.random(size=(pdim, 2, 1)).astype(np.complex128)
     original_tensors = [t1, t2, t3]
     mps = MPS(length, tensors=copy.deepcopy(original_tensors), physical_dimensions=[pdim] * length)
 
@@ -468,7 +468,7 @@ def test_flip_network() -> None:
     assert len(flipped_tensors) == length
     assert flipped_tensors[0].shape == (pdim, original_tensors[2].shape[2], original_tensors[2].shape[1])
     mps.flip_network()
-    for orig, now in zip(original_tensors, mps.tensors):
+    for orig, now in zip(original_tensors, mps.tensors, strict=False):
         assert np.allclose(orig, now)
 
 
@@ -530,10 +530,10 @@ def test_normalize() -> None:
     """
     length = 4
     pdim = 2
-    t1 = rng.random(size=(pdim, 1, 2))
-    t2 = rng.random(size=(pdim, 2, 3))
-    t3 = rng.random(size=(pdim, 3, 3))
-    t4 = rng.random(size=(pdim, 3, 1))
+    t1 = rng.random(size=(pdim, 1, 2)).astype(np.complex128)
+    t2 = rng.random(size=(pdim, 2, 3)).astype(np.complex128)
+    t3 = rng.random(size=(pdim, 3, 3)).astype(np.complex128)
+    t4 = rng.random(size=(pdim, 3, 1)).astype(np.complex128)
     mps = MPS(length, [t1, t2, t3, t4], [pdim] * length)
 
     mps.normalize(form="B")
@@ -668,9 +668,9 @@ def test_check_if_valid_mps() -> None:
     """
     length = 3
     pdim = 2
-    t1 = rng.random(size=(pdim, 1, 2))
-    t2 = rng.random(size=(pdim, 2, 3))
-    t3 = rng.random(size=(pdim, 3, 1))
+    t1 = rng.random(size=(pdim, 1, 2)).astype(np.complex128)
+    t2 = rng.random(size=(pdim, 2, 3)).astype(np.complex128)
+    t3 = rng.random(size=(pdim, 3, 1)).astype(np.complex128)
     mps = MPS(length, tensors=[t1, t2, t3], physical_dimensions=[pdim] * length)
     mps.check_if_valid_mps()
 
@@ -694,8 +694,8 @@ def test_check_canonical_form_left() -> None:
 
 def test_check_canonical_form_right() -> None:
     """Test that the right canonical form is detected correctly."""
-    unitary_left = unitary_group.rvs(3).reshape(3, 1, 3)
-    unitary_mid = unitary_group.rvs(6).reshape((2, 3, 6))
+    unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
+    unitary_mid = unitary_group.rvs(6).astype(np.complex128).reshape((2, 3, 6))
     tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
@@ -704,8 +704,8 @@ def test_check_canonical_form_right() -> None:
 
 def test_check_canonical_form_middle() -> None:
     """Test that a site canonical form is detected correctly."""
-    unitary_left = unitary_group.rvs(3).reshape(3, 1, 3)
-    unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
+    unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
+    unitary_right = unitary_group.rvs(3).astype(np.complex128).reshape(3, 3, 1)
     tensors = [unitary_left, crandn(2, 3, 3), unitary_right]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
@@ -714,11 +714,11 @@ def test_check_canonical_form_middle() -> None:
 
 def test_check_canonical_form_full() -> None:
     """Test the very special case that all canonical forms are true."""
-    delta_left = np.eye(2).reshape(2, 1, 2)
-    delta_right = np.eye(2).reshape(2, 2, 1)
-    delta_mid = np.zeros((2, 2, 2))
-    delta_mid[0, 0, 0] = 1
-    delta_mid[1, 1, 1] = 1
+    delta_left = np.eye(2, dtype=np.complex128).reshape(2, 1, 2)
+    delta_right = np.eye(2, dtype=np.complex128).reshape(2, 2, 1)
+    delta_mid = np.zeros((2, 2, 2), dtype=np.complex128)
+    delta_mid[0, 0, 0] = np.array(1, dtype=np.complex128)
+    delta_mid[1, 1, 1] = np.array(1, dtype=np.complex128)
     tensors = [delta_left, delta_mid, delta_right]
     mps = MPS(length=3, tensors=tensors)
     res = mps.check_canonical_form()
@@ -755,9 +755,9 @@ def test_convert_to_vector() -> None:
         psi = mps.to_vec()
 
         # Construct the expected state vector as the Kronecker product of local states.
-        local_states = [local_state for i in range(Length)]
+        local_states = [local_state for _ in range(Length)]
 
-        expected = 1
+        expected = np.array(1, dtype=complex)
         for state in local_states:
             expected = np.kron(expected, state)
 
@@ -1088,7 +1088,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
     ]
     sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1, show_progress=False)
 
-    results_diag: NDArray[np.object_] = np.empty((len(diagnostics_and_meta), 2), dtype=object)
+    results_diag = np.empty((len(diagnostics_and_meta), 2), dtype=object)
     mps.evaluate_observables(sim_diag, results_diag, column_index=0)
 
     # Diagnostics
@@ -1112,7 +1112,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
     pvm_only = [Observable(GateLibrary.pvm("0000"), 0)]
     sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.1, dt=0.1, show_progress=False)
 
-    results_pvm: NDArray[np.object_] = np.empty((len(pvm_only), 1), dtype=object)
+    results_pvm = np.empty((len(pvm_only), 1), dtype=object)
     mps.evaluate_observables(sim_pvm, results_pvm, column_index=0)
 
     assert results_pvm[0, 0] == 1
@@ -1136,7 +1136,7 @@ def test_evaluate_observables_local_ops_and_center_shifts() -> None:
     ]
     sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1, show_progress=False)
 
-    results: NDArray[np.object_] = np.empty((len(obs_seq), 3), dtype=object)
+    results = np.empty((len(obs_seq), 3), dtype=np.float64)
     mps.evaluate_observables(sim_params, results, column_index=2)
 
     z0, z1, x2, z3 = (results[i, 2] for i in range(4))
@@ -1154,7 +1154,7 @@ def test_evaluate_observables_meta_validation_errors() -> None:
     sim_bad_len = AnalogSimParams(
         [Observable(GateLibrary.entropy(), [1])], elapsed_time=0.1, dt=0.1, show_progress=False
     )
-    results_len: NDArray[np.object_] = np.empty((1, 1), dtype=object)
+    results_len = np.empty((1, 1), dtype=np.float64)
     with pytest.raises(AssertionError):
         mps.evaluate_observables(sim_bad_len, results_len, column_index=0)
 
@@ -1162,6 +1162,6 @@ def test_evaluate_observables_meta_validation_errors() -> None:
     sim_non_adj = AnalogSimParams(
         [Observable(GateLibrary.schmidt_spectrum(), [0, 2])], elapsed_time=0.1, dt=0.1, show_progress=False
     )
-    results_adj: NDArray[np.object_] = np.empty((1, 1), dtype=object)
+    results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
         mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)

@@ -21,6 +21,7 @@ from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
 
+from mqt.yaqs.core.libraries.gate_library import Rx
 from mqt.yaqs.digital.utils.dag_utils import (
     check_longest_gate,
     convert_dag_to_tensor_algorithm,
@@ -101,6 +102,7 @@ def test_convert_dag_to_tensor_algorithm_single_dagopnode() -> None:
     assert len(gates) == 1, "Expected one gate from a single DAGOpNode."
     gate = gates[0]
     assert gate.name.lower() == "rx", "Gate name should match 'rx'."
+    assert isinstance(gate, Rx), "Gate should be an Rx instance."
     assert gate.theta == np.pi / 4, "Gate should capture the rotation parameter (pi/4)."
     assert gate.sites == [0], "Gate should act on qubit 0."
 

@@ -53,6 +53,28 @@ class Lowering:
                 matrix[row][col] = 1
 
 
+class Measurement0:
+    """Class representing PauliZ (dephasing) noise.
+
+    Attributes:
+        matrix (np.ndarray): A 2x2 matrix representing the dephasing operator,
+            defined as [[1, 0], [0, -1]].
+    """
+
+    matrix = np.array([[1, 0], [0, 0]])
+
+
+class Measurement1:
+    """Class representing PauliZ (dephasing) noise.
+
+    Attributes:
+        matrix (np.ndarray): A 2x2 matrix representing the dephasing operator,
+            defined as [[1, 0], [0, -1]].
+    """
+
+    matrix = np.array([[0, 0], [0, 1]])
+
+
 class PauliZ:
     """Class representing PauliZ (dephasing) noise.
 
@@ -226,6 +248,8 @@ class NoiseLibrary:
     pauli_z = PauliZ
     pauli_x = PauliX
     pauli_y = PauliY
+    measure_0 = Measurement0
+    measure_1 = Measurement1
     raising_two = TwoSiteRaising
     lowering_two = TwoSiteLowering
     crosstalk_zz = CrossTalkZZ

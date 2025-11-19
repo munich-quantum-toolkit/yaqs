@@ -260,7 +260,7 @@ def test_analog_simulation_twositeprocesses() -> None:
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,
         dt=0.05,
-        num_traj=100,
+        num_traj=150,
         max_bond_dim=8,
         order=2,
         sample_timesteps=True,

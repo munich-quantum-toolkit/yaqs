@@ -9,26 +9,44 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
-### Changed
+## [0.3.2] - 2025-10-16
 
-- 🔥 Stop testing on x86 macOS systems ([#175]) ([**@denialhaag**])
+_If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#032)._
 
-## [0.3.0] - 2025-07-04
+### Added
+
+- ✨ Make it possible to return final state without setting dummy observables ([#214]) ([**@aaronleesander**])
+- 👷 Enable testing on Python 3.14 ([#212]) ([**@denialhaag**])
+
+### Removed
+
+- 🔥 Drop support for Python 3.9 ([#180]) ([**@denialhaag**])
+
+### Fixed
+
+- 🐛 Fix project bar of simulator ([#213]) ([**@aaronleesander**])
+
+## [0.3.1] - 2025-08-29
 
 _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-toolkit/yaqs/releases) for previous changelogs._
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.0
+[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
+[0.3.1]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.1
 
 <!-- PR links -->
 
-[#175]: https://github.com/munich-quantum-toolkit/qecc/pull/175
+[#214]: https://github.com/munich-quantum-toolkit/yaqs/pull/214
+[#213]: https://github.com/munich-quantum-toolkit/yaqs/pull/213
+[#212]: https://github.com/munich-quantum-toolkit/yaqs/pull/212
+[#180]: https://github.com/munich-quantum-toolkit/yaqs/pull/180
 
 <!-- Contributor -->
 
 [**@denialhaag**]: https://github.com/denialhaag
+[**@aaronleesander**]: https://github.com/aaronleesander
 
 <!-- General links -->
 

@@ -48,7 +48,7 @@ def prepare_canonical_site_tensors(
     # This will merely do a shallow copy of the MPS.
     canon_tensors = copy(state.tensors)
     left_end_dimension = state.tensors[0].shape[1]
-    left_blocks = [np.eye(left_end_dimension).reshape(left_end_dimension, 1, left_end_dimension)]
+    left_blocks = [np.eye(left_end_dimension, dtype=np.complex128).reshape(left_end_dimension, 1, left_end_dimension)]
     for i, old_local_tensor in enumerate(canon_tensors[1:], start=1):
         left_tensor = canon_tensors[i - 1]
         left_q, left_r = right_qr(left_tensor)
@@ -201,8 +201,8 @@ def bug(
 
     canon_center_tensors, left_envs = prepare_canonical_site_tensors(state, mpo)
     right_end_dimension = state.tensors[-1].shape[2]
-    right_block = np.eye(right_end_dimension).reshape(right_end_dimension, 1, right_end_dimension)
-    right_m_block = np.eye(right_end_dimension)
+    right_block = np.eye(right_end_dimension, dtype=np.complex128).reshape(right_end_dimension, 1, right_end_dimension)
+    right_m_block = np.eye(right_end_dimension, dtype=np.complex128)
     # Sweep from right to left.
     for site in range(num_sites - 1, 0, -1):
         right_m_block, right_block = local_update(
