@@ -2,8 +2,8 @@ import numpy as np
 import pickle
 from pathlib import Path
 
-L_list = [8, 12, 16, 20, 24, 28, 32, 40, 48, 64]
-dps = np.logspace(-3, 0, 10)
+L_list = range(5, 80, 5)
+dps = np.logspace(-3, 0, 20)
 data_dir = Path(".")  # adjust if needed
 
 def load_heatmap(u, t, L_list=L_list, dps=dps, prefix=""):
@@ -40,8 +40,8 @@ heat_u2_t1 = load_heatmap(u=2, t=1)  # unraveling 2, truncation 1
 # heat_u1_t2 = load_heatmap(u=1, t=2)
 # heat_u2_t2 = load_heatmap(u=2, t=2)
 
-fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
-axes = axes.reshape(2, 2)
+fig, axes = plt.subplots(2, 1, figsize=(5, 8), sharex=True, sharey=True)
+axes = axes.reshape(2, 1)
 
 panels = {
     (0, 0): (heat_u1_t1, "Unraveling 1", "Discarded weight"),
@@ -50,16 +50,18 @@ panels = {
     # (1, 1): (heat_u2_t2, "Unraveling 2", "Relative cutoff"),
 }
 
-vmin = min(np.min(arr) for (arr, _, _) in panels.values())
-vmax = max(np.max(arr) for (arr, _, _) in panels.values())
+vmin = 2 # min(np.min(arr) for (arr, _, _) in panels.values())
+vmax = 64 # max(np.max(arr) for (arr, _, _) in panels.values())
 
 for (r, c), (grid, row_label, col_label) in panels.items():
     ax = axes[r, c]
+    # ax.contour(grid, levels=[4, 8, 16, 32, 48], colors="white", linewidths=0.5, alpha=0.8)
 
     im = ax.imshow(
         grid,
         origin="lower",
         aspect="auto",
+        cmap="magma_r",
         vmin=vmin,
         vmax=vmax,
     )
@@ -78,8 +80,8 @@ for (r, c), (grid, row_label, col_label) in panels.items():
 for ax in axes[-1, :]:
     ax.set_xlabel("dp = γ Δt")
 
-cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.9)
-cbar.set_label("Average max bond dimension (num_traj = 10)")
+# cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.9)
+# cbar.set_label("Average max bond dimension (num_traj = 10)")
 
 fig.tight_layout()
 plt.show()
