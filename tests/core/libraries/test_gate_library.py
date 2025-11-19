@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def testsplit_tensor_valid_shape() -> None:
+def test_split_tensor_valid_shape() -> None:
     """Test that split_tensor correctly splits a tensor of shape (2,2,2,2) into two tensors.
 
     The test creates a tensor with values 0..15 reshaped to (2,2,2,2) and then applies split_tensor.
@@ -63,37 +63,37 @@ def testsplit_tensor_valid_shape() -> None:
     assert t2.shape[1] == 2
 
 
-def testsplit_tensor_invalid_shape() -> None:
+def test_split_tensor_invalid_shape() -> None:
     """Test that split_tensor raises an AssertionError when the input tensor does not have shape (2,2,2,2).
 
     The test creates a tensor of shape (2,2,2) and expects an assertion error.
     """
-    tensor = np.zeros((2, 2, 2))
+    tensor = np.zeros((2, 2, 2), dtype=np.complex128)
     with pytest.raises(AssertionError):
         split_tensor(tensor)
 
 
-def testextend_gate_no_identity() -> None:
+def test_extend_gate_no_identity() -> None:
     """Test extend_gate when no identity tensor is required.
 
     This test uses a simple tensor (4x4 identity reshaped to (2,2,2,2)) and sites such that the gap between sites is 1.
     It checks that the resulting MPO has exactly two tensors.
     """
-    tensor = np.eye(4).reshape(2, 2, 2, 2)
+    tensor = np.eye(4, dtype=np.complex128).reshape(2, 2, 2, 2)
     sites = [0, 1]  # No gap, so no identity tensor should be added.
     mpo_tensors = extend_gate(tensor, sites)
     assert isinstance(mpo_tensors, list)
     assert len(mpo_tensors) == 2
 
 
-def testextend_gate_with_identity() -> None:
+def test_extend_gate_with_identity() -> None:
     """Test extend_gate when an identity tensor is required.
 
     This test uses a simple tensor (4x4 identity reshaped to (2,2,2,2)) with sites that have a gap (difference 2),
     which should insert one identity tensor. It verifies that the MPO contains three tensors and that the
     identity tensor has the expected structure.
     """
-    tensor = np.eye(4).reshape(2, 2, 2, 2)
+    tensor = np.eye(4, dtype=np.complex128).reshape(2, 2, 2, 2)
     sites = [0, 2]  # Gap present, one identity tensor inserted.
     mpo_tensors = extend_gate(tensor, sites)
     assert isinstance(mpo_tensors, list)
@@ -108,13 +108,13 @@ def testextend_gate_with_identity() -> None:
         assert_array_equal(identity_tensor[:, :, i, i], np.eye(2))
 
 
-def testextend_gate_reverse_order() -> None:
+def test_extend_gate_reverse_order() -> None:
     """Test that extend_gate correctly handles reverse ordering of sites.
 
     This test applies extend_gate with sites provided in reverse order, reverses the resulting MPO tensors,
     and verifies that each tensor matches the transpose of the forward-order result on axes (0,1,3,2).
     """
-    tensor = np.eye(4).reshape(2, 2, 2, 2)
+    tensor = np.eye(4, dtype=np.complex128).reshape(2, 2, 2, 2)
     mpo_forward_tensors = extend_gate(tensor, [0, 1])
     mpo_reverse_tensors = extend_gate(tensor, [1, 0])
 
@@ -124,7 +124,7 @@ def testextend_gate_reverse_order() -> None:
     mpo_reverse.init_custom(mpo_reverse_tensors, transpose=False)
 
     mpo_reverse.tensors.reverse()
-    for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors):
+    for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors, strict=False):
         assert_allclose(t_r, np.transpose(t_f, (0, 1, 3, 2)))
 
 
@@ -594,9 +594,9 @@ def test_gate_observable() -> None:
 def test_basegate_operations_with_different_interaction() -> None:
     """Test that BaseGate raises ValueError for operations with different interaction levels."""
     # Create two gates with different interaction levels
-    gate1 = BaseGate(np.eye(2))  # Single-qubit gate (interaction = 1)
+    gate1 = BaseGate(np.eye(2, dtype=np.complex128))  # Single-qubit gate (interaction = 1)
 
-    gate2 = BaseGate(np.eye(4))  # Two-qubit gate (interaction = 2)
+    gate2 = BaseGate(np.eye(4, dtype=np.complex128))  # Two-qubit gate (interaction = 2)
 
     # Test addition
     with pytest.raises(ValueError, match="Cannot add gates with different interaction"):

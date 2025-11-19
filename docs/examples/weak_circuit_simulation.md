@@ -27,7 +27,7 @@ from qiskit.circuit.library.n_local import TwoLocal
 
 import numpy as np
 
-num_qubits = 10
+num_qubits = 5
 circuit = TwoLocal(num_qubits, ["rx"], ["rzz"], entanglement="linear", reps=num_qubits).decompose()
 num_pars = len(circuit.parameters)
 rng = np.random.default_rng()

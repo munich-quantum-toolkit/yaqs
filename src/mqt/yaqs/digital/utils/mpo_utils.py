@@ -239,11 +239,11 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
     and then decomposing the result back into MPO tensors via SVD-based truncation.
 
     Args:
-        mpo (MPO): The MPO object being updated.
-        dag1 (DAGCircuit): The first circuit's DAGCircuit.
-        dag2 (DAGCircuit): The second circuit's DAGCircuit.
-        threshold (float): The SVD threshold for truncation.
-        conjugate (bool): If True, apply the gate from dag2 in conjugated form; otherwise, from dag1.
+        mpo: The MPO object being updated.
+        dag1: The first circuit's DAGCircuit.
+        dag2: The second circuit's DAGCircuit.
+        threshold: The SVD threshold for truncation.
+        conjugate: If True, apply the gate from dag2 in conjugated form; otherwise, from dag1.
     """
     dag_to_search = dag1 if not conjugate else dag2
 
@@ -272,8 +272,11 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     and node.qargs[0]._index == gate.qubits[0]._index  # noqa: SLF001
                     and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
                 ):
+                    gate_ = convert_dag_to_tensor_algorithm(node)[0]
+                    assert hasattr(gate_, "mpo_tensors"), "Gate must have mpo_tensors attribute"
+                    mpo_tensors = gate_.mpo_tensors
                     gate_mpo = MPO()
-                    gate_mpo.init_custom(convert_dag_to_tensor_algorithm(node)[0].mpo_tensors, transpose=False)
+                    gate_mpo.init_custom(mpo_tensors, transpose=False)
                     if conjugate:
                         gate_mpo.rotate(conjugate=True)
                     dag.remove_op_node(node)
@@ -314,8 +317,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             theta = apply_temporal_zone(theta, dag2, [overall_site, overall_site + 1], conjugate=True)
             mpo.tensors[overall_site], mpo.tensors[overall_site + 1] = decompose_theta(theta, threshold)
 
-            gate_mpo.tensors[site_gate_mpo] = None
-            gate_mpo.tensors[site_gate_mpo + 1] = None
+            gate_mpo.tensors[site_gate_mpo] = None  # type: ignore [call-overload]
+            gate_mpo.tensors[site_gate_mpo + 1] = None  # type: ignore [call-overload]
 
         # Process odd-indexed (or hanging) tensor if present.
         if site_gate_mpo == len(sites) - 1 and any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors):
@@ -340,7 +343,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             theta = apply_temporal_zone(theta, dag2, [overall_site - 1, overall_site], conjugate=True)
 
             mpo.tensors[overall_site - 1], mpo.tensors[overall_site] = decompose_theta(theta, threshold)
-            gate_mpo.tensors[site_gate_mpo] = None
+            gate_mpo.tensors[site_gate_mpo] = None  # type: ignore [call-overload]
 
     assert not any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors), "Not all gate tensors were applied."
 

@@ -112,8 +112,8 @@ class Observable:
                 self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=object)
                 self.times = sim_params.times
             else:
-                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=object)
-                self.times = sim_params.elapsed_time
+                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
+                self.times = np.asarray(sim_params.elapsed_time, dtype=np.float64)
             self.results = np.empty(len(sim_params.times), dtype=np.float64)
         elif isinstance(sim_params, WeakSimParams):
             self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
@@ -173,8 +173,8 @@ class AnalogSimParams:
 
     def __init__(
         self,
-        observables: list[Observable],
-        elapsed_time: float,
+        observables: list[Observable] | None = None,
+        elapsed_time: float = 0.1,
         dt: float = 0.1,
         num_traj: int = 1000,
         max_bond_dim: int = 4096,
@@ -221,16 +221,20 @@ class AnalogSimParams:
         show_progress:
             If True, a progress bar is printed as trajectories finish.
         """
-        assert all(n.gate.name == "pvm" for n in observables) or all(n.gate.name != "pvm" for n in observables), (
+        obs_list: list[Observable] = [] if observables is None else list(observables)
+        assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
-        self.observables = observables
+        self.observables = obs_list
+
         if self.observables:
             sortable = [
-                obs for obs in observables if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+                obs
+                for obs in self.observables
+                if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             unsorted = [
-                obs for obs in observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+                obs for obs in self.observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             sorted_obs = sorted(
                 sortable,
@@ -253,6 +257,7 @@ class AnalogSimParams:
         self.evolution_mode = evolution_mode
         self.get_state = get_state
         self.show_progress = show_progress
+        assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
@@ -268,6 +273,7 @@ class AnalogSimParams:
                 all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
                 observable.results = np.concatenate(all_values)
             else:
+                assert observable.trajectories is not None
                 observable.results = np.mean(observable.trajectories, axis=0)
 
 
@@ -426,7 +432,7 @@ class StrongSimParams:
 
     def __init__(
         self,
-        observables: list[Observable],
+        observables: list[Observable] | None = None,
         num_traj: int = 1000,
         max_bond_dim: int = 4096,
         min_bond_dim: int = 2,
@@ -459,16 +465,20 @@ class StrongSimParams:
         show_progress:
             If True, a progress bar is printed as trajectories finish.
         """
-        assert all(n.gate.name == "pvm" for n in observables) or all(n.gate.name != "pvm" for n in observables), (
+        obs_list: list[Observable] = [] if observables is None else list(observables)
+        assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
-        self.observables = observables
+        self.observables = obs_list
+
         if self.observables:
             sortable = [
-                obs for obs in observables if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+                obs
+                for obs in self.observables
+                if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             unsorted = [
-                obs for obs in observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
+                obs for obs in self.observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
             ]
             sorted_obs = sorted(
                 sortable,
@@ -477,6 +487,7 @@ class StrongSimParams:
             self.sorted_observables = sorted_obs + unsorted
         else:
             self.sorted_observables = []
+
         self.num_traj = num_traj
         self.max_bond_dim = max_bond_dim
         self.min_bond_dim = min_bond_dim
@@ -486,6 +497,7 @@ class StrongSimParams:
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
         self.show_progress = show_progress
+        assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
@@ -501,4 +513,5 @@ class StrongSimParams:
                 all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
                 observable.results = np.concatenate(all_values)
             else:
+                assert observable.trajectories is not None
                 observable.results = np.mean(observable.trajectories, axis=0)

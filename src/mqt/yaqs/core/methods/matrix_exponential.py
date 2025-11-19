@@ -117,4 +117,6 @@ def expm_krylov(
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stebz")
     # Construct the approximation: scale the exponential of the eigenvalues by the norm of v,
     # and project back to the full space via the Lanczos basis V.
-    return lanczos_mat @ (u_hess @ (np.linalg.norm(vec) * np.exp(-1j * dt * w_hess) * u_hess[0]))
+    return np.asarray(
+        lanczos_mat @ (u_hess @ (np.linalg.norm(vec) * np.exp(-1j * dt * w_hess) * u_hess[0])), dtype=np.complex128
+    )
