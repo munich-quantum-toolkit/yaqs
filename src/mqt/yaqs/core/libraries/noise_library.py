@@ -75,6 +75,30 @@ class Measurement1:
     matrix = np.array([[0, 0], [0, 1]])
 
 
+class XMeasurement0:
+    """Projector onto |+> = (|0> + |1>)/sqrt(2)."""
+    matrix = 0.5 * np.array([[1, 1],
+                             [1, 1]])
+
+
+class XMeasurement1:
+    """Projector onto |-> = (|0> - |1>)/sqrt(2)."""
+    matrix = 0.5 * np.array([[1, -1],
+                             [-1, 1]])
+
+
+class YMeasurement0:
+    """Projector onto |+i> = (|0> + i|1>)/sqrt(2)."""
+    matrix = 0.5 * np.array([[1, -1j],
+                             [1j,  1]])
+
+
+class YMeasurement1:
+    """Projector onto |-i> = (|0> - i|1>)/sqrt(2)."""
+    matrix = 0.5 * np.array([[1,  1j],
+                             [-1j, 1]])
+
+
 class PauliZ:
     """Class representing PauliZ (dephasing) noise.
 
@@ -250,6 +274,10 @@ class NoiseLibrary:
     pauli_y = PauliY
     measure_0 = Measurement0
     measure_1 = Measurement1
+    measure_x_0 = XMeasurement0
+    measure_x_1 = XMeasurement1
+    measure_y_0 = YMeasurement0
+    measure_y_1 = YMeasurement1
     raising_two = TwoSiteRaising
     lowering_two = TwoSiteLowering
     crosstalk_zz = CrossTalkZZ
