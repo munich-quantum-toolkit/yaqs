@@ -54,10 +54,10 @@ if __name__ == "__main__":
     cost = tdvp_simulator(H_0, noise_model)
     results2.append(cost)
 
-    filename = f"u1t1_{L}.pickle"
+    filename = f"u1_convergence_{L}.pickle"
     with open(filename, 'wb') as handle:
         pickle.dump(results1, handle)
 
-    filename = f"u2t1_{L}.pickle"
+    filename = f"u2_convergence_{L}.pickle"
     with open(filename, 'wb') as handle:
         pickle.dump(results2, handle)
