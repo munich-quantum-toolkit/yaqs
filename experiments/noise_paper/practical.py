@@ -36,7 +36,7 @@ if __name__ == "__main__":
     H_0 = MPO()
     H_0.init_ising(L, J, h)
     # dt_list = [0.005, 0.01, 0.02, 0.05, 0.1]
-    dt_list = [0.01, 0.02, 0.05, 0.1]
+    dt_list = [0.005, 0.01, 0.02, 0.05, 0.1]
     for k, dt in enumerate(dt_list):
         gamma_list = [0.5, 1, 2, 5, 10, 20, 50, 100]
         results1 = []
