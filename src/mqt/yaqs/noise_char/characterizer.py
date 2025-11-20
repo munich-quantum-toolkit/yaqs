@@ -111,6 +111,7 @@ class Characterizer:
         *,
         alpha: float = 0.05,
         max_iterations: int = 100,
+        h: float = 1e-3,
         threshold: float = 5e-4,
         max_n_convergence: int = 50,
         tolerance: float = 1e-8,
@@ -166,6 +167,11 @@ class Characterizer:
         >>> # run with a smaller learning rate and more iterations
         >>> obj.adam_optimize(alpha=0.01, max_iterations=1000)
         """
+
+        self.loss.return_numeric_gradients = True
+
+        self.loss.epsilon = h
+
         self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = adam_optimizer(
             self.loss,
             self.init_x,
