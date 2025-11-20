@@ -109,8 +109,10 @@ class Characterizer:
     def adam_optimize(
         self,
         *,
+        x_low: np.ndarray = None,
+        x_up: np.ndarray = None,
         alpha: float = 0.05,
-        max_iterations: int = 100,
+        max_iterations: int = 500,
         h: float = 1e-3,
         threshold: float = 5e-4,
         max_n_convergence: int = 50,
@@ -175,6 +177,8 @@ class Characterizer:
         self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = adam_optimizer(
             self.loss,
             self.init_x,
+            x_low=x_low,
+            x_up=x_up,
             alpha=alpha,
             max_iterations=max_iterations,
             threshold=threshold,
@@ -264,7 +268,7 @@ class Characterizer:
         *,
         x_low, 
         x_up, 
-        sigma0=0.01, 
+        sigma0=0.02, 
         popsize=4, 
         max_iter=500
     ) -> None:
@@ -291,7 +295,7 @@ class Characterizer:
         n_iter=500,
         acq_name="UCB",
         std=0.01,
-        beta=100,
+        beta=2,
         device="cpu"
     ) -> None:
 
