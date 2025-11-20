@@ -17,7 +17,7 @@ def tdvp_simulator(H_0, dt, noise_model, state=None):
     sim_params = AnalogSimParams(observables=measurements,
                                 elapsed_time=5,
                                 dt=dt,
-                                num_traj=30,
+                                num_traj=10,
                                 threshold=1e-6,
                                 trunc_mode="discarded_weight",
                                 order=2,
@@ -35,8 +35,9 @@ if __name__ == "__main__":
     h = 1
     H_0 = MPO()
     H_0.init_ising(L, J, h)
-    dt_list = [0.005, 0.01, 0.02, 0.05, 0.1]
-    for dt in dt_list:
+    # dt_list = [0.005, 0.01, 0.02, 0.05, 0.1]
+    dt_list = [0.01, 0.02, 0.05, 0.1]
+    for k, dt in enumerate(dt_list):
         gamma_list = [0.5, 1, 2, 5, 10, 20, 50, 100]
         results1 = []
         results2 = []
@@ -60,7 +61,7 @@ if __name__ == "__main__":
             # cost = tdvp_simulator(H_0, noise_model)
             # results2.append(cost)
 
-        filename = f"u1_practical_{L}.pickle"
+        filename = f"u1_practical_{k+1}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results1, handle)
 
