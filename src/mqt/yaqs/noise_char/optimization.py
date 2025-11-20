@@ -100,7 +100,9 @@ class LossClass:
         working_dir: str | Path = ".",
         num_traj = lineal_function_400_2, 
         print_to_file: bool = False,
-        return_gradients: bool =False
+        return_gradients: bool =False,
+        return_numeric_gradients: bool = False,
+        epsilon: float = 1e-3,
     ) -> None:
         """Initializes the optimization class for noise characterization.
 
@@ -149,6 +151,12 @@ class LossClass:
         self.write_traj(obs_array=self.ref_traj_array, output_file=self.work_dir / "ref_traj.txt")
 
         self.return_gradients = return_gradients
+
+        self.return_numeric_gradients = return_numeric_gradients
+
+
+        self.epsilon = epsilon
+
 
         self.converged = False
 
@@ -446,6 +454,33 @@ class LossClass:
             sim_time = end_time - start_time  # Simulation time
 
             return loss, grad, sim_time
+        
+
+        if self.return_numeric_gradients:
+            
+            grad = np.zeros_like(x)
+
+            for i in range(len(x)):
+                x_plus = x.copy()
+                x_plus[i] += self.epsilon
+
+                noise_model_plus = self.x_to_noise_model(x_plus)
+
+                self.propagator.run(noise_model_plus)
+                obs_array_plus = copy.deepcopy(self.propagator.obs_array)
+
+                diff_plus = obs_array_plus - self.ref_traj_array
+                loss_plus = np.sum(diff_plus**2)
+
+                grad[i] = (loss_plus - loss) / self.epsilon
+
+            self.post_process(x.copy(), loss, grad.copy())
+
+            sim_time = end_time - start_time  # Simulation time
+
+            return loss, grad, sim_time
+
+
 
         self.post_process(x.copy(), loss, [0]*self.d)
 
