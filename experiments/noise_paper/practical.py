@@ -35,10 +35,12 @@ if __name__ == "__main__":
     h = 1
     H_0 = MPO()
     H_0.init_ising(L, J, h)
-    # dt_list = [0.005, 0.01, 0.02, 0.05, 0.1]
-    dt_list = [0.005, 0.01, 0.02, 0.05, 0.1]
+
+    # 1000, 500, 400, 250, 200, 125, 100, 50, 25, 20 steps
+    dt_list = [0.005, 0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.2, 0.25]
+
     for k, dt in enumerate(dt_list):
-        gamma_list = [0.5, 1, 2, 5, 10, 20, 50, 100]
+        gamma_list = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]
         results1 = []
         results2 = []
         for j, gamma in enumerate(gamma_list):
@@ -61,7 +63,7 @@ if __name__ == "__main__":
             # cost = tdvp_simulator(H_0, noise_model)
             # results2.append(cost)
 
-        filename = f"u1_practical_{k+1}.pickle"
+        filename = f"u1_practical_{k}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results1, handle)
 
