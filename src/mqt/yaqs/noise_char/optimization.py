@@ -491,6 +491,8 @@ def adam_optimizer(
     f: LossClass,
     x_copy: np.ndarray,
     *,
+    x_low: np.ndarray | None = None,
+    x_up: np.ndarray | None = None,
     alpha: float = 0.05,
     max_iterations: int = 1000,
     threshold: float = 5e-4,
@@ -617,9 +619,9 @@ def adam_optimizer(
         # Update simulation parameters with Adam update (NEW)
         x -= update
 
-        # Ensure non-negativity for the parameters
-        x[x < 0] = 0
-        x[x > 1] = 1
+        # Ensure x stays in bounds (NEW)
+        if x_low is not None and x_up is not None:
+            x = np.clip(x, x_low, x_up)
 
         restart_data = {
             "iteration": i,
