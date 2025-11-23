@@ -185,6 +185,20 @@ def test_gate_id() -> None:
     assert_array_equal(gate.matrix, base_gate.matrix)
 
 
+def test_gate_zero() -> None:
+    """Test the zero gate from GateLibrary.
+
+    This test creates the zero gate, sets its site, and verifies that its tensor matches its matrix.
+    """
+    gate = GateLibrary.zero()
+    gate.set_sites(0)
+    assert gate.sites == [0]
+    assert_array_equal(gate.tensor, gate.matrix)
+
+    base_gate = BaseGate.zero()
+    assert_array_equal(gate.matrix, base_gate.matrix)
+
+
 def test_gate_sx() -> None:
     """Test the square-root X (sx) gate from GateLibrary.
 
