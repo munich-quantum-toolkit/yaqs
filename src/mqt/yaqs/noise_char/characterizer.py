@@ -201,6 +201,7 @@ class Characterizer:
         max_iterations: int = 100,
         threshold: float = 5e-4,
         max_n_convergence: int = 50,
+        h: float = 1e-3,
         tolerance: float = 1e-8,
         restart: bool = False,
         restart_file: Path | None = None,
@@ -246,8 +247,12 @@ class Characterizer:
         >>> # run with default hyperparameters
         >>> obj.adam_optimize()
         >>> # run with a smaller learning rate and more iterations
-        >>> obj.adam_optimize(alpha=0.01, max_iterations=1000)
+        >>> obj.adam_optimize(alpha=0.01, max_iterations=1000, h=1e-3)
         """
+        self.loss.return_numeric_gradients = True
+
+        self.loss.epsilon = h
+
         self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = gradient_descent_optimizer(
             self.loss,
             self.init_x,
