@@ -265,7 +265,7 @@ class MPS:
         """
         global_max = 0
         for tensor in self.tensors:
-            local_max = max(tensor.shape[0], tensor.shape[2])
+            local_max = max(tensor.shape[1], tensor.shape[2])
             global_max = max(global_max, local_max)
 
         return global_max
