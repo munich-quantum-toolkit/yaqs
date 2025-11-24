@@ -56,7 +56,7 @@ grid = load_gamma_dt_heatmap(which_obs="max_bond")
 # --- scale to χ_avg * T / dt ---
 scaled_grid = np.full_like(grid, np.nan)
 for k, dt in enumerate(dt_list):
-    scaled_grid[:, k] = grid[:, k] * T / dt
+    scaled_grid[:, k] = grid[:, k] # * T / dt
 
 # -----------------------------
 # PLOT WITH dp = γ Δt LINES
