@@ -104,7 +104,7 @@ grid = load_gamma_dt_heatmap(which_obs="max_bond")
 # --- scale to χ_avg * T / dt ---
 scaled_grid = np.full_like(grid, np.nan)
 for k, dt in enumerate(dt_list):
-    scaled_grid[:, k] = grid[:, k] * T / dt
+    scaled_grid[:, k] = grid[:, k] # * T / dt
 
 # -----------------------------
 # PLOT WITH dp = γ Δt LINES
@@ -128,12 +128,11 @@ ax.set_xticklabels([f"{dt:.3g}" for dt in dt_list])
 ax.set_yticks(np.arange(len(gamma_list)))
 ax.set_yticklabels([f"{g:.3g}" for g in gamma_list])
 
-ax.set_xlabel(r"$\Delta t$")
+ax.set_xlabel(r"$dt$")
 ax.set_ylabel(r"$\gamma$")
-ax.set_title(r"$\chi_{\mathrm{avg}}\, T / \Delta t$ (num\_traj = 10)")
 
 cbar = fig.colorbar(im, ax=ax)
-cbar.set_label(r"$\chi_{\mathrm{avg}}\, T / \Delta t$")
+cbar.set_label(r"$\chi_{\mathrm{avg}}$")
 
 # ----------------------------------------------------
 # Add dp = γ Δt *lines* in index coordinates
@@ -159,7 +158,7 @@ for dp in dp_levels:
     x = np.interp(dt_line, dt_arr, np.arange(len(dt_arr)))
     y = np.interp(gamma_line, gamma_arr, np.arange(len(gamma_arr)))
 
-    ax.plot(x, y, linestyle="--", linewidth=1.0, color="white", alpha=0.9)
+    ax.plot(x, y, linestyle="--", linewidth=1.0, color="black", alpha=0.9)
 
 for dp in dp_levels:
     dt_label = dt_arr[1]  # second column to avoid edge

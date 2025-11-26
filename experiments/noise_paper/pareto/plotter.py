@@ -44,8 +44,8 @@ fig, axes = plt.subplots(2, 1, figsize=(5, 8), sharex=True, sharey=True)
 axes = axes.reshape(2, 1)
 
 panels = {
-    (0, 0): (heat_u1_t1, "Unraveling 1", "Discarded weight"),
-    (1, 0): (heat_u2_t1, "Unraveling 2", "Discarded weight"),
+    (0, 0): (heat_u1_t1, "Pauli Jump Unraveling", "Discarded weight"),
+    (1, 0): (heat_u2_t1, "Projective Unraveling", "Discarded weight"),
     # (0, 1): (heat_u1_t2, "Unraveling 1", "Relative cutoff"),
     # (1, 1): (heat_u2_t2, "Unraveling 2", "Relative cutoff"),
 }
@@ -67,21 +67,38 @@ for (r, c), (grid, row_label, col_label) in panels.items():
     )
 
     ax.set_xticks(np.arange(len(dps)))
-    ax.set_xticklabels([f"{dp:.3g}" for dp in dps], rotation=45, ha="right")
+    ax.set_xticklabels([f"{dp:.1g}" for dp in dps], rotation=45, ha="right")
 
     ax.set_yticks(np.arange(len(L_list)))
     ax.set_yticklabels([str(L) for L in L_list])
 
     if c == 0:
         ax.set_ylabel(f"L\n({row_label})")
-    if r == 0:
-        ax.set_title(col_label)
+    # if r == 0:
+    #     ax.set_title(col_label)
+
+    for threshold in [16, 32, 48, 64]:
+        # Contour expects x=dp index, y=L index
+        cs = ax.contour(
+            grid,
+            levels=[threshold],
+            colors="white",
+            linewidths=1.0,
+        )
+
+        ax.clabel(cs, fmt={threshold: f"χ={threshold}"}, inline=True, fontsize=8)
+
+
 
 for ax in axes[-1, :]:
     ax.set_xlabel("dp = γ Δt")
-
-# cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.9)
-# cbar.set_label("Average max bond dimension (num_traj = 10)")
-
 fig.tight_layout()
+
+# Add at the end, replacing your existing colorbar code
+fig.subplots_adjust(right=0.86)  # make room on the right
+
+cbar_ax = fig.add_axes([0.9, 0.15, 0.03, 0.7])
+cbar = fig.colorbar(im, cax=cbar_ax)
+cbar_ax.set_title("$\\chi_{\\text{max}}$")
+
 plt.show()
