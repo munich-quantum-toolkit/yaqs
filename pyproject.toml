@@ -67,21 +67,17 @@ packages = ["src/mqt"]
 version-file = "src/mqt/yaqs/_version.py"
 
 
-[tool.pytest.ini_options]
-minversion = "7.2"
+[tool.pytest]
+minversion = "9.0"
+testpaths = ["tests"]
+strict = true
 addopts = [
-    "-ra",
-    "--strict-markers",
-    "--strict-config",
-    "--numprocesses=auto", # Automatically use all available CPU cores for parallel testing
-]
-xfail_strict = true
-filterwarnings = [
-    "error",
+  "-ra",
+  "--showlocals",
+  "--numprocesses=auto", # Automatically use all available CPU cores for parallel testing
 ]
 log_level = "INFO"
-testpaths = ["tests"]
-
+filterwarnings = ["error"]
 
 [tool.coverage]
 run.source = ["mqt.yaqs"]
@@ -118,10 +114,12 @@ default.extend-ignore-re = [
     "(?Rm)^.*(#|//)\\s*spellchecker:disable-line$",  # ignore line
     "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on" # ignore block
 ]
+
 [tool.typos.default.extend-words]
 wille = "wille"
 aer = "aer"
 ket   = "ket"
+
 
 [tool.repo-review]
 ignore = ["GH200"]
@@ -129,16 +127,20 @@ ignore = ["GH200"]
 
 [tool.ruff]
 line-length = 120
+namespace-packages = ["mqt"]
 preview = true
+fix = true
 unsafe-fixes = true
+show-fixes = true
 
+[tool.ruff.format]
+docstring-code-format = true
 
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
     "C90",     # <...> too complex
     "COM812",  # Conflicts with formatter
-    "ISC001",  # Conflicts with formatter
     "PLR09",   # Too many <...>
     "PLR2004", # Magic value used in comparison
     "S101",    # Use of assert detected
@@ -168,28 +170,34 @@ override-dependencies = [
     "symengine>=0.14.1; python_version >= '3.14'",
 ]
 
+[tool.uv.sources]
+mqt-yaqs = { workspace = true }
+
 
 [dependency-groups]
 docs = [
-    "furo>=2024.8.6",
-    "myst-nb>=1.2.0",
+    "furo>=2025.09.25",
+    "myst-nb>=1.3.0",
+    "sphinx>=8.1.3",
+    "sphinx>=8.2.3; python_version >= '3.11'",
     "sphinx-autoapi>=3.6.0",
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.6.1",
-    "sphinxcontrib-bibtex>=2.6.3",
+    "sphinxcontrib-bibtex>=2.6.5",
     "sphinxcontrib-svg2pdfconverter>=1.3.0",
-    "sphinxext-opengraph>=0.9.1",
+    "sphinxext-opengraph>=0.13.0",
     "qiskit[visualization]>=1.0.0",
-    "sphinx>=8.1.3",
-    "sphinx>=8.2.3; python_version >= '3.11'",
 ]
 test = [
-    "pytest>=8.3.5",
-    "pytest-cov>=6.0.0",
-    "pytest-sugar>=1.0.0",
-    "pytest-xdist>=3.7.0",
+    "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
+    "pytest-sugar>=1.1.1",
+    "pytest-xdist>=3.8.0",
 ]
 dev = [
     {include-group = "docs"},
     {include-group = "test"},
+    "nox>=2025.11.12",
+    "ruff>=0.14.6",
+    "ty>=0.0.1a27",
 ]
