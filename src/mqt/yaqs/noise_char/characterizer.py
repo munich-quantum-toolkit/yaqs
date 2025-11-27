@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from mqt.yaqs.noise_char.optimization import adam_optimizer, gradient_descent_optimizer
 from mqt.yaqs.noise_char.algorithms.cma import cma_opt
 from mqt.yaqs.noise_char.algorithms.bayesian_optimization import bayesian_opt
+from mqt.yaqs.noise_char.algorithms.mcmc import mcmc_opt
 
 
 if TYPE_CHECKING:
@@ -297,7 +298,7 @@ class Characterizer:
         x_low,
         x_up,
         n_init=5,
-        n_iter=500,
+        max_iter=500,
         acq_name="UCB",
         std=0.01,
         beta=2,
@@ -309,11 +310,42 @@ class Characterizer:
           x_low = x_low,
           x_up = x_up,
           n_init=n_init,
-          n_iter=n_iter,
+          max_iter=max_iter,
           acq_name=acq_name,
           std=std,
           beta=beta,
           device=device
+      )
+
+      self.optimal_model = self.loss.x_to_noise_model(x_best)
+
+    
+    def mcmc_optimize(
+        self,
+        *,
+        x_low,
+        x_up,
+        max_iter=500,
+        step_size=0.05, 
+        step_rate=0.99, 
+        min_step_size=0, 
+        temperature=1.0, 
+        anneal_rate=0.99,
+        patience=100
+    ) -> None:
+
+      x_best, loss_best=mcmc_opt(
+          self.loss, 
+          self.init_x, 
+          x_low=x_low, 
+          x_up=x_up, 
+          max_iter=max_iter, 
+          step_size=step_size, 
+          step_rate=step_rate, 
+          min_step_size=min_step_size, 
+          temperature=temperature, 
+          anneal_rate=anneal_rate,
+          patience=patience
       )
 
       self.optimal_model = self.loss.x_to_noise_model(x_best)

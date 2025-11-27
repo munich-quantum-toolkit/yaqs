@@ -42,7 +42,7 @@ def bayesian_opt(
     x_low,
     x_up,
     n_init=5,
-    n_iter=15,
+    max_iter=15,
     acq_name="EI",
     std=1e-6,
     beta=2.0,
@@ -57,7 +57,7 @@ def bayesian_opt(
             Function to minimize. Must accept NumPy arrays.
         bounds: torch.tensor([[x1_min, ..., xd_min], [x1_max, ..., xd_max]])
         n_init: Number of initial random evaluations
-        n_iter: Number of BO iterations
+        max_iter: Number of BO iterations
         acq_name: "EI", "PI", or "UCB"
         std: Known standard deviation of noise
     """
@@ -99,7 +99,7 @@ def bayesian_opt(
     # -----------------------
     # BO loop
     # -----------------------
-    for i in range(n_iter):
+    for i in range(max_iter):
         model = SingleTaskGP(
             X_train,
             Y_train,
