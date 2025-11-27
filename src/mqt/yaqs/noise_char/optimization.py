@@ -494,7 +494,7 @@ def adam_optimizer(
     x_low: np.ndarray | None = None,
     x_up: np.ndarray | None = None,
     alpha: float = 0.05,
-    max_iterations: int = 1000,
+    max_iter: int = 1000,
     threshold: float = 5e-4,
     max_n_convergence: int = 50,
     tolerance: float = 1e-8,
@@ -516,7 +516,7 @@ def adam_optimizer(
         f (loss_class): An instance of a loss function class.
         x_copy (np.ndarray): Initial parameter vector to optimize.
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
+        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
         threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
         max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
         tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
@@ -597,7 +597,7 @@ def adam_optimizer(
         with perf_path.open("w", encoding="utf-8") as pf:
             pf.write("# iter    opt_step_time    simulation_time    avg_traj_time    min_traj_time    max_traj_time\n")
 
-    for i in range(start_iter, max_iterations):
+    for i in range(start_iter, max_iter):
         # Calculate loss and gradients (unchanged)
 
         start_time = time.time()
@@ -670,7 +670,7 @@ def gradient_descent_optimizer(
     x_copy: np.ndarray,
     *,
     alpha: float = 0.05,
-    max_iterations: int = 1000,
+    max_iter: int = 1000,
     threshold: float = 5e-4,
     max_n_convergence: int = 50,
     tolerance: float = 1e-8,
@@ -689,7 +689,7 @@ def gradient_descent_optimizer(
         f (loss_class): An instance of a loss function class.
         x_copy (np.ndarray): Initial parameter vector to optimize.
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
+        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
         threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
         max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
         tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
@@ -763,7 +763,7 @@ def gradient_descent_optimizer(
         with perf_path.open("w", encoding="utf-8") as pf:
             pf.write("# iter    opt_step_time    simulation_time    avg_traj_time    min_traj_time    max_traj_time\n")
 
-    for i in range(start_iter, max_iterations):
+    for i in range(start_iter, max_iter):
         # Calculate loss and gradients (unchanged)
 
         start_time = time.time()

@@ -113,7 +113,7 @@ class Characterizer:
         x_low: np.ndarray = None,
         x_up: np.ndarray = None,
         alpha: float = 0.05,
-        max_iterations: int = 500,
+        max_iter: int = 500,
         h: float = 1e-3,
         threshold: float = 5e-4,
         max_n_convergence: int = 50,
@@ -133,7 +133,7 @@ class Characterizer:
         Parameters.
         ----------
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
+        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
         threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
         max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
         tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
@@ -156,7 +156,7 @@ class Characterizer:
         ------
         ValueError
             If one or more numeric hyperparameters are out of valid ranges (e.g.,
-            non-positive learning rate or non-positive max_iterations).
+            non-positive learning rate or non-positive max_iter).
         FileNotFoundError
             If `restart` is True and `restart_file` is provided but does not exist.
         RuntimeError
@@ -168,7 +168,7 @@ class Characterizer:
         >>> # run with default hyperparameters
         >>> obj.adam_optimize()
         >>> # run with a smaller learning rate and more iterations
-        >>> obj.adam_optimize(alpha=0.01, max_iterations=1000)
+        >>> obj.adam_optimize(alpha=0.01, max_iter=1000)
         """
 
         self.loss.return_numeric_gradients = True
@@ -181,7 +181,7 @@ class Characterizer:
             x_low=x_low,
             x_up=x_up,
             alpha=alpha,
-            max_iterations=max_iterations,
+            max_iter=max_iter,
             threshold=threshold,
             max_n_convergence=max_n_convergence,
             tolerance=tolerance,
@@ -199,10 +199,10 @@ class Characterizer:
         self,
         *,
         alpha: float = 0.05,
-        max_iterations: int = 100,
+        max_iter: int = 100,
         threshold: float = 5e-4,
         max_n_convergence: int = 50,
-        h: float = 1e-3,
+        h: float = 1e-2,
         tolerance: float = 1e-8,
         restart: bool = False,
         restart_file: Path | None = None,
@@ -216,7 +216,7 @@ class Characterizer:
         Parameters.
         ----------
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iterations (int, optional): Maximum number of optimization iterations. Default is 1000.
+        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
         threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
         max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
         tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
@@ -236,7 +236,7 @@ class Characterizer:
         ------
         ValueError
             If one or more numeric hyperparameters are out of valid ranges (e.g.,
-            non-positive learning rate or non-positive max_iterations).
+            non-positive learning rate or non-positive max_iter).
         FileNotFoundError
             If `restart` is True and `restart_file` is provided but does not exist.
         RuntimeError
@@ -248,7 +248,7 @@ class Characterizer:
         >>> # run with default hyperparameters
         >>> obj.adam_optimize()
         >>> # run with a smaller learning rate and more iterations
-        >>> obj.adam_optimize(alpha=0.01, max_iterations=1000, h=1e-3)
+        >>> obj.adam_optimize(alpha=0.01, max_iter=1000, h=1e-3)
         """
         self.loss.return_numeric_gradients = True
 
@@ -258,7 +258,7 @@ class Characterizer:
             self.loss,
             self.init_x,
             alpha=alpha,
-            max_iterations=max_iterations,
+            max_iter=max_iter,
             threshold=threshold,
             max_n_convergence=max_n_convergence,
             tolerance=tolerance,
