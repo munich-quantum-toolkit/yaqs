@@ -198,6 +198,8 @@ class Characterizer:
     def gradient_descent_optimize(
         self,
         *,
+        x_low: np.ndarray = None,
+        x_up: np.ndarray = None,
         alpha: float = 0.05,
         max_iter: int = 100,
         threshold: float = 5e-4,
