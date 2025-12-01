@@ -280,18 +280,25 @@ class Characterizer:
         popsize=4, 
         max_iter=500
     ) -> None:
+      
+        print("CMA optimization parameters:")
+        print(f"x_low: {x_low}")
+        print(f"x_up: {x_up}")
+        print(f"sigma0: {sigma0}")
+        print(f"popsize: {popsize}")
+        print(f"max_iter: {max_iter}")
 
-      x_best, loss_best = cma_opt(
-          self.loss, 
-          self.init_x, 
-          x_low=x_low, 
-          x_up=x_up, 
-          sigma0=sigma0, 
-          popsize=popsize, 
-          max_iter=max_iter
-          )
+        x_best, loss_best = cma_opt(
+            self.loss, 
+            self.init_x, 
+            x_low=x_low, 
+            x_up=x_up, 
+            sigma0=sigma0, 
+            popsize=popsize, 
+            max_iter=max_iter
+            )
 
-      self.optimal_model = self.loss.x_to_noise_model(x_best)
+        self.optimal_model = self.loss.x_to_noise_model(x_best)
 
 
     def bayesian_optimize(
@@ -306,20 +313,30 @@ class Characterizer:
         beta=2,
         device="cpu"
     ) -> None:
+      
+        print("Bayesian optimization parameters:")
+        print(f"x_low: {x_low}")
+        print(f"x_up: {x_up}")
+        print(f"n_init: {n_init}")
+        print(f"max_iter: {max_iter}")
+        print(f"acq_name: {acq_name}")
+        print(f"std: {std}")
+        print(f"beta: {beta}")
+        print(f"device: {device}")
 
-      x_best, loss_best, _, _=bayesian_opt(
-          self.loss,
-          x_low = x_low,
-          x_up = x_up,
-          n_init=n_init,
-          max_iter=max_iter,
-          acq_name=acq_name,
-          std=std,
-          beta=beta,
-          device=device
-      )
+        x_best, loss_best, _, _=bayesian_opt(
+            self.loss,
+            x_low = x_low,
+            x_up = x_up,
+            n_init=n_init,
+            max_iter=max_iter,
+            acq_name=acq_name,
+            std=std,
+            beta=beta,
+            device=device
+        )
 
-      self.optimal_model = self.loss.x_to_noise_model(x_best)
+        self.optimal_model = self.loss.x_to_noise_model(x_best)
 
     
     def mcmc_optimize(
@@ -335,19 +352,30 @@ class Characterizer:
         anneal_rate=0.99,
         patience=100
     ) -> None:
+      
+        print("MCMC optimization parameters:")
+        print(f"x_low: {x_low}")
+        print(f"x_up: {x_up}")
+        print(f"max_iter: {max_iter}")
+        print(f"step_size: {step_size}")
+        print(f"step_rate: {step_rate}")
+        print(f"min_step_size: {min_step_size}")
+        print(f"temperature: {temperature}")
+        print(f"anneal_rate: {anneal_rate}")
+        print(f"patience: {patience}")
 
-      x_best, loss_best=mcmc_opt(
-          self.loss, 
-          self.init_x, 
-          x_low=x_low, 
-          x_up=x_up, 
-          max_iter=max_iter, 
-          step_size=step_size, 
-          step_rate=step_rate, 
-          min_step_size=min_step_size, 
-          temperature=temperature, 
-          anneal_rate=anneal_rate,
-          patience=patience
-      )
+        x_best, loss_best=mcmc_opt(
+            self.loss, 
+            self.init_x, 
+            x_low=x_low, 
+            x_up=x_up, 
+            max_iter=max_iter, 
+            step_size=step_size, 
+            step_rate=step_rate, 
+            min_step_size=min_step_size, 
+            temperature=temperature, 
+            anneal_rate=anneal_rate,
+            patience=patience
+        )
 
-      self.optimal_model = self.loss.x_to_noise_model(x_best)
+        self.optimal_model = self.loss.x_to_noise_model(x_best)
