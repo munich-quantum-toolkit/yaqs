@@ -67,7 +67,7 @@ def lanczos_iteration(
 
     for j in range(lanczos_iterations - 1):
         w_j = matrix_free_operator(lanczos_mat[j])
-        alpha[j] = np.vdot(w_j, lanczos_mat[j]).real
+        alpha[j] = np.vdot(lanczos_mat[j], w_j).real
         w_j -= alpha[j] * lanczos_mat[j] + (beta[j - 1] * lanczos_mat[j - 1] if j > 0 else 0)
         beta[j] = np.linalg.norm(w_j).real
         if beta[j] < 100 * len(vec) * np.finfo(float).eps:
@@ -79,7 +79,7 @@ def lanczos_iteration(
     # Complete final iteration
     j = lanczos_iterations - 1
     w_j = matrix_free_operator(lanczos_mat[j])
-    alpha[j] = np.vdot(w_j, lanczos_mat[j]).real
+    alpha[j] = np.vdot(lanczos_mat[j], w_j).real
     return (alpha, beta, lanczos_mat.T)
 
 
