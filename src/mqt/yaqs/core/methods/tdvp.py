@@ -321,13 +321,50 @@ def project_bond(
     return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
 
 
+DENSE_THRESHOLD = 128
+
+def _build_dense_effective_hamiltonian(
+    projector: Callable[..., NDArray[np.complex128]],
+    proj_args: tuple[NDArray[np.complex128], ...],
+    tensor_shape: tuple[int, ...],
+) -> NDArray[np.complex128]:
+    """Build dense effective operator H_eff for a given projector and local tensor shape.
+
+    H_eff is defined such that, for a local tensor X with shape `tensor_shape`:
+
+        vec(projector(*proj_args, X)) == H_eff @ vec(X)
+
+    This is done by applying the projector to basis vectors, so it is
+    guaranteed to match project_site / project_bond exactly, regardless
+    of environment/MPO index ordering.
+    """
+    n_loc = int(np.prod(tensor_shape))
+    H_eff = np.empty((n_loc, n_loc), dtype=np.complex128)
+
+    # Reusable basis vector
+    e = np.zeros(n_loc, dtype=np.complex128)
+
+    for j in range(n_loc):
+        e[:] = 0.0
+        e[j] = 1.0
+
+        x_tensor = e.reshape(tensor_shape)
+        y_tensor = projector(*proj_args, x_tensor)
+
+        H_eff[:, j] = y_tensor.reshape(-1)
+
+    return H_eff
+
+
 def _evolve_local_tensor_krylov(
     projector: Callable[..., NDArray[np.complex128]],
     tensor: NDArray[np.complex128],
     dt: float,
     lanczos_iterations: int,
     proj_args: tuple[NDArray[np.complex128], ...],
+    dense_threshold: int = DENSE_THRESHOLD,
 ) -> NDArray[np.complex128]:
+
     """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
 
     Args:
@@ -344,11 +381,21 @@ def _evolve_local_tensor_krylov(
     """
     tensor_shape = tensor.shape
     tensor_flat = tensor.reshape(-1)
+    n_loc = tensor_flat.size
 
-    def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        x_tensor = x_flat.reshape(tensor_shape)
-        y_tensor = projector(*proj_args, x_tensor)
-        return y_tensor.reshape(-1)
+    if n_loc <= dense_threshold:
+        # Build dense H_eff once from environments + MPO
+        H_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
+
+        def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            return H_eff @ x_flat
+
+    else:
+        # Matrix-free projector path
+        def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            x_tensor = x_flat.reshape(tensor_shape)
+            y_tensor = projector(*proj_args, x_tensor)
+            return y_tensor.reshape(-1)
 
     evolved_flat = expm_krylov(
         apply_effective_operator,
