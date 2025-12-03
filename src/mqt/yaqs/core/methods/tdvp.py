@@ -20,7 +20,7 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
@@ -321,6 +321,44 @@ def project_bond(
     return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
 
 
+def _evolve_local_tensor_krylov(
+    projector: Callable[..., NDArray[np.complex128]],
+    tensor: NDArray[np.complex128],
+    dt: float,
+    lanczos_iterations: int,
+    proj_args: tuple[NDArray[np.complex128], ...],
+) -> NDArray[np.complex128]:
+    """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
+
+    Args:
+        projector: Function implementing the local operator action on a tensor,
+            e.g. project_site(left_env, right_env, op, ket) or
+                 project_bond(left_env, right_env, bond_tensor).
+        tensor: Tensor to evolve (arbitrary shape).
+        dt: Time step for evolution.
+        lanczos_iterations: Number of Lanczos iterations.
+        proj_args: Extra arguments passed to `projector` before the tensor.
+
+    Returns:
+        The evolved tensor with the same shape as `tensor`.
+    """
+    tensor_shape = tensor.shape
+    tensor_flat = tensor.reshape(-1)
+
+    def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        x_tensor = x_flat.reshape(tensor_shape)
+        y_tensor = projector(*proj_args, x_tensor)
+        return y_tensor.reshape(-1)
+
+    evolved_flat = expm_krylov(
+        apply_effective_operator,
+        tensor_flat,
+        dt,
+        lanczos_iterations,
+    )
+    return evolved_flat.reshape(tensor_shape)
+
+
 def update_site(
     left_env: NDArray[np.complex128],
     right_env: NDArray[np.complex128],
@@ -345,14 +383,14 @@ def update_site(
     Returns:
         NDArray[np.complex128]: The updated MPS tensor after evolution.
     """
-    ket_flat = ket.reshape(-1)
-    evolved_ket_flat = expm_krylov(
-        lambda x: project_site(left_env, right_env, op, x.reshape(ket.shape)).reshape(-1),
-        ket_flat,
-        dt,
-        lanczos_iterations,
+    proj_args = (left_env, right_env, op)
+    return _evolve_local_tensor_krylov(
+        projector=project_site,
+        tensor=ket,
+        dt=dt,
+        lanczos_iterations=lanczos_iterations,
+        proj_args=proj_args
     )
-    return evolved_ket_flat.reshape(ket.shape)
 
 
 def update_bond(
@@ -377,14 +415,14 @@ def update_bond(
     Returns:
         NDArray[np.complex128]: The updated bond tensor after evolution.
     """
-    bond_tensor_flat = bond_tensor.reshape(-1)
-    evolved_bond_tensor_flat = expm_krylov(
-        lambda x: project_bond(left_env, right_env, x.reshape(bond_tensor.shape)).reshape(-1),
-        bond_tensor_flat,
-        dt,
-        lanczos_iterations,
+    proj_args = (left_env, right_env)
+    return _evolve_local_tensor_krylov(
+        projector=project_bond,
+        tensor=bond_tensor,
+        dt=dt,
+        lanczos_iterations=lanczos_iterations,
+        proj_args=proj_args,
     )
-    return evolved_bond_tensor_flat.reshape(bond_tensor.shape)
 
 
 def single_site_tdvp(
