@@ -328,15 +328,51 @@ def _build_dense_effective_hamiltonian(
     proj_args: tuple[NDArray[np.complex128], ...],
     tensor_shape: tuple[int, ...],
 ) -> NDArray[np.complex128]:
-    """Build dense effective operator H_eff for a given projector and local tensor shape.
+    """
+    Construct a dense matrix representation H_eff of the linear map defined by a
+    local projector (e.g. ``project_site`` or ``project_bond``).
 
-    H_eff is defined such that, for a local tensor X with shape `tensor_shape`:
+    The operator is defined implicitly by the projector:
 
-        vec(projector(*proj_args, X)) == H_eff @ vec(X)
+        Y = projector(*proj_args, X)
 
-    This is done by applying the projector to basis vectors, so it is
-    guaranteed to match project_site / project_bond exactly, regardless
-    of environment/MPO index ordering.
+    where X and Y are local tensors of shape ``tensor_shape``.  This function
+    builds the unique dense matrix H_eff such that:
+
+        vec(Y) = H_eff @ vec(X)
+
+    for every possible local tensor X.
+
+    This is accomplished by applying the projector to each basis vector e_j of
+    the flattened local space and storing the resulting column vec(Y_j).  Since
+    the operator is reconstructed directly from the projector, the result is
+    guaranteed to match the behavior of ``project_site`` or ``project_bond``
+    exactly, independent of index order or contraction details.
+
+    Args:
+        projector:
+            A function implementing the local operator action, e.g.
+            ``project_site(left_env, right_env, op, ket)`` or
+            ``project_bond(left_env, right_env, bond_tensor)``.
+        proj_args:
+            Extra positional arguments passed to ``projector`` before the tensor X.
+            These typically include the left environment, right environment, and
+            (for project_site) the local MPO tensor.
+        tensor_shape:
+            The shape of the local tensor X.  The flattened operator H_eff will have
+            dimension ``n_loc = prod(tensor_shape)``.
+
+    Returns:
+        A dense matrix of shape (n_loc, n_loc) such that applying ``H_eff @ vec(X)``
+        reproduces the action of ``projector(*proj_args, X)`` to machine precision.
+
+    Notes
+    -----
+    - This method is intended for small local dimensions, where explicitly
+      materializing H_eff is efficient and typically faster than repeated
+      tensor contractions inside a Krylov iteration.
+    - For large local dimensions, the matrix-free path (projector applied
+      directly inside Lanczos) is preferred.
     """
     n_loc = int(np.prod(tensor_shape))
     H_eff = np.empty((n_loc, n_loc), dtype=np.complex128)
