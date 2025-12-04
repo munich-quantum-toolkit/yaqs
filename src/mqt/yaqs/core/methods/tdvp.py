@@ -20,7 +20,7 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
@@ -29,6 +29,8 @@ from ..data_structures.simulation_parameters import StrongSimParams, WeakSimPara
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from ..data_structures.networks import MPO, MPS
@@ -329,8 +331,7 @@ def _build_dense_effective_hamiltonian(
     proj_args: tuple[NDArray[np.complex128], ...],
     tensor_shape: tuple[int, ...],
 ) -> NDArray[np.complex128]:
-    """
-    Construct a dense matrix representation H_eff of the linear map defined by a
+    """Construct a dense matrix representation H_eff of the linear map defined by a
     local projector (e.g. ``project_site`` or ``project_bond``).
 
     The operator is defined implicitly by the projector:
@@ -367,7 +368,7 @@ def _build_dense_effective_hamiltonian(
         A dense matrix of shape (n_loc, n_loc) such that applying ``H_eff @ vec(X)``
         reproduces the action of ``projector(*proj_args, X)`` to machine precision.
 
-    Notes
+    Notes:
     -----
     - This method is intended for small local dimensions, where explicitly
       materializing H_eff is efficient and typically faster than repeated
@@ -401,7 +402,6 @@ def _evolve_local_tensor_krylov(
     proj_args: tuple[NDArray[np.complex128], ...],
     dense_threshold: int = DENSE_THRESHOLD,
 ) -> NDArray[np.complex128]:
-
     """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
 
     Args:
@@ -469,11 +469,7 @@ def update_site(
     """
     proj_args = (left_env, right_env, op)
     return _evolve_local_tensor_krylov(
-        projector=project_site,
-        tensor=ket,
-        dt=dt,
-        lanczos_iterations=lanczos_iterations,
-        proj_args=proj_args
+        projector=project_site, tensor=ket, dt=dt, lanczos_iterations=lanczos_iterations, proj_args=proj_args
     )
 
 
