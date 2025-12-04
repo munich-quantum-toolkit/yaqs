@@ -40,6 +40,7 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
+    _build_dense_effective_hamiltonian,
     global_dynamic_tdvp,
     merge_mpo_tensors,
     merge_mps_tensors,
@@ -52,7 +53,6 @@ from mqt.yaqs.core.methods.tdvp import (
     update_left_environment,
     update_right_environment,
     update_site,
-    _build_dense_effective_hamiltonian
 )
 
 if TYPE_CHECKING:
@@ -557,15 +557,15 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
     np.testing.assert_allclose(theta_recon, theta_opt_k, atol=1e-10, rtol=1e-8)
 
 
-def test_dense_vs_project_site():
+def test_dense_vs_project_site() -> None:
     # small random dims
     s, l, r = 2, 2, 3
     chi_aL = chi_aR = 2
 
-    ket = (np.random.randn(s, l, r) + 1j*np.random.randn(s, l, r))
-    left_env = (np.random.randn(l, chi_aL, l) + 1j*np.random.randn(l, chi_aL, l))
-    right_env = (np.random.randn(r, chi_aR, r) + 1j*np.random.randn(r, chi_aR, r))
-    op = (np.random.randn(s, s, chi_aL, chi_aR) + 1j*np.random.randn(s, s, chi_aL, chi_aR))
+    ket = np.random.randn(s, l, r) + 1j * np.random.randn(s, l, r)
+    left_env = np.random.randn(l, chi_aL, l) + 1j * np.random.randn(l, chi_aL, l)
+    right_env = np.random.randn(r, chi_aR, r) + 1j * np.random.randn(r, chi_aR, r)
+    op = np.random.randn(s, s, chi_aL, chi_aR) + 1j * np.random.randn(s, s, chi_aL, chi_aR)
 
     H_eff = _build_dense_effective_hamiltonian(
         project_site,
@@ -579,13 +579,13 @@ def test_dense_vs_project_site():
     np.testing.assert_allclose(y1, y2, atol=1e-12)
 
 
-def test_dense_vs_project_bond():
+def test_dense_vs_project_bond() -> None:
     l, r = 3, 4
     chi_a = 2
 
-    C = (np.random.randn(l, r) + 1j*np.random.randn(l, r))
-    left_env = (np.random.randn(l, chi_a, l) + 1j*np.random.randn(l, chi_a, l))
-    right_env = (np.random.randn(r, chi_a, r) + 1j*np.random.randn(r, chi_a, r))
+    C = np.random.randn(l, r) + 1j * np.random.randn(l, r)
+    left_env = np.random.randn(l, chi_a, l) + 1j * np.random.randn(l, chi_a, l)
+    right_env = np.random.randn(r, chi_a, r) + 1j * np.random.randn(r, chi_a, r)
 
     H_eff = _build_dense_effective_hamiltonian(
         project_bond,
