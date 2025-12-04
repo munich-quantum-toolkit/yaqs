@@ -40,7 +40,7 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
-    _build_dense_effective_hamiltonian,
+    _build_dense_effective_hamiltonian,  # noqa: PLC2701
     global_dynamic_tdvp,
     merge_mpo_tensors,
     merge_mps_tensors,
@@ -558,14 +558,25 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
 
 
 def test_dense_vs_project_site() -> None:
+    """Dense H_eff should match the action of project_site on a local tensor."""
     # small random dims
-    s, l, r = 2, 2, 3
-    chi_aL = chi_aR = 2
+    phys_dim, bond_left_dim, bond_right_dim = 2, 2, 3
+    chi_a_left = chi_a_right = 2
 
-    ket = np.random.randn(s, l, r) + 1j * np.random.randn(s, l, r)
-    left_env = np.random.randn(l, chi_aL, l) + 1j * np.random.randn(l, chi_aL, l)
-    right_env = np.random.randn(r, chi_aR, r) + 1j * np.random.randn(r, chi_aR, r)
-    op = np.random.randn(s, s, chi_aL, chi_aR) + 1j * np.random.randn(s, s, chi_aL, chi_aR)
+    rng = np.random.default_rng(1234)
+
+    ket = rng.normal(size=(phys_dim, bond_left_dim, bond_right_dim)) + 1j * rng.normal(
+        size=(phys_dim, bond_left_dim, bond_right_dim)
+    )
+    left_env = rng.normal(size=(bond_left_dim, chi_a_left, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi_a_left, bond_left_dim)
+    )
+    right_env = rng.normal(size=(bond_right_dim, chi_a_right, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi_a_right, bond_right_dim)
+    )
+    op = rng.normal(size=(phys_dim, phys_dim, chi_a_left, chi_a_right)) + 1j * rng.normal(
+        size=(phys_dim, phys_dim, chi_a_left, chi_a_right)
+    )
 
     H_eff = _build_dense_effective_hamiltonian(
         project_site,
@@ -580,12 +591,19 @@ def test_dense_vs_project_site() -> None:
 
 
 def test_dense_vs_project_bond() -> None:
-    l, r = 3, 4
+    """Dense H_eff should match the action of project_bond on a bond tensor."""
+    bond_left_dim, bond_right_dim = 3, 4
     chi_a = 2
 
-    C = np.random.randn(l, r) + 1j * np.random.randn(l, r)
-    left_env = np.random.randn(l, chi_a, l) + 1j * np.random.randn(l, chi_a, l)
-    right_env = np.random.randn(r, chi_a, r) + 1j * np.random.randn(r, chi_a, r)
+    rng = np.random.default_rng(5678)
+
+    C = rng.normal(size=(bond_left_dim, bond_right_dim)) + 1j * rng.normal(size=(bond_left_dim, bond_right_dim))
+    left_env = rng.normal(size=(bond_left_dim, chi_a, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi_a, bond_left_dim)
+    )
+    right_env = rng.normal(size=(bond_right_dim, chi_a, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi_a, bond_right_dim)
+    )
 
     H_eff = _build_dense_effective_hamiltonian(
         project_bond,

@@ -331,25 +331,23 @@ def _build_dense_effective_hamiltonian(
     proj_args: tuple[NDArray[np.complex128], ...],
     tensor_shape: tuple[int, ...],
 ) -> NDArray[np.complex128]:
-    """Construct a dense matrix representation H_eff of the linear map defined by a
-    local projector (e.g. ``project_site`` or ``project_bond``).
+    r"""Construct a dense matrix representation of the local effective operator.
 
     The operator is defined implicitly by the projector:
 
         Y = projector(*proj_args, X)
 
-    where X and Y are local tensors of shape ``tensor_shape``.  This function
-    builds the unique dense matrix H_eff such that:
+    where X and Y are local tensors of shape ``tensor_shape``. This function
+    builds the unique dense matrix ``H_eff`` such that:
 
         vec(Y) = H_eff @ vec(X)
 
-    for every possible local tensor X.
-
-    This is accomplished by applying the projector to each basis vector e_j of
-    the flattened local space and storing the resulting column vec(Y_j).  Since
-    the operator is reconstructed directly from the projector, the result is
-    guaranteed to match the behavior of ``project_site`` or ``project_bond``
-    exactly, independent of index order or contraction details.
+    for every possible local tensor X. This is accomplished by applying the
+    projector to each basis vector ``e_j`` of the flattened local space and
+    storing the resulting column ``vec(Y_j)``. Since the operator is
+    reconstructed directly from the projector, the result is guaranteed to
+    match the behavior of ``project_site`` or ``project_bond`` exactly,
+    independent of index order or contraction details.
 
     Args:
         projector:
@@ -359,25 +357,25 @@ def _build_dense_effective_hamiltonian(
         proj_args:
             Extra positional arguments passed to ``projector`` before the tensor X.
             These typically include the left environment, right environment, and
-            (for project_site) the local MPO tensor.
+            (for ``project_site``) the local MPO tensor.
         tensor_shape:
-            The shape of the local tensor X.  The flattened operator H_eff will have
-            dimension ``n_loc = prod(tensor_shape)``.
+            The shape of the local tensor X. The flattened operator ``H_eff`` will
+            have dimension ``n_loc = prod(tensor_shape)``.
 
     Returns:
-        A dense matrix of shape (n_loc, n_loc) such that applying ``H_eff @ vec(X)``
-        reproduces the action of ``projector(*proj_args, X)`` to machine precision.
+        NDArray[np.complex128]: A dense matrix of shape ``(n_loc, n_loc)`` such that
+        applying ``H_eff @ vec(X)`` reproduces the action of
+        ``projector(*proj_args, X)`` to machine precision.
 
     Notes:
-    -----
-    - This method is intended for small local dimensions, where explicitly
-      materializing H_eff is efficient and typically faster than repeated
-      tensor contractions inside a Krylov iteration.
-    - For large local dimensions, the matrix-free path (projector applied
-      directly inside Lanczos) is preferred.
+        This method is intended for small local dimensions, where explicitly
+        materializing ``H_eff`` is efficient and typically faster than repeated
+        tensor contractions inside a Krylov iteration. For large local
+        dimensions, the matrix-free path (projector applied directly inside
+        Lanczos) is preferred.
     """
     n_loc = int(np.prod(tensor_shape))
-    H_eff = np.empty((n_loc, n_loc), dtype=np.complex128)
+    h_eff = np.empty((n_loc, n_loc), dtype=np.complex128)
 
     # Reusable basis vector
     e = np.zeros(n_loc, dtype=np.complex128)
@@ -389,9 +387,9 @@ def _build_dense_effective_hamiltonian(
         x_tensor = e.reshape(tensor_shape)
         y_tensor = projector(*proj_args, x_tensor)
 
-        H_eff[:, j] = y_tensor.reshape(-1)
+        h_eff[:, j] = y_tensor.reshape(-1)
 
-    return H_eff
+    return h_eff
 
 
 def _evolve_local_tensor_krylov(
@@ -412,6 +410,7 @@ def _evolve_local_tensor_krylov(
         dt: Time step for evolution.
         lanczos_iterations: Number of Lanczos iterations.
         proj_args: Extra arguments passed to `projector` before the tensor.
+        dense_threshold: Maximum size of flattened tensor to use dense operator.
 
     Returns:
         The evolved tensor with the same shape as `tensor`.
@@ -422,10 +421,10 @@ def _evolve_local_tensor_krylov(
 
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
-        H_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
+        h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
-            return H_eff @ x_flat
+            return h_eff @ x_flat
 
     else:
         # Matrix-free projector path
