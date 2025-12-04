@@ -35,6 +35,9 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
+DENSE_THRESHOLD = 128
+
+
 def split_mps_tensor(
     tensor: NDArray[np.complex128],
     svd_distribution: str,
@@ -320,8 +323,6 @@ def project_bond(
     tensor = np.tensordot(bond_tensor, right_env, axes=1)
     return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
 
-
-DENSE_THRESHOLD = 128
 
 def _build_dense_effective_hamiltonian(
     projector: Callable[..., NDArray[np.complex128]],
