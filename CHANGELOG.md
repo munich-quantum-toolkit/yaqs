@@ -9,6 +9,15 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+### Added
+
+- TDVP now utilizes a dense Hamiltonian for small tensor sizes (adjusted by global variable DENSE_THRESHOLD)
+- Updated readability of TDVP subfunctions and Lanczos method
+
+### Fixed
+
+- Updated Lanczos method's vdot order to match mathematical expectations
+
 ## [0.3.2] - 2025-10-16
 
 _If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#032)._
