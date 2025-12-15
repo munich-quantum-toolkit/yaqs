@@ -55,7 +55,7 @@ def load_gamma_dt_heatmap(
 grid = load_gamma_dt_heatmap(which_obs="max_bond")                 # χ_avg
 scaled_grid = np.full_like(grid, np.nan)
 for k, dt in enumerate(dt_list):
-    scaled_grid[:, k] = grid[:, k] * T / dt                         # χ_avg T/dt
+    scaled_grid[:, k] = grid[:, k]**2 * T / dt                         # χ_avg T/dt
 
 dt_arr = np.array(dt_list)
 gamma_arr = np.array(gamma_list)
@@ -150,7 +150,7 @@ im_b = ax.imshow(
     scaled_grid,
     origin="lower",
     aspect="auto",
-    cmap="magma_r",
+    cmap="coolwarm",
     vmin=vmin_b,
     vmax=vmax_b,
 )
@@ -181,15 +181,17 @@ ax.set_ylim(ymin, ymax)
 ax = axes[2]
 
 # --- Updated phase colors ---
-c_coherent = "#fff2a0"      # yellow
-c_zeno     = "#9ecae1"      # soft blue
-c_noiseind = "#c7e9c0"      # green (noise-independent)
-c_unresolved = "#fcbba1"    # red (unresolvable region)
+c_coherent   = "#fff2a0"    # yellow
+c_zeno       = "#9ecae1"    # blue
+c_noiseind   = "#c7e9c0"    # green (noise-independent)
+c_inaccurate = "#fdae6b"    # orange (inaccurate large-dt regime)
+c_dp         = "#fcbba1"    # red (dp>1 wedge)
 
 col_coherent = np.array(mcolors.to_rgb(c_coherent))
 col_zeno     = np.array(mcolors.to_rgb(c_zeno))
 col_noiseind = np.array(mcolors.to_rgb(c_noiseind))
-col_unres    = np.array(mcolors.to_rgb(c_unresolved))
+col_inacc    = np.array(mcolors.to_rgb(c_inaccurate))
+col_dp       = np.array(mcolors.to_rgb(c_dp))
 
 # Conceptual grid in normalized coordinates
 nx_c, ny_c = 400, 300
@@ -198,16 +200,20 @@ y_c = np.linspace(0, 1, ny_c)
 X_c, Y_c = np.meshgrid(x_c, y_c)
 
 # Boundaries
-xc_boundary = 0.4   # dt crossover
-yc_boundary = 0.5   # coherent ↔ Zeno
+xc_boundary = 0.25  # dt crossover (left vs right)
+yc_boundary = 0.35  # coherent ↔ Zeno
 wx = 0.10
 wy = 0.10
+
+# --- NEW: "inaccurate" band on far right (large dt) ---
+x_inacc = 0.80   # where the band starts (normalized dt)
+w_inacc = 0.05   # half-width for smooth blend into inaccurate band
 
 # Base image initialization
 img = np.zeros((ny_c, nx_c, 3))
 
-mask_left   = X_c < xc_boundary
-mask_right  = ~mask_left
+mask_left     = X_c < xc_boundary
+mask_right    = ~mask_left
 mask_coherent = mask_left & (Y_c < yc_boundary)
 mask_zeno     = mask_left & (Y_c >= yc_boundary)
 
@@ -216,39 +222,43 @@ img[mask_coherent] = col_coherent
 img[mask_zeno]     = col_zeno
 img[mask_right]    = col_noiseind
 
-# --- Smooth vertical blending (left → right) ---
+# --- Smooth vertical blending (left → noise-independent) ---
 t_x = np.clip((X_c - (xc_boundary - wx)) / (2 * wx), 0.0, 1.0)[..., None]
 left_colors = np.zeros_like(img)
 left_colors[mask_coherent] = col_coherent
 left_colors[mask_zeno]     = col_zeno
 left_colors[mask_right]    = col_noiseind
-
 img = (1 - t_x) * left_colors + t_x * col_noiseind
 
 # --- Smooth horizontal blending (coherent ↔ Zeno) ---
 t_y = np.clip((Y_c - (yc_boundary - wy)) / (2 * wy), 0.0, 1.0)[..., None]
 blend_left_mask = X_c < (xc_boundary + wx)
 blend_left_mask_3d = blend_left_mask[..., None]
-
 blend_colors = (1 - t_y) * col_coherent + t_y * col_zeno
 img = np.where(blend_left_mask_3d, blend_colors, img)
 
-# --- NEW: Red triangle in the top-right (“unresolvable”) ---
-# Define triangle mask: vertices at (xc_boundary,1), (1,1), (1,0.7)
+# --------------------------------------------------------
+# 1) Inaccurate large-dt band (apply first)
+# --------------------------------------------------------
+t_inacc = np.clip((X_c - (x_inacc - w_inacc)) / (2 * w_inacc), 0.0, 1.0)[..., None]
+mask_inacc_domain = (X_c >= (x_inacc - w_inacc))[..., None]
+img = np.where(mask_inacc_domain, (1 - t_inacc) * img + t_inacc * col_inacc, img)
+
+# --------------------------------------------------------
+# 2) dp>1 wedge (apply second so it remains distinct on top)
+# --------------------------------------------------------
+# Triangle vertices: (xc_boundary,1), (1,1), (1,0.7)
 tri_x1, tri_y1 = xc_boundary, 1.0
 tri_x2, tri_y2 = 1.0,       1.0
 tri_x3, tri_y3 = 1.0,       0.7
 
-# Barycentric coordinate mask for triangle
 den = (tri_y2 - tri_y3)*(tri_x1 - tri_x3) + (tri_x3 - tri_x2)*(tri_y1 - tri_y3)
 w1 = ((tri_y2 - tri_y3)*(X_c - tri_x3) + (tri_x3 - tri_x2)*(Y_c - tri_y3)) / den
 w2 = ((tri_y3 - tri_y1)*(X_c - tri_x3) + (tri_x1 - tri_x3)*(Y_c - tri_y3)) / den
 w3 = 1 - w1 - w2
+mask_dp = (w1 >= 0) & (w2 >= 0) & (w3 >= 0)
 
-mask_tri = (w1 >= 0) & (w2 >= 0) & (w3 >= 0)
-
-# Overwrite with red
-img[mask_tri] = col_unres
+img[mask_dp] = col_dp  # overwrite (keeps dp wedge separate even inside the band)
 
 # --- Draw figure ---
 ax.imshow(img, origin="lower", extent=(0, 1, 0, 1), aspect="auto")
@@ -256,18 +266,22 @@ ax.imshow(img, origin="lower", extent=(0, 1, 0, 1), aspect="auto")
 props = dict(ha="center", va="center", fontsize=11, color="black")
 
 ax.text(0.25, 0.20,
-        "Coherent phase\nHigh $\\overline{\\chi}$, many ops\n(Memory & CPU limited)",
+        "Coherent regime\nHigh $\\overline{\\chi}$, many ops\n(Memory & CPU limited)",
         **props)
 
 ax.text(0.25, 0.75,
-        "Zeno phase\nLow $\\overline{\\chi}$, many ops\n(CPU limited)",
+        "Zeno regime\nLow $\\overline{\\chi}$, many ops\n(CPU limited)",
         **props)
 
-ax.text(0.75, 0.50,
-        "Noise-independent phase\nHigh $\\overline{\\chi}$, few ops\n(Memory limited)",
+ax.text(0.62, 0.45,
+        "Noise-independent regime\n$\\overline{\\chi}$ saturated, few ops\n(Memory limited)",
         **props)
 
-ax.text(0.825, 0.9,
+ax.text(0.90, 0.30,
+        "Low accuracy regime",
+        **props)
+
+ax.text(0.86, 0.90,
         "$dp>1$",
         **props)
 
@@ -284,7 +298,6 @@ for spine in ax.spines.values():
 
 ax.text(0.02, 0.98, "(c)", transform=ax.transAxes,
         ha="left", va="top", fontsize=12, fontweight="bold")
-
 
 fig.tight_layout()
 plt.show()
