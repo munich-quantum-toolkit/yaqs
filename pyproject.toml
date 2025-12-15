@@ -57,6 +57,11 @@ Issues = "https://github.com/munich-quantum-toolkit/yaqs/issues"
 Discussions = "https://github.com/munich-quantum-toolkit/yaqs/discussions"
 
 
+[tool.check-sdist]
+sdist-only = [
+    "src/mqt/yaqs/_version.py",
+]
+
 [tool.hatch.version]
 source = "vcs"
 

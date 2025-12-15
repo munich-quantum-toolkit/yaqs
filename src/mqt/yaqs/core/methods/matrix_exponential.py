@@ -57,20 +57,21 @@ def lanczos_iteration(
               columns are the orthonormal Lanczos vectors.
     """
     # normalize starting vector
-    vec /= np.linalg.norm(vec)
+    v0 = vec.astype(np.complex128, copy=True)
+    v0 /= np.linalg.norm(v0)
 
     alpha = np.zeros(lanczos_iterations)
     beta = np.zeros(lanczos_iterations - 1)
 
-    lanczos_mat = np.zeros((lanczos_iterations, len(vec)), dtype=complex)
-    lanczos_mat[0] = vec
+    lanczos_mat = np.zeros((lanczos_iterations, len(v0)), dtype=complex)
+    lanczos_mat[0] = v0
 
     for j in range(lanczos_iterations - 1):
         w_j = matrix_free_operator(lanczos_mat[j])
-        alpha[j] = np.vdot(w_j, lanczos_mat[j]).real
+        alpha[j] = np.vdot(lanczos_mat[j], w_j).real
         w_j -= alpha[j] * lanczos_mat[j] + (beta[j - 1] * lanczos_mat[j - 1] if j > 0 else 0)
         beta[j] = np.linalg.norm(w_j).real
-        if beta[j] < 100 * len(vec) * np.finfo(float).eps:
+        if beta[j] < 100 * len(v0) * np.finfo(float).eps:
             # Terminate early if the next vector is (numerically) zero.
             lanczos_iterations = j + 1
             return (alpha[:lanczos_iterations], beta[: lanczos_iterations - 1], lanczos_mat[:lanczos_iterations, :].T)
@@ -79,7 +80,7 @@ def lanczos_iteration(
     # Complete final iteration
     j = lanczos_iterations - 1
     w_j = matrix_free_operator(lanczos_mat[j])
-    alpha[j] = np.vdot(w_j, lanczos_mat[j]).real
+    alpha[j] = np.vdot(lanczos_mat[j], w_j).real
     return (alpha, beta, lanczos_mat.T)
 
 
@@ -109,6 +110,7 @@ def expm_krylov(
         NDArray[np.complex128]:
             The approximate result of applying exp(-1j * dt * A) to vec.
     """
+    vec_norm = np.linalg.norm(vec)
     alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, vec, lanczos_iterations)
     try:
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stemr")
@@ -117,6 +119,6 @@ def expm_krylov(
         w_hess, u_hess = eigh_tridiagonal(alpha, beta, lapack_driver="stebz")
     # Construct the approximation: scale the exponential of the eigenvalues by the norm of v,
     # and project back to the full space via the Lanczos basis V.
-    return np.asarray(
-        lanczos_mat @ (u_hess @ (np.linalg.norm(vec) * np.exp(-1j * dt * w_hess) * u_hess[0])), dtype=np.complex128
-    )
+    coeffs = vec_norm * np.exp(-1j * dt * w_hess) * u_hess[0]
+
+    return np.asarray(lanczos_mat @ (u_hess @ coeffs), dtype=np.complex128)

@@ -40,6 +40,7 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
+    _build_dense_effective_hamiltonian,  # noqa: PLC2701
     global_dynamic_tdvp,
     merge_mpo_tensors,
     merge_mps_tensors,
@@ -554,3 +555,63 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
     u, s, v = np.linalg.svd(theta, full_matrices=False)
     theta_opt_k = (u[:, :k] * s[:k]) @ v[:k, :]
     np.testing.assert_allclose(theta_recon, theta_opt_k, atol=1e-10, rtol=1e-8)
+
+
+def test_dense_vs_project_site() -> None:
+    """Dense H_eff should match the action of project_site on a local tensor."""
+    # small random dims
+    phys_dim, bond_left_dim, bond_right_dim = 2, 2, 3
+    chi_a_left = chi_a_right = 2
+
+    rng = np.random.default_rng(1234)
+
+    ket = rng.normal(size=(phys_dim, bond_left_dim, bond_right_dim)) + 1j * rng.normal(
+        size=(phys_dim, bond_left_dim, bond_right_dim)
+    )
+    left_env = rng.normal(size=(bond_left_dim, chi_a_left, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi_a_left, bond_left_dim)
+    )
+    right_env = rng.normal(size=(bond_right_dim, chi_a_right, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi_a_right, bond_right_dim)
+    )
+    op = rng.normal(size=(phys_dim, phys_dim, chi_a_left, chi_a_right)) + 1j * rng.normal(
+        size=(phys_dim, phys_dim, chi_a_left, chi_a_right)
+    )
+
+    H_eff = _build_dense_effective_hamiltonian(
+        project_site,
+        (left_env, right_env, op),
+        ket.shape,
+    )
+
+    y1 = project_site(left_env, right_env, op, ket).reshape(-1)
+    y2 = H_eff @ ket.reshape(-1)
+
+    np.testing.assert_allclose(y1, y2, atol=1e-12)
+
+
+def test_dense_vs_project_bond() -> None:
+    """Dense H_eff should match the action of project_bond on a bond tensor."""
+    bond_left_dim, bond_right_dim = 3, 4
+    chi_a = 2
+
+    rng = np.random.default_rng(5678)
+
+    C = rng.normal(size=(bond_left_dim, bond_right_dim)) + 1j * rng.normal(size=(bond_left_dim, bond_right_dim))
+    left_env = rng.normal(size=(bond_left_dim, chi_a, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi_a, bond_left_dim)
+    )
+    right_env = rng.normal(size=(bond_right_dim, chi_a, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi_a, bond_right_dim)
+    )
+
+    H_eff = _build_dense_effective_hamiltonian(
+        project_bond,
+        (left_env, right_env),
+        C.shape,
+    )
+
+    y1 = project_bond(left_env, right_env, C).reshape(-1)
+    y2 = H_eff @ C.reshape(-1)
+
+    np.testing.assert_allclose(y1, y2, atol=1e-12)
