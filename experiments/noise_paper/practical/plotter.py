@@ -7,7 +7,7 @@ from matplotlib import colors as mcolors
 # ------------------------
 # Data + parameters
 # ------------------------
-dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.2, 0.25]
+dt_list = [0.001, 0.00125, 0.0025, 0.004, 0.005, 0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1]
 gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]
 gamma_min = 0.01
 gamma_max = 50
@@ -55,7 +55,7 @@ def load_gamma_dt_heatmap(
 grid = load_gamma_dt_heatmap(which_obs="max_bond")                 # χ_avg
 scaled_grid = np.full_like(grid, np.nan)
 for k, dt in enumerate(dt_list):
-    scaled_grid[:, k] = grid[:, k]**2 * T / dt                         # χ_avg T/dt
+    scaled_grid[:, k] = grid[:, k] * T / dt                         # χ_avg T/dt
 
 dt_arr = np.array(dt_list)
 gamma_arr = np.array(gamma_list)
