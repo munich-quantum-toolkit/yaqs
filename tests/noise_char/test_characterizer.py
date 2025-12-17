@@ -191,7 +191,7 @@ def create_instances(
     propagator.set_observable_list(obs_list)
     propagator.run(ref_noise_model)
 
-    loss = LossClass(ref_traj=propagator.obs_traj, traj_gradients=propagator, working_dir=tmp_path, print_to_file=False)
+    loss = LossClass(ref_traj=propagator.obs_traj, propagator=propagator, working_dir=tmp_path, print_to_file=False)
 
     return h_0, init_state, obs_list, sim_params, ref_noise_model, propagator, loss
 
@@ -203,16 +203,16 @@ def test_characterizer_init(tmp_path: Path) -> None:
     _h_0, _init_state, _obs_list, _sim_params, ref_noise_model, propagator, loss = create_instances(test, tmp_path)
 
     characterizer = Characterizer(
-        traj_gradients=propagator,
+        propagator=propagator,
         init_guess=ref_noise_model,
         loss=loss,
     )
 
     assert isinstance(characterizer.init_guess, CompactNoiseModel)
-    assert isinstance(characterizer.traj_gradients, propagation.Propagator)
+    assert isinstance(characterizer.propagator, propagation.Propagator)
     assert isinstance(characterizer.loss, LossClass)
     assert isinstance(characterizer.init_x, np.ndarray)
 
-    characterizer.adam_optimize(max_iterations=1)
+    characterizer.adam_optimize(max_iter=1)
 
     assert isinstance(characterizer.optimal_model, CompactNoiseModel)

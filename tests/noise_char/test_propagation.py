@@ -174,11 +174,9 @@ def test_propagatorwithgradients_runs() -> None:
 
     assert isinstance(propagator.times, np.ndarray)
     assert isinstance(propagator.obs_array, np.ndarray)
-    assert isinstance(propagator.d_on_d_gk_array, np.ndarray)
 
     assert propagator.times.shape == (test.n_t,)
     assert propagator.obs_array.shape == (test.n_obs, test.n_t)
-    assert propagator.d_on_d_gk_array.shape == (test.n_jump, test.n_obs, test.n_t)
 
 
 def test_raises_errors() -> None:

@@ -156,46 +156,10 @@ def create_loss_instance(tmp_path: Path, test: Parameters) -> LossClass:
 
     return LossClass(
         ref_traj=propagator.obs_traj,
-        traj_gradients=propagator,
+        propagator=propagator,
         working_dir=tmp_path,
         print_to_file=False,
     )
-
-
-def test_trapezoidal_basic() -> None:
-    """Test the basic functionality of the trapezoidal integration method.
-
-    This test verifies that the `optimization.trapezoidal` function correctly computes
-    the cumulative integral of y = x^2 over the interval [0, 1] using a discretized grid.
-    It asserts that the final value of the cumulative integral is close to the analytical
-    result of the definite integral of x^2 from 0 to 1, which is 1/3, within a tolerance of 1e-2.
-    """
-    x = np.linspace(0, 1, 20)
-    y = x**2
-    result = optimization.trapezoidal(y, x)
-    # The last value should be close to the integral of x^2 from 0 to 1, which is 1/3
-    assert np.isclose(result[-1], 1 / 3, atol=1e-2)
-
-
-def test_trapezoidal_shape_and_error() -> None:
-    """Test the `trapezoidal` function from the `optimization` module for correct output shape and error handling.
-
-    This test verifies that:
-    - The output of `optimization.trapezoidal(y, x)` has the same shape as the input array `y`.
-    - A `ValueError` is raised when the lengths of `y` and `x` do not match.
-    """
-    x = np.linspace(0, 1, 10)
-    y = np.sin(x)
-    result = optimization.trapezoidal(y, x)
-    assert result.shape == y.shape
-    # Should raise ValueError if lengths mismatch
-    with pytest.raises(ValueError, match="Mismatch in the number of elements between x and y"):
-        optimization.trapezoidal(y, x[:-1])
-
-    with pytest.raises(ValueError, match="x or y is None"):
-        optimization.trapezoidal(None, np.array([0, 1, 2]))
-    with pytest.raises(ValueError, match="x or y is None"):
-        optimization.trapezoidal(np.array([0, 1, 2]), None)
 
 
 def assert_list_of_arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]) -> None:
@@ -471,7 +435,7 @@ def test_adam_optimizer_runs(tmp_path: Path) -> None:
     loss_function = create_loss_instance(tmp_path, test)
 
     x0 = np.array([0.5, 0.5])  # Initial guess for the parameters
-    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = adam_opt(loss_function, x0, max_iterations=3)
+    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = adam_opt(loss_function, x0, max_iter=3)
     assert isinstance(f_hist, list)
     assert isinstance(x_hist, list)
     assert isinstance(x_avg_hist, list)
@@ -544,7 +508,7 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
         x_copy=np.array([1, 1]),  # ignored because restart=True
         restart=True,
         restart_file=restart_file,
-        max_iterations=7,  # keep short
+        max_iter=7,  # keep short
     )
 
     # Assert
@@ -558,7 +522,7 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
             x_copy=np.array([1, 1]),  # ignored because restart=True
             restart=True,
             restart_file=Path("/dummy/restart/file"),
-            max_iterations=7,  # keep short
+            max_iter=7,  # keep short
         )
 
 
@@ -570,14 +534,14 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
         - Creates several restart .pkl files in tmp_path with different iteration/t/obs_traj
           values, deliberately writing them in a non-chronological order on disk.
         - Calls adam_opt with restart=True and restart_file=None and
-          max_iterations=1 so the optimizer does not proceed beyond loading the restart.
+          max_iter=1 so the optimizer does not proceed beyond loading the restart.
         - Verifies that the optimizer loaded the restart file corresponding to the largest
           iteration (the "latest" file) by asserting returned_t and returned_obs match the
           values stored in that file.
     2. .pkl file cleanup when restart is disabled
         - Leaves a non-.pkl file in tmp_path to ensure non-restart files are not touched.
         - Recreates the loss instance and calls adam_opt with restart=False
-          and restart_file=None (again with max_iterations=1).
+          and restart_file=None (again with max_iter=1).
         - Verifies that the optimizer removed the expected restart .pkl files according to
           the behavior under test (only the expected baseline .pkl remains) and that the
           non-.pkl file is preserved with its original contents.
@@ -622,9 +586,9 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
             pickle.dump(saved, fh, protocol=pickle.HIGHEST_PROTOCOL)
 
     # Call optimizer with restart enabled and restart_file=None.
-    # Set max_iterations=1 so that after loading the restart file the optimizer loop does not run.
+    # Set max_iter=1 so that after loading the restart file the optimizer loop does not run.
     _, _, _, returned_t, returned_obs = adam_opt(
-        loss, np.array([0.0] * test.d), restart=True, restart_file=None, max_iterations=1
+        loss, np.array([0.0] * test.d), restart=True, restart_file=None, max_iter=1
     )
 
     # The optimizer should have loaded the latest restart file (restart_step_0003.pkl)
@@ -639,7 +603,7 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
 
     # Testing all .pkl files are deleted if restart is False
     _, _, _, returned_t, returned_obs = adam_opt(
-        loss, np.array([0.0] * test.d), restart=False, restart_file=None, max_iterations=1
+        loss, np.array([0.0] * test.d), restart=False, restart_file=None, max_iter=1
     )
 
     # Assert all .pkl files were removed

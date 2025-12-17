@@ -21,64 +21,8 @@ from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from numpy.typing import NDArray
-
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
     from mqt.yaqs.noise_char.propagation import Propagator
-
-
-def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
-    """Compute the cumulative integral of `y` with respect to `x` using the trapezoidal rule.
-
-    This function applies the trapezoidal rule to compute the cumulative numerical
-    integration of discrete data points. The output array contains the running integral
-    from the first data point up to each index.
-
-    Args:
-        y (array_like of float or None): Dependent variable values at each point in `x`.
-            Must be the same length as `x`.
-        x (array_like of float or None): Independent variable values corresponding to `y`.
-            Must be the same length as `y`.
-
-    Returns:
-        numpy.ndarray of float64: Array of cumulative integral values.
-        `integral[i]` is the integral from `x[0]` to `x[i]`.
-
-    Raises:
-        ValueError: If either `x` or `y` is `None`.
-        ValueError: If `x` and `y` have different lengths.
-
-    Notes:
-        - The first value of the returned integral is always `0.0`.
-        - The trapezoidal rule approximates the area under the curve by summing the
-          areas of trapezoids formed between consecutive points.
-        - This method assumes that `x` is ordered and that the intervals may be non-uniform.
-
-    Examples:
-        >>> import numpy as np
-        >>> x = np.array([0, 1, 2, 3])
-        >>> y = np.array([0, 1, 4, 9])
-        >>> trapezoidal(y, x)
-        array([0. , 0.5, 2.5, 7. ])
-    """
-    if y is None or x is None:
-        msg = f"x or y is None. x = {x}, y = {y}"
-        raise ValueError(msg)
-
-    y = np.asarray(y, dtype=np.float64)
-    x = np.asarray(x, dtype=np.float64)
-
-    if len(x) != len(y):
-        msg = f"Mismatch in the number of elements between x and y. len(x) = {len(x)} and len(y) = {len(y)}"
-        raise ValueError(msg)
-
-    integral = np.zeros(len(y), dtype=np.float64)
-    integral[0] = 0.0
-
-    for i in range(1, len(y)):
-        integral[i] = integral[i - 1] + 0.5 * (x[i] - x[i - 1]) * (y[i] + y[i - 1])
-
-    return integral
 
 
 def lineal_function_1000(_i: int) -> int:
