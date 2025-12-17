@@ -81,14 +81,14 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
     return integral
 
 
-def lineal_function_1000(i: int) -> int:
+def lineal_function_1000(_i: int) -> int:
     """Return a constant value of 1000.
 
     This function takes an input parameter and returns a fixed value of 1000,
     regardless of the input value.
 
     Args:
-        i (int): An integer parameter (unused in the calculation).
+        _i (int): An integer parameter (unused in the calculation).
 
     Returns:
         int: The constant value 1000.
@@ -115,10 +115,14 @@ class LossClass:
         """Initializes the optimization class for noise characterization.
 
         Args:
-            ref_traj (List[Observable]): A list of Observable objects representing the reference trajectory.
+            ref_traj (list[Observable]): A list of Observable objects representing the reference trajectory.
             propagator (Propagator): An object that provides the trajectories of some observable list.
-            working_dir (str | Path, optional): The directory where output files will be stored.
-            print_to_file (bool, optional): If True, enables printing output to a file. Defaults to False.
+            working_dir (str | Path, optional): The directory where output files will be stored. Default ".".
+            num_traj (Callable[[int], int], optional): Function to determine number of trajectories based on
+                                                    evaluation count. Default lineal_function_1000.
+            print_to_file (bool, optional): If True, enables printing output to a file. Default False.
+            return_numeric_gradients (bool, optional): If True, compute gradients numerically. Default False.
+            epsilon (float, optional): Step size for numerical gradients. Default 1e-3.
 
         Attributes:
             n_eval (int): Counter for the number of evaluations performed.
@@ -129,10 +133,18 @@ class LossClass:
             grad_history (list[np.ndarray]): History of gradient vectors.
             print_to_file (bool): Indicates whether to print output to a file.
             work_dir (Path): Working directory for file output.
-            ref_traj (List[Observable]): Deep copy of the reference trajectory.
+            ref_traj (list[Observable]): Deep copy of the reference trajectory.
             propagator (Propagator): Deep copy of the Propagator object.
             ref_traj_array (np.ndarray): Array of results from the reference trajectory.
             d (int): Dimensionality of the input noise model's processes.
+            t (np.ndarray): Time array from the propagator's simulation parameters.
+            return_numeric_gradients (bool): Whether to return numeric gradients.
+            epsilon (float): Step size for numerical gradient computation.
+            converged (bool): Flag indicating if convergence has been reached.
+            n_avg (int): Number of recent evaluations to average for convergence check.
+            n_conv (int): Number of consecutive small differences required for convergence.
+            avg_tol (float): Tolerance for average differences in convergence check.
+            num_traj (Callable[[int], int]): Function to compute number of trajectories.
         """
         self.n_eval = 0
         self.x_history: list[np.ndarray] = []
@@ -198,6 +210,15 @@ class LossClass:
             self.diff_avg_history.append(diff)
 
     def check_convergence(self) -> None:
+        """Check if the optimization has converged based on the average differences.
+
+        This method checks if the last `n_conv` entries in `diff_avg_history` are all
+        below the tolerance `avg_tol`. If so, it sets the `converged` flag to True.
+
+        The convergence criterion is that all recent differences in the averaged
+        parameter history are sufficiently small, indicating that the optimization
+        has stabilized.
+        """
         if len(self.diff_avg_history) > self.n_conv and all(
             diff < self.avg_tol for diff in self.diff_avg_history[-self.n_conv :]
         ):

@@ -282,6 +282,8 @@ class Characterizer:
         self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = gradient_descent_opt(
             self.loss,
             self.init_x,
+            x_low=x_low,
+            x_up=x_up,
             alpha=alpha,
             max_iter=max_iter,
             threshold=threshold,

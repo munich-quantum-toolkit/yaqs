@@ -5,6 +5,13 @@
 #
 # Licensed under the MIT License
 
+"""Bayesian optimization algorithms for noise characterization.
+
+This module implements Bayesian optimization using Gaussian processes for optimizing
+noise model parameters. It leverages BoTorch for acquisition functions and optimization,
+and GPyTorch for Gaussian process modeling.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -57,8 +64,7 @@ def get_acquisition_function(name: str, model: SingleTaskGP, best_f: float | Non
 
     Raises:
     ------
-    ValueError
-        If the acquisition function name is not recognized.
+        ValueError: If the acquisition function name is not recognized.
 
     Examples:
     --------
@@ -94,6 +100,7 @@ def bayesian_opt(
     device: str = "cpu",
 ) -> tuple[np.ndarray, np.ndarray, torch.Tensor, torch.Tensor]:
     """Perform Bayesian Optimization to minimize a black-box function.
+
     This function uses a Gaussian Process surrogate model with an acquisition function
     to efficiently explore the search space and find the minimum of the objective function.
 
@@ -113,66 +120,71 @@ def bayesian_opt(
         tuple: A tuple containing:
             - best_x (np.ndarray): Optimal point found. Shape (d,).
             - best_y (np.ndarray): Function value at optimal point.
-            - X_train (torch.Tensor): All evaluated points in normalized space. Shape (n_evals, d).
-            - Y_train (torch.Tensor): Negated function values for all evaluations. Shape (n_evals, 1).
+            - x_train (torch.Tensor): All evaluated points in normalized space. Shape (n_evals, d).
+            - y_train (torch.Tensor): Negated function values for all evaluations. Shape (n_evals, 1).
     """
     bounds = torch.tensor(np.array([x_low, x_up]), dtype=torch.double)
 
     d = bounds.shape[1]
 
     # Normalized [0,1]^d → real-space bounds
-    def scale_to_bounds(X_unit: torch.Tensor) -> torch.Tensor:
+    def scale_to_bounds(x_unit: torch.Tensor) -> torch.Tensor:
         """Scale a unit interval value to a specified bounds range.
 
         Transforms a value from the unit interval [0, 1] to the range [bounds[0], bounds[1]]
         using linear scaling.
 
         Args:
-            X_unit: A value in the unit interval [0, 1] to be scaled.
+            x_unit: A value in the unit interval [0, 1] to be scaled.
 
         Returns:
             The scaled value mapped to the bounds range [bounds[0], bounds[1]].
         """
-        return bounds[0] + (bounds[1] - bounds[0]) * X_unit
+        return bounds[0] + (bounds[1] - bounds[0]) * x_unit
 
     # -----------------------
     # Helper: evaluate f safely
     # -----------------------
-    def eval_function(X: torch.Tensor) -> torch.Tensor:
-        """X: torch.Tensor of shape (n, d)
-        returns: torch.Tensor of shape (n, 1).
+    def eval_function(x: torch.Tensor) -> torch.Tensor:
+        """Evaluates f safely.
+
+        Args:
+            x: torch.Tensor of shape (n, d).
+
+        Returns:
+            torch.Tensor of shape (n, 1).
         """
-        X_np = X.detach().cpu().numpy()
-        if X_np.ndim == 1:
-            X_np = X_np.reshape(1, -1)
-        y_np = np.array([f(xi)[0] for xi in X_np], dtype=np.float64)
+        x_np = x.detach().cpu().numpy()
+        if x_np.ndim == 1:
+            x_np = x_np.reshape(1, -1)
+        y_np = np.array([f(xi)[0] for xi in x_np], dtype=np.float64)
         return torch.tensor(y_np, dtype=dtype, device=device).unsqueeze(-1)
 
     # -----------------------
     # Initial data
     # -----------------------
-    X_train = torch.rand(n_init, d, dtype=dtype, device=device)
-    y = eval_function(scale_to_bounds(X_train))
-    Y_train = -y  # Negate for minimization (BO maximizes internally)
+    x_train = torch.rand(n_init, d, dtype=dtype, device=device)
+    y = eval_function(scale_to_bounds(x_train))
+    y_train = -y  # Negate for minimization (BO maximizes internally)
 
     # Constant noise variance
-    Yvar_train = torch.full_like(Y_train, std**2)
+    yvar_train = torch.full_like(y_train, std**2)
 
     # -----------------------
     # BO loop
     # -----------------------
     for _i in range(max_iter):
         model = SingleTaskGP(
-            X_train,
-            Y_train,
-            Yvar_train,
+            x_train,
+            y_train,
+            yvar_train,
             input_transform=Normalize(d),
             outcome_transform=Standardize(m=1),
         )
         mll = ExactMarginalLogLikelihood(model.likelihood, model)
         fit_gpytorch_mll(mll)
 
-        best_f = Y_train.max()
+        best_f = y_train.max()
         acq_func = get_acquisition_function(acq_name, model, best_f=best_f, beta=beta)
 
         new_x_unit, _ = optimize_acqf(
@@ -187,13 +199,13 @@ def bayesian_opt(
         new_y = -new_y  # negate for minimization
 
         # Append new data
-        X_train = torch.cat([X_train, new_x_unit])
-        Y_train = torch.cat([Y_train, new_y])
-        Yvar_train = torch.cat([Yvar_train, torch.full_like(new_y, std**2)])
+        x_train = torch.cat([x_train, new_x_unit])
+        y_train = torch.cat([y_train, new_y])
+        yvar_train = torch.cat([yvar_train, torch.full_like(new_y, std**2)])
 
-        best_idx = torch.argmax(Y_train)
-        best_x = scale_to_bounds(X_train[best_idx])
-        best_y = -Y_train[best_idx]
+        best_idx = torch.argmax(y_train)
+        best_x = scale_to_bounds(x_train[best_idx])
+        best_y = -y_train[best_idx]
 
         if f.converged:
             break
@@ -203,4 +215,4 @@ def bayesian_opt(
     # -----------------------
     # flip back to minimization scale
 
-    return best_x.numpy(), best_y.numpy()[0], X_train, -Y_train  # flip Y back to original scale
+    return best_x.numpy(), best_y.numpy()[0], x_train, -y_train  # flip Y back to original scale

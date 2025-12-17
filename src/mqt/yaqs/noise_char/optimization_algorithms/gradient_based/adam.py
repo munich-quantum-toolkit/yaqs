@@ -5,6 +5,13 @@
 #
 # Licensed under the MIT License
 
+"""ADAM optimization algorithm for noise characterization.
+
+This module implements the ADAM (Adaptive Moment Estimation) optimization algorithm
+for gradient-based optimization of noise model parameters. It includes support for
+bounds, convergence checking, early stopping, and checkpointing/restart functionality.
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -47,6 +54,8 @@ def adam_opt(
     Args:
         f (loss_class): An instance of a loss function class.
         x_copy (np.ndarray): Initial parameter vector to optimize.
+        x_low: Lower bounds for each dimension. Shape (d,).
+        x_up: Upper bounds for each dimension. Shape (d,).
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
         max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
         threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.

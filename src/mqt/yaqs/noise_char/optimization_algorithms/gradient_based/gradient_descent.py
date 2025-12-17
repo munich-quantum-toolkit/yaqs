@@ -5,6 +5,12 @@
 #
 # Licensed under the MIT License
 
+"""Gradient descent optimization algorithm for noise characterization.
+
+This module implements gradient descent optimization for noise model parameters.
+It supports bounds, convergence checking, early stopping, and checkpointing/restart.
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -44,6 +50,8 @@ def gradient_descent_opt(
     Args:
         f (loss_class): An instance of a loss function class.
         x_copy (np.ndarray): Initial parameter vector to optimize.
+        x_low: Lower bounds for each dimension. Shape (d,).
+        x_up: Upper bounds for each dimension. Shape (d,).
         alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
         max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
         threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.

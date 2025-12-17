@@ -5,6 +5,13 @@
 #
 # Licensed under the MIT License
 
+"""Markov Chain Monte Carlo (MCMC) optimization algorithm for noise characterization.
+
+This module implements MCMC-based optimization using simulated annealing for
+gradient-free optimization of noise model parameters. It supports bounds,
+early stopping based on patience, and uses modern NumPy random number generation.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -77,11 +84,13 @@ def mcmc_opt(
     if x_up is not None:
         x_up = np.array(x_up, dtype=float)
 
+    rng = np.random.default_rng()
+
     no_improve_counter = 0
 
     for _i in range(max_iter):
         # Gaussian proposal
-        x_new = x + np.random.normal(scale=step_size, size=ndim)
+        x_new = x + rng.normal(scale=step_size, size=ndim)
 
         # Apply bounds
         if x_low is not None:
@@ -91,11 +100,11 @@ def mcmc_opt(
 
         f_new, _, _ = f(x_new)
 
-        # Metropolis–Hastings acceptance
+        # Metropolis-Hastings acceptance
         delta = f_new - fx
         acceptance_prob = np.exp(-delta / temperature)
 
-        if np.random.rand() < acceptance_prob:
+        if rng.random() < acceptance_prob:
             x, fx = x_new, f_new
 
         # Track global best
@@ -115,7 +124,5 @@ def mcmc_opt(
         step_size *= step_rate
 
         step_size = max(step_size, min_step_size)
-
-        # print(f"Iter {i+1}/{max_iter}, x_best: {xbest}, Best f: {fbest:.6f}, Temp: {temperature:.4f}, Step size: {step_size:.4f}")
 
     return xbest, fbest

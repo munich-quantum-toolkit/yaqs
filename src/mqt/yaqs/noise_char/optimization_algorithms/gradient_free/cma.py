@@ -5,6 +5,19 @@
 #
 # Licensed under the MIT License
 
+"""Module for implementing the CMA-ES (Covariance Matrix Adaptation Evolution Strategy) optimization algorithm.
+
+This module provides a function `cma_opt` that performs optimization using the CMA-ES algorithm,
+which is a derivative-free optimization method suitable for non-linear and non-convex problems.
+
+The `cma_opt` function allows for the specification of an objective function to minimize,
+initial guesses, and optional bounds for the optimization variables. It also supports
+custom convergence detection through the provided objective function.
+
+The CMA-ES algorithm is particularly useful in scenarios where the objective function is expensive
+to evaluate or when the gradient information is not available.
+"""
+
 # %%
 from __future__ import annotations
 
@@ -26,8 +39,7 @@ def cma_opt(
     popsize: int = 4,
     max_iter: int = 500,
 ) -> tuple[np.ndarray, float]:
-    """CMA-ES optimization with optional lower and upper bounds per dimension
-    and a maximum number of iterations.
+    """CMA-ES optimization with optional lower and upper bounds per dimension and a maximum number of iterations.
 
     Parameters
     ----------
