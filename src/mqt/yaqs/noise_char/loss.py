@@ -9,9 +9,8 @@
 
 from __future__ import annotations
 
-import contextlib
 import copy
-import pickle  # noqa: S403
+
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -81,11 +80,22 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
     return integral
 
 
-def lineal_function_2(i):
-    return 100 + 2*i
 
-def lineal_function_400_2(i):
-    return 400 + 2*i
+def lineal_function_1000(i: int) -> int:
+    """
+    Return a constant value of 1000.
+    
+    This function takes an input parameter and returns a fixed value of 1000,
+    regardless of the input value.
+    
+    Args:
+        i (int): An integer parameter (unused in the calculation).
+    
+    Returns:
+        int: The constant value 1000.
+    """
+    return 1000
+
 
 class LossClass:
     """A base LossClass to track optimization history and compute averages."""
@@ -98,7 +108,7 @@ class LossClass:
         ref_traj: list[Observable],
         propagator: PropagatorWithGradients | Propagator,
         working_dir: str | Path = ".",
-        num_traj = lineal_function_400_2, 
+        num_traj: callable = lineal_function_1000, 
         print_to_file: bool = False,
         return_gradients: bool =False,
         return_numeric_gradients: bool = False,
@@ -422,6 +432,8 @@ class LossClass:
 
         loss: float = np.sum(diff**2)
 
+        sim_time = end_time - start_time  # Simulation time
+
         
 
         if self.return_gradients: 
@@ -451,7 +463,6 @@ class LossClass:
 
             self.post_process(x.copy(), loss, grad.copy())
 
-            sim_time = end_time - start_time  # Simulation time
 
             return loss, grad, sim_time
         
@@ -476,348 +487,11 @@ class LossClass:
 
             self.post_process(x.copy(), loss, grad.copy())
 
-            sim_time = end_time - start_time  # Simulation time
-
             return loss, grad, sim_time
 
 
+        grad = np.array([0]*self.d)
 
-        self.post_process(x.copy(), loss, [0]*self.d)
+        self.post_process(x.copy(), loss, grad.copy())
 
-        return loss
-
-
-def adam_optimizer(
-    f: LossClass,
-    x_copy: np.ndarray,
-    *,
-    x_low: np.ndarray | None = None,
-    x_up: np.ndarray | None = None,
-    alpha: float = 0.05,
-    max_iter: int = 1000,
-    threshold: float = 5e-4,
-    max_n_convergence: int = 50,
-    tolerance: float = 1e-8,
-    beta1: float = 0.5,
-    beta2: float = 0.999,
-    epsilon: float = 1e-8,
-    restart: bool = False,
-    restart_file: Path | None = None,
-) -> tuple[
-    list[float],  # f.f_history: History of loss values.
-    list[np.ndarray],  # f.x_history: History of parameter vectors.
-    list[np.ndarray],  # f.x_avg_history: History of averaged parameter vectors.
-    np.ndarray,  # f.t: Time array from the loss function.
-    np.ndarray,  # f.exp_vals_traj: Optimized trajectory of expectation values.
-]:
-    """Performs Adam optimization on a given loss function with support for checkpointing and restart.
-
-    Args:
-        f (loss_class): An instance of a loss function class.
-        x_copy (np.ndarray): Initial parameter vector to optimize.
-        alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
-        threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
-        max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
-        tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
-        beta1 (float, optional): Exponential decay rate for the first moment estimates. Default is 0.5.
-        beta2 (float, optional): Exponential decay rate for the second moment estimates. Default is 0.999.
-        epsilon (float, optional): Small constant for numerical stability. Default is 1e-8.
-        restart (bool, optional): Whether to restart optimization from a checkpoint. Default is False.
-        restart_file (str, optional): Path to a specific checkpoint file to restart from.
-        If None, the latest checkpoint in the working directory is used.
-
-    Returns:
-        Tuple[
-            List[float],      # f.f_history: History of loss values.
-            List[np.ndarray], # f.x_history: History of parameter vectors.
-            List[np.ndarray], # f.x_avg_history: History of averaged parameter vectors.
-            np.ndarray,       # f.t: Time array from the loss function.
-            np.ndarray        # f.exp_vals_traj: Optimized trajectory of expectation values.
-        ]
-
-    Raises:
-        ValueError: If restart is True but no valid checkpoint file is found.
-
-    Notes:
-        - The optimizer saves a checkpoint at every iteration in the working directory specified by `f.work_dir`.
-        - All parameter values are clipped to the [0, 1] range after each update.
-        - Performance metrics are logged to 'performance_metric_sec.txt' in the working directory.
-    """
-    restart_dir = f.work_dir
-
-    perf_path = Path(f.work_dir) / "performance_metric_sec.txt"
-
-    # Find the latest restart file in the restart_dir
-    if restart_file is None and restart and Path(restart_dir).is_dir():
-        restart_files = [
-            file_path.name
-            for file_path in Path(restart_dir).iterdir()
-            if file_path.name.startswith("restart_step_") and file_path.suffix == ".pkl"
-        ]
-        if restart_files:
-            # Sort by step number
-            restart_files.sort()
-            restart_file = Path(restart_dir) / restart_files[-1]
-
-    # Initialization
-    if restart and restart_file is not None:
-        if not restart_file.exists():
-            msg = "Restart file not found."
-            raise ValueError(msg)
-        # We only load restart files we created ourselves; no untrusted input here.
-        with restart_file.open("rb") as handle:
-            saved = pickle.load(handle)  # noqa: S301
-        x = saved["x"]
-        m = saved["m"]
-        v = saved["v"]
-        start_iter = saved["iteration"] + 1  # resume from next iteration
-
-        f.set_history(saved["x_history"], saved["f_history"], saved["x_avg_history"], saved["diff_avg_history"])
-
-        f.t = saved["t"].copy()
-        f.obs_array = saved["obs_traj"].copy()
-
-    else:
-        # Remove all .pkl files in the folder
-        restart_path = Path(restart_dir)
-        for file_path in restart_path.iterdir():
-            if file_path.suffix == ".pkl":
-                with contextlib.suppress(Exception):
-                    file_path.unlink()
-
-        x = x_copy.copy()
-        d = len(x)
-        m = np.zeros(d)
-        v = np.zeros(d)
-        start_iter = 0
-
-        # Write a header to performance_metric.txt in f.work_dir
-
-        with perf_path.open("w", encoding="utf-8") as pf:
-            pf.write("# iter    opt_step_time    simulation_time    avg_traj_time    min_traj_time    max_traj_time\n")
-
-    for i in range(start_iter, max_iter):
-        # Calculate loss and gradients (unchanged)
-
-        start_time = time.time()
-
-        loss, grad, sim_time = f(x)
-
-        # Adam update steps (NEW)
-        m = beta1 * m + (1 - beta1) * grad
-        v = beta2 * v + (1 - beta2) * (grad**2)
-
-        beta1_t = beta1 ** (i + 1)
-        beta2_t = beta2 ** (i + 1)
-
-        m_hat = m / (1 - beta1_t)
-        v_hat = v / (1 - beta2_t)
-
-        update = alpha * m_hat / (np.sqrt(v_hat) + epsilon)
-
-        # Update simulation parameters with Adam update (NEW)
-        x -= update
-
-        # Ensure x stays in bounds (NEW)
-        if x_low is not None and x_up is not None:
-            x = np.clip(x, x_low, x_up)
-
-        restart_data = {
-            "iteration": i,
-            "x": x.copy(),
-            "x_loss": x + update,
-            "loss": loss,
-            "grad": grad.copy(),
-            "beta1": beta1,
-            "beta2": beta2,
-            "m": m.copy(),
-            "v": v.copy(),
-            "update": update.copy(),
-            "f_history": f.f_history.copy(),
-            "x_history": f.x_history.copy(),
-            "x_avg_history": f.x_avg_history.copy(),
-            "diff_avg_history": f.diff_avg_history.copy(),
-            "t": f.t.copy(),
-            "obs_traj": f.obs_array.copy(),
-        }
-
-        restart_path = Path(restart_dir) / f"restart_step_{i + 1:04d}.pkl"
-        with restart_path.open("wb") as handle:
-            pickle.dump(restart_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-        end_time = time.time()
-
-        iter_time = end_time - start_time
-
-        with perf_path.open("a", encoding="utf-8") as pf:
-            pf.write(f"  {i}    {iter_time}    {sim_time}  \n")
-
-        if abs(loss) < tolerance:
-            break
-
-        # Convergence check
-        if len(f.diff_avg_history) > max_n_convergence and all(
-            diff < threshold for diff in f.diff_avg_history[-max_n_convergence:]
-        ):
-            break
-
-    return f.f_history, f.x_history, f.x_avg_history, f.t, f.obs_array
-
-
-def gradient_descent_optimizer(
-    f: LossClass,
-    x_copy: np.ndarray,
-    *,
-    x_low: np.ndarray | None = None,
-    x_up: np.ndarray | None = None,
-    alpha: float = 0.05,
-    max_iter: int = 1000,
-    threshold: float = 5e-4,
-    max_n_convergence: int = 50,
-    tolerance: float = 1e-8,
-    restart: bool = False,
-    restart_file: Path | None = None,
-) -> tuple[
-    list[float],  # f.f_history: History of loss values.
-    list[np.ndarray],  # f.x_history: History of parameter vectors.
-    list[np.ndarray],  # f.x_avg_history: History of averaged parameter vectors.
-    np.ndarray,  # f.t: Time array from the loss function.
-    np.ndarray,  # f.exp_vals_traj: Optimized trajectory of expectation values.
-]:
-    """Performs Adam optimization on a given loss function with support for checkpointing and restart.
-
-    Args:
-        f (loss_class): An instance of a loss function class.
-        x_copy (np.ndarray): Initial parameter vector to optimize.
-        alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
-        threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
-        max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
-        tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
-        restart (bool, optional): Whether to restart optimization from a checkpoint. Default is False.
-        restart_file (str, optional): Path to a specific checkpoint file to restart from.
-        If None, the latest checkpoint in the working directory is used.
-
-    Returns:
-        Tuple[
-            List[float],      # f.f_history: History of loss values.
-            List[np.ndarray], # f.x_history: History of parameter vectors.
-            List[np.ndarray], # f.x_avg_history: History of averaged parameter vectors.
-            np.ndarray,       # f.t: Time array from the loss function.
-            np.ndarray        # f.exp_vals_traj: Optimized trajectory of expectation values.
-        ]
-
-    Raises:
-        ValueError: If restart is True but no valid checkpoint file is found.
-
-    Notes:
-        - The optimizer saves a checkpoint at every iteration in the working directory specified by `f.work_dir`.
-        - All parameter values are clipped to the [0, 1] range after each update.
-        - Performance metrics are logged to 'performance_metric_sec.txt' in the working directory.
-    """
-    restart_dir = f.work_dir
-
-    perf_path = Path(f.work_dir) / "performance_metric_sec.txt"
-
-    # Find the latest restart file in the restart_dir
-    if restart_file is None and restart and Path(restart_dir).is_dir():
-        restart_files = [
-            file_path.name
-            for file_path in Path(restart_dir).iterdir()
-            if file_path.name.startswith("restart_step_") and file_path.suffix == ".pkl"
-        ]
-        if restart_files:
-            # Sort by step number
-            restart_files.sort()
-            restart_file = Path(restart_dir) / restart_files[-1]
-
-    # Initialization
-    if restart and restart_file is not None:
-        if not restart_file.exists():
-            msg = "Restart file not found."
-            raise ValueError(msg)
-        # We only load restart files we created ourselves; no untrusted input here.
-        with restart_file.open("rb") as handle:
-            saved = pickle.load(handle)  # noqa: S301
-        x = saved["x"]
-        start_iter = saved["iteration"] + 1  # resume from next iteration
-
-        f.set_history(saved["x_history"], saved["f_history"], saved["x_avg_history"], saved["diff_avg_history"])
-
-        f.t = saved["t"].copy()
-        f.obs_array = saved["obs_traj"].copy()
-
-    else:
-        # Remove all .pkl files in the folder
-        restart_path = Path(restart_dir)
-        for file_path in restart_path.iterdir():
-            if file_path.suffix == ".pkl":
-                with contextlib.suppress(Exception):
-                    file_path.unlink()
-
-        x = x_copy.copy()
-        d = len(x)
-        start_iter = 0
-
-        # Write a header to performance_metric.txt in f.work_dir
-
-        with perf_path.open("w", encoding="utf-8") as pf:
-            pf.write("# iter    opt_step_time    simulation_time    avg_traj_time    min_traj_time    max_traj_time\n")
-
-    for i in range(start_iter, max_iter):
-        # Calculate loss and gradients (unchanged)
-
-        start_time = time.time()
-
-        loss, grad, sim_time = f(x)
-
-        update = alpha*grad
-
-        print("Updates: ",x, alpha, grad, update)
-
-        # Update simulation parameters with Adam update (NEW)
-        x -= update
-        
-        # Ensure x stays in bounds (NEW)
-        if x_low is not None and x_up is not None:
-            x = np.clip(x, x_low, x_up)
-
-        print("Updated x",x)
-
-        restart_data = {
-            "iteration": i,
-            "x": x.copy(),
-            "x_loss": x + update,
-            "loss": loss,
-            "grad": grad.copy(),
-            "update": update.copy(),
-            "f_history": f.f_history.copy(),
-            "x_history": f.x_history.copy(),
-            "x_avg_history": f.x_avg_history.copy(),
-            "diff_avg_history": f.diff_avg_history.copy(),
-            "t": f.t.copy(),
-            "obs_traj": f.obs_array.copy(),
-        }
-
-        restart_path = Path(restart_dir) / f"restart_step_{i + 1:04d}.pkl"
-        with restart_path.open("wb") as handle:
-            pickle.dump(restart_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-        end_time = time.time()
-
-        iter_time = end_time - start_time
-
-        with perf_path.open("a", encoding="utf-8") as pf:
-            pf.write(f"  {i}    {iter_time}    {sim_time}  \n")
-
-        if abs(loss) < tolerance:
-            break
-
-        # Convergence check
-        if len(f.diff_avg_history) > max_n_convergence and all(
-            diff < threshold for diff in f.diff_avg_history[-max_n_convergence:]
-        ):
-            break
-
-    return f.f_history, f.x_history, f.x_avg_history, f.t, f.obs_array
+        return loss, grad, sim_time

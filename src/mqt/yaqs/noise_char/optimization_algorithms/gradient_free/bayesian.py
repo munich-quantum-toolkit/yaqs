@@ -13,10 +13,52 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 
 import numpy as np
 
+from mqt.yaqs.noise_char.loss import LossClass
 # --------------------------------------------
 # Select acquisition function
 # --------------------------------------------
-def get_acquisition_function(name, model, best_f=None, beta=2.0):
+
+def get_acquisition_function(
+    name: str, 
+    model: SingleTaskGP, 
+    best_f: float | None = None, 
+    beta: float = 2.0
+) -> object:
+    """
+    Get an acquisition function for Bayesian optimization.
+
+    Parameters
+    ----------
+    name : str
+        Name of the acquisition function. Supported options are:
+        - "EI": Expected Improvement
+        - "LEI": Log Expected Improvement
+        - "PI": Probability of Improvement
+        - "UCB": Upper Confidence Bound
+    model : object
+        The surrogate model used for acquisition function evaluation.
+    best_f : float, optional
+        The best function value found so far. Required for EI, LEI, and PI.
+        Default is None.
+    beta : float, optional
+        Exploration-exploitation trade-off parameter for UCB.
+        Default is 2.0.
+
+    Returns
+    -------
+    object
+        An acquisition function object of the specified type.
+
+    Raises
+    ------
+    ValueError
+        If the acquisition function name is not recognized.
+
+    Examples
+    --------
+    >>> acq_ei = get_acquisition_function("EI", model, best_f=0.5)
+    >>> acq_ucb = get_acquisition_function("UCB", model, beta=2.576)
+    """
     name = name.upper()
     if name == "EI":
         return ExpectedImprovement(model=model, best_f=best_f, maximize=True)
@@ -38,44 +80,65 @@ def get_acquisition_function(name, model, best_f=None, beta=2.0):
 # Bayesian Optimization Loop
 # --------------------------------------------
 def bayesian_opt(
-    f,
-    x_low,
-    x_up,
-    n_init=5,
-    max_iter=15,
-    acq_name="EI",
-    std=1e-6,
-    beta=2.0,
-    dtype=torch.double,
-    device="cpu",
-):
-    """
-    Bayesian Optimization for MINIMIZATION with fixed noise level.
-
+    f: LossClass,
+    x_low: np.ndarray | None = None,
+    x_up: np.ndarray | None = None,
+    n_init: int = 5,
+    max_iter: int = 15,
+    acq_name: str = "EI",
+    std: float = 1e-6,
+    beta: float = 2.0,
+    dtype: torch.dtype = torch.double,
+    device: str = "cpu",
+) -> tuple[np.ndarray, np.ndarray, torch.Tensor, torch.Tensor]:
+    
+    """Perform Bayesian Optimization to minimize a black-box function.
+    This function uses a Gaussian Process surrogate model with an acquisition function
+    to efficiently explore the search space and find the minimum of the objective function.
     Args:
-        f: Callable[[np.ndarray], float or np.ndarray]
-            Function to minimize. Must accept NumPy arrays.
-        bounds: torch.tensor([[x1_min, ..., xd_min], [x1_max, ..., xd_max]])
-        n_init: Number of initial random evaluations
-        max_iter: Number of BO iterations
-        acq_name: "EI", "PI", or "UCB"
-        std: Known standard deviation of noise
+        f: Callable objective function to minimize. Takes a 1D array and returns a scalar.
+        x_low: Lower bounds for each dimension. Shape (d,).
+        x_up: Upper bounds for each dimension. Shape (d,).
+        n_init: Number of initial random samples. Defaults to 5.
+        max_iter: Maximum number of optimization iterations. Defaults to 15.
+        acq_name: Acquisition function name ('EI', 'UCB', etc.). Defaults to "EI".
+        std: Observation noise standard deviation. Defaults to 1e-6.
+        beta: Exploration parameter for acquisition function. Defaults to 2.0.
+        dtype: PyTorch data type for computations. Defaults to torch.double.
+        device: Compute device ('cpu' or 'cuda'). Defaults to "cpu".
+    Returns:
+        tuple: A tuple containing:
+            - best_x (np.ndarray): Optimal point found. Shape (d,).
+            - best_y (np.ndarray): Function value at optimal point.
+            - X_train (torch.Tensor): All evaluated points in normalized space. Shape (n_evals, d).
+            - Y_train (torch.Tensor): Negated function values for all evaluations. Shape (n_evals, 1).
     """
 
-
+    
     bounds = torch.tensor(np.array([x_low, x_up]), dtype=torch.double)
 
 
     d = bounds.shape[1]
 
     # Normalized [0,1]^d → real-space bounds
-    def scale_to_bounds(X_unit):
+    def scale_to_bounds(X_unit: torch.Tensor) -> torch.Tensor:
+        """Scale a unit interval value to a specified bounds range.
+        
+        Transforms a value from the unit interval [0, 1] to the range [bounds[0], bounds[1]]
+        using linear scaling.
+        
+        Args:
+            X_unit: A value in the unit interval [0, 1] to be scaled.
+        
+        Returns:
+            The scaled value mapped to the bounds range [bounds[0], bounds[1]].
+        """
         return bounds[0] + (bounds[1] - bounds[0]) * X_unit
 
     # -----------------------
     # Helper: evaluate f safely
     # -----------------------
-    def eval_function(X):
+    def eval_function(X: torch.Tensor) -> torch.Tensor:
         """
         X: torch.Tensor of shape (n, d)
         returns: torch.Tensor of shape (n, 1)
@@ -83,7 +146,7 @@ def bayesian_opt(
         X_np = X.detach().cpu().numpy()
         if X_np.ndim == 1:
             X_np = X_np.reshape(1, -1)
-        y_np = np.array([f(xi) for xi in X_np], dtype=np.float64)
+        y_np = np.array([f(xi)[0] for xi in X_np], dtype=np.float64)
         return torch.tensor(y_np, dtype=dtype, device=device).unsqueeze(-1)
 
     # -----------------------

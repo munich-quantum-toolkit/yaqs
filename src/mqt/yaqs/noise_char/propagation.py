@@ -13,7 +13,6 @@ import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
-from pathlib import Path
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
@@ -21,6 +20,8 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary, Zero
 from mqt.yaqs.noise_char.optimization import trapezoidal
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from mqt.yaqs.core.data_structures.networks import MPO, MPS
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel, NoiseModel
 
@@ -40,11 +41,6 @@ def noise_model_to_operator_list(noise_model: NoiseModel) -> list[Observable]:
         gate = getattr(GateLibrary, proc["name"])
         noise_list.extend(Observable(gate(), site) for site in proc["sites"])
     return noise_list
-
-
-
-
-
 
 
 class Propagator:
@@ -262,7 +258,6 @@ class Propagator:
         header = "t  " + "  ".join(["obs_" + str(i) for i in range(n_obs)])
 
         np.savetxt(output_file, exp_vals_traj_with_t.T, header=header, fmt="%.6f")
-    
 
     def run(self, noise_model: CompactNoiseModel) -> None:
         """Run the propagation routine with augmented Lindblad-derived operators.
@@ -320,9 +315,6 @@ class Propagator:
                     msg = "Noise model processes or sites do not match the initialized noise model."
                     raise ValueError(msg)
 
-
-        
-
         sim_params = AnalogSimParams(
             observables=self.obs_list,
             elapsed_time=self.sim_params.elapsed_time,
@@ -334,8 +326,6 @@ class Propagator:
             sample_timesteps=True,
         )
 
-        print("Propagator: num_traj = ", sim_params.num_traj)
-
         simulator.run(self.init_state, self.hamiltonian, sim_params, noise_model.expanded_noise_model)
 
         # Separate original and new expectation values from result_lindblad.
@@ -344,23 +334,6 @@ class Propagator:
         self.times = self.sim_params.times
 
         self.obs_array = np.array([obs.results for obs in self.obs_traj])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 class PropagatorWithGradients:

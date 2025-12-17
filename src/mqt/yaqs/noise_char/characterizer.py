@@ -12,11 +12,11 @@ from __future__ import annotations
 import copy
 from typing import TYPE_CHECKING
 
-from mqt.yaqs.noise_char.optimization import adam_optimizer, gradient_descent_optimizer
-from mqt.yaqs.noise_char.algorithms.cma import cma_opt
-from mqt.yaqs.noise_char.algorithms.bayesian_optimization import bayesian_opt
-from mqt.yaqs.noise_char.algorithms.mcmc import mcmc_opt
-
+from mqt.yaqs.noise_char.optimization_algorithms.gradient_based.adam import adam_opt
+from mqt.yaqs.noise_char.optimization_algorithms.gradient_based.gradient_descent import gradient_descent_opt
+from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import bayesian_opt
+from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.cma import cma_opt
+from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.mcmc import mcmc_opt
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     import numpy as np
 
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
-    from mqt.yaqs.noise_char.optimization import LossClass
-    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients, Propagator
+    from mqt.yaqs.noise_char.loss import LossClass
+    from mqt.yaqs.noise_char.propagation import Propagator, PropagatorWithGradients
 
 
 class Characterizer:
@@ -110,8 +110,8 @@ class Characterizer:
     def adam_optimize(
         self,
         *,
-        x_low: np.ndarray = None,
-        x_up: np.ndarray = None,
+        x_low: np.ndarray | None = None,
+        x_up: np.ndarray | None = None,
         alpha: float = 0.05,
         max_iter: int = 500,
         h: float = 1e-3,
@@ -130,19 +130,36 @@ class Characterizer:
         callable `self.loss` starting from `self.init_x`. On completion (or
         early termination), several instance attributes are updated with the
         optimizer history and the recovered optimal noise model.
-        Parameters.
+
+        Parameters
         ----------
-        alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
-        threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
-        max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
-        tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
-        beta1 (float, optional): Exponential decay rate for the first moment estimates. Default is 0.5.
-        beta2 (float, optional): Exponential decay rate for the second moment estimates. Default is 0.999.
-        epsilon (float, optional): Small constant for numerical stability. Default is 1e-8.
-        restart (bool, optional): Whether to restart optimization from a checkpoint. Default is False.
-        restart_file (str, optional): Path to a specific checkpoint file to restart from.
-        If None, the latest checkpoint in the working directory is used.
+        x_low : np.ndarray or None, optional
+            Lower bounds for parameters. Default is None.
+        x_up : np.ndarray or None, optional
+            Upper bounds for parameters. Default is None.
+        alpha : float, optional
+            Learning rate for Adam optimizer. Default is 0.05.
+        max_iter : int, optional
+            Maximum number of optimization iterations. Default is 500.
+        h : float, optional
+            Step size for numerical gradients. Default is 1e-3.
+        threshold : float, optional
+            Threshold for parameter convergence check. Default is 5e-4.
+        max_n_convergence : int, optional
+            Number of consecutive iterations to check for convergence. Default is 50.
+        tolerance : float, optional
+            Absolute loss tolerance for early stopping. Default is 1e-8.
+        beta1 : float, optional
+            Exponential decay rate for the first moment estimates. Default is 0.5.
+        beta2 : float, optional
+            Exponential decay rate for the second moment estimates. Default is 0.999.
+        epsilon : float, optional
+            Small constant for numerical stability. Default is 1e-8.
+        restart : bool, optional
+            Whether to restart optimization from a checkpoint. Default is False.
+        restart_file : Path or None, optional
+            Path to a specific checkpoint file to restart from. If None, the latest
+            checkpoint in the working directory is used.
 
         Notes:
         -----
@@ -170,12 +187,11 @@ class Characterizer:
         >>> # run with a smaller learning rate and more iterations
         >>> obj.adam_optimize(alpha=0.01, max_iter=1000)
         """
-
         self.loss.return_numeric_gradients = True
 
         self.loss.epsilon = h
 
-        self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = adam_optimizer(
+        self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = adam_opt(
             self.loss,
             self.init_x,
             x_low=x_low,
@@ -194,12 +210,11 @@ class Characterizer:
 
         self.optimal_model = self.loss.x_to_noise_model(self.x_avg_history[-1])
 
-
     def gradient_descent_optimize(
         self,
         *,
-        x_low: np.ndarray = None,
-        x_up: np.ndarray = None,
+        x_low: np.ndarray | None = None,
+        x_up: np.ndarray | None = None,
         alpha: float = 0.05,
         max_iter: int = 100,
         threshold: float = 5e-4,
@@ -209,28 +224,42 @@ class Characterizer:
         restart: bool = False,
         restart_file: Path | None = None,
     ) -> None:
-        """Run an ADAM-based optimization to fit the noise model parameters.
+        """Run a gradient descent optimization to fit the noise model parameters.
 
-        This method runs the external `adam_optimizer` routine to minimize the
+        This method runs the external `gradient_descent_optimizer` routine to minimize the
         callable `self.loss` starting from `self.init_x`. On completion (or
         early termination), several instance attributes are updated with the
         optimizer history and the recovered optimal noise model.
-        Parameters.
+
+        Parameters
         ----------
-        alpha (float, optional): Learning rate for Adam optimizer. Default is 0.05.
-        max_iter (int, optional): Maximum number of optimization iterations. Default is 1000.
-        threshold (float, optional): Threshold for parameter convergence check. Default is 5e-4.
-        max_n_convergence (int, optional): Number of consecutive iterations to check for convergence. Default is 50.
-        tolerance (float, optional): Absolute loss tolerance for early stopping. Default is 1e-8.
-        restart (bool, optional): Whether to restart optimization from a checkpoint. Default is False.
-        restart_file (str, optional): Path to a specific checkpoint file to restart from.
-        If None, the latest checkpoint in the working directory is used.
+        x_low : np.ndarray or None, optional
+            Lower bounds for parameters. Default is None.
+        x_up : np.ndarray or None, optional
+            Upper bounds for parameters. Default is None.
+        alpha : float, optional
+            Learning rate for gradient descent. Default is 0.05.
+        max_iter : int, optional
+            Maximum number of optimization iterations. Default is 100.
+        threshold : float, optional
+            Threshold for parameter convergence check. Default is 5e-4.
+        max_n_convergence : int, optional
+            Number of consecutive iterations to check for convergence. Default is 50.
+        h : float, optional
+            Step size for numerical gradients. Default is 1e-2.
+        tolerance : float, optional
+            Absolute loss tolerance for early stopping. Default is 1e-8.
+        restart : bool, optional
+            Whether to restart optimization from a checkpoint. Default is False.
+        restart_file : Path or None, optional
+            Path to a specific checkpoint file to restart from. If None, the latest
+            checkpoint in the working directory is used.
 
         Notes:
         -----
         - The method delegates the numerical optimization to the external
-          `adam_optimizer` function and forwards the provided hyperparameters to it.
-        - Convergence and restart semantics depend on the `adam_optimizer` implementation.
+          `gradient_descent_optimizer` function and forwards the provided hyperparameters to it.
+        - Convergence and restart semantics depend on the `gradient_descent_optimizer` implementation.
         - After optimization, the final noise model is constructed by calling
           `self.loss.x_to_noise_model` with the final averaged parameters.
 
@@ -245,18 +274,12 @@ class Characterizer:
             If the underlying optimizer reports a failure to converge when such
             failures are surfaced as exceptions.
 
-        Examples:
-        --------
-        >>> # run with default hyperparameters
-        >>> obj.adam_optimize()
-        >>> # run with a smaller learning rate and more iterations
-        >>> obj.adam_optimize(alpha=0.01, max_iter=1000, h=1e-3)
         """
         self.loss.return_numeric_gradients = True
 
         self.loss.epsilon = h
 
-        self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = gradient_descent_optimizer(
+        self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = gradient_descent_opt(
             self.loss,
             self.init_x,
             alpha=alpha,
@@ -270,112 +293,149 @@ class Characterizer:
 
         self.optimal_model = self.loss.x_to_noise_model(self.x_avg_history[-1])
 
-
     def cma_optimize(
-        self,
-        *,
-        x_low, 
-        x_up, 
-        sigma0=0.02, 
-        popsize=4, 
-        max_iter=500
+        self, *, x_low: np.ndarray, x_up: np.ndarray, sigma0: float = 0.02, popsize: int = 4, max_iter: int = 500
     ) -> None:
-      
-        print("CMA optimization parameters:")
-        print(f"x_low: {x_low}")
-        print(f"x_up: {x_up}")
-        print(f"sigma0: {sigma0}")
-        print(f"popsize: {popsize}")
-        print(f"max_iter: {max_iter}")
+        """Run CMA-ES optimization to fit the noise model parameters.
 
-        x_best, loss_best = cma_opt(
-            self.loss, 
-            self.init_x, 
-            x_low=x_low, 
-            x_up=x_up, 
-            sigma0=sigma0, 
-            popsize=popsize, 
-            max_iter=max_iter
-            )
+        This method uses Covariance Matrix Adaptation Evolution Strategy (CMA-ES)
+        to minimize the callable `self.loss` starting from `self.init_x`.
+
+        Parameters
+        ----------
+        x_low : np.ndarray
+            Lower bounds for parameters.
+        x_up : np.ndarray
+            Upper bounds for parameters.
+        sigma0 : float, optional
+            Initial step size. Default is 0.02.
+        popsize : int, optional
+            Population size. Default is 4.
+        max_iter : int, optional
+            Maximum number of optimization iterations. Default is 500.
+
+        Notes:
+        -----
+        - After optimization, the final noise model is constructed by calling
+          `self.loss.x_to_noise_model` with the best parameters found.
+        """
+        x_best, _loss_best = cma_opt(
+            self.loss, self.init_x, x_low=x_low, x_up=x_up, sigma0=sigma0, popsize=popsize, max_iter=max_iter
+        )
 
         self.optimal_model = self.loss.x_to_noise_model(x_best)
-
 
     def bayesian_optimize(
         self,
         *,
-        x_low,
-        x_up,
-        n_init=5,
-        max_iter=500,
-        acq_name="UCB",
-        std=0.01,
-        beta=2,
-        device="cpu"
+        x_low: np.ndarray,
+        x_up: np.ndarray,
+        n_init: int = 5,
+        max_iter: int = 500,
+        acq_name: str = "UCB",
+        std: float = 0.01,
+        beta: float = 2,
+        device: str = "cpu",
     ) -> None:
-      
-        print("Bayesian optimization parameters:")
-        print(f"x_low: {x_low}")
-        print(f"x_up: {x_up}")
-        print(f"n_init: {n_init}")
-        print(f"max_iter: {max_iter}")
-        print(f"acq_name: {acq_name}")
-        print(f"std: {std}")
-        print(f"beta: {beta}")
-        print(f"device: {device}")
+        """Run Bayesian optimization to fit the noise model parameters.
 
-        x_best, loss_best, _, _=bayesian_opt(
+        This method uses Bayesian optimization with Gaussian processes to minimize
+        the callable `self.loss` starting from `self.init_x`.
+
+        Parameters
+        ----------
+        x_low : np.ndarray
+            Lower bounds for parameters.
+        x_up : np.ndarray
+            Upper bounds for parameters.
+        n_init : int, optional
+            Number of initial random evaluations. Default is 5.
+        max_iter : int, optional
+            Maximum number of optimization iterations. Default is 500.
+        acq_name : str, optional
+            Acquisition function name. Default is "UCB".
+        std : float, optional
+            Standard deviation for noise. Default is 0.01.
+        beta : float, optional
+            Beta parameter for UCB. Default is 2.
+        device : str, optional
+            Device for computation ("cpu" or "cuda"). Default is "cpu".
+
+        Notes:
+        -----
+        - After optimization, the final noise model is constructed by calling
+          `self.loss.x_to_noise_model` with the best parameters found.
+        """
+        x_best, _loss_best, _, _ = bayesian_opt(
             self.loss,
-            x_low = x_low,
-            x_up = x_up,
+            x_low=x_low,
+            x_up=x_up,
             n_init=n_init,
             max_iter=max_iter,
             acq_name=acq_name,
             std=std,
             beta=beta,
-            device=device
+            device=device,
         )
 
         self.optimal_model = self.loss.x_to_noise_model(x_best)
 
-    
     def mcmc_optimize(
         self,
         *,
-        x_low,
-        x_up,
-        max_iter=500,
-        step_size=0.05, 
-        step_rate=0.99, 
-        min_step_size=0, 
-        temperature=1.0, 
-        anneal_rate=0.99,
-        patience=100
+        x_low: np.ndarray,
+        x_up: np.ndarray,
+        max_iter: int = 500,
+        step_size: float = 0.05,
+        step_rate: float = 0.99,
+        min_step_size: float = 0,
+        temperature: float = 1.0,
+        anneal_rate: float = 0.99,
+        patience: int = 100,
     ) -> None:
-      
-        print("MCMC optimization parameters:")
-        print(f"x_low: {x_low}")
-        print(f"x_up: {x_up}")
-        print(f"max_iter: {max_iter}")
-        print(f"step_size: {step_size}")
-        print(f"step_rate: {step_rate}")
-        print(f"min_step_size: {min_step_size}")
-        print(f"temperature: {temperature}")
-        print(f"anneal_rate: {anneal_rate}")
-        print(f"patience: {patience}")
+        """Run MCMC optimization to fit the noise model parameters.
 
-        x_best, loss_best=mcmc_opt(
-            self.loss, 
-            self.init_x, 
-            x_low=x_low, 
-            x_up=x_up, 
-            max_iter=max_iter, 
-            step_size=step_size, 
-            step_rate=step_rate, 
-            min_step_size=min_step_size, 
-            temperature=temperature, 
+        This method uses Markov Chain Monte Carlo (MCMC) with simulated annealing
+        to minimize the callable `self.loss` starting from `self.init_x`.
+
+        Parameters
+        ----------
+        x_low : np.ndarray
+            Lower bounds for parameters.
+        x_up : np.ndarray
+            Upper bounds for parameters.
+        max_iter : int, optional
+            Maximum number of MCMC iterations. Default is 500.
+        step_size : float, optional
+            Initial step size for proposals. Default is 0.05.
+        step_rate : float, optional
+            Rate at which step size decreases. Default is 0.99.
+        min_step_size : float, optional
+            Minimum step size. Default is 0.
+        temperature : float, optional
+            Initial temperature. Default is 1.0.
+        anneal_rate : float, optional
+            Rate at which temperature decreases. Default is 0.99.
+        patience : int, optional
+            Iterations without improvement before stopping. Default is 100.
+
+        Notes:
+        -----
+        - After optimization, the final noise model is constructed by calling
+          `self.loss.x_to_noise_model` with the best parameters found.
+        """
+        x_best, _loss_best = mcmc_opt(
+            self.loss,
+            self.init_x,
+            x_low=x_low,
+            x_up=x_up,
+            max_iter=max_iter,
+            step_size=step_size,
+            step_rate=step_rate,
+            min_step_size=min_step_size,
+            temperature=temperature,
             anneal_rate=anneal_rate,
-            patience=patience
+            patience=patience,
         )
 
         self.optimal_model = self.loss.x_to_noise_model(x_best)

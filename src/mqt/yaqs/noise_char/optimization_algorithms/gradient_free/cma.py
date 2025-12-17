@@ -3,8 +3,18 @@ import numpy as np
 import cma
 
 
+from mqt.yaqs.noise_char.loss import LossClass
 
-def cma_opt(f, x0, x_low=None, x_up=None, sigma0=0.01, popsize=4, max_iter=500):
+
+def cma_opt(
+    f: LossClass,
+    x0: np.ndarray,
+    x_low: np.ndarray | None = None,
+    x_up: np.ndarray | None = None,
+    sigma0: float = 0.01,
+    popsize: int = 4,
+    max_iter: int = 500,
+) -> tuple[np.ndarray, float]:
     """
     CMA-ES optimization with optional lower and upper bounds per dimension
     and a maximum number of iterations.
@@ -58,7 +68,7 @@ def cma_opt(f, x0, x_low=None, x_up=None, sigma0=0.01, popsize=4, max_iter=500):
     # Run optimization loop
     for i in range(max_iter):
         solutions = es.ask()
-        values = [f(x) for x in solutions]
+        values = [f(x)[0] for x in solutions]
         es.tell(solutions, values)
 
         # Optional custom convergence detection
