@@ -1,13 +1,34 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from mqt.yaqs.noise_char.loss import LossClass
+if TYPE_CHECKING:
+    from mqt.yaqs.noise_char.loss import LossClass
 
 
-def mcmc_opt(f: LossClass, x0: np.ndarray, x_low: np.ndarray | None = None, x_up: np.ndarray | None = None, max_iter: int = 500,
-         step_size: float = 0.05, step_rate: float = 0.99, min_step_size: float = 0, temperature: float = 1.0, anneal_rate: float = 0.99,
-         patience: int = 100) -> tuple[np.ndarray, float]:
-    """
-    MCMC-based optimization with simulated annealing and early stopping.
+def mcmc_opt(
+    f: LossClass,
+    x0: np.ndarray,
+    x_low: np.ndarray | None = None,
+    x_up: np.ndarray | None = None,
+    max_iter: int = 500,
+    step_size: float = 0.05,
+    step_rate: float = 0.99,
+    min_step_size: float = 0,
+    temperature: float = 1.0,
+    anneal_rate: float = 0.99,
+    patience: int = 100,
+) -> tuple[np.ndarray, float]:
+    """MCMC-based optimization with simulated annealing and early stopping.
 
     This function performs Markov Chain Monte Carlo (MCMC) optimization using a Metropolis-Hastings
     algorithm with simulated annealing. It includes early stopping if no improvement occurs for a
@@ -38,14 +59,13 @@ def mcmc_opt(f: LossClass, x0: np.ndarray, x_low: np.ndarray | None = None, x_up
     patience : int, optional
         Number of iterations without improvement before early stopping. Default is 100.
 
-    Returns
+    Returns:
     -------
     xbest : np.ndarray
         The best point found during optimization.
     fbest : float
         The best (lowest) loss value found.
     """
-
     x = np.array(x0, dtype=float)
     ndim = x.size
 
@@ -59,8 +79,7 @@ def mcmc_opt(f: LossClass, x0: np.ndarray, x_low: np.ndarray | None = None, x_up
 
     no_improve_counter = 0
 
-    for i in range(max_iter):
-
+    for _i in range(max_iter):
         # Gaussian proposal
         x_new = x + np.random.normal(scale=step_size, size=ndim)
 

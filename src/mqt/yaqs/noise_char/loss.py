@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import copy
-
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,10 +19,12 @@ import numpy as np
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients, Propagator
+    from mqt.yaqs.noise_char.propagation import Propagator
 
 
 def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] | None) -> NDArray[np.float64]:
@@ -80,17 +81,15 @@ def trapezoidal(y: np.ndarray | list[float] | None, x: np.ndarray | list[float] 
     return integral
 
 
-
 def lineal_function_1000(i: int) -> int:
-    """
-    Return a constant value of 1000.
-    
+    """Return a constant value of 1000.
+
     This function takes an input parameter and returns a fixed value of 1000,
     regardless of the input value.
-    
+
     Args:
         i (int): An integer parameter (unused in the calculation).
-    
+
     Returns:
         int: The constant value 1000.
     """
@@ -106,11 +105,10 @@ class LossClass:
         self,
         *,
         ref_traj: list[Observable],
-        propagator: PropagatorWithGradients | Propagator,
+        propagator: Propagator,
         working_dir: str | Path = ".",
-        num_traj: callable = lineal_function_1000, 
+        num_traj: Callable[[int], int] = lineal_function_1000,
         print_to_file: bool = False,
-        return_gradients: bool =False,
         return_numeric_gradients: bool = False,
         epsilon: float = 1e-3,
     ) -> None:
@@ -118,8 +116,7 @@ class LossClass:
 
         Args:
             ref_traj (List[Observable]): A list of Observable objects representing the reference trajectory.
-            propagator (PropagatorWithGradients): An object that provides trajectory gradients
-                                                    and supports setting the observable list.
+            propagator (Propagator): An object that provides the trajectories of some observable list.
             working_dir (str | Path, optional): The directory where output files will be stored.
             print_to_file (bool, optional): If True, enables printing output to a file. Defaults to False.
 
@@ -133,7 +130,7 @@ class LossClass:
             print_to_file (bool): Indicates whether to print output to a file.
             work_dir (Path): Working directory for file output.
             ref_traj (List[Observable]): Deep copy of the reference trajectory.
-            propagator (PropagatorWithGradients): Deep copy of the trajectory gradients object.
+            propagator (Propagator): Deep copy of the Propagator object.
             ref_traj_array (np.ndarray): Array of results from the reference trajectory.
             d (int): Dimensionality of the input noise model's processes.
         """
@@ -160,13 +157,9 @@ class LossClass:
 
         self.write_traj(obs_array=self.ref_traj_array, output_file=self.work_dir / "ref_traj.txt")
 
-        self.return_gradients = return_gradients
-
         self.return_numeric_gradients = return_numeric_gradients
 
-
         self.epsilon = epsilon
-
 
         self.converged = False
 
@@ -204,12 +197,10 @@ class LossClass:
             diff: float = np.max(np.abs(self.x_avg_history[-1] - self.x_avg_history[-2]))
             self.diff_avg_history.append(diff)
 
-    def check_convergence(self):
-
+    def check_convergence(self) -> None:
         if len(self.diff_avg_history) > self.n_conv and all(
-            diff < self.avg_tol for diff in self.diff_avg_history[-self.n_conv:]
+            diff < self.avg_tol for diff in self.diff_avg_history[-self.n_conv :]
         ):
-            
             self.converged = True
 
     def post_process(self, x: np.ndarray, f: float, grad: np.ndarray) -> None:
@@ -434,41 +425,7 @@ class LossClass:
 
         sim_time = end_time - start_time  # Simulation time
 
-        
-
-        if self.return_gradients: 
-
-            self.d_on_d_gk = copy.deepcopy(self.propagator.d_on_d_gk_array)
-
-            _n_jump, n_obs, nt = np.shape(self.d_on_d_gk)
-
-            # I reshape diff so it has a shape compatible with d_on_d_gk (n_jump, n_obs, nt)
-            #  to do elemtwise multiplication. Then I sum over the n_obs and nt dimensions to
-            # get the gradient for each gamma, returning a vector of shape (n_jump)
-            grad_vec = np.sum(2 * diff.reshape(1, n_obs, nt) * self.d_on_d_gk, axis=(1, 2))
-
-            # grad_vec gives me the gradient for each individual gamma in the expanded noise model.
-
-            if len(grad_vec) != len(self.propagator.compact_noise_model.index_list):
-                msg = (
-                    f"Gradient vector length {len(grad_vec)} does not match "
-                    f"index list length {len(self.propagator.compact_noise_model.index_list)}"
-                )
-                raise ValueError(msg)
-
-            # To get the gradients for each gamma in the compact noise model, I sum the gradients
-            # corresponding to the same gamma using np.bincount.
-
-            grad = np.bincount(self.propagator.compact_noise_model.index_list, weights=grad_vec)
-
-            self.post_process(x.copy(), loss, grad.copy())
-
-
-            return loss, grad, sim_time
-        
-
         if self.return_numeric_gradients:
-            
             grad = np.zeros_like(x)
 
             for i in range(len(x)):
@@ -489,8 +446,7 @@ class LossClass:
 
             return loss, grad, sim_time
 
-
-        grad = np.array([0]*self.d)
+        grad = np.array([0] * self.d)
 
         self.post_process(x.copy(), loss, grad.copy())
 

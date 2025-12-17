@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
     from mqt.yaqs.noise_char.loss import LossClass
-    from mqt.yaqs.noise_char.propagation import Propagator, PropagatorWithGradients
+    from mqt.yaqs.noise_char.propagation import Propagator
 
 
 class Characterizer:
@@ -57,7 +57,7 @@ class Characterizer:
 
     loss: LossClass
 
-    propagator: PropagatorWithGradients | Propagator
+    propagator: Propagator
 
     init_guess: CompactNoiseModel
 
@@ -78,7 +78,7 @@ class Characterizer:
     def __init__(
         self,
         *,
-        propagator: PropagatorWithGradients | Propagator,
+        propagator: Propagator,
         init_guess: CompactNoiseModel,
         loss: LossClass,
     ) -> None:

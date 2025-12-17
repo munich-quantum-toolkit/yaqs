@@ -1,16 +1,22 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
+import contextlib
+import pickle  # noqa: S403
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from typing import TYPE_CHECKING
-from pathlib import Path
-import pickle  # noqa: S403
-import contextlib
-import time
-
-
-from mqt.yaqs.noise_char.loss import LossClass
-
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from mqt.yaqs.noise_char.loss import LossClass
 
 
 def gradient_descent_opt(
@@ -105,7 +111,7 @@ def gradient_descent_opt(
                     file_path.unlink()
 
         x = x_copy.copy()
-        d = len(x)
+        len(x)
         start_iter = 0
 
         # Write a header to performance_metric.txt in f.work_dir
@@ -120,18 +126,14 @@ def gradient_descent_opt(
 
         loss, grad, sim_time = f(x)
 
-        update = alpha*grad
-
-        print("Updates: ",x, alpha, grad, update)
+        update = alpha * grad
 
         # Update simulation parameters with Adam update (NEW)
         x -= update
-        
+
         # Ensure x stays in bounds (NEW)
         if x_low is not None and x_up is not None:
             x = np.clip(x, x_low, x_up)
-
-        print("Updated x",x)
 
         restart_data = {
             "iteration": i,
@@ -168,4 +170,4 @@ def gradient_descent_opt(
         ):
             break
 
-    return f.f_history, f.x_history, f.x_avg_history, f.t, f.obs_array 
+    return f.f_history, f.x_history, f.x_avg_history, f.t, f.obs_array

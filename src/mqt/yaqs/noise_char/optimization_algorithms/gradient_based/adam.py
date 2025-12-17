@@ -1,18 +1,23 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+from __future__ import annotations
+
+import contextlib
+import pickle  # noqa: S403
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
-from typing import TYPE_CHECKING
-from pathlib import Path
-import pickle  # noqa: S403
-import contextlib
-import time
-
-
-from mqt.yaqs.noise_char.loss import LossClass
-
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
- 
+    from mqt.yaqs.noise_char.loss import LossClass
+
 
 def adam_opt(
     f: LossClass,

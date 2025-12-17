@@ -1,9 +1,20 @@
-#%%
-import numpy as np
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+# %%
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import cma
+import numpy as np
 
-
-from mqt.yaqs.noise_char.loss import LossClass
+if TYPE_CHECKING:
+    from mqt.yaqs.noise_char.loss import LossClass
 
 
 def cma_opt(
@@ -15,8 +26,7 @@ def cma_opt(
     popsize: int = 4,
     max_iter: int = 500,
 ) -> tuple[np.ndarray, float]:
-    """
-    CMA-ES optimization with optional lower and upper bounds per dimension
+    """CMA-ES optimization with optional lower and upper bounds per dimension
     and a maximum number of iterations.
 
     Parameters
@@ -36,14 +46,13 @@ def cma_opt(
     max_iter : int, optional
         Maximum number of iterations (default: 500).
 
-    Returns
+    Returns:
     -------
     fbest : float
         Best objective function value.
     xbest : ndarray
         Best solution found.
     """
-
     x0 = np.array(x0, dtype=float)
 
     # Handle flexible bounds
@@ -59,31 +68,27 @@ def cma_opt(
         x0,
         sigma0,
         {
-            'popsize': popsize,
-            'verb_disp': 0,
-            'bounds': [x_low.tolist(), x_up.tolist()],
+            "popsize": popsize,
+            "verb_disp": 0,
+            "bounds": [x_low.tolist(), x_up.tolist()],
         },
     )
 
     # Run optimization loop
-    for i in range(max_iter):
+    for _i in range(max_iter):
         solutions = es.ask()
         values = [f(x)[0] for x in solutions]
         es.tell(solutions, values)
 
         # Optional custom convergence detection
         if hasattr(f, "converged") and getattr(f, "converged", False):
-            print(f"Average stable at iteration {i}.")
             break
 
         if es.stop():
             break
 
         if f.converged:
-            print(f"Average stable at iteration {f.n_eval}.")
             break
 
     result = es.result
     return result.xbest, result.fbest
-
-
