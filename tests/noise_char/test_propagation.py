@@ -76,14 +76,14 @@ class Parameters:
 
 def create_propagator_instance(
     test: Parameters,
-) -> tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, propagation.PropagatorWithGradients]:
-    """Create and initialize a PropagatorWithGradients instance.
+) -> tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, propagation.Propagator]:
+    """Create and initialize a Propagator instance.
 
     It is configured for an analog open quantum system simulation.
     This helper constructs an Ising Hamiltonian (MPO), a zero-filled initial MPS, a list of single-site
     Pauli observables (X, Y, Z for each site), an AnalogSimParams object with sampling enabled, and a
     CompactNoiseModel containing two noise channels ("lowering" and "pauli_z"). It then instantiates a
-    propagation.PropagatorWithGradients using those objects, registers the observable list with the
+    propagation.Propagator using those objects, registers the observable list with the
     propagator, and runs a propagation using the reference noise model.
     Parameters
     ----------
@@ -103,7 +103,7 @@ def create_propagator_instance(
 
     Returns:
     -------
-    tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, propagation.PropagatorWithGradients]
+    tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, propagation.Propagator]
         A 6-tuple containing, in order:
           - h_0: MPO
               The initialized Ising Hamiltonian MPO for the given system parameters.
@@ -115,7 +115,7 @@ def create_propagator_instance(
               The simulation parameter object used to configure the propagator (with sample_timesteps=True).
           - ref_noise_model: CompactNoiseModel
               The compact noise model containing the "lowering" and "pauli_z" channels applied to all sites.
-          - propagator: propagation.PropagatorWithGradients
+          - propagator: propagation.Propagator
               The propagator instance after calling set_observable_list(...) and run(ref_noise_model). The
               propagator therefore has performed the configured propagation at least once.
     """
@@ -147,7 +147,7 @@ def create_propagator_instance(
         {"name": "pauli_z", "sites": list(range(test.sites)), "strength": test.gamma_deph},
     ])
 
-    propagator = propagation.PropagatorWithGradients(
+    propagator = propagation.Propagator(
         sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
     )
 
@@ -182,7 +182,7 @@ def test_propagatorwithgradients_runs() -> None:
 
 
 def test_raises_errors() -> None:
-    """Test that `PropagatorWithGradients` raises expected ValueErrors.
+    """Test that `Propagator` raises expected ValueErrors.
 
     Verifies errors for:
     - Noise model referencing sites beyond the Hamiltonian.
@@ -194,7 +194,7 @@ def test_raises_errors() -> None:
 
     h_0, init_state, obs_list, sim_params, ref_noise_model, _ = create_propagator_instance(test)
 
-    # Test that PropagatorWithGradients raises a ValueError when
+    # Test that Propagator raises a ValueError when
     # the noise model exceeds the number of sites of the Hamiltonian.
     exceed_ref_noise_model = CompactNoiseModel([
         {"name": "lowering", "sites": list(range(test.sites + 1)), "strength": test.gamma_rel},
@@ -203,27 +203,27 @@ def test_raises_errors() -> None:
 
     msg = "Noise site index exceeds number of sites in the Hamiltonian."
     with pytest.raises(ValueError, match=re.escape(msg)):
-        propagator = propagation.PropagatorWithGradients(
+        propagator = propagation.Propagator(
             sim_params=sim_params, hamiltonian=h_0, compact_noise_model=exceed_ref_noise_model, init_state=init_state
         )
 
-    # Test that PropagatorWithGradients raises a ValueError when
+    # Test that Propagator raises a ValueError when
     # observable list exceeds the number of sites of the Hamiltonian.
     exceed_obs_list = (
         [Observable(X(), site) for site in range(test.sites)]
         + [Observable(Y(), site) for site in range(test.sites)]
         + [Observable(Z(), site) for site in range(test.sites + 1)]
     )
-    propagator = propagation.PropagatorWithGradients(
+    propagator = propagation.Propagator(
         sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
     )
     msg = "Observable site index exceeds number of sites in the Hamiltonian."
     with pytest.raises(ValueError, match=re.escape(msg)):
         propagator.set_observable_list(exceed_obs_list)
 
-    # Test that PropagatorWithGradients raises a ValueError when
+    # Test that Propagator raises a ValueError when
     # observable list is not set.
-    propagator = propagation.PropagatorWithGradients(
+    propagator = propagation.Propagator(
         sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
     )
     msg = "Observable list not set. Please use the set_observable_list method to set the observables."
@@ -231,14 +231,14 @@ def test_raises_errors() -> None:
     with pytest.raises(ValueError, match=re.escape(msg)):
         propagator.run(ref_noise_model)
 
-    # Test that PropagatorWithGradients raises a ValueError when
+    # Test that Propagator raises a ValueError when
     # the provided noise model does not match the initialized noise model.
     wrong_ref_noise_model = CompactNoiseModel([
         {"name": "lowering", "sites": list(range(test.sites)), "strength": test.gamma_rel},
         {"name": "pauli_x", "sites": list(range(test.sites)), "strength": test.gamma_deph},
     ])
 
-    propagator = propagation.PropagatorWithGradients(
+    propagator = propagation.Propagator(
         sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
     )
     propagator.set_observable_list(obs_list)

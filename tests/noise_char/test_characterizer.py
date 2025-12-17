@@ -19,12 +19,12 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams,
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.noise_char import propagation
 from mqt.yaqs.noise_char.characterizer import Characterizer
-from mqt.yaqs.noise_char.optimization import LossClass
+from mqt.yaqs.noise_char.loss import LossClass
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from mqt.yaqs.noise_char.propagation import PropagatorWithGradients
+    from mqt.yaqs.noise_char.propagation import Propagator
 
 
 class Parameters:
@@ -103,12 +103,12 @@ class Parameters:
 
 def create_instances(
     test: Parameters, tmp_path: Path
-) -> tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, PropagatorWithGradients, LossClass]:
+) -> tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, Propagator, LossClass]:
     """Create and initialize objects required for an analog open-quantum-system simulation.
 
     This helper constructs an Ising Hamiltonian MPO, an initial MPS, a list of single-site
     observables (X, Y, Z for each site), simulation parameters, a compact noise model
-    (with lowering and dephasing channels), and a PropagatorWithGradients instance.
+    (with lowering and dephasing channels), and a Propagator instance.
     The propagator is configured with the observables and then executed (propagator.run)
     with the constructed noise model before being returned.
     Parameters.
@@ -131,7 +131,7 @@ def create_instances(
 
     Returns:
     -------
-    tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, PropagatorWithGradients]
+    tuple[MPO, MPS, list[Observable], AnalogSimParams, CompactNoiseModel, Propagator]
         A 6-tuple containing:
         - h_0 (MPO): Ising Hamiltonian MPO initialized with (sites, j, g).
         - init_state (MPS): initial MPS in the "zeros" product state.
@@ -139,7 +139,7 @@ def create_instances(
         - sim_params (AnalogSimParams): simulation parameters assembled from `test` and `obs_list`.
         - ref_noise_model (CompactNoiseModel): compact noise model with "lowering" and "pauli_z"
           channels applied to all sites, using strengths `gamma_rel` and `gamma_deph`.
-        - propagator (PropagatorWithGradients): propagator configured with the Hamiltonian,
+        - propagator (Propagator): propagator configured with the Hamiltonian,
           noise model and initial state; observables are set and the propagation has been run
           with `ref_noise_model` prior to return.
 
@@ -184,7 +184,7 @@ def create_instances(
         {"name": "pauli_z", "sites": list(range(test.sites)), "strength": test.gamma_deph},
     ])
 
-    propagator = propagation.PropagatorWithGradients(
+    propagator = propagation.Propagator(
         sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
     )
 
@@ -209,7 +209,7 @@ def test_characterizer_init(tmp_path: Path) -> None:
     )
 
     assert isinstance(characterizer.init_guess, CompactNoiseModel)
-    assert isinstance(characterizer.traj_gradients, propagation.PropagatorWithGradients)
+    assert isinstance(characterizer.traj_gradients, propagation.Propagator)
     assert isinstance(characterizer.loss, LossClass)
     assert isinstance(characterizer.init_x, np.ndarray)
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import contextlib
 import pickle  # noqa: S403
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pytest
@@ -21,10 +21,9 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
-from mqt.yaqs.noise_char import optimization, propagation
-
-if TYPE_CHECKING:
-    from mqt.yaqs.noise_char.optimization import LossClass
+from mqt.yaqs.noise_char import propagation
+from mqt.yaqs.noise_char.loss import LossClass
+from mqt.yaqs.noise_char.optimization_algorithms.gradient_based.adam import adam_opt
 
 
 class Parameters:
@@ -117,7 +116,7 @@ def create_loss_instance(tmp_path: Path, test: Parameters) -> LossClass:
     Returns:
     -------
     LossClass
-        An instance of optimization.LossClass initialized with a reference trajectory
+        An instance of LossClass initialized with a reference trajectory
         and propagator for use in tests.
     """
     h_0 = MPO()
@@ -148,14 +147,14 @@ def create_loss_instance(tmp_path: Path, test: Parameters) -> LossClass:
         {"name": "pauli_z", "sites": list(range(test.sites)), "strength": test.gamma_deph},
     ])
 
-    propagator = propagation.PropagatorWithGradients(
+    propagator = propagation.Propagator(
         sim_params=sim_params, hamiltonian=h_0, compact_noise_model=ref_noise_model, init_state=init_state
     )
 
     propagator.set_observable_list(obs_list)
     propagator.run(ref_noise_model)
 
-    return optimization.LossClass(
+    return LossClass(
         ref_traj=propagator.obs_traj,
         traj_gradients=propagator,
         working_dir=tmp_path,
@@ -219,7 +218,7 @@ def assert_list_of_arrays_equal(list1: list[np.ndarray], list2: list[np.ndarray]
 def test_loss_class_history_and_reset(tmp_path: Path) -> None:
     """Tests the history management and reset functionality of a loss class.
 
-    This test defines a DummyLoss class inheriting from `optimization.LossClass` and verifies:
+    This test defines a DummyLoss class inheriting from `LossClass` and verifies:
     - The `reset()` method correctly initializes evaluation count and history attributes.
     - The `set_history()` method updates the history attributes (`x_history`, `f_history`, `
     diff_avg_history`) and evaluation count (`n_eval`) as expected.
@@ -249,7 +248,7 @@ def test_loss_class_history_and_reset(tmp_path: Path) -> None:
 def test_loss_class_compute_avg_and_diff(tmp_path: Path) -> None:
     """Test the computation of average and difference in the loss class.
 
-    This test defines a dummy subclass of `optimization.LossClass` with preset history values.
+    This test defines a dummy subclass of `LossClass` with preset history values.
     It verifies that:
     - The `compute_avg()` method correctly computes and appends
     the average of the last `n_avg` entries in `x_history` to `x_avg_history`.
@@ -329,7 +328,7 @@ def test_write_opt_traj_creates_correct_file_and_content(tmp_path: Path) -> None
 def test_loss_class_set_work_dir(tmp_path: Path) -> None:
     """Tests the functionality of setting a file name and writing to a file in a custom loss class.
 
-    This test defines a DummyLoss class inheriting from `optimization.LossClass`, sets up a working directory,
+    This test defines a DummyLoss class inheriting from `LossClass`, sets up a working directory,
     and verifies that:
     - The file name is correctly set and the file is created.
 
@@ -448,7 +447,7 @@ def test_write_to_file_does_nothing_when_disabled(tmp_path: Path) -> None:
 def test_adam_optimizer_runs(tmp_path: Path) -> None:
     """Test that the Adam optimizer runs successfully with a dummy loss function.
 
-    This test defines a DummyLoss class inheriting from `optimization.LossClass` and
+    This test defines a DummyLoss class inheriting from `LossClass` and
     verifies that the `adam_optimizer` function from the `optimization` module executes
     without errors for a small number of iterations. It checks that the returned values
     have the expected types.
@@ -472,7 +471,7 @@ def test_adam_optimizer_runs(tmp_path: Path) -> None:
     loss_function = create_loss_instance(tmp_path, test)
 
     x0 = np.array([0.5, 0.5])  # Initial guess for the parameters
-    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = optimization.adam_optimizer(loss_function, x0, max_iterations=3)
+    f_hist, x_hist, x_avg_hist, t, exp_vals_traj = adam_opt(loss_function, x0, max_iterations=3)
     assert isinstance(f_hist, list)
     assert isinstance(x_hist, list)
     assert isinstance(x_avg_hist, list)
@@ -540,7 +539,7 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     loss = create_loss_instance(tmp_path, test)
 
     # Act
-    f_hist, x_hist, x_avg_hist, _, _ = optimization.adam_optimizer(
+    f_hist, x_hist, x_avg_hist, _, _ = adam_opt(
         loss,
         x_copy=np.array([1, 1]),  # ignored because restart=True
         restart=True,
@@ -554,7 +553,7 @@ def test_restart_loads_x_m_v(tmp_path: Path) -> None:
     assert_list_of_arrays_equal(x_avg_hist[:iteration], x_avg_history)
 
     with pytest.raises(ValueError, match="Restart file not found"):
-        _, _, _, _, _ = optimization.adam_optimizer(
+        _, _, _, _, _ = adam_opt(
             loss,
             x_copy=np.array([1, 1]),  # ignored because restart=True
             restart=True,
@@ -570,14 +569,14 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
     1. Latest-restart-file selection
         - Creates several restart .pkl files in tmp_path with different iteration/t/obs_traj
           values, deliberately writing them in a non-chronological order on disk.
-        - Calls optimization.adam_optimizer with restart=True and restart_file=None and
+        - Calls adam_opt with restart=True and restart_file=None and
           max_iterations=1 so the optimizer does not proceed beyond loading the restart.
         - Verifies that the optimizer loaded the restart file corresponding to the largest
           iteration (the "latest" file) by asserting returned_t and returned_obs match the
           values stored in that file.
     2. .pkl file cleanup when restart is disabled
         - Leaves a non-.pkl file in tmp_path to ensure non-restart files are not touched.
-        - Recreates the loss instance and calls optimization.adam_optimizer with restart=False
+        - Recreates the loss instance and calls adam_opt with restart=False
           and restart_file=None (again with max_iterations=1).
         - Verifies that the optimizer removed the expected restart .pkl files according to
           the behavior under test (only the expected baseline .pkl remains) and that the
@@ -624,7 +623,7 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
 
     # Call optimizer with restart enabled and restart_file=None.
     # Set max_iterations=1 so that after loading the restart file the optimizer loop does not run.
-    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(
+    _, _, _, returned_t, returned_obs = adam_opt(
         loss, np.array([0.0] * test.d), restart=True, restart_file=None, max_iterations=1
     )
 
@@ -639,7 +638,7 @@ def test_adam_selects_latest_restart_file(tmp_path: Path) -> None:
     loss = create_loss_instance(tmp_path, test)
 
     # Testing all .pkl files are deleted if restart is False
-    _, _, _, returned_t, returned_obs = optimization.adam_optimizer(
+    _, _, _, returned_t, returned_obs = adam_opt(
         loss, np.array([0.0] * test.d), restart=False, restart_file=None, max_iterations=1
     )
 
