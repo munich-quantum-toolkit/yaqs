@@ -7,7 +7,7 @@ from matplotlib import colors as mcolors
 # ------------------------
 # Data + parameters
 # ------------------------
-dt_list = [0.0025, 0.004, 0.005, 0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.25, 0.5]
+dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.25, 0.5]
 gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]
 gamma_min = 0.01
 gamma_max = 50
@@ -44,7 +44,7 @@ def load_gamma_dt_heatmap(
             for j, obs_list in enumerate(results):
                 if obs_list is None:
                     continue
-                obs = obs_list[0][obs_idx]
+                obs = obs_list[obs_idx]
                 vals = np.array(obs.results)
                 g = gamma_list[j]
                 row = gamma_to_idx[g]
@@ -54,12 +54,12 @@ def load_gamma_dt_heatmap(
                 vals = np.array(obs)
                 g = gamma_list[j]
                 row = gamma_to_idx[g]
-                scaled_grid[row, k] = float(vals)
+                scaled_grid[row, k] = np.log(float(vals))
                 # scaled_grid[row, k] = float(np.sum(vals**2))
                 # scaled_grid[row, k] += 0.1*scaled_grid[row, k]*T/dt
                 # scaled_grid[row, k] += float(np.sum(vals**2))
                 # scaled_grid[row, k] = np.log(scaled_grid[row, k])
-
+    scaled_grid = scaled_grid / np.nanmax(scaled_grid)
     return grid, scaled_grid
 
 grid, scaled_grid = load_gamma_dt_heatmap(which_obs="max_bond")                 # χ_avg
@@ -174,7 +174,7 @@ ax.set_xlabel(r"$dt$")
 ax.set_ylabel(r"$\gamma$")
 
 cbar_b = fig.colorbar(im_b, ax=ax)
-cbar_b.set_label(r"Wall time per trajectory (s)")
+cbar_b.set_label(r"Normalized wall time per trajectory")
 
 add_dp_lines(ax)
 ax.text(0.02, 0.98, "(b)", transform=ax.transAxes,
