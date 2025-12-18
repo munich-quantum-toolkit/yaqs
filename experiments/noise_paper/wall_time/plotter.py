@@ -14,7 +14,7 @@ gamma_max = 50
 
 T = 5.0
 data_dir = Path(".")
-prefix = "walltime_"
+prefix = "walltime_heisenberg_"
 
 def load_gamma_dt_heatmap(
     dt_list=dt_list,
@@ -44,7 +44,7 @@ def load_gamma_dt_heatmap(
             for j, obs_list in enumerate(results):
                 if obs_list is None:
                     continue
-                obs = obs_list[obs_idx]
+                obs = obs_list[0][obs_idx]
                 vals = np.array(obs.results)
                 g = gamma_list[j]
                 row = gamma_to_idx[g]
@@ -54,12 +54,12 @@ def load_gamma_dt_heatmap(
                 vals = np.array(obs)
                 g = gamma_list[j]
                 row = gamma_to_idx[g]
-                scaled_grid[row, k] = np.log(float(vals))
+                scaled_grid[row, k] = float(vals)
                 # scaled_grid[row, k] = float(np.sum(vals**2))
                 # scaled_grid[row, k] += 0.1*scaled_grid[row, k]*T/dt
                 # scaled_grid[row, k] += float(np.sum(vals**2))
                 # scaled_grid[row, k] = np.log(scaled_grid[row, k])
-    scaled_grid = scaled_grid / np.nanmax(scaled_grid)
+    scaled_grid = scaled_grid
     return grid, scaled_grid
 
 grid, scaled_grid = load_gamma_dt_heatmap(which_obs="max_bond")                 # χ_avg
