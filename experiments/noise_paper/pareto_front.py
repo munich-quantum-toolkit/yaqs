@@ -15,7 +15,7 @@ def tdvp_simulator(H_0, noise_model, state=None):
 
     measurements = [Observable(Z(), [0])] + [Observable("entropy", [L//2, L//2+1])] + [Observable("max_bond")]
     sim_params = AnalogSimParams(observables=measurements,
-                                elapsed_time=5,
+                                elapsed_time=3,
                                 dt=0.1,
                                 num_traj=30,
                                 threshold=1e-6,
@@ -37,7 +37,8 @@ if __name__ == "__main__":
         J = 1
         h = 1
         H_0 = MPO()
-        H_0.init_ising(L, J, h)
+        # H_0.init_ising(L, J, h)
+        H_0.init_heisenberg(L, J, J, J, h)
 
         dps = np.logspace(-3, 0, 20)
         results1 = []
