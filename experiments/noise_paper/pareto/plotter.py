@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 
-L_list = range(5, 50, 5)
+L_list = range(5, 55, 5)
 dps = np.logspace(-3, 0, 20)
 data_dir = Path(".")  # adjust if needed
 
@@ -24,7 +24,7 @@ def load_heatmap(u, t, L_list=L_list, dps=dps, prefix=""):
         if len(results) != len(dps):
             raise ValueError(f"{fname} has {len(results)} entries, expected {len(dps)}")
 
-        for j, (entropy_obs, max_bond_obs) in enumerate(results):
+        for j, (z, entropy_obs, max_bond_obs) in enumerate(results):
             # max_bond_obs.results: list/array over trajectories
             vals = np.array(max_bond_obs.results)
             grid[i, j] = float(vals.mean())
@@ -51,7 +51,7 @@ panels = {
 }
 
 vmin = 2 # min(np.min(arr) for (arr, _, _) in panels.values())
-vmax = 64 # max(np.max(arr) for (arr, _, _) in panels.values())
+vmax = 128 # max(np.max(arr) for (arr, _, _) in panels.values())
 
 for (r, c), (grid, row_label, col_label) in panels.items():
     ax = axes[r, c]
