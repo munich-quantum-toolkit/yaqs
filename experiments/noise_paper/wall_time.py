@@ -13,7 +13,7 @@ def tdvp_simulator(H_0, dt, noise_model, state=None):
 
     state = MPS(length=L)
 
-    measurements = [Observable("max_bond")]
+    measurements = [Observable(Z(), [L//2])] + [Observable("max_bond")]
     sim_params = AnalogSimParams(observables=measurements,
                                 elapsed_time=5,
                                 dt=dt,
@@ -30,8 +30,9 @@ def tdvp_simulator(H_0, dt, noise_model, state=None):
 
     # print("Obs Exp Val", sim_params.observables[0].results[-1])
     # print("Entropy", sim_params.observables[0].results[-1])
-    print("Max Bond", sim_params.observables[0].results)
-    return [sim_params.observables, time_per_traj]
+    print("Max Bond", sim_params.observables[1].results)
+    print(time_per_traj)
+    return [sim_params.observables[1], time_per_traj]
 
 if __name__ == "__main__":
     L = 65
@@ -41,7 +42,8 @@ if __name__ == "__main__":
     H_0.init_ising(L, J, h)
 
     # 1000, 500, 400, 250, 200, 125, 100, 50, 25, 20, 10 steps
-    dt_list = [0.0025, 0.004, 0.005, 0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.2, 0.25, 0.5]
+    # dt_list = [0.0025, 0.004, 0.005, 0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.2, 0.25, 0.5]
+    dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.2, 0.25, 0.5]
 
     for k, dt in enumerate(dt_list):
         gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]
@@ -68,7 +70,7 @@ if __name__ == "__main__":
             # cost = tdvp_simulator(H_0, noise_model)
             # results2.append(cost)
 
-        filename = f"walltime_{k+4}.pickle"
+        filename = f"walltime_{k}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results1, handle)
 

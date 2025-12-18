@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
-DENSE_THRESHOLD = 128
+DENSE_THRESHOLD = 0
 
 
 def split_mps_tensor(
