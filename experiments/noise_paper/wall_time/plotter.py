@@ -174,7 +174,7 @@ ax.set_xlabel(r"$dt$")
 ax.set_ylabel(r"$\gamma$")
 
 cbar_b = fig.colorbar(im_b, ax=ax)
-cbar_b.set_label(r"Normalized wall time per trajectory")
+cbar_b.set_label(r"Wall time per trajectory (s)")
 
 add_dp_lines(ax)
 ax.text(0.02, 0.98, "(b)", transform=ax.transAxes,

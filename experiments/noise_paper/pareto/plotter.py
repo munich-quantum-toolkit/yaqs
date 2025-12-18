@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 
-L_list = range(5, 80, 5)
+L_list = range(5, 50, 5)
 dps = np.logspace(-3, 0, 20)
 data_dir = Path(".")  # adjust if needed
 
@@ -17,7 +17,7 @@ def load_heatmap(u, t, L_list=L_list, dps=dps, prefix=""):
     grid = np.zeros((len(L_list), len(dps)), dtype=float)
 
     for i, L in enumerate(L_list):
-        fname = data_dir / f"{prefix}u{u}t{t}_{L}.pickle"
+        fname = data_dir / f"{prefix}u{u}_{L}.pickle"
         with open(fname, "rb") as f:
             results = pickle.load(f)  # list over dp
 
