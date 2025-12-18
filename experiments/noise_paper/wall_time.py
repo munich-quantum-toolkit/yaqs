@@ -13,11 +13,11 @@ def tdvp_simulator(H_0, dt, noise_model, state=None):
 
     state = MPS(length=L)
 
-    measurements = [Observable(Z(), [L//2])] + [Observable("max_bond")]
+    measurements = [Observable("max_bond")]
     sim_params = AnalogSimParams(observables=measurements,
-                                elapsed_time=5,
+                                elapsed_time=3,
                                 dt=dt,
-                                num_traj=3,
+                                num_traj=10,
                                 threshold=1e-6,
                                 trunc_mode="discarded_weight",
                                 order=2,
@@ -26,20 +26,21 @@ def tdvp_simulator(H_0, dt, noise_model, state=None):
     start_time = time.time()
     simulator.run(state, H_0, sim_params, noise_model=noise_model)
     elapsed_time = time.time() - start_time
-    time_per_traj = elapsed_time / sim_params.num_traj
+    time_per_traj = elapsed_time
 
     # print("Obs Exp Val", sim_params.observables[0].results[-1])
     # print("Entropy", sim_params.observables[0].results[-1])
-    print("Max Bond", sim_params.observables[1].results)
+    print("Max Bond", sim_params.observables[0].results)
     print(time_per_traj)
-    return [sim_params.observables[1], time_per_traj]
+    return [sim_params.observables, time_per_traj]
 
 if __name__ == "__main__":
     L = 65
     J = 1
     h = 1
     H_0 = MPO()
-    H_0.init_ising(L, J, h)
+    # H_0.init_ising(L, J, h)
+    H_0.init_heisenberg(L, J, J, J, h)
 
     # 1000, 500, 400, 250, 200, 125, 100, 50, 25, 20, 10 steps
     # dt_list = [0.0025, 0.004, 0.005, 0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.2, 0.25, 0.5]
@@ -70,7 +71,7 @@ if __name__ == "__main__":
             # cost = tdvp_simulator(H_0, noise_model)
             # results2.append(cost)
 
-        filename = f"walltime_{k}.pickle"
+        filename = f"walltime_heisenberg_{k}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results1, handle)
 
