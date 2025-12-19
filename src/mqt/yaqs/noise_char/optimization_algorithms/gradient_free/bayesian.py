@@ -71,8 +71,6 @@ def get_acquisition_function(name: str, model: SingleTaskGP, best_f: float | Non
     >>> acq_ucb = get_acquisition_function("UCB", model, beta=2.576)
     """
     name = name.upper()
-    if name == "EI":
-        return ExpectedImprovement(model=model, best_f=best_f, maximize=True)
     if name == "LEI":
         return LogExpectedImprovement(model=model, best_f=best_f, maximize=True)
     if name == "PI":
@@ -92,7 +90,7 @@ def bayesian_opt(
     x_up: np.ndarray | None = None,
     n_init: int = 5,
     max_iter: int = 15,
-    acq_name: str = "EI",
+    acq_name: str = "UCB",
     std: float = 1e-6,
     beta: float = 2.0,
     dtype: torch.dtype = torch.double,
@@ -118,7 +116,7 @@ def bayesian_opt(
     Returns:
         tuple: A tuple containing:
             - best_x (np.ndarray): Optimal point found. Shape (d,).
-            - best_y (np.ndarray): Function value at optimal point.
+            - best_y (np.floating): Function value at optimal point (numpy scalar).
             - x_train (torch.Tensor): All evaluated points in normalized space. Shape (n_evals, d).
             - y_train (torch.Tensor): Negated function values for all evaluations. Shape (n_evals, 1).
     """
