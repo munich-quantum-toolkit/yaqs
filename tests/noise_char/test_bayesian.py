@@ -23,6 +23,15 @@ import pytest
 
 import torch
 
+# Suppress botorch warnings:
+# - Deprecation warnings related to numpy 2.0 compatibility
+# - InputDataWarning about float32 (we intentionally test with float32)
+# These are external library warnings, not issues with our code
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::DeprecationWarning:botorch.*",
+    "ignore:The model inputs are of type torch.float32.*:UserWarning",  # InputDataWarning about float32
+)
+
 from botorch.acquisition import (
     LogExpectedImprovement,
     ProbabilityOfImprovement,
@@ -282,7 +291,7 @@ def test_bayesian_opt_custom_parameters() -> None:
         n_init=4,
         max_iter=3,
         acq_name="UCB",
-        std=1e-5,
+        std=1e-2,
         beta=2.5,
         dtype=torch.float32,
         device="cpu",

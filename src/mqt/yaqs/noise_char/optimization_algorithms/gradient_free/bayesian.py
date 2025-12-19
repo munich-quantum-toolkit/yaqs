@@ -91,7 +91,7 @@ def bayesian_opt(
     n_init: int = 5,
     max_iter: int = 15,
     acq_name: str = "UCB",
-    std: float = 1e-6,
+    std: float = 1e-2,
     beta: float = 2.0,
     dtype: torch.dtype = torch.double,
     device: str = "cpu",
