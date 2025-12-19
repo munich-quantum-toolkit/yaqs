@@ -48,7 +48,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
-[#274]: https://github.com/munich-quantum-toolkit/yaqs/pull/261
+[#274]: https://github.com/munich-quantum-toolkit/yaqs/pull/274
 [#261]: https://github.com/munich-quantum-toolkit/yaqs/pull/261
 [#214]: https://github.com/munich-quantum-toolkit/yaqs/pull/214
 [#213]: https://github.com/munich-quantum-toolkit/yaqs/pull/213
