@@ -462,7 +462,7 @@ def test_split_truncation_discarded_weight_kept_count(
     ],
 )
 def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the: float, expected_keep: int) -> None:
-    """relative: keep count matches s_i/s_max > threshold; shapes consistent."""
+    """relative: keep count matches s_i/s_max >= threshold; shapes consistent."""
     d0, d1, D0, D2 = 2, 3, 2, 3
     theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=12)
     A_in = _as_input_tensor(theta, d0, d1, D0, D2)
