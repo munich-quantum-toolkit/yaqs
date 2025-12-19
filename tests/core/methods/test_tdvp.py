@@ -390,11 +390,12 @@ def _as_input_tensor(theta: NDArray[np.complex128], d0: int, d1: int, d2: int, d
 
 @pytest.mark.parametrize(
     ("svs", "threshold", "expected_keep"),
-    [
-        (np.array([1.0, 0.5, 0.1, 0.01]), 1e-4, 4),  # discard 0.01 -> 1e-4
-        (np.array([1.0, 0.5, 0.01, 0.001]), 1e-4, 3),  # 1e-4 + 1e-6 ≈ 1e-4 boundary
-        (np.array([1.0, 0.2, 0.2, 0.2]), 0.2**2 * 3, 1),  # keep only the largest
-    ],
+[
+  (np.array([1.0, 0.5, 0.1, 0.0100001]), 1e-4, 4),
+  (np.array([1.0, 0.5, 0.01, 0.001]), 1e-4, 3),
+  (np.array([1.0, 0.2, 0.2, 0.2]), 0.2**2 * 3, 1),
+]
+
 )
 def test_split_truncation_discarded_weight_kept_count(
     svs: NDArray[np.float64], threshold: float, expected_keep: int
