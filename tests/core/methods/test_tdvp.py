@@ -447,7 +447,7 @@ def test_split_truncation_discarded_weight_kept_count(
 
     # 2) maximality: if we kept one fewer, tail would exceed threshold (unless keep is forced)
     if keep > sim_params.min_bond_dim:
-        tail_prev = svs[keep-1:]  # discarding one extra singular value
+        tail_prev = svs[keep - 1 :]  # discarding one extra singular value
         tail_prev_power = float(np.sum(tail_prev**2))
         assert tail_prev_power > threshold - tol
 

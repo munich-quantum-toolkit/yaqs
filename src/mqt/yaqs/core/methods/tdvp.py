@@ -103,7 +103,7 @@ def split_mps_tensor(
         min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
         # iterate from smallest to largest
         for idx, s in enumerate(reversed(s_vec)):
-            next_discard = discard + s*s
+            next_discard = discard + s * s
             if next_discard > sim_params.threshold:
                 # don't discard this one; discard only the ones already counted
                 keep = max(len(s_vec) - idx, min_keep)
