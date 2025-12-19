@@ -101,13 +101,18 @@ def split_mps_tensor(
     if sim_params.trunc_mode == "discarded_weight":
         discard = 0.0
         min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
+        # iterate from smallest to largest
         for idx, s in enumerate(reversed(s_vec)):
-            discard += s**2
-            if discard >= sim_params.threshold:
-                keep = max(len(s_vec) - (idx + 1), min_keep)
+            next_discard = discard + s*s
+            if next_discard > sim_params.threshold:
+                # don't discard this one; discard only the ones already counted
+                keep = max(len(s_vec) - idx, min_keep)
                 break
+            discard = next_discard
     elif sim_params.trunc_mode == "relative":
-        keep = min(sum(s_vec / max(s_vec) > sim_params.threshold), sim_params.max_bond_dim)
+        smax = s_vec[0]
+        keep = 0 if smax == 0 else int(np.sum((s_vec / smax) >= sim_params.threshold))
+        keep = min(keep, sim_params.max_bond_dim)
         keep = max(keep, sim_params.min_bond_dim)
 
     left_tensor = u_mat[:, :keep]

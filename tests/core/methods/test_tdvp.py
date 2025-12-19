@@ -391,8 +391,8 @@ def _as_input_tensor(theta: NDArray[np.complex128], d0: int, d1: int, d2: int, d
 @pytest.mark.parametrize(
     ("svs", "threshold", "expected_keep"),
     [
-        (np.array([1.0, 0.5, 0.1, 0.01]), 1e-4, 3),  # discard 0.01 -> 1e-4
-        (np.array([1.0, 0.5, 0.01, 0.001]), 1e-4, 2),  # 1e-4 + 1e-6 ≈ 1e-4 boundary
+        (np.array([1.0, 0.5, 0.1, 0.01]), 1e-4, 4),  # discard 0.01 -> 1e-4
+        (np.array([1.0, 0.5, 0.01, 0.001]), 1e-4, 3),  # 1e-4 + 1e-6 ≈ 1e-4 boundary
         (np.array([1.0, 0.2, 0.2, 0.2]), 0.2**2 * 3, 1),  # keep only the largest
     ],
 )
@@ -439,9 +439,17 @@ def test_split_truncation_discarded_weight_kept_count(
     else:
         assert keep == expected_keep
 
-    # Verify tail-power condition that triggered the selection (with tolerance).
     tail = svs[keep:] if keep < len(svs) else np.array([], dtype=svs.dtype)
-    assert np.sum(tail**2) + tol >= threshold or keep == len(svs)
+    tail_power = float(np.sum(tail**2))
+
+    # 1) chosen keep must satisfy tail <= threshold (within tolerance)
+    assert tail_power <= threshold + tol or keep == len(svs)
+
+    # 2) maximality: if we kept one fewer, tail would exceed threshold (unless keep is forced)
+    if keep > sim_params.min_bond_dim:
+        tail_prev = svs[keep-1:]  # discarding one extra singular value
+        tail_prev_power = float(np.sum(tail_prev**2))
+        assert tail_prev_power > threshold - tol
 
 
 @pytest.mark.parametrize(
@@ -513,7 +521,7 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         elapsed_time=0.2,
         dt=0.1,
         min_bond_dim=2,
-        threshold=0.5,
+        threshold=2,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
         show_progress=False,
