@@ -63,7 +63,6 @@ def get_acquisition_function(name: str, model: SingleTaskGP, best_f: float | Non
         An acquisition function object of the specified type.
 
     Raises:
-    ------
         ValueError: If the acquisition function name is not recognized.
 
     Examples:

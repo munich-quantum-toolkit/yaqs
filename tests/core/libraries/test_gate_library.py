@@ -45,7 +45,7 @@ def test_split_tensor_valid_shape() -> None:
     (expected shape (2, 2, 1, r)) and the second tensor has shape (2, 2, r, 1).
     """
     # Create a simple tensor of shape (2,2,2,2) with values 0..15.
-    tensor = np.arange(16, dtype=float).reshape(2, 2, 2, 2)
+    tensor = np.arange(16, dtype=np.complex128).reshape(2, 2, 2, 2)
     tensors = split_tensor(tensor)
     # Expect a list of two tensors.
     assert isinstance(tensors, list)
