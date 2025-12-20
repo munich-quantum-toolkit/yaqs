@@ -12,7 +12,7 @@ This module implements left and right moving versions of the QR and SVD decompos
 
 from __future__ import annotations
 
-from typing import cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import scipy.linalg
@@ -108,8 +108,8 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
         check_finite=False,
     )
     # mypy compatibility
-    q_mat = cast(NDArray[np.complex128], np.asarray(q_mat, dtype=np.complex128))
-    r_mat = cast(NDArray[np.complex128], np.asarray(r_mat, dtype=np.complex128))
+    q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
+    r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
 
     q_tensor = q_mat.reshape(phys, left, q_mat.shape[1])
     return q_tensor, r_mat
@@ -142,8 +142,8 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
     )
 
     # mypy compatibility
-    q_mat = cast(NDArray[np.complex128], np.asarray(q_mat, dtype=np.complex128))
-    r_mat = cast(NDArray[np.complex128], np.asarray(r_mat, dtype=np.complex128))
+    q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
+    r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
 
     q_tensor = q_mat.reshape((old_shape[0], old_shape[2], q_mat.shape[1])).transpose(0, 2, 1)
     r_mat = r_mat.T
