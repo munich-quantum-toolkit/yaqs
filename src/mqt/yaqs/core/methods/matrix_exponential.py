@@ -55,6 +55,9 @@ def lanczos_iteration(
             - beta (NDArray[np.float64]): Array of length lanczos_iterations-1 containing the off-diagonal entries.
             - lanczos_mat (NDArray[np.complex128]): A matrix of shape (len(vec) x lanczos_iterations) whose
               columns are the orthonormal Lanczos vectors.
+
+    Raises:
+        ValueError: If the starting vector has zero norm.
     """
     v0 = np.array(vec, dtype=np.complex128, copy=True)
     nrm = np.linalg.norm(v0)
@@ -68,13 +71,13 @@ def lanczos_iteration(
     beta = np.zeros(m - 1, dtype=np.float64)
 
     # Store basis as (n, m): V[:, j] is contiguous and BLAS-friendly
-    V = np.zeros((v0.size, m), dtype=np.complex128)
-    V[:, 0] = v0
+    v = np.zeros((v0.size, m), dtype=np.complex128)
+    v[:, 0] = v0
 
     eps_cut = 100.0 * v0.size * np.finfo(np.float64).eps
 
     for j in range(m - 1):
-        vj = V[:, j]
+        vj = v[:, j]
         w = matrix_free_operator(vj)  # expect shape (n,)
 
         # alpha_j = <v_j, w>
@@ -84,7 +87,7 @@ def lanczos_iteration(
         # w <- w - aj*vj - beta_{j-1}*v_{j-1}
         w -= aj * vj
         if j > 0:
-            w -= beta[j - 1] * V[:, j - 1]
+            w -= beta[j - 1] * v[:, j - 1]
 
         bj = np.linalg.norm(w)
         beta[j] = bj
@@ -92,15 +95,15 @@ def lanczos_iteration(
         if bj < eps_cut:
             # Early termination: return truncated basis
             k = j + 1
-            return alpha[:k], beta[: k - 1], V[:, :k]
+            return alpha[:k], beta[: k - 1], v[:, :k]
 
-        V[:, j + 1] = w / bj
+        v[:, j + 1] = w / bj
 
     # Final alpha_{m-1}
-    vj = V[:, m - 1]
+    vj = v[:, m - 1]
     w = matrix_free_operator(vj)
     alpha[m - 1] = np.vdot(vj, w).real
-    return alpha, beta, V
+    return alpha, beta, v
 
 
 def expm_krylov(

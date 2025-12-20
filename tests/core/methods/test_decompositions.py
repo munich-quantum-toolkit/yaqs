@@ -12,7 +12,7 @@ This module tests the left and right qr and svd decompositions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, NoReturn, Any
 
 import numpy as np
 import pytest
@@ -208,8 +208,13 @@ def test_robust_svd_reduced_shapes_unitary_and_reconstruction() -> None:
 
 
 def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
-    """robust_svd: full SVD has correct shapes, unitary factors, and reconstructs A."""
-    a = crandn(4, 6)  # m < n (k = 4), full U is (m,m), full Vh is (n,n)
+    """robust_svd: full SVD has correct shapes, unitary factors, and reconstructs A.
+
+    Reconstruction uses the standard full-SVD identity:
+        A = U[:, :k] @ diag(s) @ Vh[:k, :]
+    where k = min(m, n).
+    """
+    a = crandn(4, 6)
     u, s, vh = robust_svd(a, full_matrices=True)
 
     m, n = a.shape
@@ -222,39 +227,36 @@ def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
     iden_m = np.eye(m, dtype=np.complex128)
     iden_n = np.eye(n, dtype=np.complex128)
 
-    # U and Vh are unitary
     assert np.allclose(u.conj().T @ u, iden_m)
     assert np.allclose(vh.conj().T @ vh, iden_n)
 
-    # Reconstruct A using the standard full-SVD form:
-    # A = U[:, :k] @ diag(s) @ Vh[:k, :]
     a_rec = u[:, :k] @ (np.diag(s) @ vh[:k, :])
     assert np.allclose(a_rec, a)
 
 
 def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None:
     """robust_svd: if the fast driver fails, it retries with the robust driver."""
-    calls: list[tuple[str, bool]] = []
+    calls: list[tuple[str | None, bool | None]] = []
     real_svd = scipy.linalg.svd
 
-    def fake_svd(a_mat: NDArray[np.complex128], **kwargs):
-        # Track (lapack_driver, check_finite)
+    def fake_svd(
+        a_mat: NDArray[np.complex128],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
         calls.append((kwargs.get("lapack_driver"), kwargs.get("check_finite")))
         if kwargs.get("lapack_driver") == "gesdd":
-            msg = "forced failure in fast driver"
-            raise scipy.linalg.LinAlgError(msg)
-        return real_svd(a_mat, **kwargs)
+            raise scipy.linalg.LinAlgError("forced failure in fast driver")
+        return real_svd(a_mat, *args, **kwargs)
 
     monkeypatch.setattr(scipy.linalg, "svd", fake_svd)
 
     a = crandn(6, 6)
     u, s, vh = robust_svd(a, full_matrices=False)
 
-    # Verify call sequence
     assert calls[0] == ("gesdd", False)
     assert calls[1] == ("gesvd", True)
 
-    # Still produces a valid decomposition
     a_rec = u @ (np.diag(s) @ vh)
     assert np.allclose(a_rec, a)
 
@@ -262,9 +264,8 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
 def test_robust_svd_propagates_error_if_both_drivers_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     """robust_svd: if both drivers fail, the error is propagated."""
 
-    def always_fail(*args, **kwargs) -> NoReturn:
-        msg = "forced failure in both drivers"
-        raise scipy.linalg.LinAlgError(msg)
+    def always_fail(*args: Any, **kwargs: Any) -> NoReturn:
+        raise scipy.linalg.LinAlgError("forced failure in both drivers")
 
     monkeypatch.setattr(scipy.linalg, "svd", always_fail)
 
