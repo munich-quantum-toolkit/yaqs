@@ -59,7 +59,8 @@ def lanczos_iteration(
     v0 = np.array(vec, dtype=np.complex128, copy=True)
     nrm = np.linalg.norm(v0)
     if nrm == 0:
-        raise ValueError("Starting vector has zero norm.")
+        msg = "Starting vector has zero norm."
+        raise ValueError(msg)
     v0 /= nrm
 
     m = lanczos_iterations
@@ -81,9 +82,9 @@ def lanczos_iteration(
         alpha[j] = aj
 
         # w <- w - aj*vj - beta_{j-1}*v_{j-1}
-        w = w - aj * vj
+        w -= aj * vj
         if j > 0:
-            w = w - beta[j - 1] * V[:, j - 1]
+            w -= beta[j - 1] * V[:, j - 1]
 
         bj = np.linalg.norm(w)
         beta[j] = bj

@@ -12,14 +12,14 @@ This module tests the left and right qr and svd decompositions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import numpy as np
-import scipy.linalg
 import pytest
+import scipy.linalg
 
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.decompositions import robust_svd, left_qr, right_qr, right_svd, truncated_right_svd
+from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, robust_svd, truncated_right_svd
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -241,7 +241,8 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
         # Track (lapack_driver, check_finite)
         calls.append((kwargs.get("lapack_driver"), kwargs.get("check_finite")))
         if kwargs.get("lapack_driver") == "gesdd":
-            raise scipy.linalg.LinAlgError("forced failure in fast driver")
+            msg = "forced failure in fast driver"
+            raise scipy.linalg.LinAlgError(msg)
         return real_svd(a_mat, **kwargs)
 
     monkeypatch.setattr(scipy.linalg, "svd", fake_svd)
@@ -260,8 +261,10 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_robust_svd_propagates_error_if_both_drivers_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     """robust_svd: if both drivers fail, the error is propagated."""
-    def always_fail(*args, **kwargs):
-        raise scipy.linalg.LinAlgError("forced failure in both drivers")
+
+    def always_fail(*args, **kwargs) -> NoReturn:
+        msg = "forced failure in both drivers"
+        raise scipy.linalg.LinAlgError(msg)
 
     monkeypatch.setattr(scipy.linalg, "svd", always_fail)
 

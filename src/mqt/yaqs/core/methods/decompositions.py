@@ -85,7 +85,7 @@ def robust_svd(
             a_mat,
             full_matrices=full_matrices,
             lapack_driver="gesvd",  # robust
-            check_finite=True, # Adds safety
+            check_finite=True,  # Adds safety
         )
         return u_mat, s_vec, v_mat
 
@@ -109,7 +109,7 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
     q_mat, r_mat = scipy.linalg.qr(
         mat,
         mode="economic",
-        overwrite_a=True,       # allows in-place LAPACK
+        overwrite_a=True,  # allows in-place LAPACK
         check_finite=False,
     )
 
@@ -259,4 +259,3 @@ def two_site_svd(
     b_new = v_tensor.transpose(1, 0, 2)  # (phys_j, keep, R)
 
     return a_new, b_new
-
