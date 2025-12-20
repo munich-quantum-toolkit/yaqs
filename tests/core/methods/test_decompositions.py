@@ -279,11 +279,11 @@ def test_robust_svd_propagates_error_if_both_drivers_fail(monkeypatch: pytest.Mo
     """robust_svd: if both drivers fail, the error is propagated."""
 
     def always_fail(
-        _a_mat: NDArray[np.complex128],
+        a_mat: NDArray[np.complex128],
         *,
-        _full_matrices: bool,
-        _lapack_driver: LapackDriver,
-        _check_finite: bool,
+        full_matrices: bool,
+        lapack_driver: LapackDriver,
+        check_finite: bool,
     ) -> NoReturn:
         msg = "forced failure in both drivers"
         raise scipy.linalg.LinAlgError(msg)
