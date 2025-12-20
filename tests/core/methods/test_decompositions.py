@@ -15,9 +15,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+import scipy.linalg
+import pytest
 
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, truncated_right_svd
+from mqt.yaqs.core.methods.decompositions import robust_svd, left_qr, right_qr, right_svd, truncated_right_svd
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -177,3 +179,92 @@ def test_truncated_right_svd_maxbd() -> None:
     assert sim_params.max_bond_dim == v_matrix.shape[0]
     assert sim_params.max_bond_dim == s_vector.shape[0]
     assert np.allclose(s_vector, s_vector_i[: sim_params.max_bond_dim])
+
+
+def test_robust_svd_reduced_shapes_unitary_and_reconstruction() -> None:
+    """robust_svd: reduced SVD has correct shapes, unitary factors, and reconstructs A."""
+    a = crandn(7, 5)  # m > n (k = 5)
+    u, s, vh = robust_svd(a, full_matrices=False)
+
+    k = min(a.shape)
+    assert u.shape == (a.shape[0], k)
+    assert s.shape == (k,)
+    assert vh.shape == (k, a.shape[1])
+
+    # U is column-orthonormal: U^H U = I_k
+    iden_k = np.eye(k, dtype=np.complex128)
+    assert np.allclose(u.conj().T @ u, iden_k)
+
+    # Vh has orthonormal rows: Vh Vh^H = I_k
+    assert np.allclose(vh @ vh.conj().T, iden_k)
+
+    # Singular values are non-increasing and non-negative (within numerical tolerance)
+    assert np.all(np.diff(s) <= 1e-12)
+    assert np.all(s >= -1e-12)
+
+    # Reconstruct A
+    a_rec = u @ (np.diag(s) @ vh)
+    assert np.allclose(a_rec, a)
+
+
+def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
+    """robust_svd: full SVD has correct shapes, unitary factors, and reconstructs A."""
+    a = crandn(4, 6)  # m < n (k = 4), full U is (m,m), full Vh is (n,n)
+    u, s, vh = robust_svd(a, full_matrices=True)
+
+    m, n = a.shape
+    k = min(m, n)
+
+    assert u.shape == (m, m)
+    assert s.shape == (k,)
+    assert vh.shape == (n, n)
+
+    iden_m = np.eye(m, dtype=np.complex128)
+    iden_n = np.eye(n, dtype=np.complex128)
+
+    # U and Vh are unitary
+    assert np.allclose(u.conj().T @ u, iden_m)
+    assert np.allclose(vh.conj().T @ vh, iden_n)
+
+    # Reconstruct A using the standard full-SVD form:
+    # A = U[:, :k] @ diag(s) @ Vh[:k, :]
+    a_rec = u[:, :k] @ (np.diag(s) @ vh[:k, :])
+    assert np.allclose(a_rec, a)
+
+
+def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """robust_svd: if the fast driver fails, it retries with the robust driver."""
+    calls: list[tuple[str, bool]] = []
+    real_svd = scipy.linalg.svd
+
+    def fake_svd(a_mat: NDArray[np.complex128], **kwargs):
+        # Track (lapack_driver, check_finite)
+        calls.append((kwargs.get("lapack_driver"), kwargs.get("check_finite")))
+        if kwargs.get("lapack_driver") == "gesdd":
+            raise scipy.linalg.LinAlgError("forced failure in fast driver")
+        return real_svd(a_mat, **kwargs)
+
+    monkeypatch.setattr(scipy.linalg, "svd", fake_svd)
+
+    a = crandn(6, 6)
+    u, s, vh = robust_svd(a, full_matrices=False)
+
+    # Verify call sequence
+    assert calls[0] == ("gesdd", False)
+    assert calls[1] == ("gesvd", True)
+
+    # Still produces a valid decomposition
+    a_rec = u @ (np.diag(s) @ vh)
+    assert np.allclose(a_rec, a)
+
+
+def test_robust_svd_propagates_error_if_both_drivers_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """robust_svd: if both drivers fail, the error is propagated."""
+    def always_fail(*args, **kwargs):
+        raise scipy.linalg.LinAlgError("forced failure in both drivers")
+
+    monkeypatch.setattr(scipy.linalg, "svd", always_fail)
+
+    a = crandn(5, 3)
+    with pytest.raises(scipy.linalg.LinAlgError):
+        robust_svd(a, full_matrices=False)
