@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added more stable and faster SVD and QR implementation ([#278]) ([**@aaronleesander**])
 - TDVP now utilizes a dense Hamiltonian for small tensor sizes (adjusted by global variable DENSE_THRESHOLD) ([#261]) ([**@aaronleesander**])
 - Updated readability of TDVP subfunctions and Lanczos method ([#261]) ([**@aaronleesander**])
 
@@ -48,6 +49,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#278]: https://github.com/munich-quantum-toolkit/yaqs/pull/278
 [#274]: https://github.com/munich-quantum-toolkit/yaqs/pull/274
 [#261]: https://github.com/munich-quantum-toolkit/yaqs/pull/261
 [#214]: https://github.com/munich-quantum-toolkit/yaqs/pull/214
