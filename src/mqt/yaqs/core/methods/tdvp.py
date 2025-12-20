@@ -26,6 +26,7 @@ import numpy as np
 import opt_einsum as oe
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
@@ -93,8 +94,7 @@ def split_mps_tensor(
         shape_transposed[0] * shape_transposed[1],
         shape_transposed[2] * shape_transposed[3],
     )
-    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
-    s_vec = s_vec[s_vec/max(s_vec) > sim_params.threshold]
+    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
 
     # Handled by dynamic TDVP
     keep = min(len(s_vec), sim_params.max_bond_dim) if not dynamic else len(s_vec)

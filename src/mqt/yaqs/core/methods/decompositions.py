@@ -12,12 +12,77 @@ This module implements left and right moving versions of the QR and SVD decompos
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
+import scipy.linalg
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+
+def robust_svd(
+    a_mat: NDArray[np.complex128],
+    *,
+    full_matrices: bool = False,
+) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
+    """Robust SVD with fast-path + fallback LAPACK drivers.
+
+    Computes the singular value decomposition (SVD) of `a` using SciPy/LAPACK:
+
+        a = U @ np.diag(s) @ Vh
+
+    where `U` and `Vh` are unitary (up to numerical precision) and `s` contains the
+    non-negative singular values in descending order.
+
+    This routine is intended for performance-critical tensor network code where rare
+    numerical pathologies can cause the default fast SVD to fail to converge. We try
+    a fast divide-and-conquer driver first and fall back to a more robust driver if
+    needed:
+
+        1) 'gesdd' (fast, divide-and-conquer)
+        2) 'gesvd' (more robust, typically slower)
+
+    The fallback also enables finite checks to catch NaNs/Infs early, producing a
+    clearer failure mode when upstream numerics are broken.
+
+    Args:
+        a_mat: Input matrix of shape (m, n). Must be finite (no NaNs/Infs) for reliable
+            results; if not, the fallback path uses `check_finite=True` to detect it.
+        full_matrices: If False, compute the reduced/economy SVD with:
+            - U shape: (m, k)
+            - s shape: (k,)
+            - Vh shape: (k, n)
+            where k = min(m, n).
+            If True, compute the full SVD with:
+            - U shape: (m, m)
+            - Vh shape: (n, n)
+
+    Returns:
+        u_mat: Left singular vectors (complex128), shape depends on `full_matrices`.
+        s_vec: Singular values (float64), sorted in non-increasing order.
+        v_mat: Right singular vectors conjugate-transposed (complex128), shape depends
+            on `full_matrices`.
+    """
+    try:
+        u_mat, s_vec, v_mat = scipy.linalg.svd(
+            a_mat,
+            full_matrices=full_matrices,
+            lapack_driver="gesdd",  # fast
+            check_finite=False,
+        )
+    except (scipy.linalg.LinAlgError, ValueError, FloatingPointError):
+        # Retry with more robust driver
+        u_mat, s_vec, v_mat = scipy.linalg.svd(
+            a_mat,
+            full_matrices=full_matrices,
+            lapack_driver="gesvd",  # robust
+            check_finite=True,  # Adds safety
+        )
+    else:
+        return u_mat, s_vec, v_mat
+
+    return u_mat, s_vec, v_mat
 
 
 def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -33,12 +98,20 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
             leg (phys,left,new).
         r_mat: The R matrix with the right virtual leg (new,right).
     """
-    old_shape = mps_tensor.shape
-    qr_shape = (old_shape[0] * old_shape[1], old_shape[2])
-    mps_tensor = mps_tensor.reshape(qr_shape)
-    q_mat, r_mat = np.linalg.qr(mps_tensor)
-    new_shape = (old_shape[0], old_shape[1], -1)
-    q_tensor = q_mat.reshape(new_shape)
+    phys, left, right = mps_tensor.shape
+    mat = mps_tensor.reshape(phys * left, right)
+
+    q_mat, r_mat = scipy.linalg.qr(
+        mat,
+        mode="economic",
+        overwrite_a=True,  # allows in-place LAPACK
+        check_finite=False,
+    )
+    # mypy compatibility
+    q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
+    r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
+
+    q_tensor = q_mat.reshape(phys, left, q_mat.shape[1])
     return q_tensor, r_mat
 
 
@@ -57,13 +130,24 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
 
     """
     old_shape = mps_tensor.shape
-    mps_tensor = mps_tensor.transpose(0, 2, 1)
+    mps_tensor_t = mps_tensor.transpose(0, 2, 1)
     qr_shape = (old_shape[0] * old_shape[2], old_shape[1])
-    mps_tensor = mps_tensor.reshape(qr_shape)
-    q_mat, r_mat = np.linalg.qr(mps_tensor)
-    q_tensor = q_mat.reshape((old_shape[0], old_shape[2], -1))
-    q_tensor = q_tensor.transpose(0, 2, 1)
+    mat = mps_tensor_t.reshape(qr_shape)
+
+    q_mat, r_mat = scipy.linalg.qr(
+        mat,
+        mode="economic",
+        overwrite_a=True,
+        check_finite=False,
+    )
+
+    # mypy compatibility
+    q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
+    r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
+
+    q_tensor = q_mat.reshape((old_shape[0], old_shape[2], q_mat.shape[1])).transpose(0, 2, 1)
     r_mat = r_mat.T
+
     return q_tensor, r_mat
 
 
@@ -160,7 +244,7 @@ def two_site_svd(
     theta_mat = theta.reshape(left * phys_i, phys_j * right)
 
     # 3) full SVD
-    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
 
     # 4) decide how many singular values to keep:
     #    sum of squares of discarded values ≤ threshold
