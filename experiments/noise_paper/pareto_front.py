@@ -11,11 +11,11 @@ import pickle
 def tdvp_simulator(H_0, noise_model, state=None):
     L = H_0.length
 
-    state = MPS(length=L)
+    state = MPS(state="Neel", length=L)
 
     measurements = [Observable(Z(), [0])] + [Observable("entropy", [L//2, L//2+1])] + [Observable("max_bond")]
     sim_params = AnalogSimParams(observables=measurements,
-                                elapsed_time=3,
+                                elapsed_time=2,
                                 dt=0.1,
                                 num_traj=30,
                                 threshold=1e-6,
@@ -60,10 +60,10 @@ if __name__ == "__main__":
             cost = tdvp_simulator(H_0, noise_model)
             results2.append(cost)
 
-        filename = f"u1_{L}.pickle"
+        filename = f"u1_neel_heisenberg_{L}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results1, handle)
 
-        filename = f"u2_{L}.pickle"
+        filename = f"u2_neel_heisenberg_{L}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results2, handle)
