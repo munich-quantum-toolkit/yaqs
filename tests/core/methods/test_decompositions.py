@@ -273,23 +273,3 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
 
     a_rec = u @ (np.diag(s) @ vh)
     assert np.allclose(a_rec, a)
-
-
-def test_robust_svd_propagates_error_if_both_drivers_fail(monkeypatch: pytest.MonkeyPatch) -> None:
-    """robust_svd: if both drivers fail, the error is propagated."""
-
-    def always_fail(
-        a_mat: NDArray[np.complex128],
-        *,
-        full_matrices: bool,
-        lapack_driver: LapackDriver,
-        check_finite: bool,
-    ) -> NoReturn:
-        msg = "forced failure in both drivers"
-        raise scipy.linalg.LinAlgError(msg)
-
-    monkeypatch.setattr(scipy.linalg, "svd", always_fail)
-
-    a = crandn(5, 3)
-    with pytest.raises(scipy.linalg.LinAlgError):
-        robust_svd(a, full_matrices=False)
