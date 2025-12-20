@@ -12,16 +12,16 @@ This module tests the left and right qr and svd decompositions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, NoReturn
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import pytest
 import scipy.linalg
 
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, robust_svd, truncated_right_svd
 
 if TYPE_CHECKING:
+    import pytest
     from numpy.typing import NDArray
 
 
