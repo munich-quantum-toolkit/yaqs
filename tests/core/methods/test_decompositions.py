@@ -12,7 +12,7 @@ This module tests the left and right qr and svd decompositions.
 
 from __future__ import annotations
 
-from typing import cast, Literal, TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Literal, NoReturn
 
 import numpy as np
 import pytest
@@ -251,7 +251,8 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
     ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
         calls.append((lapack_driver, check_finite))
         if lapack_driver == "gesdd":
-            raise scipy.linalg.LinAlgError("forced failure in fast driver")
+            msg = "forced failure in fast driver"
+            raise scipy.linalg.LinAlgError(msg)
 
         u, s, vh = real_svd(
             a_mat,
@@ -284,7 +285,8 @@ def test_robust_svd_propagates_error_if_both_drivers_fail(monkeypatch: pytest.Mo
         _lapack_driver: LapackDriver,
         _check_finite: bool,
     ) -> NoReturn:
-        raise scipy.linalg.LinAlgError("forced failure in both drivers")
+        msg = "forced failure in both drivers"
+        raise scipy.linalg.LinAlgError(msg)
 
     monkeypatch.setattr(scipy.linalg, "svd", always_fail)
 
