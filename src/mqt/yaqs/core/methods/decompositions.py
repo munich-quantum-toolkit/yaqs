@@ -12,7 +12,7 @@ This module implements left and right moving versions of the QR and SVD decompos
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import cast, TYPE_CHECKING
 
 import numpy as np
 import scipy.linalg
@@ -63,13 +63,6 @@ def robust_svd(
         s_vec: Singular values (float64), sorted in non-increasing order.
         v_mat: Right singular vectors conjugate-transposed (complex128), shape depends
             on `full_matrices`.
-
-    Raises:
-        scipy.linalg.LinAlgError: If both LAPACK drivers fail to converge.
-        ValueError: If the input has an invalid shape or contains NaNs/Infs detected
-            on the fallback path.
-        FloatingPointError: If floating point errors are raised during computation
-            (rare; depends on global NumPy error settings).
     """
     try:
         u_mat, s_vec, v_mat = scipy.linalg.svd(
@@ -78,7 +71,6 @@ def robust_svd(
             lapack_driver="gesdd",  # fast
             check_finite=False,
         )
-        return u_mat, s_vec, v_mat
     except (scipy.linalg.LinAlgError, ValueError, FloatingPointError):
         # Retry with more robust driver
         u_mat, s_vec, v_mat = scipy.linalg.svd(
@@ -87,7 +79,10 @@ def robust_svd(
             lapack_driver="gesvd",  # robust
             check_finite=True,  # Adds safety
         )
+    else:
         return u_mat, s_vec, v_mat
+
+    return u_mat, s_vec, v_mat
 
 
 def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -112,6 +107,9 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
         overwrite_a=True,  # allows in-place LAPACK
         check_finite=False,
     )
+    # mypy compatibility
+    q_mat = cast(NDArray[np.complex128], np.asarray(q_mat, dtype=np.complex128))
+    r_mat = cast(NDArray[np.complex128], np.asarray(r_mat, dtype=np.complex128))
 
     q_tensor = q_mat.reshape(phys, left, q_mat.shape[1])
     return q_tensor, r_mat
@@ -132,13 +130,24 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
 
     """
     old_shape = mps_tensor.shape
-    mps_tensor = mps_tensor.transpose(0, 2, 1)
+    mps_tensor_t = mps_tensor.transpose(0, 2, 1)
     qr_shape = (old_shape[0] * old_shape[2], old_shape[1])
-    mps_tensor = mps_tensor.reshape(qr_shape)
-    q_mat, r_mat = np.linalg.qr(mps_tensor)
-    q_tensor = q_mat.reshape((old_shape[0], old_shape[2], -1))
-    q_tensor = q_tensor.transpose(0, 2, 1)
+    mat = mps_tensor_t.reshape(qr_shape)
+
+    q_mat, r_mat = scipy.linalg.qr(
+        mat,
+        mode="economic",
+        overwrite_a=True,
+        check_finite=False,
+    )
+
+    # mypy compatibility
+    q_mat = cast(NDArray[np.complex128], np.asarray(q_mat, dtype=np.complex128))
+    r_mat = cast(NDArray[np.complex128], np.asarray(r_mat, dtype=np.complex128))
+
+    q_tensor = q_mat.reshape((old_shape[0], old_shape[2], q_mat.shape[1])).transpose(0, 2, 1)
     r_mat = r_mat.T
+
     return q_tensor, r_mat
 
 
