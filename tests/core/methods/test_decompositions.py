@@ -12,7 +12,7 @@ This module tests the left and right qr and svd decompositions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NoReturn, Any
+from typing import cast, Literal, TYPE_CHECKING, NoReturn
 
 import numpy as np
 import pytest
@@ -234,20 +234,33 @@ def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
     assert np.allclose(a_rec, a)
 
 
+LapackDriver = Literal["gesdd", "gesvd"]
+
+
 def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None:
     """robust_svd: if the fast driver fails, it retries with the robust driver."""
-    calls: list[tuple[str | None, bool | None]] = []
+    calls: list[tuple[LapackDriver, bool]] = []
     real_svd = scipy.linalg.svd
 
     def fake_svd(
         a_mat: NDArray[np.complex128],
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        calls.append((kwargs.get("lapack_driver"), kwargs.get("check_finite")))
-        if kwargs.get("lapack_driver") == "gesdd":
+        *,
+        full_matrices: bool,
+        lapack_driver: LapackDriver,
+        check_finite: bool,
+    ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
+        calls.append((lapack_driver, check_finite))
+        if lapack_driver == "gesdd":
             raise scipy.linalg.LinAlgError("forced failure in fast driver")
-        return real_svd(a_mat, *args, **kwargs)
+
+        u, s, vh = real_svd(
+            a_mat,
+            full_matrices=full_matrices,
+            lapack_driver=lapack_driver,
+            check_finite=check_finite,
+        )
+
+        return (u, s, vh)
 
     monkeypatch.setattr(scipy.linalg, "svd", fake_svd)
 
@@ -264,7 +277,13 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
 def test_robust_svd_propagates_error_if_both_drivers_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     """robust_svd: if both drivers fail, the error is propagated."""
 
-    def always_fail(*args: Any, **kwargs: Any) -> NoReturn:
+    def always_fail(
+        _a_mat: NDArray[np.complex128],
+        *,
+        _full_matrices: bool,
+        _lapack_driver: LapackDriver,
+        _check_finite: bool,
+    ) -> NoReturn:
         raise scipy.linalg.LinAlgError("forced failure in both drivers")
 
     monkeypatch.setattr(scipy.linalg, "svd", always_fail)
