@@ -211,14 +211,15 @@ if __name__ == "__main__":
         )
         results3.append(cost)
 
-    filename = f"convergence_u1.pickle"
-    with open(filename, 'wb') as handle:
-        pickle.dump(results1, handle)
+        if (j+1) % 10 == 0:
+            filename = f"convergence_u1_{j+1}.pickle"
+            with open(filename, 'wb') as handle:
+                pickle.dump(results1, handle)
 
-    filename = f"convergence_u2.pickle"
-    with open(filename, 'wb') as handle:
-        pickle.dump(results2, handle)
+            filename = f"convergence_u2_{j+1}.pickle"
+            with open(filename, 'wb') as handle:
+                pickle.dump(results2, handle)
 
-    filename = f"convergence_qutip.pickle"
-    with open(filename, 'wb') as handle:
-        pickle.dump(results3, handle)
+            filename = f"convergence_qutip_{j+1}.pickle"
+            with open(filename, 'wb') as handle:
+                pickle.dump(results3, handle)
