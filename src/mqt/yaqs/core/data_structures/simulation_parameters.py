@@ -187,6 +187,7 @@ class AnalogSimParams:
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
         show_progress: bool = True,
+        use_jax: bool = True
     ) -> None:
         """Physics simulation parameters initialization.
 

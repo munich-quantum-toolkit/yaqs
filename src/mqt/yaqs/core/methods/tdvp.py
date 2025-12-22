@@ -22,12 +22,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import jax.numpy as jnp
 import numpy as np
 import opt_einsum as oe
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
+from .matrix_exponential_jax import expm_krylov_dense_jax
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -421,6 +423,8 @@ def _evolve_local_tensor_krylov(
     Returns:
         The evolved tensor with the same shape as `tensor`.
     """
+    use_jax = True
+
     tensor_shape = tensor.shape
     tensor_flat = tensor.reshape(-1)
     n_loc = tensor_flat.size
@@ -429,8 +433,14 @@ def _evolve_local_tensor_krylov(
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
 
-        def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
-            return h_eff @ x_flat
+        if use_jax:
+            h_eff_j = jnp.asarray(h_eff)
+            v_j = jnp.asarray(tensor_flat)
+            evolved_j = expm_krylov_dense_jax(h_eff_j, v_j, dt, lanczos_iterations)
+            return np.asarray(evolved_j).reshape(tensor_shape)
+        else:
+            def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+                return h_eff @ x_flat
 
     else:
         # Matrix-free projector path

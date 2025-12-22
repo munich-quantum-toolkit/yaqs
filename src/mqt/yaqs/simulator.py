@@ -190,6 +190,8 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
         os.environ.setdefault(k, str(n_threads))
     os.environ.setdefault("OMP_DYNAMIC", "FALSE")
     os.environ.setdefault("MKL_DYNAMIC", "FALSE")
+    os.environ["JAX_PLATFORM_NAME"] = "cpu"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
     # Import optional libs safely without inline `import` statements
     with contextlib.suppress(Exception):
