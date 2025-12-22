@@ -333,9 +333,9 @@ def project_bond(
 
 
 def build_dense_heff_site(
-    left_env: NDArray[np.complex128],   # shape (a, l, A)
+    left_env: NDArray[np.complex128],  # shape (a, l, A)
     right_env: NDArray[np.complex128],  # shape (b, r, B)
-    op: NDArray[np.complex128],         # shape (o, p, l, r)
+    op: NDArray[np.complex128],  # shape (o, p, l, r)
 ) -> NDArray[np.complex128]:
     r"""Construct the dense effective operator for a single-site Hamiltonian update.
 
@@ -388,7 +388,7 @@ def build_dense_heff_site(
 
 
 def build_dense_heff_bond(
-    left_env: NDArray[np.complex128],   # shape (u, a, p)
+    left_env: NDArray[np.complex128],  # shape (u, a, p)
     right_env: NDArray[np.complex128],  # shape (v, a, w)
 ) -> NDArray[np.complex128]:
     r"""Construct the dense effective operator for the bond contraction.
@@ -485,7 +485,6 @@ def _build_dense_effective_hamiltonian(
         dimensions, the matrix-free path (projector applied directly inside
         Lanczos) is preferred.
     """
-    
     # Fast paths
     if projector is project_site:
         left_env, right_env, op = proj_args
