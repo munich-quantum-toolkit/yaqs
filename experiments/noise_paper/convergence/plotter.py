@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import pickle
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -75,9 +75,8 @@ def extract_yaqs_xx_timeseries(dp_entry: Any, obs_index: int = 0) -> np.ndarray:
     dp_entry is what you appended as `cost` in results1/results2:
         cost == sim_params.observables  (a list of Observable objects)
 
-    We take cost[0].results as the XX trajectory.
+    We take cost[obs_index].results as the XX trajectory.
     """
-    # dp_entry: list[Observable]
     obs_list = dp_entry
     if not isinstance(obs_list, (list, tuple)) or len(obs_list) <= obs_index:
         raise ValueError(f"Unexpected YAQS entry format: {type(dp_entry)}")
@@ -86,8 +85,7 @@ def extract_yaqs_xx_timeseries(dp_entry: Any, obs_index: int = 0) -> np.ndarray:
     if not hasattr(obs, "results"):
         raise ValueError("YAQS Observable object has no attribute `results`")
 
-    ts = np.asarray(obs.results, dtype=float)
-    return ts
+    return np.asarray(obs.results, dtype=float)
 
 
 def extract_qutip_timeseries(dp_entry: Any) -> np.ndarray:
@@ -106,6 +104,13 @@ def mse(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.mean(d * d))
 
 
+def signal_power(x: np.ndarray) -> float:
+    """Mean squared magnitude over time: (1/N) * sum_t x(t)^2."""
+    if x.size == 0:
+        return float("nan")
+    return float(np.mean(x * x))
+
+
 # ----------------------------
 # Main analysis
 # ----------------------------
@@ -115,6 +120,7 @@ def main(
     dp_min: float = 1e-4,
     dp_max: float = 1.0,
     num_dp: int = 100,
+    eps: float = 1e-12,
 ) -> None:
     data_dir = Path(data_dir)
 
@@ -144,17 +150,29 @@ def main(
 
     mse_u1 = np.empty(n, dtype=float)
     mse_u2 = np.empty(n, dtype=float)
+    power_ref = np.empty(n, dtype=float)
+    nrmse_u1 = np.empty(n, dtype=float)
+    nrmse_u2 = np.empty(n, dtype=float)
 
     for i in range(n):
-        yaqs_u1_ts = extract_yaqs_xx_timeseries(results_u1[i], obs_index=0)
-        yaqs_u2_ts = extract_yaqs_xx_timeseries(results_u2[i], obs_index=0)
-        qutip_ts = extract_qutip_timeseries(results_qt[i])
+        yaqs_u1_ts = extract_yaqs_xx_timeseries(results_u1[i], obs_index=0)[0:21]
+        yaqs_u2_ts = extract_yaqs_xx_timeseries(results_u2[i], obs_index=0)[0:21]
+        qutip_ts = extract_qutip_timeseries(results_qt[i])[0:21]
 
-        mse_u1[i] = mse(yaqs_u1_ts, qutip_ts)
-        mse_u2[i] = mse(yaqs_u2_ts, qutip_ts)
+        m1 = mse(yaqs_u1_ts, qutip_ts)
+        m2 = mse(yaqs_u2_ts, qutip_ts)
+        p = signal_power(qutip_ts)
+
+        mse_u1[i] = m1
+        mse_u2[i] = m2
+        power_ref[i] = p
+
+        denom = np.sqrt(p) + eps
+        nrmse_u1[i] = np.sqrt(m1) / denom
+        nrmse_u2[i] = np.sqrt(m2) / denom
 
     # ----------------------------
-    # Plot
+    # Plot 1: MSE vs dp
     # ----------------------------
     plt.figure()
     plt.loglog(dp_list, mse_u1, marker="o", markersize=3, linewidth=1, label="YAQS u1 vs QuTiP")
@@ -165,11 +183,43 @@ def main(
     plt.grid(True, which="both", linestyle="--", linewidth=0.5)
     plt.legend()
     plt.tight_layout()
+
+    # ----------------------------
+    # Plot 2: Signal power vs dp
+    # ----------------------------
+    plt.figure()
+    plt.loglog(dp_list, power_ref, marker="o", markersize=3, linewidth=1, label="QuTiP signal power")
+    plt.xlabel("dp")
+    plt.ylabel(r"Signal power $P(dp)=\langle \langle XX\rangle(t)^2 \rangle_t$")
+    plt.title(f"Signal power vs dp (reference, dt={dt}, N={n})")
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.legend()
+    plt.tight_layout()
+
+    # ----------------------------
+    # Plot 3: NRMSE vs dp
+    # ----------------------------
+    plt.figure()
+    plt.loglog(dp_list, nrmse_u1, marker="o", markersize=3, linewidth=1, label="YAQS u1 NRMSE")
+    plt.loglog(dp_list, nrmse_u2, marker="o", markersize=3, linewidth=1, label="YAQS u2 NRMSE")
+    plt.xlabel("dp")
+    plt.ylabel(r"NRMSE $= \sqrt{\mathrm{MSE}}/(\sqrt{P}+\epsilon)$")
+    plt.title(f"NRMSE vs dp (dt={dt}, N={n}, eps={eps:g})")
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.legend()
+    plt.tight_layout()
+
     plt.show()
 
-    # Optional: save numeric data
-    out = np.column_stack([dp_list, mse_u1, mse_u2])
-    np.savetxt(data_dir / "mse_vs_dp.csv", out, delimiter=",", header="dp,mse_u1,mse_u2", comments="")
+    # Save numeric data
+    out = np.column_stack([dp_list, mse_u1, mse_u2, power_ref, nrmse_u1, nrmse_u2])
+    np.savetxt(
+        data_dir / "mse_vs_dp.csv",
+        out,
+        delimiter=",",
+        header="dp,mse_u1,mse_u2,signal_power_ref,nrmse_u1,nrmse_u2",
+        comments="",
+    )
     print(f"Saved: {data_dir / 'mse_vs_dp.csv'}")
 
 
@@ -180,4 +230,5 @@ if __name__ == "__main__":
         dp_min=1e-4,
         dp_max=1.0,
         num_dp=100,
+        eps=1e-12,
     )
