@@ -142,7 +142,7 @@ def tdvp_simulator(H_0, noise_model, dt=0.1, state=None):
 
     measurements = [Observable(XX(), [L//2, L//2+1])]
     sim_params = AnalogSimParams(observables=measurements,
-                                elapsed_time=5,
+                                elapsed_time=2,
                                 dt=dt,
                                 num_traj=1000,
                                 threshold=1e-6,
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     L = 5
     J = 1
     h = 1
-    T = 5
+    T = 2
     dt = 0.1
 
     H = ising_hamiltonian(L, J, h)
