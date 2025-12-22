@@ -517,7 +517,6 @@ def _build_dense_effective_hamiltonian(
     return h_eff
 
 
-
 def _evolve_local_tensor_krylov(
     projector: Callable[..., NDArray[np.complex128]],
     tensor: NDArray[np.complex128],
