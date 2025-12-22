@@ -381,10 +381,13 @@ def build_dense_heff_site(
           For larger local dimensions, the matrix-free projector path should be
           preferred.
     """
-    # H[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
-    H6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
-    o, A, B, p, a, b = H6.shape
-    return np.asarray(H6.reshape(o * A * B, p * a * b), dtype=np.complex128)
+    # h[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
+    h6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
+    o_dim, a_dim_out, b_dim_out, p_dim, a_dim_in, b_dim_in = h6.shape
+    return np.asarray(
+        h6.reshape(o_dim * a_dim_out * b_dim_out, p_dim * a_dim_in * b_dim_in),
+        dtype=np.complex128,
+    )
 
 
 def build_dense_heff_bond(
@@ -431,10 +434,10 @@ def build_dense_heff_bond(
         iteration.  For large bond dimensions, the matrix-free projector path
         should be preferred.
     """
-    # H[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
-    H4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
-    p, w, u, v = H4.shape
-    return np.asarray(H4.reshape(p * w, u * v), dtype=np.complex128)
+    # h[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
+    h4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
+    p_dim, w_dim, u_dim, v_dim = h4.shape
+    return np.asarray(h4.reshape(p_dim * w_dim, u_dim * v_dim), dtype=np.complex128)
 
 
 def _build_dense_effective_hamiltonian(
