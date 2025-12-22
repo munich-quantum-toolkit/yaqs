@@ -127,9 +127,9 @@ def main(
     # Rebuild dp list exactly as in your generator script
     dp_list = np.logspace(np.log10(dp_min), np.log10(dp_max), num_dp)
 
-    u1_paths = sorted(data_dir.glob("convergence_u1_*.pickle"), key=_extract_suffix_int)
-    u2_paths = sorted(data_dir.glob("convergence_u2_*.pickle"), key=_extract_suffix_int)
-    qt_paths = sorted(data_dir.glob("convergence_qutip_*.pickle"), key=_extract_suffix_int)
+    u1_paths = sorted(data_dir.glob("convergence_u1_small_timestep*.pickle"), key=_extract_suffix_int)
+    u2_paths = sorted(data_dir.glob("convergence_u2_small_timestep*.pickle"), key=_extract_suffix_int)
+    qt_paths = sorted(data_dir.glob("convergence_qutip_small_timestep*.pickle"), key=_extract_suffix_int)
 
     if not (u1_paths and u2_paths and qt_paths):
         raise FileNotFoundError(
@@ -229,6 +229,6 @@ if __name__ == "__main__":
         dt=0.1,
         dp_min=1e-4,
         dp_max=1.0,
-        num_dp=100,
+        num_dp=20,
         eps=1e-12,
     )
