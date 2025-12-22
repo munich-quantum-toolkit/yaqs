@@ -381,6 +381,9 @@ def build_dense_heff_site(
           For larger local dimensions, the matrix-free projector path should be
           preferred.
     """
+    left_env = np.asarray(left_env, dtype=np.complex128)
+    right_env = np.asarray(right_env, dtype=np.complex128)
+    op = np.asarray(op, dtype=np.complex128)
     # h[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
     h6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
     o_dim, a_dim_out, b_dim_out, p_dim, a_dim_in, b_dim_in = h6.shape
@@ -434,6 +437,9 @@ def build_dense_heff_bond(
         iteration.  For large bond dimensions, the matrix-free projector path
         should be preferred.
     """
+    left_env = np.asarray(left_env, dtype=np.complex128)
+    right_env = np.asarray(right_env, dtype=np.complex128)
+
     # h[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
     h4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
     p_dim, w_dim, u_dim, v_dim = h4.shape
@@ -509,6 +515,7 @@ def _build_dense_effective_hamiltonian(
         h_eff[:, j] = y_tensor.reshape(-1)
 
     return h_eff
+
 
 
 def _evolve_local_tensor_krylov(
@@ -898,7 +905,7 @@ def local_dynamic_tdvp(
     # build identity for left_blocks[0]
     chi0 = state.tensors[0].shape[1]
     mpo_dim = hamiltonian.tensors[0].shape[2]
-    eye = np.zeros((chi0, mpo_dim, chi0), dtype=right_blocks[0].dtype)
+    eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
     for i in range(chi0):
         eye[i, :, i] = 1
     left_blocks[0] = eye
