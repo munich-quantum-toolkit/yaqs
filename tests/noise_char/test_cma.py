@@ -1,14 +1,24 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Tests for the CMA-ES wrapper used in noise characterization."""
 
 from __future__ import annotations
 
 import types
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free import cma
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class DummyStrategy:
@@ -52,7 +62,7 @@ def _patch_strategy(monkeypatch, factory: Callable[..., DummyStrategy]) -> list[
 
 def test_cma_opt_returns_best_solution(monkeypatch) -> None:
     """Best solution should come from the lowest objective value."""
-    created = _patch_strategy(monkeypatch, lambda x0, s0, opt: DummyStrategy(x0, s0, opt))
+    created = _patch_strategy(monkeypatch, DummyStrategy)
 
     class Objective:
         converged = False
@@ -69,9 +79,7 @@ def test_cma_opt_returns_best_solution(monkeypatch) -> None:
 
 def test_cma_opt_stops_when_objective_converges(monkeypatch) -> None:
     """Optimization loop stops early when the objective signals convergence."""
-    created = _patch_strategy(
-        monkeypatch, lambda x0, s0, opt: DummyStrategy(x0, s0, opt, stop_after_first=False)
-    )
+    created = _patch_strategy(monkeypatch, lambda x0, s0, opt: DummyStrategy(x0, s0, opt, stop_after_first=False))
 
     class Objective:
         def __init__(self) -> None:
@@ -95,7 +103,7 @@ def test_cma_opt_stops_when_objective_converges(monkeypatch) -> None:
 
 def test_cma_opt_passes_bounds(monkeypatch) -> None:
     """Bounds are forwarded to the CMA strategy in list form."""
-    created = _patch_strategy(monkeypatch, lambda x0, s0, opt: DummyStrategy(x0, s0, opt))
+    created = _patch_strategy(monkeypatch, DummyStrategy)
     x_low = np.array([-1.0, -2.0])
     x_up = np.array([1.0, 2.0])
 
@@ -109,5 +117,3 @@ def test_cma_opt_passes_bounds(monkeypatch) -> None:
 
     bounds = created[0].options["bounds"]
     assert bounds == [x_low.tolist(), x_up.tolist()]
-
-

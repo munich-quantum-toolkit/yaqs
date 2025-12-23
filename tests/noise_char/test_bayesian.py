@@ -16,11 +16,10 @@ This module tests the Bayesian optimization functionality including:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
-
 import torch
 
 # Suppress botorch warnings:
@@ -43,6 +42,9 @@ from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import (
     bayesian_opt,
     get_acquisition_function,
 )
+
+if TYPE_CHECKING:
+    from mqt.yaqs.noise_char.loss import LossClass
 
 
 class MockLossClass:
@@ -78,6 +80,11 @@ class MockLossClass:
         return loss_value, grad, 0.0
 
 
+def make_loss(objective_func: callable, *, converged: bool = False) -> LossClass:
+    """Create a LossClass-typed mock for type checkers."""
+    return cast("LossClass", MockLossClass(objective_func, converged))
+
+
 def test_get_acquisition_function_lei() -> None:
     """Test that get_acquisition_function returns LogExpectedImprovement for 'LEI'."""
     x_train = torch.rand(5, 2, dtype=torch.double)
@@ -108,7 +115,6 @@ def test_get_acquisition_function_ucb() -> None:
     assert isinstance(acq_func, UpperConfidenceBound)
 
 
-
 def test_get_acquisition_function_invalid_name() -> None:
     """Test that get_acquisition_function raises ValueError for invalid names."""
     x_train = torch.rand(5, 2, dtype=torch.double)
@@ -121,17 +127,16 @@ def test_get_acquisition_function_invalid_name() -> None:
 
 def test_bayesian_opt_basic_functionality() -> None:
     """Test basic Bayesian optimization with a simple quadratic function."""
+
     # Simple quadratic function: f(x) = (x - 0.5)^2
     def objective(x: np.ndarray) -> float:
         return float(np.sum((x - 0.5) ** 2))
 
-    loss = MockLossClass(objective)
+    loss = make_loss(objective)
     x_low = np.array([0.0, 0.0])
     x_up = np.array([1.0, 1.0])
 
-    best_x, best_y, x_train, y_train = bayesian_opt(
-        loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=2, acq_name="UCB"
-    )
+    best_x, best_y, x_train, y_train = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=2, acq_name="UCB")
 
     # Check return types
     assert isinstance(best_x, np.ndarray)
@@ -155,6 +160,7 @@ def test_bayesian_opt_basic_functionality() -> None:
 
 def test_bayesian_opt_different_acquisition_functions() -> None:
     """Test Bayesian optimization with different acquisition functions."""
+
     # Simple objective function
     def objective(x: np.ndarray) -> float:
         return float(np.sum(x**2))
@@ -163,10 +169,8 @@ def test_bayesian_opt_different_acquisition_functions() -> None:
     x_up = np.array([1.0, 1.0])
 
     for acq_name in ["LEI", "PI", "UCB"]:
-        loss = MockLossClass(objective)
-        best_x, best_y, _, _ = bayesian_opt(
-            loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2, acq_name=acq_name
-        )
+        loss = make_loss(objective)
+        best_x, best_y, _, _ = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2, acq_name=acq_name)
 
         assert isinstance(best_x, np.ndarray)
         assert isinstance(best_y, (np.floating, np.number, float))  # best_y is a numpy scalar
@@ -175,11 +179,12 @@ def test_bayesian_opt_different_acquisition_functions() -> None:
 
 def test_bayesian_opt_convergence() -> None:
     """Test that Bayesian optimization respects the converged flag."""
+
     # Simple objective function
     def objective(x: np.ndarray) -> float:
         return float(np.sum(x**2))
 
-    loss = MockLossClass(objective, converged=False)
+    loss = make_loss(objective, converged=False)
     x_low = np.array([-1.0])
     x_up = np.array([1.0])
 
@@ -198,7 +203,7 @@ def test_bayesian_opt_convergence() -> None:
     loss.__call__ = call_with_convergence
 
     # Run with max_iter=10, but should stop early due to convergence
-    best_x, best_y, x_train, y_train = bayesian_opt(
+    best_x, best_y, _x_train, _y_train = bayesian_opt(
         loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=10, acq_name="UCB"
     )
 
@@ -211,20 +216,19 @@ def test_bayesian_opt_convergence() -> None:
 
 def test_bayesian_opt_return_values() -> None:
     """Test that Bayesian optimization returns values in the correct format."""
+
     def objective(x: np.ndarray) -> float:
         return float(np.sum(x**2))
 
-    loss = MockLossClass(objective)
+    loss = make_loss(objective)
     x_low = np.array([0.0, 0.0])
     x_up = np.array([1.0, 1.0])
 
-    best_x, best_y, x_train, y_train = bayesian_opt(
-        loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=2
-    )
+    best_x, best_y, x_train, y_train = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=2)
 
     # Check that best_x is a numpy array
     assert isinstance(best_x, np.ndarray)
-    assert best_x.dtype in [np.float64, np.float32]
+    assert best_x.dtype in {np.float64, np.float32}
 
     # Check that best_y is a numpy scalar
     assert isinstance(best_y, (np.floating, np.number, float))
@@ -243,16 +247,15 @@ def test_bayesian_opt_return_values() -> None:
 
 def test_bayesian_opt_one_dimensional() -> None:
     """Test Bayesian optimization with one-dimensional input."""
+
     def objective(x: np.ndarray) -> float:
         return float((x[0] - 0.3) ** 2)
 
-    loss = MockLossClass(objective)
+    loss = make_loss(objective)
     x_low = np.array([0.0])
     x_up = np.array([1.0])
 
-    best_x, best_y, x_train, y_train = bayesian_opt(
-        loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2
-    )
+    best_x, _best_y, x_train, _y_train = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2)
 
     assert best_x.shape == (1,)
     assert x_train.shape[1] == 1
@@ -260,16 +263,15 @@ def test_bayesian_opt_one_dimensional() -> None:
 
 def test_bayesian_opt_three_dimensional() -> None:
     """Test Bayesian optimization with three-dimensional input."""
+
     def objective(x: np.ndarray) -> float:
         return float(np.sum((x - 0.5) ** 2))
 
-    loss = MockLossClass(objective)
+    loss = make_loss(objective)
     x_low = np.array([0.0, 0.0, 0.0])
     x_up = np.array([1.0, 1.0, 1.0])
 
-    best_x, best_y, x_train, y_train = bayesian_opt(
-        loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2
-    )
+    best_x, _best_y, x_train, _y_train = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2)
 
     assert best_x.shape == (3,)
     assert x_train.shape[1] == 3
@@ -277,14 +279,15 @@ def test_bayesian_opt_three_dimensional() -> None:
 
 def test_bayesian_opt_custom_parameters() -> None:
     """Test Bayesian optimization with custom parameters."""
+
     def objective(x: np.ndarray) -> float:
         return float(np.sum(x**2))
 
-    loss = MockLossClass(objective)
+    loss = make_loss(objective)
     x_low = np.array([-1.0, -1.0])
     x_up = np.array([1.0, 1.0])
 
-    best_x, best_y, x_train, y_train = bayesian_opt(
+    best_x, best_y, x_train, _y_train = bayesian_opt(
         loss,
         x_low=x_low,
         x_up=x_up,
@@ -304,15 +307,16 @@ def test_bayesian_opt_custom_parameters() -> None:
 
 def test_bayesian_opt_improves_objective() -> None:
     """Test that Bayesian optimization improves the objective over iterations."""
+
     # Objective with minimum at [0.5, 0.5]
     def objective(x: np.ndarray) -> float:
         return float(np.sum((x - 0.5) ** 2))
 
-    loss = MockLossClass(objective)
+    loss = make_loss(objective)
     x_low = np.array([0.0, 0.0])
     x_up = np.array([1.0, 1.0])
 
-    best_x, best_y, x_train, y_train = bayesian_opt(
+    best_x, best_y, _x_train, _y_train = bayesian_opt(
         loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=5, acq_name="UCB"
     )
 
@@ -325,17 +329,15 @@ def test_bayesian_opt_improves_objective() -> None:
 
 def test_bayesian_opt_handles_negative_values() -> None:
     """Test Bayesian optimization with negative bounds."""
+
     def objective(x: np.ndarray) -> float:
         return float(np.sum(x**2))
 
-    loss = MockLossClass(objective)
+    loss = make_loss(objective)
     x_low = np.array([-2.0, -2.0])
     x_up = np.array([2.0, 2.0])
 
-    best_x, best_y, x_train, y_train = bayesian_opt(
-        loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2
-    )
+    best_x, _best_y, _x_train, _y_train = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2)
 
     assert np.all(best_x >= x_low)
     assert np.all(best_x <= x_up)
-

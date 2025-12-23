@@ -1,19 +1,31 @@
+# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 """Tests for the MCMC-based gradient-free optimizer."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free import mcmc
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 
 class DummyRng:
     """Deterministic RNG to control proposals and acceptance decisions."""
 
-    def __init__(self, normals: Sequence[Sequence[float]] | None = None, randoms: Sequence[float] | None = None) -> None:
+    def __init__(
+        self, normals: Sequence[Sequence[float]] | None = None, randoms: Sequence[float] | None = None
+    ) -> None:
         self.normals = list(normals or [])
         self.randoms = list(randoms or [])
         self.normal_calls = 0
@@ -130,5 +142,3 @@ def test_mcmc_opt_applies_bounds(monkeypatch) -> None:
     )
 
     np.testing.assert_array_equal(objective.last_x, np.array([1.0, -1.0]))
-
-

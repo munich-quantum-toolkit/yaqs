@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 from botorch.acquisition import (
-    ExpectedImprovement,
     LogExpectedImprovement,
     ProbabilityOfImprovement,
     UpperConfidenceBound,

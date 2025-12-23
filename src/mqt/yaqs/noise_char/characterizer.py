@@ -13,7 +13,6 @@ import copy
 from typing import TYPE_CHECKING
 
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_based.adam import adam_opt
-from mqt.yaqs.noise_char.optimization_algorithms.gradient_based.gradient_descent import gradient_descent_opt
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import bayesian_opt
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.cma import cma_opt
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.mcmc import mcmc_opt
@@ -204,91 +203,6 @@ class Characterizer:
             beta1=beta1,
             beta2=beta2,
             epsilon=epsilon,
-            restart=restart,
-            restart_file=restart_file,
-        )
-
-        self.optimal_model = self.loss.x_to_noise_model(self.x_avg_history[-1])
-
-    def gradient_descent_optimize(
-        self,
-        *,
-        x_low: np.ndarray | None = None,
-        x_up: np.ndarray | None = None,
-        alpha: float = 0.05,
-        max_iter: int = 100,
-        threshold: float = 5e-4,
-        max_n_convergence: int = 50,
-        h: float = 1e-2,
-        tolerance: float = 1e-8,
-        restart: bool = False,
-        restart_file: Path | None = None,
-    ) -> None:
-        """Run a gradient descent optimization to fit the noise model parameters.
-
-        This method runs the external `gradient_descent_optimizer` routine to minimize the
-        callable `self.loss` starting from `self.init_x`. On completion (or
-        early termination), several instance attributes are updated with the
-        optimizer history and the recovered optimal noise model.
-
-        Parameters
-        ----------
-        x_low : np.ndarray or None, optional
-            Lower bounds for parameters. Default is None.
-        x_up : np.ndarray or None, optional
-            Upper bounds for parameters. Default is None.
-        alpha : float, optional
-            Learning rate for gradient descent. Default is 0.05.
-        max_iter : int, optional
-            Maximum number of optimization iterations. Default is 100.
-        threshold : float, optional
-            Threshold for parameter convergence check. Default is 5e-4.
-        max_n_convergence : int, optional
-            Number of consecutive iterations to check for convergence. Default is 50.
-        h : float, optional
-            Step size for numerical gradients. Default is 1e-2.
-        tolerance : float, optional
-            Absolute loss tolerance for early stopping. Default is 1e-8.
-        restart : bool, optional
-            Whether to restart optimization from a checkpoint. Default is False.
-        restart_file : Path or None, optional
-            Path to a specific checkpoint file to restart from. If None, the latest
-            checkpoint in the working directory is used.
-
-        Notes:
-        -----
-        - The method delegates the numerical optimization to the external
-          `gradient_descent_optimizer` function and forwards the provided hyperparameters to it.
-        - Convergence and restart semantics depend on the `gradient_descent_optimizer` implementation.
-        - After optimization, the final noise model is constructed by calling
-          `self.loss.x_to_noise_model` with the final averaged parameters.
-
-        Raises:
-        ------
-        ValueError
-            If one or more numeric hyperparameters are out of valid ranges (e.g.,
-            non-positive learning rate or non-positive max_iter).
-        FileNotFoundError
-            If `restart` is True and `restart_file` is provided but does not exist.
-        RuntimeError
-            If the underlying optimizer reports a failure to converge when such
-            failures are surfaced as exceptions.
-
-        """
-        self.loss.return_numeric_gradients = True
-
-        self.loss.epsilon = h
-
-        self.loss_history, self.x_history, self.x_avg_history, self.times, self.observable_traj = gradient_descent_opt(
-            self.loss,
-            self.init_x,
-            x_low=x_low,
-            x_up=x_up,
-            alpha=alpha,
-            max_iter=max_iter,
-            threshold=threshold,
-            max_n_convergence=max_n_convergence,
-            tolerance=tolerance,
             restart=restart,
             restart_file=restart_file,
         )
