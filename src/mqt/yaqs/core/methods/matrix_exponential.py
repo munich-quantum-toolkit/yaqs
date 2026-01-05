@@ -15,6 +15,7 @@ approximation of exp(-1j * dt * A) * v without explicitly constructing the matri
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -106,6 +107,23 @@ def lanczos_iteration(
     return alpha, beta, v
 
 
+# calculating the norm of A using power iteration
+def norm_A_calc(matrix_free_operator, dim):
+    v = np.random.rand(dim).astype(np.complex128) #rand vector
+    v /= np.linalg.norm(v)
+    
+    for i in range(10): #TEST with other iteration values
+        # use callable matrix_free_operator to apply A
+        v = matrix_free_operator(v)
+        
+        #compute norm/growth
+        # each normalization preserves the direction and the vector gradually aligns with the dominant eigenvector, and the later iters become more accurate
+        norm_A = np.linalg.norm(v)
+        
+        v /= norm_A  # normalize/reset for the next iteration to avoid overflow
+        
+    return norm_A
+
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vec: NDArray[np.complex128],
@@ -133,6 +151,40 @@ def expm_krylov(
             The approximate result of applying exp(-1j * dt * A) to vec.
     """
     vec_norm = np.linalg.norm(vec)
+
+
+        # find norm of A (include length of the vector)
+    norm_A = norm_A_calc(matrix_free_operator, vec.shape[0])
+    # get rid of/avoid/is it 1?
+    # matrix path vs matrix free path 
+
+    ADAPTIVE_LANCZOS = True # TEST: toggle adaptive lanczos on/off
+
+
+    # calculated norm is used to find the norm_A * abs(dt)
+
+    mag = norm_A * abs(dt)
+    
+    tolerance =1e-8 #TEST: between 1e-3 and 1e-16
+    
+    # calculate: error bound= (((norm_A * abs(dt))**m) / math.factorial(m))
+    # solving for m, unknown for now
+    m = 1
+
+    # run loop until error bound < tolerance
+    while True:
+        error_bound = (mag**m) / math.factorial(m)
+        
+        if error_bound < tolerance:
+            break
+            
+        m += 1
+
+    lanczos_iterations = m #using my calculated m for lanczos iterations
+    # Maybe can get rid of the pre define lanczos_iterations value in earlier function calls since i just rewrite it here
+
+
+
     alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, vec, lanczos_iterations)
     try:
         w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
