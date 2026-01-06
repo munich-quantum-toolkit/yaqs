@@ -44,6 +44,8 @@ from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from mqt.yaqs.noise_char.loss import LossClass
 
 
@@ -53,7 +55,7 @@ class MockLossClass:
     This class simulates a loss function that can be called and has a converged attribute.
     """
 
-    def __init__(self, objective_func: callable, converged: bool = False) -> None:
+    def __init__(self, objective_func: Callable[[np.ndarray], float], converged: bool = False) -> None:
         """Initialize mock loss class.
 
         Args:
@@ -80,7 +82,7 @@ class MockLossClass:
         return loss_value, grad, 0.0
 
 
-def make_loss(objective_func: callable, *, converged: bool = False) -> LossClass:
+def make_loss(objective_func: Callable[[np.ndarray], float], *, converged: bool = False) -> LossClass:
     """Create a LossClass-typed mock for type checkers."""
     return cast("LossClass", MockLossClass(objective_func, converged))
 
@@ -137,16 +139,17 @@ def test_bayesian_opt_basic_functionality() -> None:
     x_up = np.array([1.0, 1.0])
 
     best_x, best_y, x_train, y_train = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=2, acq_name="UCB")
+    best_y_scalar = float(best_y)
 
     # Check return types
     assert isinstance(best_x, np.ndarray)
-    assert isinstance(best_y, (np.floating, np.number, float))  # best_y is a numpy scalar
+    assert isinstance(best_y_scalar, float)
     assert isinstance(x_train, torch.Tensor)
     assert isinstance(y_train, torch.Tensor)
 
     # Check shapes
     assert best_x.shape == (2,)
-    assert np.isscalar(best_y)  # best_y is a scalar
+    assert np.isscalar(best_y_scalar)
     assert x_train.shape[1] == 2  # Second dimension should match input dimension
     assert y_train.shape[1] == 1  # y_train should have shape (n_evals, 1)
 
@@ -171,9 +174,9 @@ def test_bayesian_opt_different_acquisition_functions() -> None:
     for acq_name in ["LEI", "PI", "UCB"]:
         loss = make_loss(objective)
         best_x, best_y, _, _ = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=2, max_iter=2, acq_name=acq_name)
+        _ = float(best_y)
 
         assert isinstance(best_x, np.ndarray)
-        assert isinstance(best_y, (np.floating, np.number, float))  # best_y is a numpy scalar
         assert best_x.shape == (2,)
 
 
@@ -200,7 +203,7 @@ def test_bayesian_opt_convergence() -> None:
             loss.converged = True
         return result
 
-    loss.__call__ = call_with_convergence
+    loss.__call__ = call_with_convergence  # type: ignore[method-assign]
 
     # Run with max_iter=10, but should stop early due to convergence
     best_x, best_y, _x_train, _y_train = bayesian_opt(
@@ -211,7 +214,7 @@ def test_bayesian_opt_convergence() -> None:
     # With n_init=2 and convergence set after 3rd eval, it should stop after 1 iteration
     # So total evals should be 3 (n_init=2 + 1 iteration), not 2 + 10 = 12
     assert isinstance(best_x, np.ndarray)
-    assert isinstance(best_y, (np.floating, np.number, float))  # best_y is a numpy scalar
+    _ = float(best_y)
 
 
 def test_bayesian_opt_return_values() -> None:
@@ -225,14 +228,13 @@ def test_bayesian_opt_return_values() -> None:
     x_up = np.array([1.0, 1.0])
 
     best_x, best_y, x_train, y_train = bayesian_opt(loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=2)
+    best_y_scalar = float(best_y)
 
     # Check that best_x is a numpy array
     assert isinstance(best_x, np.ndarray)
     assert best_x.dtype in {np.float64, np.float32}
-
-    # Check that best_y is a numpy scalar
-    assert isinstance(best_y, (np.floating, np.number, float))
-    assert np.isscalar(best_y)
+    assert isinstance(best_y_scalar, float)
+    assert np.isscalar(best_y_scalar)
 
     # Check that x_train is a torch tensor
     assert isinstance(x_train, torch.Tensor)
@@ -301,7 +303,7 @@ def test_bayesian_opt_custom_parameters() -> None:
     )
 
     assert isinstance(best_x, np.ndarray)
-    assert isinstance(best_y, (np.floating, np.number, float))  # best_y is a numpy scalar
+    _ = float(best_y)
     assert x_train.dtype == torch.float32
 
 
@@ -319,12 +321,13 @@ def test_bayesian_opt_improves_objective() -> None:
     best_x, best_y, _x_train, _y_train = bayesian_opt(
         loss, x_low=x_low, x_up=x_up, n_init=3, max_iter=5, acq_name="UCB"
     )
+    best_y_scalar = float(best_y)
 
     # The best value should be reasonable (not too far from minimum)
     # Since this is stochastic, we just check it's within bounds
     assert np.all(best_x >= x_low)
     assert np.all(best_x <= x_up)
-    assert best_y >= 0  # Objective is non-negative
+    assert best_y_scalar >= 0  # Objective is non-negative
 
 
 def test_bayesian_opt_handles_negative_values() -> None:

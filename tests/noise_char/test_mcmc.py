@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
@@ -18,6 +18,10 @@ from mqt.yaqs.noise_char.optimization_algorithms.gradient_free import mcmc
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from _pytest.monkeypatch import MonkeyPatch
+
+    from mqt.yaqs.noise_char.loss import LossClass
 
 
 class DummyRng:
@@ -46,16 +50,21 @@ class DummyRng:
         return float(self.randoms[idx])
 
 
-def _patch_rng(monkeypatch, rng: DummyRng) -> None:
+def _patch_rng(monkeypatch: MonkeyPatch, rng: DummyRng) -> None:
     """Patch ``np.random.default_rng`` to return a deterministic RNG."""
 
-    def _factory():
+    def _factory() -> DummyRng:
         return rng
 
-    monkeypatch.setattr(mcmc.np.random, "default_rng", _factory)
+    monkeypatch.setattr("numpy.random.default_rng", _factory)
 
 
-def test_mcmc_opt_tracks_best(monkeypatch) -> None:
+def make_loss(obj: object) -> LossClass:
+    """Treat a simple callable/object as a LossClass for static type checking."""
+    return cast("LossClass", obj)
+
+
+def test_mcmc_opt_tracks_best(monkeypatch: MonkeyPatch) -> None:
     """Accepts an improved proposal and updates the global best."""
     rng = DummyRng(normals=[[-1.0, -1.0]], randoms=[0.0])
     _patch_rng(monkeypatch, rng)
@@ -71,7 +80,7 @@ def test_mcmc_opt_tracks_best(monkeypatch) -> None:
     objective = QuadObjective()
 
     xbest, fbest = mcmc.mcmc_opt(
-        objective,
+        make_loss(objective),
         x0=np.array([1.0, 1.0]),
         max_iter=1,
         step_size=1.0,
@@ -84,7 +93,7 @@ def test_mcmc_opt_tracks_best(monkeypatch) -> None:
     assert objective.call_count == 2  # initial + one proposal
 
 
-def test_mcmc_opt_early_stops_on_patience(monkeypatch) -> None:
+def test_mcmc_opt_early_stops_on_patience(monkeypatch: MonkeyPatch) -> None:
     """Loop stops when no improvements occur for ``patience`` iterations."""
     patience = 3
     rng = DummyRng(normals=[[0.0]], randoms=[0.0])
@@ -101,7 +110,7 @@ def test_mcmc_opt_early_stops_on_patience(monkeypatch) -> None:
     objective = FlatObjective()
 
     _xbest, fbest = mcmc.mcmc_opt(
-        objective,
+        make_loss(objective),
         x0=np.array([0.0]),
         max_iter=10,
         step_size=0.0,
@@ -115,14 +124,14 @@ def test_mcmc_opt_early_stops_on_patience(monkeypatch) -> None:
     assert objective.call_count == patience + 1
 
 
-def test_mcmc_opt_applies_bounds(monkeypatch) -> None:
+def test_mcmc_opt_applies_bounds(monkeypatch: MonkeyPatch) -> None:
     """Proposals are clipped to provided bounds before evaluation."""
     rng = DummyRng(normals=[[5.0, -5.0]], randoms=[0.0])
     _patch_rng(monkeypatch, rng)
 
     class CaptureObjective:
         def __init__(self) -> None:
-            self.last_x = None
+            self.last_x: np.ndarray | None = None
 
         def __call__(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
             self.last_x = np.array(x)
@@ -131,7 +140,7 @@ def test_mcmc_opt_applies_bounds(monkeypatch) -> None:
     objective = CaptureObjective()
 
     mcmc.mcmc_opt(
-        objective,
+        make_loss(objective),
         x0=np.array([0.0, 0.0]),
         x_low=np.array([-1.0, -1.0]),
         x_up=np.array([1.0, 1.0]),
