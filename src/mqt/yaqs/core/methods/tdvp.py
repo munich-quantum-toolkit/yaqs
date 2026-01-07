@@ -26,6 +26,7 @@ import numpy as np
 import opt_einsum as oe
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
@@ -93,7 +94,7 @@ def split_mps_tensor(
         shape_transposed[0] * shape_transposed[1],
         shape_transposed[2] * shape_transposed[3],
     )
-    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
 
     # Handled by dynamic TDVP
     keep = min(len(s_vec), sim_params.max_bond_dim) if not dynamic else len(s_vec)
@@ -101,13 +102,18 @@ def split_mps_tensor(
     if sim_params.trunc_mode == "discarded_weight":
         discard = 0.0
         min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
+        # iterate from smallest to largest
         for idx, s in enumerate(reversed(s_vec)):
-            discard += s**2
-            if discard >= sim_params.threshold:
-                keep = max(len(s_vec) - (idx + 1), min_keep)
+            next_discard = discard + s * s
+            if next_discard > sim_params.threshold:
+                # don't discard this one; discard only the ones already counted
+                keep = max(len(s_vec) - idx, min_keep)
                 break
+            discard = next_discard
     elif sim_params.trunc_mode == "relative":
-        keep = min(sum(s_vec / max(s_vec) > sim_params.threshold), sim_params.max_bond_dim)
+        smax = s_vec[0]
+        keep = 0 if smax == 0 else int(np.sum((s_vec / smax) >= sim_params.threshold))
+        keep = min(keep, sim_params.max_bond_dim)
         keep = max(keep, sim_params.min_bond_dim)
 
     left_tensor = u_mat[:, :keep]
@@ -326,6 +332,120 @@ def project_bond(
     return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
 
 
+def build_dense_heff_site(
+    left_env: NDArray[np.complex128],  # shape (a, l, A)
+    right_env: NDArray[np.complex128],  # shape (b, r, B)
+    op: NDArray[np.complex128],  # shape (o, p, l, r)
+) -> NDArray[np.complex128]:
+    r"""Construct the dense effective operator for a single-site Hamiltonian update.
+
+    This function builds the dense matrix representation ``H_eff`` of the linear
+    map implemented by :func:`project_site`.  The operator is defined implicitly by
+
+        Y = project_site(left_env, right_env, op, X),
+
+    where ``X`` is a local MPS tensor of shape ``(p, a, b)`` and ``Y`` is the
+    resulting tensor of shape ``(o, A, B)``.
+
+    The returned matrix ``H_eff`` satisfies
+
+        vec(Y) = H_eff @ vec(X),
+
+    where ``vec`` denotes NumPy row-major flattening (``reshape(-1)``).
+
+    The dense operator is constructed directly via a single multi-index tensor
+    contraction over the MPO tensor and the left and right operator blocks.
+    This avoids the explicit application of ``project_site`` to each basis
+    vector of the local tensor space and is algebraically equivalent to the
+    generic basis-expansion construction.
+
+    Args:
+        left_env (NDArray[np.complex128]):
+            Left operator block, a 3-index tensor of shape ``(a, l, A)``.
+        right_env (NDArray[np.complex128]):
+            Right operator block, a 3-index tensor of shape ``(b, r, B)``.
+        op (NDArray[np.complex128]):
+            Local MPO tensor, a 4-index tensor of shape ``(o, p, l, r)``.
+
+    Returns:
+        NDArray[np.complex128]:
+            A dense matrix ``H_eff`` of shape ``(o * A * B, p * a * b)`` such that
+            applying ``H_eff @ vec(X)`` reproduces the action of
+            ``project_site(left_env, right_env, op, X)`` exactly.
+
+    Notes:
+        - The index ordering of ``H_eff`` is consistent with NumPy row-major
+          flattening of both input and output tensors.
+        - This function is intended for small local Hilbert spaces, where
+          explicitly materializing the dense effective operator is efficient.
+          For larger local dimensions, the matrix-free projector path should be
+          preferred.
+    """
+    left_env = np.asarray(left_env, dtype=np.complex128)
+    right_env = np.asarray(right_env, dtype=np.complex128)
+    op = np.asarray(op, dtype=np.complex128)
+    # h[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
+    h6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
+    o_dim, a_dim_out, b_dim_out, p_dim, a_dim_in, b_dim_in = h6.shape
+    return np.asarray(
+        h6.reshape(o_dim * a_dim_out * b_dim_out, p_dim * a_dim_in * b_dim_in),
+        dtype=np.complex128,
+    )
+
+
+def build_dense_heff_bond(
+    left_env: NDArray[np.complex128],  # shape (u, a, p)
+    right_env: NDArray[np.complex128],  # shape (v, a, w)
+) -> NDArray[np.complex128]:
+    r"""Construct the dense effective operator for the bond contraction.
+
+    This function builds the dense matrix representation ``H_eff`` of the linear
+    map implemented by :func:`project_bond`.  The operator is defined implicitly by
+
+        Y = project_bond(left_env, right_env, C),
+
+    where ``C`` is a bond tensor of shape ``(u, v)`` and ``Y`` is the resulting
+    tensor of shape ``(p, w)``.
+
+    The returned matrix ``H_eff`` satisfies
+
+        vec(Y) = H_eff @ vec(C),
+
+    where ``vec`` denotes NumPy row-major flattening (``reshape(-1)``).
+
+    This implementation constructs ``H_eff`` directly using a single tensor
+    contraction, avoiding the explicit application of ``project_bond`` to each
+    basis vector of the local space.  The result is algebraically equivalent to
+    the generic basis-expansion construction but significantly more efficient.
+
+    Args:
+        left_env (NDArray[np.complex128]):
+            Left operator block, a 3-index tensor of shape ``(u, a, p)``.
+        right_env (NDArray[np.complex128]):
+            Right operator block, a 3-index tensor of shape ``(v, a, w)``.
+
+    Returns:
+        NDArray[np.complex128]:
+            A dense matrix ``H_eff`` of shape ``(p * w, u * v)`` such that
+            applying ``H_eff @ vec(C)`` reproduces the action of
+            ``project_bond(left_env, right_env, C)`` exactly.
+
+    Notes:
+        This function is intended for small local bond dimensions, where
+        explicitly materializing the dense effective operator is efficient and
+        typically faster than repeated tensor contractions inside a Krylov
+        iteration.  For large bond dimensions, the matrix-free projector path
+        should be preferred.
+    """
+    left_env = np.asarray(left_env, dtype=np.complex128)
+    right_env = np.asarray(right_env, dtype=np.complex128)
+
+    # h[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
+    h4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
+    p_dim, w_dim, u_dim, v_dim = h4.shape
+    return np.asarray(h4.reshape(p_dim * w_dim, u_dim * v_dim), dtype=np.complex128)
+
+
 def _build_dense_effective_hamiltonian(
     projector: Callable[..., NDArray[np.complex128]],
     proj_args: tuple[NDArray[np.complex128], ...],
@@ -374,19 +494,24 @@ def _build_dense_effective_hamiltonian(
         dimensions, the matrix-free path (projector applied directly inside
         Lanczos) is preferred.
     """
+    # Fast paths
+    if projector is project_site:
+        left_env, right_env, op = proj_args
+        return build_dense_heff_site(left_env, right_env, op)
+
+    if projector is project_bond:
+        left_env, right_env = proj_args
+        return build_dense_heff_bond(left_env, right_env)
+
+    # Generic fallback (slow but general)
     n_loc = int(np.prod(tensor_shape))
     h_eff = np.empty((n_loc, n_loc), dtype=np.complex128)
-
-    # Reusable basis vector
     e = np.zeros(n_loc, dtype=np.complex128)
-
     for j in range(n_loc):
         e[:] = 0.0
         e[j] = 1.0
-
         x_tensor = e.reshape(tensor_shape)
         y_tensor = projector(*proj_args, x_tensor)
-
         h_eff[:, j] = y_tensor.reshape(-1)
 
     return h_eff
@@ -779,7 +904,7 @@ def local_dynamic_tdvp(
     # build identity for left_blocks[0]
     chi0 = state.tensors[0].shape[1]
     mpo_dim = hamiltonian.tensors[0].shape[2]
-    eye = np.zeros((chi0, mpo_dim, chi0), dtype=right_blocks[0].dtype)
+    eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
     for i in range(chi0):
         eye[i, :, i] = 1
     left_blocks[0] = eye

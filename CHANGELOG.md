@@ -11,12 +11,15 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- TDVP now utilizes a dense Hamiltonian for small tensor sizes (adjusted by global variable DENSE_THRESHOLD)
-- Updated readability of TDVP subfunctions and Lanczos method
+- added faster paths for TDVP dense effective Hamiltonian ([#280]) ([**@aaronleesander**])
+- added more stable and faster SVD and QR implementation ([#278]) ([**@aaronleesander**])
+- TDVP now utilizes a dense Hamiltonian for small tensor sizes (adjusted by global variable DENSE_THRESHOLD) ([#261]) ([**@aaronleesander**])
+- Updated readability of TDVP subfunctions and Lanczos method ([#261]) ([**@aaronleesander**])
 
 ### Fixed
 
-- Updated Lanczos method's vdot order to match mathematical expectations
+- Fixed a truncation bug in TDVP sometimes leading to over-truncation ([#274]) ([**@aaronleesander**])
+- Updated Lanczos method's vdot order to match mathematical expectations ([#261]) ([**@aaronleesander**])
 
 ## [0.3.2] - 2025-10-16
 
@@ -47,6 +50,10 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#280]: https://github.com/munich-quantum-toolkit/yaqs/pull/280
+[#278]: https://github.com/munich-quantum-toolkit/yaqs/pull/278
+[#274]: https://github.com/munich-quantum-toolkit/yaqs/pull/274
+[#261]: https://github.com/munich-quantum-toolkit/yaqs/pull/261
 [#214]: https://github.com/munich-quantum-toolkit/yaqs/pull/214
 [#213]: https://github.com/munich-quantum-toolkit/yaqs/pull/213
 [#212]: https://github.com/munich-quantum-toolkit/yaqs/pull/212
