@@ -21,16 +21,6 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import pytest
 import torch
-
-# Suppress botorch warnings:
-# - Deprecation warnings related to numpy 2.0 compatibility
-# - InputDataWarning about float32 (we intentionally test with float32)
-# These are external library warnings, not issues with our code
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::DeprecationWarning:botorch.*",
-    "ignore:The model inputs are of type torch.float32.*:UserWarning",  # InputDataWarning about float32
-)
-
 from botorch.acquisition import (
     LogExpectedImprovement,
     ProbabilityOfImprovement,
@@ -41,6 +31,15 @@ from botorch.models import SingleTaskGP
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import (
     bayesian_opt,
     get_acquisition_function,
+)
+
+# Suppress botorch warnings:
+# - Deprecation warnings related to numpy 2.0 compatibility
+# - InputDataWarning about float32 (we intentionally test with float32)
+# These are external library warnings, not issues with our code
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::DeprecationWarning:botorch.*",
+    "ignore:The model inputs are of type torch.float32.*:UserWarning",  # InputDataWarning about float32
 )
 
 if TYPE_CHECKING:
@@ -55,7 +54,7 @@ class MockLossClass:
     This class simulates a loss function that can be called and has a converged attribute.
     """
 
-    def __init__(self, objective_func: Callable[[np.ndarray], float], converged: bool = False) -> None:
+    def __init__(self, objective_func: Callable[[np.ndarray], float], *, converged: bool = False) -> None:
         """Initialize mock loss class.
 
         Args:
@@ -83,8 +82,16 @@ class MockLossClass:
 
 
 def make_loss(objective_func: Callable[[np.ndarray], float], *, converged: bool = False) -> LossClass:
-    """Create a LossClass-typed mock for type checkers."""
-    return cast("LossClass", MockLossClass(objective_func, converged))
+    """Create a LossClass-typed mock for type checkers.
+
+    Args:
+        objective_func: Function that takes a 1D numpy array and returns a scalar.
+        converged: Whether the optimization has converged.
+
+    Returns:
+        The mock loss object cast to LossClass type.
+    """
+    return cast("LossClass", MockLossClass(objective_func, converged=converged))
 
 
 def test_get_acquisition_function_lei() -> None:

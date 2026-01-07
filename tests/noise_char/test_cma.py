@@ -36,6 +36,14 @@ class DummyStrategy:
         *,
         stop_after_first: bool = True,
     ) -> None:
+        """Initialize the dummy strategy.
+
+        Args:
+            x0: Initial solution vector.
+            sigma0: Initial step size.
+            options: Strategy options dictionary.
+            stop_after_first: Whether to stop after the first iteration.
+        """
         self.x0 = np.array(x0, dtype=float)
         self.sigma0 = sigma0
         self.options = options
@@ -45,21 +53,45 @@ class DummyStrategy:
         self.result = types.SimpleNamespace(xbest=None, fbest=None)
 
     def ask(self) -> list[np.ndarray]:
+        """Request candidate solutions from the strategy.
+
+        Returns:
+            List of candidate solution vectors.
+        """
         self.calls += 1
         return [np.array([1.0, 2.0]), np.array([-1.0, 0.5])]
 
     def tell(self, solutions: list[np.ndarray], values: list[float]) -> None:
+        """Provide objective values for candidate solutions.
+
+        Args:
+            solutions: List of candidate solution vectors.
+            values: List of objective function values corresponding to each solution.
+        """
         self.tell_calls += 1
         best_idx = int(np.argmin(values))
         self.result.xbest = np.array(solutions[best_idx])
         self.result.fbest = float(values[best_idx])
 
     def stop(self) -> bool:
+        """Check if the strategy should stop.
+
+        Returns:
+            True if the strategy should stop, False otherwise.
+        """
         return self.stop_after_first and self.calls >= 1
 
 
 def _patch_strategy(monkeypatch: MonkeyPatch, factory: Callable[..., DummyStrategy]) -> list[DummyStrategy]:
-    """Patch CMAEvolutionStrategy and capture created instances."""
+    """Patch CMAEvolutionStrategy and capture created instances.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        factory: Factory function to create DummyStrategy instances.
+
+    Returns:
+        List of created DummyStrategy instances.
+    """
     created: list[DummyStrategy] = []
 
     def _wrapper(x0: np.ndarray, sigma0: float, options: dict[str, Any]) -> DummyStrategy:
@@ -72,7 +104,14 @@ def _patch_strategy(monkeypatch: MonkeyPatch, factory: Callable[..., DummyStrate
 
 
 def make_loss(obj: object) -> LossClass:
-    """Treat a simple callable/object as a LossClass for static type checking."""
+    """Treat a simple callable/object as a LossClass for static type checking.
+
+    Args:
+        obj: The object to cast to LossClass.
+
+    Returns:
+        The object cast to LossClass type.
+    """
     return cast("LossClass", obj)
 
 
