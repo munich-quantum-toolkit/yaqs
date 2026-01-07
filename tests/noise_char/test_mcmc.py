@@ -30,12 +30,27 @@ class DummyRng:
     def __init__(
         self, normals: Sequence[Sequence[float]] | None = None, randoms: Sequence[float] | None = None
     ) -> None:
+        """Initialize the deterministic RNG with predefined sequences.
+
+        Args:
+            normals: Predefined sequences of normal distribution values to return.
+            randoms: Predefined sequence of random values to return.
+        """
         self.normals = list(normals or [])
         self.randoms = list(randoms or [])
         self.normal_calls = 0
         self.random_calls = 0
 
     def normal(self, *, scale: float, size: int) -> np.ndarray:
+        """Return a deterministic normal distribution sample.
+
+        Args:
+            scale: Scale factor to multiply the predefined normal values.
+            size: Size of the output array.
+
+        Returns:
+            Array of scaled normal distribution values.
+        """
         idx = min(self.normal_calls, len(self.normals) - 1)
         self.normal_calls += 1
         vec = np.array(self.normals[idx], dtype=float)
@@ -45,6 +60,11 @@ class DummyRng:
         return scale * vec
 
     def random(self) -> float:
+        """Return a deterministic random value.
+
+        Returns:
+            A predefined random float value.
+        """
         idx = min(self.random_calls, len(self.randoms) - 1)
         self.random_calls += 1
         return float(self.randoms[idx])
@@ -60,7 +80,14 @@ def _patch_rng(monkeypatch: MonkeyPatch, rng: DummyRng) -> None:
 
 
 def make_loss(obj: object) -> LossClass:
-    """Treat a simple callable/object as a LossClass for static type checking."""
+    """Treat a simple callable/object as a LossClass for static type checking.
+
+    Args:
+        obj: The object to cast to LossClass.
+
+    Returns:
+        The object cast to LossClass type.
+    """
     return cast("LossClass", obj)
 
 
