@@ -239,7 +239,7 @@ def test_bayesian_opt_return_values() -> None:
 
     # Check that best_x is a numpy array
     assert isinstance(best_x, np.ndarray)
-    assert best_x.dtype in (np.float64, np.float32)
+    assert best_x.dtype in {np.dtype("float64"), np.dtype("float32")}
     assert isinstance(best_y_scalar, float)
     assert np.isscalar(best_y_scalar)
 
