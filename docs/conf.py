@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -44,7 +44,7 @@ release = version.split("+")[0]
 project = "MQT YAQS"
 author = "Chair for Design Automation, TUM"
 language = "en"
-project_copyright = "2023 - 2025, Chair for Design Automation, TUM"
+project_copyright = "2025 - 2026, Chair for Design Automation, TUM"
 
 master_doc = "index"
 
