@@ -19,8 +19,6 @@ These tests ensure that the MPS class functions as expected in various simulatio
 from __future__ import annotations
 
 import copy
-import re
-from functools import reduce
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -37,7 +35,7 @@ if TYPE_CHECKING:
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id, X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id, X, Z
 
 
 def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:

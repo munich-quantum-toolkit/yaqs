@@ -25,7 +25,7 @@ import numpy as np
 import opt_einsum as oe
 from tqdm import tqdm
 
-from ..libraries.gate_library import Destroy, X, Y, Z
+from ..libraries.gate_library import Destroy
 from ..methods.decompositions import right_qr, two_site_svd
 
 if TYPE_CHECKING:
@@ -986,6 +986,7 @@ class MPO:
     rotate(conjugate: bool = False) -> None
         Rotates the MPO tensors by swapping physical dimensions.
     """
+
     _PAULI_2 = {
         "I": np.eye(2, dtype=complex),
         "X": np.array([[0, 1], [1, 0]], dtype=complex),
@@ -994,7 +995,6 @@ class MPO:
     }
     _VALID = frozenset(_PAULI_2.keys())
     _PAULI_TOKEN_RE = re.compile(r"\b([IXYZ])\s*(\d+)\b", flags=re.IGNORECASE)
-
 
     def init_ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
         """Ising MPO.
@@ -1271,11 +1271,13 @@ class MPO:
         tol: float = 1e-12,
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
-    ) -> "MPO":
+    ) -> MPO:
         if L <= 0:
-            raise ValueError("L must be positive.")
+            msg = "L must be positive."
+            raise ValueError(msg)
         if bc not in {"open", "periodic"}:
-            raise ValueError("bc must be 'open' or 'periodic'.")
+            msg = "bc must be 'open' or 'periodic'."
+            raise ValueError(msg)
 
         two_body = two_body or []
         one_body = one_body or []
@@ -1283,7 +1285,8 @@ class MPO:
         def op(x: str) -> str:
             x = str(x).upper()
             if x not in cls._VALID:
-                raise ValueError(f"Invalid operator {x!r}; expected one of {sorted(cls._VALID)}.")
+                msg = f"Invalid operator {x!r}; expected one of {sorted(cls._VALID)}."
+                raise ValueError(msg)
             return x
 
         terms: list[tuple[complex | float, str]] = []
@@ -1297,8 +1300,7 @@ class MPO:
 
         for c, a in one_body:
             a = op(a)
-            for i in range(L):
-                terms.append((c, f"{a}{i}"))
+            terms.extend((c, f"{a}{i}") for i in range(L))
 
         mpo = cls()
         mpo.from_pauli_sum(
@@ -1327,9 +1329,11 @@ class MPO:
           "Z0 Z1"   or   "X7"   or   "" (identity)
         """
         if physical_dimension != 2:
-            raise ValueError("Only physical_dimension=2 is supported by this Pauli MPO builder.")
+            msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
+            raise ValueError(msg)
         if length <= 0:
-            raise ValueError("length must be positive.")
+            msg = "length must be positive."
+            raise ValueError(msg)
 
         self.length = length
         self.physical_dimension = physical_dimension
@@ -1340,9 +1344,11 @@ class MPO:
             # validate sites + ops
             for site, lab in ops.items():
                 if not (0 <= site < length):
-                    raise ValueError(f"Site index {site} outside [0, {length - 1}].")
+                    msg = f"Site index {site} outside [0, {length - 1}]."
+                    raise ValueError(msg)
                 if lab not in self._VALID:
-                    raise ValueError(f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}.")
+                    msg = f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}."
+                    raise ValueError(msg)
             mpo_terms.append(self._create_term(length, ops, coeff))
 
         if not mpo_terms:
@@ -1355,7 +1361,6 @@ class MPO:
 
         self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
-
 
     def compress(
         self,
@@ -1382,9 +1387,11 @@ class MPO:
                 - "rl_lr": do rl then lr
         """
         if n_sweeps < 0:
-            raise ValueError("n_sweeps must be >= 0.")
+            msg = "n_sweeps must be >= 0."
+            raise ValueError(msg)
         if directions not in {"lr", "rl", "lr_rl", "rl_lr"}:
-            raise ValueError("directions must be one of {'lr', 'rl', 'lr_rl', 'rl_lr'}.")
+            msg = "directions must be one of {'lr', 'rl', 'lr_rl', 'rl_lr'}."
+            raise ValueError(msg)
 
         if n_sweeps == 0:
             return
@@ -1400,11 +1407,11 @@ class MPO:
             for direction in schedule:
                 self._compress_one_sweep(direction=direction, tol=tol, max_bond_dim=max_bond_dim)
 
-
     def _compress_one_sweep(self, *, direction: str, tol: float, max_bond_dim: int | None) -> None:
         """One local-SVD sweep in a single direction ('lr' or 'rl')."""
         if direction not in {"lr", "rl"}:
-            raise ValueError("direction must be 'lr' or 'rl'.")
+            msg = "direction must be 'lr' or 'rl'."
+            raise ValueError(msg)
 
         length = len(self.tensors)
         if length <= 1:
@@ -1413,7 +1420,7 @@ class MPO:
         rng = range(length - 1) if direction == "lr" else range(length - 2, -1, -1)
 
         for k in rng:
-            A = self.tensors[k]      # (d, d, Dl, Dm)
+            A = self.tensors[k]  # (d, d, Dl, Dm)
             B = self.tensors[k + 1]  # (d, d, Dm, Dr)
 
             phys_dim = A.shape[0]
@@ -1432,7 +1439,7 @@ class MPO:
             )
 
             U, S, Vh = np.linalg.svd(matrix, full_matrices=False)
-            keep = int(np.sum(S > tol))
+            keep = int(np.sum(tol < S))
             if max_bond_dim is not None:
                 keep = min(keep, max_bond_dim)
             keep = max(1, keep)
@@ -1451,11 +1458,7 @@ class MPO:
             self.tensors[k] = UL
             self.tensors[k + 1] = VR
 
-
-
-    def _create_term(
-        self, length: int, ops: dict[int, str], coeff: complex | float
-    ) -> list[np.ndarray]:
+    def _create_term(self, length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
         tensors: list[np.ndarray] = []
         P = self._PAULI_2
         for i in range(length):
@@ -1467,7 +1470,6 @@ class MPO:
         tensors[0][:, :, 0, 0] *= coeff
         return tensors
 
-
     @classmethod
     def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
         s = spec.replace(",", " ").strip()
@@ -1478,13 +1480,14 @@ class MPO:
             site = int(idx)
             op_up = op.upper()
             if site in out:
-                raise ValueError(f"Duplicate site {site} in spec '{spec}'.")
+                msg = f"Duplicate site {site} in spec '{spec}'."
+                raise ValueError(msg)
             out[site] = op_up
         cleaned = cls._PAULI_TOKEN_RE.sub("", s)
         if cleaned.split():
-            raise ValueError(f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'.")
+            msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
+            raise ValueError(msg)
         return out
-
 
     @staticmethod
     def _sum_terms(A: list[np.ndarray], B: list[np.ndarray]) -> list[np.ndarray]:
