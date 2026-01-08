@@ -113,9 +113,9 @@ def apply_dissipation(
                     dissipative_op = expm(-0.5 * dt * gamma * mat)
                     state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
 
-            processes_here = [
-                process for process in noise_model.processes if len(process["sites"]) == 2 and process["sites"][1] == i
-            ]
+        processes_here = [
+            process for process in noise_model.processes if len(process["sites"]) == 2 and process["sites"][1] == i
+        ]
         # 2. Apply all 2-site dissipators acting on sites (i-1, i)
         if i != 0:
             for process in processes_here:
