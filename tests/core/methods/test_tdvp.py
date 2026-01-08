@@ -40,6 +40,9 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
+    _build_dense_effective_hamiltonian,  # noqa: PLC2701
+    build_dense_heff_bond,
+    build_dense_heff_site,
     global_dynamic_tdvp,
     merge_mpo_tensors,
     merge_mps_tensors,
@@ -390,9 +393,9 @@ def _as_input_tensor(theta: NDArray[np.complex128], d0: int, d1: int, d2: int, d
 @pytest.mark.parametrize(
     ("svs", "threshold", "expected_keep"),
     [
-        (np.array([1.0, 0.5, 0.1, 0.01]), 1e-4, 3),  # discard 0.01 -> 1e-4
-        (np.array([1.0, 0.5, 0.01, 0.001]), 1e-4, 2),  # 1e-4 + 1e-6 ≈ 1e-4 boundary
-        (np.array([1.0, 0.2, 0.2, 0.2]), 0.2**2 * 3, 1),  # keep only the largest
+        (np.array([1.0, 0.5, 0.1, 0.0100001]), 1e-4, 4),
+        (np.array([1.0, 0.5, 0.01, 0.001]), 1e-4, 3),
+        (np.array([1.0, 0.2, 0.2, 0.2]), 0.2**2 * 3, 1),
     ],
 )
 def test_split_truncation_discarded_weight_kept_count(
@@ -438,9 +441,17 @@ def test_split_truncation_discarded_weight_kept_count(
     else:
         assert keep == expected_keep
 
-    # Verify tail-power condition that triggered the selection (with tolerance).
     tail = svs[keep:] if keep < len(svs) else np.array([], dtype=svs.dtype)
-    assert np.sum(tail**2) + tol >= threshold or keep == len(svs)
+    tail_power = float(np.sum(tail**2))
+
+    # 1) chosen keep must satisfy tail <= threshold (within tolerance)
+    assert tail_power <= threshold + tol or keep == len(svs)
+
+    # 2) maximality: if we kept one fewer, tail would exceed threshold (unless keep is forced)
+    if keep > sim_params.min_bond_dim:
+        tail_prev = svs[keep - 1 :]  # discarding one extra singular value
+        tail_prev_power = float(np.sum(tail_prev**2))
+        assert tail_prev_power > threshold - tol
 
 
 @pytest.mark.parametrize(
@@ -453,7 +464,7 @@ def test_split_truncation_discarded_weight_kept_count(
     ],
 )
 def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the: float, expected_keep: int) -> None:
-    """relative: keep count matches s_i/s_max > threshold; shapes consistent."""
+    """relative: keep count matches s_i/s_max >= threshold; shapes consistent."""
     d0, d1, D0, D2 = 2, 3, 2, 3
     theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=12)
     A_in = _as_input_tensor(theta, d0, d1, D0, D2)
@@ -512,7 +523,7 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         elapsed_time=0.2,
         dt=0.1,
         min_bond_dim=2,
-        threshold=0.5,
+        threshold=2,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
         show_progress=False,
@@ -554,3 +565,215 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
     u, s, v = np.linalg.svd(theta, full_matrices=False)
     theta_opt_k = (u[:, :k] * s[:k]) @ v[:k, :]
     np.testing.assert_allclose(theta_recon, theta_opt_k, atol=1e-10, rtol=1e-8)
+
+
+def test_dense_vs_project_site() -> None:
+    """Dense H_eff should match the action of project_site on a local tensor."""
+    # small random dims
+    phys_dim, bond_left_dim, bond_right_dim = 2, 2, 3
+    chi_a_left = chi_a_right = 2
+
+    rng = np.random.default_rng(1234)
+
+    ket = rng.normal(size=(phys_dim, bond_left_dim, bond_right_dim)) + 1j * rng.normal(
+        size=(phys_dim, bond_left_dim, bond_right_dim)
+    )
+    left_env = rng.normal(size=(bond_left_dim, chi_a_left, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi_a_left, bond_left_dim)
+    )
+    right_env = rng.normal(size=(bond_right_dim, chi_a_right, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi_a_right, bond_right_dim)
+    )
+    op = rng.normal(size=(phys_dim, phys_dim, chi_a_left, chi_a_right)) + 1j * rng.normal(
+        size=(phys_dim, phys_dim, chi_a_left, chi_a_right)
+    )
+
+    H_eff = _build_dense_effective_hamiltonian(
+        project_site,
+        (left_env, right_env, op),
+        ket.shape,
+    )
+
+    y1 = project_site(left_env, right_env, op, ket).reshape(-1)
+    y2 = H_eff @ ket.reshape(-1)
+
+    np.testing.assert_allclose(y1, y2, atol=1e-12)
+
+
+def test_dense_vs_project_bond() -> None:
+    """Dense H_eff should match the action of project_bond on a bond tensor."""
+    bond_left_dim, bond_right_dim = 3, 4
+    chi_a = 2
+
+    rng = np.random.default_rng(5678)
+
+    C = rng.normal(size=(bond_left_dim, bond_right_dim)) + 1j * rng.normal(size=(bond_left_dim, bond_right_dim))
+    left_env = rng.normal(size=(bond_left_dim, chi_a, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi_a, bond_left_dim)
+    )
+    right_env = rng.normal(size=(bond_right_dim, chi_a, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi_a, bond_right_dim)
+    )
+
+    H_eff = _build_dense_effective_hamiltonian(
+        project_bond,
+        (left_env, right_env),
+        C.shape,
+    )
+
+    y1 = project_bond(left_env, right_env, C).reshape(-1)
+    y2 = H_eff @ C.reshape(-1)
+
+    np.testing.assert_allclose(y1, y2, atol=1e-12)
+
+
+def test_build_dense_heff_site_matches_project_site() -> None:
+    """build_dense_heff_site: vec(project_site(..., X)) == H_eff @ vec(X) for random small tensors.
+
+    This test constructs random left/right environments and a local MPO tensor with compatible
+    dimensions, builds the dense effective operator via build_dense_heff_site, and verifies
+    that applying it to a flattened local tensor matches the explicit projector contraction.
+    """
+    # Small random dims
+    phys_in, phys_out = 2, 2
+    bond_left_dim, bond_right_dim = 3, 4
+    chi_left, chi_right = 2, 3  # MPO virtual dims (left/right)
+
+    rng = np.random.default_rng(4321)
+
+    # X (ket) has shape (p, a, b)
+    ket = rng.normal(size=(phys_in, bond_left_dim, bond_right_dim)) + 1j * rng.normal(
+        size=(phys_in, bond_left_dim, bond_right_dim)
+    )
+    ket = np.asarray(ket, dtype=np.complex128)
+
+    # left_env has shape (a, l, A)
+    left_env = rng.normal(size=(bond_left_dim, chi_left, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi_left, bond_left_dim)
+    )
+    left_env = np.asarray(left_env, dtype=np.complex128)
+
+    # right_env has shape (b, r, B)
+    right_env = rng.normal(size=(bond_right_dim, chi_right, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi_right, bond_right_dim)
+    )
+    right_env = np.asarray(right_env, dtype=np.complex128)
+
+    # op has shape (o, p, l, r)
+    op = rng.normal(size=(phys_out, phys_in, chi_left, chi_right)) + 1j * rng.normal(
+        size=(phys_out, phys_in, chi_left, chi_right)
+    )
+    op = np.asarray(op, dtype=np.complex128)
+
+    H_eff = build_dense_heff_site(left_env, right_env, op)
+
+    y1 = project_site(left_env, right_env, op, ket).reshape(-1)
+    y2 = H_eff @ ket.reshape(-1)
+
+    np.testing.assert_allclose(y1, y2, atol=1e-12)
+
+
+def test_build_dense_heff_bond_matches_project_bond() -> None:
+    """build_dense_heff_bond: vec(project_bond(..., C)) == H_eff @ vec(C) for random small tensors.
+
+    This test constructs random left/right environments and a bond tensor with compatible
+    dimensions, builds the dense effective operator via build_dense_heff_bond, and verifies
+    that applying it to a flattened bond tensor matches the explicit projector contraction.
+    """
+    bond_left_dim, bond_right_dim = 3, 4
+    chi = 2  # MPO virtual dim (shared index)
+
+    rng = np.random.default_rng(8765)
+
+    C = rng.normal(size=(bond_left_dim, bond_right_dim)) + 1j * rng.normal(size=(bond_left_dim, bond_right_dim))
+    C = np.asarray(C, dtype=np.complex128)
+
+    # left_env has shape (u, a, p)
+    left_env = rng.normal(size=(bond_left_dim, chi, bond_left_dim)) + 1j * rng.normal(
+        size=(bond_left_dim, chi, bond_left_dim)
+    )
+    left_env = np.asarray(left_env, dtype=np.complex128)
+
+    # right_env has shape (v, a, w)
+    right_env = rng.normal(size=(bond_right_dim, chi, bond_right_dim)) + 1j * rng.normal(
+        size=(bond_right_dim, chi, bond_right_dim)
+    )
+    right_env = np.asarray(right_env, dtype=np.complex128)
+
+    H_eff = build_dense_heff_bond(left_env, right_env)
+
+    y1 = project_bond(left_env, right_env, C).reshape(-1)
+    y2 = H_eff @ C.reshape(-1)
+
+    np.testing.assert_allclose(y1, y2, atol=1e-12)
+
+
+def test_build_dense_effective_hamiltonian_uses_generic_fallback() -> None:
+    """_build_dense_effective_hamiltonian: uses generic fallback for unknown projector (basis-loop path).
+
+    This test defines a simple linear projector that is *not* the canonical project_site/project_bond
+    function object, calls _build_dense_effective_hamiltonian, and verifies:
+      1) the projector was called exactly n_loc times (once per basis vector),
+      2) the resulting dense operator has the expected shape.
+    """
+    rng_local = np.random.default_rng(2025)
+
+    # Small tensor space: n_loc = 2 * 3 = 6
+    tensor_shape = (2, 3)
+    n_loc = int(np.prod(tensor_shape))
+
+    # Define an explicit dense operator A and a projector implementing y = A @ vec(x)
+    A = rng_local.normal(size=(n_loc, n_loc)) + 1j * rng_local.normal(size=(n_loc, n_loc))
+    A = np.asarray(A, dtype=np.complex128)
+
+    calls = {"n": 0}
+
+    def custom_projector(mat: NDArray[np.complex128], x: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        calls["n"] += 1
+        y = mat @ x.reshape(-1)
+        return y.reshape(tensor_shape)
+
+    H_eff = _build_dense_effective_hamiltonian(
+        projector=custom_projector,  # not project_site / project_bond
+        proj_args=(A,),
+        tensor_shape=tensor_shape,
+    )
+
+    assert calls["n"] == n_loc, f"Expected {n_loc} projector calls (basis loop), got {calls['n']}"
+    assert H_eff.shape == (n_loc, n_loc)
+
+
+def test_build_dense_effective_hamiltonian_generic_fallback_correctness() -> None:
+    """_build_dense_effective_hamiltonian: generic fallback reconstructs the operator exactly.
+
+    This test uses a custom linear projector defined by an explicit matrix A acting on vec(x).
+    The fallback builder should reconstruct A (up to floating-point roundoff), so H_eff @ vec(x)
+    matches projector(x) for a random x.
+    """
+    rng_local = np.random.default_rng(2026)
+
+    tensor_shape = (2, 2, 2)  # n_loc = 8
+    n_loc = int(np.prod(tensor_shape))
+
+    A = rng_local.normal(size=(n_loc, n_loc)) + 1j * rng_local.normal(size=(n_loc, n_loc))
+    A = np.asarray(A, dtype=np.complex128)
+
+    def custom_projector(mat: NDArray[np.complex128], x: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        y = mat @ x.reshape(-1)
+        return y.reshape(tensor_shape)
+
+    H_eff = _build_dense_effective_hamiltonian(
+        projector=custom_projector,
+        proj_args=(A,),
+        tensor_shape=tensor_shape,
+    )
+
+    # Check action agreement on a random vector (stronger than only checking H_eff ~= A elementwise
+    # if you later change internal vec conventions).
+    x = rng_local.normal(size=n_loc) + 1j * rng_local.normal(size=n_loc)
+    x = np.asarray(x, dtype=np.complex128)
+
+    y1 = custom_projector(A, x.reshape(tensor_shape)).reshape(-1)
+    y2 = H_eff @ x
+
+    np.testing.assert_allclose(y1, y2, atol=1e-12)
