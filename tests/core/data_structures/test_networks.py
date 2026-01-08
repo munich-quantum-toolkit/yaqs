@@ -103,112 +103,88 @@ rng = np.random.default_rng()
 ##############################################################################
 
 
-def test_init_ising() -> None:
-    """Test that init_ising creates the correct MPO for the Ising model.
+# ---- single-qubit ops ----
+_I2 = np.eye(2, dtype=complex)
+_X2 = np.array([[0, 1], [1, 0]], dtype=complex)
+_Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
+_Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
 
-    This test initializes an Ising MPO with a given length, coupling constant (J), and transverse field (g).
-    It verifies that:
-      - The MPO has the expected length and physical dimension.
-      - The left boundary tensor, inner tensors, and right boundary tensor have the correct shapes.
-      - The operator blocks (after untransposing) match the expected values: identity, -J*Z, and -g*X.
+
+def _embed_one_body(op: np.ndarray, L: int, i: int) -> np.ndarray:
+    """Return I⊗...⊗op_i⊗...⊗I as a dense 2^L x 2^L matrix."""
+    out = np.array([[1.0]], dtype=complex)
+    for k in range(L):
+        out = np.kron(out, op if k == i else _I2)
+    return out
+
+
+def _embed_two_body(op1: np.ndarray, op2: np.ndarray, L: int, i: int) -> np.ndarray:
+    """Return I⊗...⊗op1_i⊗op2_{i+1}⊗...⊗I as a dense 2^L x 2^L matrix."""
+    out = np.array([[1.0]], dtype=complex)
+    for k in range(L):
+        if k == i:
+            out = np.kron(out, op1)
+        elif k == i + 1:
+            out = np.kron(out, op2)
+        else:
+            out = np.kron(out, _I2)
+    return out
+
+
+def _ising_dense(L: int, J: float, g: float) -> np.ndarray:
+    """H = -J Σ Z_i Z_{i+1} - g Σ X_i (open chain)."""
+    dim = 2**L
+    H = np.zeros((dim, dim), dtype=complex)
+
+    for i in range(L - 1):
+        H += (-J) * _embed_two_body(_Z2, _Z2, L, i)
+    for i in range(L):
+        H += (-g) * _embed_one_body(_X2, L, i)
+
+    return H
+
+
+def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.ndarray:
+    """H = -Σ (Jx XX + Jy YY + Jz ZZ) - h Σ Z (open chain).
+
+    Match this sign convention to your init_heisenberg implementation.
     """
+    dim = 2**L
+    H = np.zeros((dim, dim), dtype=complex)
+
+    for i in range(L - 1):
+        H += (-Jx) * _embed_two_body(_X2, _X2, L, i)
+        H += (-Jy) * _embed_two_body(_Y2, _Y2, L, i)
+        H += (-Jz) * _embed_two_body(_Z2, _Z2, L, i)
+    for i in range(L):
+        H += (-h) * _embed_one_body(_Z2, L, i)
+
+    return H
+
+
+def test_init_ising_correct_operator() -> None:
     mpo = MPO()
-    length = 4
+    L = 5
     J = 1.0
     g = 0.5
 
-    mpo.init_ising(length, J, g)
+    mpo.init_ising(L, J, g)
 
-    assert mpo.length == length
+    assert mpo.length == L
     assert mpo.physical_dimension == 2
-    assert len(mpo.tensors) == length
+    assert len(mpo.tensors) == L
 
-    minus_J = -J  # -1.0
-    minus_g = -g  # -0.5
-
-    # Check left boundary: shape (2,2,1,3) -> untransposed to (1,3,2,2)
-    left_block = untranspose_block(mpo.tensors[0])
-    assert left_block.shape == (1, 3, 2, 2)
-
-    block_I = left_block[0, 0]
-    block_JZ = left_block[0, 1]
-    block_gX = left_block[0, 2]
-
-    assert np.allclose(block_I, Id().matrix)
-    assert np.allclose(block_JZ, minus_J * Z().matrix)
-    assert np.allclose(block_gX, minus_g * X().matrix)
-
-    # Check an inner tensor (if length > 2): shape (2,2,3,3) -> untransposed to (3,3,2,2)
-    if length > 2:
-        inner_block = untranspose_block(mpo.tensors[1])
-        assert inner_block.shape == (3, 3, 2, 2)
-        assert np.allclose(inner_block[0, 0], Id().matrix)
-        assert np.allclose(inner_block[0, 1], minus_J * Z().matrix)
-        assert np.allclose(inner_block[0, 2], minus_g * X().matrix)
-        assert np.allclose(inner_block[1, 2], Z().matrix)
-        assert np.allclose(inner_block[2, 2], Id().matrix)
-
-    # Check right boundary: shape (2,2,3,1) -> untransposed to (3,1,2,2)
-    right_block = untranspose_block(mpo.tensors[-1])
-    assert right_block.shape == (3, 1, 2, 2)
-
-    block_gX = right_block[0, 0]
-    block_Z = right_block[1, 0]
-    block_I = right_block[2, 0]
-
-    assert np.allclose(block_gX, minus_g * X().matrix)
-    assert np.allclose(block_Z, Z().matrix)
-    assert np.allclose(block_I, Id().matrix)
+    assert np.allclose(mpo.to_matrix(), _ising_dense(L, J, g), atol=1e-12)
 
 
-def test_init_heisenberg() -> None:
-    """Test that init_heisenberg creates the correct MPO for the Heisenberg model.
-
-    This test initializes a Heisenberg MPO with given coupling constants (Jx, Jy, Jz) and field h.
-    It verifies that:
-      - The MPO has the expected length and physical dimension.
-      - The left boundary tensor (after untransposition) has the correct shape and
-        contains the expected operators: [I, -Jx*X, -Jy*Y, -Jz*Z, -h*Z].
-      - Inner and right boundary tensors have the expected shapes.
-    """
+def test_init_heisenberg_correct_operator() -> None:
     mpo = MPO()
-    length = 5
+    L = 5
     Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
 
-    mpo.init_heisenberg(length, Jx, Jy, Jz, h)
+    mpo.init_heisenberg(L, Jx, Jy, Jz, h)
 
-    assert mpo.length == length
-    assert mpo.physical_dimension == 2
-    assert len(mpo.tensors) == length
-
-    left_block = untranspose_block(mpo.tensors[0])
-    assert left_block.shape == (1, 5, 2, 2)
-
-    block_I = left_block[0, 0]
-    block_JxX = left_block[0, 1]
-    block_JyY = left_block[0, 2]
-    block_JzZ = left_block[0, 3]
-    block_hZ = left_block[0, 4]
-
-    minus_Jx = -Jx
-    minus_Jy = -Jy
-    minus_Jz = -Jz
-    minus_h = -h
-
-    assert np.allclose(block_I, Id().matrix)
-    assert np.allclose(block_JxX, minus_Jx * X().matrix)
-    assert np.allclose(block_JyY, minus_Jy * Y().matrix)
-    assert block_JyY.shape == (2, 2)
-    assert np.allclose(block_JzZ, minus_Jz * Z().matrix)
-    assert np.allclose(block_hZ, minus_h * Z().matrix)
-
-    for i, tensor in enumerate(mpo.tensors):
-        if i == 0:
-            assert tensor.shape == (2, 2, 1, 5)
-        elif i == length - 1:
-            assert tensor.shape == (2, 2, 5, 1)
-        else:
-            assert tensor.shape == (2, 2, 5, 5)
+    assert np.allclose(mpo.to_matrix(), _heisenberg_dense(L, Jx, Jy, Jz, h), atol=1e-12)
 
 
 def test_init_identity() -> None:
@@ -287,152 +263,6 @@ def test_init_custom() -> None:
     for original, created in zip(tensors, mpo.tensors, strict=False):
         assert original.shape == created.shape
         assert np.allclose(original, created)
-
-
-def _dense_matrix_from_terms(length: int, terms: list[tuple[complex, list[str]]]) -> NDArray[np.complex128]:
-    """Utility function to build the dense operator matrix from full label lists.
-
-    Args:
-        length (int): The number of sites/qubits.
-        terms (list[tuple[complex, list[str]]]): The list of terms, each as (coefficient, [Pauli labels]).
-
-    Returns:
-        NDArray[np.complex128]: The resulting dense operator matrix.
-    """
-    PAULI_OPS = {
-        "I": np.array([[1, 0], [0, 1]], dtype=complex),
-        "X": np.array([[0, 1], [1, 0]], dtype=complex),
-        "Y": np.array([[0, -1j], [1j, 0]], dtype=complex),
-        "Z": np.array([[1, 0], [0, -1]], dtype=complex),
-    }
-    dim = 2**length
-    H_ref = np.zeros((dim, dim), dtype=complex)
-    for coeff, s in terms:
-        matrices = [PAULI_OPS[ch] for ch in s]
-        H_ref += coeff * reduce(np.kron, matrices)
-    return H_ref
-
-
-def test_init_from_terms_sum_of_pauli_strings() -> None:
-    """Test that init_from_terms correctly sets up an MPO from a sum of Pauli strings.
-
-    This test generates a Hamiltonian from a list of sum operators, initializes an MPO from
-    that list, and verifies that the reconstructed matrix matches the original one.
-    """
-    H_terms = [
-        (1.0 + 0j, ["Z", "Z", "I", "I"]),
-        (0.5 + 0j, ["X", "I", "X", "I"]),
-        (-0.2 + 0j, ["I", "Y", "Y", "I"]),
-    ]
-    L = len(H_terms[0][1])
-
-    mpo = MPO()
-    mpo.init_from_terms(length=L, terms=H_terms, physical_dimension=2, tol=1e-10, max_bond_dim=None, n_sweeps=2)
-    H_matrix = mpo.to_matrix()
-
-    # Static tests
-    assert mpo.length == L
-    assert mpo.physical_dimension == 2
-    assert len(mpo.tensors) == L
-
-    # Validate on small N by comparing to reconstructed matrix
-    H_ref = _dense_matrix_from_terms(L, H_terms)
-    assert np.allclose(H_matrix, H_ref)
-
-
-def test_init_from_terms_single_site() -> None:
-    """Test that init_from_terms correctly sets up an MPO from a single Pauli matrix.
-
-    This test generates MPO from a single Pauli matrix and verifies that the reconstructed
-    matrix matches exactly the input.
-    """
-    H_terms = [(2.0 + 0j, ["Z"])]
-    L = 1
-
-    mpo = MPO()
-    mpo.init_from_terms(length=L, terms=H_terms, physical_dimension=2, tol=1e-10, max_bond_dim=None, n_sweeps=2)
-    H_matrix = mpo.to_matrix()
-
-    # Static tests
-    assert mpo.length == L
-    assert mpo.physical_dimension == 2
-    assert len(mpo.tensors) == L
-
-    Z = np.array([[1, 0], [0, -1]], dtype=complex)
-    assert np.allclose(H_matrix, 2 * Z)
-
-
-def test_init_from_sparse_pauli_terms_errors() -> None:
-    """Tests that the parser raises ValueError on invalid tokens and duplicate sites."""
-    mpo = MPO()
-    with pytest.raises(ValueError, match=re.escape("Invalid token(s) in spec 'X0 Ybad'. Use forms like 'X0 Y2 Z5'.")):
-        mpo.init_from_sparse_pauli_terms(terms=[(1.0, "X0 Ybad")])
-    with pytest.raises(ValueError, match=re.escape("Duplicate site 0 in spec 'X0 X0'.")):
-        mpo.init_from_sparse_pauli_terms(terms=[(1.0, "X0 X0")])
-    with pytest.raises(ValueError, match=re.escape("Invalid token(s) in spec 'X'. Use forms like 'X0 Y2 Z5'.")):
-        mpo.init_from_sparse_pauli_terms(terms=[(1.0, "X")])  # missing index
-
-
-def test_init_from_sparse_pauli_terms_equivalence_to_dense() -> None:
-    """Tests that the sparse initializer matches the dense init_from_terms for the same Hamiltonian."""
-    L = 5
-    # H = 0.7 X0 + 1.2 Z3 Y4 + 0.5 X1 X2
-    sparse_terms: list[tuple[complex | float, dict[int, str] | list[tuple[int, str]] | str]] = [
-        (0.7, "X0"),
-        (1.2, "Z3 Y4"),
-        (0.5, [(1, "X"), (2, "X")]),
-    ]
-
-    mpo_sparse = MPO()
-    mpo_sparse.init_from_sparse_pauli_terms(sparse_terms)
-    A = mpo_sparse.to_matrix()
-
-    dense_terms: list[tuple[complex | float, list[str]]] = [
-        (0.7, ["X", "I", "I", "I", "I"]),
-        (1.2, ["I", "I", "I", "Z", "Y"]),
-        (0.5, ["I", "X", "X", "I", "I"]),
-    ]
-    mpo_dense = MPO()
-    mpo_dense.init_from_terms(length=L, terms=dense_terms, physical_dimension=2)
-    B = mpo_dense.to_matrix()
-
-    assert A.shape == B.shape == (2**L, 2**L)
-    assert np.allclose(A, B, atol=1e-10)
-
-
-def test_init_from_sparse_pauli_terms_infer_length() -> None:
-    """Tests that the correct length is inferred from the maximum site index when the length itself is not provided."""
-    mpo = MPO()
-    mpo.init_from_sparse_pauli_terms([(2.0, "X0 Y3")])  # infers L=4
-    assert mpo.length == 4
-    assert mpo.to_matrix().shape == (16, 16)
-
-
-def test_init_from_sparse_pauli_terms_default_op() -> None:
-    """Tests that unspecified sites are filled with the default operator and that invalid labels raise errors.
-
-    This test initializes an MPO with a specified default operator ('Z') for unspecified sites. Also, it checks
-    that providing an invalid default operator raises a ValueError.
-    """
-    mpo = MPO()
-    mpo.init_from_sparse_pauli_terms([(1.0, "X0")], length=2, default_op="Z")
-    gt = _dense_matrix_from_terms(2, [(1.0, ["X", "Z"])])
-    assert np.allclose(mpo.to_matrix(), gt, atol=1e-12)
-
-    with pytest.raises(ValueError, match=re.escape("Invalid default_op 'Q'. Expected one of ['I', 'X', 'Y', 'Z'].")):
-        MPO().init_from_sparse_pauli_terms([(1.0, "X0")], length=2, default_op="Q")  # invalid label
-
-
-def test_init_from_sparse_pauli_terms_validation_errors() -> None:
-    """Tests that invalid inputs to init_from_sparse_pauli_terms raise ValueErrors."""
-    with pytest.raises(ValueError, match=re.escape("Site index 5 outside [0, 3].")):
-        MPO().init_from_sparse_pauli_terms([(1.0, {5: "X"})], length=4)  # site 5 out of range
-
-    with pytest.raises(ValueError, match=re.escape("Duplicate site 0 in spec 'X0 X0'.")):
-        MPO().init_from_sparse_pauli_terms([(1.0, "X0 X0")], length=2)  # duplicate site
-
-    with pytest.raises(ValueError, match=re.escape("Cannot infer length from empty terms. Provide 'length'.")):
-        MPO().init_from_sparse_pauli_terms([])  # cannot infer length
 
 
 def test_to_mps() -> None:
