@@ -100,7 +100,7 @@ def test_extend_gate_with_identity() -> None:
     assert len(mpo_tensors) == 3
 
     mpo = MPO()
-    mpo.init_custom(mpo_tensors, transpose=False)
+    mpo.custom(mpo_tensors, transpose=False)
     identity_tensor = mpo.tensors[1]
     prev_bond = mpo.tensors[0].shape[3]
     assert identity_tensor.shape == (2, 2, prev_bond, prev_bond)
@@ -120,8 +120,8 @@ def test_extend_gate_reverse_order() -> None:
 
     mpo_forward = MPO()
     mpo_reverse = MPO()
-    mpo_forward.init_custom(mpo_forward_tensors, transpose=False)
-    mpo_reverse.init_custom(mpo_reverse_tensors, transpose=False)
+    mpo_forward.custom(mpo_forward_tensors, transpose=False)
+    mpo_reverse.custom(mpo_reverse_tensors, transpose=False)
 
     mpo_reverse.tensors.reverse()
     for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors, strict=False):

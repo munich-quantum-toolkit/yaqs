@@ -206,11 +206,11 @@ def test_identity() -> None:
         assert np.allclose(np.squeeze(tensor), Id().matrix)
 
 
-def test_init_custom_hamiltonian() -> None:
+def test_finite_state_machine() -> None:
     """Test initializing a custom Hamiltonian MPO using user-provided boundary and inner tensors.
 
     This test creates random tensors for the left boundary, inner sites, and right boundary,
-    initializes the MPO with these using init_custom_hamiltonian, and verifies that the tensors
+    initializes the MPO with these using finite_state_machine, and verifies that the tensors
     have the expected shapes and values (after appropriate transposition).
     """
     length = 4
@@ -221,7 +221,7 @@ def test_init_custom_hamiltonian() -> None:
     right_bound = rng.random(size=(2, 1, pdim, pdim)).astype(np.complex128)
 
     mpo = MPO()
-    mpo.init_custom_hamiltonian(length, left_bound, inner, right_bound)
+    mpo.finite_state_machine(length, left_bound, inner, right_bound)
 
     assert mpo.length == length
     assert len(mpo.tensors) == length
@@ -237,8 +237,8 @@ def test_init_custom_hamiltonian() -> None:
     assert np.allclose(mpo.tensors[-1], np.transpose(right_bound, (2, 3, 0, 1)))
 
 
-def test_init_custom() -> None:
-    """Test that init_custom correctly sets up an MPO from a user-provided list of tensors.
+def test_custom() -> None:
+    """Test that custom correctly sets up an MPO from a user-provided list of tensors.
 
     This test provides a list of tensors for the left boundary, middle, and right boundary,
     initializes the MPO, and checks that the shapes and values of the MPO tensors match the inputs.
@@ -252,7 +252,7 @@ def test_init_custom() -> None:
     ]
 
     mpo = MPO()
-    mpo.init_custom(tensors)
+    mpo.custom(tensors)
 
     assert mpo.length == length
     assert mpo.physical_dimension == pdim

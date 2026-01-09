@@ -968,10 +968,10 @@ class MPO:
         Initializes the MPO for the Heisenberg model with given parameters.
     identity(length: int, physical_dimension: int = 2) -> None
         Initializes the MPO as an identity operator.
-    init_custom_hamiltonian(length: int, left_bound: NDArray[np.complex128],
+    finite_state_machine(length: int, left_bound: NDArray[np.complex128],
                             inner: NDArray[np.complex128], right_bound: NDArray[np.complex128]) -> None
         Initializes the MPO with custom Hamiltonian tensors.
-    init_custom(tensors: list[NDArray[np.complex128]], transpose: bool = True) -> None
+    custom(tensors: list[NDArray[np.complex128]], transpose: bool = True) -> None
         Initializes the MPO with custom tensors.
     to_mps() -> MPS
         Converts the MPO to a Matrix Product State (MPS).
@@ -995,6 +995,60 @@ class MPO:
     }
     _VALID = frozenset(_PAULI_2.keys())
     _PAULI_TOKEN_RE = re.compile(r"\b([IXYZ])\s*(\d+)\b", flags=re.IGNORECASE)
+
+    @classmethod
+    def hamiltonian(
+        cls,
+        *,
+        L: int,
+        two_body: list[tuple[complex | float, str, str]] | None = None,
+        one_body: list[tuple[complex | float, str]] | None = None,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> MPO:
+        if L <= 0:
+            msg = "L must be positive."
+            raise ValueError(msg)
+        if bc not in {"open", "periodic"}:
+            msg = "bc must be 'open' or 'periodic'."
+            raise ValueError(msg)
+
+        two_body = two_body or []
+        one_body = one_body or []
+
+        def op(x: str) -> str:
+            x = str(x).upper()
+            if x not in cls._VALID:
+                msg = f"Invalid operator {x!r}; expected one of {sorted(cls._VALID)}."
+                raise ValueError(msg)
+            return x
+
+        terms: list[tuple[complex | float, str]] = []
+
+        bonds = range(L) if bc == "periodic" else range(L - 1)
+        for c, a, b in two_body:
+            a, b = op(a), op(b)
+            for i in bonds:
+                j = (i + 1) % L
+                terms.append((c, f"{a}{i} {b}{j}"))
+
+        for c, a in one_body:
+            a = op(a)
+            terms.extend((c, f"{a}{i}") for i in range(L))
+
+        mpo = cls()
+        mpo.from_pauli_sum(
+            terms=terms,
+            length=L,
+            physical_dimension=physical_dimension,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+        )
+        return mpo
 
     def ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
         """Ising MPO.
@@ -1210,7 +1264,7 @@ class MPO:
         for _ in range(length):
             self.tensors.append(mat)
 
-    def init_custom_hamiltonian(
+    def finite_state_machine(
         self,
         length: int,
         left_bound: NDArray[np.complex128],
@@ -1237,7 +1291,7 @@ class MPO:
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def init_custom(self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True) -> None:
+    def custom(self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True) -> None:
         """Custom MPO from tensors.
 
         Initialize the custom MPO (Matrix Product Operator) with the given tensors.
@@ -1258,60 +1312,6 @@ class MPO:
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
         self.length = len(self.tensors)
         self.physical_dimension = tensors[0].shape[0]
-
-    @classmethod
-    def hamiltonian(
-        cls,
-        *,
-        L: int,
-        two_body: list[tuple[complex | float, str, str]] | None = None,
-        one_body: list[tuple[complex | float, str]] | None = None,
-        bc: str = "open",
-        physical_dimension: int = 2,
-        tol: float = 1e-12,
-        max_bond_dim: int | None = None,
-        n_sweeps: int = 2,
-    ) -> MPO:
-        if L <= 0:
-            msg = "L must be positive."
-            raise ValueError(msg)
-        if bc not in {"open", "periodic"}:
-            msg = "bc must be 'open' or 'periodic'."
-            raise ValueError(msg)
-
-        two_body = two_body or []
-        one_body = one_body or []
-
-        def op(x: str) -> str:
-            x = str(x).upper()
-            if x not in cls._VALID:
-                msg = f"Invalid operator {x!r}; expected one of {sorted(cls._VALID)}."
-                raise ValueError(msg)
-            return x
-
-        terms: list[tuple[complex | float, str]] = []
-
-        bonds = range(L) if bc == "periodic" else range(L - 1)
-        for c, a, b in two_body:
-            a, b = op(a), op(b)
-            for i in bonds:
-                j = (i + 1) % L
-                terms.append((c, f"{a}{i} {b}{j}"))
-
-        for c, a in one_body:
-            a = op(a)
-            terms.extend((c, f"{a}{i}") for i in range(L))
-
-        mpo = cls()
-        mpo.from_pauli_sum(
-            terms=terms,
-            length=L,
-            physical_dimension=physical_dimension,
-            tol=tol,
-            max_bond_dim=max_bond_dim,
-            n_sweeps=n_sweeps,
-        )
-        return mpo
 
     def from_pauli_sum(
         self,
@@ -1458,63 +1458,23 @@ class MPO:
             self.tensors[k] = UL
             self.tensors[k + 1] = VR
 
-    def _create_term(self, length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
-        tensors: list[np.ndarray] = []
-        P = self._PAULI_2
-        for i in range(length):
-            lab = ops.get(i, "I")
-            T = np.zeros((2, 2, 1, 1), dtype=complex)
-            T[:, :, 0, 0] = P[lab]
-            tensors.append(T)
-        tensors[0] = tensors[0].copy()
-        tensors[0][:, :, 0, 0] *= coeff
-        return tensors
+    def rotate(self, *, conjugate: bool = False) -> None:
+        """Rotates MPO.
 
-    @classmethod
-    def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
-        s = spec.replace(",", " ").strip()
-        if not s:
-            return {}
-        out: dict[int, str] = {}
-        for op, idx in cls._PAULI_TOKEN_RE.findall(s):
-            site = int(idx)
-            op_up = op.upper()
-            if site in out:
-                msg = f"Duplicate site {site} in spec '{spec}'."
-                raise ValueError(msg)
-            out[site] = op_up
-        cleaned = cls._PAULI_TOKEN_RE.sub("", s)
-        if cleaned.split():
-            msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
-            raise ValueError(msg)
-        return out
+        Rotates the tensors in the network by flipping the physical dimensions.
+        This method transposes each tensor in the network along specified axes.
+        If the `conjugate` parameter is set to True, it also takes the complex
+        conjugate of each tensor before transposing.
 
-    @staticmethod
-    def _sum_terms(A: list[np.ndarray], B: list[np.ndarray]) -> list[np.ndarray]:
-        length = len(A)
-        assert length == len(B)
-        if length == 1:
-            return [A[0] + B[0]]
-        out: list[np.ndarray] = []
-        for k in range(length):
-            a, b = A[k], B[k]
-            d = a.shape[0]
-            la, ra = a.shape[2], a.shape[3]
-            lb, rb = b.shape[2], b.shape[3]
-            if k == 0:
-                c = np.zeros((d, d, 1, ra + rb), dtype=complex)
-                c[:, :, 0, :ra] = a[:, :, 0, :]
-                c[:, :, 0, ra:] = b[:, :, 0, :]
-            elif k == length - 1:
-                c = np.zeros((d, d, la + lb, 1), dtype=complex)
-                c[:, :, :la, 0] = a[:, :, :, 0]
-                c[:, :, la:, 0] = b[:, :, :, 0]
+        Args:
+            conjugate (bool): If True, take the complex conjugate of each tensor
+                              before transposing. Default is False.
+        """
+        for i, tensor in enumerate(self.tensors):
+            if conjugate:
+                self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
             else:
-                c = np.zeros((d, d, la + lb, ra + rb), dtype=complex)
-                c[:, :, :la, :ra] = a
-                c[:, :, la:, ra:] = b
-            out.append(c)
-        return out
+                self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
 
     def to_mps(self) -> MPS:
         """MPO to MPS conversion.
@@ -1597,20 +1557,62 @@ class MPO:
         # Checks if trace is not a singular values for partial trace
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
 
-    def rotate(self, *, conjugate: bool = False) -> None:
-        """Rotates MPO.
+    @classmethod
+    def _create_term(cls, length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
+        tensors: list[np.ndarray] = []
+        P = cls._PAULI_2
+        for i in range(length):
+            lab = ops.get(i, "I")
+            T = np.zeros((2, 2, 1, 1), dtype=complex)
+            T[:, :, 0, 0] = P[lab]
+            tensors.append(T)
+        tensors[0] = tensors[0].copy()
+        tensors[0][:, :, 0, 0] *= coeff
+        return tensors
 
-        Rotates the tensors in the network by flipping the physical dimensions.
-        This method transposes each tensor in the network along specified axes.
-        If the `conjugate` parameter is set to True, it also takes the complex
-        conjugate of each tensor before transposing.
+    @classmethod
+    def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
+        s = spec.replace(",", " ").strip()
+        if not s:
+            return {}
+        out: dict[int, str] = {}
+        for op, idx in cls._PAULI_TOKEN_RE.findall(s):
+            site = int(idx)
+            op_up = op.upper()
+            if site in out:
+                msg = f"Duplicate site {site} in spec '{spec}'."
+                raise ValueError(msg)
+            out[site] = op_up
+        cleaned = cls._PAULI_TOKEN_RE.sub("", s)
+        if cleaned.split():
+            msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
+            raise ValueError(msg)
+        return out
 
-        Args:
-            conjugate (bool): If True, take the complex conjugate of each tensor
-                              before transposing. Default is False.
-        """
-        for i, tensor in enumerate(self.tensors):
-            if conjugate:
-                self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
+    @staticmethod
+    def _sum_terms(A: list[np.ndarray], B: list[np.ndarray]) -> list[np.ndarray]:
+        length = len(A)
+        assert length == len(B)
+        if length == 1:
+            return [A[0] + B[0]]
+        out: list[np.ndarray] = []
+        for k in range(length):
+            a, b = A[k], B[k]
+            d = a.shape[0]
+            la, ra = a.shape[2], a.shape[3]
+            lb, rb = b.shape[2], b.shape[3]
+            if k == 0:
+                c = np.zeros((d, d, 1, ra + rb), dtype=complex)
+                c[:, :, 0, :ra] = a[:, :, 0, :]
+                c[:, :, 0, ra:] = b[:, :, 0, :]
+            elif k == length - 1:
+                c = np.zeros((d, d, la + lb, 1), dtype=complex)
+                c[:, :, :la, 0] = a[:, :, :, 0]
+                c[:, :, la:, 0] = b[:, :, :, 0]
             else:
-                self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
+                c = np.zeros((d, d, la + lb, ra + rb), dtype=complex)
+                c[:, :, :la, :ra] = a
+                c[:, :, la:, ra:] = b
+            out.append(c)
+        return out
+

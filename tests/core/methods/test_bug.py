@@ -81,7 +81,7 @@ def random_mpo(shapes: list[tuple[int, int, int, int]]) -> MPO:
     """
     tensors = [crandn(shape) for shape in shapes]
     mpo = MPO()
-    mpo.init_custom(tensors, transpose=False)
+    mpo.custom(tensors, transpose=False)
     return mpo
 
 
@@ -96,7 +96,7 @@ def test_prepare_canonical_site_tensors_single_site() -> None:
     ref_mps = deepcopy(mps)
     mpo_tensor = crandn(2, 2, 1, 1)
     mpo = MPO()
-    mpo.init_custom([mpo_tensor])
+    mpo.custom([mpo_tensor])
     canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
     assert len(left_envs) == 1
@@ -120,7 +120,7 @@ def test_prepare_canonical_site_tensors_three_sites() -> None:
     shapes2 = [(2, 2, 1, 3), (2, 2, 3, 4), (2, 2, 4, 1)]
     mpo_tensors = [crandn(shape) for shape in shapes2]
     mpo = MPO()
-    mpo.init_custom(mpo_tensors, transpose=False)
+    mpo.custom(mpo_tensors, transpose=False)
     canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
     assert len(left_envs) == 3

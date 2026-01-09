@@ -276,7 +276,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     assert hasattr(gate_, "mpo_tensors"), "Gate must have mpo_tensors attribute"
                     mpo_tensors = gate_.mpo_tensors
                     gate_mpo = MPO()
-                    gate_mpo.init_custom(mpo_tensors, transpose=False)
+                    gate_mpo.custom(mpo_tensors, transpose=False)
                     if conjugate:
                         gate_mpo.rotate(conjugate=True)
                     dag.remove_op_node(node)
