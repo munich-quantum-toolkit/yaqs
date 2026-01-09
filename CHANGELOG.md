@@ -18,6 +18,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- Fixed bug where two-site dissipative processes were computed in loop ([#290]) ([**@aaronleesander**])
 - Fixed a truncation bug in TDVP sometimes leading to over-truncation ([#274]) ([**@aaronleesander**])
 - Updated Lanczos method's vdot order to match mathematical expectations ([#261]) ([**@aaronleesander**])
 
@@ -50,6 +51,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#290]: https://github.com/munich-quantum-toolkit/yaqs/pull/290
 [#280]: https://github.com/munich-quantum-toolkit/yaqs/pull/280
 [#278]: https://github.com/munich-quantum-toolkit/yaqs/pull/278
 [#274]: https://github.com/munich-quantum-toolkit/yaqs/pull/274
