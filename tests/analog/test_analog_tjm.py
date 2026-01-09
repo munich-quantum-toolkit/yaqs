@@ -54,7 +54,7 @@ def test_initialize() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO.ising(L, J, g)
+    MPO.ising(L, J, g)
 
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])

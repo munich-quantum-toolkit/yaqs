@@ -1062,7 +1062,7 @@ class MPO:
         tol: float = 1e-12,
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
-    ) -> "MPO":
+    ) -> MPO:
         """Construct an Ising Hamiltonian MPO.
 
         Args:
@@ -1103,7 +1103,7 @@ class MPO:
         tol: float = 1e-12,
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
-    ) -> "MPO":
+    ) -> MPO:
         """Construct a Heisenberg (XYZ) Hamiltonian MPO.
 
         Args:
