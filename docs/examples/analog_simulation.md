@@ -19,7 +19,7 @@ In this example, an Ising Hamiltonian is initialized as an MPO, and an MPS state
 A noise model is applied, and simulation parameters are defined for an analog simulation using the Tensor Jump Method (TJM).
 After running the simulation, the expectation values of the $X$ observable are extracted and displayed as a heatmap.
 
-Define the system Hamiltonian
+Define the system Hamiltonian. We show 3 possible ways to define the Ising Hamiltonian as an example.
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.networks import MPO
@@ -27,7 +27,31 @@ from mqt.yaqs.core.data_structures.networks import MPO
 L = 3
 J = 1
 g = 0.5
+
+# Method 1: Pre-implemented Hamiltonians
 H_0 = MPO.ising(L, J, g)
+
+# Method 2: Same Ising Hamiltonian built via the generic Pauli interaction interface
+H_0 = MPO.hamiltonian(
+    length=L,
+    two_body=[(-J, "Z", "Z")],
+    one_body=[(-g, "X")],
+    bc="open",
+)
+
+# Method 3: Explicit Pauli-string expansion
+terms = []
+
+# -J Σ Z_i Z_{i+1}
+for i in range(L - 1):
+    terms.append((-J, f"Z{i} Z{i+1}"))
+
+# -g Σ X_i
+for i in range(L):
+    terms.append((-g, f"X{i}"))
+
+H_0 = MPO()
+H_0.from_pauli_sum(terms=terms, length=L)
 ```
 
 Define the initial state
