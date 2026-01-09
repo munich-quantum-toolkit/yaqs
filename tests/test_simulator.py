@@ -459,8 +459,7 @@ def test_two_site_correlator_left_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -569,8 +568,8 @@ def test_two_site_correlator_center() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
+
 
     state = MPS(L, state="zeros")
 
@@ -683,8 +682,8 @@ def test_two_site_correlator_right_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
+
 
     state = MPS(L, state="zeros")
 
@@ -841,7 +840,7 @@ def test_transmon_simulation() -> None:
     alpha = -0.3 / (2 * np.pi)
     g = 0.2 / (2 * np.pi)
 
-    H_0 = MPO().coupled_transmon(
+    H_0 = MPO.coupled_transmon(
         length=length,
         qubit_dim=qubit_dim,
         resonator_dim=resonator_dim,
