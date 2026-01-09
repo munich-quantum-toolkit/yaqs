@@ -151,7 +151,10 @@ def available_cpus() -> int:
             pass
 
     # 3) Fallback
-    return os.cpu_count() or multiprocessing.cpu_count() or 1
+    try:
+        return os.cpu_count() or multiprocessing.cpu_count() or 1
+    except (NotImplementedError, OSError):
+        return 1
 
 
 # ---------------------------------------------------------------------------
