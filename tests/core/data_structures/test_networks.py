@@ -161,12 +161,11 @@ def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.n
 
 
 def test_ising_correct_operator() -> None:
-    mpo = MPO()
     L = 5
     J = 1.0
     g = 0.5
 
-    mpo.ising(L, J, g)
+    mpo = MPO.ising(L, J, g)
 
     assert mpo.length == L
     assert mpo.physical_dimension == 2
@@ -176,11 +175,10 @@ def test_ising_correct_operator() -> None:
 
 
 def test_heisenberg_correct_operator() -> None:
-    mpo = MPO()
     L = 5
     Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
 
-    mpo.heisenberg(L, Jx, Jy, Jz, h)
+    mpo = MPO.heisenberg(L, Jx, Jy, Jz, h)
 
     assert np.allclose(mpo.to_matrix(), _heisenberg_dense(L, Jx, Jy, Jz, h), atol=1e-12)
 
@@ -270,11 +268,10 @@ def test_to_mps() -> None:
     and verifies that the resulting MPS has the correct length and that each tensor has been reshaped
     to the expected dimensions.
     """
-    mpo = MPO()
     length = 3
     J, g = 1.0, 0.5
 
-    mpo.ising(length, J, g)
+    mpo = MPO.ising(length, J, g)
     mps = mpo.to_mps()
 
     assert isinstance(mps, MPS)
@@ -293,11 +290,10 @@ def test_check_if_valid_mpo() -> None:
 
     This test initializes an Ising MPO and calls check_if_valid_mpo, which should validate the MPO.
     """
-    mpo = MPO()
     length = 4
     J, g = 1.0, 0.5
 
-    mpo.ising(length, J, g)
+    mpo = MPO.ising(length, J, g)
     mpo.check_if_valid_mpo()
 
 
@@ -307,11 +303,10 @@ def test_rotate() -> None:
     This test checks that rotating an MPO (without conjugation) transposes each tensor as expected,
     and that rotating back with conjugation returns tensors with the original physical dimensions.
     """
-    mpo = MPO()
     length = 3
     J, g = 1.0, 0.5
 
-    mpo.ising(length, J, g)
+    mpo = MPO.ising(length, J, g)
     original_tensors = [t.copy() for t in mpo.tensors]
 
     mpo.rotate(conjugate=False)

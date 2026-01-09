@@ -74,8 +74,7 @@ def test_analog_simulation() -> None:
     length = 5
     initial_state = MPS(length, state="zeros")
 
-    H = MPO()
-    H.ising(length, J=1, g=0.5)
+    H = MPO.ising(length, J=1, g=0.5)
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
@@ -128,8 +127,7 @@ def test_analog_simulation_parallel_off() -> None:
     length = 5
     initial_state = MPS(length, state="zeros")
 
-    H = MPO()
-    H.ising(length, J=1, g=0.5)
+    H = MPO.ising(length, J=1, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
         elapsed_time=1,
@@ -178,8 +176,7 @@ def test_analog_simulation_get_state() -> None:
         length = 2
         initial_state = MPS(length, state="zeros")
 
-        H = MPO()
-        H.ising(length, J=1, g=0.5)
+        H = MPO.ising(length, J=1, g=0.5)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), length // 2)],

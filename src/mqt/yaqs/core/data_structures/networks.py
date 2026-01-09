@@ -1000,7 +1000,7 @@ class MPO:
     def hamiltonian(
         cls,
         *,
-        L: int,
+        length: int,
         two_body: list[tuple[complex | float, str, str]] | None = None,
         one_body: list[tuple[complex | float, str]] | None = None,
         bc: str = "open",
@@ -1009,7 +1009,7 @@ class MPO:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> MPO:
-        if L <= 0:
+        if length <= 0:
             msg = "L must be positive."
             raise ValueError(msg)
         if bc not in {"open", "periodic"}:
@@ -1028,21 +1028,21 @@ class MPO:
 
         terms: list[tuple[complex | float, str]] = []
 
-        bonds = range(L) if bc == "periodic" else range(L - 1)
+        bonds = range(length) if bc == "periodic" else range(length - 1)
         for c, a, b in two_body:
             a, b = op(a), op(b)
             for i in bonds:
-                j = (i + 1) % L
+                j = (i + 1) % length
                 terms.append((c, f"{a}{i} {b}{j}"))
 
         for c, a in one_body:
             a = op(a)
-            terms.extend((c, f"{a}{i}") for i in range(L))
+            terms.extend((c, f"{a}{i}") for i in range(length))
 
         mpo = cls()
         mpo.from_pauli_sum(
             terms=terms,
-            length=L,
+            length=length,
             physical_dimension=physical_dimension,
             tol=tol,
             max_bond_dim=max_bond_dim,
@@ -1050,87 +1050,87 @@ class MPO:
         )
         return mpo
 
-    def ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
-        """Ising MPO.
-
-        Initialize the Ising model as a Matrix Product Operator (MPO).
-        This method constructs the MPO representation of the Ising model with
-        specified parameters. The MPO has a 3x3 block structure at each site.
-
-        Left boundary (1, 3, 2, 2)
-        [I, -J Z, -g X]
-
-        Inner tensor (3, 3, 2, 2)
-        W = [[ I,     -J Z,  -g X ],
-              [ 0,       0,     Z  ],
-              [ 0,       0,     I  ]]
-
-        Right boundary (3, 1, 2, 2)
-        [I, -J Z, -g X]
+    @classmethod
+    def ising(
+        cls,
+        L: int,
+        J: float,
+        g: float,
+        *,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> "MPO":
+        """Construct an Ising Hamiltonian MPO.
 
         Args:
-            length (int): The number of sites in the Ising chain.
-            J (float): The coupling constant for the interaction.
-            g (float): The coupling constant for the field.
+            L: Number of sites.
+            J: ZZ coupling strength (Hamiltonian includes -J Σ Z_i Z_{i+1}).
+            g: X field strength (Hamiltonian includes -g Σ X_i).
+            bc: "open" or "periodic".
+            physical_dimension: Local dimension (Ising Pauli builder requires 2).
+            tol: SVD truncation threshold used during compression.
+            max_bond_dim: Optional hard cap for MPO bond dimension during compression.
+            n_sweeps: Number of compression sweeps.
+
+        Returns:
+            An MPO representing the Ising Hamiltonian.
         """
-        mpo = type(self).hamiltonian(
-            L=length,
+        return cls.hamiltonian(
+            length=L,
             two_body=[(-J, "Z", "Z")],
             one_body=[(-g, "X")],
-            bc="open",
-            physical_dimension=2,
-            # choose whatever defaults you want here:
-            tol=1e-12,
-            max_bond_dim=None,
-            n_sweeps=2,
+            bc=bc,
+            physical_dimension=physical_dimension,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
         )
 
-        # adopt the result
-        self.tensors = mpo.tensors
-        self.length = mpo.length
-        self.physical_dimension = mpo.physical_dimension
+    @classmethod
+    def heisenberg(
+        cls,
+        L: int,
+        Jx: float,
+        Jy: float,
+        Jz: float,
+        h: float = 0.0,
+        *,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> "MPO":
+        """Construct a Heisenberg (XYZ) Hamiltonian MPO.
 
-    def heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:  # noqa: N803
-        """Heisenberg MPO.
+        Args:
+            L: Number of sites.
+            Jx: XX coupling strength (Hamiltonian includes -Jx Σ X_i X_{i+1}).
+            Jy: YY coupling strength (Hamiltonian includes -Jy Σ Y_i Y_{i+1}).
+            Jz: ZZ coupling strength (Hamiltonian includes -Jz Σ Z_i Z_{i+1}).
+            h: Z field strength (Hamiltonian includes -h Σ Z_i).
+            bc: "open" or "periodic".
+            physical_dimension: Local dimension (Pauli builder requires 2).
+            tol: SVD truncation threshold used during compression.
+            max_bond_dim: Optional hard cap for MPO bond dimension during compression.
+            n_sweeps: Number of compression sweeps.
 
-        Initialize the Heisenberg model as a Matrix Product Operator (MPO).
-
-        Left boundary: shape (1, 5, d, d)
-        [I, Jx*X, Jy*Y, Jz*Z, h*Z]
-
-        Inner tensor: shape (5, 5, d, d)
-        W = [[ I,    Jx*X,  Jy*Y,  Jz*Z,   h*Z ],
-              [ 0,     0,     0,     0,     X  ],
-              [ 0,     0,     0,     0,     Y  ],
-              [ 0,     0,     0,     0,     Z  ],
-              [ 0,     0,     0,     0,     I  ]]
-
-        Right boundary: shape (5, 1, d, d)
-        [0, X, Y, Z, I]^T
-
-        Parameters:
-        length (int): The number of sites in the chain.
-        Jx (float): The coupling constant for the X interaction.
-        Jy (float): The coupling constant for the Y interaction.
-        Jz (float): The coupling constant for the Z interaction.
-        h (float): The magnetic field strength.
+        Returns:
+            An MPO representing the Heisenberg Hamiltonian.
         """
-        mpo = type(self).hamiltonian(
-            L=length,
+        return cls.hamiltonian(
+            length=L,
             two_body=[(-Jx, "X", "X"), (-Jy, "Y", "Y"), (-Jz, "Z", "Z")],
-            one_body=[(-h, "Z")],
-            bc="open",
-            physical_dimension=2,
-            # choose whatever defaults you want here:
-            tol=1e-12,
-            max_bond_dim=None,
-            n_sweeps=2,
+            one_body=[(-h, "Z")] if h != 0 else [],
+            bc=bc,
+            physical_dimension=physical_dimension,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
         )
-
-        # adopt the result
-        self.tensors = mpo.tensors
-        self.length = mpo.length
-        self.physical_dimension = mpo.physical_dimension
 
     def init_coupled_transmon(
         self,
