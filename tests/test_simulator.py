@@ -841,8 +841,7 @@ def test_transmon_simulation() -> None:
     alpha = -0.3 / (2 * np.pi)
     g = 0.2 / (2 * np.pi)
 
-    H_0 = MPO()
-    H_0.init_coupled_transmon(
+    H_0 = MPO().coupled_transmon(
         length=length,
         qubit_dim=qubit_dim,
         resonator_dim=resonator_dim,

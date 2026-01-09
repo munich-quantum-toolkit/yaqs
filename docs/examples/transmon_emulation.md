@@ -32,16 +32,13 @@ w_r = 4/(2*np.pi)
 alpha = 0
 g = 2/(2*np.pi)
 
-H_0 = MPO()
-H_0.init_coupled_transmon(
-    length=length,
+H_0 = MPO().coupled_transmon(length=length,
     qubit_dim=qubit_dim,
     resonator_dim=resonator_dim,
     qubit_freq=w_q,
     resonator_freq=w_r,
     anharmonicity=alpha,
-    coupling=g  # T_swap = pi/2g
-)
+    coupling=g  # T_swap = pi/2g)
 ```
 
 ## Define the initial state

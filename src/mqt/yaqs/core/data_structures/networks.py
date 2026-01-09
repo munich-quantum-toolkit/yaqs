@@ -1132,8 +1132,9 @@ class MPO:
             n_sweeps=n_sweeps,
         )
 
-    def init_coupled_transmon(
-        self,
+    @classmethod
+    def coupled_transmon(
+        cls,
         length: int,
         qubit_dim: int,
         resonator_dim: int,
@@ -1141,7 +1142,7 @@ class MPO:
         resonator_freq: float,
         anharmonicity: float,
         coupling: float,
-    ) -> None:
+    ) -> "MPO":
         """Coupled Transmon MPO.
 
         Initializes an MPO representation of a 1D chain of coupled transmon qubits
@@ -1189,36 +1190,32 @@ class MPO:
         x_q = b_dag.matrix + b.matrix
         x_r = a_dag.matrix + a.matrix
 
-        self.tensors = []
+        tensors: list[np.ndarray] = []
 
         for i in range(length):
             if i % 2 == 0:
                 # Qubit site
                 if i == 0:
-                    # Qubit 0: left edge
                     tensor = np.array(
-                        [
-                            [
-                                h_q,  # (0,0): on-site Hamiltonian
-                                id_q,  # (0,1): pass identity right
-                                coupling * x_q,  # (0,2): pass coupling operator right
-                                id_q,  # (0,3): tail end (unused)
-                            ]
-                        ],
+                        [[
+                            h_q,
+                            id_q,
+                            coupling * x_q,
+                            id_q,
+                        ]],
                         dtype=object,
-                    )  # shape (1, 4, d, d)
+                    )  # (1, 4, dq, dq)
 
                 elif i == length - 1:
-                    # Qubit 1: right edge
                     tensor = np.array(
                         [
-                            [id_q],  # (0,0): tail end
-                            [coupling * x_q],  # (1,0): coupled input from resonator
-                            [id_q],  # (2,0): pass-through
-                            [h_q],  # (3,0): on-site Hamiltonian
+                            [id_q],
+                            [coupling * x_q],
+                            [id_q],
+                            [h_q],
                         ],
                         dtype=object,
-                    )  # shape (4, 1, d, d)
+                    )  # (4, 1, dq, dq)
 
                 else:
                     tensor = np.empty((4, 4, qubit_dim, qubit_dim), dtype=object)
@@ -1233,19 +1230,25 @@ class MPO:
                 # Resonator site
                 tensor = np.empty((4, 4, resonator_dim, resonator_dim), dtype=object)
                 tensor[:, :] = [[zero_r for _ in range(4)] for _ in range(4)]
-
                 tensor[0, 0] = id_r
                 tensor[1, 2] = h_r
                 tensor[2, 0] = x_r
                 tensor[3, 1] = x_r
                 tensor[3, 3] = id_r
 
-            # Transpose to (phys_out, phys_in, left, right)
-            tensor = np.transpose(tensor, (2, 3, 0, 1))
-            self.tensors.append(tensor)
+            # (left, right, phys_out, phys_in) -> (phys_out, phys_in, left, right)
+            tensors.append(np.transpose(tensor, (2, 3, 0, 1)))
 
-        self.length = length
-        self.physical_dimension = qubit_dim
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = length
+
+        # Backward-compat: single attribute even though dims alternate.
+        mpo.physical_dimension = qubit_dim
+
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+        return mpo
+
 
     def identity(self, length: int, physical_dimension: int = 2) -> None:
         """Initialize identity MPO.
