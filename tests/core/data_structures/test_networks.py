@@ -37,6 +37,107 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id, X, Z
 
+# ---- single-qubit ops ----
+_I2 = np.eye(2, dtype=complex)
+_X2 = np.array([[0, 1], [1, 0]], dtype=complex)
+_Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
+_Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
+
+
+def _embed_one_body(op: np.ndarray, L: int, i: int) -> np.ndarray:  # noqa: N803
+    """Embed a single-site operator into a length-L qubit Hilbert space.
+
+    Args:
+        op: Local 2x2 operator acting on site i.
+        L: Total number of sites.
+        i: Site index at which to apply the operator.
+
+    Returns:
+        Dense (2**L, 2**L) matrix representing I⊗…⊗op_i⊗…⊗I.
+    """
+    out = np.array([[1.0]], dtype=complex)
+    for k in range(L):
+        out = np.kron(out, op if k == i else _I2)
+    return out
+
+
+def _embed_two_body(op1: np.ndarray, op2: np.ndarray, L: int, i: int) -> np.ndarray:  # noqa: N803
+    """Embed a nearest-neighbor two-site operator into a length-L qubit Hilbert space.
+
+    Args:
+        op1: Local operator acting on site i.
+        op2: Local operator acting on site i+1.
+        L: Total number of sites.
+        i: Left site index of the two-body term.
+
+    Returns:
+        Dense (2**L, 2**L) matrix representing
+        I⊗…⊗op1_i⊗op2_{i+1}⊗…⊗I.
+    """
+    out = np.array([[1.0]], dtype=complex)
+    for k in range(L):
+        if k == i:
+            out = np.kron(out, op1)
+        elif k == i + 1:
+            out = np.kron(out, op2)
+        else:
+            out = np.kron(out, _I2)
+    return out
+
+
+def _ising_dense(L: int, J: float, g: float) -> np.ndarray:  # noqa: N803
+    """Construct the dense Ising Hamiltonian for an open chain.
+
+    The Hamiltonian is
+        H = -J sum_i Z_i Z_{i+1} - g sum_i X_i.
+
+    Args:
+        L: Number of sites.
+        J: Nearest-neighbor coupling strength.
+        g: Transverse-field strength.
+
+    Returns:
+        Dense (2**L, 2**L) Hamiltonian matrix.
+    """
+    dim = 2**L
+    H = np.zeros((dim, dim), dtype=complex)
+
+    for i in range(L - 1):
+        H += (-J) * _embed_two_body(_Z2, _Z2, L, i)
+    for i in range(L):
+        H += (-g) * _embed_one_body(_X2, L, i)
+
+    return H
+
+
+def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.ndarray:  # noqa: N803
+    """Construct the dense Heisenberg Hamiltonian for an open chain.
+
+    The Hamiltonian is
+        H = -sum_i (Jx X_i X_{i+1} + Jy Y_i Y_{i+1} + Jz Z_i Z_{i+1}) - h sum_i Z_i.
+
+    Args:
+        L: Number of sites.
+        Jx: XX coupling strength.
+        Jy: YY coupling strength.
+        Jz: ZZ coupling strength.
+        h: Longitudinal field strength.
+
+    Returns:
+        Dense (2**L, 2**L) Hamiltonian matrix.
+    """
+    dim = 2**L
+    H = np.zeros((dim, dim), dtype=complex)
+
+    for i in range(L - 1):
+        H += (-Jx) * _embed_two_body(_X2, _X2, L, i)
+        H += (-Jy) * _embed_two_body(_Y2, _Y2, L, i)
+        H += (-Jz) * _embed_two_body(_Z2, _Z2, L, i)
+    for i in range(L):
+        H += (-h) * _embed_one_body(_Z2, L, i)
+
+    return H
+
 
 def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Reverse the transposition of an MPO tensor.
@@ -101,66 +202,8 @@ rng = np.random.default_rng()
 ##############################################################################
 
 
-# ---- single-qubit ops ----
-_I2 = np.eye(2, dtype=complex)
-_X2 = np.array([[0, 1], [1, 0]], dtype=complex)
-_Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
-_Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
-
-
-def _embed_one_body(op: np.ndarray, L: int, i: int) -> np.ndarray:
-    """Return I⊗...⊗op_i⊗...⊗I as a dense 2^L x 2^L matrix."""
-    out = np.array([[1.0]], dtype=complex)
-    for k in range(L):
-        out = np.kron(out, op if k == i else _I2)
-    return out
-
-
-def _embed_two_body(op1: np.ndarray, op2: np.ndarray, L: int, i: int) -> np.ndarray:
-    """Return I⊗...⊗op1_i⊗op2_{i+1}⊗...⊗I as a dense 2^L x 2^L matrix."""
-    out = np.array([[1.0]], dtype=complex)
-    for k in range(L):
-        if k == i:
-            out = np.kron(out, op1)
-        elif k == i + 1:
-            out = np.kron(out, op2)
-        else:
-            out = np.kron(out, _I2)
-    return out
-
-
-def _ising_dense(L: int, J: float, g: float) -> np.ndarray:
-    """H = -J Σ Z_i Z_{i+1} - g Σ X_i (open chain)."""
-    dim = 2**L
-    H = np.zeros((dim, dim), dtype=complex)
-
-    for i in range(L - 1):
-        H += (-J) * _embed_two_body(_Z2, _Z2, L, i)
-    for i in range(L):
-        H += (-g) * _embed_one_body(_X2, L, i)
-
-    return H
-
-
-def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.ndarray:
-    """H = -Σ (Jx XX + Jy YY + Jz ZZ) - h Σ Z (open chain).
-
-    Match this sign convention to your heisenberg implementation.
-    """
-    dim = 2**L
-    H = np.zeros((dim, dim), dtype=complex)
-
-    for i in range(L - 1):
-        H += (-Jx) * _embed_two_body(_X2, _X2, L, i)
-        H += (-Jy) * _embed_two_body(_Y2, _Y2, L, i)
-        H += (-Jz) * _embed_two_body(_Z2, _Z2, L, i)
-    for i in range(L):
-        H += (-h) * _embed_one_body(_Z2, L, i)
-
-    return H
-
-
 def test_ising_correct_operator() -> None:
+    """Verify that the Ising MPO matches the exact dense Hamiltonian."""
     L = 5
     J = 1.0
     g = 0.5
@@ -175,6 +218,7 @@ def test_ising_correct_operator() -> None:
 
 
 def test_heisenberg_correct_operator() -> None:
+    """Verify that the Heisenberg MPO matches the exact dense Hamiltonian."""
     L = 5
     Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
 
