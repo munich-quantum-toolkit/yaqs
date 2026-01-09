@@ -966,7 +966,7 @@ class MPO:
         Initializes the MPO for the Ising model with given parameters.
     heisenberg(length: int, Jx: float, Jy: float, Jz: float, h: float) -> None
         Initializes the MPO for the Heisenberg model with given parameters.
-    init_identity(length: int, physical_dimension: int = 2) -> None
+    identity(length: int, physical_dimension: int = 2) -> None
         Initializes the MPO as an identity operator.
     init_custom_hamiltonian(length: int, left_bound: NDArray[np.complex128],
                             inner: NDArray[np.complex128], right_bound: NDArray[np.complex128]) -> None
@@ -1193,7 +1193,7 @@ class MPO:
         self.length = length
         self.physical_dimension = qubit_dim
 
-    def init_identity(self, length: int, physical_dimension: int = 2) -> None:
+    def identity(self, length: int, physical_dimension: int = 2) -> None:
         """Initialize identity MPO.
 
         Initializes the network with identity matrices.
@@ -1588,7 +1588,7 @@ class MPO:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
         identity_mpo = MPO()
-        identity_mpo.init_identity(self.length)
+        identity_mpo.identity(self.length)
 
         identity_mps = identity_mpo.to_mps()
         mps = self.to_mps()

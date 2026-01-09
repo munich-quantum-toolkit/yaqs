@@ -185,8 +185,8 @@ def test_heisenberg_correct_operator() -> None:
     assert np.allclose(mpo.to_matrix(), _heisenberg_dense(L, Jx, Jy, Jz, h), atol=1e-12)
 
 
-def test_init_identity() -> None:
-    """Test that init_identity initializes an identity MPO correctly.
+def test_identity() -> None:
+    """Test that identity initializes an identity MPO correctly.
 
     This test checks that an identity MPO has the correct length, physical dimension,
     and that each tensor corresponds to the identity operator.
@@ -195,7 +195,7 @@ def test_init_identity() -> None:
     length = 3
     pdim = 2
 
-    mpo.init_identity(length, physical_dimension=pdim)
+    mpo.identity(length, physical_dimension=pdim)
 
     assert mpo.length == length
     assert mpo.physical_dimension == pdim
@@ -334,7 +334,7 @@ def test_check_if_identity() -> None:
     length = 3
     pdim = 2
 
-    mpo.init_identity(length, pdim)
+    mpo.identity(length, pdim)
     fidelity_threshold = 0.9
     assert mpo.check_if_identity(fidelity_threshold) is True
 
