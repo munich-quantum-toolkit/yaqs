@@ -23,14 +23,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 import opt_einsum as oe
+from numpy.typing import NDArray
 from tqdm import tqdm
 
 from ..libraries.gate_library import Destroy
 from ..methods.decompositions import right_qr, two_site_svd
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 
 
@@ -954,6 +953,9 @@ class MPS:
         return vec.flatten()
 
 
+ComplexTensor = NDArray[np.complex128]
+
+
 class MPO:
     """Matrix Product Operator (MPO) for YAQS tensor-network simulations.
 
@@ -1004,6 +1006,10 @@ class MPO:
         r"\b([IXYZ])\s*(\d+)\b",
         flags=re.IGNORECASE,
     )
+
+    tensors: list[ComplexTensor]
+    length: int
+    physical_dimension: int
 
     @classmethod
     def hamiltonian(
