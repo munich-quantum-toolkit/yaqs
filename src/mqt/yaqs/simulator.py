@@ -141,10 +141,14 @@ def available_cpus() -> int:
     # 2) Respect Linux affinity / cgroup limits if available
     fn = getattr(os, "sched_getaffinity", None)
     if fn is not None:
-        sched_getaffinity = cast("Callable[[int], set[int]]", fn)
-        n = len(sched_getaffinity(0))
-        if n > 0:
-            return n
+        try:
+            sched_getaffinity = cast("Callable[[int], set[int]]", fn)
+            n = len(sched_getaffinity(0))
+            if n > 0:
+                return n
+        except OSError:
+            # System call failed; fall through to next fallback
+            pass
 
     # 3) Fallback
     return os.cpu_count() or multiprocessing.cpu_count() or 1
