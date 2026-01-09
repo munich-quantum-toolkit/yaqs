@@ -1615,4 +1615,3 @@ class MPO:
                 c[:, :, la:, ra:] = b
             out.append(c)
         return out
-
