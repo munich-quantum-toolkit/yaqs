@@ -570,7 +570,6 @@ def test_two_site_correlator_center() -> None:
     g = 0.1
     H_0 = MPO.ising(L, J, g)
 
-
     state = MPS(L, state="zeros")
 
     sim_params = AnalogSimParams(
@@ -683,7 +682,6 @@ def test_two_site_correlator_right_boundary() -> None:
     J = 1
     g = 0.1
     H_0 = MPO.ising(L, J, g)
-
 
     state = MPS(L, state="zeros")
 

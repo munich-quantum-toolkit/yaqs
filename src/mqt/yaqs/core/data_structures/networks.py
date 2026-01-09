@@ -1142,7 +1142,7 @@ class MPO:
         resonator_freq: float,
         anharmonicity: float,
         coupling: float,
-    ) -> "MPO":
+    ) -> MPO:
         """Coupled Transmon MPO.
 
         Initializes an MPO representation of a 1D chain of coupled transmon qubits
@@ -1197,12 +1197,14 @@ class MPO:
                 # Qubit site
                 if i == 0:
                     tensor = np.array(
-                        [[
-                            h_q,
-                            id_q,
-                            coupling * x_q,
-                            id_q,
-                        ]],
+                        [
+                            [
+                                h_q,
+                                id_q,
+                                coupling * x_q,
+                                id_q,
+                            ]
+                        ],
                         dtype=object,
                     )  # (1, 4, dq, dq)
 
@@ -1248,7 +1250,6 @@ class MPO:
 
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
         return mpo
-
 
     def identity(self, length: int, physical_dimension: int = 2) -> None:
         """Initialize identity MPO.
