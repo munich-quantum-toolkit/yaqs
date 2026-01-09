@@ -55,7 +55,7 @@ def test_initialize() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
     sim_params = AnalogSimParams(
@@ -88,7 +88,7 @@ def test_step_through() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
     sim_params = AnalogSimParams(
@@ -122,7 +122,7 @@ def test_analog_tjm_2() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -152,7 +152,7 @@ def test_analog_tjm_2_sample_timesteps() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -182,7 +182,7 @@ def test_analog_tjm_1() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -212,7 +212,7 @@ def test_analog_tjm_1_sample_timesteps() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -253,7 +253,7 @@ def test_analog_simulation_twositeprocesses() -> None:
 
     # Setup YAQS simulation
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L, state="zeros")
 
     sim_params = AnalogSimParams(
@@ -379,7 +379,7 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
     # Setup YAQS simulation (same parameters as reference)
     L = 3
     H = MPO()
-    H.init_ising(L, 1.0, 0.5)
+    H.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(L)],

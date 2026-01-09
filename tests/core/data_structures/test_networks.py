@@ -145,7 +145,7 @@ def _ising_dense(L: int, J: float, g: float) -> np.ndarray:
 def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.ndarray:
     """H = -Σ (Jx XX + Jy YY + Jz ZZ) - h Σ Z (open chain).
 
-    Match this sign convention to your init_heisenberg implementation.
+    Match this sign convention to your heisenberg implementation.
     """
     dim = 2**L
     H = np.zeros((dim, dim), dtype=complex)
@@ -160,13 +160,13 @@ def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.n
     return H
 
 
-def test_init_ising_correct_operator() -> None:
+def test_ising_correct_operator() -> None:
     mpo = MPO()
     L = 5
     J = 1.0
     g = 0.5
 
-    mpo.init_ising(L, J, g)
+    mpo.ising(L, J, g)
 
     assert mpo.length == L
     assert mpo.physical_dimension == 2
@@ -175,12 +175,12 @@ def test_init_ising_correct_operator() -> None:
     assert np.allclose(mpo.to_matrix(), _ising_dense(L, J, g), atol=1e-12)
 
 
-def test_init_heisenberg_correct_operator() -> None:
+def test_heisenberg_correct_operator() -> None:
     mpo = MPO()
     L = 5
     Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
 
-    mpo.init_heisenberg(L, Jx, Jy, Jz, h)
+    mpo.heisenberg(L, Jx, Jy, Jz, h)
 
     assert np.allclose(mpo.to_matrix(), _heisenberg_dense(L, Jx, Jy, Jz, h), atol=1e-12)
 
@@ -266,7 +266,7 @@ def test_init_custom() -> None:
 def test_to_mps() -> None:
     """Test converting an MPO to an MPS.
 
-    This test initializes an MPO using init_ising, converts it to an MPS via to_mps,
+    This test initializes an MPO using ising, converts it to an MPS via to_mps,
     and verifies that the resulting MPS has the correct length and that each tensor has been reshaped
     to the expected dimensions.
     """
@@ -274,7 +274,7 @@ def test_to_mps() -> None:
     length = 3
     J, g = 1.0, 0.5
 
-    mpo.init_ising(length, J, g)
+    mpo.ising(length, J, g)
     mps = mpo.to_mps()
 
     assert isinstance(mps, MPS)
@@ -297,7 +297,7 @@ def test_check_if_valid_mpo() -> None:
     length = 4
     J, g = 1.0, 0.5
 
-    mpo.init_ising(length, J, g)
+    mpo.ising(length, J, g)
     mpo.check_if_valid_mpo()
 
 
@@ -311,7 +311,7 @@ def test_rotate() -> None:
     length = 3
     J, g = 1.0, 0.5
 
-    mpo.init_ising(length, J, g)
+    mpo.ising(length, J, g)
     original_tensors = [t.copy() for t in mpo.tensors]
 
     mpo.rotate(conjugate=False)

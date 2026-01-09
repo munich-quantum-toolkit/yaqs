@@ -962,9 +962,9 @@ class MPO:
 
     Methods.
     -------
-    init_ising(length: int, J: float, g: float) -> None
+    ising(length: int, J: float, g: float) -> None
         Initializes the MPO for the Ising model with given parameters.
-    init_heisenberg(length: int, Jx: float, Jy: float, Jz: float, h: float) -> None
+    heisenberg(length: int, Jx: float, Jy: float, Jz: float, h: float) -> None
         Initializes the MPO for the Heisenberg model with given parameters.
     init_identity(length: int, physical_dimension: int = 2) -> None
         Initializes the MPO as an identity operator.
@@ -996,7 +996,7 @@ class MPO:
     _VALID = frozenset(_PAULI_2.keys())
     _PAULI_TOKEN_RE = re.compile(r"\b([IXYZ])\s*(\d+)\b", flags=re.IGNORECASE)
 
-    def init_ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
+    def ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
         """Ising MPO.
 
         Initialize the Ising model as a Matrix Product Operator (MPO).
@@ -1036,7 +1036,7 @@ class MPO:
         self.length = mpo.length
         self.physical_dimension = mpo.physical_dimension
 
-    def init_heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:  # noqa: N803
+    def heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:  # noqa: N803
         """Heisenberg MPO.
 
         Initialize the Heisenberg model as a Matrix Product Operator (MPO).

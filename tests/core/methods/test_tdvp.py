@@ -243,7 +243,7 @@ def test_single_site_tdvp() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
@@ -272,7 +272,7 @@ def test_two_site_tdvp() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
     state = MPS(L, state="zeros")
     ref_mps = deepcopy(state)
     sim_params = AnalogSimParams(
@@ -313,7 +313,7 @@ def test_dynamic_tdvp_one_site() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")
@@ -347,7 +347,7 @@ def test_dynamic_tdvp_two_site() -> None:
     J = 1
     g = 0.5
     H = MPO()
-    H.init_ising(L, J, g)
+    H.ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")

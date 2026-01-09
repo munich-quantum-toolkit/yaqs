@@ -75,7 +75,7 @@ def test_analog_simulation() -> None:
     initial_state = MPS(length, state="zeros")
 
     H = MPO()
-    H.init_ising(length, J=1, g=0.5)
+    H.ising(length, J=1, g=0.5)
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
@@ -129,7 +129,7 @@ def test_analog_simulation_parallel_off() -> None:
     initial_state = MPS(length, state="zeros")
 
     H = MPO()
-    H.init_ising(length, J=1, g=0.5)
+    H.ising(length, J=1, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
         elapsed_time=1,
@@ -179,7 +179,7 @@ def test_analog_simulation_get_state() -> None:
         initial_state = MPS(length, state="zeros")
 
         H = MPO()
-        H.init_ising(length, J=1, g=0.5)
+        H.ising(length, J=1, g=0.5)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), length // 2)],
@@ -463,7 +463,7 @@ def test_two_site_correlator_left_boundary() -> None:
     J = 1
     g = 0.1
     H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -573,7 +573,7 @@ def test_two_site_correlator_center() -> None:
     J = 1
     g = 0.1
     H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -687,7 +687,7 @@ def test_two_site_correlator_right_boundary() -> None:
     J = 1
     g = 0.1
     H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 

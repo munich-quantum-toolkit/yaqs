@@ -253,7 +253,7 @@ def test_bug_single_site() -> None:
     mps = random_mps([(2, 1, 1)])
     ref_mps = deepcopy(mps)
     mpo = MPO()
-    mpo.init_ising(1, 1, 0.5)
+    mpo.ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
     sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
     # Perform BUG
@@ -271,7 +271,7 @@ def test_bug_three_sites() -> None:
     mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
     ref_mps = deepcopy(mps)
     mpo = MPO()
-    mpo.init_ising(3, 1, 0.5)
+    mpo.ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
     sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
     # Perform BUG

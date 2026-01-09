@@ -28,7 +28,7 @@ L = 3
 J = 1
 g = 0.5
 H_0 = MPO()
-H_0.init_ising(L, J, g)
+H_0.ising(L, J, g)
 ```
 
 Define the initial state
