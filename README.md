@@ -27,9 +27,9 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 ## Key Features
 
-- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a parallelized implementation using the Tensor Jump Method (TJM) [2]
+- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a parallelized implementation using the Tensor Jump Method (TJM) [1]
 - **Noisy Quantum Circuit Simulation (Digital Simulation)**: Investigate the effect of noise on large quantum circuits [3]
-- **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method [1]
+- **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method [2]
 - **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
 
 If you have any questions, feel free to create a [discussion](https://github.com/munich-quantum-toolkit/yaqs/discussions) or an [issue](https://github.com/munich-quantum-toolkit/yaqs/issues) on [GitHub](https://github.com/munich-quantum-toolkit/yaqs).
@@ -113,19 +113,21 @@ When discussing the overall MQT project or its ecosystem, cite the MQT Handbook:
 
 When citing the underlying methods and research, please reference the most relevant peer-reviewed publications from the list below:
 
-[[1]](https://arxiv.org/pdf/2410.10946)
-A. Sander, L. Burgholzer, and R. Wille.
-Equivalence checking of quantum circuits via intermediary matrix product operator.
-_Phys. Rev. Research 7, 023261_, 2023.
-
-[[2]](https://arxiv.org/pdf/2501.17913)
+[[1]](https://www.nature.com/articles/s41467-025-66846-x)
 A. Sander, M. Fröhlich, M. Eigel, J. Eisert, P. Gelß, M. Hintermüller, R. M. Milbradt, R. Wille, C. B. Mendl.
 Large-scale stochastic simulation of open quantum systems.
+_Nature Communications_ *16*, 11074 (2025).
+
+[[3]](https://journals.aps.org/prresearch/abstract/10.1103/3q71-y8cf)
+A. Sander, L. Burgholzer, and R. Wille.
+Equivalence checking of quantum circuits via intermediary matrix product operator.
+_Phys. Rev. Research_ *7*, 023261, (2025).
 
 [[3]](https://arxiv.org/abs/2508.10096)
 A. Sander, M. Fröhlich, M. Ali, M. Eigel, J. Eisert, M. Hintermüller, C. B. Mendl, R. M. Milbradt, R. Wille
 Quantum circuit simulation with a local time-dependent variational principle.
-
+arXiv:2508.10096 (2025)
+```
 ---
 
 ## Acknowledgements
