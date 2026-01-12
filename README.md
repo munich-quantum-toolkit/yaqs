@@ -116,17 +116,18 @@ When citing the underlying methods and research, please reference the most relev
 [[1]](https://www.nature.com/articles/s41467-025-66846-x)
 A. Sander, M. Fröhlich, M. Eigel, J. Eisert, P. Gelß, M. Hintermüller, R. M. Milbradt, R. Wille, C. B. Mendl.
 Large-scale stochastic simulation of open quantum systems.
-_Nature Communications_ *16*, 11074 (2025).
+_Nature Communications_ _16_, 11074 (2025).
 
 [[3]](https://journals.aps.org/prresearch/abstract/10.1103/3q71-y8cf)
 A. Sander, L. Burgholzer, and R. Wille.
 Equivalence checking of quantum circuits via intermediary matrix product operator.
-_Phys. Rev. Research_ *7*, 023261, (2025).
+_Phys. Rev. Research_ _7_, 023261, (2025).
 
 [[3]](https://arxiv.org/abs/2508.10096)
 A. Sander, M. Fröhlich, M. Ali, M. Eigel, J. Eisert, M. Hintermüller, C. B. Mendl, R. M. Milbradt, R. Wille
 Quantum circuit simulation with a local time-dependent variational principle.
 arXiv:2508.10096 (2025)
+
 ```
 ---
 
@@ -140,3 +141,4 @@ The Munich Quantum Toolkit has been supported by the European Research Council (
     <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/mqt-funding-footer-light.svg" width="90%" alt="MQT Funding Footer">
   </picture>
 </p>
+```
