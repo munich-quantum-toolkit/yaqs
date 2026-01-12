@@ -128,7 +128,6 @@ A. Sander, M. Fröhlich, M. Ali, M. Eigel, J. Eisert, M. Hintermüller, C. B. Me
 Quantum circuit simulation with a local time-dependent variational principle.
 arXiv:2508.10096 (2025)
 
-```
 ---
 
 ## Acknowledgements
