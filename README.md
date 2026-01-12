@@ -118,7 +118,7 @@ A. Sander, M. Fröhlich, M. Eigel, J. Eisert, P. Gelß, M. Hintermüller, R. M. 
 Large-scale stochastic simulation of open quantum systems.
 _Nature Communications_ _16_, 11074 (2025).
 
-[[3]](https://journals.aps.org/prresearch/abstract/10.1103/3q71-y8cf)
+[[2]](https://journals.aps.org/prresearch/abstract/10.1103/3q71-y8cf)
 A. Sander, L. Burgholzer, and R. Wille.
 Equivalence checking of quantum circuits via intermediary matrix product operator.
 _Phys. Rev. Research_ _7_, 023261, (2025).
