@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- updated bib and readme with new publication ([#298]) ([**@aaronleesander**])
 - updates MPO class to allow construction of arbitrary Pauli Hamiltonians ([#216]) ([**@aaronleesander**, **@thilomueller**])
 - added faster paths for TDVP dense effective Hamiltonian ([#280]) ([**@aaronleesander**])
 - added more stable and faster SVD and QR implementation ([#278]) ([**@aaronleesander**])
@@ -52,6 +53,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#298]: https://github.com/munich-quantum-toolkit/yaqs/pull/298
 [#216]: https://github.com/munich-quantum-toolkit/yaqs/pull/216
 [#290]: https://github.com/munich-quantum-toolkit/yaqs/pull/290
 [#280]: https://github.com/munich-quantum-toolkit/yaqs/pull/280
