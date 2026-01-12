@@ -57,7 +57,7 @@ def run(
 
     start_time = time.time()
     mpo = MPO()
-    mpo.init_identity(circuit1.num_qubits)
+    mpo.identity(circuit1.num_qubits)
 
     circuit1_dag = circuit_to_dag(circuit1)
     circuit2_dag = circuit_to_dag(circuit2)
