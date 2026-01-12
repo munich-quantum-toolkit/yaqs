@@ -1305,3 +1305,77 @@ def test_from_pauli_sum_calls_create_term_for_each_term(monkeypatch: pytest.Monk
         (2, {0: "Z"}, 2.0),
         (2, {0: "Z"}, 3.0),
     ]
+
+
+def test_compress_raises_on_negative_n_sweeps() -> None:
+    """MPO compress input validation: negative n_sweeps must raise."""
+    mpo = MPO()
+    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex)]
+    with pytest.raises(ValueError, match=r"n_sweeps must be >= 0\."):
+        mpo.compress(n_sweeps=-1)
+
+
+def test_compress_raises_on_invalid_directions() -> None:
+    """MPO compress input validation: invalid sweep schedule strings must raise."""
+    mpo = MPO()
+    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex)]
+    with pytest.raises(ValueError, match=r"directions must be one of \{'lr', 'rl', 'lr_rl', 'rl_lr'\}\."):
+        mpo.compress(directions="lr,rl")
+
+
+def test_compress_n_sweeps_zero_returns_without_calling_sweeps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MPO compress control flow: n_sweeps=0 must return without invoking sweeps."""
+    mpo = MPO()
+    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex), np.zeros((2, 2, 1, 1), dtype=complex)]
+
+    called = False
+
+    def boom(**_kwargs: object) -> None:
+        nonlocal called
+        called = True
+        msg = "should not be called when n_sweeps=0"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(mpo, "_compress_one_sweep", boom)
+
+    mpo.compress(n_sweeps=0, directions="lr_rl")
+    assert called is False
+
+
+def test_compress_one_sweep_raises_on_invalid_direction() -> None:
+    """MPO _compress_one_sweep input validation: direction must be 'lr' or 'rl'."""
+    mpo = MPO()
+    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex), np.zeros((2, 2, 1, 1), dtype=complex)]
+    with pytest.raises(ValueError, match=r"direction must be 'lr' or 'rl'\."):
+        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)  # noqa: SLF001
+
+
+def test_from_pauli_sum_empty_spec_is_identity_term() -> None:
+    """Pauli parsing integration: empty spec denotes the identity operator."""
+    mpo = MPO()
+    mpo.from_pauli_sum(terms=[(1.0, "")], length=2, n_sweeps=0)
+    assert len(mpo.tensors) == 2  # construction succeeded
+
+
+def test_from_pauli_sum_parses_commas_and_normalizes_case() -> None:
+    """Pauli parsing integration: commas/whitespace are accepted and labels are case-normalized."""
+    mpo = MPO()
+    mpo.from_pauli_sum(terms=[(1.0, "x0, y1")], length=2, n_sweeps=0)
+    assert len(mpo.tensors) == 2
+
+
+def test_from_pauli_sum_raises_on_duplicate_site_in_spec() -> None:
+    """Pauli parsing integration: duplicate site indices in a spec must raise."""
+    mpo = MPO()
+    with pytest.raises(ValueError, match=r"Duplicate site 0 in spec"):
+        mpo.from_pauli_sum(terms=[(1.0, "X0 Z0")], length=2, n_sweeps=0)
+
+
+def test_from_pauli_sum_raises_on_invalid_tokens_in_spec() -> None:
+    """Pauli parsing integration: invalid tokens in the spec must raise."""
+    mpo = MPO()
+    with pytest.raises(ValueError, match=r"Invalid token\(s\) in spec"):
+        mpo.from_pauli_sum(terms=[(1.0, "X0 Q2")], length=3, n_sweeps=0)
+
+    with pytest.raises(ValueError, match=r"Invalid token\(s\) in spec"):
+        mpo.from_pauli_sum(terms=[(1.0, "X0 Y2 garbage")], length=4, n_sweeps=0)
