@@ -1180,3 +1180,128 @@ def test_evaluate_observables_meta_validation_errors() -> None:
     results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
         mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)
+
+
+def test_hamiltonian_raises_on_nonpositive_length() -> None:
+    """Hamiltonian input validation: non-positive system size must raise."""
+    with pytest.raises(ValueError, match=r"L must be positive\."):
+        MPO.hamiltonian(length=0)
+
+    with pytest.raises(ValueError, match=r"L must be positive\."):
+        MPO.hamiltonian(length=-3)
+
+
+def test_hamiltonian_raises_on_invalid_bc() -> None:
+    """Hamiltonian input validation: unsupported boundary conditions must raise."""
+    with pytest.raises(ValueError, match=r"bc must be 'open' or 'periodic'\."):
+        MPO.hamiltonian(length=4, bc="closed")
+
+    with pytest.raises(ValueError, match=r"bc must be 'open' or 'periodic'\."):
+        MPO.hamiltonian(length=4, bc="")
+
+
+def test_hamiltonian_raises_on_invalid_one_body_operator() -> None:
+    """Hamiltonian input validation: invalid single-site operator labels must raise."""
+    with pytest.raises(ValueError, match=r"Invalid operator 'Q'"):
+        MPO.hamiltonian(length=3, one_body=[(1.0, "Q")])
+
+
+def test_hamiltonian_raises_on_invalid_two_body_operator_left() -> None:
+    """Hamiltonian input validation: invalid left two-body operator labels must raise."""
+    with pytest.raises(ValueError, match=r"Invalid operator 'Q'"):
+        MPO.hamiltonian(length=3, two_body=[(1.0, "Q", "Z")])
+
+
+def test_hamiltonian_raises_on_invalid_two_body_operator_right() -> None:
+    """Hamiltonian input validation: invalid right two-body operator labels must raise."""
+    with pytest.raises(ValueError, match=r"Invalid operator 'Q'"):
+        MPO.hamiltonian(length=3, two_body=[(1.0, "X", "Q")])
+
+
+def test_hamiltonian_normalizes_operator_case() -> None:
+    """Hamiltonian construction: operator labels are case-insensitive and normalized."""
+    _ = MPO.hamiltonian(
+        length=2,
+        one_body=[(0.5, "x")],
+        two_body=[(1.0, "z", "y")],
+        bc="open",
+        n_sweeps=0,
+    )
+
+
+def test_from_pauli_sum_raises_on_invalid_physical_dimension() -> None:
+    """Pauli-sum MPO validation: only physical_dimension=2 is supported."""
+    mpo = MPO()
+    with pytest.raises(ValueError, match=r"Only physical_dimension=2 is supported"):
+        mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=2, physical_dimension=3)
+
+
+def test_from_pauli_sum_raises_on_nonpositive_length() -> None:
+    """Pauli-sum MPO validation: non-positive length must raise."""
+    mpo = MPO()
+    with pytest.raises(ValueError, match=r"length must be positive\."):
+        mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=0)
+
+    with pytest.raises(ValueError, match=r"length must be positive\."):
+        mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=-5)
+
+
+def test_from_pauli_sum_raises_on_site_index_out_of_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pauli-sum MPO validation: parsed site indices outside [0, L-1] must raise."""
+    mpo = MPO()
+
+    # Force the parser to return an out-of-bounds site index regardless of spec.
+    monkeypatch.setattr(mpo, "_parse_pauli_string", lambda _spec: {99: "Z"})
+
+    with pytest.raises(ValueError, match=r"Site index 99 outside \[0, 3\]\."):
+        mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=4)
+
+
+def test_from_pauli_sum_raises_on_invalid_local_op_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pauli-sum MPO validation: parsed local operator labels must be in _VALID."""
+    mpo = MPO()
+
+    # Force the parser to return an invalid label.
+    monkeypatch.setattr(mpo, "_parse_pauli_string", lambda _spec: {0: "Q"})
+
+    with pytest.raises(ValueError, match=r"Invalid local op 'Q'"):
+        mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=2)
+
+
+def test_from_pauli_sum_empty_terms_builds_zero_mpo() -> None:
+    """Pauli-sum MPO construction: empty term list yields an all-zero MPO with bond dim 1."""
+    mpo = MPO()
+    mpo.from_pauli_sum(terms=[], length=3, n_sweeps=0)  # n_sweeps=0 keeps it fast
+
+    assert len(mpo.tensors) == 3
+    for t in mpo.tensors:
+        assert t.shape == (2, 2, 1, 1)
+        assert np.allclose(t, 0.0)
+
+
+def test_from_pauli_sum_calls_create_term_for_each_term(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pauli-sum MPO construction: each term is converted via _create_term before summation."""
+    mpo = MPO()
+
+    # Make parsing deterministic and valid.
+    monkeypatch.setattr(mpo, "_parse_pauli_string", lambda _spec: {0: "Z"})
+
+    calls: list[tuple[int, dict[int, str], complex | float]] = []
+
+    def fake_create_term(length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
+        calls.append((length, ops, coeff))
+        # Minimal valid term tensor list: identity-ish MPO with bond dim 1
+        return [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
+
+    monkeypatch.setattr(mpo, "_create_term", fake_create_term)
+
+    # Avoid depending on compress/check behavior in this unit test.
+    monkeypatch.setattr(mpo, "compress", lambda **_kwargs: None)
+    monkeypatch.setattr(mpo, "check_if_valid_mpo", lambda: True)
+
+    mpo.from_pauli_sum(terms=[(2.0, "Z0"), (3.0, "Z0")], length=2, n_sweeps=0)
+
+    assert calls == [
+        (2, {0: "Z"}, 2.0),
+        (2, {0: "Z"}, 3.0),
+    ]
