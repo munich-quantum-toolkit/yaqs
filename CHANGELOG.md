@@ -7,7 +7,13 @@ All notable changes to this project will be documented in this file.
 The format is based on a mixture of [Keep a Changelog] and [Common Changelog].
 This project adheres to [Semantic Versioning], with the exception that minor releases may include breaking changes.
 
-## [Unreleased]
+## [unreleased]
+
+### Added
+
+### Fixed
+
+## [0.3.3] - 2026-01-12
 
 ### Added
 
@@ -47,7 +53,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.2...HEAD
+[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
 [0.3.1]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.1
 
