@@ -53,8 +53,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.2...HEAD
-[0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.3
+[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
 [0.3.1]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.1
 
