@@ -52,7 +52,7 @@ panels = {
 }
 
 vmin = 2 # min(np.min(arr) for (arr, _, _) in panels.values())
-vmax = 75 # max(np.max(arr) for (arr, _, _) in panels.values())
+vmax = max(np.max(arr) for (arr, _, _) in panels.values())
 
 for (r, c), (grid, row_label, col_label) in panels.items():
     ax = axes[r, c]
