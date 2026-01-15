@@ -2,10 +2,9 @@ import numpy as np
 import pickle
 from pathlib import Path
 
-# L_list = range(5, 80, 5)
-L_list = [5,10, 15, 20, 25, 30, 40, 60, 80]
+L_list = range(5, 80, 5)
 dps = np.logspace(-3, 0, 20)
-data_dir = Path(".")  # adjust if needed
+data_dir = Path("ising")  # adjust if needed
 
 def load_heatmap(u, t, L_list=L_list, dps=dps, prefix=""):
     """
@@ -18,16 +17,16 @@ def load_heatmap(u, t, L_list=L_list, dps=dps, prefix=""):
     grid = np.zeros((len(L_list), len(dps)), dtype=float)
 
     for i, L in enumerate(L_list):
-        fname = data_dir / f"{prefix}u{u}_{L}.pickle"
+        fname = data_dir / f"{prefix}u{u}t1_{L}.pickle"
         with open(fname, "rb") as f:
             results = pickle.load(f)  # list over dp
 
         if len(results) != len(dps):
             raise ValueError(f"{fname} has {len(results)} entries, expected {len(dps)}")
 
-        for j, max_bond_obs in enumerate(results):
+        for j, (z, max_bond_obs) in enumerate(results):
             # max_bond_obs.results: list/array over trajectories
-            vals = np.array(max_bond_obs[0].results)
+            vals = np.array(max_bond_obs.results)
             grid[i, j] = float(vals.mean())
 
     return grid
@@ -52,7 +51,7 @@ panels = {
 }
 
 vmin = 2 # min(np.min(arr) for (arr, _, _) in panels.values())
-vmax = 75 # max(np.max(arr) for (arr, _, _) in panels.values())
+vmax = 64 # max(np.max(arr) for (arr, _, _) in panels.values())
 
 for (r, c), (grid, row_label, col_label) in panels.items():
     ax = axes[r, c]
@@ -78,7 +77,7 @@ for (r, c), (grid, row_label, col_label) in panels.items():
     # if r == 0:
     #     ax.set_title(col_label)
 
-    for threshold in [16, 32, 48, 64, 80]:
+    for threshold in [16, 32, 48, 64]:
         # Contour expects x=dp index, y=L index
         cs = ax.contour(
             grid,
