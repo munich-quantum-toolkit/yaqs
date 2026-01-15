@@ -17,20 +17,22 @@ def tdvp_simulator(H_0, noise_model, state=None):
     sim_params = AnalogSimParams(observables=measurements,
                                 elapsed_time=5,
                                 dt=0.1,
-                                num_traj=100,
+                                num_traj=30,
                                 threshold=1e-6,
                                 trunc_mode="discarded_weight",
                                 order=2,
                                 sample_timesteps=False)
 
     simulator.run(state, H_0, sim_params, noise_model=noise_model)
-    print("Obs Exp Val", sim_params.observables[0].results[-1])
-    print("Entropy", sim_params.observables[1].results[-1])
-    print("Max Bond", sim_params.observables[2].results[-1])
+    # print("Obs Exp Val", sim_params.observables[0].results[-1])
+    # print("Entropy", sim_params.observables[1].results[-1])
+    print("Max Bond", sim_params.observables[0].results[-1])
     return sim_params.observables
 
 if __name__ == "__main__":
-    L_list = range(5, 80, 5)
+    # L_list = range(5, 80, 5)
+    # L_list = [10, 20, 30, 40, 60, 70, 80, 90, 100, 120, 140, 160, 180, 200]
+    L_list = [10, 20, 30, 40, 60, 80, 100, 120, 140, 160, 180, 200]
 
     for L in L_list:
         print(L)
