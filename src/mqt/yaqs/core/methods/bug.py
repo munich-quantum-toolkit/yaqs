@@ -137,7 +137,6 @@ def local_update(
     site: int,
     right_m_block: NDArray[np.complex128],
     sim_params: AnalogSimParams | WeakSimParams | StrongSimParams,
-    numiter_lanczos: int,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Single Site bug algorithm update.
 
@@ -152,16 +151,13 @@ def local_update(
         site: The site to be updated.
         right_m_block: The basis update matrix of the site to the right.
         sim_params: Simulation parameters.
-        numiter_lanczos: Number of Lanczos iterations.
 
     Returns:
         basis_change_m: The basis update matrix of this site.
         new_right_block: The right environment of this site.
     """
     old_tensor = canon_center_tensors[site]
-    updated_tensor = update_site(
-        left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt, numiter_lanczos
-    )
+    updated_tensor = update_site(left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt)
     old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state)
     new_q = find_new_q(old_stack_tensor, updated_tensor)
     old_q = state.tensors[site]
@@ -172,9 +168,7 @@ def local_update(
     return basis_change_m, new_right_block
 
 
-def bug(
-    state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | StrongSimParams, numiter_lanczos: int = 25
-) -> None:
+def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | StrongSimParams) -> None:
     """Performs the Basis-Update and Galerkin Method for an MPS.
 
     The state is updated in place.
@@ -184,7 +178,6 @@ def bug(
         state: The initial state represented as an MPS.
         sim_params: Simulation parameters containing time step 'dt' and SVD
             threshold.
-        numiter_lanczos: Number of Lanczos iterations for each local update.
 
     Raises:
         ValueError: If the state and Hamiltonian have different numbers of
@@ -206,12 +199,10 @@ def bug(
     # Sweep from right to left.
     for site in range(num_sites - 1, 0, -1):
         right_m_block, right_block = local_update(
-            state, mpo, left_envs, right_block, canon_center_tensors, site, right_m_block, sim_params, numiter_lanczos
+            state, mpo, left_envs, right_block, canon_center_tensors, site, right_m_block, sim_params
         )
     # Update the first site.
-    updated_tensor = update_site(
-        left_envs[0], right_block, mpo.tensors[0], canon_center_tensors[0], sim_params.dt, numiter_lanczos
-    )
+    updated_tensor = update_site(left_envs[0], right_block, mpo.tensors[0], canon_center_tensors[0], sim_params.dt)
     state.tensors[0] = updated_tensor
     # Truncation
     state.truncate(sim_params.threshold, sim_params.max_bond_dim)

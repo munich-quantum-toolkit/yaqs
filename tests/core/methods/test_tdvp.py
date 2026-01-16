@@ -211,8 +211,7 @@ def test_update_site() -> None:
     W = rng.random(size=(2, 2, 1, 1)).astype(np.complex128)
     L_arr = rng.random(size=(2, 1, 2)).astype(np.complex128)
     dt = 0.05
-    lanczos_iterations = 10
-    out = update_site(L_arr, R, W, A, dt, lanczos_iterations)
+    out = update_site(L_arr, R, W, A, dt)
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
 
 
@@ -226,8 +225,7 @@ def test_update_bond() -> None:
     R = rng.random(size=(2, 2, 2)).astype(np.complex128)
     L_arr = rng.random(size=(2, 2, 2)).astype(np.complex128)
     dt = 0.05
-    lanczos_iterations = 10
-    out = update_bond(L_arr, R, C, dt, lanczos_iterations)
+    out = update_bond(L_arr, R, C, dt)
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
 
@@ -251,7 +249,7 @@ def test_single_site_tdvp() -> None:
         dt=0.1,
         sample_timesteps=True,
     )
-    single_site_tdvp(state, H, sim_params, numiter_lanczos=5)
+    single_site_tdvp(state, H, sim_params)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -281,7 +279,7 @@ def test_two_site_tdvp() -> None:
         dt=0.1,
         sample_timesteps=True,
     )
-    two_site_tdvp(state, H, sim_params, numiter_lanczos=25)
+    two_site_tdvp(state, H, sim_params)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
