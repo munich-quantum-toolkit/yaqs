@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -54,7 +54,10 @@ from concurrent.futures import (
     ProcessPoolExecutor,
     wait,
 )
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
@@ -90,7 +93,7 @@ from .core.data_structures.simulation_parameters import AnalogSimParams, StrongS
 from .digital.digital_tjm import digital_tjm
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Iterator, Sequence
     from concurrent.futures import Future
 
     import numpy as np
@@ -136,13 +139,22 @@ def available_cpus() -> int:
                 pass
 
     # 2) Respect Linux affinity / cgroup limits if available
-    try:
-        return len(os.sched_getaffinity(0))
-    except AttributeError:
-        pass
+    fn = getattr(os, "sched_getaffinity", None)
+    if fn is not None:
+        try:
+            sched_getaffinity = cast("Callable[[int], set[int]]", fn)
+            n = len(sched_getaffinity(0))
+            if n > 0:
+                return n
+        except OSError:
+            # System call failed; fall through to next fallback
+            pass
 
     # 3) Fallback
-    return multiprocessing.cpu_count() or 1
+    try:
+        return os.cpu_count() or multiprocessing.cpu_count() or 1
+    except (NotImplementedError, OSError):
+        return 1
 
 
 # ---------------------------------------------------------------------------

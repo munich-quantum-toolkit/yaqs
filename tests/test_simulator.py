@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -74,8 +74,7 @@ def test_analog_simulation() -> None:
     length = 5
     initial_state = MPS(length, state="zeros")
 
-    H = MPO()
-    H.init_ising(length, J=1, g=0.5)
+    H = MPO.ising(length, J=1, g=0.5)
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
@@ -128,8 +127,7 @@ def test_analog_simulation_parallel_off() -> None:
     length = 5
     initial_state = MPS(length, state="zeros")
 
-    H = MPO()
-    H.init_ising(length, J=1, g=0.5)
+    H = MPO.ising(length, J=1, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
         elapsed_time=1,
@@ -178,8 +176,7 @@ def test_analog_simulation_get_state() -> None:
         length = 2
         initial_state = MPS(length, state="zeros")
 
-        H = MPO()
-        H.init_ising(length, J=1, g=0.5)
+        H = MPO.ising(length, J=1, g=0.5)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), length // 2)],
@@ -462,8 +459,7 @@ def test_two_site_correlator_left_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -572,8 +568,7 @@ def test_two_site_correlator_center() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -686,8 +681,7 @@ def test_two_site_correlator_right_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -844,8 +838,7 @@ def test_transmon_simulation() -> None:
     alpha = -0.3 / (2 * np.pi)
     g = 0.2 / (2 * np.pi)
 
-    H_0 = MPO()
-    H_0.init_coupled_transmon(
+    H_0 = MPO.coupled_transmon(
         length=length,
         qubit_dim=qubit_dim,
         resonator_dim=resonator_dim,
