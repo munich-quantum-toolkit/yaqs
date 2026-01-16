@@ -590,9 +590,7 @@ def update_site(
         NDArray[np.complex128]: The updated MPS tensor after evolution.
     """
     proj_args = (left_env, right_env, op)
-    return _evolve_local_tensor_krylov(
-        projector=project_site, tensor=ket, dt=dt, proj_args=proj_args
-    )
+    return _evolve_local_tensor_krylov(projector=project_site, tensor=ket, dt=dt, proj_args=proj_args)
 
 
 def update_bond(
@@ -679,9 +677,7 @@ def single_site_tdvp(
         left_blocks[i + 1] = update_left_environment(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
         )
-        bond_tensor = update_bond(
-            left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt
-        )
+        bond_tensor = update_bond(left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt)
         state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -714,9 +710,7 @@ def single_site_tdvp(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
         )
         bond_tensor = bond_tensor.transpose()
-        bond_tensor = update_bond(
-            left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt
-        )
+        bond_tensor = update_bond(left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt)
         state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
         state.tensors[i - 1] = update_site(
             left_blocks[i - 1],
@@ -779,9 +773,7 @@ def two_site_tdvp(
     for i in range(num_sites - 2):
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
-        )
+        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
             merged_tensor,
             "right",
@@ -807,9 +799,7 @@ def two_site_tdvp(
     i = num_sites - 2
     merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
     merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-    merged_tensor = update_site(
-        left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt
-    )
+    merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt)
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
@@ -843,9 +833,7 @@ def two_site_tdvp(
         )
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
-        )
+        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
             merged_tensor,
             "left",
@@ -917,9 +905,7 @@ def local_dynamic_tdvp(
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
                 )
-                bond_tensor = update_bond(
-                    left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt
-                )
+                bond_tensor = update_bond(left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt)
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
             if i == num_sites - 2:
                 # Guarantees final site is 1TDVP
@@ -1005,9 +991,7 @@ def local_dynamic_tdvp(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
                 )
                 bond_tensor = bond_tensor.transpose()
-                bond_tensor = update_bond(
-                    left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt
-                )
+                bond_tensor = update_bond(left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt)
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
 
                 if i == 1:

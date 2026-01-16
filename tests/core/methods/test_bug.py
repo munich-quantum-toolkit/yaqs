@@ -232,9 +232,7 @@ def test_local_update() -> None:
     right_m_block = np.eye(5, dtype=np.complex128)
     sim_params = AnalogSimParams(get_state=True, elapsed_time=1, show_progress=False)
     # Perform the local update
-    result = local_update(
-        mps, mpo, left_envs, right_block, canon_sites, site, right_m_block, sim_params
-    )
+    result = local_update(mps, mpo, left_envs, right_block, canon_sites, site, right_m_block, sim_params)
     # General Change Check
     assert not mps.almost_equal(ref_mps)
     assert canon_sites[site - 1].shape != ref_canon_sites[site - 1].shape
