@@ -148,7 +148,7 @@ def tdvp_simulator(H_0, noise_model, dt=0.01, state=None):
                                 threshold=1e-6,
                                 trunc_mode="discarded_weight",
                                 order=2,
-                                sample_timesteps=True)
+                                sample_timesteps=False)
 
     simulator.run(state, H_0, sim_params, noise_model=noise_model)
     # print("Obs Exp Val", sim_params.observables[0].results[-1])
