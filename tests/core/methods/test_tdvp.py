@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -240,8 +240,8 @@ def test_single_site_tdvp() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
@@ -269,8 +269,8 @@ def test_two_site_tdvp() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L, state="zeros")
     ref_mps = deepcopy(state)
     sim_params = AnalogSimParams(
@@ -310,8 +310,7 @@ def test_dynamic_tdvp_one_site() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")
@@ -344,8 +343,7 @@ def test_dynamic_tdvp_two_site() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")

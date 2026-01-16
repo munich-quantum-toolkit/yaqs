@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -81,7 +81,7 @@ def random_mpo(shapes: list[tuple[int, int, int, int]]) -> MPO:
     """
     tensors = [crandn(shape) for shape in shapes]
     mpo = MPO()
-    mpo.init_custom(tensors, transpose=False)
+    mpo.custom(tensors, transpose=False)
     return mpo
 
 
@@ -96,7 +96,7 @@ def test_prepare_canonical_site_tensors_single_site() -> None:
     ref_mps = deepcopy(mps)
     mpo_tensor = crandn(2, 2, 1, 1)
     mpo = MPO()
-    mpo.init_custom([mpo_tensor])
+    mpo.custom([mpo_tensor])
     canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
     assert len(left_envs) == 1
@@ -120,7 +120,7 @@ def test_prepare_canonical_site_tensors_three_sites() -> None:
     shapes2 = [(2, 2, 1, 3), (2, 2, 3, 4), (2, 2, 4, 1)]
     mpo_tensors = [crandn(shape) for shape in shapes2]
     mpo = MPO()
-    mpo.init_custom(mpo_tensors, transpose=False)
+    mpo.custom(mpo_tensors, transpose=False)
     canon_sites, left_envs = prepare_canonical_site_tensors(mps, mpo)
     assert mps.almost_equal(ref_mps)
     assert len(left_envs) == 3
@@ -252,8 +252,7 @@ def test_bug_single_site() -> None:
     """Tests the BUG on a single site MPS against an exact time evolution."""
     mps = random_mps([(2, 1, 1)])
     ref_mps = deepcopy(mps)
-    mpo = MPO()
-    mpo.init_ising(1, 1, 0.5)
+    mpo = MPO.ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
     sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
     # Perform BUG
@@ -270,8 +269,7 @@ def test_bug_three_sites() -> None:
     """Tests the BUG on a three site MPS against an exact time evolution."""
     mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
     ref_mps = deepcopy(mps)
-    mpo = MPO()
-    mpo.init_ising(3, 1, 0.5)
+    mpo = MPO.ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
     sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
     # Perform BUG
