@@ -7,14 +7,14 @@ from matplotlib import colors as mcolors
 # ------------------------
 # Data + parameters
 # ------------------------
-dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.25, 0.5]
-gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]
+dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.125]
+gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 gamma_min = 0.01
 gamma_max = 50
 
 T = 5.0
 data_dir = Path(".")
-prefix = "observable/walltime_"
+prefix = ""
 
 def load_gamma_dt_heatmap(
     dt_list=dt_list,
@@ -31,7 +31,7 @@ def load_gamma_dt_heatmap(
     obs_idx = obs_idx_map[which_obs]
 
     for k, dt in enumerate(dt_list):
-        fname = data_dir / f"{prefix}{k}.pickle"
+        fname = data_dir / f"practical_u1_{k}.pickle"
         if fname.exists():
             with open(fname, "rb") as f:
                 results = pickle.load(f)
@@ -45,7 +45,7 @@ def load_gamma_dt_heatmap(
                 if obs_list is None:
                     continue
                 obs = obs_list[obs_idx]
-                vals = np.array(obs.results)
+                vals = np.array(obs[0].results)
                 g = gamma_list[j]
                 row = gamma_to_idx[g]
                 grid[row, k] = float(np.max(vals))
@@ -60,7 +60,7 @@ def load_gamma_dt_heatmap(
                 # scaled_grid[row, k] += 0.1*scaled_grid[row, k]*T/dt
                 # scaled_grid[row, k] += float(np.sum(vals**2))
                 # scaled_grid[row, k] = np.log(scaled_grid[row, k])
-    scaled_grid = scaled_grid / np.nanmax(scaled_grid) 
+    # scaled_grid = scaled_grid / np.nanmax(scaled_grid) 
     return grid, scaled_grid
 
 grid, scaled_grid = load_gamma_dt_heatmap(which_obs="max_bond")                 # χ_avg
