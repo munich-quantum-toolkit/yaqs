@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
-import scipy
+import scipy.linalg
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import robust_svd
@@ -523,7 +523,6 @@ def _evolve_local_tensor_krylov(
     projector: Callable[..., NDArray[np.complex128]],
     tensor: NDArray[np.complex128],
     dt: float,
-    lanczos_iterations: int,
     proj_args: tuple[NDArray[np.complex128], ...],
     dense_threshold: int = DENSE_THRESHOLD,
 ) -> NDArray[np.complex128]:
@@ -535,7 +534,6 @@ def _evolve_local_tensor_krylov(
                  project_bond(left_env, right_env, bond_tensor).
         tensor: Tensor to evolve (arbitrary shape).
         dt: Time step for evolution.
-        lanczos_iterations: Number of Lanczos iterations.
         proj_args: Extra arguments passed to `projector` before the tensor.
         dense_threshold: Maximum size of flattened tensor to use dense operator.
 
@@ -549,12 +547,11 @@ def _evolve_local_tensor_krylov(
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
-
+        norm = scipy.linalg.norm(h_eff)
         for m in range(1, 26):
-            error_m = abs(scipy.linalg.norm(h_eff) * dt**m / math.factorial(m))
+            error_m = abs(norm * dt**m / math.factorial(m))
             if error_m < 1e-9:
                 break
-        lanczos_iterations = m
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
@@ -566,7 +563,7 @@ def _evolve_local_tensor_krylov(
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
 
-    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt, lanczos_iterations)
+    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt, lanczos_iterations=m)
     return evolved_flat.reshape(tensor_shape)
 
 
@@ -576,7 +573,6 @@ def update_site(
     op: NDArray[np.complex128],
     ket: NDArray[np.complex128],
     dt: float,
-    lanczos_iterations: int,
 ) -> NDArray[np.complex128]:
     """Evolve the local MPS tensor A forward in time using the local Hamiltonian.
 
@@ -589,14 +585,13 @@ def update_site(
         op (NDArray[np.complex128]): Local MPO tensor.
         ket (NDArray[np.complex128]): Local MPS tensor.
         dt (float): Time step for evolution.
-        lanczos_iterations (int): Number of Lanczos iterations.
 
     Returns:
         NDArray[np.complex128]: The updated MPS tensor after evolution.
     """
     proj_args = (left_env, right_env, op)
     return _evolve_local_tensor_krylov(
-        projector=project_site, tensor=ket, dt=dt, lanczos_iterations=lanczos_iterations, proj_args=proj_args
+        projector=project_site, tensor=ket, dt=dt, proj_args=proj_args
     )
 
 
@@ -605,7 +600,6 @@ def update_bond(
     right_env: NDArray[np.complex128],
     bond_tensor: NDArray[np.complex128],
     dt: float,
-    lanczos_iterations: int,
 ) -> NDArray[np.complex128]:
     """Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
 
@@ -617,7 +611,6 @@ def update_bond(
         right_env (NDArray[np.complex128]): Right operator block.
         bond_tensor (NDArray[np.complex128]): Bond tensor.
         dt (float): Time step for the bond evolution.
-        lanczos_iterations (int): Number of Lanczos iterations.
 
     Returns:
         NDArray[np.complex128]: The updated bond tensor after evolution.
@@ -627,7 +620,6 @@ def update_bond(
         projector=project_bond,
         tensor=bond_tensor,
         dt=dt,
-        lanczos_iterations=lanczos_iterations,
         proj_args=proj_args,
     )
 
@@ -636,7 +628,6 @@ def single_site_tdvp(
     state: MPS,
     hamiltonian: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    numiter_lanczos: int = 25,
 ) -> None:
     """Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
 
@@ -649,7 +640,6 @@ def single_site_tdvp(
         hamiltonian (MPO): Hamiltonian represented as an MPO.
         sim_params (AnalogSimParams | StrongSimParams | WeakSimParams):
             Simulation parameters containing the time step 'dt' (and possibly a threshold for SVD truncation).
-        numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -681,7 +671,6 @@ def single_site_tdvp(
             hamiltonian.tensors[i],
             state.tensors[i],
             0.5 * sim_params.dt,
-            numiter_lanczos,
         )
         tensor_shape = state.tensors[i].shape
         reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
@@ -691,7 +680,7 @@ def single_site_tdvp(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
         )
         bond_tensor = update_bond(
-            left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+            left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt
         )
         state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
 
@@ -705,7 +694,6 @@ def single_site_tdvp(
         hamiltonian.tensors[last],
         state.tensors[last],
         sim_params.dt,
-        numiter_lanczos,
     )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -727,7 +715,7 @@ def single_site_tdvp(
         )
         bond_tensor = bond_tensor.transpose()
         bond_tensor = update_bond(
-            left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+            left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt
         )
         state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
         state.tensors[i - 1] = update_site(
@@ -736,7 +724,6 @@ def single_site_tdvp(
             hamiltonian.tensors[i - 1],
             state.tensors[i - 1],
             0.5 * sim_params.dt,
-            numiter_lanczos,
         )
 
 
@@ -744,7 +731,6 @@ def two_site_tdvp(
     state: MPS,
     hamiltonian: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    numiter_lanczos: int = 25,
     *,
     dynamic: bool = False,
 ) -> None:
@@ -761,7 +747,6 @@ def two_site_tdvp(
         hamiltonian (MPO): Hamiltonian represented as an MPO.
         sim_params (AnalogSimParams | StrongSimParams | WeakSimParams):
             Simulation parameters containing the time step 'dt' and SVD threshold.
-        numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
         dynamic: Determines if bond dimension is handled by dynamic TDVP (True) or truncation (False).
 
     Raises:
@@ -795,7 +780,7 @@ def two_site_tdvp(
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
         merged_tensor = update_site(
-            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
         )
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
             merged_tensor,
@@ -813,7 +798,6 @@ def two_site_tdvp(
             hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
-            numiter_lanczos,
         )
 
     # Guarantees unit time at final site for circuits
@@ -824,7 +808,7 @@ def two_site_tdvp(
     merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
     merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
     merged_tensor = update_site(
-        left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos
+        left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt
     )
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -856,12 +840,11 @@ def two_site_tdvp(
             hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
-            numiter_lanczos,
         )
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
         merged_tensor = update_site(
-            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
         )
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
             merged_tensor,
@@ -879,7 +862,6 @@ def local_dynamic_tdvp(
     state: MPS,
     hamiltonian: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    numiter_lanczos: int = 25,
 ) -> None:
     """Perform a dynamic TDVP sweep: at each bond.
 
@@ -891,7 +873,6 @@ def local_dynamic_tdvp(
         state: MPS state to evolve.
         hamiltonian: MPO Hamiltonian.
         sim_params: Simulation parameters including dt and threshold.
-        numiter_lanczos: Lanczos iterations per local update.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -927,7 +908,6 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i],
                 state.tensors[i],
                 0.5 * sim_params.dt,
-                numiter_lanczos,
             )
             if i != num_sites - 1:
                 tensor_shape = state.tensors[i].shape
@@ -938,7 +918,7 @@ def local_dynamic_tdvp(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
                 )
                 bond_tensor = update_bond(
-                    left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+                    left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt
                 )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
             if i == num_sites - 2:
@@ -951,7 +931,7 @@ def local_dynamic_tdvp(
             merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
-                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
 
             state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
@@ -972,7 +952,7 @@ def local_dynamic_tdvp(
             merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
-                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
             state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
                 merged_tensor,
@@ -990,7 +970,6 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i + 1],
                 state.tensors[i + 1],
                 -0.5 * sim_params.dt,
-                numiter_lanczos,
             )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -1007,7 +986,6 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i],
                 state.tensors[i],
                 0.5 * sim_params.dt,
-                numiter_lanczos,
             )
             if i != 0:
                 state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
@@ -1028,7 +1006,7 @@ def local_dynamic_tdvp(
                 )
                 bond_tensor = bond_tensor.transpose()
                 bond_tensor = update_bond(
-                    left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
+                    left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt
                 )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
 
@@ -1041,7 +1019,7 @@ def local_dynamic_tdvp(
             merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
             merged_tensor = update_site(
-                left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
             state.tensors[i - 1], state.tensors[i] = split_mps_tensor(
                 merged_tensor,
@@ -1061,7 +1039,6 @@ def local_dynamic_tdvp(
                     hamiltonian.tensors[i - 1],
                     state.tensors[i - 1],
                     -0.5 * sim_params.dt,
-                    numiter_lanczos,
                 )
 
 
