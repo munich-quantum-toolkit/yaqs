@@ -28,7 +28,7 @@ import opt_einsum as oe
 import scipy
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import robust_svd
-from .matrix_exponential import expm_krylov, norm_A_calc  # ADAPTIVE ONE NORM_A
+from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
     from collections.abc import Callable
