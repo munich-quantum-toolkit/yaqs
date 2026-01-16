@@ -152,39 +152,6 @@ def expm_krylov(
     """
     vec_norm = np.linalg.norm(vec)
 
-
-        # find norm of A (include length of the vector)
-    norm_A = norm_A_calc(matrix_free_operator, vec.shape[0])
-    # get rid of/avoid/is it 1?
-    # matrix path vs matrix free path 
-
-    ADAPTIVE_LANCZOS = True # TEST: toggle adaptive lanczos on/off
-
-
-    # calculated norm is used to find the norm_A * abs(dt)
-
-    mag = norm_A * abs(dt)
-    
-    tolerance =1e-8 #TEST: between 1e-3 and 1e-16
-    
-    # calculate: error bound= (((norm_A * abs(dt))**m) / math.factorial(m))
-    # solving for m, unknown for now
-    m = 1
-
-    # run loop until error bound < tolerance
-    while True:
-        error_bound = (mag**m) / math.factorial(m)
-        
-        if error_bound < tolerance:
-            break
-            
-        m += 1
-
-    lanczos_iterations = m #using my calculated m for lanczos iterations
-    # Maybe can get rid of the pre define lanczos_iterations value in earlier function calls since i just rewrite it here
-
-
-
     alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, vec, lanczos_iterations)
     try:
         w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
