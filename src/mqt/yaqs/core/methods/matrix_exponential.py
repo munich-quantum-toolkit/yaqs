@@ -105,6 +105,7 @@ def lanczos_iteration(
     alpha[m - 1] = np.vdot(vj, w).real
     return alpha, beta, v
 
+
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vec: NDArray[np.complex128],

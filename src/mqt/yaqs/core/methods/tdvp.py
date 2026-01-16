@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 import scipy
+
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
@@ -548,12 +549,12 @@ def _evolve_local_tensor_krylov(
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
-        
-        for m in range(1,26):
+
+        for m in range(1, 26):
             error_m = abs(scipy.linalg.norm(h_eff) * dt**m / math.factorial(m))
-            if error_m < 1e-9: 
+            if error_m < 1e-9:
                 break
-        lanczos_iterations = m 
+        lanczos_iterations = m
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
@@ -565,12 +566,7 @@ def _evolve_local_tensor_krylov(
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
 
-    evolved_flat = expm_krylov(
-        apply_effective_operator,
-        tensor_flat,
-        dt,
-        lanczos_iterations
-    )
+    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt, lanczos_iterations)
     return evolved_flat.reshape(tensor_shape)
 
 
@@ -622,6 +618,7 @@ def update_bond(
         bond_tensor (NDArray[np.complex128]): Bond tensor.
         dt (float): Time step for the bond evolution.
         lanczos_iterations (int): Number of Lanczos iterations.
+
     Returns:
         NDArray[np.complex128]: The updated bond tensor after evolution.
     """
@@ -708,7 +705,7 @@ def single_site_tdvp(
         hamiltonian.tensors[last],
         state.tensors[last],
         sim_params.dt,
-        numiter_lanczos
+        numiter_lanczos,
     )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -739,7 +736,7 @@ def single_site_tdvp(
             hamiltonian.tensors[i - 1],
             state.tensors[i - 1],
             0.5 * sim_params.dt,
-            numiter_lanczos
+            numiter_lanczos,
         )
 
 
