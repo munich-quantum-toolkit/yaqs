@@ -2,7 +2,8 @@ import numpy as np
 import pickle
 from pathlib import Path
 import matplotlib.pyplot as plt
-from matplotlib import colors as mcolors
+from matplotlib.colors import Normalize, LogNorm
+import matplotlib.patheffects as pe
 
 # ------------------------
 # Data + parameters
@@ -12,303 +13,207 @@ gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 gamma_min = 0.01
 gamma_max = 50
 
-T = 5.0
 data_dir = Path(".")
-prefix = ""
-
-def load_gamma_dt_heatmap(
-    dt_list=dt_list,
-    gamma_list=gamma_list,
-    prefix=prefix,
-    data_dir=data_dir,
-    which_obs="max_bond",
-):
-    grid = np.full((len(gamma_list), len(dt_list)), np.nan, dtype=float)
-    scaled_grid = np.full_like(grid, np.nan)
-
-    gamma_to_idx = {g: i for i, g in enumerate(gamma_list)}
-    obs_idx_map = {"max_bond": 0}
-    obs_idx = obs_idx_map[which_obs]
-
-    for k, dt in enumerate(dt_list):
-        fname = data_dir / f"practical_u1_{k}.pickle"
-        if fname.exists():
-            with open(fname, "rb") as f:
-                results = pickle.load(f)
-
-            if len(results) != len(gamma_list):
-                raise ValueError(
-                    f"{fname} has {len(results)} entries, "
-                    f"expected {len(gamma_list)}"
-                )
-            for j, obs_list in enumerate(results):
-                if obs_list is None:
-                    continue
-                obs = obs_list[obs_idx]
-                vals = np.array(obs[0].results)
-                g = gamma_list[j]
-                row = gamma_to_idx[g]
-                grid[row, k] = float(np.max(vals))
-                # scaled_grid[row, k] = float(np.sum(vals**3))
-
-                obs = obs_list[1]
-                vals = np.array(obs)
-                g = gamma_list[j]
-                row = gamma_to_idx[g]
-                scaled_grid[row, k] = float(vals)
-                # scaled_grid[row, k] = float(np.sum(vals**3))
-                # scaled_grid[row, k] += 0.1*scaled_grid[row, k]*T/dt
-                # scaled_grid[row, k] += float(np.sum(vals**2))
-                # scaled_grid[row, k] = np.log(scaled_grid[row, k])
-    # scaled_grid = scaled_grid / np.nanmax(scaled_grid) 
-    return grid, scaled_grid
-
-grid, scaled_grid = load_gamma_dt_heatmap(which_obs="max_bond")                 # χ_avg
-# scaled_grid = np.full_like(grid, np.nan)
-# for k, dt in enumerate(dt_list):
-#     scaled_grid[:, k] = grid[:, k] * T / dt                         # χ_avg T/dt
-
-dt_arr = np.array(dt_list)
-gamma_arr = np.array(gamma_list)
 dp_levels = [1e-3, 1e-2, 1e-1, 1.0]
 
+dt = np.array(dt_list, dtype=float)
+g = np.array(gamma_list, dtype=float)
+
 # ------------------------
-# Helper: add dp lines
+# Loader for U1 / U2
 # ------------------------
-def add_dp_lines(ax):
-    dt_dense = np.linspace(dt_arr.min(), dt_arr.max(), 500)
+def load_gamma_dt_heatmaps_for_u(u_tag: str):
+    bond_grid = np.full((len(gamma_list), len(dt_list)), np.nan, dtype=float)
+    time_grid = np.full_like(bond_grid, np.nan)
+
+    gamma_to_idx = {gg: i for i, gg in enumerate(gamma_list)}
+
+    for k, _dt in enumerate(dt_list):
+        fname = data_dir / f"practical_{u_tag}_{k}.pickle"
+        if not fname.exists():
+            continue
+
+        with open(fname, "rb") as f:
+            results = pickle.load(f)
+
+        if len(results) != len(gamma_list):
+            raise ValueError(f"{fname} has {len(results)} entries, expected {len(gamma_list)}")
+
+        for j, obs_list in enumerate(results):
+            if obs_list is None:
+                continue
+
+            # max bond dimension
+            obs_bond = obs_list[0]
+            vals = np.asarray(obs_bond[0].results, dtype=float)
+            row = gamma_to_idx[gamma_list[j]]
+            bond_grid[row, k] = float(np.max(vals))
+
+            # wall time per trajectory
+            time_grid[row, k] = float(np.asarray(obs_list[1]))
+
+    return bond_grid, time_grid
+
+u1_bond, u1_time = load_gamma_dt_heatmaps_for_u("u1")
+u2_bond, u2_time = load_gamma_dt_heatmaps_for_u("u2")
+
+# ------------------------
+# PRX-ish style
+# ------------------------
+plt.rcParams.update({
+    "font.size": 10,
+    "axes.titlesize": 11,
+    "axes.labelsize": 11,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "axes.linewidth": 0.8,
+    "xtick.major.size": 3,
+    "ytick.major.size": 3,
+    "xtick.major.width": 0.8,
+    "ytick.major.width": 0.8,
+})
+
+def panel_label(ax, s):
+    t = ax.text(
+        0.02, 0.98, s, transform=ax.transAxes,
+        ha="left", va="top", fontweight="bold",
+        bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.5)
+    )
+    t.set_path_effects([pe.withStroke(linewidth=1.3, foreground="white")])
+
+# ------------------------
+# pcolormesh edges
+# (dt: linear edges; gamma: geometric edges for log axis)
+# ------------------------
+def edges_linear(x):
+    x = np.asarray(x, float)
+    dx = np.diff(x)
+    left = x[0] - dx[0] / 2
+    right = x[-1] + dx[-1] / 2
+    mids = (x[:-1] + x[1:]) / 2
+    return np.concatenate([[left], mids, [right]])
+
+def edges_geo(x):
+    x = np.asarray(x, float)
+    r = x[1:] / x[:-1]
+    left = x[0] / np.sqrt(r[0])
+    right = x[-1] * np.sqrt(r[-1])
+    mids = np.sqrt(x[:-1] * x[1:])
+    return np.concatenate([[left], mids, [right]])
+
+dt_edges = edges_linear(dt)   # linear dt axis
+g_edges = edges_geo(g)        # log-friendly gamma edges
+
+# ------------------------
+# Norms (shared per column)
+# ------------------------
+bond_norm = Normalize(
+    vmin=np.nanmin([u1_bond, u2_bond]),
+    vmax=np.nanmax([u1_bond, u2_bond]),
+)
+
+# Keep log wall time (usually more PRX-like). If you insist on linear: swap to Normalize.
+time_norm = LogNorm(
+    vmin=max(1e-6, np.nanmin([u1_time, u2_time])),
+    vmax=np.nanmax([u1_time, u2_time]),
+)
+
+# ------------------------
+# dp lines in true (dt, gamma) coordinates
+# ------------------------
+def add_dp_lines_true(ax, *, add_labels=False):
+    dt_dense = np.linspace(dt.min(), dt.max(), 600)  # linear dt (since axis is linear)
     for dp in dp_levels:
         gamma_dense = dp / dt_dense
-        mask = (gamma_dense >= gamma_arr.min()) & (gamma_dense <= gamma_arr.max())
+        mask = (gamma_dense >= gamma_min) & (gamma_dense <= gamma_max)
         if not np.any(mask):
             continue
-        dt_line = dt_dense[mask]
-        gamma_line = gamma_dense[mask]
-        x = np.interp(dt_line, dt_arr, np.arange(len(dt_arr)))
-        y = np.interp(gamma_line, gamma_arr, np.arange(len(gamma_arr)))
-        ax.plot(x, y, linestyle="--", linewidth=1.0, color="black", alpha=0.8)
+        ax.plot(dt_dense[mask], gamma_dense[mask], "--", color="k", lw=1.0, alpha=0.65)
 
-    # label dp on second dt column to avoid edges
-    for dp in dp_levels:
-        dt_label = dt_arr[1]
-        gamma_label = dp / dt_label
-        if gamma_label < gamma_arr.min() or gamma_label > gamma_arr.max():
-            continue
-        x_lab = np.interp(dt_label, dt_arr, np.arange(len(dt_arr)))
-        y_lab = np.interp(gamma_label, gamma_arr, np.arange(len(gamma_arr)))
-        ax.text(
-            x_lab + 0.2,
-            y_lab + 0.2,
-            rf"$dp={dp:g}$",
-            color="white",
-            fontsize=7,
-            bbox=dict(facecolor="black", alpha=0.4, edgecolor="none"),
-        )
+    if add_labels:
+        dt_label = dt[1]
+        for dp in dp_levels:
+            gamma_label = dp / dt_label
+            if not (gamma_min <= gamma_label <= gamma_max):
+                continue
+            txt = ax.text(
+                dt_label * 1.01, gamma_label * 1.05,
+                rf"$dp={dp:g}$", color="w", fontsize=8
+            )
+            txt.set_path_effects([pe.withStroke(linewidth=2.5, foreground="black", alpha=0.6)])
 
 # ------------------------
-# Figure with 3 panels
+# Heatmap helper
 # ------------------------
-fig, axes = plt.subplots(
-    1, 3,
-    figsize=(15, 4.5),
-    gridspec_kw={"width_ratios": [1.0, 1.0, 1.1]}
-)
-
-# ------------------------
-# (a) Max bond dimension heatmap
-# ------------------------
-ax = axes[0]
-vmin_a = np.nanmin(grid)
-vmax_a = np.nanmax(grid)
-
-im_a = ax.imshow(
-    grid,
-    origin="lower",
-    aspect="auto",
-    cmap="magma_r",
-    vmin=vmin_a,
-    vmax=vmax_a,
-)
-
-ax.set_xticks(np.arange(len(dt_list)))
-ax.set_xticklabels([f"{dt:.3g}" for dt in dt_list], rotation=45, ha="right")
-ax.set_yticks(np.arange(len(gamma_list)))
-ax.set_yticklabels([f"{g:.3g}" for g in gamma_list])
-
-ax.set_xlabel(r"$dt$")
-ax.set_ylabel(r"$\gamma$")
-
-cbar_a = fig.colorbar(im_a, ax=ax)
-cbar_a.set_label(r"$\overline{\chi}$")
-
-add_dp_lines(ax)
-ax.text(0.02, 0.98, "(a)", transform=ax.transAxes,
-        ha="left", va="top", fontsize=12, fontweight="bold")
-
-ymin = np.interp(gamma_min, gamma_arr, np.arange(len(gamma_arr)))
-ymax = np.interp(gamma_max, gamma_arr, np.arange(len(gamma_arr)))
-
-ax.set_ylim(ymin, ymax)
+def heat(ax, Z, *, cmap, norm):
+    m = ax.pcolormesh(dt_edges, g_edges, Z, cmap=cmap, norm=norm, shading="auto")
+    ax.set_yscale("log")
+    ax.set_xlim(dt_edges[0], dt_edges[-1])
+    ax.set_ylim(gamma_min, gamma_max)
+    ax.tick_params(direction="out")
+    return m
 
 # ------------------------
-# (b) Cost heatmap χ_avg T/dt
+# Figure 1: 2x2 heatmaps
 # ------------------------
-ax = axes[1]
-vmin_b = np.nanmin(scaled_grid)
-vmax_b = np.nanmax(scaled_grid)
+fig = plt.figure(figsize=(7.2, 6.2), layout="constrained")  # PRX single-column-ish
+gs = fig.add_gridspec(2, 4, width_ratios=[1.0, 1.0, 0.06, 0.06], wspace=0.15, hspace=0.20)
 
-im_b = ax.imshow(
-    scaled_grid,
-    origin="lower",
-    aspect="auto",
-    cmap="coolwarm",
-    vmin=vmin_b,
-    vmax=vmax_b,
-)
+ax_u1_bond = fig.add_subplot(gs[0, 0])
+ax_u1_time = fig.add_subplot(gs[0, 1])
+ax_u2_bond = fig.add_subplot(gs[1, 0])
+ax_u2_time = fig.add_subplot(gs[1, 1])
 
-ax.set_xticks(np.arange(len(dt_list)))
-ax.set_xticklabels([f"{dt:.3g}" for dt in dt_list], rotation=45, ha="right")
-ax.set_yticks(np.arange(len(gamma_list)))
-ax.set_yticklabels([f"{g:.3g}" for g in gamma_list])
+cax_bond = fig.add_subplot(gs[:, 2])  # shared colorbar for bond column
+cax_time = fig.add_subplot(gs[:, 3])  # shared colorbar for time column
 
-ax.set_xlabel(r"$dt$")
-ax.set_ylabel(r"$\gamma$")
+m1 = heat(ax_u1_bond, u1_bond, cmap="magma_r", norm=bond_norm)
+m2 = heat(ax_u1_time, u1_time, cmap="coolwarm", norm=time_norm)
+m3 = heat(ax_u2_bond, u2_bond, cmap="magma_r", norm=bond_norm)
+m4 = heat(ax_u2_time, u2_time, cmap="coolwarm", norm=time_norm)
 
-cbar_b = fig.colorbar(im_b, ax=ax)
-cbar_b.set_label(r"Wall time per trajectory (s)")
+ax_u1_bond.set_title("U1: max bond dimension")
+ax_u1_time.set_title("U1: wall time")
+ax_u2_bond.set_title("U2: max bond dimension")
+ax_u2_time.set_title("U2: wall time")
 
-add_dp_lines(ax)
-ax.text(0.02, 0.98, "(b)", transform=ax.transAxes,
-        ha="left", va="top", fontsize=12, fontweight="bold")
+# ticks: reduce redundancy
+for ax in (ax_u1_bond, ax_u1_time):
+    ax.set_xticklabels([])
 
-ymin = np.interp(gamma_min, gamma_arr, np.arange(len(gamma_arr)))
-ymax = np.interp(gamma_max, gamma_arr, np.arange(len(gamma_arr)))
+for ax in (ax_u1_time, ax_u2_time):
+    ax.set_yticklabels([])
 
-ax.set_ylim(ymin, ymax)
+# dt ticks (linear)
+for ax in (ax_u2_bond, ax_u2_time):
+    ax.set_xticks(dt)
+    ax.set_xticklabels([f"{x:g}" for x in dt], rotation=45, ha="right")
 
-# ------------------------
-# (c) Abstract phase diagram
-# ------------------------
-ax = axes[2]
+# gamma ticks
+for ax in (ax_u1_bond, ax_u2_bond):
+    ax.set_yticks(g)
+    ax.set_yticklabels([f"{x:g}" for x in g])
 
-# --- Updated phase colors ---
-c_coherent   = "#fff2a0"    # yellow
-c_zeno       = "#9ecae1"    # blue
-c_noiseind   = "#c7e9c0"    # green (noise-independent)
-c_inaccurate = "#fdae6b"    # orange (inaccurate large-dt regime)
-c_dp         = "#fcbba1"    # red (dp>1 wedge)
+# dp overlays
+for ax in (ax_u1_bond, ax_u1_time, ax_u2_bond, ax_u2_time):
+    add_dp_lines_true(ax, add_labels=False)
+add_dp_lines_true(ax_u1_bond, add_labels=True)
 
-col_coherent = np.array(mcolors.to_rgb(c_coherent))
-col_zeno     = np.array(mcolors.to_rgb(c_zeno))
-col_noiseind = np.array(mcolors.to_rgb(c_noiseind))
-col_inacc    = np.array(mcolors.to_rgb(c_inaccurate))
-col_dp       = np.array(mcolors.to_rgb(c_dp))
+# panel letters
+panel_label(ax_u1_bond, "(a)")
+panel_label(ax_u1_time, "(b)")
+panel_label(ax_u2_bond, "(c)")
+panel_label(ax_u2_time, "(d)")
 
-# Conceptual grid in normalized coordinates
-nx_c, ny_c = 400, 300
-x_c = np.linspace(0, 1, nx_c)
-y_c = np.linspace(0, 1, ny_c)
-X_c, Y_c = np.meshgrid(x_c, y_c)
+# shared colorbars
+cb_b = fig.colorbar(m1, cax=cax_bond)
+cb_b.set_label(r"$\overline{\chi}$")
 
-# Boundaries
-xc_boundary = 0.25  # dt crossover (left vs right)
-yc_boundary = 0.35  # coherent ↔ Zeno
-wx = 0.10
-wy = 0.10
+cb_t = fig.colorbar(m2, cax=cax_time)
+cb_t.set_label("Wall time (s)")
 
-# --- NEW: "inaccurate" band on far right (large dt) ---
-x_inacc = 0.80   # where the band starts (normalized dt)
-w_inacc = 0.05   # half-width for smooth blend into inaccurate band
+# shared axis labels
+fig.supxlabel(r"$dt$")
+fig.supylabel(r"$\gamma$")
 
-# Base image initialization
-img = np.zeros((ny_c, nx_c, 3))
-
-mask_left     = X_c < xc_boundary
-mask_right    = ~mask_left
-mask_coherent = mask_left & (Y_c < yc_boundary)
-mask_zeno     = mask_left & (Y_c >= yc_boundary)
-
-# Assign base colors
-img[mask_coherent] = col_coherent
-img[mask_zeno]     = col_zeno
-img[mask_right]    = col_noiseind
-
-# --- Smooth vertical blending (left → noise-independent) ---
-t_x = np.clip((X_c - (xc_boundary - wx)) / (2 * wx), 0.0, 1.0)[..., None]
-left_colors = np.zeros_like(img)
-left_colors[mask_coherent] = col_coherent
-left_colors[mask_zeno]     = col_zeno
-left_colors[mask_right]    = col_noiseind
-img = (1 - t_x) * left_colors + t_x * col_noiseind
-
-# --- Smooth horizontal blending (coherent ↔ Zeno) ---
-t_y = np.clip((Y_c - (yc_boundary - wy)) / (2 * wy), 0.0, 1.0)[..., None]
-blend_left_mask = X_c < (xc_boundary + wx)
-blend_left_mask_3d = blend_left_mask[..., None]
-blend_colors = (1 - t_y) * col_coherent + t_y * col_zeno
-img = np.where(blend_left_mask_3d, blend_colors, img)
-
-# --------------------------------------------------------
-# 1) Inaccurate large-dt band (apply first)
-# --------------------------------------------------------
-t_inacc = np.clip((X_c - (x_inacc - w_inacc)) / (2 * w_inacc), 0.0, 1.0)[..., None]
-mask_inacc_domain = (X_c >= (x_inacc - w_inacc))[..., None]
-img = np.where(mask_inacc_domain, (1 - t_inacc) * img + t_inacc * col_inacc, img)
-
-# --------------------------------------------------------
-# 2) dp>1 wedge (apply second so it remains distinct on top)
-# --------------------------------------------------------
-# Triangle vertices: (xc_boundary,1), (1,1), (1,0.7)
-tri_x1, tri_y1 = xc_boundary, 1.0
-tri_x2, tri_y2 = 1.0,       1.0
-tri_x3, tri_y3 = 1.0,       0.7
-
-den = (tri_y2 - tri_y3)*(tri_x1 - tri_x3) + (tri_x3 - tri_x2)*(tri_y1 - tri_y3)
-w1 = ((tri_y2 - tri_y3)*(X_c - tri_x3) + (tri_x3 - tri_x2)*(Y_c - tri_y3)) / den
-w2 = ((tri_y3 - tri_y1)*(X_c - tri_x3) + (tri_x1 - tri_x3)*(Y_c - tri_y3)) / den
-w3 = 1 - w1 - w2
-mask_dp = (w1 >= 0) & (w2 >= 0) & (w3 >= 0)
-
-img[mask_dp] = col_dp  # overwrite (keeps dp wedge separate even inside the band)
-
-# --- Draw figure ---
-ax.imshow(img, origin="lower", extent=(0, 1, 0, 1), aspect="auto")
-
-props = dict(ha="center", va="center", fontsize=11, color="black")
-
-ax.text(0.25, 0.20,
-        "Coherent regime\nHigh $\\overline{\\chi}$, many ops\n(Memory & CPU limited)",
-        **props)
-
-ax.text(0.25, 0.75,
-        "Zeno regime\nLow $\\overline{\\chi}$, many ops\n(CPU limited)",
-        **props)
-
-ax.text(0.62, 0.45,
-        "Noise-independent regime\n$\\overline{\\chi}$ saturated, few ops\n(Memory limited)",
-        **props)
-
-ax.text(0.90, 0.30,
-        "Low accuracy regime",
-        **props)
-
-ax.text(0.86, 0.90,
-        "$dp>1$",
-        **props)
-
-ax.set_xlabel("Small timestep   $\\longrightarrow$   Large timestep",
-              fontsize=12, labelpad=10)
-ax.set_ylabel("Weak noise   $\\longrightarrow$   Strong noise",
-              fontsize=12, labelpad=10)
-
-ax.set_xticks([])
-ax.set_yticks([])
-
-for spine in ax.spines.values():
-    spine.set_linewidth(0.8)
-
-ax.text(0.02, 0.98, "(c)", transform=ax.transAxes,
-        ha="left", va="top", fontsize=12, fontweight="bold")
-
-fig.tight_layout()
 plt.show()
