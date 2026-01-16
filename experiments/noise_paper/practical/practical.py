@@ -42,8 +42,9 @@ if __name__ == "__main__":
     # 1000, 500, 400, 250, 200, 125, 100, 50, 25, 20, 10 steps
     # dt_list = [0.0025, 0.004, 0.005, 0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.2, 0.25, 0.5]
     dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.125, 0.2, 0.25, 0.5]
-
     for k, dt in enumerate(dt_list):
+        if k < 8:
+            continue
         gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 
         results1 = []
@@ -65,7 +66,7 @@ if __name__ == "__main__":
             noise_model = NoiseModel([
                 {"name": name, "sites": [i], "strength": 2*gamma} for i in range(L) for name in ["measure_0", "measure_1", "measure_x_0", "measure_x_1", "measure_y_0", "measure_y_1"]
             ])
-            cost = tdvp_simulator(H_0, noise_model)
+            cost = tdvp_simulator(H_0, dt, noise_model)
             results2.append(cost)
 
         filename = f"practical_u1_{k}.pickle"
