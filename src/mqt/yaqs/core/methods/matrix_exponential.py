@@ -15,7 +15,6 @@ approximation of exp(-1j * dt * A) * v without explicitly constructing the matri
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -105,24 +104,6 @@ def lanczos_iteration(
     w = matrix_free_operator(vj)
     alpha[m - 1] = np.vdot(vj, w).real
     return alpha, beta, v
-
-
-# calculating the norm of A using power iteration
-def norm_A_calc(matrix_free_operator, dim):
-    v = np.random.rand(dim).astype(np.complex128) #rand vector
-    v /= np.linalg.norm(v)
-    
-    for i in range(10): #TEST with other iteration values
-        # use callable matrix_free_operator to apply A
-        v = matrix_free_operator(v)
-        
-        #compute norm/growth
-        # each normalization preserves the direction and the vector gradually aligns with the dominant eigenvector, and the later iters become more accurate
-        norm_A = np.linalg.norm(v)
-        
-        v /= norm_A  # normalize/reset for the next iteration to avoid overflow
-        
-    return norm_A
 
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
