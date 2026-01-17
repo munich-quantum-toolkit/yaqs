@@ -8,7 +8,7 @@ import matplotlib.patheffects as pe
 # ------------------------
 # Data + parameters
 # ------------------------
-dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.125]
+dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1]
 gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 gamma_min = 0.01
 gamma_max = 50
@@ -56,6 +56,10 @@ def load_gamma_dt_heatmaps_for_u(u_tag: str):
 
 u1_bond, u1_time = load_gamma_dt_heatmaps_for_u("u1")
 u2_bond, u2_time = load_gamma_dt_heatmaps_for_u("u2")
+print(np.min(u1_bond / u2_bond), np.max(u1_bond / u2_bond), np.mean(u1_bond / u2_bond))
+max_time = np.nanmax([u1_time, u2_time])
+u1_time = u1_time / np.nanmax(u1_time)
+u2_time = u2_time / np.nanmax(u2_time)
 
 # ------------------------
 # PRX-ish style
@@ -82,27 +86,13 @@ def panel_label(ax, s):
     t.set_path_effects([pe.withStroke(linewidth=1.3, foreground="white")])
 
 # ------------------------
-# pcolormesh edges
-# (dt: linear edges; gamma: geometric edges for log axis)
+# pcolormesh edges (index axes for dt AND gamma -> perfect grid alignment)
 # ------------------------
-def edges_linear(x):
-    x = np.asarray(x, float)
-    dx = np.diff(x)
-    left = x[0] - dx[0] / 2
-    right = x[-1] + dx[-1] / 2
-    mids = (x[:-1] + x[1:]) / 2
-    return np.concatenate([[left], mids, [right]])
+dt_centers = np.arange(len(dt_list), dtype=float)
+dt_edges   = np.arange(len(dt_list) + 1, dtype=float) - 0.5
 
-def edges_geo(x):
-    x = np.asarray(x, float)
-    r = x[1:] / x[:-1]
-    left = x[0] / np.sqrt(r[0])
-    right = x[-1] * np.sqrt(r[-1])
-    mids = np.sqrt(x[:-1] * x[1:])
-    return np.concatenate([[left], mids, [right]])
-
-dt_edges = edges_linear(dt)   # linear dt axis
-g_edges = edges_geo(g)        # log-friendly gamma edges
+g_centers  = np.arange(len(gamma_list), dtype=float)
+g_edges    = np.arange(len(gamma_list) + 1, dtype=float) - 0.5
 
 # ------------------------
 # Norms (shared per column)
@@ -112,32 +102,38 @@ bond_norm = Normalize(
     vmax=np.nanmax([u1_bond, u2_bond]),
 )
 
-# Keep log wall time (usually more PRX-like). If you insist on linear: swap to Normalize.
-time_norm = LogNorm(
-    vmin=max(1e-6, np.nanmin([u1_time, u2_time])),
+time_norm = Normalize(
+    vmin=np.nanmin([u1_time, u2_time]),
     vmax=np.nanmax([u1_time, u2_time]),
 )
 
 # ------------------------
 # dp lines in true (dt, gamma) coordinates
 # ------------------------
-def add_dp_lines_true(ax, *, add_labels=False):
-    dt_dense = np.linspace(dt.min(), dt.max(), 600)  # linear dt (since axis is linear)
+def add_dp_lines_true(ax, *, add_labels=False, gamma_top=10.0):
+    dt_dense = np.linspace(dt.min(), dt.max(), 800)
+    x_dense = np.interp(dt_dense, dt, dt_centers)
+
+    logg = np.log(g)
     for dp in dp_levels:
         gamma_dense = dp / dt_dense
-        mask = (gamma_dense >= gamma_min) & (gamma_dense <= gamma_max)
+        mask = (gamma_dense >= gamma_min) & (gamma_dense <= gamma_top)
         if not np.any(mask):
             continue
-        ax.plot(dt_dense[mask], gamma_dense[mask], "--", color="k", lw=1.0, alpha=0.65)
+
+        y_dense = np.interp(np.log(gamma_dense[mask]), logg, g_centers)
+        ax.plot(x_dense[mask], y_dense, "--", color="k", lw=1.0, alpha=0.65)
 
     if add_labels:
         dt_label = dt[1]
+        x_lab = np.interp(dt_label, dt, dt_centers)
         for dp in dp_levels:
             gamma_label = dp / dt_label
-            if not (gamma_min <= gamma_label <= gamma_max):
+            if not (gamma_min <= gamma_label <= gamma_top):
                 continue
+            y_lab = np.interp(np.log(gamma_label), logg, g_centers)
             txt = ax.text(
-                dt_label * 1.01, gamma_label * 1.05,
+                x_lab + 0.15, y_lab + 0.10,
                 rf"$dp={dp:g}$", color="w", fontsize=8
             )
             txt.set_path_effects([pe.withStroke(linewidth=2.5, foreground="black", alpha=0.6)])
@@ -145,75 +141,90 @@ def add_dp_lines_true(ax, *, add_labels=False):
 # ------------------------
 # Heatmap helper
 # ------------------------
-def heat(ax, Z, *, cmap, norm):
+def heat(ax, Z, *, cmap, norm, gamma_top=10.0):
     m = ax.pcolormesh(dt_edges, g_edges, Z, cmap=cmap, norm=norm, shading="auto")
-    ax.set_yscale("log")
     ax.set_xlim(dt_edges[0], dt_edges[-1])
-    ax.set_ylim(gamma_min, gamma_max)
+
+    top_idx = int(np.where(g == gamma_top)[0][0])
+    ax.set_ylim(-0.5, top_idx + 0.5)
+
     ax.tick_params(direction="out")
     return m
 
 # ------------------------
-# Figure 1: 2x2 heatmaps
+# Figure
 # ------------------------
-fig = plt.figure(figsize=(7.2, 6.2), layout="constrained")  # PRX single-column-ish
-gs = fig.add_gridspec(2, 4, width_ratios=[1.0, 1.0, 0.06, 0.06], wspace=0.15, hspace=0.20)
+fig = plt.figure(figsize=(8.2, 5.4))
+
+gs = fig.add_gridspec(
+    2, 5,
+    left=0.085, right=0.955, bottom=0.135, top=0.965,
+    width_ratios=[1.0, 0.035, 0.07, 1.0, 0.035],
+    wspace=0.06, hspace=0.20
+)
 
 ax_u1_bond = fig.add_subplot(gs[0, 0])
-ax_u1_time = fig.add_subplot(gs[0, 1])
+ax_u1_time = fig.add_subplot(gs[0, 3])
 ax_u2_bond = fig.add_subplot(gs[1, 0])
-ax_u2_time = fig.add_subplot(gs[1, 1])
+ax_u2_time = fig.add_subplot(gs[1, 3])
 
-cax_bond = fig.add_subplot(gs[:, 2])  # shared colorbar for bond column
-cax_time = fig.add_subplot(gs[:, 3])  # shared colorbar for time column
+cax_bond = fig.add_subplot(gs[:, 1])
+cax_time = fig.add_subplot(gs[:, 4])
 
-m1 = heat(ax_u1_bond, u1_bond, cmap="magma_r", norm=bond_norm)
-m2 = heat(ax_u1_time, u1_time, cmap="coolwarm", norm=time_norm)
-m3 = heat(ax_u2_bond, u2_bond, cmap="magma_r", norm=bond_norm)
-m4 = heat(ax_u2_time, u2_time, cmap="coolwarm", norm=time_norm)
+ax_spacer = fig.add_subplot(gs[:, 2])
+ax_spacer.axis("off")
 
-ax_u1_bond.set_title("U1: max bond dimension")
-ax_u1_time.set_title("U1: wall time")
-ax_u2_bond.set_title("U2: max bond dimension")
-ax_u2_time.set_title("U2: wall time")
+pos = cax_bond.get_position()
+cax_bond.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.95])
 
-# ticks: reduce redundancy
+pos = cax_time.get_position()
+cax_time.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.95])
+
+gamma_top = 10.0
+
+m1 = heat(ax_u1_bond, u1_bond, cmap="magma_r", norm=bond_norm, gamma_top=gamma_top)
+m2 = heat(ax_u1_time, u1_time, cmap="coolwarm", norm=time_norm, gamma_top=gamma_top)
+m3 = heat(ax_u2_bond, u2_bond, cmap="magma_r", norm=bond_norm, gamma_top=gamma_top)
+m4 = heat(ax_u2_time, u2_time, cmap="coolwarm", norm=time_norm, gamma_top=gamma_top)
+
 for ax in (ax_u1_bond, ax_u1_time):
-    ax.set_xticklabels([])
+    ax.tick_params(labelbottom=False)
 
 for ax in (ax_u1_time, ax_u2_time):
-    ax.set_yticklabels([])
+    ax.tick_params(labelleft=False)
 
-# dt ticks (linear)
+tick_idx = np.arange(len(dt_list))
+tick_labels = [f"{x:g}" for x in dt_list]
 for ax in (ax_u2_bond, ax_u2_time):
-    ax.set_xticks(dt)
-    ax.set_xticklabels([f"{x:g}" for x in dt], rotation=45, ha="right")
+    ax.set_xticks(tick_idx)
+    ax.set_xticklabels(tick_labels, rotation=45, ha="right")
+    ax.set_xlabel(r"$dt$", labelpad=4)
 
-# gamma ticks
+top_idx = int(np.where(g == gamma_top)[0][0])
+g_tick_idx = np.arange(top_idx + 1)
+g_tick_labels = [f"{x:g}" for x in g[:top_idx + 1]]
 for ax in (ax_u1_bond, ax_u2_bond):
-    ax.set_yticks(g)
-    ax.set_yticklabels([f"{x:g}" for x in g])
+    ax.set_yticks(g_tick_idx)
+    ax.set_yticklabels(g_tick_labels)
+    ax.set_ylabel(r"$\gamma$", labelpad=4)
 
-# dp overlays
 for ax in (ax_u1_bond, ax_u1_time, ax_u2_bond, ax_u2_time):
-    add_dp_lines_true(ax, add_labels=False)
-add_dp_lines_true(ax_u1_bond, add_labels=True)
+    add_dp_lines_true(ax, add_labels=False, gamma_top=gamma_top)
+add_dp_lines_true(ax_u1_bond, add_labels=True, gamma_top=gamma_top)
 
-# panel letters
 panel_label(ax_u1_bond, "(a)")
 panel_label(ax_u1_time, "(b)")
 panel_label(ax_u2_bond, "(c)")
 panel_label(ax_u2_time, "(d)")
 
-# shared colorbars
 cb_b = fig.colorbar(m1, cax=cax_bond)
-cb_b.set_label(r"$\overline{\chi}$")
+cb_b.set_label("")
+cax_bond.text(0.5, 1.02, r"$\bar{\chi}$", transform=cax_bond.transAxes,
+              ha="center", va="bottom")
 
 cb_t = fig.colorbar(m2, cax=cax_time)
-cb_t.set_label("Wall time (s)")
-
-# shared axis labels
-fig.supxlabel(r"$dt$")
-fig.supylabel(r"$\gamma$")
+cb_t.set_label("")
+cax_time.text(0.5, 1.02, "$\\tau$", transform=cax_time.transAxes,
+              ha="center", va="bottom")
 
 plt.show()
