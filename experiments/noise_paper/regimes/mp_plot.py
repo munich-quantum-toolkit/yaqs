@@ -16,7 +16,7 @@ class MPPoint:
     P: int
     label: str = ""          # kept for caption use; not drawn on-plot
     marker: str = "s"
-    ms: float = 6.0
+    ms: float = 8.0
 
 
 def plot_m_P_decision_map_prx(
@@ -82,11 +82,23 @@ def plot_m_P_decision_map_prx(
     Z = ((R < 1.0) & feasible_A).astype(int)
 
     # --- background (print-friendly, 2-class) ---
-    cmap = ListedColormap(["#E6E6E6", "#C9D6E8"])
+    # --- background (semantically tied to the alpha-kappa plot) ---
+    # 0: B faster (blue-tint), 1: A faster (green-tint)
+    color_B = "#C9D6E8"   # same family as your B-faster region
+    color_A = "#D8EBD2"   # soft green
+    cmap = ListedColormap([color_B, color_A])
     norm = BoundaryNorm([-0.5, 0.5, 1.5], cmap.N)
 
     ax.set_yscale("log")
     ax.pcolormesh(P_grid, m_vals[:, None], Z, shading="auto", cmap=cmap, norm=norm)
+
+    # Subtle in-panel labels to echo the a-k plot (optional but nice)
+    ax.text(0.22, 0.78, "A faster", transform=ax.transAxes,
+            ha="center", va="center", fontsize=8.0, fontweight="bold",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.55, pad=0.8))
+    ax.text(0.62, 0.30, "B faster", transform=ax.transAxes,
+            ha="center", va="center", fontsize=8.0, fontweight="bold",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.55, pad=0.8))
 
     ax.set_xlabel(r"Threads $P$")
     ax.set_ylabel(r"Memory $m=M/M_B$")
@@ -121,49 +133,63 @@ def plot_m_P_decision_map_prx(
         secax.tick_params(labelsize=8.0)
 
     # --- boundary lines ---
+    # --- boundary lines (use semantic colors tied to a-k plot) ---
     P_line = np.linspace(P_min, P_max, 800)
-    lw = 1.1
+    lw_main = 1.6
+    lw_aux  = 1.3
 
-    l_feas, = ax.plot(P_line, np.full_like(P_line, alpha**2), lw=lw, ls="-",  label="Feasible (A)")
-    l_thr,  = ax.plot(P_line, (alpha**2) * P_line,           lw=lw, ls="--", label="Thread-limited")
-    l_mem,  = ax.plot(P_line, P_line,                         lw=lw, ls=":",  label="Memory-limited")
-    l_mix,  = ax.plot(P_line, (alpha**5 / kappa) * P_line,    lw=lw, ls="-.", label="Crossover")
+    col_feas = "#000000"   # pure black
+    col_thr  = "#1B5E20"   # dark green
+    col_mem  = "#0D47A1"   # dark blue
+    col_x    = "#E65100"   # strong orange
+    l_feas, = ax.plot(P_line, np.full_like(P_line, alpha**2),
+                    lw=lw_main, color=col_feas, ls="-", label="Feasible (A)")
+
+    l_thr,  = ax.plot(P_line, (alpha**2) * P_line,
+                    lw=lw_aux, color=col_thr, ls="--", label="Thread-limited")
+
+    l_mem,  = ax.plot(P_line, P_line,
+                    lw=lw_aux, color=col_mem, ls=":", label="Memory-limited")
+
+    l_mix,  = ax.plot(P_line, (alpha**5 / kappa) * P_line,
+                    lw=lw_main, color=col_x, ls="-.", label="Crossover")
 
     # --- overlay points: numbers INSIDE squares, with stroke (fixed) ---
     if points:
         for i, p in enumerate(points, start=1):
+            marker_color = "#F57C00"  # same orange family as crossover
+
             ax.plot(
                 p.P, p.m,
                 p.marker,
-                ms=p.ms,
-                color="#7A1E1E",
+                ms=8,
+                color=marker_color,
                 markeredgecolor="black",
-                markeredgewidth=0.7,
-                zorder=7,
-                clip_on=False,   # helps edge cases at boundaries
+                markeredgewidth=1.0,
+                zorder=9,
             )
 
-            if annotate_points:
+            if True:
                 # small inward nudge if we're hugging an axis edge
                 x = p.P
-                y = p.m
+                y = p.m / 1.03
                 if p.P >= P_max * 0.95:
                     x = p.P - 0.8
                 if p.P <= P_min * 1.2:
                     x = p.P + 0.6
                 if p.m >= m_max / 1.1:
-                    y = p.m / 1.08
+                    y = p.m / 1.05
 
-                ax.text(
-                    x, y, f"{i}",
-                    ha="center", va="center",
-                    fontsize=7.2,
-                    fontweight="bold",
-                    color="white",
-                    path_effects=[pe.withStroke(linewidth=1.2, foreground="black")],
-                    zorder=8,
-                    clip_on=False,
-                )
+            ax.text(
+                x, y, f"{i}",
+                ha="center", va="center",
+                fontsize=7.2,
+                fontweight="bold",
+                color="white",
+                path_effects=[pe.withStroke(linewidth=1.2, foreground="black")],
+                zorder=10,
+                clip_on=False,
+            )
 
     # --- grid ---
     ax.grid(True, which="major", linestyle=":", linewidth=0.6, alpha=0.55)
@@ -185,7 +211,7 @@ def plot_m_P_decision_map_prx(
     )
 
     if savepath:
-        fig.savefig(savepath, bbox_inches="tight")
+        fig.savefig(savepath, dpi=300)
     plt.show()
 
 
@@ -209,5 +235,5 @@ if __name__ == "__main__":
             MPPoint(m=128.0 / M_B_gb, P=32),  # Small server / workstation
             MPPoint(m=256.0 / M_B_gb, P=64),  # HPC node
         ],
-        savepath=None,
+        savepath="mp_plot.pdf",
     )

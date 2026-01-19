@@ -144,9 +144,9 @@ def plot_alpha_kappa_phase_prx(
                     p.label,
                     (p.alpha, p.kappa),
                     textcoords="offset points",
-                    xytext=(3, 7),
+                    xytext=(5, 1),
                     ha="left",
-                    va="bottom",
+                    va="center",
                     fontsize=7.6,
                     rotation=30,
                     rotation_mode="anchor",
@@ -163,17 +163,17 @@ def plot_alpha_kappa_phase_prx(
     )
 
     if savepath:
-        fig.savefig(savepath, bbox_inches="tight")
+        fig.savefig(savepath, dpi=300)
     plt.show()
 
 
 if __name__ == "__main__":
-    demo_points = [
-        PhasePoint(alpha=2.0, kappa=10.0, label=r"$(\alpha,\kappa)=(2,10)$", marker="s"),
-    ]
+    # demo_points = [
+    #     PhasePoint(alpha=1.8, kappa=5.0, label=r"$(\alpha,\kappa)=(1.8,5)$", marker="o"),
+    # ]
     plot_alpha_kappa_phase_prx(
         alpha_range=(1.0, 5.0),
         kappa_range=(1.0, 1e3),
-        points=demo_points,
-        savepath=None,  # e.g. "alpha_kappa_phase.pdf"
+        # points=demo_points,
+        savepath="ak_plot.pdf",  # e.g. "alpha_kappa_phase.pdf"
     )

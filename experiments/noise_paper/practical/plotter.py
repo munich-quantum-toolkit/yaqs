@@ -56,7 +56,6 @@ def load_gamma_dt_heatmaps_for_u(u_tag: str):
 
 u1_bond, u1_time = load_gamma_dt_heatmaps_for_u("u1")
 u2_bond, u2_time = load_gamma_dt_heatmaps_for_u("u2")
-print(np.min(u1_bond / u2_bond), np.max(u1_bond / u2_bond), np.mean(u1_bond / u2_bond))
 max_time = np.nanmax([u1_time, u2_time])
 u1_time = u1_time / np.nanmax(u1_time)
 u2_time = u2_time / np.nanmax(u2_time)
@@ -154,14 +153,16 @@ def heat(ax, Z, *, cmap, norm, gamma_top=10.0):
 # ------------------------
 # Figure
 # ------------------------
-fig = plt.figure(figsize=(8.2, 5.4))
+# Figure: make it true PRX figure* width
+fig = plt.figure(figsize=(7.2, 4.4))
 
 gs = fig.add_gridspec(
     2, 5,
-    left=0.085, right=0.955, bottom=0.135, top=0.965,
-    width_ratios=[1.0, 0.035, 0.07, 1.0, 0.035],
-    wspace=0.06, hspace=0.20
+    left=0.08, right=0.94, bottom=0.14, top=0.96,
+    width_ratios=[1.0, 0.032, 0.05, 1.0, 0.032],  # tighter middle gap
+    wspace=0.06, hspace=0.18
 )
+
 
 ax_u1_bond = fig.add_subplot(gs[0, 0])
 ax_u1_time = fig.add_subplot(gs[0, 3])
@@ -195,9 +196,14 @@ for ax in (ax_u1_time, ax_u2_time):
 
 tick_idx = np.arange(len(dt_list))
 tick_labels = [f"{x:g}" for x in dt_list]
+# for ax in (ax_u2_bond, ax_u2_time):
+#     ax.set_xticks(tick_idx)
+#     ax.set_xticklabels(tick_labels, rotation=45, ha="right")
+#     ax.set_xlabel(r"$dt$", labelpad=4)
+# dt tick labels: no rotation (usually readable in figure*)
 for ax in (ax_u2_bond, ax_u2_time):
     ax.set_xticks(tick_idx)
-    ax.set_xticklabels(tick_labels, rotation=45, ha="right")
+    ax.set_xticklabels(tick_labels, rotation=0, ha="center")
     ax.set_xlabel(r"$dt$", labelpad=4)
 
 top_idx = int(np.where(g == gamma_top)[0][0])
@@ -227,4 +233,5 @@ cb_t.set_label("")
 cax_time.text(0.5, 1.02, "$\\tau$", transform=cax_time.transAxes,
               ha="center", va="bottom")
 
+fig.savefig("gamma_dt.pdf", dpi=300)
 plt.show()

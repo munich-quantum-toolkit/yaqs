@@ -102,5 +102,5 @@ for sp in ax.spines.values():
     sp.set_linewidth(0.8)
 
 # Optional: save as vector PDF for PRX
-# plt.savefig("regimes_prx_singlecol.pdf", bbox_inches="tight")
+plt.savefig("gamma_dt_summary.pdf", dpi=300)
 plt.show()
