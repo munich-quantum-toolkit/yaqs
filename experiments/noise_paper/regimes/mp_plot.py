@@ -173,7 +173,7 @@ def plot_m_P_decision_map_prx(
     ax.legend(
         handles=[l_feas, l_thr, l_mem, l_mix],
         loc="lower center",
-        bbox_to_anchor=(0.50, 0.065),  # was 0.05; reduce edge overlap
+        bbox_to_anchor=(0.50, 0.04),  # was 0.05; reduce edge overlap
         ncol=2,
         frameon=False,
         handlelength=2.0,
@@ -190,15 +190,15 @@ def plot_m_P_decision_map_prx(
 
 
 if __name__ == "__main__":
-    L = 512
+    L = 1024
     chi_B = 256
     bytes_per_complex = 16 # Could also be 8
     overhead = 2.0
     M_B_gb = overhead * (L * chi_B**2 * bytes_per_complex) / 1e9
 
     plot_m_P_decision_map_prx(
-        alpha=1.8,
-        kappa=8.0,
+        alpha=1.5,
+        kappa=5.0,
         m_range=(0.5, 1e3),
         P_range=(1, 68),
         M_B_gb=M_B_gb,
