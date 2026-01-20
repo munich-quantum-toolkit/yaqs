@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -133,6 +133,7 @@ def expm_krylov(
             The approximate result of applying exp(-1j * dt * A) to vec.
     """
     vec_norm = np.linalg.norm(vec)
+
     alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, vec, lanczos_iterations)
     try:
         w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
