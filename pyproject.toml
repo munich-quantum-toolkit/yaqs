@@ -55,6 +55,7 @@ dependencies = [
 
     "botorch>=0.16.0; python_version < '3.13'",
     "gpytorch>=1.14.2; python_version < '3.13'",
+    "pyro-ppl>=1.9.0; python_version < '3.13'",
 
 ]
 
@@ -118,7 +119,7 @@ explicit_package_bases = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["qiskit.*", "qiskit_aer.*", "opt_einsum.*", "botorch.*", "gpytorch.*", "torch", "cma"]
+module = ["qiskit.*", "qiskit_aer.*", "opt_einsum.*", "botorch.*", "gpytorch.*", "torch.*", "cma.*"]
 ignore_missing_imports = true
 
 
