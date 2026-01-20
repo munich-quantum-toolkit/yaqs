@@ -14,7 +14,7 @@ maintainers = [
   { name="Lukas Burgholzer", email = "burgholzer@me.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -29,8 +29,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
     "Typing :: Typed",
 ]
@@ -50,10 +48,14 @@ dependencies = [
     "opt-einsum>=3.4.0",
     "tqdm>=4.67.1",
     "cma>=4.0.0",
+
     "torch>=2.1.0; python_version < '3.12'",
-    "torch>=2.4.0; python_version >= '3.12'",
-    "botorch>=0.16.0",
-    "gpytorch>=1.14.2",
+    "torch>=2.4.0; python_version >= '3.12' and python_version < '3.13'",
+
+
+    "botorch>=0.16.0; python_version < '3.13'",
+    "gpytorch>=1.14.2; python_version < '3.13'",
+
 ]
 
 [project.urls]
