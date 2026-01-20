@@ -397,7 +397,7 @@ def _run_strong_sim(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
-    # We type as Any to keep mypy happy without over-constraining element types.
+    # We type as Any to keep ty happy without over-constraining element types.
     backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # If there's no noise at all, we don't need multiple trajectories
