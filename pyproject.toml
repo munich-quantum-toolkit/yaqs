@@ -181,6 +181,12 @@ mqt-yaqs = { workspace = true }
 
 
 [dependency-groups]
+test = [
+    "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
+    "pytest-sugar>=1.1.1",
+    "pytest-xdist>=3.8.0",
+]
 docs = [
     "furo>=2025.09.25",
     "myst-nb>=1.3.0",
@@ -194,13 +200,8 @@ docs = [
     "sphinxext-opengraph>=0.13.0",
     "qiskit[visualization]>=1.0.0",
 ]
-test = [
-    "pytest>=9.0.1",
-    "pytest-cov>=7.0.0",
-    "pytest-sugar>=1.1.1",
-    "pytest-xdist>=3.8.0",
-]
 dev = [
     {include-group = "test"},
     "nox>=2025.11.12",
+    "ty==0.0.12",
 ]
