@@ -14,7 +14,7 @@ maintainers = [
   { name="Lukas Burgholzer", email = "burgholzer@me.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
