@@ -367,7 +367,6 @@ def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
     rng_local = np.random.default_rng(seed)
     A = rng_local.normal(size=(m, n)) + 1j * rng_local.normal(size=(m, n))
     Q, _ = np.linalg.qr(A)
-    # ensure dtype and shape for mypy
     Q = np.asarray(Q, dtype=np.complex128)
     return cast("NDArray[np.complex128]", Q[:, :n])
 

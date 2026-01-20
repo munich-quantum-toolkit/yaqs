@@ -1583,14 +1583,12 @@ class MPO:
         Returns:
             The resulting matrix after tensor contractions and reshaping.
         """
-        for i, tensor in enumerate(self.tensors):
-            if i == 0:
-                mat = tensor
-            else:
-                mat = oe.contract("abcd, efdg->aebfcg", mat, tensor)
-                mat = np.reshape(
-                    mat, (mat.shape[0] * mat.shape[1], mat.shape[2] * mat.shape[3], mat.shape[4], mat.shape[5])
-                )
+        mat = self.tensors[0]
+        for tensor in self.tensors[1:]:
+            mat = oe.contract("abcd, efdg->aebfcg", mat, tensor)
+            mat = np.reshape(
+                mat, (mat.shape[0] * mat.shape[1], mat.shape[2] * mat.shape[3], mat.shape[4], mat.shape[5])
+            )
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
