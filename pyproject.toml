@@ -50,7 +50,9 @@ dependencies = [
     "opt-einsum>=3.4.0",
     "tqdm>=4.67.1",
     "cma>=4.0.0",
-    "torch>=2.5.1; python_version >= '3.12'",
+    "torch>=2.1.0",
+    "torch>=2.3.0; python_version >= '3.13'",
+    "torch>=2.6.0; python_version >= '3.14'",
     "botorch>=0.16.0",
     "gpytorch>=1.14.2",
 ]
