@@ -485,6 +485,9 @@ def _run_weak_sim(
             trajectory count, and storage for measurements.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
+
+    Raises:
+        TypeError: If a measurement result is not of the expected type.
     """
     # digital_tjm returns a measurement outcome structure for weak sim
     backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
@@ -515,13 +518,17 @@ def _run_weak_sim(
             retry_exceptions=(CancelledError, TimeoutError, OSError),
         ):
             # For weak sim, write the raw per-trajectory measurement structure
-            assert isinstance(result, dict)
+            if not isinstance(result, dict):
+                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
+                raise TypeError(msg)
             sim_params.measurements[i] = cast("dict[int, int]", result)
     else:
         # Serial path
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg)
-            assert isinstance(result, dict)
+            if not isinstance(result, dict):
+                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
+                raise TypeError(msg)
             sim_params.measurements[i] = cast("dict[int, int]", result)
 
     # Reset shots back from trajectories
