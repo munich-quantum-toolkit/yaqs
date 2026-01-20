@@ -64,8 +64,8 @@ if TYPE_CHECKING:
 threadpool_limits: Callable[..., Any] | None
 threadpool_info: Callable[[], Any] | None
 try:
-    from threadpoolctl import threadpool_info as _threadpool_info  # type: ignore[import-not-found]
-    from threadpoolctl import threadpool_limits as _threadpool_limits
+    from threadpoolctl import threadpool_info as _threadpool_info  # ty: ignore[unresolved-import]
+    from threadpoolctl import threadpool_limits as _threadpool_limits  # ty: ignore[unresolved-import]
 except ImportError:  # pragma: no cover - optional dependency
     threadpool_limits = None
     threadpool_info = None
@@ -481,9 +481,8 @@ def _run_weak_sim(
     Args:
         initial_state : The initial system state as an MPS.
         operator: The quantum circuit representing the operation to simulate.
-        sim_params: Simulation parameters for weak simulation,
-                                    including number of shots, trajectory count,
-                                    and storage for measurements.
+        sim_params: Simulation parameters for weak simulation, including number of shots,
+            trajectory count, and storage for measurements.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
     """
@@ -516,12 +515,14 @@ def _run_weak_sim(
             retry_exceptions=(CancelledError, TimeoutError, OSError),
         ):
             # For weak sim, write the raw per-trajectory measurement structure
-            sim_params.measurements[i] = result
+            assert isinstance(result, dict)
+            sim_params.measurements[i] = cast("dict[int, int]", result)
     else:
         # Serial path
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg)
-            sim_params.measurements[i] = result
+            assert isinstance(result, dict)
+            sim_params.measurements[i] = cast("dict[int, int]", result)
 
     # Reset shots back from trajectories
     if not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes)):

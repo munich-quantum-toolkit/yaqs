@@ -598,6 +598,23 @@ class BaseGate:
         """
         return SchmidtSpectrum()
 
+    @property
+    def mpo_tensors(self) -> list[NDArray[np.complex128]]:
+        """Returns a list of MPO tensors representing the gate.
+
+        Raises:
+            AttributeError: If the gate does not have MPO tensors defined.
+        """
+        try:
+            return self._mpo_tensors
+        except AttributeError:
+            msg = "This gate does not have MPO tensors defined."
+            raise AttributeError(msg) from None
+
+    @mpo_tensors.setter
+    def mpo_tensors(self, tensors: list[NDArray[np.complex128]]) -> None:
+        self._mpo_tensors = tensors
+
 
 class X(BaseGate):
     """Class representing the Pauli-X (NOT) gate.
