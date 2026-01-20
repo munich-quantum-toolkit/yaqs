@@ -107,7 +107,6 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
         overwrite_a=True,  # allows in-place LAPACK
         check_finite=False,
     )
-    # mypy compatibility
     q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
     r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
 
@@ -140,8 +139,6 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
         overwrite_a=True,
         check_finite=False,
     )
-
-    # mypy compatibility
     q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
     r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
 

@@ -480,6 +480,7 @@ def test_digital_tjm_longrange_noise() -> None:
     qc = QuantumCircuit(num_qubits)
     for layer in range(num_layers):
         qc = qc.compose(timestep)
+        assert qc is not None
         if layer < num_layers - 1:
             qc.barrier(label="SAMPLE_OBSERVABLES")
 
