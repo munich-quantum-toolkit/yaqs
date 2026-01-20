@@ -119,8 +119,7 @@ def create_loss_instance(tmp_path: Path, test: Parameters) -> LossClass:
         An instance of LossClass initialized with a reference trajectory
         and propagator for use in tests.
     """
-    h_0 = MPO()
-    h_0.init_ising(test.sites, test.j, test.g)
+    h_0 = MPO.ising(test.sites, test.j, test.g)
 
     # Define the initial state
     init_state = MPS(test.sites, state="zeros")

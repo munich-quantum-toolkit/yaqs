@@ -156,8 +156,7 @@ def create_instances(
     >>> h_0, init_state, obs_list, sim_params, ref_noise_model, propagator = create_instances(tmp_path, test)
     >>> # After this call, `propagator` has been run and the constructed objects are available for assertions.
     """
-    h_0 = MPO()
-    h_0.init_ising(test.sites, test.j, test.g)
+    h_0 = MPO.ising(test.sites, test.j, test.g)
 
     # Define the initial state
     init_state = MPS(test.sites, state="zeros")

@@ -119,8 +119,7 @@ def create_propagator_instance(
               The propagator instance after calling set_observable_list(...) and run(ref_noise_model). The
               propagator therefore has performed the configured propagation at least once.
     """
-    h_0 = MPO()
-    h_0.init_ising(test.sites, test.j, test.g)
+    h_0 = MPO.ising(test.sites, test.j, test.g)
 
     # Define the initial state
     init_state = MPS(test.sites, state="zeros")
