@@ -259,7 +259,7 @@ class AnalogSimParams:
         self.show_progress = show_progress
         assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
 
-    def aggregate_trajectories(self) -> None:
+    def aggregate_trajectories(self, i) -> None:
         """Aggregates trajectories for result.
 
         Aggregates the trajectories of each observable by computing the mean
@@ -274,8 +274,7 @@ class AnalogSimParams:
                 observable.results = np.concatenate(all_values)
             else:
                 assert observable.trajectories is not None
-                observable.results = np.mean(observable.trajectories, axis=0)
-
+                observable.results = np.mean(observable.trajectories[0:i], axis=0)
 
 class WeakSimParams:
     """A class to represent the parameters for a weak simulation.

@@ -82,6 +82,7 @@ import importlib
 # ---------------------------------------------------------------------------
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
+import numpy as np
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
@@ -96,7 +97,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
     from concurrent.futures import Future
 
-    import numpy as np
     from numpy.typing import NDArray
 
     from .core.data_structures.networks import MPS
@@ -639,16 +639,36 @@ def _run_analog(
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]
+
+
     else:
         # Serial fallback
+        counter = 0
         for i, arg in enumerate(args):
+            print(i)
             result = _call_backend(backend, arg)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]
 
+            if i > 2:
+                sim_params.aggregate_trajectories(i)
+                mse = []
+                for obs_index, observable in enumerate(sim_params.observables):
+                     mse.append(np.abs(observable.results - old_sim_params.observables[obs_index].results)**2)
+                mse = np.mean(mse)
+                if mse < 1e-6:
+                    counter += 1
+                else:
+                    counter = 0
+
+                if counter == 10:
+                    break
+                print("MSE:", mse)
+            old_sim_params = copy.deepcopy(sim_params)
+
     # Aggregate per-trajectory data into final arrays/statistics
-    sim_params.aggregate_trajectories()
+    # sim_params.aggregate_trajectories()
 
 
 # ---------------------------------------------------------------------------
