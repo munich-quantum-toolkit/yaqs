@@ -15,10 +15,12 @@ the effects of noise in quantum simulations.
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from ..libraries.gate_library import GateLibrary
 from ..libraries.noise_library import NoiseLibrary
 
 if TYPE_CHECKING:
@@ -163,3 +165,89 @@ class NoiseModel:
         operator_class = getattr(NoiseLibrary, name)
         operator: BaseGate = operator_class()
         return operator.matrix
+
+
+class CompactNoiseModel:
+    """A class to represent a compact noise model with multi-site noise processes."""
+
+    def __init__(self, compact_processes: list[dict[str, Any]] | None = None) -> None:
+        """Initialize the compact noise model.
+
+        Parameters.
+        ----------
+        compact_processes : list[dict[str, Any]] | None, optional
+            A list of compact noise process specifications or None. Each process dict
+            must contain the following keys:
+              - "name" (str): name of a noise process available from GateLibrary.
+              - "sites" (iterable[int]): indices of sites the compact process acts on.
+              - "strength" (numeric): strength/amplitude of the noise process.
+        Behavior
+        --------
+        - If compact_processes is provided, a deep copy is stored in
+          self.compact_processes to avoid external mutation; otherwise an empty list
+          is used.
+        - Each process dict is validated:
+            - Must contain the keys "name", "sites", and "strength".
+            - The GateLibrary entry for the given "name" must exist and represent a
+              1-site interaction (GateLibrary.<name>().interaction == 1).
+          Violations raise AssertionError or ValueError.
+        - The compact processes are expanded into single-site process entries:
+            - For each site in a compact process, an expanded dict
+              {"name": name, "sites": [site], "strength": strength} is appended to
+              self.expanded_processes.
+            - For each expanded entry, the index of the originating compact process
+              is appended to self.index_list.
+        - A NoiseModel is created from the expanded processes and stored as
+          self.expanded_noise_model.
+        Attributes set
+        --------------
+        self.compact_processes : list[dict[str, Any]]
+            Deep-copied list of compact process definitions (or empty list).
+        self.expanded_processes : list[dict[str, Any]]
+            List of per-site expanded process dictionaries.
+        self.index_list : list[int]
+            Mapping from each expanded process to the index of its original compact
+            process in self.compact_processes.
+        self.expanded_noise_model : NoiseModel
+            NoiseModel constructed from self.expanded_processes.
+        self.strength_list : np.ndarray
+            Array of strengths corresponding to each compact process.
+
+        Raises:
+        ------
+        ValueError: If the named gate is not found in GateLibrary. The exception message is:
+                    "Gate '<name>' not found in GateLibrary".
+
+        Notes:
+        -----
+        - This initializer assumes GateLibrary and NoiseModel are available in the
+          surrounding module scope.
+        - The method performs input validation and expansion to ensure downstream
+          code can work with single-site noise process descriptions.
+        """
+        self.compact_processes: list[dict[str, Any]] = (
+            copy.deepcopy(compact_processes) if compact_processes is not None else []
+        )
+
+        self.expanded_processes: list[dict[str, Any]] = []
+
+        self.index_list: list[int] = []
+
+        for i, proc in enumerate(self.compact_processes):
+            assert "name" in proc, "Each process must have a 'name' key"
+            name = proc["name"]
+            if not hasattr(GateLibrary, name):
+                msg = f"Gate '{name}' not found in GateLibrary"
+                raise ValueError(msg)
+            msg = "Only 1-site noise processes are supported in CompactNoiseModel"
+            assert getattr(GateLibrary, name)().interaction == 1, msg
+            assert "sites" in proc, "Each process must have a 'sites' key"
+            assert "strength" in proc, "Each process must have a 'strength' key"
+
+            for site in proc["sites"]:
+                self.expanded_processes.append({"name": proc["name"], "sites": [site], "strength": proc["strength"]})
+                self.index_list.append(i)
+
+        self.strength_list: np.ndarray = np.array([proc["strength"] for proc in self.compact_processes])
+
+        self.expanded_noise_model: NoiseModel = NoiseModel(self.expanded_processes)
