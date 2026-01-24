@@ -46,8 +46,7 @@ if __name__ == "__main__":
             # Build Hamiltonian once per L
             J = 1
             h = 1
-            H_0 = MPO()
-            H_0.init_ising(L, J, h)
+            H_0 = MPO().ising(L, J, h)
 
             results_u1 = []
             results_u2 = []
