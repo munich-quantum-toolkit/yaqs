@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -211,8 +211,7 @@ def test_update_site() -> None:
     W = rng.random(size=(2, 2, 1, 1)).astype(np.complex128)
     L_arr = rng.random(size=(2, 1, 2)).astype(np.complex128)
     dt = 0.05
-    lanczos_iterations = 10
-    out = update_site(L_arr, R, W, A, dt, lanczos_iterations)
+    out = update_site(L_arr, R, W, A, dt)
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
 
 
@@ -226,8 +225,7 @@ def test_update_bond() -> None:
     R = rng.random(size=(2, 2, 2)).astype(np.complex128)
     L_arr = rng.random(size=(2, 2, 2)).astype(np.complex128)
     dt = 0.05
-    lanczos_iterations = 10
-    out = update_bond(L_arr, R, C, dt, lanczos_iterations)
+    out = update_bond(L_arr, R, C, dt)
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
 
@@ -242,8 +240,8 @@ def test_single_site_tdvp() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
@@ -251,7 +249,7 @@ def test_single_site_tdvp() -> None:
         dt=0.1,
         sample_timesteps=True,
     )
-    single_site_tdvp(state, H, sim_params, numiter_lanczos=5)
+    single_site_tdvp(state, H, sim_params)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -271,8 +269,8 @@ def test_two_site_tdvp() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L, state="zeros")
     ref_mps = deepcopy(state)
     sim_params = AnalogSimParams(
@@ -281,7 +279,7 @@ def test_two_site_tdvp() -> None:
         dt=0.1,
         sample_timesteps=True,
     )
-    two_site_tdvp(state, H, sim_params, numiter_lanczos=25)
+    two_site_tdvp(state, H, sim_params)
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -312,8 +310,7 @@ def test_dynamic_tdvp_one_site() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")
@@ -346,8 +343,7 @@ def test_dynamic_tdvp_two_site() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
 
     # Define the initial state.
     state = MPS(L, state="zeros")
@@ -371,7 +367,6 @@ def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
     rng_local = np.random.default_rng(seed)
     A = rng_local.normal(size=(m, n)) + 1j * rng_local.normal(size=(m, n))
     Q, _ = np.linalg.qr(A)
-    # ensure dtype and shape for mypy
     Q = np.asarray(Q, dtype=np.complex128)
     return cast("NDArray[np.complex128]", Q[:, :n])
 

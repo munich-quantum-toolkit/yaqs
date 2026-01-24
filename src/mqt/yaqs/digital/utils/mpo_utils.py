@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -273,10 +273,9 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
                 ):
                     gate_ = convert_dag_to_tensor_algorithm(node)[0]
-                    assert hasattr(gate_, "mpo_tensors"), "Gate must have mpo_tensors attribute"
                     mpo_tensors = gate_.mpo_tensors
                     gate_mpo = MPO()
-                    gate_mpo.init_custom(mpo_tensors, transpose=False)
+                    gate_mpo.custom(mpo_tensors, transpose=False)
                     if conjugate:
                         gate_mpo.rotate(conjugate=True)
                     dag.remove_op_node(node)

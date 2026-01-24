@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -18,18 +18,18 @@ from __future__ import annotations
 import concurrent.futures
 import copy
 import multiprocessing
-from typing import TYPE_CHECKING
+import re
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 import opt_einsum as oe
+from numpy.typing import NDArray
 from tqdm import tqdm
 
-from ..libraries.gate_library import Destroy, X, Y, Z
+from ..libraries.gate_library import Destroy
 from ..methods.decompositions import right_qr, two_site_svd
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 
 
@@ -953,151 +953,228 @@ class MPS:
         return vec.flatten()
 
 
+ComplexTensor = NDArray[np.complex128]
+
+
 class MPO:
-    """Class representing a Matrix Product Operator (MPO) for quantum many-body systems.
+    """Matrix Product Operator (MPO) for YAQS tensor-network simulations.
 
-    This class forms the basis of the MPS used in YAQS simulations.
-    The index order is (sigma, sigma', chi_l-1, chi_l).
+    An MPO represents a linear operator on a 1D lattice as a chain of local tensors.
+    YAQS stores each site tensor with index order::
 
-    Methods.
-    -------
-    init_ising(length: int, J: float, g: float) -> None
-        Initializes the MPO for the Ising model with given parameters.
-    init_heisenberg(length: int, Jx: float, Jy: float, Jz: float, h: float) -> None
-        Initializes the MPO for the Heisenberg model with given parameters.
-    init_identity(length: int, physical_dimension: int = 2) -> None
-        Initializes the MPO as an identity operator.
-    init_custom_hamiltonian(length: int, left_bound: NDArray[np.complex128],
-                            inner: NDArray[np.complex128], right_bound: NDArray[np.complex128]) -> None
-        Initializes the MPO with custom Hamiltonian tensors.
-    init_custom(tensors: list[NDArray[np.complex128]], transpose: bool = True) -> None
-        Initializes the MPO with custom tensors.
-    to_mps() -> MPS
-        Converts the MPO to a Matrix Product State (MPS).
-    to_matrix() -> NDArray[np.complex128]
-        Converts the MPO to a full matrix representation.
-    write_tensor_shapes() -> None
-        Writes the shapes of the tensors in the MPO.
-    check_if_valid_mpo() -> bool
-        Checks if the MPO is valid.
-    check_if_identity(fidelity: float) -> bool
-        Checks if the MPO represents an identity operator with given fidelity.
-    rotate(conjugate: bool = False) -> None
-        Rotates the MPO tensors by swapping physical dimensions.
+        (phys_out, phys_in, chi_left, chi_right)
+
+    where ``phys_out``/``phys_in`` are the physical operator legs and
+    ``chi_left``/``chi_right`` are the virtual (bond) dimensions.
+
+    Construction
+    -----------
+    Use classmethod factories to build common Hamiltonians or custom operators:
+
+    - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
+    - ``MPO.hamiltonian(...)``: generic one-/two-body Pauli interactions.
+    - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
+    - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
+    - ``identity(...)``, ``custom(...)``, ``finite_state_machine(...)``: in-place builders.
+
+    Operations
+    ----------
+    - ``compress(...)``: SVD-based bond compression sweeps.
+    - ``rotate(...)``: swap physical legs (optionally conjugating).
+
+    Conversion / checks
+    -------------------
+    - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix.
+    - ``check_if_valid_mpo()``: structural bond-dimension consistency check.
+    - ``check_if_identity(...)``: heuristic identity check (qubit systems).
+
+    Notes:
+    -----
+    Some constructors (e.g. Pauli-string builders) currently require
+    ``physical_dimension == 2``.
     """
 
-    def init_ising(self, length: int, J: float, g: float) -> None:  # noqa: N803
-        """Ising MPO.
+    _PAULI_2: ClassVar[dict[str, np.ndarray]] = {
+        "I": np.eye(2, dtype=complex),
+        "X": np.array([[0, 1], [1, 0]], dtype=complex),
+        "Y": np.array([[0, -1j], [1j, 0]], dtype=complex),
+        "Z": np.array([[1, 0], [0, -1]], dtype=complex),
+    }
 
-        Initialize the Ising model as a Matrix Product Operator (MPO).
-        This method constructs the MPO representation of the Ising model with
-        specified parameters. The MPO has a 3x3 block structure at each site.
+    _VALID: ClassVar[frozenset[str]] = frozenset(_PAULI_2.keys())
+    _PAULI_TOKEN_RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"\b([IXYZ])\s*(\d+)\b",
+        flags=re.IGNORECASE,
+    )
 
-        Left boundary (1, 3, 2, 2)
-        [I, -J Z, -g X]
+    tensors: list[ComplexTensor]
+    length: int
+    physical_dimension: int
 
-        Inner tensor (3, 3, 2, 2)
-        W = [[ I,     -J Z,  -g X ],
-              [ 0,       0,     Z  ],
-              [ 0,       0,     I  ]]
+    @classmethod
+    def hamiltonian(
+        cls,
+        *,
+        length: int,
+        two_body: list[tuple[complex | float, str, str]] | None = None,
+        one_body: list[tuple[complex | float, str]] | None = None,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> MPO:
+        """Construct an MPO from specified one- and two-body Pauli interactions.
 
-        Right boundary (3, 1, 2, 2)
-        [I, -J Z, -g X]
+        Builds a Hamiltonian MPO by expanding the provided interaction lists into
+        a sum of Pauli strings and delegating construction to ``from_pauli_sum``.
+        Nearest-neighbor two-body terms are generated according to the chosen
+        boundary condition.
 
         Args:
-            length (int): The number of sites in the Ising chain.
-            J (float): The coupling constant for the interaction.
-            g (float): The coupling constant for the field.
+            length: Number of sites (L).
+            two_body: List of ``(coeff, op_i, op_j)`` nearest-neighbor interactions,
+                where operators are given as Pauli labels (e.g. ``"X"``, ``"Z"``).
+            one_body: List of ``(coeff, op)`` on-site terms.
+            bc: Boundary condition, either ``"open"`` or ``"periodic"``.
+            physical_dimension: Local Hilbert-space dimension (only ``2`` supported).
+            tol: SVD truncation threshold used during compression.
+            max_bond_dim: Optional hard cap on the MPO bond dimension.
+            n_sweeps: Number of compression sweeps (>= 0).
+
+        Returns:
+            MPO representing the specified Hamiltonian.
+
+        Raises:
+            ValueError: If ``length <= 0``, an invalid boundary condition is given,
+                or an operator label is not a valid Pauli operator.
         """
-        physical_dimension = 2
-        identity = np.eye(physical_dimension, dtype=complex)
-        x = X().matrix
-        if length == 1:
-            tensor: NDArray[np.complex128] = np.reshape(x, (2, 2, 1, 1))
-            self.tensors = [tensor]
-            self.length = length
-            self.physical_dimension = physical_dimension
-            return
-        z = Z().matrix
+        if length <= 0:
+            msg = "L must be positive."
+            raise ValueError(msg)
+        if bc not in {"open", "periodic"}:
+            msg = "bc must be 'open' or 'periodic'."
+            raise ValueError(msg)
 
-        left_bound = np.array([identity, -J * z, -g * x])[np.newaxis, :]
+        two_body = two_body or []
+        one_body = one_body or []
 
-        # Inner tensors (3x3 block):
-        inner = np.zeros((3, 3, physical_dimension, physical_dimension), dtype=complex)
-        inner[0, 0] = identity
-        inner[0, 1] = -J * z
-        inner[0, 2] = -g * x
-        inner[1, 2] = z
-        inner[2, 2] = identity
+        def op(x: str) -> str:
+            x = str(x).upper()
+            if x not in cls._VALID:
+                msg = f"Invalid operator {x!r}; expected one of {sorted(cls._VALID)}."
+                raise ValueError(msg)
+            return x
 
-        right_bound = np.array([[-g * x], [z], [identity]])
+        terms: list[tuple[complex | float, str]] = []
 
-        # Construct the MPO as a list of tensors:
-        self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
-        for i, tensor in enumerate(self.tensors):
-            # left, right, sigma, sigma'
-            self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
+        bonds = range(length) if bc == "periodic" else range(length - 1)
+        for c, a, b in two_body:
+            a_op, b_op = op(a), op(b)
+            for i in bonds:
+                j = (i + 1) % length
+                terms.append((c, f"{a_op}{i} {b_op}{j}"))
 
-        self.length = length
-        self.physical_dimension = physical_dimension
+        for c, a in one_body:
+            a_op = op(a)
+            terms.extend((c, f"{a_op}{i}") for i in range(length))
 
-    def init_heisenberg(self, length: int, Jx: float, Jy: float, Jz: float, h: float) -> None:  # noqa: N803
-        """Heisenberg MPO.
+        mpo = cls()
+        mpo.from_pauli_sum(
+            terms=terms,
+            length=length,
+            physical_dimension=physical_dimension,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+        )
+        return mpo
 
-        Initialize the Heisenberg model as a Matrix Product Operator (MPO).
+    @classmethod
+    def ising(
+        cls,
+        length: int,
+        J: float,  # noqa: N803
+        g: float,
+        *,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> MPO:
+        """Construct an Ising Hamiltonian MPO.
 
-        Left boundary: shape (1, 5, d, d)
-        [I, Jx*X, Jy*Y, Jz*Z, h*Z]
+        Args:
+            length: Number of sites.
+            J: ZZ coupling strength (Hamiltonian includes -J Σ Z_i Z_{i+1}).
+            g: X field strength (Hamiltonian includes -g Σ X_i).
+            bc: "open" or "periodic".
+            physical_dimension: Local dimension (Ising Pauli builder requires 2).
+            tol: SVD truncation threshold used during compression.
+            max_bond_dim: Optional hard cap for MPO bond dimension during compression.
+            n_sweeps: Number of compression sweeps.
 
-        Inner tensor: shape (5, 5, d, d)
-        W = [[ I,    Jx*X,  Jy*Y,  Jz*Z,   h*Z ],
-              [ 0,     0,     0,     0,     X  ],
-              [ 0,     0,     0,     0,     Y  ],
-              [ 0,     0,     0,     0,     Z  ],
-              [ 0,     0,     0,     0,     I  ]]
-
-        Right boundary: shape (5, 1, d, d)
-        [0, X, Y, Z, I]^T
-
-        Parameters:
-        length (int): The number of sites in the chain.
-        Jx (float): The coupling constant for the X interaction.
-        Jy (float): The coupling constant for the Y interaction.
-        Jz (float): The coupling constant for the Z interaction.
-        h (float): The magnetic field strength.
+        Returns:
+            An MPO representing the Ising Hamiltonian.
         """
-        physical_dimension = 2
-        zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
-        identity = np.eye(physical_dimension, dtype=complex)
-        x = X().matrix
-        y = Y().matrix
-        z = Z().matrix
+        return cls.hamiltonian(
+            length=length,
+            two_body=[(-J, "Z", "Z")],
+            one_body=[(-g, "X")],
+            bc=bc,
+            physical_dimension=physical_dimension,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+        )
 
-        left_bound = np.array([identity, -Jx * x, -Jy * y, -Jz * z, -h * z])[np.newaxis, :]
+    @classmethod
+    def heisenberg(
+        cls,
+        length: int,
+        Jx: float,  # noqa: N803
+        Jy: float,  # noqa: N803
+        Jz: float,  # noqa: N803
+        h: float = 0.0,
+        *,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> MPO:
+        """Construct a Heisenberg (XYZ) Hamiltonian MPO.
 
-        inner = np.zeros((5, 5, physical_dimension, physical_dimension), dtype=complex)
-        inner[0, 0] = identity
-        inner[0, 1] = -Jx * x
-        inner[0, 2] = -Jy * y
-        inner[0, 3] = -Jz * z
-        inner[0, 4] = -h * z
-        inner[1, 4] = x
-        inner[2, 4] = y
-        inner[3, 4] = z
-        inner[4, 4] = identity
+        Args:
+            length: Number of sites.
+            Jx: XX coupling strength (Hamiltonian includes -Jx Σ X_i X_{i+1}).
+            Jy: YY coupling strength (Hamiltonian includes -Jy Σ Y_i Y_{i+1}).
+            Jz: ZZ coupling strength (Hamiltonian includes -Jz Σ Z_i Z_{i+1}).
+            h: Z field strength (Hamiltonian includes -h Σ Z_i).
+            bc: "open" or "periodic".
+            physical_dimension: Local dimension (Pauli builder requires 2).
+            tol: SVD truncation threshold used during compression.
+            max_bond_dim: Optional hard cap for MPO bond dimension during compression.
+            n_sweeps: Number of compression sweeps.
 
-        right_bound = np.array([zero, x, y, z, identity])[:, np.newaxis]
+        Returns:
+            An MPO representing the Heisenberg Hamiltonian.
+        """
+        return cls.hamiltonian(
+            length=length,
+            two_body=[(-Jx, "X", "X"), (-Jy, "Y", "Y"), (-Jz, "Z", "Z")],
+            one_body=[(-h, "Z")] if h != 0 else [],
+            bc=bc,
+            physical_dimension=physical_dimension,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+        )
 
-        # Construct the MPO
-        self.tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
-        for i, tensor in enumerate(self.tensors):
-            # left, right, sigma, sigma'
-            self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
-        self.length = length
-        self.physical_dimension = physical_dimension
-
-    def init_coupled_transmon(
-        self,
+    @classmethod
+    def coupled_transmon(
+        cls,
         length: int,
         qubit_dim: int,
         resonator_dim: int,
@@ -1105,7 +1182,7 @@ class MPO:
         resonator_freq: float,
         anharmonicity: float,
         coupling: float,
-    ) -> None:
+    ) -> MPO:
         """Coupled Transmon MPO.
 
         Initializes an MPO representation of a 1D chain of coupled transmon qubits
@@ -1125,6 +1202,9 @@ class MPO:
             anharmonicity: Strength of the anharmonic (nonlinear) term
                                 for each transmon, typically negative.
             coupling : Strength of the qubit-resonator coupling term.
+
+        Returns:
+            An MPO instance representing the coupled transmon-resonator chain.
 
         Notes:
             - The Hamiltonian for each qubit is modeled as a Duffing oscillator:
@@ -1153,36 +1233,34 @@ class MPO:
         x_q = b_dag.matrix + b.matrix
         x_r = a_dag.matrix + a.matrix
 
-        self.tensors = []
+        tensors: list[np.ndarray] = []
 
         for i in range(length):
             if i % 2 == 0:
                 # Qubit site
                 if i == 0:
-                    # Qubit 0: left edge
                     tensor = np.array(
                         [
                             [
-                                h_q,  # (0,0): on-site Hamiltonian
-                                id_q,  # (0,1): pass identity right
-                                coupling * x_q,  # (0,2): pass coupling operator right
-                                id_q,  # (0,3): tail end (unused)
+                                h_q,
+                                id_q,
+                                coupling * x_q,
+                                id_q,
                             ]
                         ],
                         dtype=object,
-                    )  # shape (1, 4, d, d)
+                    )  # (1, 4, dq, dq)
 
                 elif i == length - 1:
-                    # Qubit 1: right edge
                     tensor = np.array(
                         [
-                            [id_q],  # (0,0): tail end
-                            [coupling * x_q],  # (1,0): coupled input from resonator
-                            [id_q],  # (2,0): pass-through
-                            [h_q],  # (3,0): on-site Hamiltonian
+                            [id_q],
+                            [coupling * x_q],
+                            [id_q],
+                            [h_q],
                         ],
                         dtype=object,
-                    )  # shape (4, 1, d, d)
+                    )  # (4, 1, dq, dq)
 
                 else:
                     tensor = np.empty((4, 4, qubit_dim, qubit_dim), dtype=object)
@@ -1197,27 +1275,34 @@ class MPO:
                 # Resonator site
                 tensor = np.empty((4, 4, resonator_dim, resonator_dim), dtype=object)
                 tensor[:, :] = [[zero_r for _ in range(4)] for _ in range(4)]
-
                 tensor[0, 0] = id_r
                 tensor[1, 2] = h_r
                 tensor[2, 0] = x_r
                 tensor[3, 1] = x_r
                 tensor[3, 3] = id_r
 
-            # Transpose to (phys_out, phys_in, left, right)
-            tensor = np.transpose(tensor, (2, 3, 0, 1))
-            self.tensors.append(tensor)
+            # (left, right, phys_out, phys_in) -> (phys_out, phys_in, left, right)
+            tensors.append(np.transpose(tensor, (2, 3, 0, 1)))
 
-        self.length = length
-        self.physical_dimension = qubit_dim
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = length
 
-    def init_identity(self, length: int, physical_dimension: int = 2) -> None:
+        # Backward-compat: single attribute even though dims alternate.
+        mpo.physical_dimension = qubit_dim
+
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+        return mpo
+
+    def identity(self, length: int, physical_dimension: int = 2) -> None:
         """Initialize identity MPO.
 
         Initializes the network with identity matrices.
+
         Parameters:
-        length (int): The number of identity matrices to initialize.
-        physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
+            length (int): The number of identity matrices to initialize.
+            physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
+
         """
         mat = np.eye(2, dtype=np.complex128)
         mat = np.expand_dims(mat, (2, 3))
@@ -1228,7 +1313,7 @@ class MPO:
         for _ in range(length):
             self.tensors.append(mat)
 
-    def init_custom_hamiltonian(
+    def finite_state_machine(
         self,
         length: int,
         left_bound: NDArray[np.complex128],
@@ -1255,7 +1340,7 @@ class MPO:
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def init_custom(self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True) -> None:
+    def custom(self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True) -> None:
         """Custom MPO from tensors.
 
         Initialize the custom MPO (Matrix Product Operator) with the given tensors.
@@ -1276,6 +1361,197 @@ class MPO:
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
         self.length = len(self.tensors)
         self.physical_dimension = tensors[0].shape[0]
+
+    def from_pauli_sum(
+        self,
+        *,
+        terms: list[tuple[complex | float, str]],
+        length: int,
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> None:
+        """Build this MPO from a sum of Pauli-string terms.
+
+        Each term is given as ``(coeff, spec)`` where ``spec`` is a string like
+        ``"Z0 Z1"``, ``"X7"``, or ``""`` for the identity. Terms are assembled by
+        direct-summing their MPO bond spaces and then compressed in-place.
+
+        Args:
+            terms: List of ``(coefficient, spec)`` Pauli terms.
+            length: Number of sites (L).
+            physical_dimension: Local dimension (only ``2`` is supported).
+            tol: SVD truncation threshold used during compression.
+            max_bond_dim: Optional hard cap on the kept MPO bond dimension.
+            n_sweeps: Number of compression sweeps (>= 0).
+
+        Raises:
+            ValueError: If ``length <= 0``, ``physical_dimension != 2``, a site index is
+                out of bounds, an operator label is invalid, or a term spec is malformed.
+
+        Notes:
+            The resulting MPO represents the sum of all provided terms (including
+            coefficients). Compression is performed via ``self.compress(..., directions="lr_rl")``.
+        """
+        if physical_dimension != 2:
+            msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
+            raise ValueError(msg)
+        if length <= 0:
+            msg = "length must be positive."
+            raise ValueError(msg)
+
+        self.length = length
+        self.physical_dimension = physical_dimension
+
+        mpo_terms: list[list[np.ndarray]] = []
+        for coeff, spec in terms:
+            ops = self._parse_pauli_string(spec)  # {site: "X|Y|Z|I"}
+            # validate sites + ops
+            for site, lab in ops.items():
+                if not (0 <= site < length):
+                    msg = f"Site index {site} outside [0, {length - 1}]."
+                    raise ValueError(msg)
+                if lab not in self._VALID:
+                    msg = f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}."
+                    raise ValueError(msg)
+            mpo_terms.append(self._create_term(length, ops, coeff))
+
+        if not mpo_terms:
+            self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
+        else:
+            acc = mpo_terms[0]
+            for nxt in mpo_terms[1:]:
+                acc = self._sum_terms(acc, nxt)
+            self.tensors = acc
+
+        self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
+        assert self.check_if_valid_mpo(), "MPO initialized wrong"
+
+    def compress(
+        self,
+        *,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 1,
+        directions: str = "lr_rl",
+    ) -> None:
+        """Compress this MPO using local SVD sweeps.
+
+        This is a *public* convenience API that can run one or more sweeps in a chosen order.
+        Each sweep applies local two-site SVD factorization along the chain, truncates singular
+        values <= tol (and optionally caps the rank), and writes the factors back into the MPO.
+
+        Args:
+            tol: Truncation threshold. Singular values S_i with S_i <= tol are discarded.
+            max_bond_dim: Optional hard cap on the kept rank after SVD.
+            n_sweeps: Number of repetitions of the sweep schedule (must be >= 0).
+            directions: Sweep schedule:
+                - "lr": left-to-right only
+                - "rl": right-to-left only
+                - "lr_rl": do lr then rl (default)
+                - "rl_lr": do rl then lr
+
+        Raises:
+            ValueError: If n_sweeps < 0 or directions is invalid.
+        """
+        if n_sweeps < 0:
+            msg = "n_sweeps must be >= 0."
+            raise ValueError(msg)
+        if directions not in {"lr", "rl", "lr_rl", "rl_lr"}:
+            msg = "directions must be one of {'lr', 'rl', 'lr_rl', 'rl_lr'}."
+            raise ValueError(msg)
+
+        if n_sweeps == 0:
+            return
+
+        schedule = {
+            "lr": ("lr",),
+            "rl": ("rl",),
+            "lr_rl": ("lr", "rl"),
+            "rl_lr": ("rl", "lr"),
+        }[directions]
+
+        for _ in range(n_sweeps):
+            for direction in schedule:
+                self._compress_one_sweep(direction=direction, tol=tol, max_bond_dim=max_bond_dim)
+
+    def _compress_one_sweep(self, *, direction: str, tol: float, max_bond_dim: int | None) -> None:
+        """Run one in-place MPO SVD compression sweep in the given direction.
+
+        Args:
+            direction: Sweep direction ("lr" or "rl").
+            tol: Discard singular values <= tol.
+            max_bond_dim: Optional hard cap on the kept rank.
+
+        Raises:
+            ValueError: If the direction is not 'lr' or 'rl'.
+        """
+        if direction not in {"lr", "rl"}:
+            msg = "direction must be 'lr' or 'rl'."
+            raise ValueError(msg)
+
+        length = len(self.tensors)
+        if length <= 1:
+            return
+
+        rng = range(length - 1) if direction == "lr" else range(length - 2, -1, -1)
+
+        for k in rng:
+            a = self.tensors[k]  # (d, d, Dl, Dm)
+            b = self.tensors[k + 1]  # (d, d, Dm, Dr)
+
+            phys_dim = a.shape[0]
+            bond_dim_left = a.shape[2]
+            bond_dim_right = b.shape[3]
+
+            # Contract shared virtual bond (a.r with b.l): (s,t,l,r)x(u,v,r,w)->(s,t,u,v,l,w)
+            theta = oe.contract("stlr,uvrw->stuvlw", a, b)
+
+            # Group left legs (l,s,t) and right legs (u,v,w)
+            theta = np.transpose(theta, (4, 0, 1, 2, 3, 5))
+            matrix = theta.reshape(
+                bond_dim_left * phys_dim * phys_dim,
+                phys_dim * phys_dim * bond_dim_right,
+            )
+
+            u, s, vh = np.linalg.svd(matrix, full_matrices=False)
+            keep = int(np.sum(tol < s))
+            if max_bond_dim is not None:
+                keep = min(keep, max_bond_dim)
+            keep = max(1, keep)
+
+            u = u[:, :keep]
+            s = s[:keep]
+            vh = vh[:keep, :]
+
+            # Left tensor: (bond_dim_left, d, d, keep) -> (d, d, bond_dim_left, keep)
+            left = u.reshape(bond_dim_left, phys_dim, phys_dim, keep).transpose(1, 2, 0, 3)
+
+            # Right tensor: (keep, d, d, bond_dim_right) -> (d, d, keep, bond_dim_right)
+            svh = (s[:, None] * vh).reshape(keep, phys_dim, phys_dim, bond_dim_right)
+            right = svh.transpose(1, 2, 0, 3)
+
+            self.tensors[k] = left
+            self.tensors[k + 1] = right
+
+    def rotate(self, *, conjugate: bool = False) -> None:
+        """Rotates MPO.
+
+        Rotates the tensors in the network by flipping the physical dimensions.
+        This method transposes each tensor in the network along specified axes.
+        If the `conjugate` parameter is set to True, it also takes the complex
+        conjugate of each tensor before transposing.
+
+        Args:
+            conjugate (bool): If True, take the complex conjugate of each tensor
+                              before transposing. Default is False.
+        """
+        for i, tensor in enumerate(self.tensors):
+            if conjugate:
+                self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
+            else:
+                self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
 
     def to_mps(self) -> MPS:
         """MPO to MPS conversion.
@@ -1307,14 +1583,12 @@ class MPO:
         Returns:
             The resulting matrix after tensor contractions and reshaping.
         """
-        for i, tensor in enumerate(self.tensors):
-            if i == 0:
-                mat = tensor
-            else:
-                mat = oe.contract("abcd, efdg->aebfcg", mat, tensor)
-                mat = np.reshape(
-                    mat, (mat.shape[0] * mat.shape[1], mat.shape[2] * mat.shape[3], mat.shape[4], mat.shape[5])
-                )
+        mat = self.tensors[0]
+        for tensor in self.tensors[1:]:
+            mat = oe.contract("abcd, efdg->aebfcg", mat, tensor)
+            mat = np.reshape(
+                mat, (mat.shape[0] * mat.shape[1], mat.shape[2] * mat.shape[3], mat.shape[4], mat.shape[5])
+            )
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
@@ -1349,7 +1623,7 @@ class MPO:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
         identity_mpo = MPO()
-        identity_mpo.init_identity(self.length)
+        identity_mpo.identity(self.length)
 
         identity_mps = identity_mpo.to_mps()
         mps = self.to_mps()
@@ -1358,20 +1632,122 @@ class MPO:
         # Checks if trace is not a singular values for partial trace
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
 
-    def rotate(self, *, conjugate: bool = False) -> None:
-        """Rotates MPO.
+    @classmethod
+    def _create_term(cls, length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
+        """Construct an MPO tensor list for a single Pauli-string term.
 
-        Rotates the tensors in the network by flipping the physical dimensions.
-        This method transposes each tensor in the network along specified axes.
-        If the `conjugate` parameter is set to True, it also takes the complex
-        conjugate of each tensor before transposing.
+        Builds a length-`length` MPO corresponding to a single Pauli operator
+        product specified by a mapping from site indices to Pauli labels.
+
+        Each site tensor has bond dimension 1, and the overall MPO represents:
+            coeff ⨂_i P_i
+        where P_i ∈ {I, X, Y, Z}.
 
         Args:
-            conjugate (bool): If True, take the complex conjugate of each tensor
-                              before transposing. Default is False.
+            length: Total number of sites in the MPO.
+            ops: Mapping from site index to Pauli label
+                ('I', 'X', 'Y', or 'Z'). Sites not present in the dictionary
+                default to identity.
+            coeff: Scalar coefficient multiplying the operator.
+
+        Returns:
+            list[np.ndarray]: List of MPO tensors, one per site, each of shape
+            (2, 2, 1, 1).
         """
-        for i, tensor in enumerate(self.tensors):
-            if conjugate:
-                self.tensors[i] = np.transpose(np.conj(tensor), (1, 0, 2, 3))
+        tensors: list[np.ndarray] = []
+        p = cls._PAULI_2
+        for i in range(length):
+            lab = ops.get(i, "I")
+            term = np.zeros((2, 2, 1, 1), dtype=complex)
+            term[:, :, 0, 0] = p[lab]
+            tensors.append(term)
+        tensors[0] = tensors[0].copy()
+        tensors[0][:, :, 0, 0] *= coeff
+        return tensors
+
+    @classmethod
+    def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
+        """Parse a Pauli-string specification into a site-to-operator mapping.
+
+        Converts a compact string representation of a Pauli operator product
+        into a dictionary mapping site indices to Pauli labels.
+
+        The expected format is a whitespace- or comma-separated list of tokens:
+            "X0 Y2 Z5"
+
+        Args:
+            spec: Pauli-string specification.
+
+        Returns:
+            dict[int, str]: Mapping from site index to Pauli label
+            ('I', 'X', 'Y', or 'Z'). An empty dictionary corresponds to the
+            identity operator.
+
+        Raises:
+            ValueError: If:
+                - a site index appears more than once,
+                - an invalid token is encountered,
+                - or the specification contains malformed entries.
+
+        """
+        s = spec.replace(",", " ").strip()
+        if not s:
+            return {}
+        out: dict[int, str] = {}
+        for op, idx in cls._PAULI_TOKEN_RE.findall(s):
+            site = int(idx)
+            op_up = op.upper()
+            if site in out:
+                msg = f"Duplicate site {site} in spec '{spec}'."
+                raise ValueError(msg)
+            out[site] = op_up
+        cleaned = cls._PAULI_TOKEN_RE.sub("", s)
+        if cleaned.split():
+            msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
+            raise ValueError(msg)
+        return out
+
+    @staticmethod
+    def _sum_terms(tensors1: list[np.ndarray], tensors2: list[np.ndarray]) -> list[np.ndarray]:
+        """Form the direct-sum MPO representing the sum of two MPO terms.
+
+        Given two MPOs `tensors1` and `tensors2` of equal length, constructs a new MPO
+        representing their sum by block-diagonal concatenation of virtual
+        bond spaces.
+
+        Args:
+            tensors1: First MPO term as a list of tensors.
+            tensors2: Second MPO term as a list of tensors.
+
+        Returns:
+            list[np.ndarray]: MPO tensors representing tensors1 + tensors2.
+
+        Notes:
+            - This operation increases the MPO bond dimension additively.
+            - No compression is performed here; callers are expected to
+            compress the result afterward if desired.
+        """
+        length = len(tensors1)
+        assert length == len(tensors2)
+        if length == 1:
+            return [tensors1[0] + tensors2[0]]
+        out: list[np.ndarray] = []
+        for k in range(length):
+            a, b = tensors1[k], tensors2[k]
+            d = a.shape[0]
+            la, ra = a.shape[2], a.shape[3]
+            lb, rb = b.shape[2], b.shape[3]
+            if k == 0:
+                c = np.zeros((d, d, 1, ra + rb), dtype=complex)
+                c[:, :, 0, :ra] = a[:, :, 0, :]
+                c[:, :, 0, ra:] = b[:, :, 0, :]
+            elif k == length - 1:
+                c = np.zeros((d, d, la + lb, 1), dtype=complex)
+                c[:, :, :la, 0] = a[:, :, :, 0]
+                c[:, :, la:, 0] = b[:, :, :, 0]
             else:
-                self.tensors[i] = np.transpose(tensor, (1, 0, 2, 3))
+                c = np.zeros((d, d, la + lb, ra + rb), dtype=complex)
+                c[:, :, :la, :ra] = a
+                c[:, :, la:, ra:] = b
+            out.append(c)
+        return out

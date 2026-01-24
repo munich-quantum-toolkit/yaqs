@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -597,6 +597,23 @@ class BaseGate:
             An instance of the Schmidt spectrum diagnostic gate.
         """
         return SchmidtSpectrum()
+
+    @property
+    def mpo_tensors(self) -> list[NDArray[np.complex128]]:
+        """Returns a list of MPO tensors representing the gate.
+
+        Raises:
+            AttributeError: If the gate does not have MPO tensors defined.
+        """
+        try:
+            return self._mpo_tensors
+        except AttributeError:
+            msg = "This gate does not have MPO tensors defined."
+            raise AttributeError(msg) from None
+
+    @mpo_tensors.setter
+    def mpo_tensors(self, tensors: list[NDArray[np.complex128]]) -> None:
+        self._mpo_tensors = tensors
 
 
 class X(BaseGate):

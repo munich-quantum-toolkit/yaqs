@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -54,15 +54,18 @@ from concurrent.futures import (
     ProcessPoolExecutor,
     wait,
 )
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
 threadpool_limits: Callable[..., Any] | None
 threadpool_info: Callable[[], Any] | None
 try:
-    from threadpoolctl import threadpool_info as _threadpool_info  # type: ignore[import-not-found]
-    from threadpoolctl import threadpool_limits as _threadpool_limits
+    from threadpoolctl import threadpool_info as _threadpool_info  # ty: ignore[unresolved-import]
+    from threadpoolctl import threadpool_limits as _threadpool_limits  # ty: ignore[unresolved-import]
 except ImportError:  # pragma: no cover - optional dependency
     threadpool_limits = None
     threadpool_info = None
@@ -90,7 +93,7 @@ from .core.data_structures.simulation_parameters import AnalogSimParams, StrongS
 from .digital.digital_tjm import digital_tjm
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Iterator, Sequence
     from concurrent.futures import Future
 
     import numpy as np
@@ -136,13 +139,22 @@ def available_cpus() -> int:
                 pass
 
     # 2) Respect Linux affinity / cgroup limits if available
-    try:
-        return len(os.sched_getaffinity(0))
-    except AttributeError:
-        pass
+    fn = getattr(os, "sched_getaffinity", None)
+    if fn is not None:
+        try:
+            sched_getaffinity = cast("Callable[[int], set[int]]", fn)
+            n = len(sched_getaffinity(0))
+            if n > 0:
+                return n
+        except OSError:
+            # System call failed; fall through to next fallback
+            pass
 
     # 3) Fallback
-    return multiprocessing.cpu_count() or 1
+    try:
+        return os.cpu_count() or multiprocessing.cpu_count() or 1
+    except (NotImplementedError, OSError):
+        return 1
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +397,7 @@ def _run_strong_sim(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
-    # We type as Any to keep mypy happy without over-constraining element types.
+    # We type as Any to keep ty happy without over-constraining element types.
     backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # If there's no noise at all, we don't need multiple trajectories
@@ -469,11 +481,13 @@ def _run_weak_sim(
     Args:
         initial_state : The initial system state as an MPS.
         operator: The quantum circuit representing the operation to simulate.
-        sim_params: Simulation parameters for weak simulation,
-                                    including number of shots, trajectory count,
-                                    and storage for measurements.
+        sim_params: Simulation parameters for weak simulation, including number of shots,
+            trajectory count, and storage for measurements.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
+
+    Raises:
+        TypeError: If a measurement result is not of the expected type.
     """
     # digital_tjm returns a measurement outcome structure for weak sim
     backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
@@ -504,12 +518,18 @@ def _run_weak_sim(
             retry_exceptions=(CancelledError, TimeoutError, OSError),
         ):
             # For weak sim, write the raw per-trajectory measurement structure
-            sim_params.measurements[i] = result
+            if not isinstance(result, dict):
+                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
+                raise TypeError(msg)
+            sim_params.measurements[i] = cast("dict[int, int]", result)
     else:
         # Serial path
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg)
-            sim_params.measurements[i] = result
+            if not isinstance(result, dict):
+                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
+                raise TypeError(msg)
+            sim_params.measurements[i] = cast("dict[int, int]", result)
 
     # Reset shots back from trajectories
     if not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes)):

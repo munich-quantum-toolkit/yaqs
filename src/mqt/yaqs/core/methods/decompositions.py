@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -107,7 +107,6 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
         overwrite_a=True,  # allows in-place LAPACK
         check_finite=False,
     )
-    # mypy compatibility
     q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
     r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
 
@@ -140,8 +139,6 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
         overwrite_a=True,
         check_finite=False,
     )
-
-    # mypy compatibility
     q_mat = cast("NDArray[np.complex128]", np.asarray(q_mat, dtype=np.complex128))
     r_mat = cast("NDArray[np.complex128]", np.asarray(r_mat, dtype=np.complex128))
 

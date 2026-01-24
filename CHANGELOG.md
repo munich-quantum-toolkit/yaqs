@@ -9,8 +9,16 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
+### Changed
+
+- 🔧 Replace `mypy` with `ty` ([#304]) ([**@denialhaag**])
+
+## [0.3.3] - 2026-01-12
+
 ### Added
 
+- updated bib and readme with Nature Communications publication ([#298]) ([**@aaronleesander**])
+- updates MPO class to allow construction of arbitrary Pauli Hamiltonians ([#216]) ([**@aaronleesander**, **@thilomueller**])
 - added faster paths for TDVP dense effective Hamiltonian ([#280]) ([**@aaronleesander**])
 - added more stable and faster SVD and QR implementation ([#278]) ([**@aaronleesander**])
 - TDVP now utilizes a dense Hamiltonian for small tensor sizes (adjusted by global variable DENSE_THRESHOLD) ([#261]) ([**@aaronleesander**])
@@ -18,6 +26,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- Fixed bug where two-site dissipative processes were computed in loop ([#290]) ([**@aaronleesander**])
 - Fixed a truncation bug in TDVP sometimes leading to over-truncation ([#274]) ([**@aaronleesander**])
 - Updated Lanczos method's vdot order to match mathematical expectations ([#261]) ([**@aaronleesander**])
 
@@ -44,12 +53,17 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
 [0.3.1]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.1
 
 <!-- PR links -->
 
+[#304]: https://github.com/munich-quantum-toolkit/yaqs/pull/304
+[#298]: https://github.com/munich-quantum-toolkit/yaqs/pull/298
+[#216]: https://github.com/munich-quantum-toolkit/yaqs/pull/216
+[#290]: https://github.com/munich-quantum-toolkit/yaqs/pull/290
 [#280]: https://github.com/munich-quantum-toolkit/yaqs/pull/280
 [#278]: https://github.com/munich-quantum-toolkit/yaqs/pull/278
 [#274]: https://github.com/munich-quantum-toolkit/yaqs/pull/274
@@ -63,6 +77,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 [**@denialhaag**]: https://github.com/denialhaag
 [**@aaronleesander**]: https://github.com/aaronleesander
+[**@thilomueller**]: https://github.com/thilomueller
 
 <!-- General links -->
 

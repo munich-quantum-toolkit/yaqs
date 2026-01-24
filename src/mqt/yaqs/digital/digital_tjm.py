@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -173,7 +173,7 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
             tensors.append(w)
 
     mpo = MPO()
-    mpo.init_custom(tensors)
+    mpo.custom(tensors)
     return mpo, first_site, last_site
 
 
@@ -202,7 +202,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
         state.shift_orthogonality_center_right(i)
 
     short_mpo = MPO()
-    short_mpo.init_custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
+    short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
     assert window[1] - window[0] + 1 > 1, "MPS cannot be length 1"
     short_state = MPS(length=window[1] - window[0] + 1, tensors=state.tensors[window[0] : window[1] + 1])
 
