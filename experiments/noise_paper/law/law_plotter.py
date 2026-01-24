@@ -2,45 +2,19 @@ from __future__ import annotations
 
 import pickle
 from pathlib import Path
-from typing import Sequence, Iterable, Tuple
+from typing import Sequence, Tuple, Iterable
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 # -------------------------
-# Data (same as your heatmap script)
+# Experiment metadata
 # -------------------------
-L_list = [5, 10, 15, 20, 25, 30, 40, 60, 80]
-dp_list = np.logspace(-3, 0, 20)
-data_dir = Path(".")
-
-
-def load_heatmap(*, u: int, L_list: Sequence[int], dp_list: np.ndarray, prefix: str = "") -> np.ndarray:
-    """
-    grid[i, j] = mean chi_max over trajectories for L=L_list[i], dp=dp_list[j].
-
-    Expects: f"{prefix}u{u}_{L}.pickle"
-    Each results[j] is something like [entropy_obs, max_bond_obs] or similar.
-    !!! IMPORTANT: set `CHI_INDEX` correctly for your stored structure.
-    """
-    CHI_INDEX = 0  # <-- change to 1 if your max-bond observable is stored at index 1
-
-    grid = np.zeros((len(L_list), len(dp_list)), dtype=float)
-    for i, L in enumerate(L_list):
-        fname = data_dir / f"{prefix}u{u}_{L}.pickle"
-        with open(fname, "rb") as f:
-            results = pickle.load(f)
-
-        if len(results) != len(dp_list):
-            raise ValueError(f"{fname} has {len(results)} entries, expected {len(dp_list)}")
-
-        for j, entry in enumerate(results):
-            obs = entry[CHI_INDEX]
-            vals = np.asarray(obs.results, dtype=float)
-            grid[i, j] = float(np.mean(vals))
-
-    return grid
+DATA_DIR = Path(".")
+L_LIST = [5, 10, 15, 20, 25, 30, 40, 60, 80]
+DP_VALUES = [1e-3, 1e-2, 1e-1, 1e0]   # exactly what you saved
+T_LIST = [2, 5, 8]
 
 
 def style_prx(ax: plt.Axes) -> None:
@@ -49,35 +23,35 @@ def style_prx(ax: plt.Axes) -> None:
     ax.spines["right"].set_visible(False)
 
 
-def nearest_dp_indices(dp_grid: np.ndarray, targets: Iterable[float]) -> Tuple[np.ndarray, np.ndarray]:
+def load_law_grid(*, u: int, T: int | float, L_list: Sequence[int], dp_values: Sequence[float]) -> np.ndarray:
     """
-    For each target dp, return nearest index and the actual dp value used.
+    Load grid[i, j] = mean(max_bond) for L=L_list[i], dp=dp_values[j]
+    from files: u{u}_law_T{T}_L{L}.pickle
+
+    Each pickle contains a list over dp_values, where each entry is a list of Observables.
+    We assume the first observable is Observable("max_bond") as in your runner.
     """
-    dp_grid = np.asarray(dp_grid, dtype=float)
-    t = np.asarray(list(targets), dtype=float)
+    grid = np.zeros((len(L_list), len(dp_values)), dtype=float)
 
-    idx = np.array([int(np.argmin(np.abs(dp_grid - x))) for x in t], dtype=int)
-    used = dp_grid[idx]
-    return idx, used
+    for i, L in enumerate(L_list):
+        fname = DATA_DIR / f"u{u}_law_T{T}_L{L}.pickle"
+        if not fname.exists():
+            raise FileNotFoundError(f"Missing file: {fname}")
 
+        with open(fname, "rb") as f:
+            results = pickle.load(f)
 
-def power_law_fit(L: np.ndarray, chi: np.ndarray) -> Tuple[float, float]:
-    """
-    Fit chi ~ a * L^b via log-log least squares (ignoring non-positive entries).
-    Returns (a, b).
-    """
-    L = np.asarray(L, dtype=float)
-    chi = np.asarray(chi, dtype=float)
+        if len(results) != len(dp_values):
+            raise ValueError(f"{fname} has {len(results)} dp entries, expected {len(dp_values)}")
 
-    m = (L > 0) & (chi > 0)
-    if np.count_nonzero(m) < 2:
-        return np.nan, np.nan
+        for j, obs_list in enumerate(results):
+            # obs_list is whatever tdvp_simulator returned; in your code it's `sim_params.observables`
+            # and you set measurements=[Observable("max_bond")] so index 0 is max_bond.
+            max_bond_obs = obs_list[0]
+            vals = np.asarray(max_bond_obs.results, dtype=float)
+            grid[i, j] = float(np.mean(vals))
 
-    x = np.log(L[m])
-    y = np.log(chi[m])
-    b, loga = np.polyfit(x, y, 1)
-    a = float(np.exp(loga))
-    return a, float(b)
+    return grid
 
 
 if __name__ == "__main__":
@@ -91,79 +65,80 @@ if __name__ == "__main__":
         "savefig.dpi": 300,
     })
 
-    # -------------------------
-    # Load the same grids as the heatmap script
-    # -------------------------
-    Z_A = load_heatmap(u=1, L_list=L_list, dp_list=dp_list)  # Unraveling A
-    Z_B = load_heatmap(u=2, L_list=L_list, dp_list=dp_list)  # Unraveling B
+    L_arr = np.asarray(L_LIST, dtype=float)
+    dp_arr = np.asarray(DP_VALUES, dtype=float)
 
-    L_arr = np.asarray(L_list, dtype=float)
-
-    # Only use L > 15  (with your L_list this means L >= 20)
-    mask_L = L_arr > 1
+    # Optional: drop tiny-L region if you want (set to 15 or 20)
+    L_MIN = 5
+    mask_L = L_arr >= L_MIN
     L_sel = L_arr[mask_L]
 
-    # Targets (requested)
-    dp_targets = np.array([1e-3, 1e-2, 1e-1, 1e0], dtype=float)
-    dp_idx, dp_used = nearest_dp_indices(dp_list, dp_targets)
-
-    print("Requested dp targets:", dp_targets)
-    print("Nearest dp grid used:", dp_used)
-    if np.any(np.abs(np.log10(dp_used / dp_targets)) > 1e-6):
-        print("NOTE: Some requested dp values are not exactly on dp_list; nearest values were used.")
-
-    # Extract slices: shape (n_dp, n_L_selected)
-    A_slices = np.stack([Z_A[mask_L, j] for j in dp_idx], axis=0)
-    B_slices = np.stack([Z_B[mask_L, j] for j in dp_idx], axis=0)
-
-    # -------------------------
-    # Plot: 2 panels (A/B), 4 curves (dp values) each
-    # -------------------------
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.8), sharey=True)
-    axA, axB = axes
-
-    # Use a clean set of linestyles so we don’t rely on color alone
+    # Line styles (don’t rely only on color)
     linestyles = ["-", "--", "-.", ":"]
     markers = ["o", "s", "D", "^"]
 
-    for ax, slices, title, panel in [
-        (axA, A_slices, "Unraveling A", "(a)"),
-        (axB, B_slices, "Unraveling B", "(b)"),
-    ]:
-        for k, (chi_vals, dp_val, ls, mk) in enumerate(zip(slices, dp_used, linestyles, markers)):
-            ax.plot(
-                L_sel,
-                chi_vals,
-                linestyle=ls,
-                marker=mk,
-                markersize=4.5,
-                linewidth=1.2,
-                label=rf"$dp \approx {dp_val:.2g}$",
-            )
+    # -------------------------
+    # 2x3 layout: rows=unravelings, cols=T
+    # -------------------------
+    fig, axes = plt.subplots(
+        2, len(T_LIST),
+        figsize=(7.2, 4.2),
+        sharex=True, sharey="row",
+    )
 
-            # Optional quick power-law fit on the shown points (prints to console)
-            a, b = power_law_fit(L_sel, chi_vals)
-            if np.isfinite(b):
-                print(f"{title}: dp≈{dp_val:.2g}  fit chi ~ a*L^b  =>  b={b:.3f}, a={a:.3g}")
+    # Collect legend handles once
+    legend_handles = None
+    legend_labels = None
 
-        style_prx(ax)
-        ax.set_title(title, pad=4)
+    for col, T in enumerate(T_LIST):
+        # load grids for this T
+        ZA = load_law_grid(u=1, T=T, L_list=L_LIST, dp_values=DP_VALUES)
+        ZB = load_law_grid(u=2, T=T, L_list=L_LIST, dp_values=DP_VALUES)
+
+        for row, (Z, title) in enumerate([(ZA, "Unraveling A"), (ZB, "Unraveling B")]):
+            ax = axes[row, col]
+
+            for k, (dp, ls, mk) in enumerate(zip(dp_arr, linestyles, markers)):
+                y = Z[mask_L, k]
+                (line,) = ax.plot(
+                    L_sel, y,
+                    linestyle=ls,
+                    marker=mk,
+                    markersize=4.5,
+                    linewidth=1.2,
+                    label=rf"$dp = {dp:.0e}$",
+                )
+
+            style_prx(ax)
+
+            if row == 0:
+                ax.set_title(rf"$T={T}$", pad=4)
+
+            if col == 0:
+                ax.set_ylabel(r"$\overline{\chi}_{\mathrm{peak}}$" + "\n" + title)
+
+            ax.set_xticks(L_sel)
+
+            # grab legend entries from the first axis only
+            if legend_handles is None:
+                legend_handles, legend_labels = ax.get_legend_handles_labels()
+
+    # Common x label
+    for ax in axes[-1, :]:
         ax.set_xlabel(r"$L$")
 
-        ax.text(
-            0.02, 0.98, panel,
-            transform=ax.transAxes,
-            ha="left", va="top",
-            fontweight="bold",
-            bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.2),
-        )
+    # One shared legend at top center
+    fig.legend(
+        legend_handles, legend_labels,
+        ncol=4,
+        loc="upper center",
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.02),
+        fontsize=8,
+        handlelength=2.5,
+        columnspacing=1.5,
+    )
 
-        # nice discrete ticks at your sample points
-        ax.set_xticks(L_sel)
-
-    axA.set_ylabel(r"$\overline{\chi}_{peak}$")
-    axB.legend(frameon=False, fontsize=8, loc="upper left")
-
-    fig.subplots_adjust(left=0.08, right=0.98, bottom=0.22, top=0.86, wspace=0.18)
-    fig.savefig("chi_vs_L_slices.pdf")
+    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.12, top=0.86, wspace=0.18, hspace=0.22)
+    fig.savefig("chi_vs_L_slices_Tscan.pdf")
     plt.show()
