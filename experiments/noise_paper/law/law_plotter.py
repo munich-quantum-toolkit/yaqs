@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 DATA_DIR = Path(".")
 L_LIST = [5, 10, 15, 20, 25, 30, 40, 60, 80]
 DP_VALUES = [1e-3, 1e-2, 1e-1, 1e0]   # exactly what you saved
-T_LIST = [2, 5, 8]
+T_LIST = [2]
 
 
 def style_prx(ax: plt.Axes) -> None:
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # 2x3 layout: rows=unravelings, cols=T
     # -------------------------
     fig, axes = plt.subplots(
-        2, len(T_LIST),
+        2, len(T_LIST)+1,
         figsize=(7.2, 4.2),
         sharex=True, sharey="row",
     )
