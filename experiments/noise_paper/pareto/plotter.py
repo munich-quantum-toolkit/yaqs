@@ -151,8 +151,8 @@ if __name__ == "__main__":
         add_contours(ax, DPc, Lc, Z)
     # --- after plotting both panels ---
     axA.set_ylabel(r"$L$")
-    axA.set_xlabel(r"$dp=\gamma\,\Delta t$")
-    axB.set_xlabel(r"$dp=\gamma\,\Delta t$")
+    axA.set_xlabel(r"$\delta p=\gamma\,\delta t$")
+    axB.set_xlabel(r"$\delta p=\gamma\,\delta t$")
 
     # -------------------------
     # Layout tuning (reduce left whitespace, reserve space for cbar)

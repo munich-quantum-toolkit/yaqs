@@ -4,6 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, LogNorm
 import matplotlib.patheffects as pe
+import matplotlib.ticker as mticker
 
 # ------------------------
 # Data + parameters
@@ -57,8 +58,8 @@ def load_gamma_dt_heatmaps_for_u(u_tag: str):
 u1_bond, u1_time = load_gamma_dt_heatmaps_for_u("u1")
 u2_bond, u2_time = load_gamma_dt_heatmaps_for_u("u2")
 max_time = np.nanmax([u1_time, u2_time])
-u1_time = u1_time / np.nanmax(u1_time)
-u2_time = u2_time / np.nanmax(u2_time)
+u1_time = u1_time / np.nanmax(max_time)
+u2_time = u2_time / np.nanmax(max_time)
 
 # ------------------------
 # PRX-ish style
@@ -101,7 +102,7 @@ bond_norm = Normalize(
     vmax=np.nanmax([u1_bond, u2_bond]),
 )
 
-time_norm = Normalize(
+time_norm = LogNorm(
     vmin=np.nanmin([u1_time, u2_time]),
     vmax=np.nanmax([u1_time, u2_time]),
 )
@@ -133,7 +134,7 @@ def add_dp_lines_true(ax, *, add_labels=False, gamma_top=10.0):
             y_lab = np.interp(np.log(gamma_label), logg, g_centers)
             txt = ax.text(
                 x_lab + 0.15, y_lab + 0.10,
-                rf"$dp={dp:g}$", color="w", fontsize=8
+                rf"$\delta p={dp:g}$", color="w", fontsize=8
             )
             txt.set_path_effects([pe.withStroke(linewidth=2.5, foreground="black", alpha=0.6)])
 
@@ -175,9 +176,14 @@ cax_time = fig.add_subplot(gs[:, 4])
 ax_spacer = fig.add_subplot(gs[:, 2])
 ax_spacer.axis("off")
 
+# --- tighten/space colorbars a bit more cleanly ---
+# (a) bond colorbar: make it a bit narrower to create extra gap to the right column
 pos = cax_bond.get_position()
-cax_bond.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.95])
+shrink_x = 0.85   # <--- smaller = more gap on both sides inside its slot
+new_w = pos.width * shrink_x
+cax_bond.set_position([pos.x0 + 0.5*(pos.width - new_w), pos.y0, new_w, pos.height * 0.95])
 
+# (b) time colorbar: keep as-is (or apply same pattern if you want symmetry)
 pos = cax_time.get_position()
 cax_time.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.95])
 
@@ -204,7 +210,7 @@ tick_labels = [f"{x:g}" for x in dt_list]
 for ax in (ax_u2_bond, ax_u2_time):
     ax.set_xticks(tick_idx)
     ax.set_xticklabels(tick_labels, rotation=0, ha="center")
-    ax.set_xlabel(r"$dt$", labelpad=4)
+    ax.set_xlabel(r"$\delta t$", labelpad=4)
 
 top_idx = int(np.where(g == gamma_top)[0][0])
 g_tick_idx = np.arange(top_idx + 1)
@@ -233,5 +239,15 @@ cb_t.set_label("")
 cax_time.text(0.5, 1.02, "$\\tau$", transform=cax_time.transAxes,
               ha="center", va="bottom")
 
+# --- force a *linear-labeled* colorbar (even though colors use LogNorm) ---
+cb_t.ax.set_yscale("linear")          # <- key: stops 10^0 / x10 formatting
+cb_t.minorticks_off()                # no minor ticks
+
+ticks = [0.25, 0.5, 0.75, 1.0]
+cb_t.set_ticks(ticks)
+cb_t.set_ticklabels(["0.25", "0.5", "0.75", "1"])
+
+# remove any scientific/offset text that may still exist
+cb_t.ax.yaxis.get_offset_text().set_visible(False)
 fig.savefig("gamma_dt.pdf", dpi=300)
 plt.show()

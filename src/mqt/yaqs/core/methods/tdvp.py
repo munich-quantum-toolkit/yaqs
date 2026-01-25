@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
-DENSE_THRESHOLD = 1024
+DENSE_THRESHOLD = 256
 
 
 def split_mps_tensor(
@@ -550,7 +550,7 @@ def _evolve_local_tensor_krylov(
         norm = scipy.linalg.norm(h_eff)
         for m in range(1, 26):
             error_m = abs(norm * dt**m / math.factorial(m))
-            if error_m < 1e-9:
+            if error_m < 1e-5:
                 break
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -558,6 +558,7 @@ def _evolve_local_tensor_krylov(
 
     else:
         # Matrix-free projector path
+        m = 8
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             x_tensor = x_flat.reshape(tensor_shape)
             y_tensor = projector(*proj_args, x_tensor)
