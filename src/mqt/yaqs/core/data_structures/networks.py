@@ -174,7 +174,9 @@ class MPS:
                     vector[0] = rng.random()
                     vector[1] = 1 - vector[0]
                 elif state == "basis":
-                    assert basis_string is not None, "basis_string must be provided for 'basis' state initialization."
+                    assert (
+                        basis_string is not None
+                    ), "basis_string must be provided for 'basis' state initialization."
                     self.init_mps_from_basis(basis_string, self.physical_dimensions)
                     break
                 else:
@@ -191,7 +193,9 @@ class MPS:
         if pad is not None:
             self.pad_bond_dimension(pad)
 
-    def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
+    def init_mps_from_basis(
+        self, basis_string: str, physical_dimensions: list[int]
+    ) -> None:
         """Initialize a list of MPS tensors representing a product state from a basis string.
 
         Args:
@@ -350,8 +354,12 @@ class MPS:
             NDArray[np.float64]: The Schmidt spectrum (length 500),
             with unused entries filled with NaN.
         """
-        assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
-        assert sites[0] + 1 == sites[1], "Schmidt spectrum only defined for nearest-neighbor cut."
+        assert (
+            len(sites) == 2
+        ), "Schmidt spectrum is defined on a bond (two adjacent sites)."
+        assert (
+            sites[0] + 1 == sites[1]
+        ), "Schmidt spectrum only defined for nearest-neighbor cut."
         top_schmidt_vals = 500
         i, j = sites
         a, b = self.tensors[i], self.tensors[j]
@@ -407,7 +415,9 @@ class MPS:
                 return False
         return True
 
-    def shift_orthogonality_center_right(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
+    def shift_orthogonality_center_right(
+        self, current_orthogonality_center: int, decomposition: str = "QR"
+    ) -> None:
         """Shifts orthogonality center right.
 
         This function performs a QR decomposition to shift the known current center to the right and move
@@ -426,14 +436,24 @@ class MPS:
             # If normalizing, we just throw away the R
             if current_orthogonality_center + 1 < self.length:
                 self.tensors[current_orthogonality_center + 1] = oe.contract(
-                    "ij, ajc->aic", bond_tensor, self.tensors[current_orthogonality_center + 1]
+                    "ij, ajc->aic",
+                    bond_tensor,
+                    self.tensors[current_orthogonality_center + 1],
                 )
         elif decomposition == "SVD":
-            a, b = self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1]
+            a, b = (
+                self.tensors[current_orthogonality_center],
+                self.tensors[current_orthogonality_center + 1],
+            )
             a_new, b_new = two_site_svd(a, b, threshold=1e-12, max_bond_dim=None)
-            self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1] = a_new, b_new
+            (
+                self.tensors[current_orthogonality_center],
+                self.tensors[current_orthogonality_center + 1],
+            ) = (a_new, b_new)
 
-    def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
+    def shift_orthogonality_center_left(
+        self, current_orthogonality_center: int, decomposition: str = "QR"
+    ) -> None:
         """Shifts orthogonality center left.
 
         This function flips the network, performs a right shift, then flips the network again.
@@ -444,10 +464,14 @@ class MPS:
                 Default is QR.
         """
         self.flip_network()
-        self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
+        self.shift_orthogonality_center_right(
+            self.length - current_orthogonality_center - 1, decomposition
+        )
         self.flip_network()
 
-    def set_canonical_form(self, orthogonality_center: int, decomposition: str = "QR") -> None:
+    def set_canonical_form(
+        self, orthogonality_center: int, decomposition: str = "QR"
+    ) -> None:
         """Sets canonical form of MPS.
 
         Left and right normalizes an MPS around a selected site.
@@ -458,7 +482,9 @@ class MPS:
             decomposition: Type of decomposition. Default QR.
         """
 
-        def sweep_decomposition(orthogonality_center: int, decomposition: str = "QR") -> None:
+        def sweep_decomposition(
+            orthogonality_center: int, decomposition: str = "QR"
+        ) -> None:
             for site, _ in enumerate(self.tensors):
                 if site == orthogonality_center:
                     break
@@ -489,13 +515,17 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-        self.set_canonical_form(orthogonality_center=self.length - 1, decomposition=decomposition)
+        self.set_canonical_form(
+            orthogonality_center=self.length - 1, decomposition=decomposition
+        )
         self.shift_orthogonality_center_right(self.length - 1, decomposition)
 
         if form == "B":
             self.flip_network()
 
-    def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:
+    def truncate(
+        self, threshold: float = 1e-12, max_bond_dim: int | None = None
+    ) -> None:
         """In-place MPS truncation via repeated two-site SVDs."""
         orth_center = self.check_canonical_form()[0]
         if self.length == 1:
@@ -517,7 +547,9 @@ class MPS:
 
         self.flip_network()
 
-    def scalar_product(self, other: MPS, sites: int | list[int] | None = None) -> np.complex128:
+    def scalar_product(
+        self, other: MPS, sites: int | list[int] | None = None
+    ) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
 
         The function contracts the corresponding tensors of two MPS objects. If no specific site is
@@ -544,8 +576,12 @@ class MPS:
             result = None
             for idx in range(self.length):
                 # contract at each site into a 4-leg tensor
-                theta = oe.contract("abc,ade->bdce", a_copy.tensors[idx], b_copy.tensors[idx])
-                result = theta if idx == 0 else oe.contract("abcd,cdef->abef", result, theta)
+                theta = oe.contract(
+                    "abc,ade->bdce", a_copy.tensors[idx], b_copy.tensors[idx]
+                )
+                result = (
+                    theta if idx == 0 else oe.contract("abcd,cdef->abef", result, theta)
+                )
             # squeeze down to scalar
             assert result is not None
             return np.complex128(np.squeeze(result))
@@ -577,7 +613,9 @@ class MPS:
         msg = f"Invalid `sites` argument: {sites!r}"
         raise ValueError(msg)
 
-    def local_expect(self, operator: Observable, sites: int | list[int]) -> np.complex128:
+    def local_expect(
+        self, operator: Observable, sites: int | list[int]
+    ) -> np.complex128:
         """Compute the local expectation value of an operator on an MPS.
 
         The function applies the given operator to the tensor at the specified site of a deep copy of the
@@ -603,11 +641,17 @@ class MPS:
                 i = sites
 
             if isinstance(operator.sites, list):
-                assert operator.sites[0] == i, f"Operator sites mismatch {operator.sites[0]}, {i}"
+                assert (
+                    operator.sites[0] == i
+                ), f"Operator sites mismatch {operator.sites[0]}, {i}"
             elif isinstance(operator.sites, int):
-                assert operator.sites == i, f"Operator sites mismatch {operator.sites}, {i}"
+                assert (
+                    operator.sites == i
+                ), f"Operator sites mismatch {operator.sites}, {i}"
 
-            assert i is not None, f"Invalid type for 'sites': expected int or list[int], got {type(sites).__name__}"
+            assert (
+                i is not None
+            ), f"Invalid type for 'sites': expected int or list[int], got {type(sites).__name__}"
             a = temp_state.tensors[i]
             temp_state.tensors[i] = oe.contract("ab, bcd->acd", operator.gate.matrix, a)
 
@@ -618,10 +662,12 @@ class MPS:
 
             assert operator.sites[0] == i, "Observable sites mismatch"
             assert operator.sites[1] == j, "Observable sites mismatch"
-            assert operator.sites[0] < operator.sites[1], "Observable sites must be in ascending order."
-            assert operator.sites[1] - operator.sites[0] == 1, (
-                "Only nearest-neighbor observables are currently implemented."
-            )
+            assert (
+                operator.sites[0] < operator.sites[1]
+            ), "Observable sites must be in ascending order."
+            assert (
+                operator.sites[1] - operator.sites[0] == 1
+            ), "Only nearest-neighbor observables are currently implemented."
             a = temp_state.tensors[i]
             b = temp_state.tensors[j]
             d_i, left, _ = a.shape
@@ -633,7 +679,9 @@ class MPS:
             theta = theta.reshape(left, d_i * d_j, right)  # (l, d_i*d_j, r)
 
             # 2) apply operator on the combined phys index
-            theta = oe.contract("ab, cbd->cad", operator.gate.matrix, theta)  # (l, d_i*d_j, r)
+            theta = oe.contract(
+                "ab, cbd->cad", operator.gate.matrix, theta
+            )  # (l, d_i*d_j, r)
             theta = theta.reshape(left, d_i, d_j, right)  # back to (l, d_i, d_j, r)
 
             # 3) split via SVD
@@ -646,7 +694,9 @@ class MPS:
             u_tensor = u_mat.reshape(left, d_i, chi_new)  # (l, d_i, r_new)
             a_new = u_tensor.transpose(1, 0, 2)  # → (d_i, l, r_new)
 
-            v_tensor = (np.diag(s_vec) @ v_mat).reshape(chi_new, d_j, right)  # (l_new, d_j, r)
+            v_tensor = (np.diag(s_vec) @ v_mat).reshape(
+                chi_new, d_j, right
+            )  # (l_new, d_j, r)
             b_new = v_tensor.transpose(1, 0, 2)  # → (d_j, l_new, r)
 
             temp_state.tensors[i] = a_new
@@ -655,7 +705,10 @@ class MPS:
         return self.scalar_product(temp_state, sites)
 
     def evaluate_observables(
-        self, sim_params: AnalogSimParams | StrongSimParams, results: NDArray[np.float64], column_index: int = 0
+        self,
+        sim_params: AnalogSimParams | StrongSimParams,
+        results: NDArray[np.float64],
+        column_index: int = 0,
     ) -> None:
         """Evaluate and record expectation values of observables for a given MPS state.
 
@@ -679,24 +732,44 @@ class MPS:
             elif observable.gate.name == "total_bond":
                 results[obs_index, column_index] = self.get_total_bond()
             elif observable.gate.name in {"entropy", "schmidt_spectrum"}:
-                assert isinstance(observable.sites, list), "Given metric requires a list of sites"
-                assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
+                assert isinstance(
+                    observable.sites, list
+                ), "Given metric requires a list of sites"
+                assert (
+                    len(observable.sites) == 2
+                ), "Given metric requires 2 sites to act on."
                 max_site = max(observable.sites)
                 min_site = min(observable.sites)
-                assert max_site - min_site == 1, "Entropy and Schmidt cuts must be nearest neighbor."
+                assert (
+                    max_site - min_site == 1
+                ), "Entropy and Schmidt cuts must be nearest neighbor."
                 for s in observable.sites:
-                    assert s in range(self.length), f"Observable acting on non-existing site: {s}"
+                    assert s in range(
+                        self.length
+                    ), f"Observable acting on non-existing site: {s}"
                 if observable.gate.name == "entropy":
-                    results[obs_index, column_index] = self.get_entropy(observable.sites)
+                    results[obs_index, column_index] = self.get_entropy(
+                        observable.sites
+                    )
                 elif observable.gate.name == "schmidt_spectrum":
-                    results[obs_index, column_index] = self.get_schmidt_spectrum(observable.sites)
+                    results[obs_index, column_index] = self.get_schmidt_spectrum(
+                        observable.sites
+                    )
 
             elif observable.gate.name == "pvm":
-                assert hasattr(observable.gate, "bitstring"), "Gate does not have attribute bitstring."
-                results[obs_index, column_index] = self.project_onto_bitstring(observable.gate.bitstring)
+                assert hasattr(
+                    observable.gate, "bitstring"
+                ), "Gate does not have attribute bitstring."
+                results[obs_index, column_index] = self.project_onto_bitstring(
+                    observable.gate.bitstring
+                )
 
             else:
-                idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
+                idx = (
+                    observable.sites[0]
+                    if isinstance(observable.sites, list)
+                    else observable.sites
+                )
                 if idx > last_site:
                     for site in range(last_site, idx):
                         temp_state.shift_orthogonality_center_right(site)
@@ -721,16 +794,24 @@ class MPS:
         elif isinstance(observable.sites, list):
             sites_list = observable.sites
 
-        assert sites_list is not None, f"Invalid type in expect {type(observable.sites).__name__}"
+        assert (
+            sites_list is not None
+        ), f"Invalid type in expect {type(observable.sites).__name__}"
 
-        assert len(sites_list) < 3, "Only one- and two-site observables are currently implemented."
+        assert (
+            len(sites_list) < 3
+        ), "Only one- and two-site observables are currently implemented."
 
         for s in sites_list:
-            assert s in range(self.length), f"Observable acting on non-existing site: {s}"
+            assert s in range(
+                self.length
+            ), f"Observable acting on non-existing site: {s}"
 
         exp = self.local_expect(observable, sites_list)
 
-        assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
+        assert (
+            exp.imag < 1e-13
+        ), f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 
     def measure_single_shot(self) -> int:
@@ -747,7 +828,9 @@ class MPS:
         temp_state = copy.deepcopy(self)
         bitstring = []
         for site, tensor in enumerate(temp_state.tensors):
-            reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
+            reduced_density_matrix = oe.contract(
+                "abc, dbc->ad", tensor, np.conj(tensor)
+            )
             probabilities = np.diag(reduced_density_matrix).real
             rng = np.random.default_rng()
             chosen_index = rng.choice(len(probabilities), p=probabilities)
@@ -761,7 +844,9 @@ class MPS:
                 temp_state.tensors[site + 1] = (  # noqa: B909
                     1
                     / np.sqrt(probabilities[chosen_index])
-                    * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])
+                    * oe.contract(
+                        "ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1]
+                    )
                 )
         return sum(c << i for i, c in enumerate(bitstring))
 
@@ -786,10 +871,14 @@ class MPS:
         if shots > 1:
             max_workers = max(1, multiprocessing.cpu_count() - 1)
             with (
-                concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor,
+                concurrent.futures.ProcessPoolExecutor(
+                    max_workers=max_workers
+                ) as executor,
                 tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
             ):
-                futures = [executor.submit(self.measure_single_shot) for _ in range(shots)]
+                futures = [
+                    executor.submit(self.measure_single_shot) for _ in range(shots)
+                ]
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
                     results[result] = results.get(result, 0) + 1
@@ -813,7 +902,9 @@ class MPS:
         Returns:
             float: Probability of obtaining the given bitstring under projective measurement.
         """
-        assert len(bitstring) == self.length, "Bitstring length must match number of sites"
+        assert (
+            len(bitstring) == self.length
+        ), "Bitstring length must match number of sites"
         temp_state = copy.deepcopy(self)
         total_norm = 1.0
 
@@ -821,7 +912,9 @@ class MPS:
             state_index = int(char)
             tensor = temp_state.tensors[site]
             local_dim = self.physical_dimensions[site]
-            assert 0 <= state_index < local_dim, f"Invalid state index {state_index} at site {site}"
+            assert (
+                0 <= state_index < local_dim
+            ), f"Invalid state index {state_index} at site {site}"
 
             selected_state = np.zeros(local_dim)
             selected_state[state_index] = 1
@@ -838,7 +931,11 @@ class MPS:
             # Normalize and propagate
             if site != self.length - 1:
                 temp_state.tensors[site + 1] = (
-                    1 / norm * oe.contract("ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1])
+                    1
+                    / norm
+                    * oe.contract(
+                        "ab, cbd->cad", projected_tensor, temp_state.tensors[site + 1]
+                    )
                 )
 
         return np.complex128(total_norm**2)
@@ -1294,6 +1391,74 @@ class MPO:
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
         return mpo
 
+    @classmethod
+    def bose_hubbard(
+        cls,
+        length: int,
+        local_dim: int,
+        omega: float,
+        hopping_J: float,
+        hubbard_U: float,
+    ) -> MPO:
+        """Bose-Hubbard Hamiltonian.
+
+        Initializes an MPO representation of a Bose-Hubbard Hamiltonian.
+
+        Parameters:
+            length: Total number of sites in the chain.
+            local_dim: Local Hilbert space dimension of each site. Maximally
+                                local_dim - 1 particles per site.
+            omega: Frequency of a site.
+            hopping_J: Hopping constant between sites.
+            hubbard_U: Repulsive onsite Hubbard interaction on each site.
+
+        Returns:
+            An MPO instance representing the Hamiltonian.
+
+        Notes:
+            - The Hamiltonian for each qubit is modeled as a Duffing oscillator:
+                H = sum_i ω * n_i + U/2 * n_i (n_i - 1) + J * (adag_i a_{i+1} + h.c.)
+            - The MPO bond dimension is D=4.
+        """
+        a = Destroy(local_dim)
+        a_dag = a.dag()
+
+        id = np.eye(local_dim, dtype=complex)
+        zero = np.zeros_like(id_q)
+
+        n = a_dag.matrix @ a.matrix
+        h_loc = 0.5 * hubbard_U * (n @ (n - id)) + omega * n
+
+        tensors: list[np.ndarray] = []
+
+        # channels: 0 = start/identity, 1 = carries adag, 2 = carries a, 3 = end/accumulator
+        tensor = np.empty((4, 4, local_dim, local_dim), dtype=object)
+        tensor[:, :] = [[zero for _ in range(4)] for _ in range(4)]
+        tensor[0, 0] = id
+        tensor[0, 1] = a_dag
+        tensor[0, 2] = a
+        tensor[0, 3] = h_loc
+
+        tensor[1, 3] = -hopping_J * a  # completes adag_i * a_{i+1}
+        tensor[2, 3] = -hopping_J * a_dag
+        tensor[3, 3] = id
+
+        tensors = [tensor.copy() for _ in range(L)]
+        # Left boundary: take only row 0
+        tensors[0] = tensor[0:1, :, :, :].copy()
+        # Right boundary: take only col 3
+        tensors[-1] = tensor[:, 3:4, :, :].copy()
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = length
+
+        # Backward-compat: single attribute even though dims alternate.
+        mpo.physical_dimension = local_dim
+
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+        return mpo
+
     def identity(self, length: int, physical_dimension: int = 2) -> None:
         """Initialize identity MPO.
 
@@ -1340,7 +1505,9 @@ class MPO:
         self.length = len(self.tensors)
         self.physical_dimension = self.tensors[0].shape[0]
 
-    def custom(self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True) -> None:
+    def custom(
+        self, tensors: list[NDArray[np.complex128]], *, transpose: bool = True
+    ) -> None:
         """Custom MPO from tensors.
 
         Initialize the custom MPO (Matrix Product Operator) with the given tensors.
@@ -1418,14 +1585,18 @@ class MPO:
             mpo_terms.append(self._create_term(length, ops, coeff))
 
         if not mpo_terms:
-            self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
+            self.tensors = [
+                np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)
+            ]
         else:
             acc = mpo_terms[0]
             for nxt in mpo_terms[1:]:
                 acc = self._sum_terms(acc, nxt)
             self.tensors = acc
 
-        self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
+        self.compress(
+            tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl"
+        )
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
 
     def compress(
@@ -1474,9 +1645,13 @@ class MPO:
 
         for _ in range(n_sweeps):
             for direction in schedule:
-                self._compress_one_sweep(direction=direction, tol=tol, max_bond_dim=max_bond_dim)
+                self._compress_one_sweep(
+                    direction=direction, tol=tol, max_bond_dim=max_bond_dim
+                )
 
-    def _compress_one_sweep(self, *, direction: str, tol: float, max_bond_dim: int | None) -> None:
+    def _compress_one_sweep(
+        self, *, direction: str, tol: float, max_bond_dim: int | None
+    ) -> None:
         """Run one in-place MPO SVD compression sweep in the given direction.
 
         Args:
@@ -1526,7 +1701,9 @@ class MPO:
             vh = vh[:keep, :]
 
             # Left tensor: (bond_dim_left, d, d, keep) -> (d, d, bond_dim_left, keep)
-            left = u.reshape(bond_dim_left, phys_dim, phys_dim, keep).transpose(1, 2, 0, 3)
+            left = u.reshape(bond_dim_left, phys_dim, phys_dim, keep).transpose(
+                1, 2, 0, 3
+            )
 
             # Right tensor: (keep, d, d, bond_dim_right) -> (d, d, keep, bond_dim_right)
             svh = (s[:, None] * vh).reshape(keep, phys_dim, phys_dim, bond_dim_right)
@@ -1565,7 +1742,10 @@ class MPO:
             MPS: An MPS object containing the reshaped tensors.
         """
         converted_tensors: list[NDArray[np.complex128]] = [
-            np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
+            np.reshape(
+                tensor,
+                (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]),
+            )
             for tensor in self.tensors
         ]
 
@@ -1587,7 +1767,13 @@ class MPO:
         for tensor in self.tensors[1:]:
             mat = oe.contract("abcd, efdg->aebfcg", mat, tensor)
             mat = np.reshape(
-                mat, (mat.shape[0] * mat.shape[1], mat.shape[2] * mat.shape[3], mat.shape[4], mat.shape[5])
+                mat,
+                (
+                    mat.shape[0] * mat.shape[1],
+                    mat.shape[2] * mat.shape[3],
+                    mat.shape[4],
+                    mat.shape[5],
+                ),
             )
 
         # Final left and right bonds should be 1
@@ -1633,7 +1819,9 @@ class MPO:
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
 
     @classmethod
-    def _create_term(cls, length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
+    def _create_term(
+        cls, length: int, ops: dict[int, str], coeff: complex
+    ) -> list[np.ndarray]:
         """Construct an MPO tensor list for a single Pauli-string term.
 
         Builds a length-`length` MPO corresponding to a single Pauli operator
@@ -1708,7 +1896,9 @@ class MPO:
         return out
 
     @staticmethod
-    def _sum_terms(tensors1: list[np.ndarray], tensors2: list[np.ndarray]) -> list[np.ndarray]:
+    def _sum_terms(
+        tensors1: list[np.ndarray], tensors2: list[np.ndarray]
+    ) -> list[np.ndarray]:
         """Form the direct-sum MPO representing the sum of two MPO terms.
 
         Given two MPOs `tensors1` and `tensors2` of equal length, constructs a new MPO
