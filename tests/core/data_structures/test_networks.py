@@ -1279,9 +1279,6 @@ def test_from_pauli_sum_empty_terms_builds_zero_mpo() -> None:
         assert np.allclose(t, 0.0)
 
 
-
-
-
 def test_compress_raises_on_negative_n_sweeps() -> None:
     """MPO compress input validation: negative n_sweeps must raise."""
     mpo = MPO()
