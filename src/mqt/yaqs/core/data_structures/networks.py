@@ -1424,7 +1424,7 @@ class MPO:
                 if lab not in self._VALID:
                     msg = f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}."
                     raise ValueError(msg)
-            
+
             # Fill missing sites with Identity "I"
             op_list = [ops_map.get(i, "I") for i in range(length)]
             parsed_terms.append((coeff, op_list))
@@ -1432,63 +1432,64 @@ class MPO:
         # 2. Assign State IDs (Right-to-Left)
         #    We identify unique "suffix states" needed at each bond.
         #    A state at bond i is uniquely defined by the pair (Operator at site i, State at bond i+1).
-        
+
         # `term_trajectories[term_idx][i]` stores the State ID at bond `i` for `term_idx`.
         # Bond indices range from 0 (left of site 0) to L (right of site L-1).
         term_trajectories = [[0] * (length + 1) for _ in range(len(parsed_terms))]
-        
+
         # Initialize right boundary (Bond L): All terms end at the "sink" state (ID 0).
         for t_idx in range(len(parsed_terms)):
             term_trajectories[t_idx][length] = 0
-            
+
         # bond_state_maps[i] stores the mapping: (Op_str, Next_State_ID) -> Current_State_ID
         bond_state_maps: list[dict[tuple[str, int], int]] = [{} for _ in range(length + 1)]
-        
+
         # Sweep Right-to-Left (sites L-1 down to 1) to build the FSM transitions.
         # We stop at bond 1. Bond 0 is always the single "Start" state.
         for i in range(length - 1, 0, -1):
             next_bond = i + 1
             current_bond = i
-            
+
             unique_states_map = bond_state_maps[current_bond]
             next_id = 0
-            
+
             for t_idx, (_, ops) in enumerate(parsed_terms):
                 op = ops[i]
                 next_state = term_trajectories[t_idx][next_bond]
                 signature = (op, next_state)
-                
+
                 if signature not in unique_states_map:
                     unique_states_map[signature] = next_id
                     next_id += 1
-                
+
                 term_trajectories[t_idx][current_bond] = unique_states_map[signature]
 
         # 3. Build Tensors (Left-to-Right)
         self.tensors = []
         paulis = self._PAULI_2
-        
+
         for i in range(length):
             # Determine bond dimensions based on number of unique states at boundaries
             if i == 0:
                 d_left = 1
                 d_right = 1 if length == 1 else len(bond_state_maps[1])
                 # Handle edge case where d_right is 0 (should not happen if terms exist)
-                if length > 1 and d_right == 0: d_right = 1
+                if length > 1 and d_right == 0:
+                    d_right = 1
             else:
                 d_left = len(bond_state_maps[i])
                 d_right = 1 if i == length - 1 else len(bond_state_maps[i + 1])
-            
+
             # Allocate tensor: (phys_out, phys_in, left, right)
             tensor = np.zeros((2, 2, d_left, d_right), dtype=complex)
-            
+
             if i == 0:
                 # First site: Accumulate coefficients and split into initial branches.
                 for t_idx, (coeff, ops) in enumerate(parsed_terms):
                     op_name = ops[i]
                     op_mat = paulis[op_name]
                     target_state = term_trajectories[t_idx][1]
-                    
+
                     # Accumulate contribution. Multiple terms may map to the same target state.
                     tensor[:, :, 0, target_state] += coeff * op_mat
             else:
@@ -1496,11 +1497,11 @@ class MPO:
                 # Each row (current_id) in the tensor corresponds to a unique state from Step 2.
                 # This state maps to exactly one (op, next_id) pair.
                 map_i = bond_state_maps[i]
-                
+
                 for (op_name, next_id), current_id in map_i.items():
                     op_mat = paulis[op_name]
                     tensor[:, :, current_id, next_id] = op_mat
-            
+
             self.tensors.append(tensor)
 
         # 4. Final Compression
@@ -1714,8 +1715,6 @@ class MPO:
         # Checks if trace is not a singular values for partial trace
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
 
-
-
     @classmethod
     def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
         """Parse a Pauli-string specification into a site-to-operator mapping.
@@ -1757,5 +1756,3 @@ class MPO:
             msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
             raise ValueError(msg)
         return out
-
-
