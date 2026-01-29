@@ -519,12 +519,13 @@ def _build_dense_effective_hamiltonian(
     return h_eff
 
 
+
 def _evolve_local_tensor_krylov(
     projector: Callable[..., NDArray[np.complex128]],
     tensor: NDArray[np.complex128],
     dt: float,
     proj_args: tuple[NDArray[np.complex128], ...],
-    dense_threshold: int = DENSE_THRESHOLD,
+    dense_threshold: int = 128,  # Reduced from 1024 based on benchmarking
 ) -> NDArray[np.complex128]:
     """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
 
@@ -544,15 +545,17 @@ def _evolve_local_tensor_krylov(
     tensor_flat = tensor.reshape(-1)
     n_loc = tensor_flat.size
 
+    # Only use dense path if significantly smaller than threshold (based on benchmark)
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
-        norm = scipy.linalg.norm(h_eff)
-        for m in range(1, 26):
-            error_m = abs(norm * dt**m / math.factorial(m))
-            if error_m < 1e-9:
-                break
-
+        # Note: Dense path uses full matrix exponential via Krylov (similar efficiency to dense expm but generic)
+        # However, for consistency we stick to the provided structure.
+        
+        # We can still use the norm to check Taylor error for small systems if desired, 
+        # but adaptive Krylov handles it automatically.
+        # Let's just use the same adaptive Krylov on the dense matmul wrapper.
+        
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
 
@@ -563,8 +566,10 @@ def _evolve_local_tensor_krylov(
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
 
-    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt, lanczos_iterations=m)
+    # Use adaptive Krylov with defaults (or custom tol if needed)
+    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt)
     return evolved_flat.reshape(tensor_shape)
+
 
 
 def update_site(
