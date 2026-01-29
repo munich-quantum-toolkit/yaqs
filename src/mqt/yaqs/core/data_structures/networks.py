@@ -1397,8 +1397,8 @@ class MPO:
         length: int,
         local_dim: int,
         omega: float,
-        hopping_J: float,
-        hubbard_U: float,
+        hopping_j: float,
+        hubbard_u: float,
     ) -> MPO:
         """Bose-Hubbard Hamiltonian.
 
@@ -1423,29 +1423,28 @@ class MPO:
         a = Destroy(local_dim).matrix
         a_dag = Destroy(local_dim).dag().matrix
 
-        id = np.eye(local_dim, dtype=complex)
-        zero = np.zeros_like(id)
+        id_boson = np.eye(local_dim, dtype=complex)
+        zero = np.zeros_like(id_boson)
 
         n = a_dag @ a
-        h_loc = 0.5 * hubbard_U * (n @ (n - id)) + omega * n
+        h_loc = 0.5 * hubbard_u * (n @ (n - id_boson)) + omega * n
 
         tensors: list[np.ndarray] = []
 
         # channels: 0 = start/identity, 1 = carries adag, 2 = carries a, 3 = end/accumulator
         tensor = np.empty((4, 4, local_dim, local_dim), dtype=object)
         tensor[:, :] = [[zero for _ in range(4)] for _ in range(4)]
-        tensor[0, 0] = id
+        tensor[0, 0] = id_boson
         tensor[0, 1] = a_dag
         tensor[0, 2] = a
 
         tensor[0, 3] = h_loc
 
-        tensor[1, 3] = -hopping_J * a  # completes adag_i * a_{i+1}
-        tensor[2, 3] = -hopping_J * a_dag
-        tensor[3, 3] = id
+        tensor[1, 3] = -hopping_j * a  # completes adag_i * a_{i+1}
+        tensor[2, 3] = -hopping_j * a_dag
+        tensor[3, 3] = id_boson
 
         tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)) for _ in range(length)]
-        # tensors.append(np.transpose(tensor.copy(), (2, 3, 0, 1)))
 
         # Left boundary: take only row 0
         tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].copy()
