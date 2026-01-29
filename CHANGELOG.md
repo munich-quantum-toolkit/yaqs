@@ -10,8 +10,9 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ## [Unreleased]
 
 ### Changed
+
 - changed Pauli summation to use finite state machine construction
-([#308]) ([**@aaronleesander**])
+  ([#308]) ([**@aaronleesander**])
 - 🔧 Replace `mypy` with `ty` ([#304]) ([**@denialhaag**])
 
 ## [0.3.3] - 2026-01-12
