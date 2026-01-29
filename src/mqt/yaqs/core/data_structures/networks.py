@@ -1376,7 +1376,7 @@ class MPO:
 
         Each term is given as ``(coeff, spec)`` where ``spec`` is a string like
         ``"Z0 Z1"``, ``"X7"``, or ``""`` for the identity. Terms are assembled by
-        direct-summing their MPO bond spaces and then compressed in-place.
+        summing them in batches and compressing incrementally to keep the bond dimension small.
 
         Args:
             terms: List of ``(coefficient, spec)`` Pauli terms.
@@ -1392,7 +1392,8 @@ class MPO:
 
         Notes:
             The resulting MPO represents the sum of all provided terms (including
-            coefficients). Compression is performed via ``self.compress(..., directions="lr_rl")``.
+            coefficients). Compression is performed incrementally and finally via
+            ``self.compress(..., directions="lr_rl")``.
         """
         if physical_dimension != 2:
             msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
@@ -1419,12 +1420,35 @@ class MPO:
 
         if not mpo_terms:
             self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
-        else:
-            acc = mpo_terms[0]
-            for nxt in mpo_terms[1:]:
-                acc = self._sum_terms(acc, nxt)
-            self.tensors = acc
+            return
 
+        # Batch processing: sum groups of terms and compress
+        batch_size = 10
+        current_mpo = None
+
+        def sum_mpo_list(mpos: list[list[np.ndarray]]) -> list[np.ndarray]:
+            acc = mpos[0]
+            for nxt in mpos[1:]:
+                acc = self._sum_terms(acc, nxt)
+            return acc
+
+        for i in range(0, len(mpo_terms), batch_size):
+            batch = mpo_terms[i : i + batch_size]
+            batch_sum = sum_mpo_list(batch)
+
+            if current_mpo is None:
+                current_mpo = batch_sum
+            else:
+                current_mpo = self._sum_terms(current_mpo, batch_sum)
+
+            # Update the MPO tensors effectively to run compression
+            self.tensors = current_mpo
+            # Run one sweep of compression to reduce bond dimension
+            # We use the user's tolerance but maybe fewer sweeps for speed
+            self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=1, directions="lr_rl")
+            current_mpo = self.tensors
+
+        # Final compression
         self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
 
