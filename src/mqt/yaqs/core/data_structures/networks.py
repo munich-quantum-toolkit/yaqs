@@ -1420,13 +1420,13 @@ class MPO:
                 H = sum_i ω * n_i + U/2 * n_i (n_i - 1) + J * (adag_i a_{i+1} + h.c.)
             - The MPO bond dimension is D=4.
         """
-        a = Destroy(local_dim)
-        a_dag = a.dag()
+        a = Destroy(local_dim).matrix
+        a_dag = Destroy(local_dim).dag().matrix
 
         id = np.eye(local_dim, dtype=complex)
-        zero = np.zeros_like(id_q)
+        zero = np.zeros_like(id)
 
-        n = a_dag.matrix @ a.matrix
+        n = a_dag @ a
         h_loc = 0.5 * hubbard_U * (n @ (n - id)) + omega * n
 
         tensors: list[np.ndarray] = []
@@ -1437,17 +1437,20 @@ class MPO:
         tensor[0, 0] = id
         tensor[0, 1] = a_dag
         tensor[0, 2] = a
+
         tensor[0, 3] = h_loc
 
         tensor[1, 3] = -hopping_J * a  # completes adag_i * a_{i+1}
         tensor[2, 3] = -hopping_J * a_dag
         tensor[3, 3] = id
 
-        tensors = [tensor.copy() for _ in range(L)]
+        tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)) for _ in range(length)]
+        # tensors.append(np.transpose(tensor.copy(), (2, 3, 0, 1)))
+
         # Left boundary: take only row 0
-        tensors[0] = tensor[0:1, :, :, :].copy()
+        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].copy()
         # Right boundary: take only col 3
-        tensors[-1] = tensor[:, 3:4, :, :].copy()
+        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].copy()
 
         mpo = cls()
         mpo.tensors = tensors
