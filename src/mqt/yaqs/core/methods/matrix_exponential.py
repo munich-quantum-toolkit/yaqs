@@ -162,6 +162,11 @@ def expm_krylov(
     # At m=1, T is 1x1 [alpha[0]], we want to check convergence after at least a few steps?
     # Usually we check every step.
 
+    # Cache for eigendecomposition to avoid recomputing if we reach max iterations
+    cached_eigvals = None
+    cached_eigvecs = None
+    cached_k = None
+
     for j in range(m_max):
         vj = v[:, j]
         w = matrix_free_operator(vj)
@@ -217,6 +222,11 @@ def expm_krylov(
                     check_finite=False,
                 )
 
+            # Cache this eigendecomposition
+            cached_eigvals = w_hess
+            cached_eigvecs = u_hess
+            cached_k = k
+
             # E_k = U exp(-i dt D) U^H
             # We need the first column of E_k, say y_k. y_k = U @ (exp(...) * (U^H e1))
             # u_hess is (k, k). u_hess[0, :] is the first row of U, which is (U^H e1)^T (since U is real/orth).
@@ -243,7 +253,13 @@ def expm_krylov(
                     return np.asarray(v[:, :k] @ (y_k * vec_norm), dtype=np.complex128)
 
     # If we reach here, we exhausted max_lanczos_iterations
-    # Using the full basis generated.
+    # Check if we can reuse the cached eigendecomposition
+    if cached_eigvals is not None and cached_k == m_max:
+        # Reuse the cached eigendecomposition from the last error check
+        coeffs = vec_norm * np.exp(-1j * dt * cached_eigvals) * cached_eigvecs[0]
+        return np.asarray(v @ (cached_eigvecs @ coeffs), dtype=np.complex128)
+    
+    # Otherwise compute fresh (shouldn't happen often)
     return _compute_krylov_result(alpha, beta, v, vec_norm, dt)
 
 
