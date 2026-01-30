@@ -1424,7 +1424,7 @@ class MPO:
         a_dag = Destroy(local_dim).dag().matrix
 
         id_boson = np.eye(local_dim, dtype=complex)
-        zero = np.zeros_like(id_boson)
+        zero = np.zeros_like(id_boson, dtype=complex)
 
         n = a_dag @ a
         h_loc = 0.5 * hubbard_u * (n @ (n - id_boson)) + omega * n
@@ -1450,6 +1450,22 @@ class MPO:
         tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].copy()
         # Right boundary: take only col 3
         tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].copy()
+
+        # build the full tensor list
+        tensors = [
+            np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128)
+            for _ in range(length)
+        ]
+
+        # Left boundary: take only row 0
+        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(
+            np.complex128
+        )
+
+        # Right boundary: take only col 3
+        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].astype(
+            np.complex128
+        )
 
         mpo = cls()
         mpo.tensors = tensors
