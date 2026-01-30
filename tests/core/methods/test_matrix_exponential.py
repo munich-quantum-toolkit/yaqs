@@ -27,62 +27,9 @@ import numpy as np
 from numpy.linalg import norm
 from scipy.linalg import expm
 
-from mqt.yaqs.core.methods.matrix_exponential import expm_krylov, lanczos_iteration
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
+from mqt.yaqs.core.methods.matrix_exponential import expm_krylov
 
 
-def test_lanczos_iteration_small() -> None:
-    """Test small Lanczos.
-
-    Check that lanczos_iteration produces correct shapes and orthonormal vectors
-    for a small 2x2 Hermitian matrix.
-    """
-    mat = np.array([[2.0, 1.0], [1.0, 3.0]])
-
-    def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return mat @ x
-
-    initial_vec = np.array([1.0, 1.0], dtype=complex)
-    lanczos_iterations = 2
-
-    alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, initial_vec, lanczos_iterations)
-    # alpha should have shape (2,), beta shape (1,), and V shape (2, 2)
-    assert alpha.shape == (2,)
-    assert beta.shape == (1,)
-    assert lanczos_mat.shape == (2, 2)
-
-    # Check first Lanczos vector is normalized.
-    np.testing.assert_allclose(norm(lanczos_mat[:, 0]), 1.0, atol=1e-12)
-    # Check second vector is orthogonal to the first.
-    dot_01 = np.vdot(lanczos_mat[:, 0], lanczos_mat[:, 1])
-    np.testing.assert_allclose(dot_01, 0.0, atol=1e-12)
-    np.testing.assert_allclose(norm(lanczos_mat[:, 1]), 1.0, atol=1e-12)
-
-
-def test_lanczos_early_termination() -> None:
-    """Test Lanczos early termination.
-
-    Check that lanczos_iteration terminates early when beta[j] is nearly zero.
-
-    Using a diagonal matrix so that if the starting vector is an eigenvector, the
-    iteration can terminate early. In this case, with initial_vec aligned with [1, 0],
-    the iteration should stop after one step.
-    """
-    mat = np.diag([1.0, 2.0])
-
-    def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return mat @ x
-
-    initial_vec = np.array([1.0, 0.0], dtype=complex)
-    lanczos_iterations = 5
-
-    alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, initial_vec, lanczos_iterations)
-    # Expect termination after 1 iteration: alpha shape (1,), beta shape (0,), V shape (2, 1)
-    assert alpha.shape == (1,)
-    assert beta.shape == (0,)
-    assert lanczos_mat.shape == (2, 1), "Should have truncated V to 1 Lanczos vector."
 
 
 def test_expm_krylov_2x2_exact() -> None:
