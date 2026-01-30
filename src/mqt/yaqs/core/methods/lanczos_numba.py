@@ -88,8 +88,8 @@ def normalize_and_store(v: np.ndarray, w: np.ndarray, j: int, bj: float) -> None
         bj: Normalization factor (the computed norm of `w` after orthogonalization).
             If `bj <= 0`, normalization is skipped.
 
-    Returns:
-        None: Modifies `v` in-place.
+    Note:
+        Modifies `v` in-place.
     """
     if bj > 0:
         inv_bj = 1.0 / bj
