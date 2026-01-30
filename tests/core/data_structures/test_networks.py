@@ -142,13 +142,15 @@ def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.n
     return H
 
 
-def _bose_hubbard_dense(length: int, local_dim: int, omega: float, J: float, U: float) -> np.ndarray:
+def _bose_hubbard_dense(
+    length: int, local_dim: int, omega: float, J: float, U: float
+) -> np.ndarray:
     """Construct the exact dense Bose–Hubbard Hamiltonian for comparison."""
     # Local operators
     a = Destroy(local_dim).matrix
     adag = Destroy(local_dim).dag().matrix
     n = adag @ a
-    I = np.eye(local_dim, dtype=complex)
+    id_op = np.eye(local_dim, dtype=complex)
 
     dim = local_dim**length
     H = np.zeros((dim, dim), dtype=complex)
@@ -162,20 +164,20 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, J: float, U: 
 
     # Onsite terms
     for i in range(length):
-        op_list = [I] * length
-        op_list[i] = omega * n + 0.5 * U * (n @ (n - I))
+        op_list = [id_op] * length
+        op_list[i] = omega * n + 0.5 * U * (n @ (n - id_op))
         H += embed(op_list)
 
     # Hopping terms
     for i in range(length - 1):
         # adag_i * a_{i+1}
-        op_list1 = [I] * length
+        op_list1 = [id_op] * length
         op_list1[i] = adag
         op_list1[i + 1] = a
         H += -J * embed(op_list1)
 
         # a_i * adag_{i+1}
-        op_list2 = [I] * length
+        op_list2 = [id_op] * length
         op_list2[i] = a
         op_list2[i + 1] = adag
         H += -J * embed(op_list2)
@@ -203,7 +205,9 @@ def test_bose_hubbard_correct_operator() -> None:
     assert mpo.length == length
     assert mpo.physical_dimension == local_dim
     assert len(mpo.tensors) == length
-    assert all(t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors), "Bond dimension should be 4"
+    assert all(
+        t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors
+    ), "Bond dimension should be 4"
 
     # Dense comparison
     H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)
@@ -465,7 +469,9 @@ def test_check_if_identity() -> None:
 ##############################################################################
 
 
-@pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall", "basis"])
+@pytest.mark.parametrize(
+    "state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall", "basis"]
+)
 def test_mps_initialization(state: str) -> None:
     """Test that MPS initializes with the correct chain length, physical dimensions, and tensor shapes.
 
@@ -519,10 +525,18 @@ def test_mps_initialization(state: str) -> None:
             expected = np.array([1, -1j], dtype=complex) / np.sqrt(2)
             np.testing.assert_allclose(vec, expected)
         elif state == "Neel":
-            expected = np.array([1, 0], dtype=complex) if i % 2 else np.array([0, 1], dtype=complex)
+            expected = (
+                np.array([1, 0], dtype=complex)
+                if i % 2
+                else np.array([0, 1], dtype=complex)
+            )
             np.testing.assert_allclose(vec, expected)
         elif state == "wall":
-            expected = np.array([1, 0], dtype=complex) if i < length // 2 else np.array([0, 1], dtype=complex)
+            expected = (
+                np.array([1, 0], dtype=complex)
+                if i < length // 2
+                else np.array([0, 1], dtype=complex)
+            )
             np.testing.assert_allclose(vec, expected)
         elif state == "basis":
             bit = int(basis_string[i])
@@ -974,7 +988,9 @@ def test_pad_raises_on_shrink() -> None:
     mps = MPS(length=5, state="zeros")
     mps.pad_bond_dimension(4)  # enlarge first
 
-    with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
+    with pytest.raises(
+        ValueError, match="Target bond dim must be at least current bond dim"
+    ):
         mps.pad_bond_dimension(2)  # would shrink - must fail
 
 
@@ -1200,7 +1216,9 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
         Observable(GateLibrary.entropy(), [1, 2]),
         Observable(GateLibrary.schmidt_spectrum(), [1, 2]),
     ]
-    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1, show_progress=False)
+    sim_diag = AnalogSimParams(
+        diagnostics_and_meta, elapsed_time=0.1, dt=0.1, show_progress=False
+    )
 
     results_diag = np.empty((len(diagnostics_and_meta), 2), dtype=object)
     mps.evaluate_observables(sim_diag, results_diag, column_index=0)
@@ -1399,7 +1417,9 @@ def test_from_pauli_sum_calls_create_term_for_each_term(
 
     calls: list[tuple[int, dict[int, str], complex | float]] = []
 
-    def fake_create_term(length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
+    def fake_create_term(
+        length: int, ops: dict[int, str], coeff: complex
+    ) -> list[np.ndarray]:
         calls.append((length, ops, coeff))
         # Minimal valid term tensor list: identity-ish MPO with bond dim 1
         return [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
