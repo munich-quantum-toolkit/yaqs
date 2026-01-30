@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- improved Lanczos iteration and introduced numba usage leading to significant speedup ([`#310`]) ([**@aaronleesander**])
 - Changed Pauli summation to use finite state machine construction ([`#308`]) ([**@aaronleesander**])
 - 🔧 Replace `mypy` with `ty` ([#304]) ([**@denialhaag**])
 
@@ -61,6 +62,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#310]: https://github.com/munich-quantum-toolkit/yaqs/pull/310
 [#308]: https://github.com/munich-quantum-toolkit/yaqs/pull/308
 [#304]: https://github.com/munich-quantum-toolkit/yaqs/pull/304
 [#298]: https://github.com/munich-quantum-toolkit/yaqs/pull/298
