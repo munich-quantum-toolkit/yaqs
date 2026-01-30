@@ -107,6 +107,23 @@ def lanczos_iteration(
     return alpha, beta, v
 
 
+    # If we reach here, we exhausted max_lanczos_iterations
+    # Check if we can reuse the cached eigendecomposition
+    if cached_eigvals is not None and cached_k == m_max:
+        # Reuse the cached eigendecomposition from the last error check
+        coeffs = vec_norm * np.exp(-1j * dt * cached_eigvals) * cached_eigvecs[0]
+        return np.asarray(v @ (cached_eigvecs @ coeffs), dtype=np.complex128)
+    
+    # Otherwise compute fresh (shouldn't happen often)
+    return _compute_krylov_result(alpha, beta, v, vec_norm, dt)
+
+
+try:
+    from .lanczos_numba import normalize_and_store, orthogonalize_step
+    HAS_NUMBA = True
+except ImportError:
+    HAS_NUMBA = False
+
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vec: NDArray[np.complex128],
@@ -150,17 +167,20 @@ def expm_krylov(
     m_max = max_lanczos_iterations
     alpha = np.zeros(m_max, dtype=np.float64)
     beta = np.zeros(m_max - 1, dtype=np.float64)
-    v = np.zeros((vec.size, m_max), dtype=np.complex128)
+    
+    # If using Numba, we prefer Fortran order so that columns v[:, j] are contiguous in memory...
+    # BUT for high bond dimensions, interacting with C-ordered w from tensordot might be costly?
+    # Let's test C-order always.
+    use_numba = HAS_NUMBA and vec.size >= 8192
+    
+    order = 'C' # Force C-order to test
+    v = np.zeros((vec.size, m_max), dtype=np.complex128, order=order)
 
     v0 = vec / vec_norm
     v[:, 0] = v0
 
     # Small constant for breakdown check
     eps_cut = 100.0 * vec.size * np.finfo(np.float64).eps
-
-    # Initial guess for the coefficients (just e1 scaled)
-    # At m=1, T is 1x1 [alpha[0]], we want to check convergence after at least a few steps?
-    # Usually we check every step.
 
     # Cache for eigendecomposition to avoid recomputing if we reach max iterations
     cached_eigvals = None
@@ -171,30 +191,37 @@ def expm_krylov(
         vj = v[:, j]
         w = matrix_free_operator(vj)
 
-        # alpha_j = <v_j, w>
-        aj = np.vdot(vj, w).real
-        alpha[j] = aj
+        if use_numba:
+            # Use JIT-compiled kernel for orthogonalization
+            bj = orthogonalize_step(v, w, j, alpha, beta)
+            
+            if j < m_max - 1:
+                if bj < eps_cut:
+                    k = j + 1
+                    return _compute_krylov_result(alpha[:k], beta[: k - 1], v[:, :k], vec_norm, dt)
+                    
+                normalize_and_store(v, w, j, bj)
+        else:
+            # Pure Python implementation
+            # alpha_j = <v_j, w>
+            aj = np.vdot(vj, w).real
+            alpha[j] = aj
 
-        # Orthogonalize
-        w -= aj * vj
-        if j > 0:
-            w -= beta[j - 1] * v[:, j - 1]
+            # Orthogonalize
+            w -= aj * vj
+            if j > 0:
+                w -= beta[j - 1] * v[:, j - 1]
 
-        # Beta_j
-        if j < m_max - 1:
-            bj = np.linalg.norm(w)
-            beta[j] = bj
+            # Beta_j
+            if j < m_max - 1:
+                bj = np.linalg.norm(w)
+                beta[j] = bj
 
-            if bj < eps_cut:
-                # Invariant subspace found, exact solution possible
-                # Truncate to generated subspace size k = j + 1
-                k = j + 1
-                _alpha = alpha[:k]
-                _beta = beta[: k - 1]
-                _v = v[:, :k]
-                return _compute_krylov_result(_alpha, _beta, _v, vec_norm, dt)
+                if bj < eps_cut:
+                    k = j + 1
+                    return _compute_krylov_result(alpha[:k], beta[: k - 1], v[:, :k], vec_norm, dt)
 
-            v[:, j + 1] = w / bj
+                v[:, j + 1] = w / bj
 
         # Error check (adaptive)
         # We need to compute the exponential of the current T_j
@@ -227,28 +254,15 @@ def expm_krylov(
             cached_eigvecs = u_hess
             cached_k = k
 
-            # E_k = U exp(-i dt D) U^H
-            # We need the first column of E_k, say y_k. y_k = U @ (exp(...) * (U^H e1))
-            # u_hess is (k, k). u_hess[0, :] is the first row of U, which is (U^H e1)^T (since U is real/orth).
-            # So coeffs = exp(...) * u_hess[0, :]
-            # element we want is the last element of y_k: [y_k]_{k-1}
-            # y_k = u_hess @ coeffs
-            # last_el = u_hess[k-1, :] @ coeffs
-
             coeffs = np.exp(-1j * dt * w_hess) * u_hess[0, :]
             phi_last = np.dot(u_hess[k - 1, :], coeffs)
 
-            # Error estimate: beta_{j} * |phi_last| (using beta[j] which is beta_{k-1})
-            # Note: beta array is 0-indexed, so beta[k-1] exists if we are not at the very last step.
-            # However, we compute beta[j] BEFORE this check.
-            # If j == m_max - 1, we don't have beta[j]. The loop finishes anyway.
-            
             if j < m_max - 1:
+                # Note: beta array is 0-indexed, so beta[j] corresponds to beta_{j} (the one we just computed)
+                # Ensure we have computed it (we did above)
                 err = beta[j] * abs(phi_last)
                 if err < tol:
                     # Converged
-                    # Reconstruct result using the current subspace
-                    # y = V_k @ y_k
                     y_k = u_hess @ coeffs
                     return np.asarray(v[:, :k] @ (y_k * vec_norm), dtype=np.complex128)
 
