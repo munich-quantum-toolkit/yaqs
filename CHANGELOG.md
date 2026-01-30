@@ -26,6 +26,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 - Updated readability of TDVP subfunctions and Lanczos method ([#261]) ([**@aaronleesander**])
 
 ### Fixed
+
 - lowered trajectories in various tests to speedup test suite ([#312]) ([**@aaronleesander**])
 - Fixed bug where two-site dissipative processes were computed in loop ([#290]) ([**@aaronleesander**])
 - Fixed a truncation bug in TDVP sometimes leading to over-truncation ([#274]) ([**@aaronleesander**])
