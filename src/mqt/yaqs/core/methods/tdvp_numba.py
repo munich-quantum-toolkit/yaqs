@@ -66,35 +66,40 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
     # Precompute T1 via partial contraction over MPO left bond
     t1 = np.zeros((o_dim, p_dim, mpo_r, a_in, a_out), dtype=np.complex128)
 
-    for o in range(o_dim):
-        for p in range(p_dim):
-            for r in range(mpo_r):
-                for a in prange(a_in):  # type: ignore[attr-defined]
-                    for aa in range(a_out):
-                        sum_val = 0.0 + 0.0j
-                        for mpo_l_idx in range(mpo_l):
-                            sum_val += op[o, p, mpo_l_idx, r] * left_env[a, mpo_l_idx, aa]
-                        t1[o, p, r, a, aa] = sum_val
+    for opr in range(o_dim * p_dim * mpo_r):
+        o = opr // (p_dim * mpo_r)
+        rem = opr % (p_dim * mpo_r)
+        p = rem // mpo_r
+        r = rem % mpo_r
+        for a in prange(a_in):  # type: ignore[attr-defined]
+            for aa in range(a_out):
+                sum_val = 0.0 + 0.0j
+                for mpo_l_idx in range(mpo_l):
+                    sum_val += op[o, p, mpo_l_idx, r] * left_env[a, mpo_l_idx, aa]
+                t1[o, p, r, a, aa] = sum_val
 
     rows = o_dim * a_out * b_out
     cols = p_dim * a_in * b_in
     out = np.zeros((rows, cols), dtype=np.complex128)
 
     # Final contraction over MPO right bond and reshape to matrix
-    for o in range(o_dim):
-        for aa in prange(a_out):  # type: ignore[attr-defined]
-            for bb in range(b_out):
-                row_idx = (o * a_out + aa) * b_out + bb
+    for o_aa in prange(o_dim * a_out):  # type: ignore[attr-defined]
+        o = o_aa // a_out
+        aa = o_aa % a_out
+        for bb in range(b_out):
+            row_idx = o_aa * b_out + bb
 
-                for p in range(p_dim):
-                    for a in range(a_in):
-                        for b in range(b_in):
-                            col_idx = (p * a_in + a) * b_in + b
+            for p_a_b in range(p_dim * a_in * b_in):
+                col_idx = p_a_b
+                p = p_a_b // (a_in * b_in)
+                rem_p = p_a_b % (a_in * b_in)
+                a = rem_p // b_in
+                b = rem_p % b_in
 
-                            sum_val = 0.0 + 0.0j
-                            for r in range(mpo_r):
-                                sum_val += t1[o, p, r, a, aa] * right_env[b, r, bb]
-                            out[row_idx, col_idx] = sum_val
+                sum_val = 0.0 + 0.0j
+                for r in range(mpo_r):
+                    sum_val += t1[o, p, r, a, aa] * right_env[b, r, bb]
+                out[row_idx, col_idx] = sum_val
 
     return out
 
