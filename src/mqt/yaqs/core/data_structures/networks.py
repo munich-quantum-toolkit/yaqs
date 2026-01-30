@@ -1366,20 +1366,13 @@ class MPO:
         tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].copy()
 
         # build the full tensor list
-        tensors = [
-            np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128)
-            for _ in range(length)
-        ]
+        tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128) for _ in range(length)]
 
         # Left boundary: take only row 0
-        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(
-            np.complex128
-        )
+        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(np.complex128)
 
         # Right boundary: take only col 3
-        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].astype(
-            np.complex128
-        )
+        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].astype(np.complex128)
 
         mpo = cls()
         mpo.tensors = tensors
