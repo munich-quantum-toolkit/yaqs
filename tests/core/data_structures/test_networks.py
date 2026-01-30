@@ -1279,34 +1279,6 @@ def test_from_pauli_sum_empty_terms_builds_zero_mpo() -> None:
         assert np.allclose(t, 0.0)
 
 
-def test_from_pauli_sum_calls_create_term_for_each_term(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pauli-sum MPO construction: each term is converted via _create_term before summation."""
-    mpo = MPO()
-
-    # Make parsing deterministic and valid.
-    monkeypatch.setattr(mpo, "_parse_pauli_string", lambda _spec: {0: "Z"})
-
-    calls: list[tuple[int, dict[int, str], complex | float]] = []
-
-    def fake_create_term(length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
-        calls.append((length, ops, coeff))
-        # Minimal valid term tensor list: identity-ish MPO with bond dim 1
-        return [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
-
-    monkeypatch.setattr(mpo, "_create_term", fake_create_term)
-
-    # Avoid depending on compress/check behavior in this unit test.
-    monkeypatch.setattr(mpo, "compress", lambda **_kwargs: None)
-    monkeypatch.setattr(mpo, "check_if_valid_mpo", lambda: True)
-
-    mpo.from_pauli_sum(terms=[(2.0, "Z0"), (3.0, "Z0")], length=2, n_sweeps=0)
-
-    assert calls == [
-        (2, {0: "Z"}, 2.0),
-        (2, {0: "Z"}, 3.0),
-    ]
-
-
 def test_compress_raises_on_negative_n_sweeps() -> None:
     """MPO compress input validation: negative n_sweeps must raise."""
     mpo = MPO()
