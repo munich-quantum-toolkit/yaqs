@@ -44,12 +44,7 @@ def orthogonalize_step(
     alpha[j] = aj
     
     # 2. w <- w - aj * vj
-    # This loop fusion avoids allocating a temporary array for (aj * vj)
     w_len = w.size
-    
-    # We used fastmath=True, so we can use manual loops for explicit fusion if needed,
-    # but Numba's array analysis usually handles `w -= aj * vj` efficiently.
-    # explicit loop for maximum clarity and fusion guarantee:
     for i in range(w_len):
         w[i] = w[i] - aj * vj[i]
 
@@ -61,12 +56,8 @@ def orthogonalize_step(
             w[i] = w[i] - b_prev * v_prev[i]
             
     # 4. Compute norm
-    # np.linalg.norm(w) corresponds to sqrt(sum(|x|^2))
     norm_sq = 0.0
     for i in range(w_len):
-        # abs(complex) is sqrt(real^2 + imag^2)
-        # norm_sq += w[i].real**2 + w[i].imag**2
-        # This avoids the sqrt in abs() for every element
         val = w[i]
         norm_sq += val.real * val.real + val.imag * val.imag
         
