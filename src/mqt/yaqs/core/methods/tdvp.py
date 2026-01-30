@@ -538,7 +538,7 @@ def _evolve_local_tensor_krylov(
     tensor: NDArray[np.complex128],
     dt: float,
     proj_args: tuple[NDArray[np.complex128], ...],
-    dense_threshold: int = 128,  # Reduced from 1024 based on benchmarking
+    dense_threshold: int = 128,
 ) -> NDArray[np.complex128]:
     """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
 
@@ -562,12 +562,6 @@ def _evolve_local_tensor_krylov(
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
-        # Note: Dense path uses full matrix exponential via Krylov (similar efficiency to dense expm but generic)
-        # However, for consistency we stick to the provided structure.
-
-        # We can still use the norm to check Taylor error for small systems if desired,
-        # but adaptive Krylov handles it automatically.
-        # Let's just use the same adaptive Krylov on the dense matmul wrapper.
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
