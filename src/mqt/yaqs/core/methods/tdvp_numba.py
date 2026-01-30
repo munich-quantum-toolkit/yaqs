@@ -66,7 +66,7 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
     # Precompute T1 via partial contraction over MPO left bond
     t1 = np.zeros((o_dim, p_dim, mpo_r, a_in, a_out), dtype=np.complex128)
 
-    for o in range(o_dim):  # noqa: PLR1702
+    for o in range(o_dim):
         for p in range(p_dim):
             for r in range(mpo_r):
                 for a in prange(a_in):  # type: ignore[attr-defined]
@@ -81,7 +81,7 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
     out = np.zeros((rows, cols), dtype=np.complex128)
 
     # Final contraction over MPO right bond and reshape to matrix
-    for o in range(o_dim):  # noqa: PLR1702
+    for o in range(o_dim):
         for aa in prange(a_out):  # type: ignore[attr-defined]
             for bb in range(b_out):
                 row_idx = (o * a_out + aa) * b_out + bb
