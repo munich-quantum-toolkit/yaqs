@@ -77,7 +77,6 @@ def expm_krylov(
     alpha = np.zeros(m_max, dtype=np.float64)
     beta = np.zeros(m_max - 1, dtype=np.float64)
 
-    # If using Numba, we prefer Fortran order so that columns v[:, j] are contiguous in memory.
     # Benchmarks suggest a crossover around N=8000 where Numba becomes consistently faster (3x+).
     use_numba = HAS_NUMBA and vec.size >= 8192
 

@@ -71,7 +71,26 @@ def orthogonalize_step(
 
 @jit(nopython=True, cache=True, fastmath=True)
 def normalize_and_store(v: np.ndarray, w: np.ndarray, j: int, bj: float) -> None:
-    """Normalize w by bj and store it in v[:, j+1]."""
+    """Normalize a Lanczos vector and store it in the Lanczos basis matrix.
+
+    This helper function completes the Lanczos iteration by normalizing the
+    candidate vector `w` by the computed norm `bj` and storing the result
+    as the next Lanczos vector in column `j+1` of the basis matrix `v`.
+
+    If `bj` is zero (indicating loss of orthogonality or convergence), the
+    normalization is skipped and the column remains unchanged.
+
+    Args:
+        v: (N, m) matrix of Lanczos vectors. Column `j+1` will be overwritten.
+            Should be F-ordered for optimal memory access.
+        w: (N,) candidate vector to normalize. Not modified.
+        j: Current iteration index. The normalized vector is stored in `v[:, j+1]`.
+        bj: Normalization factor (the computed norm of `w` after orthogonalization).
+            If `bj <= 0`, normalization is skipped.
+
+    Returns:
+        None: Modifies `v` in-place.
+    """
     if bj > 0:
         inv_bj = 1.0 / bj
 

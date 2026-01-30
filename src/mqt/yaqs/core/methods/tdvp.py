@@ -29,6 +29,13 @@ from ..data_structures.simulation_parameters import StrongSimParams, WeakSimPara
 from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
 
+try:
+    from .tdvp_numba import build_dense_heff_bond_numba, build_dense_heff_site_numba
+
+    HAS_NUMBA = True
+except ImportError:
+    HAS_NUMBA = False
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -38,7 +45,9 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
-DENSE_THRESHOLD = 1024
+# Threshold below which we strictly use the dense operator construction path.
+# Experiments show matrix-free is competitive even at small sizes, and 128 is a safe default.
+DENSE_THRESHOLD = 128
 
 
 def split_mps_tensor(
@@ -384,6 +393,10 @@ def build_dense_heff_site(
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
     op = np.asarray(op, dtype=np.complex128)
+
+    if HAS_NUMBA:
+        return build_dense_heff_site_numba(left_env, right_env, op)
+
     # h[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
     h6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
     o_dim, a_dim_out, b_dim_out, p_dim, a_dim_in, b_dim_in = h6.shape
@@ -439,6 +452,9 @@ def build_dense_heff_bond(
     """
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
+
+    if HAS_NUMBA:
+        return build_dense_heff_bond_numba(left_env, right_env)
 
     # h[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
     h4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
