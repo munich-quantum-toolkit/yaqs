@@ -25,15 +25,13 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-
-
-
-
 try:
     from .lanczos_numba import normalize_and_store, orthogonalize_step
+
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False
+
 
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
@@ -78,12 +76,12 @@ def expm_krylov(
     m_max = max_lanczos_iterations
     alpha = np.zeros(m_max, dtype=np.float64)
     beta = np.zeros(m_max - 1, dtype=np.float64)
-    
+
     # If using Numba, we prefer Fortran order so that columns v[:, j] are contiguous in memory.
     # Benchmarks suggest a crossover around N=8000 where Numba becomes consistently faster (3x+).
     use_numba = HAS_NUMBA and vec.size >= 8192
-    
-    order = 'C'
+
+    order = "C"
     v = np.zeros((vec.size, m_max), dtype=np.complex128, order=order)
 
     v0 = vec / vec_norm
@@ -104,12 +102,12 @@ def expm_krylov(
         if use_numba:
             # Use JIT-compiled kernel for orthogonalization
             bj = orthogonalize_step(v, w, j, alpha, beta)
-            
+
             if j < m_max - 1:
                 if bj < eps_cut:
                     k = j + 1
-                    return _compute_krylov_result(alpha[:k], beta[: k - 1], v[:, :k], vec_norm, dt)
-                    
+                    return _compute_krylov_result(alpha[:k], beta[: k - 1], v[:, :k], float(vec_norm), dt)
+
                 normalize_and_store(v, w, j, bj)
         else:
             # Pure Python implementation
@@ -129,7 +127,7 @@ def expm_krylov(
 
                 if bj < eps_cut:
                     k = j + 1
-                    return _compute_krylov_result(alpha[:k], beta[: k - 1], v[:, :k], vec_norm, dt)
+                    return _compute_krylov_result(alpha[:k], beta[: k - 1], v[:, :k], float(vec_norm), dt)
 
                 v[:, j + 1] = w / bj
 
@@ -140,21 +138,21 @@ def expm_krylov(
         if j >= 1:
             # Current tridiagonal matrix T_k of size k x k where k = j + 1
             k = j + 1
-            _alpha = alpha[:k]
-            _beta = beta[: k - 1]  # beta has length k-1
+            alpha_ = alpha[:k]
+            beta_ = beta[: k - 1]  # beta has length k-1
 
             # Diagonalize T_k
             try:
                 w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
-                    _alpha,
-                    _beta,
+                    alpha_,
+                    beta_,
                     lapack_driver="stemr",
                     check_finite=False,
                 )
             except scipy.linalg.LinAlgError:
                 w_hess, u_hess = scipy.linalg.eigh_tridiagonal(
-                    _alpha,
-                    _beta,
+                    alpha_,
+                    beta_,
                     lapack_driver="stebz",
                     check_finite=False,
                 )
@@ -178,13 +176,13 @@ def expm_krylov(
 
     # If we reach here, we exhausted max_lanczos_iterations
     # Check if we can reuse the cached eigendecomposition
-    if cached_eigvals is not None and cached_k == m_max:
+    if cached_eigvals is not None and cached_eigvecs is not None and cached_k == m_max:
         # Reuse the cached eigendecomposition from the last error check
         coeffs = vec_norm * np.exp(-1j * dt * cached_eigvals) * cached_eigvecs[0]
         return np.asarray(v @ (cached_eigvecs @ coeffs), dtype=np.complex128)
-    
+
     # Otherwise compute fresh (shouldn't happen often)
-    return _compute_krylov_result(alpha, beta, v, vec_norm, dt)
+    return _compute_krylov_result(alpha, beta, v, float(vec_norm), dt)
 
 
 def _compute_krylov_result(
@@ -226,4 +224,3 @@ def _compute_krylov_result(
         )
     coeffs = nrm * np.exp(-1j * dt * w_hess) * u_hess[0]
     return np.asarray(lanczos_mat @ (u_hess @ coeffs), dtype=np.complex128)
-

@@ -20,12 +20,10 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
-import scipy.linalg
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import robust_svd
@@ -519,7 +517,6 @@ def _build_dense_effective_hamiltonian(
     return h_eff
 
 
-
 def _evolve_local_tensor_krylov(
     projector: Callable[..., NDArray[np.complex128]],
     tensor: NDArray[np.complex128],
@@ -551,11 +548,11 @@ def _evolve_local_tensor_krylov(
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
         # Note: Dense path uses full matrix exponential via Krylov (similar efficiency to dense expm but generic)
         # However, for consistency we stick to the provided structure.
-        
-        # We can still use the norm to check Taylor error for small systems if desired, 
+
+        # We can still use the norm to check Taylor error for small systems if desired,
         # but adaptive Krylov handles it automatically.
         # Let's just use the same adaptive Krylov on the dense matmul wrapper.
-        
+
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
 
@@ -569,7 +566,6 @@ def _evolve_local_tensor_krylov(
     # Use adaptive Krylov with defaults (or custom tol if needed)
     evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt)
     return evolved_flat.reshape(tensor_shape)
-
 
 
 def update_site(

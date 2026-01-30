@@ -24,12 +24,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.linalg import norm
 from scipy.linalg import expm
 
 from mqt.yaqs.core.methods.matrix_exponential import expm_krylov
 
-
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def test_expm_krylov_2x2_exact() -> None:
