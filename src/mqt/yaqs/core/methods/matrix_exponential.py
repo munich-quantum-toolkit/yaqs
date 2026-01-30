@@ -80,7 +80,7 @@ def expm_krylov(
     # Benchmarks suggest a crossover around N=8000 where Numba becomes consistently faster (3x+).
     use_numba = HAS_NUMBA and vec.size >= 8192
 
-    order = "C"
+    order = "F" if use_numba else "C"
     v = np.zeros((vec.size, m_max), dtype=np.complex128, order=order)
 
     v0 = vec / vec_norm
@@ -93,7 +93,6 @@ def expm_krylov(
     cached_eigvals = None
     cached_eigvecs = None
     cached_k = None
-
     for j in range(m_max):
         vj = v[:, j]
         w = matrix_free_operator(vj)
