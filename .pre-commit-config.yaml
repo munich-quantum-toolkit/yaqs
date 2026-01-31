@@ -63,7 +63,6 @@ repos:
   # Static type checking using ty
   - repo: local
     hooks:
-
       - id: ty-check
         name: ty check
         entry: uv run ty check
