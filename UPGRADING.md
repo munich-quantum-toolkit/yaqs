@@ -4,6 +4,11 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### End of support for x86 macOS systems
+
+Starting with this release, we can no longer guarantee support for x86 macOS systems.
+x86 macOS systems are no longer tested in our CI and we can no longer guarantee that MQT QECC installs and runs correctly on them.
+
 ## [0.3.2]
 
 ### End of support for Python 3.9
@@ -14,5 +19,6 @@ As a result, MQT YAQS is no longer tested under Python 3.9 and requires Python 3
 
 <!-- Version links -->
 
-[unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.1...v0.3.2
