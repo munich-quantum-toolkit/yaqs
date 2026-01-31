@@ -7,7 +7,7 @@ This document describes breaking changes and how to upgrade. For a complete list
 ### End of support for x86 macOS systems
 
 Starting with this release, we can no longer guarantee support for x86 macOS systems.
-x86 macOS systems are no longer tested in our CI and we can no longer guarantee that MQT QECC installs and runs correctly on them.
+x86 macOS systems are no longer tested in our CI and we can no longer guarantee that MQT YAQS installs and runs correctly on them.
 
 ## [0.3.2]
 
