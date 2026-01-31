@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
+import platform
 import shutil
 import sys
 import tempfile
@@ -63,8 +64,8 @@ def _run_tests(
     install_args: Sequence[str] = (),
     run_args: Sequence[str] = (),
 ) -> None:
-    if sys.platform == "darwin" and session.python == "3.14":
-        session.skip("Skipping Python 3.14 tests on macOS due to missing llvmlite wheels")
+    if sys.platform == "darwin" and platform.machine() == "x86_64":
+        session.skip("Skipping tests on Intel macOS due to missing llvmlite wheels")
 
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
 
