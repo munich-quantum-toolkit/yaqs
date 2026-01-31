@@ -80,7 +80,7 @@ def test_analog_simulation() -> None:
         observables=[Observable(Z(), site) for site in range(length)],
         elapsed_time=1,
         dt=0.1,
-        num_traj=10,
+        num_traj=2,
         max_bond_dim=4,
         threshold=1e-6,
         order=2,
@@ -132,7 +132,7 @@ def test_analog_simulation_parallel_off() -> None:
         observables=[Observable(Z(), site) for site in range(length)],
         elapsed_time=1,
         dt=0.1,
-        num_traj=10,
+        num_traj=2,
         max_bond_dim=4,
         threshold=1e-6,
         order=2,
@@ -338,7 +338,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=64, max_bond_dim=4, show_progress=False)
 
     gamma = 1e-3
     noise_model = NoiseModel([

@@ -431,6 +431,7 @@ def test_noisy_digital_tjm_matches_reference() -> None:
 
     sim_params = StrongSimParams(
         observables=[Observable(Z(), i) for i in range(num_qubits)],
+        num_traj=500,
         sample_layers=True,
         num_mid_measurements=4,
         show_progress=False,
@@ -499,6 +500,7 @@ def test_digital_tjm_longrange_noise() -> None:
 
     sim_params = StrongSimParams(
         observables=[Observable(Z(), i) for i in range(num_qubits)],
+        num_traj=500,
         sample_layers=True,
         num_mid_measurements=num_layers - 1,
         show_progress=False,
