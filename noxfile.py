@@ -17,9 +17,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
-import platform
 import shutil
-import sys
 import tempfile
 from typing import TYPE_CHECKING
 
