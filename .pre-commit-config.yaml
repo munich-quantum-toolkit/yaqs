@@ -47,11 +47,7 @@ repos:
       - id: rst-directive-colons
       - id: rst-inline-touching-normal
 
-  # Ensure uv lock file is up-to-date
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.28
-    hooks:
-      - id: uv-lock
+
 
   # Python linting using ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -63,6 +59,11 @@ repos:
   # Static type checking using ty
   - repo: local
     hooks:
+      - id: uv-lock
+        name: uv lock
+        entry: uv lock
+        language: system
+        files: ^pyproject\.toml$|^uv\.lock$
       - id: ty-check
         name: ty check
         entry: uv run ty check
