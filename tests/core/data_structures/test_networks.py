@@ -28,14 +28,17 @@ from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
 from mqt.yaqs import simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    AnalogSimParams,
+    StrongSimParams,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id, X, Z
+from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, X, Z
 
 # ---- single-qubit ops ----
 _I2 = np.eye(2, dtype=complex)
@@ -61,7 +64,7 @@ def _embed_one_body(op: np.ndarray, L: int, i: int) -> np.ndarray:  # noqa: N803
     return out
 
 
-def _embed_two_body(op1: np.ndarray, op2: np.ndarray, L: int, i: int) -> np.ndarray:  # noqa: N803
+def _embed_two_body(op1: np.ndarray, op2: np.ndarray, L: int, i: int) -> np.ndarray:
     """Embed a nearest-neighbor two-site operator into a length-L qubit Hilbert space.
 
     Args:
@@ -110,7 +113,7 @@ def _ising_dense(L: int, J: float, g: float) -> np.ndarray:  # noqa: N803
     return H
 
 
-def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.ndarray:  # noqa: N803
+def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.ndarray:
     """Construct the dense Heisenberg Hamiltonian for an open chain.
 
     The Hamiltonian is
@@ -139,6 +142,75 @@ def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.n
     return H
 
 
+def _bose_hubbard_dense(length: int, local_dim: int, omega: float, J: float, U: float) -> np.ndarray:
+    """Construct the exact dense Bose–Hubbard Hamiltonian for comparison."""
+    # Local operators
+    a = Destroy(local_dim).matrix
+    adag = Destroy(local_dim).dag().matrix
+    n = adag @ a
+    id_op = np.eye(local_dim, dtype=complex)
+
+    dim = local_dim**length
+    H = np.zeros((dim, dim), dtype=complex)
+
+    # Build H term-by-term using Kronecker products
+    def embed(op_list):
+        out = np.array([[1.0]], dtype=complex)
+        for op in op_list:
+            out = np.kron(out, op)
+        return out
+
+    # Onsite terms
+    for i in range(length):
+        op_list = [id_op] * length
+        op_list[i] = omega * n + 0.5 * U * (n @ (n - id_op))
+        H += embed(op_list)
+
+    # Hopping terms
+    for i in range(length - 1):
+        # adag_i * a_{i+1}
+        op_list1 = [id_op] * length
+        op_list1[i] = adag
+        op_list1[i + 1] = a
+        H += -J * embed(op_list1)
+
+        # a_i * adag_{i+1}
+        op_list2 = [id_op] * length
+        op_list2[i] = a
+        op_list2[i + 1] = adag
+        H += -J * embed(op_list2)
+
+    return H
+
+
+def test_bose_hubbard_correct_operator() -> None:
+    """Verify that the Bose–Hubbard MPO matches the exact dense Hamiltonian."""
+    length = 4
+    local_dim = 3  # up to 2 bosons per site
+    omega = 0.7
+    J = 0.2
+    U = 1.3
+
+    mpo = MPO.bose_hubbard(
+        length=length,
+        local_dim=local_dim,
+        omega=omega,
+        hopping_j=J,
+        hubbard_u=U,
+    )
+
+    # Basic checks
+    assert mpo.length == length
+    assert mpo.physical_dimension == local_dim
+    assert len(mpo.tensors) == length
+    assert all(t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors), "Bond dimension should be 4"
+
+    # Dense comparison
+    H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)
+    H_mpo = mpo.to_matrix()
+    np.testing.assert_allclose(H_mpo, H_dense, atol=1e-8)
+
+
 def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Reverse the transposition of an MPO tensor.
 
@@ -156,7 +228,9 @@ def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex1
 
 
 def crandn(
-    size: int | tuple[int, ...], *args: int, seed: np.random.Generator | int | None = None
+    size: int | tuple[int, ...],
+    *args: int,
+    seed: np.random.Generator | int | None = None,
 ) -> NDArray[np.complex128]:
     """Draw random samples from the standard complex normal distribution.
 
@@ -174,7 +248,10 @@ def crandn(
         size = (size,)
     rng = np.random.default_rng(seed)
     # 1 / sqrt(2) is a normalization factor
-    return np.asarray((rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2), dtype=np.complex128)
+    return np.asarray(
+        (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2),
+        dtype=np.complex128,
+    )
 
 
 def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) -> MPS:
@@ -355,7 +432,12 @@ def test_rotate() -> None:
 
     mpo.rotate(conjugate=False)
     for orig, rotated in zip(original_tensors, mpo.tensors, strict=False):
-        assert rotated.shape == (orig.shape[1], orig.shape[0], orig.shape[2], orig.shape[3])
+        assert rotated.shape == (
+            orig.shape[1],
+            orig.shape[0],
+            orig.shape[2],
+            orig.shape[3],
+        )
         np.testing.assert_allclose(rotated, np.transpose(orig, (1, 0, 2, 3)))
 
     mpo.rotate(conjugate=True)
@@ -398,7 +480,12 @@ def test_mps_initialization(state: str) -> None:
     basis_string = "1001"
 
     if state == "basis":
-        mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state, basis_string=basis_string)
+        mps = MPS(
+            length=length,
+            physical_dimensions=[pdim] * length,
+            state=state,
+            basis_string=basis_string,
+        )
     else:
         mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state)
 
@@ -476,12 +563,20 @@ def test_flip_network() -> None:
     t2 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
     t3 = rng.random(size=(pdim, 2, 1)).astype(np.complex128)
     original_tensors = [t1, t2, t3]
-    mps = MPS(length, tensors=copy.deepcopy(original_tensors), physical_dimensions=[pdim] * length)
+    mps = MPS(
+        length,
+        tensors=copy.deepcopy(original_tensors),
+        physical_dimensions=[pdim] * length,
+    )
 
     mps.flip_network()
     flipped_tensors = mps.tensors
     assert len(flipped_tensors) == length
-    assert flipped_tensors[0].shape == (pdim, original_tensors[2].shape[2], original_tensors[2].shape[1])
+    assert flipped_tensors[0].shape == (
+        pdim,
+        original_tensors[2].shape[2],
+        original_tensors[2].shape[1],
+    )
     mps.flip_network()
     for orig, now in zip(original_tensors, mps.tensors, strict=False):
         assert np.allclose(orig, now)
@@ -794,7 +889,9 @@ def test_convert_to_vector_fidelity() -> None:
 
     # Define the simulation parameters
     sim_params = StrongSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)], get_state=True, show_progress=False
+        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        get_state=True,
+        show_progress=False,
     )
     simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
@@ -818,7 +915,9 @@ def test_convert_to_vector_fidelity_long_range() -> None:
 
     # Define the simulation parameters
     sim_params = StrongSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)], get_state=True, show_progress=False
+        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        get_state=True,
+        show_progress=False,
     )
     simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
@@ -1167,7 +1266,10 @@ def test_evaluate_observables_meta_validation_errors() -> None:
 
     # Wrong length (entropy expects exactly two adjacent indices)
     sim_bad_len = AnalogSimParams(
-        [Observable(GateLibrary.entropy(), [1])], elapsed_time=0.1, dt=0.1, show_progress=False
+        [Observable(GateLibrary.entropy(), [1])],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
     )
     results_len = np.empty((1, 1), dtype=np.float64)
     with pytest.raises(AssertionError):
@@ -1175,7 +1277,10 @@ def test_evaluate_observables_meta_validation_errors() -> None:
 
     # Non-adjacent Schmidt cut
     sim_non_adj = AnalogSimParams(
-        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])], elapsed_time=0.1, dt=0.1, show_progress=False
+        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
     )
     results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
@@ -1246,7 +1351,9 @@ def test_from_pauli_sum_raises_on_nonpositive_length() -> None:
         mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=-5)
 
 
-def test_from_pauli_sum_raises_on_site_index_out_of_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_from_pauli_sum_raises_on_site_index_out_of_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Pauli-sum MPO validation: parsed site indices outside [0, L-1] must raise."""
     mpo = MPO()
 
@@ -1257,7 +1364,9 @@ def test_from_pauli_sum_raises_on_site_index_out_of_bounds(monkeypatch: pytest.M
         mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=4)
 
 
-def test_from_pauli_sum_raises_on_invalid_local_op_label(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_from_pauli_sum_raises_on_invalid_local_op_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Pauli-sum MPO validation: parsed local operator labels must be in _VALID."""
     mpo = MPO()
 
@@ -1279,6 +1388,36 @@ def test_from_pauli_sum_empty_terms_builds_zero_mpo() -> None:
         assert np.allclose(t, 0.0)
 
 
+def test_from_pauli_sum_calls_create_term_for_each_term(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pauli-sum MPO construction: each term is converted via _create_term before summation."""
+    mpo = MPO()
+
+    # Make parsing deterministic and valid.
+    monkeypatch.setattr(mpo, "_parse_pauli_string", lambda _spec: {0: "Z"})
+
+    calls: list[tuple[int, dict[int, str], complex | float]] = []
+
+    def fake_create_term(length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
+        calls.append((length, ops, coeff))
+        # Minimal valid term tensor list: identity-ish MPO with bond dim 1
+        return [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
+
+    monkeypatch.setattr(mpo, "_create_term", fake_create_term)
+
+    # Avoid depending on compress/check behavior in this unit test.
+    monkeypatch.setattr(mpo, "compress", lambda **_kwargs: None)
+    monkeypatch.setattr(mpo, "check_if_valid_mpo", lambda: True)
+
+    mpo.from_pauli_sum(terms=[(2.0, "Z0"), (3.0, "Z0")], length=2, n_sweeps=0)
+
+    assert calls == [
+        (2, {0: "Z"}, 2.0),
+        (2, {0: "Z"}, 3.0),
+    ]
+
+
 def test_compress_raises_on_negative_n_sweeps() -> None:
     """MPO compress input validation: negative n_sweeps must raise."""
     mpo = MPO()
@@ -1291,14 +1430,22 @@ def test_compress_raises_on_invalid_directions() -> None:
     """MPO compress input validation: invalid sweep schedule strings must raise."""
     mpo = MPO()
     mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex)]
-    with pytest.raises(ValueError, match=r"directions must be one of \{'lr', 'rl', 'lr_rl', 'rl_lr'\}\."):
+    with pytest.raises(
+        ValueError,
+        match=r"directions must be one of \{'lr', 'rl', 'lr_rl', 'rl_lr'\}\.",
+    ):
         mpo.compress(directions="lr,rl")
 
 
-def test_compress_n_sweeps_zero_returns_without_calling_sweeps(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compress_n_sweeps_zero_returns_without_calling_sweeps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """MPO compress control flow: n_sweeps=0 must return without invoking sweeps."""
     mpo = MPO()
-    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex), np.zeros((2, 2, 1, 1), dtype=complex)]
+    mpo.tensors = [
+        np.zeros((2, 2, 1, 1), dtype=complex),
+        np.zeros((2, 2, 1, 1), dtype=complex),
+    ]
 
     called = False
 
@@ -1317,9 +1464,12 @@ def test_compress_n_sweeps_zero_returns_without_calling_sweeps(monkeypatch: pyte
 def test_compress_one_sweep_raises_on_invalid_direction() -> None:
     """MPO _compress_one_sweep input validation: direction must be 'lr' or 'rl'."""
     mpo = MPO()
-    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex), np.zeros((2, 2, 1, 1), dtype=complex)]
+    mpo.tensors = [
+        np.zeros((2, 2, 1, 1), dtype=complex),
+        np.zeros((2, 2, 1, 1), dtype=complex),
+    ]
     with pytest.raises(ValueError, match=r"direction must be 'lr' or 'rl'\."):
-        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)  # noqa: SLF001
+        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)
 
 
 def test_from_pauli_sum_empty_spec_is_identity_term() -> None:
