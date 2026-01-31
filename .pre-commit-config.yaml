@@ -66,10 +66,11 @@ repos:
       - id: ty-check
         name: ty check
         entry: uv run ty check
-        language: system
+        language: unsupported
         require_serial: true
         types_or: [python, pyi, jupyter]
         exclude: ^(docs/)
+        pass_filenames: false
 
   # Also run Black on examples in the documentation
   - repo: https://github.com/adamchainz/blacken-docs
