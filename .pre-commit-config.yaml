@@ -47,8 +47,6 @@ repos:
       - id: rst-directive-colons
       - id: rst-inline-touching-normal
 
-
-
   # Python linting using ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.14
