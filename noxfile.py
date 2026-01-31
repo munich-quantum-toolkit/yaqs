@@ -18,6 +18,7 @@ import argparse
 import contextlib
 import os
 import shutil
+import sys
 import tempfile
 from typing import TYPE_CHECKING
 
@@ -62,6 +63,9 @@ def _run_tests(
     install_args: Sequence[str] = (),
     run_args: Sequence[str] = (),
 ) -> None:
+    if sys.platform == "darwin" and session.python == "3.14":
+        session.skip("Skipping Python 3.14 tests on macOS due to missing llvmlite wheels")
+
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
 
     if "--cov" in session.posargs:
