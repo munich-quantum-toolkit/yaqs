@@ -11,7 +11,8 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
-- Changed Pauli summation to use finite state machine construction ([`#308`]) ([**@aaronleesander**])
+- Minor improvements to TDVP performance ([#311]) ([**@aaronleesander**])
+- Changed Pauli summation to use finite state machine construction ([#308]) ([**@aaronleesander**])
 - 🔧 Replace `mypy` with `ty` ([#304]) ([**@denialhaag**])
 
 ## [0.3.3] - 2026-01-12
@@ -61,6 +62,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#311]: https://github.com/munich-quantum-toolkit/yaqs/pull/311
 [#308]: https://github.com/munich-quantum-toolkit/yaqs/pull/308
 [#304]: https://github.com/munich-quantum-toolkit/yaqs/pull/304
 [#298]: https://github.com/munich-quantum-toolkit/yaqs/pull/298
