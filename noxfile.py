@@ -64,9 +64,6 @@ def _run_tests(
     install_args: Sequence[str] = (),
     run_args: Sequence[str] = (),
 ) -> None:
-    if sys.platform == "darwin" and platform.machine() == "x86_64":
-        session.skip("Skipping tests on Intel macOS due to missing llvmlite wheels")
-
     env = {"UV_PROJECT_ENVIRONMENT": session.virtualenv.location}
 
     if "--cov" in session.posargs:
