@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
-- Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
+- 👷‍♂️ Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
 - ⚡️ Improve Lanczos iteration and use numba for significant speedup ([#310]) ([**@aaronleesander**])
 - ♻️ Change Pauli summation to use finite state machine construction ([#308]) ([**@aaronleesander**])
 - 🔧 Replace `mypy` with `ty` ([#304]) ([**@denialhaag**])
