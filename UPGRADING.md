@@ -20,5 +20,4 @@ As a result, MQT YAQS is no longer tested under Python 3.9 and requires Python 3
 <!-- Version links -->
 
 [Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.3...HEAD
-[0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.1...v0.3.2
