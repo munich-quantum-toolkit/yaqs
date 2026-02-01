@@ -1609,7 +1609,8 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numba", specifier = ">=0.63.0" },
+    { name = "numba", specifier = ">=0.61.0" },
+    { name = "numba", marker = "python_full_version >= '3.14'", specifier = ">=0.63.0" },
     { name = "numpy", specifier = ">=1.23.0" },
     { name = "numpy", marker = "python_full_version >= '3.11'", specifier = ">=1.24" },
     { name = "numpy", marker = "python_full_version >= '3.12'", specifier = ">=1.26" },
