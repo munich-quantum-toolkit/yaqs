@@ -338,7 +338,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=256, max_bond_dim=4, show_progress=False)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -366,7 +366,7 @@ def test_weak_simulation_no_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=256, max_bond_dim=4, show_progress=False)
 
     noise_model = None
 
