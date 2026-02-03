@@ -118,7 +118,7 @@ TRes = TypeVar("TRes")
 # ---------------------------------------------------------------------------
 def available_cpus() -> int:
     """Determine the number of available CPU cores for parallel execution.
-    
+
     This function checks if the PYTEST_XDIST_WORKER environment variable is set. If so, it returns 1 to avoid
     nested parallelism during tests.
     Next, it checks if the SLURM_CPUS_ON_NODE environment variable is set (indicating a SLURM-managed cluster job).
