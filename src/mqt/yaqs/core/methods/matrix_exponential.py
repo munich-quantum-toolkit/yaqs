@@ -33,7 +33,7 @@ except ImportError:
     HAS_NUMBA = False
 
 
-NUMBA_THRESHOLD = 8192
+NUMBA_THRESHOLD = 1e6
 
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
