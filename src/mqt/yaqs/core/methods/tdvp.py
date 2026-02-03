@@ -558,7 +558,6 @@ def _evolve_local_tensor_krylov(
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
 
-    # Use adaptive Krylov with defaults (max_lanczos_iterations=25, tol=1e-12)
     evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt)
     return evolved_flat.reshape(tensor_shape)
 
