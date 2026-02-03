@@ -20,21 +20,16 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
+import scipy.linalg
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
-
-try:
-    from .tdvp_numba import build_dense_heff_bond_numba, build_dense_heff_site_numba
-
-    HAS_NUMBA = True
-except ImportError:
-    HAS_NUMBA = False
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -45,9 +40,7 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
-# Threshold below which we strictly use the dense operator construction path.
-# Experiments show matrix-free is competitive even at small sizes, and 128 is a safe default.
-DENSE_THRESHOLD = 4096
+DENSE_THRESHOLD = 128
 
 
 def split_mps_tensor(
@@ -393,10 +386,6 @@ def build_dense_heff_site(
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
     op = np.asarray(op, dtype=np.complex128)
-
-    if HAS_NUMBA:
-        return build_dense_heff_site_numba(left_env, right_env, op)
-
     # h[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
     h6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
     o_dim, a_dim_out, b_dim_out, p_dim, a_dim_in, b_dim_in = h6.shape
@@ -452,9 +441,6 @@ def build_dense_heff_bond(
     """
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
-
-    if HAS_NUMBA:
-        return build_dense_heff_bond_numba(left_env, right_env)
 
     # h[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
     h4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
@@ -538,7 +524,7 @@ def _evolve_local_tensor_krylov(
     tensor: NDArray[np.complex128],
     dt: float,
     proj_args: tuple[NDArray[np.complex128], ...],
-    dense_threshold: int = 128,
+    dense_threshold: int = DENSE_THRESHOLD,
 ) -> NDArray[np.complex128]:
     """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
 
@@ -558,10 +544,14 @@ def _evolve_local_tensor_krylov(
     tensor_flat = tensor.reshape(-1)
     n_loc = tensor_flat.size
 
-    # Only use dense path if significantly smaller than threshold (based on benchmark)
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
+        norm = scipy.linalg.norm(h_eff)
+        for m in range(1, 26):
+            error_m = abs(norm * dt**m / math.factorial(m))
+            if error_m < 1e-9:
+                break
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
@@ -573,8 +563,7 @@ def _evolve_local_tensor_krylov(
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
 
-    # Use adaptive Krylov with defaults (or custom tol if needed)
-    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt)
+    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt, lanczos_iterations=m)
     return evolved_flat.reshape(tensor_shape)
 
 

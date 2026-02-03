@@ -25,15 +25,8 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-try:
-    from .lanczos_numba import normalize_and_store, orthogonalize_step
-
-    HAS_NUMBA = True
-except ImportError:
-    HAS_NUMBA = False
-
-
-NUMBA_THRESHOLD = 1e6
+# Removed eager Numba import - now using lazy import inside expm_krylov
+NUMBA_THRESHOLD = 4096  # Optimal based on benchmarks
 
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
@@ -79,8 +72,14 @@ def expm_krylov(
     alpha = np.zeros(m_max, dtype=np.float64)
     beta = np.zeros(m_max - 1, dtype=np.float64)
 
-    # Benchmarks suggest a crossover around N=8000 where Numba becomes consistently faster (3x+).
-    use_numba = HAS_NUMBA and vec.size >= NUMBA_THRESHOLD
+    # Lazy import Numba only when needed to avoid startup overhead
+    use_numba = False
+    if vec.size >= NUMBA_THRESHOLD:
+        try:
+            from .lanczos_numba import normalize_and_store, orthogonalize_step
+            use_numba = True
+        except ImportError:
+            pass
 
     order = "F" if use_numba else "C"
     v = np.zeros((vec.size, m_max), dtype=np.complex128, order=order)
