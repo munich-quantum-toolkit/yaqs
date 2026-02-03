@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 # Removed eager Numba import - now using lazy import inside expm_krylov
 NUMBA_THRESHOLD = 4096  # Optimal based on benchmarks
 
+
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vec: NDArray[np.complex128],
