@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 
 # Threshold below which we strictly use the dense operator construction path.
 # Experiments show matrix-free is competitive even at small sizes, and 128 is a safe default.
-DENSE_THRESHOLD = 128
+DENSE_THRESHOLD = 4096
 
 
 def split_mps_tensor(

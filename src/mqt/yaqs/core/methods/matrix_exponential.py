@@ -33,6 +33,8 @@ except ImportError:
     HAS_NUMBA = False
 
 
+NUMBA_THRESHOLD = 8192
+
 def expm_krylov(
     matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
     vec: NDArray[np.complex128],
@@ -78,7 +80,7 @@ def expm_krylov(
     beta = np.zeros(m_max - 1, dtype=np.float64)
 
     # Benchmarks suggest a crossover around N=8000 where Numba becomes consistently faster (3x+).
-    use_numba = HAS_NUMBA and vec.size >= 8192
+    use_numba = HAS_NUMBA and vec.size >= NUMBA_THRESHOLD
 
     order = "F" if use_numba else "C"
     v = np.zeros((vec.size, m_max), dtype=np.complex128, order=order)
