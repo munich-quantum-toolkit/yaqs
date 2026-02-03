@@ -42,8 +42,9 @@ def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Should return multiprocessing.cpu_count().
     """
-    # Ensure the env var is absent
+    # Ensure the env vars are absent
     monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
 
     assert simulator.available_cpus() == multiprocessing.cpu_count()
 
@@ -54,6 +55,7 @@ def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
     Should return that exact value.
     """
     monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
 
     # Reload the module only if available_cpus caches anything at import;
     # here it's not necessary, but harmless:
@@ -338,7 +340,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=256, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -366,7 +368,7 @@ def test_weak_simulation_no_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=256, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
 
     noise_model = None
 
