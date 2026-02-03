@@ -329,10 +329,10 @@ def test_weak_simulation_noise() -> None:
     """Test the weak simulation branch with a non-None noise model.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
-    It sets up WeakSimParams with a specified number of shots, max bond dimension, threshold, and window size,
-    and a noise model with small strengths. After running simulator.run, the test verifies that sim_params.num_traj
-    equals the number of shots, that each measurement is a dictionary, and that the total number of shots
-    recorded in sim_params.results equals the expected number.
+    It sets up WeakSimParams with a sufficient number of shots for statistical verification, max bond dimension,
+    threshold, and window size, and a noise model with small strengths. After running simulator.run, the test
+    verifies that sim_params.num_traj equals the number of shots, that each measurement is a dictionary,
+    and that the total number of shots recorded in sim_params.results equals the expected number.
     """
     num_qubits = 5
     initial_state = MPS(num_qubits)
@@ -359,7 +359,7 @@ def test_weak_simulation_no_noise() -> None:
     """Test the weak simulation branch when the noise model is None.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system,
-    and configures WeakSimParams with a specified number of shots. When noise_model is None,
+    and configures WeakSimParams with a sufficient number of shots. When noise_model is None,
     the simulation should set sim_params.num_traj to 1. The test verifies that the measurements and results
     are consistent with this behavior.
     """
