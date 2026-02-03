@@ -433,7 +433,7 @@ def test_noisy_digital_tjm_matches_reference() -> None:
         observables=[Observable(Z(), i) for i in range(num_qubits)],
         sample_layers=True,
         num_mid_measurements=4,
-        num_traj=400,
+        num_traj=800,
         show_progress=False,
     )
     state = MPS(num_qubits, state="zeros", pad=2)
