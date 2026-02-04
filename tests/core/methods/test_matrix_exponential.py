@@ -165,7 +165,8 @@ def test_expm_krylov_linalg_error_fallback() -> None:
     with patch("scipy.linalg.eigh_tridiagonal", mock_eigh):
         # Minimal inputs to reach the eigh call
         size = 10
-        np.ones(size, dtype=complex)
+        # Minimal inputs to reach the eigh call
+        size = 10
 
         # Force single iteration to reach _compute_krylov_result
 
