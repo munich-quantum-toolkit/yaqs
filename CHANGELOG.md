@@ -20,6 +20,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added multi-threading setting for noise-free ones ([#316]) ([**@aaronleesander**])
 - updated bib and readme with Nature Communications publication ([#298]) ([**@aaronleesander**])
 - updates MPO class to allow construction of arbitrary Pauli Hamiltonians ([#216]) ([**@aaronleesander**, **@thilomueller**])
 - added faster paths for TDVP dense effective Hamiltonian ([#280]) ([**@aaronleesander**])
@@ -63,6 +64,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#316]: https://github.com/munich-quantum-toolkit/yaqs/pull/316
 [#310]: https://github.com/munich-quantum-toolkit/yaqs/pull/310
 [#308]: https://github.com/munich-quantum-toolkit/yaqs/pull/308
 [#304]: https://github.com/munich-quantum-toolkit/yaqs/pull/304
