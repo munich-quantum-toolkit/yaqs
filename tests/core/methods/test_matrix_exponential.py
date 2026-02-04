@@ -25,9 +25,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import scipy.linalg
-from scipy.linalg import expm
-
-from mqt.yaqs.core.methods.matrix_exponential import expm_krylov
+from mqt.yaqs.core.methods import matrix_exponential
+from mqt.yaqs.core.methods.matrix_exponential import _compute_krylov_result, expm_krylov
 
 
 def test_expm_krylov_2x2_exact() -> None:
@@ -46,7 +45,7 @@ def test_expm_krylov_2x2_exact() -> None:
     lanczos_iterations = 2  # full subspace
 
     approx = expm_krylov(matrix_free_operator, v, dt, max_lanczos_iterations=lanczos_iterations)
-    direct = expm(-1j * dt * mat) @ v
+    direct = scipy.linalg.expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(
         approx,
@@ -73,7 +72,7 @@ def test_expm_krylov_smaller_subspace() -> None:
     lanczos_iterations = 1  # subspace dimension smaller than the full space
 
     approx = expm_krylov(matrix_free_operator, v, dt, max_lanczos_iterations=lanczos_iterations)
-    direct = expm(-1j * dt * mat) @ v
+    direct = scipy.linalg.expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(
         approx,
@@ -108,7 +107,7 @@ def test_expm_krylov_numba_execution() -> None:
     dt = 0.1
     mat = np.eye(size)
 
-    def op(x):
+    def op(x: np.ndarray) -> np.ndarray:
         return mat @ x
 
     # We need to verify that numba logic is triggered.
@@ -140,7 +139,7 @@ def test_expm_krylov_numba_early_convergence() -> None:
     # With v=e_0, Av = 0*e_0 = 0. Krylov subspace is 1D.
     # Should converge immediately.
 
-    def op(x):
+    def op(x: np.ndarray) -> np.ndarray:
         return mat @ x
 
     with patch("mqt.yaqs.core.methods.matrix_exponential.NUMBA_THRESHOLD", 50):
@@ -182,9 +181,7 @@ def test_expm_krylov_linalg_error_fallback() -> None:
         nrm = 1.0
         dt = 0.1
 
-        from mqt.yaqs.core.methods.matrix_exponential import _compute_krylov_result
-
-        _compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)
+        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)
 
         assert mock_eigh.call_count == 2
         # First call should be stemr

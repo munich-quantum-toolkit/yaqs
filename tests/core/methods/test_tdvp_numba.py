@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+"""Tests for Numba-accelerated TDVP kernels."""
+
 import numpy as np
 
 from mqt.yaqs.core.methods.tdvp_numba import (

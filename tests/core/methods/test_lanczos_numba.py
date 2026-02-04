@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+"""Tests for Numba-accelerated Lanczos methods."""
+
 import numpy as np
 
 from mqt.yaqs.core.methods.lanczos_numba import normalize_and_store, orthogonalize_step
