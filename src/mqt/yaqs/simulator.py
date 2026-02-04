@@ -119,14 +119,21 @@ TRes = TypeVar("TRes")
 def available_cpus() -> int:
     """Determine the number of available CPU cores for parallel execution.
 
-    This function checks if the SLURM_CPUS_ON_NODE environment variable is set (indicating a SLURM-managed cluster job).
+    This function checks if the PYTEST_XDIST_WORKER environment variable is set. If so, it returns 1 to avoid
+    nested parallelism during tests.
+    Next, it checks if the SLURM_CPUS_ON_NODE environment variable is set (indicating a SLURM-managed cluster job).
     If so, it returns the number of CPUs specified by SLURM. Otherwise, it returns the total number of CPUs available
     on the machine as reported by multiprocessing.cpu_count().
 
     Returns:
         int: The number of available CPU cores for parallel execution.
     """
-    # 1) SLURM hints first (explicit user/job request should win)
+    # 1) Detect xdist: running inside a pytest worker?
+    # If so, force 1 CPU to avoid "process explosion" (nested pools).
+    if os.environ.get("PYTEST_XDIST_WORKER", ""):
+        return 1
+
+    # 2) SLURM hints (explicit user/job request should win)
     for var in ("SLURM_CPUS_PER_TASK", "SLURM_CPUS_ON_NODE"):
         value = os.environ.get(var, "").strip()
         if value:
@@ -138,7 +145,7 @@ def available_cpus() -> int:
                 # Ignore malformed values and continue
                 pass
 
-    # 2) Respect Linux affinity / cgroup limits if available
+    # 3) Respect Linux affinity / cgroup limits if available
     fn = getattr(os, "sched_getaffinity", None)
     if fn is not None:
         try:
@@ -150,7 +157,7 @@ def available_cpus() -> int:
             # System call failed; fall through to next fallback
             pass
 
-    # 3) Fallback
+    # 4) Fallback
     try:
         return os.cpu_count() or multiprocessing.cpu_count() or 1
     except (NotImplementedError, OSError):

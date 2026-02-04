@@ -20,12 +20,10 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
-import scipy.linalg
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import robust_svd
@@ -40,7 +38,7 @@ if TYPE_CHECKING:
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
-DENSE_THRESHOLD = 1024
+DENSE_THRESHOLD = 128
 
 
 def split_mps_tensor(
@@ -547,11 +545,6 @@ def _evolve_local_tensor_krylov(
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
         h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
-        norm = scipy.linalg.norm(h_eff)
-        for m in range(1, 26):
-            error_m = abs(norm * dt**m / math.factorial(m))
-            if error_m < 1e-9:
-                break
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
@@ -563,7 +556,7 @@ def _evolve_local_tensor_krylov(
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
 
-    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt, lanczos_iterations=m)
+    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt)
     return evolved_flat.reshape(tensor_shape)
 
 
