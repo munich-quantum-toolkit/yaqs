@@ -24,6 +24,12 @@ All simulation results (e.g., observables, measurements) are aggregated and retu
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+# ---------------------------------------------------------------------------
+# 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
+# ---------------------------------------------------------------------------
+import multiprocessing
+
 # ---------------------------------------------------------------------------
 # 0) IMPORTS
 # Thread caps are NOT set at module level to allow single-trajectory
@@ -32,13 +38,6 @@ from __future__ import annotations
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
 import os
-
-# ruff: noqa: E402
-
-# ---------------------------------------------------------------------------
-# 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
-# ---------------------------------------------------------------------------
-import multiprocessing
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
@@ -445,7 +444,7 @@ def _run_strong_sim(
         # If running a single trajectory, process pool overhead is usually not worth it.
         # However, we can use BLAS threading if the user requested it via num_threads.
         n_threads = getattr(sim_params, "num_threads", 1)  # Default to 1 if not present (e.g. WeakSimParams)
-        
+
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
