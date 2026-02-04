@@ -25,8 +25,9 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import scipy.linalg
+
 from mqt.yaqs.core.methods import matrix_exponential
-from mqt.yaqs.core.methods.matrix_exponential import _compute_krylov_result, expm_krylov
+from mqt.yaqs.core.methods.matrix_exponential import expm_krylov
 
 
 def test_expm_krylov_2x2_exact() -> None:
@@ -181,7 +182,7 @@ def test_expm_krylov_linalg_error_fallback() -> None:
         nrm = 1.0
         dt = 0.1
 
-        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)
+        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)  # noqa: SLF001
 
         assert mock_eigh.call_count == 2
         # First call should be stemr
