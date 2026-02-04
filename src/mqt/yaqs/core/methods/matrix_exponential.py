@@ -168,7 +168,6 @@ def expm_krylov(
 
             if j < m_max - 1:
                 # Note: beta array is 0-indexed, so beta[j] corresponds to beta_{j} (the one we just computed)
-                # Ensure we have computed it (we did above)
                 err = beta[j] * abs(phi_last)
                 if err < tol:
                     # Converged
