@@ -248,7 +248,7 @@ def update_left_environment(
     return np.tensordot(ket, tensor, axes=((0, 1), (0, 2)))
 
 
-def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
+def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex128]]:
     """Compute the right operator blocks (partial contractions) for the given MPS and MPO.
 
     Starting from the rightmost site, an identity-like tensor is constructed and then
@@ -269,10 +269,10 @@ def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
         msg = "The lengths of the state and the operator must match."
         raise ValueError(msg)
 
-    right_blocks = np.empty(num_sites, dtype=object)
+    right_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     right_virtual_dim = psi.tensors[num_sites - 1].shape[2]
     mpo_right_dim = op.tensors[num_sites - 1].shape[3]
-    right_identity = np.zeros((right_virtual_dim, mpo_right_dim, right_virtual_dim), dtype=complex)
+    right_identity = np.zeros((right_virtual_dim, mpo_right_dim, right_virtual_dim), dtype=np.complex128)
     for i in range(right_virtual_dim):
         for a in range(mpo_right_dim):
             right_identity[i, a, i] = 1
@@ -642,7 +642,7 @@ def single_site_tdvp(
 
     right_blocks = initialize_right_environments(state, hamiltonian)
 
-    left_blocks = np.empty(num_sites, dtype=object)
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -749,7 +749,7 @@ def two_site_tdvp(
 
     right_blocks = initialize_right_environments(state, hamiltonian)
 
-    left_blocks = np.empty(num_sites, dtype=object)
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -865,7 +865,7 @@ def local_dynamic_tdvp(
 
     # Prepare environments
     right_blocks = initialize_right_environments(state, hamiltonian)
-    left_blocks = np.empty(num_sites, dtype=object)
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     # build identity for left_blocks[0]
     chi0 = state.tensors[0].shape[1]
     mpo_dim = hamiltonian.tensors[0].shape[2]
