@@ -118,6 +118,11 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         else:
             raise NotImplementedError
 
+    # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
+    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)
+    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))
+    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))
+
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
 
