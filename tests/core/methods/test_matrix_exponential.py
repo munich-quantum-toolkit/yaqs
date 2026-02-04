@@ -165,8 +165,6 @@ def test_expm_krylov_linalg_error_fallback() -> None:
     with patch("scipy.linalg.eigh_tridiagonal", mock_eigh):
         # Minimal inputs to reach the eigh call
         size = 10
-        # Minimal inputs to reach the eigh call
-        size = 10
 
         # Force single iteration to reach _compute_krylov_result
 
@@ -183,7 +181,7 @@ def test_expm_krylov_linalg_error_fallback() -> None:
         nrm = 1.0
         dt = 0.1
 
-        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)  # noqa: SLF001
+        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)
 
         assert mock_eigh.call_count == 2
         # First call should be stemr
