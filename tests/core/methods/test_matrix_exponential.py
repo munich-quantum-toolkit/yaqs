@@ -181,7 +181,7 @@ def test_expm_krylov_linalg_error_fallback() -> None:
         nrm = 1.0
         dt = 0.1
 
-        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)
+        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt) #noqa: SLF001
 
         assert mock_eigh.call_count == 2
         # First call should be stemr
