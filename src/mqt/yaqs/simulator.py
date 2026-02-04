@@ -442,9 +442,10 @@ def _run_strong_sim(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial path (debugging/single-core/short runs)
-        # If running a single trajectory, we allow using available CPUs (minus one for parent)
-        # to speed up the computation (e.g. BLAS/LAPACK parallelism).
-        n_threads = max(1, available_cpus() - 1) if sim_params.num_traj == 1 else 1
+        # If running a single trajectory, process pool overhead is usually not worth it.
+        # However, we can use BLAS threading if the user requested it via num_threads.
+        n_threads = getattr(sim_params, "num_threads", 1)  # Default to 1 if not present (e.g. WeakSimParams)
+        
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
