@@ -526,9 +526,7 @@ def _run_weak_sim(
             sim_params.measurements[i] = cast("dict[int, int]", result)
     else:
         # Serial path
-        # If running a single trajectory, we allow using available CPUs (minus one for parent)
-        # to speed up the computation (e.g. BLAS/LAPACK parallelism).
-        n_threads = max(1, available_cpus() - 1) if sim_params.num_traj == 1 else 1
+        n_threads = getattr(sim_params, "num_threads", 1)
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg, n_threads=n_threads)
             if not isinstance(result, dict):
@@ -646,9 +644,7 @@ def _run_analog(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial fallback
-        # If running a single trajectory, we allow using available CPUs (minus one for parent)
-        # to speed up the computation (e.g. BLAS/LAPACK parallelism).
-        n_threads = max(1, available_cpus() - 1) if sim_params.num_traj == 1 else 1
+        n_threads = getattr(sim_params, "num_threads", 1)  # Default to 1 if not present (e.g. WeakSimParams)
         for i, arg in enumerate(args):
             result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
