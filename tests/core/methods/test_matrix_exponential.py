@@ -24,6 +24,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 import scipy.linalg
 
 from mqt.yaqs.core.methods import matrix_exponential
@@ -99,9 +100,9 @@ def test_expm_krylov_zero_norm() -> None:
 
 def test_expm_krylov_numba_execution() -> None:
     """Test execution path when Numba is enabled (large vector)."""
-    # Create a vector larger than NUMBA_THRESHOLD (4096)
-    # We'll patch NUMBA_THRESHOLD effectively by using a large vector or patching the constant
-    # Patching constant is safer to avoid huge allocations in test
+    # Verify Numba module is available
+    pytest.importorskip("mqt.yaqs.core.methods.lanczos_numba")
+    from mqt.yaqs.core.methods.lanczos_numba import orthogonalize_step
 
     size = 100
     v = np.ones(size, dtype=complex)
@@ -111,22 +112,18 @@ def test_expm_krylov_numba_execution() -> None:
     def op(x: np.ndarray) -> np.ndarray:
         return mat @ x
 
-    # We need to verify that numba logic is triggered.
-    # The simplest way is to mock lanczos_numba.orthogonalize_step or check coverage.
-    # But since we can't easily mock imported cached modules inside the function,
-    # we can try to patch the constant in the module.
-
+    # Patch NUMBA_THRESHOLD to force Numba path for smaller vector
     with patch("mqt.yaqs.core.methods.matrix_exponential.NUMBA_THRESHOLD", 50):
-        # Trigger numba path because size=100 > 50
+        # Spy on orthogonalize_step to ensure it's called
+        with patch("mqt.yaqs.core.methods.lanczos_numba.orthogonalize_step", wraps=orthogonalize_step) as mock_ortho:
+            res = expm_krylov(op, v, dt, max_lanczos_iterations=5)
 
-        # We also need to ensure lanczos_numba can be imported.
-        # Ideally we assume it is since we are testing it.
+            # Assert expected numerical result
+            expected = np.exp(-1j * dt) * v
+            np.testing.assert_allclose(res, expected)
 
-        res = expm_krylov(op, v, dt, max_lanczos_iterations=5)
-
-        # Exact solution for Identity matrix exp(-i*dt*I) v = e^{-i*dt} v
-        expected = np.exp(-1j * dt) * v
-        np.testing.assert_allclose(res, expected)
+            # Assert Numba kernel was actually used
+            assert mock_ortho.called, "Numba-accelerated orthogonalize_step should have been called"
 
 
 def test_expm_krylov_numba_early_convergence() -> None:
