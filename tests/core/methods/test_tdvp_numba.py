@@ -1,12 +1,19 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
 import numpy as np
-import pytest
+
 from mqt.yaqs.core.methods.tdvp_numba import (
     build_dense_heff_bond_numba,
     build_dense_heff_site_numba,
 )
 
 
-def test_build_dense_heff_site_numba():
+def test_build_dense_heff_site_numba() -> None:
     """Test the Numba-accelerated single-site effective Hamiltonian construction."""
     # Dimensions
     o_dim, p_dim = 2, 2
@@ -26,7 +33,7 @@ def test_build_dense_heff_site_numba():
     # Reference implementation using einsum
     # H_eff[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
     heff_ref = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env)
-    
+
     # Reshape reference to matrix: (o*A*B, p*a*b)
     # Note: The numba implementation uses specific ordering.
     # Row index: (o * a_out + aa) * b_out + bb -> o, A, B
@@ -38,7 +45,7 @@ def test_build_dense_heff_site_numba():
     np.testing.assert_allclose(heff_numba, heff_ref_flat, rtol=1e-12, atol=1e-12)
 
 
-def test_build_dense_heff_bond_numba():
+def test_build_dense_heff_bond_numba() -> None:
     """Test the Numba-accelerated bond effective Hamiltonian construction."""
     # Dimensions
     u_dim, p_dim = 3, 2
