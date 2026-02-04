@@ -101,8 +101,9 @@ def test_expm_krylov_zero_norm() -> None:
 def test_expm_krylov_numba_execution() -> None:
     """Test execution path when Numba is enabled (large vector)."""
     # Verify Numba module is available
+    # Verify Numba module is available
     pytest.importorskip("mqt.yaqs.core.methods.lanczos_numba")
-    from mqt.yaqs.core.methods.lanczos_numba import orthogonalize_step
+    from mqt.yaqs.core.methods.lanczos_numba import orthogonalize_step  # noqa: PLC0415
 
     size = 100
     v = np.ones(size, dtype=complex)
@@ -113,17 +114,19 @@ def test_expm_krylov_numba_execution() -> None:
         return mat @ x
 
     # Patch NUMBA_THRESHOLD to force Numba path for smaller vector
-    with patch("mqt.yaqs.core.methods.matrix_exponential.NUMBA_THRESHOLD", 50):
+    with (
+        patch("mqt.yaqs.core.methods.matrix_exponential.NUMBA_THRESHOLD", 50),
         # Spy on orthogonalize_step to ensure it's called
-        with patch("mqt.yaqs.core.methods.lanczos_numba.orthogonalize_step", wraps=orthogonalize_step) as mock_ortho:
-            res = expm_krylov(op, v, dt, max_lanczos_iterations=5)
+        patch("mqt.yaqs.core.methods.lanczos_numba.orthogonalize_step", wraps=orthogonalize_step) as mock_ortho,
+    ):
+        res = expm_krylov(op, v, dt, max_lanczos_iterations=5)
 
-            # Assert expected numerical result
-            expected = np.exp(-1j * dt) * v
-            np.testing.assert_allclose(res, expected)
+        # Assert expected numerical result
+        expected = np.exp(-1j * dt) * v
+        np.testing.assert_allclose(res, expected)
 
-            # Assert Numba kernel was actually used
-            assert mock_ortho.called, "Numba-accelerated orthogonalize_step should have been called"
+        # Assert Numba kernel was actually used
+        assert mock_ortho.called, "Numba-accelerated orthogonalize_step should have been called"
 
 
 def test_expm_krylov_numba_early_convergence() -> None:
