@@ -67,6 +67,8 @@ def _run_tests(
     if "--cov" in session.posargs:
         # try to use the lighter-weight `sys.monitoring` coverage core
         env["COVERAGE_CORE"] = "sysmon"
+        # disable Numba JIT coverage
+        env["NUMBA_DISABLE_JIT"] = "1"
 
     session.run(
         "uv",
