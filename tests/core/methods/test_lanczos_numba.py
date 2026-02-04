@@ -27,6 +27,7 @@ def test_orthogonalize_step() -> None:
     rng = np.random.default_rng(42)
     v = rng.standard_normal((dim, num_vecs)) + 1j * rng.standard_normal((dim, num_vecs))
     v, _ = np.linalg.qr(v)
+    v = np.asfortranarray(v)
 
     j = 2
 
