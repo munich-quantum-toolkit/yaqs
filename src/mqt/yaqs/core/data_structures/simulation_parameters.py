@@ -187,6 +187,7 @@ class AnalogSimParams:
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
         show_progress: bool = True,
+        num_threads: int = 1,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -220,6 +221,9 @@ class AnalogSimParams:
             If True, output MPS is returned.
         show_progress:
             If True, a progress bar is printed as trajectories finish.
+        num_threads:
+            Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
+            Defaults to 1 for efficiency on small/medium bond dimensions.
         """
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
@@ -257,6 +261,7 @@ class AnalogSimParams:
         self.evolution_mode = evolution_mode
         self.get_state = get_state
         self.show_progress = show_progress
+        self.num_threads = num_threads
         assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
 
     def aggregate_trajectories(self) -> None:
@@ -443,6 +448,7 @@ class StrongSimParams:
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
         show_progress: bool = True,
+        num_threads: int = 1,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -464,6 +470,9 @@ class StrongSimParams:
             If True, output MPS is returned.
         show_progress:
             If True, a progress bar is printed as trajectories finish.
+        num_threads:
+            Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
+            Defaults to 1 for efficiency on small/medium bond dimensions.
         """
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
@@ -497,6 +506,7 @@ class StrongSimParams:
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
         self.show_progress = show_progress
+        self.num_threads = num_threads
         assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
 
     def aggregate_trajectories(self) -> None:
