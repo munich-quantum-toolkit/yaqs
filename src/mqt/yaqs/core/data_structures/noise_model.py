@@ -57,19 +57,35 @@ class NoiseModel:
         Static method to retrieve the operator matrix for a given noise process name.
     """
 
-    def __init__(self, processes: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self, processes: list[dict[str, Any]] | None = None, scheduled_jumps: list[dict[str, Any]] | None = None
+    ) -> None:
         """Initialize the NoiseModel.
 
         Parameters
         ----------
         processes :
             A list of noise process dictionaries affecting the quantum system. Default is None.
+        scheduled_jumps :
+            A list of scheduled jumps to apply at specific times. Default is None.
 
         Note:
             Input validation is performed and assertion errors may be raised by
             internal helpers if inputs are malformed.
         """
         self.processes: list[dict[str, Any]] = []
+        self.scheduled_jumps: list[dict[str, Any]] = []
+        if scheduled_jumps is not None:
+            for jump in scheduled_jumps:
+                assert "time" in jump, "Each scheduled jump must have a 'time' key"
+                assert "sites" in jump, "Each scheduled jump must have a 'sites' key"
+                assert "name" in jump, "Each scheduled jump must have a 'name' key"
+                assert len(jump["sites"]) <= 2, "Each scheduled jump must have at most 2 sites"
+                jump_dict = dict(jump)  # Copy to avoid mutating caller's dict
+                if "matrix" not in jump_dict:
+                    jump_dict["matrix"] = NoiseModel.get_operator(jump_dict["name"])
+                self.scheduled_jumps.append(jump_dict)
+
         if processes is None:
             return
 
@@ -160,6 +176,9 @@ class NoiseModel:
         Returns:
             np.ndarray: The matrix representation of the operator.
         """
+        if name in PAULI_MAP:
+            return PAULI_MAP[name]
         operator_class = getattr(NoiseLibrary, name)
+
         operator: BaseGate = operator_class()
         return operator.matrix
