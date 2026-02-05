@@ -24,30 +24,20 @@ All simulation results (e.g., observables, measurements) are aggregated and retu
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# 0) THREAD CAPS — must be set BEFORE importing numpy/scipy/qiskit/etc.
-# We set conservative defaults to avoid worker processes each spawning a
-# large number of BLAS/OpenMP threads (oversubscription → slowdown/crashes).
-# Users can still override these by exporting the vars before import.
-# ---------------------------------------------------------------------------
-import os
-
-for _k, _v in {
-    "OMP_NUM_THREADS": "1",
-    "OPENBLAS_NUM_THREADS": "1",
-    "MKL_NUM_THREADS": "1",
-    "NUMEXPR_NUM_THREADS": "1",
-    "VECLIB_MAXIMUM_THREADS": "1",  # harmless on Linux; relevant on macOS
-    "BLIS_NUM_THREADS": "1",
-}.items():
-    os.environ.setdefault(_k, _v)
-
 # ruff: noqa: E402
-
 # ---------------------------------------------------------------------------
 # 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
 # ---------------------------------------------------------------------------
 import multiprocessing
+
+# ---------------------------------------------------------------------------
+# 0) IMPORTS
+# Thread caps are NOT set at module level to allow single-trajectory
+# simulations to use multi-threading via threadpoolctl.
+# Thread limits are enforced in worker processes via _limit_worker_threads()
+# and in backend calls via _call_backend() with threadpoolctl.
+# ---------------------------------------------------------------------------
+import os
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
@@ -64,8 +54,8 @@ if TYPE_CHECKING:
 threadpool_limits: Callable[..., Any] | None
 threadpool_info: Callable[[], Any] | None
 try:
-    from threadpoolctl import threadpool_info as _threadpool_info  # ty: ignore[unresolved-import]
-    from threadpoolctl import threadpool_limits as _threadpool_limits  # ty: ignore[unresolved-import]
+    from threadpoolctl import threadpool_info as _threadpool_info
+    from threadpoolctl import threadpool_limits as _threadpool_limits
 except ImportError:  # pragma: no cover - optional dependency
     threadpool_limits = None
     threadpool_info = None
@@ -233,17 +223,18 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
 # Wrap a single backend call in a context that (again) caps threadpools.
 # This protects against libraries that spawn pools lazily during the call.
 # ---------------------------------------------------------------------------
-def _call_backend(backend: Callable[[TArg], TRes], arg: TArg) -> TRes:
+def _call_backend(backend: Callable[[TArg], TRes], arg: TArg, n_threads: int = 1) -> TRes:
     """Invoke a backend function under a strict temporary thread cap.
 
     Wraps a single backend call in a context that forces threadpool limits
     (if ``threadpoolctl`` is available). This ensures that even if a library
     lazily initializes its thread pool inside the backend call, it will still
-    run single-threaded.
+    run single-threaded (or with the specified number of threads).
 
     Args:
         backend : The backend function to execute.
         arg : The argument to pass to the backend function.
+        n_threads: The maximum number of threads to allow. Defaults to 1.
 
     Returns:
         TRes: The result returned by the backend function.
@@ -254,7 +245,7 @@ def _call_backend(backend: Callable[[TArg], TRes], arg: TArg) -> TRes:
     """
     if threadpool_limits is not None:
         # Caps any pools entered/created within the context
-        with contextlib.suppress(Exception), threadpool_limits(limits=1):
+        with contextlib.suppress(Exception), threadpool_limits(limits=n_threads):
             return backend(arg)
     # If threadpoolctl fails for any reason, fallback to direct call
     return backend(arg)
@@ -450,8 +441,12 @@ def _run_strong_sim(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial path (debugging/single-core/short runs)
+        # If running a single trajectory, process pool overhead is usually not worth it.
+        # However, we can use BLAS threading if the user requested it via num_threads.
+        n_threads = getattr(sim_params, "num_threads", 1)  # Default to 1 if not present (e.g. WeakSimParams)
+
         for i, arg in enumerate(args):
-            result = _call_backend(backend, arg)
+            result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]
@@ -531,8 +526,9 @@ def _run_weak_sim(
             sim_params.measurements[i] = cast("dict[int, int]", result)
     else:
         # Serial path
+        n_threads = getattr(sim_params, "num_threads", 1)
         for i, arg in enumerate(args):
-            result = _call_backend(backend, arg)
+            result = _call_backend(backend, arg, n_threads=n_threads)
             if not isinstance(result, dict):
                 msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
                 raise TypeError(msg)
@@ -648,8 +644,9 @@ def _run_analog(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial fallback
+        n_threads = getattr(sim_params, "num_threads", 1)  # Default to 1 if not present (e.g. WeakSimParams)
         for i, arg in enumerate(args):
-            result = _call_backend(backend, arg)
+            result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]

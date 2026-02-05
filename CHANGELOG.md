@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- added multi-threading setting for noise-free ones ([#316]) ([**@aaronleesander**])
 - Minor improvements to TDVP performance ([#311]) ([**@aaronleesander**])
 - 👷‍♂️ Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
 - ⚡️ Improve Lanczos iteration and use numba for significant speedup ([#310]) ([**@aaronleesander**])
@@ -64,6 +65,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#316]: https://github.com/munich-quantum-toolkit/yaqs/pull/316
 [#311]: https://github.com/munich-quantum-toolkit/yaqs/pull/311
 [#310]: https://github.com/munich-quantum-toolkit/yaqs/pull/310
 [#308]: https://github.com/munich-quantum-toolkit/yaqs/pull/308
