@@ -40,7 +40,7 @@ def has_scheduled_jump(noise_model: NoiseModel | None, time: float, dt: float) -
     if noise_model is None or not noise_model.scheduled_jumps:
         return False
 
-    return any(np.isclose(jump["time"], time, atol=dt * 0.001) for jump in noise_model.scheduled_jumps)
+    return any(np.isclose(jump["time"], time, atol=dt * 1e-3) for jump in noise_model.scheduled_jumps)
 
 
 def apply_scheduled_jumps(
