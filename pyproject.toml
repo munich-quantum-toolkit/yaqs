@@ -49,6 +49,9 @@ dependencies = [
     "qiskit>=1.3.0; python_version >= '3.13'",
     "opt-einsum>=3.4.0",
     "tqdm>=4.67.1",
+    "threadpoolctl>=3.1.0",
+    "numba>=0.61.0",
+    "numba>=0.63.0; python_version >= '3.14'",
 ]
 
 [project.urls]
@@ -128,6 +131,7 @@ ignore = [
   "MY100", # We use ty instead of mypy
   "PC140", # We use ty instead of mypy
   "PC160", # We use a mirror of crate-ci/typos
+  "PC170", # We do not use rST files anymore
 ]
 
 
@@ -203,5 +207,5 @@ docs = [
 dev = [
     {include-group = "test"},
     "nox>=2025.11.12",
-    "ty==0.0.13",
+    "ty==0.0.14",
 ]

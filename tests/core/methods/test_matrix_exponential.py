@@ -21,68 +21,14 @@ These tests ensure reliable numerical behavior and accuracy of Krylov-based algo
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
 
 import numpy as np
-from numpy.linalg import norm
-from scipy.linalg import expm
+import pytest
+import scipy.linalg
 
-from mqt.yaqs.core.methods.matrix_exponential import expm_krylov, lanczos_iteration
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
-
-def test_lanczos_iteration_small() -> None:
-    """Test small Lanczos.
-
-    Check that lanczos_iteration produces correct shapes and orthonormal vectors
-    for a small 2x2 Hermitian matrix.
-    """
-    mat = np.array([[2.0, 1.0], [1.0, 3.0]])
-
-    def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return mat @ x
-
-    initial_vec = np.array([1.0, 1.0], dtype=complex)
-    lanczos_iterations = 2
-
-    alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, initial_vec, lanczos_iterations)
-    # alpha should have shape (2,), beta shape (1,), and V shape (2, 2)
-    assert alpha.shape == (2,)
-    assert beta.shape == (1,)
-    assert lanczos_mat.shape == (2, 2)
-
-    # Check first Lanczos vector is normalized.
-    np.testing.assert_allclose(norm(lanczos_mat[:, 0]), 1.0, atol=1e-12)
-    # Check second vector is orthogonal to the first.
-    dot_01 = np.vdot(lanczos_mat[:, 0], lanczos_mat[:, 1])
-    np.testing.assert_allclose(dot_01, 0.0, atol=1e-12)
-    np.testing.assert_allclose(norm(lanczos_mat[:, 1]), 1.0, atol=1e-12)
-
-
-def test_lanczos_early_termination() -> None:
-    """Test Lanczos early termination.
-
-    Check that lanczos_iteration terminates early when beta[j] is nearly zero.
-
-    Using a diagonal matrix so that if the starting vector is an eigenvector, the
-    iteration can terminate early. In this case, with initial_vec aligned with [1, 0],
-    the iteration should stop after one step.
-    """
-    mat = np.diag([1.0, 2.0])
-
-    def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        return mat @ x
-
-    initial_vec = np.array([1.0, 0.0], dtype=complex)
-    lanczos_iterations = 5
-
-    alpha, beta, lanczos_mat = lanczos_iteration(matrix_free_operator, initial_vec, lanczos_iterations)
-    # Expect termination after 1 iteration: alpha shape (1,), beta shape (0,), V shape (2, 1)
-    assert alpha.shape == (1,)
-    assert beta.shape == (0,)
-    assert lanczos_mat.shape == (2, 1), "Should have truncated V to 1 Lanczos vector."
+from mqt.yaqs.core.methods import matrix_exponential
+from mqt.yaqs.core.methods.matrix_exponential import expm_krylov
 
 
 def test_expm_krylov_2x2_exact() -> None:
@@ -93,15 +39,15 @@ def test_expm_krylov_2x2_exact() -> None:
     """
     mat = np.array([[2.0, 1.0], [1.0, 3.0]])
 
-    def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    def matrix_free_operator(x: np.ndarray) -> np.ndarray:
         return mat @ x
 
     v = np.array([1.0, 0.0], dtype=complex)
     dt = 0.1
     lanczos_iterations = 2  # full subspace
 
-    approx = expm_krylov(matrix_free_operator, v, dt, lanczos_iterations)
-    direct = expm(-1j * dt * mat) @ v
+    approx = expm_krylov(matrix_free_operator, v, dt, max_lanczos_iterations=lanczos_iterations)
+    direct = scipy.linalg.expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(
         approx,
@@ -120,15 +66,15 @@ def test_expm_krylov_smaller_subspace() -> None:
     """
     mat = np.array([[2.0, 1.0], [1.0, 3.0]])
 
-    def matrix_free_operator(x: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    def matrix_free_operator(x: np.ndarray) -> np.ndarray:
         return mat @ x
 
     v = np.array([1.0, 1.0], dtype=complex)
     dt = 0.05
     lanczos_iterations = 1  # subspace dimension smaller than the full space
 
-    approx = expm_krylov(matrix_free_operator, v, dt, lanczos_iterations)
-    direct = expm(-1j * dt * mat) @ v
+    approx = expm_krylov(matrix_free_operator, v, dt, max_lanczos_iterations=lanczos_iterations)
+    direct = scipy.linalg.expm(-1j * dt * mat) @ v
 
     np.testing.assert_allclose(
         approx,
@@ -136,3 +82,109 @@ def test_expm_krylov_smaller_subspace() -> None:
         atol=1e-1,
         err_msg="Krylov with subspace < dimension might be approximate, but should be within 1e-1 for small dt.",
     )
+
+
+def test_expm_krylov_zero_norm() -> None:
+    """Test that zero vector input returns zero vector immediately."""
+    v = np.zeros(10, dtype=complex)
+    dt = 0.1
+
+    # matrix_free_operator shouldn't even be called
+    mock_op = MagicMock()
+
+    res = expm_krylov(mock_op, v, dt)
+
+    np.testing.assert_array_equal(res, v)
+    mock_op.assert_not_called()
+
+
+def test_expm_krylov_numba_execution() -> None:
+    """Test execution path when Numba is enabled (large vector)."""
+    # Verify Numba module is available
+    # Verify Numba module is available
+    pytest.importorskip("mqt.yaqs.core.methods.lanczos_numba")
+    from mqt.yaqs.core.methods.lanczos_numba import orthogonalize_step  # noqa: PLC0415
+
+    size = 100
+    v = np.ones(size, dtype=complex)
+    dt = 0.1
+    mat = np.eye(size)
+
+    def op(x: np.ndarray) -> np.ndarray:
+        return mat @ x
+
+    # Patch NUMBA_THRESHOLD to force Numba path for smaller vector
+    with (
+        patch("mqt.yaqs.core.methods.matrix_exponential.NUMBA_THRESHOLD", 50),
+        # Spy on orthogonalize_step to ensure it's called
+        patch("mqt.yaqs.core.methods.lanczos_numba.orthogonalize_step", wraps=orthogonalize_step) as mock_ortho,
+    ):
+        res = expm_krylov(op, v, dt, max_lanczos_iterations=5)
+
+        # Assert expected numerical result
+        expected = np.exp(-1j * dt) * v
+        np.testing.assert_allclose(res, expected)
+
+        # Assert Numba kernel was actually used
+        assert mock_ortho.called, "Numba-accelerated orthogonalize_step should have been called"
+
+
+def test_expm_krylov_numba_early_convergence() -> None:
+    """Test early convergence (breakdown) in Numba path."""
+    # If starting vector is eigenvector, breakdown happens at step 1
+    size = 60
+    v = np.zeros(size, dtype=complex)
+    v[0] = 1.0  # Standard basis vector
+    mat = np.diag(np.arange(size))  # Diagonal matrix, standard basis vectors are eigenvectors
+
+    # With v=e_0, Av = 0*e_0 = 0. Krylov subspace is 1D.
+    # Should converge immediately.
+
+    def op(x: np.ndarray) -> np.ndarray:
+        return mat @ x
+
+    with patch("mqt.yaqs.core.methods.matrix_exponential.NUMBA_THRESHOLD", 50):
+        res = expm_krylov(op, v, dt=0.1, max_lanczos_iterations=10)
+
+        # Exact: exp(-i*0.1*0) * e_0 = 1 * e_0 = e_0
+        np.testing.assert_allclose(res, v)
+
+
+def test_expm_krylov_linalg_error_fallback() -> None:
+    """Test fallback to 'stebz' driver when 'stemr' fails with LinAlgError."""
+    # We need to patch scipy.linalg.eigh_tridiagonal to raise LinAlgError on first call
+    # and succeed on second call.
+
+    # Mock return values must match the dimension implied by alpha (len 2)
+    # alpha size 2 -> returns 2 eigenvalues and 2x2 eigenvectors
+    mock_evals = np.array([1.0, 2.0])
+    mock_evecs = np.eye(2)
+
+    mock_eigh = MagicMock(side_effect=[scipy.linalg.LinAlgError("Test Error"), (mock_evals, mock_evecs)])
+
+    with patch("scipy.linalg.eigh_tridiagonal", mock_eigh):
+        # Minimal inputs to reach the eigh call
+        size = 10
+
+        # Force single iteration to reach _compute_krylov_result
+
+        alpha = np.array([1.0, 1.0])
+        beta = np.array([0.5])
+        # lanczos_mat should be (size, k) where k=len(alpha)=2
+        # But _compute_krylov_result takes lanczos_mat which is (size, m_max) usually,
+        # or (size, k) if sliced.
+        # In the function signature: lanczos_mat: NDArray[np.complex128]
+        # logic: return np.asarray(lanczos_mat @ (u_hess @ coeffs), dtype=np.complex128)
+        # u_hess is (k, k), coeffs is (k,). u_hess @ coeffs -> (k,)
+        # lanczos_mat must be (N, k).
+        lanczos_mat = np.zeros((size, 2), dtype=complex)
+        nrm = 1.0
+        dt = 0.1
+
+        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)  # noqa: SLF001
+
+        assert mock_eigh.call_count == 2
+        # First call should be stemr
+        assert mock_eigh.call_args_list[0][1]["lapack_driver"] == "stemr"
+        # Second call should be stebz
+        assert mock_eigh.call_args_list[1][1]["lapack_driver"] == "stebz"
