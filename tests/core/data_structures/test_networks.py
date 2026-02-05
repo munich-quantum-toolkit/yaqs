@@ -142,9 +142,7 @@ def _heisenberg_dense(length: int, jx: float, jy: float, jz: float, h: float) ->
     return H
 
 
-def _bose_hubbard_dense(
-    length: int, local_dim: int, omega: float, hopping_j: float, hubbard_u: float
-) -> np.ndarray:
+def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: float, hubbard_u: float) -> np.ndarray:
     """Construct the exact dense Bose-Hubbard Hamiltonian for comparison.
 
     Returns:
