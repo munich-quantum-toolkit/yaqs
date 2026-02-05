@@ -60,9 +60,6 @@ def apply_scheduled_jumps(
     Returns:
         The updated Matrix Product State.
     """
-    if noise_model is None or not noise_model.scheduled_jumps:
-        return state
-
     for jump in noise_model.scheduled_jumps:
         if np.isclose(jump["time"], time, atol=sim_params.dt * 1e-3):
             sites = jump["sites"]
