@@ -9,16 +9,21 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ## [Unreleased]
 
-### Changed
+## [0.4.0] - 2026-02-05
 
+### Added
 - added ability to schedule jumps ([#319]) ([**@aaronleesander**])
 - added Bose-Hubbard Hamiltonian option ([#309]) ([**@lucello**])
 - added multi-threading setting for noise-free ones ([#316]) ([**@aaronleesander**])
 - Minor improvements to TDVP performance ([#311]) ([**@aaronleesander**])
-- 👷‍♂️ Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
 - ⚡️ Improve Lanczos iteration and use numba for significant speedup ([#310]) ([**@aaronleesander**])
+
+### Changed
 - ♻️ Change Pauli summation to use finite state machine construction ([#308]) ([**@aaronleesander**])
 - 🔧 Replace `mypy` with `ty` ([#304]) ([**@denialhaag**])
+
+### Removed
+- 👷‍♂️ Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
 
 ## [0.3.3] - 2026-01-12
 
@@ -60,7 +65,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Version links -->
 
-[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
 [0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
 [0.3.1]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.1
