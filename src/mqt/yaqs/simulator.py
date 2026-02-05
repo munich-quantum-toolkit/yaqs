@@ -54,8 +54,8 @@ if TYPE_CHECKING:
 threadpool_limits: Callable[..., Any] | None
 threadpool_info: Callable[[], Any] | None
 try:
-    from threadpoolctl import threadpool_info as _threadpool_info  # ty: ignore[unresolved-import]
-    from threadpoolctl import threadpool_limits as _threadpool_limits  # ty: ignore[unresolved-import]
+    from threadpoolctl import threadpool_info as _threadpool_info
+    from threadpoolctl import threadpool_limits as _threadpool_limits
 except ImportError:  # pragma: no cover - optional dependency
     threadpool_limits = None
     threadpool_info = None
