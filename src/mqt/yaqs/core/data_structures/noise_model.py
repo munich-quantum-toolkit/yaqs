@@ -177,11 +177,7 @@ class NoiseModel:
         """
         if name in PAULI_MAP:
             return PAULI_MAP[name]
-        try:
-            operator_class = getattr(NoiseLibrary, name)
-        except AttributeError:
-            # Fallback for case-insensitive lookup (e.g. 'x' -> 'pauli_x' if not in map, though map handles x)
-            raise
+        operator_class = getattr(NoiseLibrary, name)
 
         operator: BaseGate = operator_class()
         return operator.matrix

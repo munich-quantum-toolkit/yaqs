@@ -5,6 +5,12 @@
 #
 # Licensed under the MIT License
 
+"""Scheduled Noise Jumps.
+
+This module implements functions for applying scheduled noise jumps to a Matrix Product State (MPS)
+during an analog simulation.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

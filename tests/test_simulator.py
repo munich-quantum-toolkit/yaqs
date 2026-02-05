@@ -944,9 +944,7 @@ def test_scheduled_jump_two_site() -> None:
     noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
 
     # Measure ZZ on site 0, 1
-    from mqt.yaqs.core.libraries.gate_library import ZZ as ZZ_gate
-
-    zz_obs = Observable(ZZ_gate(), sites=[0, 1])
+    zz_obs = Observable(ZZ(), sites=[0, 1])
     sim_params = AnalogSimParams(
         elapsed_time=T,
         dt=dt,

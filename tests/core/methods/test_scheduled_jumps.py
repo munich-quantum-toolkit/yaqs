@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+"""Tests for the scheduled_jumps module."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -39,8 +41,8 @@ def test_has_scheduled_jump() -> None:
 
 def test_apply_scheduled_jumps_single_site() -> None:
     """Tests applying a single-site scheduled jump."""
-    L = 2
-    state = MPS(L, state="zeros")  # |00>
+    length = 2
+    state = MPS(length, state="zeros")  # |00>
     state.normalize("B")
 
     scheduled_jumps = [{"time": 1.0, "sites": [0], "name": "x"}]
@@ -62,8 +64,8 @@ def test_apply_scheduled_jumps_single_site() -> None:
 
 def test_apply_scheduled_jumps_two_site() -> None:
     """Tests applying a two-site scheduled jump."""
-    L = 2
-    state = MPS(L, state="zeros")  # |00>
+    length = 2
+    state = MPS(length, state="zeros")  # |00>
     state.normalize("B")
 
     # ZZ jump should do nothing to |00> in terms of expectation?
@@ -91,8 +93,8 @@ def test_apply_scheduled_jumps_two_site() -> None:
 
 def test_apply_scheduled_jumps_multiple() -> None:
     """Tests applying multiple scheduled jumps at the same time."""
-    L = 3
-    state = MPS(L, state="zeros")  # |000>
+    length = 3
+    state = MPS(length, state="zeros")  # |000>
     state.normalize("B")
 
     # Jumps on site 0 and site 2 at t=1.0
