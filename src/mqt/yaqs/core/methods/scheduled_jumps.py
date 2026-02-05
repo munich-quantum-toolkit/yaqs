@@ -75,8 +75,7 @@ def apply_scheduled_jumps(
                 i, j = sorted(sites)
                 if abs(i - j) != 1:
                     msg = (
-                        f"Scheduled jump acts on non-adjacent sites {sites}. "
-                        "Only nearest-neighbor jumps are supported."
+                        f"Scheduled jump acts on non-adjacent sites {sites}. Only nearest-neighbor jumps are supported."
                     )
                     raise ValueError(msg)
 
