@@ -70,9 +70,6 @@ def apply_scheduled_jumps(
             elif len(sites) == 2:
                 i, j = sites[0], sites[1]
                 # Assuming adjacent for now based on NoiseModel constraints or generic apply logic
-                # For non-adjacent, need swap gates or similar, but NoiseModel requires adjacency for "matrix" usually
-                # except for crosstalk which provides factors.
-                # Let's handle adjacent case (most common for jumps)
                 if abs(i - j) == 1:
                      merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
                      merged = oe.contract("ab, bcd->acd", jump_op, merged)
@@ -81,9 +78,6 @@ def apply_scheduled_jumps(
                     )
                      state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
                 else:
-                    # If factors are provided or we can decompose?
-                    # For now raise if not adjacent and not factorizable logic?
-                    # The implementation plan said "Applies the operator".
                     pass
 
     state.normalize("B")
