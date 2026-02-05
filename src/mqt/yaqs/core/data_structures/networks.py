@@ -1329,11 +1329,18 @@ class MPO:
         Returns:
             An MPO instance representing the Hamiltonian.
 
+        Raises:
+            ValueError: If ``length <= 0``.
+
         Notes:
-            - The Hamiltonian for each qubit is modeled as a Duffing oscillator:
+            - The Hamiltonian for each site is modeled as a Duffing oscillator:
                 H = sum_i ω * n_i + U/2 * n_i (n_i - 1) + J * (adag_i a_{i+1} + h.c.)
             - The MPO bond dimension is D=4.
         """
+        if length <= 0:
+            msg = "length must be positive."
+            raise ValueError(msg)
+
         a = Destroy(local_dim).matrix
         a_dag = Destroy(local_dim).dag().matrix
 
