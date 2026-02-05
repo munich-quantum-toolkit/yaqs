@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- added multi-threading setting for noise-free ones ([#316]) ([**@aaronleesander**])
 - Minor improvements to TDVP performance ([#311]) ([**@aaronleesander**])
 - 👷‍♂️ Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
 - ⚡️ Improve Lanczos iteration and use numba for significant speedup ([#310]) ([**@aaronleesander**])
@@ -21,7 +22,6 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added multi-threading setting for noise-free ones ([#316]) ([**@aaronleesander**])
 - updated bib and readme with Nature Communications publication ([#298]) ([**@aaronleesander**])
 - updates MPO class to allow construction of arbitrary Pauli Hamiltonians ([#216]) ([**@aaronleesander**, **@thilomueller**])
 - added faster paths for TDVP dense effective Hamiltonian ([#280]) ([**@aaronleesander**])
