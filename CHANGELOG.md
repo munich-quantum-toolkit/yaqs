@@ -12,6 +12,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ## [0.4.0] - 2026-02-05
 
 ### Added
+
 - added ability to schedule jumps ([#319]) ([**@aaronleesander**])
 - added Bose-Hubbard Hamiltonian option ([#309]) ([**@lucello**])
 - added multi-threading setting for noise-free ones ([#316]) ([**@aaronleesander**])
@@ -19,10 +20,12 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 - ⚡️ Improve Lanczos iteration and use numba for significant speedup ([#310]) ([**@aaronleesander**])
 
 ### Changed
+
 - ♻️ Change Pauli summation to use finite state machine construction ([#308]) ([**@aaronleesander**])
 - 🔧 Replace `mypy` with `ty` ([#304]) ([**@denialhaag**])
 
 ### Removed
+
 - 👷‍♂️ Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
 
 ## [0.3.3] - 2026-01-12
