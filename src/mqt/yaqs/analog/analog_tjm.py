@@ -51,8 +51,8 @@ def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSim
         MPS: The initialized sampling MPS Phi(0).
     """
     apply_dissipation(state, noise_model, sim_params.dt / 2, sim_params)
-    # Check for scheduled jumps at t=0
-    current_time = 0.0  # Assumed start time
+    # Check for scheduled jumps at start time
+    current_time = sim_params.times[0]
     if has_scheduled_jump(noise_model, current_time, sim_params.dt):
         return apply_scheduled_jumps(state, noise_model, current_time, sim_params)
     return stochastic_process(state, noise_model, sim_params.dt, sim_params)
