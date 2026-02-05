@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- added Bose-Hubbard Hamiltonian option ([#309]) ([**@lucello**])
 - added multi-threading setting for noise-free ones ([#316]) ([**@aaronleesander**])
 - Minor improvements to TDVP performance ([#311]) ([**@aaronleesander**])
 - 👷‍♂️ Stop testing on x86 macOS systems ([#310]) ([**@aaronleesander**])
@@ -68,6 +69,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [#316]: https://github.com/munich-quantum-toolkit/yaqs/pull/316
 [#311]: https://github.com/munich-quantum-toolkit/yaqs/pull/311
 [#310]: https://github.com/munich-quantum-toolkit/yaqs/pull/310
+[#309]: https://github.com/munich-quantum-toolkit/yaqs/pull/309
 [#308]: https://github.com/munich-quantum-toolkit/yaqs/pull/308
 [#304]: https://github.com/munich-quantum-toolkit/yaqs/pull/304
 [#298]: https://github.com/munich-quantum-toolkit/yaqs/pull/298
@@ -87,6 +89,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@denialhaag**]: https://github.com/denialhaag
 [**@aaronleesander**]: https://github.com/aaronleesander
 [**@thilomueller**]: https://github.com/thilomueller
+[**@lucello**]: https://github.com/lucello
 
 <!-- General links -->
 

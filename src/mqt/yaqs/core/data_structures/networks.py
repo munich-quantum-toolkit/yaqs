@@ -426,12 +426,20 @@ class MPS:
             # If normalizing, we just throw away the R
             if current_orthogonality_center + 1 < self.length:
                 self.tensors[current_orthogonality_center + 1] = oe.contract(
-                    "ij, ajc->aic", bond_tensor, self.tensors[current_orthogonality_center + 1]
+                    "ij, ajc->aic",
+                    bond_tensor,
+                    self.tensors[current_orthogonality_center + 1],
                 )
         elif decomposition == "SVD":
-            a, b = self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1]
+            a, b = (
+                self.tensors[current_orthogonality_center],
+                self.tensors[current_orthogonality_center + 1],
+            )
             a_new, b_new = two_site_svd(a, b, threshold=1e-12, max_bond_dim=None)
-            self.tensors[current_orthogonality_center], self.tensors[current_orthogonality_center + 1] = a_new, b_new
+            (
+                self.tensors[current_orthogonality_center],
+                self.tensors[current_orthogonality_center + 1],
+            ) = (a_new, b_new)
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center left.
@@ -655,7 +663,10 @@ class MPS:
         return self.scalar_product(temp_state, sites)
 
     def evaluate_observables(
-        self, sim_params: AnalogSimParams | StrongSimParams, results: NDArray[np.float64], column_index: int = 0
+        self,
+        sim_params: AnalogSimParams | StrongSimParams,
+        results: NDArray[np.float64],
+        column_index: int = 0,
     ) -> None:
         """Evaluate and record expectation values of observables for a given MPS state.
 
@@ -1290,6 +1301,85 @@ class MPO:
 
         # Backward-compat: single attribute even though dims alternate.
         mpo.physical_dimension = qubit_dim
+
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+        return mpo
+
+    @classmethod
+    def bose_hubbard(
+        cls,
+        length: int,
+        local_dim: int,
+        omega: float,
+        hopping_j: float,
+        hubbard_u: float,
+    ) -> MPO:
+        """Bose-Hubbard Hamiltonian.
+
+        Initializes an MPO representation of a Bose-Hubbard Hamiltonian.
+
+        Parameters:
+            length: Total number of sites in the chain.
+            local_dim: Local Hilbert space dimension of each site. Maximally
+                                local_dim - 1 particles per site.
+            omega: Frequency of a site.
+            hopping_j: Hopping constant between sites.
+            hubbard_u: Repulsive onsite Hubbard interaction on each site.
+
+        Returns:
+            An MPO instance representing the Hamiltonian.
+
+        Raises:
+            ValueError: If ``length <= 0``.
+
+        Notes:
+            - The Hamiltonian for each site is modeled as a Duffing oscillator:
+                H = sum_i ω * n_i + U/2 * n_i (n_i - 1) + J * (adag_i a_{i+1} + h.c.)
+            - The MPO bond dimension is D=4.
+        """
+        if length <= 0:
+            msg = "length must be positive."
+            raise ValueError(msg)
+
+        a = Destroy(local_dim).matrix
+        a_dag = Destroy(local_dim).dag().matrix
+
+        id_boson = np.eye(local_dim, dtype=complex)
+        zero = np.zeros_like(id_boson, dtype=complex)
+
+        n = a_dag @ a
+        h_loc = 0.5 * hubbard_u * (n @ (n - id_boson)) + omega * n
+
+        tensors: list[np.ndarray] = []
+
+        # channels: 0 = start/identity, 1 = carries adag, 2 = carries a, 3 = end/accumulator
+        tensor = np.empty((4, 4, local_dim, local_dim), dtype=object)
+        tensor[:, :] = [[zero for _ in range(4)] for _ in range(4)]
+        tensor[0, 0] = id_boson
+        tensor[0, 1] = a_dag
+        tensor[0, 2] = a
+
+        tensor[0, 3] = h_loc
+
+        tensor[1, 3] = -hopping_j * a  # completes adag_i * a_{i+1}
+        tensor[2, 3] = -hopping_j * a_dag
+        tensor[3, 3] = id_boson
+
+        # build the full tensor list
+        tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128) for _ in range(length)]
+
+        # Left boundary: take only row 0
+        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(np.complex128)
+
+        # Right boundary: take only col 3
+        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].astype(np.complex128)
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = length
+
+        # Backward-compat: single attribute even though dims alternate.
+        mpo.physical_dimension = local_dim
 
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
         return mpo

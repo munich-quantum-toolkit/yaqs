@@ -28,14 +28,17 @@ from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
 from mqt.yaqs import simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    AnalogSimParams,
+    StrongSimParams,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, Id, X, Z
+from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, X, Z
 
 # ---- single-qubit ops ----
 _I2 = np.eye(2, dtype=complex)
@@ -44,38 +47,38 @@ _Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
 
 
-def _embed_one_body(op: np.ndarray, L: int, i: int) -> np.ndarray:  # noqa: N803
+def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
     """Embed a single-site operator into a length-L qubit Hilbert space.
 
     Args:
         op: Local 2x2 operator acting on site i.
-        L: Total number of sites.
+        length: Total number of sites.
         i: Site index at which to apply the operator.
 
     Returns:
-        Dense (2**L, 2**L) matrix representing I⊗…⊗op_i⊗…⊗I.
+        Dense (2**length, 2**length) matrix representing I⊗…⊗op_i⊗…⊗I.
     """
     out = np.array([[1.0]], dtype=complex)
-    for k in range(L):
+    for k in range(length):
         out = np.kron(out, op if k == i else _I2)
     return out
 
 
-def _embed_two_body(op1: np.ndarray, op2: np.ndarray, L: int, i: int) -> np.ndarray:  # noqa: N803
+def _embed_two_body(op1: np.ndarray, op2: np.ndarray, length: int, i: int) -> np.ndarray:
     """Embed a nearest-neighbor two-site operator into a length-L qubit Hilbert space.
 
     Args:
         op1: Local operator acting on site i.
         op2: Local operator acting on site i+1.
-        L: Total number of sites.
+        length: Total number of sites.
         i: Left site index of the two-body term.
 
     Returns:
-        Dense (2**L, 2**L) matrix representing
+        Dense (2**length, 2**length) matrix representing
         I⊗…⊗op1_i⊗op2_{i+1}⊗…⊗I.
     """
     out = np.array([[1.0]], dtype=complex)
-    for k in range(L):
+    for k in range(length):
         if k == i:
             out = np.kron(out, op1)
         elif k == i + 1:
@@ -85,56 +88,101 @@ def _embed_two_body(op1: np.ndarray, op2: np.ndarray, L: int, i: int) -> np.ndar
     return out
 
 
-def _ising_dense(L: int, J: float, g: float) -> np.ndarray:  # noqa: N803
+def _ising_dense(length: int, j_val: float, g: float) -> np.ndarray:
     """Construct the dense Ising Hamiltonian for an open chain.
 
     The Hamiltonian is
         H = -J sum_i Z_i Z_{i+1} - g sum_i X_i.
 
     Args:
-        L: Number of sites.
-        J: Nearest-neighbor coupling strength.
+        length: Number of sites.
+        j_val: Nearest-neighbor coupling strength.
         g: Transverse-field strength.
 
     Returns:
-        Dense (2**L, 2**L) Hamiltonian matrix.
+        Dense (2**length, 2**length) Hamiltonian matrix.
     """
-    dim = 2**L
+    dim = 2**length
     H = np.zeros((dim, dim), dtype=complex)
 
-    for i in range(L - 1):
-        H += (-J) * _embed_two_body(_Z2, _Z2, L, i)
-    for i in range(L):
-        H += (-g) * _embed_one_body(_X2, L, i)
+    for i in range(length - 1):
+        H += (-j_val) * _embed_two_body(_Z2, _Z2, length, i)
+    for i in range(length):
+        H += (-g) * _embed_one_body(_X2, length, i)
 
     return H
 
 
-def _heisenberg_dense(L: int, Jx: float, Jy: float, Jz: float, h: float) -> np.ndarray:  # noqa: N803
+def _heisenberg_dense(length: int, jx: float, jy: float, jz: float, h: float) -> np.ndarray:
     """Construct the dense Heisenberg Hamiltonian for an open chain.
 
     The Hamiltonian is
         H = -sum_i (Jx X_i X_{i+1} + Jy Y_i Y_{i+1} + Jz Z_i Z_{i+1}) - h sum_i Z_i.
 
     Args:
-        L: Number of sites.
-        Jx: XX coupling strength.
-        Jy: YY coupling strength.
-        Jz: ZZ coupling strength.
+        length: Number of sites.
+        jx: XX coupling strength.
+        jy: YY coupling strength.
+        jz: ZZ coupling strength.
         h: Longitudinal field strength.
 
     Returns:
-        Dense (2**L, 2**L) Hamiltonian matrix.
+        Dense (2**length, 2**length) Hamiltonian matrix.
     """
-    dim = 2**L
+    dim = 2**length
     H = np.zeros((dim, dim), dtype=complex)
 
-    for i in range(L - 1):
-        H += (-Jx) * _embed_two_body(_X2, _X2, L, i)
-        H += (-Jy) * _embed_two_body(_Y2, _Y2, L, i)
-        H += (-Jz) * _embed_two_body(_Z2, _Z2, L, i)
-    for i in range(L):
-        H += (-h) * _embed_one_body(_Z2, L, i)
+    for i in range(length - 1):
+        H += (-jx) * _embed_two_body(_X2, _X2, length, i)
+        H += (-jy) * _embed_two_body(_Y2, _Y2, length, i)
+        H += (-jz) * _embed_two_body(_Z2, _Z2, length, i)
+    for i in range(length):
+        H += (-h) * _embed_one_body(_Z2, length, i)
+
+    return H
+
+
+def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: float, hubbard_u: float) -> np.ndarray:
+    """Construct the exact dense Bose-Hubbard Hamiltonian for comparison.
+
+    Returns:
+        Dense Hamiltonian matrix.
+    """
+    # Local operators
+    a = Destroy(local_dim).matrix
+    adag = Destroy(local_dim).dag().matrix
+    n = adag @ a
+    id_op = np.eye(local_dim, dtype=complex)
+
+    dim = local_dim**length
+    H = np.zeros((dim, dim), dtype=complex)
+
+    # Build H term-by-term using Kronecker products
+    def embed(op_list: list[np.ndarray]) -> np.ndarray:
+        out = np.array([[1.0]], dtype=complex)
+        for op in op_list:
+            out = np.kron(out, op)
+        return out
+
+    # Onsite terms
+    for i in range(length):
+        op_list = [id_op] * length
+        op_list[i] = omega * n + 0.5 * hubbard_u * (n @ (n - id_op))
+        H += embed(op_list)
+
+    # Hopping terms
+    for i in range(length - 1):
+        # adag_i * a_{i+1}
+        op_list1 = [id_op] * length
+        op_list1[i] = adag
+        op_list1[i + 1] = a
+        H += -hopping_j * embed(op_list1)
+
+        # a_i * adag_{i+1}
+        op_list2 = [id_op] * length
+        op_list2[i] = a
+        op_list2[i + 1] = adag
+        H += -hopping_j * embed(op_list2)
 
     return H
 
@@ -225,6 +273,34 @@ def test_heisenberg_correct_operator() -> None:
     mpo = MPO.heisenberg(L, Jx, Jy, Jz, h)
 
     assert np.allclose(mpo.to_matrix(), _heisenberg_dense(L, Jx, Jy, Jz, h), atol=1e-12)
+
+
+def test_bose_hubbard_correct_operator() -> None:
+    """Verify that the Bose-Hubbard MPO matches the exact dense Hamiltonian."""
+    length = 4
+    local_dim = 3  # up to 2 bosons per site
+    omega = 0.7
+    J = 0.2
+    U = 1.3
+
+    mpo = MPO.bose_hubbard(
+        length=length,
+        local_dim=local_dim,
+        omega=omega,
+        hopping_j=J,
+        hubbard_u=U,
+    )
+
+    # Basic checks
+    assert mpo.length == length
+    assert mpo.physical_dimension == local_dim
+    assert len(mpo.tensors) == length
+    assert all(t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors), "Bond dimension should be 4"
+
+    # Dense comparison
+    H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)
+    H_mpo = mpo.to_matrix()
+    np.testing.assert_allclose(H_mpo, H_dense, atol=1e-8)
 
 
 def test_identity() -> None:
