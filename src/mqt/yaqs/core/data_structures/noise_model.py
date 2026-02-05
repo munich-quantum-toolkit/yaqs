@@ -81,10 +81,10 @@ class NoiseModel:
                 assert "sites" in jump, "Each scheduled jump must have a 'sites' key"
                 assert "name" in jump, "Each scheduled jump must have a 'name' key"
                 assert len(jump["sites"]) <= 2, "Each scheduled jump must have at most 2 sites"
-                jump = dict(jump)  # Copy to avoid mutating caller's dict
-                if "matrix" not in jump:
-                    jump["matrix"] = NoiseModel.get_operator(jump["name"])
-                self.scheduled_jumps.append(jump)
+                jump_dict = dict(jump)  # Copy to avoid mutating caller's dict
+                if "matrix" not in jump_dict:
+                    jump_dict["matrix"] = NoiseModel.get_operator(jump_dict["name"])
+                self.scheduled_jumps.append(jump_dict)
 
         if processes is None:
             return

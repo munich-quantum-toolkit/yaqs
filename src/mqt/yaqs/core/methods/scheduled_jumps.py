@@ -59,6 +59,9 @@ def apply_scheduled_jumps(
 
     Returns:
         The updated Matrix Product State.
+
+    Raises:
+        ValueError: If a two-site jump acts on non-adjacent sites.
     """
     for jump in noise_model.scheduled_jumps:
         if np.isclose(jump["time"], time, atol=sim_params.dt * 1e-3):
@@ -71,7 +74,10 @@ def apply_scheduled_jumps(
             elif len(sites) == 2:
                 i, j = sorted(sites)
                 if abs(i - j) != 1:
-                    msg = f"Scheduled jump acts on non-adjacent sites {sites}. Only nearest-neighbor jumps are supported."
+                    msg = (
+                        f"Scheduled jump acts on non-adjacent sites {sites}. "
+                        "Only nearest-neighbor jumps are supported."
+                    )
                     raise ValueError(msg)
 
                 merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
