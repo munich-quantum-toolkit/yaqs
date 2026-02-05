@@ -45,7 +45,7 @@ def has_scheduled_jump(noise_model: NoiseModel | None, time: float, dt: float) -
 
 def apply_scheduled_jumps(
     state: MPS,
-    noise_model: NoiseModel,
+    noise_model: NoiseModel | None,
     time: float,
     sim_params: AnalogSimParams,
 ) -> MPS:
@@ -63,6 +63,9 @@ def apply_scheduled_jumps(
     Raises:
         ValueError: If a two-site jump acts on non-adjacent sites.
     """
+    if noise_model is None or not noise_model.scheduled_jumps:
+        return state
+
     for jump in noise_model.scheduled_jumps:
         if np.isclose(jump["time"], time, atol=sim_params.dt * 1e-3):
             sites = jump["sites"]
