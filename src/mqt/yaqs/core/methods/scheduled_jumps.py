@@ -69,19 +69,21 @@ def apply_scheduled_jumps(
                 site = sites[0]
                 state.tensors[site] = oe.contract("ab, bcd->acd", jump_op, state.tensors[site])
             elif len(sites) == 2:
-                i, j = sites[0], sites[1]
-                # Assuming adjacent for now based on NoiseModel constraints or generic apply logic
-                if abs(i - j) == 1:
-                    merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
-                    merged = oe.contract("ab, bcd->acd", jump_op, merged)
-                    tensor_left_new, tensor_right_new = split_mps_tensor(
-                        merged,
-                        "right",
-                        sim_params,
-                        [state.physical_dimensions[i], state.physical_dimensions[j]],
-                        dynamic=False,
-                    )
-                    state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
+                i, j = sorted(sites)
+                if abs(i - j) != 1:
+                    msg = f"Scheduled jump acts on non-adjacent sites {sites}. Only nearest-neighbor jumps are supported."
+                    raise ValueError(msg)
+
+                merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
+                merged = oe.contract("ab, bcd->acd", jump_op, merged)
+                tensor_left_new, tensor_right_new = split_mps_tensor(
+                    merged,
+                    "right",
+                    sim_params,
+                    [state.physical_dimensions[i], state.physical_dimensions[j]],
+                    dynamic=False,
+                )
+                state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
 
     state.normalize("B")
     return state
