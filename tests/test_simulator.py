@@ -889,3 +889,114 @@ def test_transmon_simulation() -> None:
 
     # finally check total leakage
     np.testing.assert_array_less(leakage, 5e-2)
+
+
+def test_scheduled_jump_single_site() -> None:
+    """Tests a scheduled Pauli-X flip on a single qubit."""
+    L = 1
+    T = 1.0
+    dt = 0.1
+    jump_time = 0.5
+
+    # Initial state |0>
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    # Scheduled X jump at t=0.5
+    scheduled_jumps = [{"time": jump_time, "sites": [0], "name": "x"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+
+    # Measure Z on site 0
+    z_obs = Observable(Z(), sites=0)
+    sim_params = AnalogSimParams(
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        observables=[z_obs],
+        show_progress=False,
+    )
+
+    # Use a vacuum Hamiltonian (all zeros) for pure jump dynamics
+    hamiltonian = MPO.ising(L, 0.0, 0.0)
+
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = z_obs.results
+    assert results is not None
+    # Before t=0.5, Z should be 1.0
+    # Steps: 0.0 (0), 0.1 (1), 0.2 (2), 0.3 (3), 0.4 (4), 0.5 (5)
+    # The jump is applied at t=0.5. Depending on how the loop is structured,
+    # it might flip at index 5 or 6?
+    # Actually, sim_params.times = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    # idx 5 is 0.5.
+    
+    # Let's check the logic: if isclose(jump_time, current_time): apply.
+    # So at t=0.5, it should flip.
+    np.testing.assert_allclose(results[:5], 1.0, atol=1e-10)
+    np.testing.assert_allclose(results[5:], -1.0, atol=1e-10)
+
+
+def test_scheduled_jump_two_site() -> None:
+    """Tests a scheduled XX jump on two qubits."""
+    L = 2
+    T = 0.4
+    dt = 0.1
+    jump_time = 0.2
+
+    # Initial state |00>
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    # Scheduled XX jump at t=0.2
+    scheduled_jumps = [{"time": jump_time, "sites": [0, 1], "name": "crosstalk_xx"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+
+    # Measure ZZ on site 0, 1
+    # We can measure individual Zs or combined ZZ
+    from mqt.yaqs.core.libraries.gate_library import ZZ as ZZ_gate
+    zz_obs = Observable(ZZ_gate(), sites=[0, 1])
+    sim_params = AnalogSimParams(
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        observables=[zz_obs],
+        show_progress=False,
+    )
+
+    # Vacuum Hamiltonian
+    hamiltonian = MPO.ising(L, 0.0, 0.0)
+
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = zz_obs.results
+    assert results is not None
+    # |00> --XX--> |11>. ZZ expectancy remains 1.0? 
+    # Wait, |00> has Z=1, Z=1 -> ZZ=1.
+    # |11> has Z=-1, Z=-1 -> ZZ=1.
+    # Let's measure Z0 instead. it should flip from 1 to -1.
+    
+    # Actually, let's verify individual Zs.
+    # Re-run if I missed something, but it's easier to just check Z0.
+    # No, I already ran it in my head. Let's just use Z0 and Z1.
+    # But I only define one.
+    
+    # Let's add Z0 to observables.
+    z0_obs = Observable(Z(), sites=0)
+    sim_params.observables.append(z0_obs)
+    sim_params.sorted_observables.append(z0_obs) # Needs manual update if we append after init?
+    # Better to just define them in init.
+    
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), sites=0)],
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        show_progress=False,
+    )
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+    
+    results = sim_params.observables[0].results
+    assert results is not None
+    # t=0.0 (0), 0.1 (1), 0.2 (2) -> flip.
+    np.testing.assert_allclose(results[:2], 1.0, atol=1e-10)
+    np.testing.assert_allclose(results[2:], -1.0, atol=1e-10)
