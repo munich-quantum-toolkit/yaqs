@@ -181,7 +181,7 @@ class NoiseModel:
             operator_class = getattr(NoiseLibrary, name)
         except AttributeError:
             # Fallback for case-insensitive lookup (e.g. 'x' -> 'pauli_x' if not in map, though map handles x)
-             raise
+            raise
 
         operator: BaseGate = operator_class()
         return operator.matrix

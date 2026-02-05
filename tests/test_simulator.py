@@ -945,6 +945,7 @@ def test_scheduled_jump_two_site() -> None:
 
     # Measure ZZ on site 0, 1
     from mqt.yaqs.core.libraries.gate_library import ZZ as ZZ_gate
+
     zz_obs = Observable(ZZ_gate(), sites=[0, 1])
     sim_params = AnalogSimParams(
         elapsed_time=T,
@@ -965,7 +966,7 @@ def test_scheduled_jump_two_site() -> None:
     z0_obs = Observable(Z(), sites=0)
     sim_params.observables.append(z0_obs)
     sim_params.sorted_observables.append(z0_obs)
-    
+
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), sites=0)],
         elapsed_time=T,
@@ -974,7 +975,7 @@ def test_scheduled_jump_two_site() -> None:
         show_progress=False,
     )
     simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
-    
+
     results = sim_params.observables[0].results
     assert results is not None
     # t=0.0 (0), 0.1 (1), 0.2 (2) -> flip.

@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -33,10 +34,7 @@ def has_scheduled_jump(noise_model: NoiseModel | None, time: float, dt: float) -
     if noise_model is None or not noise_model.scheduled_jumps:
         return False
 
-    for jump in noise_model.scheduled_jumps:
-        if np.isclose(jump["time"], time, atol=dt * 1e-3):
-            return True
-    return False
+    return any(np.isclose(jump["time"], time, atol=dt * 0.001) for jump in noise_model.scheduled_jumps)
 
 
 def apply_scheduled_jumps(
@@ -71,14 +69,16 @@ def apply_scheduled_jumps(
                 i, j = sites[0], sites[1]
                 # Assuming adjacent for now based on NoiseModel constraints or generic apply logic
                 if abs(i - j) == 1:
-                     merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
-                     merged = oe.contract("ab, bcd->acd", jump_op, merged)
-                     tensor_left_new, tensor_right_new = split_mps_tensor(
-                        merged, "right", sim_params, [state.physical_dimensions[i], state.physical_dimensions[j]], dynamic=False
+                    merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
+                    merged = oe.contract("ab, bcd->acd", jump_op, merged)
+                    tensor_left_new, tensor_right_new = split_mps_tensor(
+                        merged,
+                        "right",
+                        sim_params,
+                        [state.physical_dimensions[i], state.physical_dimensions[j]],
+                        dynamic=False,
                     )
-                     state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
-                else:
-                    pass
+                    state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
 
     state.normalize("B")
     return state

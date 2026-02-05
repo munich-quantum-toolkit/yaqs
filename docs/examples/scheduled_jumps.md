@@ -14,7 +14,7 @@ mystnb:
 
 # Scheduled Noise Jumps
 
-This example demonstrates how to use **scheduled noise jumps** in YAQS. 
+This example demonstrates how to use **scheduled noise jumps** in YAQS.
 Scheduled jumps allow you to apply specific operators at predetermined times during an analog simulation. This is useful for simulating controlled gates, sudden noise events, or time-dependent perturbations without needing a full time-dependent Hamiltonian.
 
 In this notebook, we simulate a 10-site Ising chain and apply a scheduled Pauli-X flip to a specific site at $t=1.0$.
@@ -40,6 +40,7 @@ state = MPS(L, state="zeros")
 ## 2. Define the Scheduled Jump
 
 We define a scheduled jump using a list of dictionaries in the `NoiseModel`. Each dictionary must specify:
+
 - `time`: The time at which to apply the jump.
 - `sites`: A list of site indices the jump acts on.
 - `name`: The name of the jump operator (e.g., "x", "y", "z", "crosstalk_xx").
