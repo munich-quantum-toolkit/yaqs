@@ -105,7 +105,7 @@ def test_step_through() -> None:
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
-        step_through(state, H, noise_model, sim_params)
+        step_through(state, H, noise_model, sim_params, current_time=0.2)
         mock_dynamic_tdvp(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
