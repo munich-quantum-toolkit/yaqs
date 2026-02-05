@@ -1323,8 +1323,8 @@ class MPO:
             local_dim: Local Hilbert space dimension of each site. Maximally
                                 local_dim - 1 particles per site.
             omega: Frequency of a site.
-            hopping_J: Hopping constant between sites.
-            hubbard_U: Repulsive onsite Hubbard interaction on each site.
+            hopping_j: Hopping constant between sites.
+            hubbard_u: Repulsive onsite Hubbard interaction on each site.
 
         Returns:
             An MPO instance representing the Hamiltonian.
@@ -1459,13 +1459,15 @@ class MPO:
 
         Each term is given as ``(coeff, spec)`` where ``spec`` is a string like
         ``"Z0 Z1"``, ``"X7"``, or ``""`` for the identity. Terms are assembled by
-        direct-summing their MPO bond spaces and then compressed in-place.
+        constructing a finite state machine (FSM) that represents the sum of terms
+        directly, resulting in an optimal or near-optimal bond dimension without
+        intermediate compression steps.
 
         Args:
             terms: List of ``(coefficient, spec)`` Pauli terms.
             length: Number of sites (L).
             physical_dimension: Local dimension (only ``2`` is supported).
-            tol: SVD truncation threshold used during compression.
+            tol: SVD truncation threshold used during final compression.
             max_bond_dim: Optional hard cap on the kept MPO bond dimension.
             n_sweeps: Number of compression sweeps (>= 0).
 
@@ -1475,7 +1477,8 @@ class MPO:
 
         Notes:
             The resulting MPO represents the sum of all provided terms (including
-            coefficients). Compression is performed via ``self.compress(..., directions="lr_rl")``.
+            coefficients). The construction uses an FSM approach which is significantly
+            faster than summing individual MPOs for large numbers of terms.
         """
         if physical_dimension != 2:
             msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
@@ -1487,27 +1490,107 @@ class MPO:
         self.length = length
         self.physical_dimension = physical_dimension
 
-        mpo_terms: list[list[np.ndarray]] = []
+        if not terms:
+            self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
+            return
+
+        # 1. Parse terms into dense lists of operator names.
+        #    Structure: terms list of (coeff, [op_at_site_0, op_at_site_1, ...])
+        parsed_terms: list[tuple[complex | float, list[str]]] = []
         for coeff, spec in terms:
-            ops = self._parse_pauli_string(spec)  # {site: "X|Y|Z|I"}
-            # validate sites + ops
-            for site, lab in ops.items():
+            ops_map = self._parse_pauli_string(spec)
+            # Validate sites
+            for site, lab in ops_map.items():
                 if not (0 <= site < length):
                     msg = f"Site index {site} outside [0, {length - 1}]."
                     raise ValueError(msg)
                 if lab not in self._VALID:
                     msg = f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}."
                     raise ValueError(msg)
-            mpo_terms.append(self._create_term(length, ops, coeff))
 
-        if not mpo_terms:
-            self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
-        else:
-            acc = mpo_terms[0]
-            for nxt in mpo_terms[1:]:
-                acc = self._sum_terms(acc, nxt)
-            self.tensors = acc
+            # Fill missing sites with Identity "I"
+            op_list = [ops_map.get(i, "I") for i in range(length)]
+            parsed_terms.append((coeff, op_list))
 
+        # 2. Assign State IDs (Right-to-Left)
+        #    We identify unique "suffix states" needed at each bond.
+        #    A state at bond i is uniquely defined by the pair (Operator at site i, State at bond i+1).
+
+        # `term_trajectories[term_idx][i]` stores the State ID at bond `i` for `term_idx`.
+        # Bond indices range from 0 (left of site 0) to L (right of site L-1).
+        term_trajectories = [[0] * (length + 1) for _ in range(len(parsed_terms))]
+
+        # Initialize right boundary (Bond L): All terms end at the "sink" state (ID 0).
+        for t_idx in range(len(parsed_terms)):
+            term_trajectories[t_idx][length] = 0
+
+        # bond_state_maps[i] stores the mapping: (Op_str, Next_State_ID) -> Current_State_ID
+        bond_state_maps: list[dict[tuple[str, int], int]] = [{} for _ in range(length + 1)]
+
+        # Sweep Right-to-Left (sites L-1 down to 1) to build the FSM transitions.
+        # We stop at bond 1. Bond 0 is always the single "Start" state.
+        for i in range(length - 1, 0, -1):
+            next_bond = i + 1
+            current_bond = i
+
+            unique_states_map = bond_state_maps[current_bond]
+            next_id = 0
+
+            for t_idx, (_, ops) in enumerate(parsed_terms):
+                op = ops[i]
+                next_state = term_trajectories[t_idx][next_bond]
+                signature = (op, next_state)
+
+                if signature not in unique_states_map:
+                    unique_states_map[signature] = next_id
+                    next_id += 1
+
+                term_trajectories[t_idx][current_bond] = unique_states_map[signature]
+
+        # 3. Build Tensors (Left-to-Right)
+        self.tensors = []
+        paulis = self._PAULI_2
+
+        for i in range(length):
+            # Determine bond dimensions based on number of unique states at boundaries
+            if i == 0:
+                d_left = 1
+                d_right = 1 if length == 1 else len(bond_state_maps[1])
+                # Handle edge case where d_right is 0 (should not happen if terms exist)
+                if length > 1 and d_right == 0:
+                    d_right = 1
+            else:
+                d_left = len(bond_state_maps[i])
+                d_right = 1 if i == length - 1 else len(bond_state_maps[i + 1])
+
+            # Allocate tensor: (phys_out, phys_in, left, right)
+            tensor = np.zeros((2, 2, d_left, d_right), dtype=complex)
+
+            if i == 0:
+                # First site: Accumulate coefficients and split into initial branches.
+                for t_idx, (coeff, ops) in enumerate(parsed_terms):
+                    op_name = ops[i]
+                    op_mat = paulis[op_name]
+                    target_state = term_trajectories[t_idx][1]
+
+                    # Accumulate contribution. Multiple terms may map to the same target state.
+                    tensor[:, :, 0, target_state] += coeff * op_mat
+            else:
+                # Internal sites: deterministic transitions.
+                # Each row (current_id) in the tensor corresponds to a unique state from Step 2.
+                # This state maps to exactly one (op, next_id) pair.
+                map_i = bond_state_maps[i]
+
+                for (op_name, next_id), current_id in map_i.items():
+                    op_mat = paulis[op_name]
+                    tensor[:, :, current_id, next_id] = op_mat
+
+            self.tensors.append(tensor)
+
+        # 4. Final Compression
+        #    The FSM construction is optimal for one-sided (suffix) uniqueness.
+        #    A standard two-sweep compression ("lr_rl") puts the MPO in canonical form
+        #    and removes any remaining redundancies (e.g., common prefixes).
         self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
 
@@ -1648,10 +1731,7 @@ class MPO:
             MPS: An MPS object containing the reshaped tensors.
         """
         converted_tensors: list[NDArray[np.complex128]] = [
-            np.reshape(
-                tensor,
-                (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]),
-            )
+            np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
             for tensor in self.tensors
         ]
 
@@ -1673,13 +1753,7 @@ class MPO:
         for tensor in self.tensors[1:]:
             mat = oe.contract("abcd, efdg->aebfcg", mat, tensor)
             mat = np.reshape(
-                mat,
-                (
-                    mat.shape[0] * mat.shape[1],
-                    mat.shape[2] * mat.shape[3],
-                    mat.shape[4],
-                    mat.shape[5],
-                ),
+                mat, (mat.shape[0] * mat.shape[1], mat.shape[2] * mat.shape[3], mat.shape[4], mat.shape[5])
             )
 
         # Final left and right bonds should be 1
@@ -1725,39 +1799,6 @@ class MPO:
         return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
 
     @classmethod
-    def _create_term(cls, length: int, ops: dict[int, str], coeff: complex) -> list[np.ndarray]:
-        """Construct an MPO tensor list for a single Pauli-string term.
-
-        Builds a length-`length` MPO corresponding to a single Pauli operator
-        product specified by a mapping from site indices to Pauli labels.
-
-        Each site tensor has bond dimension 1, and the overall MPO represents:
-            coeff ⨂_i P_i
-        where P_i ∈ {I, X, Y, Z}.
-
-        Args:
-            length: Total number of sites in the MPO.
-            ops: Mapping from site index to Pauli label
-                ('I', 'X', 'Y', or 'Z'). Sites not present in the dictionary
-                default to identity.
-            coeff: Scalar coefficient multiplying the operator.
-
-        Returns:
-            list[np.ndarray]: List of MPO tensors, one per site, each of shape
-            (2, 2, 1, 1).
-        """
-        tensors: list[np.ndarray] = []
-        p = cls._PAULI_2
-        for i in range(length):
-            lab = ops.get(i, "I")
-            term = np.zeros((2, 2, 1, 1), dtype=complex)
-            term[:, :, 0, 0] = p[lab]
-            tensors.append(term)
-        tensors[0] = tensors[0].copy()
-        tensors[0][:, :, 0, 0] *= coeff
-        return tensors
-
-    @classmethod
     def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
         """Parse a Pauli-string specification into a site-to-operator mapping.
 
@@ -1797,49 +1838,4 @@ class MPO:
         if cleaned.split():
             msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
             raise ValueError(msg)
-        return out
-
-    @staticmethod
-    def _sum_terms(tensors1: list[np.ndarray], tensors2: list[np.ndarray]) -> list[np.ndarray]:
-        """Form the direct-sum MPO representing the sum of two MPO terms.
-
-        Given two MPOs `tensors1` and `tensors2` of equal length, constructs a new MPO
-        representing their sum by block-diagonal concatenation of virtual
-        bond spaces.
-
-        Args:
-            tensors1: First MPO term as a list of tensors.
-            tensors2: Second MPO term as a list of tensors.
-
-        Returns:
-            list[np.ndarray]: MPO tensors representing tensors1 + tensors2.
-
-        Notes:
-            - This operation increases the MPO bond dimension additively.
-            - No compression is performed here; callers are expected to
-            compress the result afterward if desired.
-        """
-        length = len(tensors1)
-        assert length == len(tensors2)
-        if length == 1:
-            return [tensors1[0] + tensors2[0]]
-        out: list[np.ndarray] = []
-        for k in range(length):
-            a, b = tensors1[k], tensors2[k]
-            d = a.shape[0]
-            la, ra = a.shape[2], a.shape[3]
-            lb, rb = b.shape[2], b.shape[3]
-            if k == 0:
-                c = np.zeros((d, d, 1, ra + rb), dtype=complex)
-                c[:, :, 0, :ra] = a[:, :, 0, :]
-                c[:, :, 0, ra:] = b[:, :, 0, :]
-            elif k == length - 1:
-                c = np.zeros((d, d, la + lb, 1), dtype=complex)
-                c[:, :, :la, 0] = a[:, :, :, 0]
-                c[:, :, la:, 0] = b[:, :, :, 0]
-            else:
-                c = np.zeros((d, d, la + lb, ra + rb), dtype=complex)
-                c[:, :, :la, :ra] = a
-                c[:, :, la:, ra:] = b
-            out.append(c)
         return out
