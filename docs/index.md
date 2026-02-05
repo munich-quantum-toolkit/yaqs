@@ -35,6 +35,7 @@ self
 
 installation
 examples/analog_simulation
+examples/scheduled_jumps
 examples/transmon_emulation
 examples/strong_circuit_simulation
 examples/sample_observable_digital_tjm
