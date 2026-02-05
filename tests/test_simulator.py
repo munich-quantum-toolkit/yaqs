@@ -961,9 +961,9 @@ def test_scheduled_jump_two_site() -> None:
     results = zz_obs.results
     assert results is not None
 
-    z0_obs = Observable(Z(), sites=0)
-    sim_params.observables.append(z0_obs)
-    sim_params.sorted_observables.append(z0_obs)
+    # Reset state for second run to verify dynamics again with a different observable
+    state = MPS(L, state="zeros")
+    state.normalize("B")
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), sites=0)],
