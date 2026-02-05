@@ -57,19 +57,34 @@ class NoiseModel:
         Static method to retrieve the operator matrix for a given noise process name.
     """
 
-    def __init__(self, processes: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self, processes: list[dict[str, Any]] | None = None, scheduled_jumps: list[dict[str, Any]] | None = None
+    ) -> None:
         """Initialize the NoiseModel.
 
         Parameters
         ----------
         processes :
             A list of noise process dictionaries affecting the quantum system. Default is None.
+        scheduled_jumps :
+            A list of scheduled jumps to apply at specific times. Default is None.
 
         Note:
             Input validation is performed and assertion errors may be raised by
             internal helpers if inputs are malformed.
         """
         self.processes: list[dict[str, Any]] = []
+        self.scheduled_jumps: list[dict[str, Any]] = []
+        if scheduled_jumps is not None:
+            for jump in scheduled_jumps:
+                assert "time" in jump, "Each scheduled jump must have a 'time' key"
+                assert "sites" in jump, "Each scheduled jump must have a 'sites' key"
+                assert "name" in jump, "Each scheduled jump must have a 'name' key"
+                assert len(jump["sites"]) <= 2, "Each scheduled jump must have at most 2 sites"
+                if "matrix" not in jump:
+                    jump["matrix"] = NoiseModel.get_operator(jump["name"])
+                self.scheduled_jumps.append(jump)
+
         if processes is None:
             return
 
@@ -160,6 +175,13 @@ class NoiseModel:
         Returns:
             np.ndarray: The matrix representation of the operator.
         """
-        operator_class = getattr(NoiseLibrary, name)
+        if name in PAULI_MAP:
+            return PAULI_MAP[name]
+        try:
+            operator_class = getattr(NoiseLibrary, name)
+        except AttributeError:
+            # Fallback for case-insensitive lookup (e.g. 'x' -> 'pauli_x' if not in map, though map handles x)
+             raise
+
         operator: BaseGate = operator_class()
         return operator.matrix
