@@ -103,16 +103,25 @@ if __name__ == "__main__":
     DPc, Lc = np.meshgrid(dp_list, L_arr)
 
     # -------------------------
-    # FIGURE* LAYOUT (side-by-side)
+    # FIGURE LAYOUT (1 row, 3 columns)
     # -------------------------
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.0), sharey=True)
-    axA, axB = axes
+    # Increase figure width to accommodate 3 panels
+    fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.0), sharey=True)
+    axA, axB, axAlpha = axes
+
+    # -------------------------
+    # Panel (a) and (b): Unraveling A and B
+    # -------------------------
+    # Store the pcm for colorbar
+    pcm_AB = None 
+    
+    from scipy.ndimage import gaussian_filter
 
     for ax, Z, title, panel in [
         (axA, Z_A, "Unraveling A", "(a)"),
         (axB, Z_B, "Unraveling B", "(b)"),
     ]:
-        pcm = ax.pcolormesh(
+        pcm_AB = ax.pcolormesh(
             dp_edges,
             L_edges,
             Z,
@@ -120,52 +129,160 @@ if __name__ == "__main__":
             cmap="magma_r",
             vmin=vmin,
             vmax=vmax,
+            rasterized=True
         )
 
-        # x is log, y is LINEAR (as you requested)
         ax.set_xscale("log")
         ax.set_ylim(min(L_list) - 2, max(L_list) + 5)
 
         style_prx(ax)
-        ax.set_title(title, pad=4)
+        ax.set_title(title, pad=6)
 
         # Panel label
         ax.text(
-            0.02, 0.98, panel,
+            0.04, 0.96, panel,
             transform=ax.transAxes,
             ha="left", va="top",
             fontweight="bold",
-            bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.2),
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.5),
         )
 
         # Clean y ticks at your L samples
         ax.set_yticks(L_arr)
 
-        # Log x ticks: only decades as majors
+        # Log x ticks
         ax.xaxis.set_major_locator(LogLocator(base=10, subs=(1.0,)))
         ax.xaxis.set_major_formatter(LogFormatterMathtext())
         ax.xaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10) * 0.1))
         ax.tick_params(which="minor", length=2.0)
 
         # Contours + labels
-        add_contours(ax, DPc, Lc, Z)
-    # --- after plotting both panels ---
+        # Smooth the data for contours to reduce jaggedness
+        Z_smooth = gaussian_filter(Z, sigma=1.0)
+        add_contours(ax, DPc, Lc, Z_smooth)
+
+    # -------------------------
+    # Panel (c): Alpha Ratio
+    # -------------------------
+    # Calculate ratio
+    Z_B_safe = Z_B.copy()
+    Z_B_safe[np.abs(Z_B_safe) < 1e-12] = np.nan
+    Z_alpha = Z_A / Z_B_safe
+
+    # Dynamic scaling for contrast
+    # Use percentiles to ignore outliers and stretch contrast
+    vmin_alpha = np.nanpercentile(Z_alpha, 2)
+    vmax_alpha = np.nanpercentile(Z_alpha, 98)
+    # Ensure reasonable bounds if data is flat
+    vmin_alpha = 1.0
+    vmax_alpha = 2.5
+
+    # Plot Heatmap
+    # Use 'plasma' or 'inferno' for high contrast in this range
+    pcm_alpha = axAlpha.pcolormesh(
+        dp_edges,
+        L_edges,
+        Z_alpha,
+        shading="auto",
+        cmap="cividis", # cividis is good for perceptual uniformity
+        vmin=vmin_alpha,
+        vmax=vmax_alpha,
+        rasterized=True
+    )
+    
+    axAlpha.set_xscale("log")
+    style_prx(axAlpha)
+    
+    # Panel label
+    axAlpha.text(
+        0.04, 0.96, "(c)",
+        transform=axAlpha.transAxes,
+        ha="left", va="top",
+        fontweight="bold",
+        bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.5),
+    )
+    
+    axAlpha.set_yticks(L_arr)
+    axAlpha.xaxis.set_major_locator(LogLocator(base=10, subs=(1.0,)))
+    axAlpha.xaxis.set_major_formatter(LogFormatterMathtext())
+    axAlpha.xaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10) * 0.1))
+    axAlpha.tick_params(which="minor", length=2.0)
+
+    # Add contours to Alpha plot for precision
+    # Smooth alpha for better contours
+    Z_alpha_smooth = gaussian_filter(Z_alpha, sigma=1.0)
+    # Define contour levels based on range
+    alpha_levels = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5] # np.linspace(vmin_alpha, vmax_alpha, 6)
+    cs_alpha = axAlpha.contour(DPc, Lc, Z_alpha_smooth, levels=alpha_levels, colors="white", linewidths=0.8, alpha=0.8)
+    axAlpha.clabel(
+        cs_alpha,
+        fmt=lambda v: f"{v:.2f}",
+        inline=True,
+        fontsize=7,
+        colors="white",
+    )
+
+    # -------------------------
+    # Labels
+    # -------------------------
     axA.set_ylabel(r"$L$")
-    axA.set_xlabel(r"$\delta p=\gamma\,\delta t$")
-    axB.set_xlabel(r"$\delta p=\gamma\,\delta t$")
+    for ax in axes:
+        ax.set_xlabel(r"$\delta p=\gamma\,\delta t$")
 
     # -------------------------
-    # Layout tuning (reduce left whitespace, reserve space for cbar)
+    # Colorbars
     # -------------------------
-    fig.subplots_adjust(left=0.07, right=0.90, bottom=0.18, top=0.86, wspace=0.10)
-
-    # Dedicated colorbar axis (outside the panels)
-    cbar_ax = fig.add_axes([0.92, 0.22, 0.02, 0.58])
-    cbar = fig.colorbar(pcm, cax=cbar_ax)
-
-    # Put chi as the colorbar title instead of a side label
-    cbar.set_label("")  # ensure no side label
-    cbar_ax.set_title(r"$\overline{\chi}_{peak}$", pad=6)
+    # Layout adjustment to make room
+    # left, bottom, right, top, wspace, hspace
+    plt.subplots_adjust(left=0.06, right=0.91, bottom=0.18, top=0.88, wspace=0.15)
+    
+    # 1) Colorbar for A & B (placed between B and C? or far right?)
+    # Request: "first unraveling, second unraveling, their shared colorbar, heatmap alpha, its colorbar"
+    # So: [A] [B] [cbarAB] [Alpha] [cbarAlpha]
+    # This implies we need to adjust subplot positioning manually or use gridspec.
+    # Let's try to fit cbarAB between B and Alpha, and cbarAlpha on the right.
+    
+    # We can use inset_axes to place colorbars explicitly relative to axes
+    
+    # Cbar for A & B attached to B (right side)
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    
+    # However, forcing 3 subplots and squeezing a colorbar in between is tricky with standard subplots.
+    # Let's restart the figure layout using GridSpec for precise control if we want that specific order.
+    # Actually, standard tight_layout might not work well with "cbar in middle".
+    # Let's stick to subplots and place cbarAB to the right of B, and cbarAlpha to the right of C.
+    
+    # Get positions
+    posB = axB.get_position()
+    posC = axAlpha.get_position()
+    
+    # Manually adjust posC to the right to make room for cbarAB?
+    # Or just use the space provided by wspace.
+    
+    # Let's try adding axes specifically.
+    
+    # Cbar for A&B
+    # Position: Right of B.
+    # [left, bottom, width, height]
+    # We'll attach it to axB
+    cax_AB = axB.inset_axes([1.03, 0.0, 0.05, 1.0])
+    cbar_AB = fig.colorbar(pcm_AB, cax=cax_AB)
+    cbar_AB.ax.set_title(r"$\overline{\chi}_{peak}$", pad=5, fontsize=10)
+    # cbar_AB.set_label(r"$\overline{\chi}_{peak}$")
+    # cbar_AB.ax.yaxis.set_ticks_position('right') # Default
+    
+    # Cbar for Alpha
+    # Position: Right of C
+    cax_Alpha = axAlpha.inset_axes([1.03, 0.0, 0.05, 1.0])
+    cbar_Alpha = fig.colorbar(pcm_alpha, cax=cax_Alpha)
+    cbar_Alpha.ax.set_title(r"$\alpha$", pad=5, fontsize=10)
+    # cbar_Alpha.set_label(r"$\alpha$")
+    
+    # Adjust wspace to prevent overlap between cbarAB and axC
+    # The inset_axes are inside the "bbox" of the parent usually, or relative to it.
+    # If we put it at x=1.03, it's outside.
+    # We need enough wspace.
+    plt.subplots_adjust(wspace=0.25)
 
     fig.savefig("large_scale.pdf")
     plt.show()
