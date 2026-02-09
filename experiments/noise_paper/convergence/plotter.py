@@ -10,7 +10,7 @@ import matplotlib.patheffects as pe
 # -------------------------
 # Parameters (must match convergence.py)
 # -------------------------
-dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1, 0.125, 0.2, 0.25, 0.5]
+dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1]
 gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 gamma_min = 0.01
 gamma_max = 50
@@ -189,7 +189,7 @@ def plot_heatmaps(N1, N2, target_error):
     # Let's center around 1? or just linear/log?
     # Usually we look for improvement.
     k_min, k_max = np.nanmin(Kappa), np.nanmax(Kappa)
-    norm_k = Normalize(vmin=0, vmax=max(k_max, 2)) # Adjust based on data
+    norm_k = Normalize(vmin=1, vmax=max(5, 2)) # Adjust based on data
     
     m3 = ax_al.pcolormesh(dt_edges, g_edges, Kappa, cmap="RdBu_r", norm=norm_k, shading="auto")
     # Red = High Kappa (B needs more = A better). Blue = Low Kappa (B needs less = B better). 
