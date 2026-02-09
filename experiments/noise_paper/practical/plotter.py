@@ -152,102 +152,115 @@ def heat(ax, Z, *, cmap, norm, gamma_top=10.0):
     return m
 
 # ------------------------
+# ------------------------
+# Alpha Calculation
+# ------------------------
+# Bond Alpha
+alpha_bond = u1_bond / u2_bond  
+# Handle 0/0 or inf? usually bond > 1.
+
+# Time Alpha
+alpha_time = u1_time / u2_time
+
+# ------------------------
 # Figure
 # ------------------------
-# Figure: make it true PRX figure* width
-fig = plt.figure(figsize=(7.2, 4.4))
+# Figure
+# ------------------------
+# Figure: make it true PRX figure* width (double column)
+fig = plt.figure(figsize=(10.5, 2.6)) # Single row height
 
+# 1 row (Bond)
+# Layout: [U1] [U2] [CbarShared] [Sp] [Alpha] [CbarAlpha]
 gs = fig.add_gridspec(
-    2, 5,
-    left=0.08, right=0.94, bottom=0.14, top=0.96,
-    width_ratios=[1.0, 0.032, 0.05, 1.0, 0.032],  # tighter middle gap
-    wspace=0.06, hspace=0.18
+    1, 6,
+    left=0.06, right=0.92, bottom=0.18, top=0.88,
+    width_ratios=[1.0, 1.0, 0.03, 0.12, 1.0, 0.03], 
+    wspace=0.08
 )
 
-
+# Row 0: Bond
 ax_u1_bond = fig.add_subplot(gs[0, 0])
-ax_u1_time = fig.add_subplot(gs[0, 3])
-ax_u2_bond = fig.add_subplot(gs[1, 0])
-ax_u2_time = fig.add_subplot(gs[1, 3])
-
-cax_bond = fig.add_subplot(gs[:, 1])
-cax_time = fig.add_subplot(gs[:, 4])
-
-ax_spacer = fig.add_subplot(gs[:, 2])
-ax_spacer.axis("off")
-
-# --- tighten/space colorbars a bit more cleanly ---
-# (a) bond colorbar: make it a bit narrower to create extra gap to the right column
-pos = cax_bond.get_position()
-shrink_x = 0.85   # <--- smaller = more gap on both sides inside its slot
-new_w = pos.width * shrink_x
-cax_bond.set_position([pos.x0 + 0.5*(pos.width - new_w), pos.y0, new_w, pos.height * 0.95])
-
-# (b) time colorbar: keep as-is (or apply same pattern if you want symmetry)
-pos = cax_time.get_position()
-cax_time.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.95])
+ax_u2_bond = fig.add_subplot(gs[0, 1])
+cax_bond   = fig.add_subplot(gs[0, 2])
+# Spacer at 3
+ax_al_bond = fig.add_subplot(gs[0, 4])
+cax_al_bond= fig.add_subplot(gs[0, 5])
 
 gamma_top = 10.0
 
+# --- Plot Bond ---
 m1 = heat(ax_u1_bond, u1_bond, cmap="magma_r", norm=bond_norm, gamma_top=gamma_top)
-m2 = heat(ax_u1_time, u1_time, cmap="coolwarm", norm=time_norm, gamma_top=gamma_top)
 m3 = heat(ax_u2_bond, u2_bond, cmap="magma_r", norm=bond_norm, gamma_top=gamma_top)
-m4 = heat(ax_u2_time, u2_time, cmap="coolwarm", norm=time_norm, gamma_top=gamma_top)
 
-for ax in (ax_u1_bond, ax_u1_time):
-    ax.tick_params(labelbottom=False)
+# Alpha Bond
+from scipy.ndimage import gaussian_filter
+alpha_bond_smooth = gaussian_filter(alpha_bond, sigma=0.8) # Light smoothing
+vm_ab = 1 # np.nanpercentile(alpha_bond, 2)
+vx_ab = 2 # np.nanpercentile(alpha_bond, 98)
+if vx_ab <= vm_ab: vx_ab = vm_ab + 1.0
+m5 = heat(ax_al_bond, alpha_bond, cmap="cividis", norm=Normalize(vmin=vm_ab, vmax=vx_ab), gamma_top=gamma_top)
 
-for ax in (ax_u1_time, ax_u2_time):
-    ax.tick_params(labelleft=False)
+# --- Formatting ---
 
+# X-Labels (now on all plots)
 tick_idx = np.arange(len(dt_list))
 tick_labels = [f"{x:g}" for x in dt_list]
-# for ax in (ax_u2_bond, ax_u2_time):
-#     ax.set_xticks(tick_idx)
-#     ax.set_xticklabels(tick_labels, rotation=45, ha="right")
-#     ax.set_xlabel(r"$dt$", labelpad=4)
-# dt tick labels: no rotation (usually readable in figure*)
-for ax in (ax_u2_bond, ax_u2_time):
+for ax in (ax_u1_bond, ax_u2_bond, ax_al_bond):
     ax.set_xticks(tick_idx)
     ax.set_xticklabels(tick_labels, rotation=0, ha="center")
     ax.set_xlabel(r"$\delta t$", labelpad=4)
 
+# Y-Labels (only left col)
+for ax in (ax_u2_bond, ax_al_bond):
+    ax.tick_params(labelleft=False)
+
 top_idx = int(np.where(g == gamma_top)[0][0])
 g_tick_idx = np.arange(top_idx + 1)
 g_tick_labels = [f"{x:g}" for x in g[:top_idx + 1]]
-for ax in (ax_u1_bond, ax_u2_bond):
+for ax in (ax_u1_bond,):
     ax.set_yticks(g_tick_idx)
     ax.set_yticklabels(g_tick_labels)
     ax.set_ylabel(r"$\gamma$", labelpad=4)
 
-for ax in (ax_u1_bond, ax_u1_time, ax_u2_bond, ax_u2_time):
+# Contours for Alphas
+# Need grid for contour
+DT_c, G_c = np.meshgrid(dt_centers, g_centers[:top_idx+1])
+# We need to slice alpha to gamma_top
+alpha_bond_cut = alpha_bond_smooth[:top_idx+1, :]
+
+# Contour Bond
+lev_ab = [1.0, 1.2, 1.4, 1.6, 1.8] # np.linspace(vm_ab, vx_ab, 5)
+cs_ab = ax_al_bond.contour(DT_c, G_c, alpha_bond_cut, levels=lev_ab, colors="white", linewidths=0.8, alpha=0.8)
+ax_al_bond.clabel(cs_ab, fmt="%.2f", inline=True, fontsize=7, colors="white")
+
+
+# dp lines (ONLY on U1/U2 plots, REMOVE from Alpha)
+for ax in (ax_u1_bond, ax_u2_bond):
     add_dp_lines_true(ax, add_labels=False, gamma_top=gamma_top)
+
+# Only add labels to first one?
 add_dp_lines_true(ax_u1_bond, add_labels=True, gamma_top=gamma_top)
 
+# Titles / Panels
 panel_label(ax_u1_bond, "(a)")
-panel_label(ax_u1_time, "(b)")
-panel_label(ax_u2_bond, "(c)")
-panel_label(ax_u2_time, "(d)")
+panel_label(ax_u2_bond, "(b)")
+panel_label(ax_al_bond, "(c)")
 
+# Titles
+ax_u1_bond.set_title("Unraveling A", fontsize=10)
+ax_u2_bond.set_title("Unraveling B", fontsize=10)
+# No title for Alpha column per request
+# ax_al_bond.set_title("", fontsize=10)
+
+# Colorbars
+# 1. Bond Shared
 cb_b = fig.colorbar(m1, cax=cax_bond)
-cb_b.set_label("")
-cax_bond.text(0.5, 1.02, r"$\bar{\chi}$", transform=cax_bond.transAxes,
-              ha="center", va="bottom")
+cax_bond.set_title(r"$\bar{\chi}$", pad=5, fontsize=10)
 
-cb_t = fig.colorbar(m2, cax=cax_time)
-cb_t.set_label("")
-cax_time.text(0.5, 1.02, "$\\tau$", transform=cax_time.transAxes,
-              ha="center", va="bottom")
+# 2. Alpha Bond
+cb_ab = fig.colorbar(m5, cax=cax_al_bond)
+cax_al_bond.set_title(r"$\alpha$", pad=5, fontsize=10) # Renamed
 
-# --- force a *linear-labeled* colorbar (even though colors use LogNorm) ---
-cb_t.ax.set_yscale("linear")          # <- key: stops 10^0 / x10 formatting
-cb_t.minorticks_off()                # no minor ticks
-
-ticks = [0.25, 0.5, 0.75, 1.0]
-cb_t.set_ticks(ticks)
-cb_t.set_ticklabels(["0.25", "0.5", "0.75", "1"])
-
-# remove any scientific/offset text that may still exist
-cb_t.ax.yaxis.get_offset_text().set_visible(False)
-fig.savefig("gamma_dt.pdf", dpi=300)
+fig.savefig("gamma_dt_alpha.pdf", dpi=300)
 plt.show()
