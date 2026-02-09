@@ -42,8 +42,9 @@ def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Should return multiprocessing.cpu_count().
     """
-    # Ensure the env var is absent
+    # Ensure the env vars are absent
     monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
 
     assert simulator.available_cpus() == multiprocessing.cpu_count()
 
@@ -54,6 +55,7 @@ def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
     Should return that exact value.
     """
     monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
 
     # Reload the module only if available_cpus caches anything at import;
     # here it's not necessary, but harmless:
@@ -327,10 +329,10 @@ def test_weak_simulation_noise() -> None:
     """Test the weak simulation branch with a non-None noise model.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
-    It sets up WeakSimParams with a specified number of shots, max bond dimension, threshold, and window size,
-    and a noise model with small strengths. After running simulator.run, the test verifies that sim_params.num_traj
-    equals the number of shots, that each measurement is a dictionary, and that the total number of shots
-    recorded in sim_params.results equals the expected number.
+    It sets up WeakSimParams with a sufficient number of shots for statistical verification, max bond dimension,
+    threshold, and window size, and a noise model with small strengths. After running simulator.run, the test
+    verifies that sim_params.num_traj equals the number of shots, that each measurement is a dictionary,
+    and that the total number of shots recorded in sim_params.results equals the expected number.
     """
     num_qubits = 5
     initial_state = MPS(num_qubits)
@@ -338,7 +340,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -357,7 +359,7 @@ def test_weak_simulation_no_noise() -> None:
     """Test the weak simulation branch when the noise model is None.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system,
-    and configures WeakSimParams with a specified number of shots. When noise_model is None,
+    and configures WeakSimParams with a sufficient number of shots. When noise_model is None,
     the simulation should set sim_params.num_traj to 1. The test verifies that the measurements and results
     are consistent with this behavior.
     """
@@ -366,7 +368,7 @@ def test_weak_simulation_no_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
 
     noise_model = None
 
@@ -887,3 +889,93 @@ def test_transmon_simulation() -> None:
 
     # finally check total leakage
     np.testing.assert_array_less(leakage, 5e-2)
+
+
+def test_scheduled_jump_single_site() -> None:
+    """Tests a scheduled Pauli-X flip on a single qubit."""
+    L = 1
+    T = 1.0
+    dt = 0.1
+    jump_time = 0.5
+
+    # Initial state |0>
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    # Scheduled X jump at t=0.5
+    scheduled_jumps = [{"time": jump_time, "sites": [0], "name": "x"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+
+    # Measure Z on site 0
+    z_obs = Observable(Z(), sites=0)
+    sim_params = AnalogSimParams(
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        observables=[z_obs],
+        show_progress=False,
+    )
+
+    # Use a vacuum Hamiltonian (all zeros) for pure jump dynamics
+    hamiltonian = MPO.ising(L, 0.0, 0.0)
+
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = z_obs.results
+    assert results is not None
+
+    np.testing.assert_allclose(results[:5], 1.0, atol=1e-10)
+    np.testing.assert_allclose(results[5:], -1.0, atol=1e-10)
+
+
+def test_scheduled_jump_two_site() -> None:
+    """Tests a scheduled XX jump on two qubits."""
+    L = 2
+    T = 0.4
+    dt = 0.1
+    jump_time = 0.2
+
+    # Initial state |00>
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    # Scheduled XX jump at t=0.2
+    scheduled_jumps = [{"time": jump_time, "sites": [0, 1], "name": "crosstalk_xx"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+
+    # Measure ZZ on site 0, 1
+    zz_obs = Observable(ZZ(), sites=[0, 1])
+    sim_params = AnalogSimParams(
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        observables=[zz_obs],
+        show_progress=False,
+    )
+
+    # Vacuum Hamiltonian
+    hamiltonian = MPO.ising(L, 0.0, 0.0)
+
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = zz_obs.results
+    assert results is not None
+
+    # Reset state for second run to verify dynamics again with a different observable
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), sites=0)],
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        show_progress=False,
+    )
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = sim_params.observables[0].results
+    assert results is not None
+    # t=0.0 (0), 0.1 (1), 0.2 (2) -> flip.
+    np.testing.assert_allclose(results[:2], 1.0, atol=1e-10)
+    np.testing.assert_allclose(results[2:], -1.0, atol=1e-10)

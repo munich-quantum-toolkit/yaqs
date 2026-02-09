@@ -24,6 +24,7 @@ import numpy as np
 from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
+from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import local_dynamic_tdvp
 
@@ -50,10 +51,16 @@ def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSim
         MPS: The initialized sampling MPS Phi(0).
     """
     apply_dissipation(state, noise_model, sim_params.dt / 2, sim_params)
+    # Check for scheduled jumps at start time
+    current_time = sim_params.times[0]
+    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+        return apply_scheduled_jumps(state, noise_model, current_time, sim_params)
     return stochastic_process(state, noise_model, sim_params.dt, sim_params)
 
 
-def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, sim_params: AnalogSimParams) -> MPS:
+def step_through(
+    state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, sim_params: AnalogSimParams, current_time: float
+) -> MPS:
     """Perform a single time step evolution of the system state using the TJM.
 
     Corresponding to Fj in the TJM paper, this function evolves the state by applying dynamic TDVP,
@@ -64,6 +71,7 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
         hamiltonian (MPO): The Hamiltonian operator for the system.
         noise_model (NoiseModel | None): The noise model to apply to the system.
         sim_params (AnalogSimParams): Simulation parameters including the time step and measurement settings.
+        current_time (float): The current simulation time.
 
     Returns:
         MPS: The updated state after one time step evolution.
@@ -73,6 +81,9 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt, sim_params)
+
+    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+        return apply_scheduled_jumps(state, noise_model, current_time, sim_params)
     return stochastic_process(state, noise_model, sim_params.dt, sim_params)
 
 
@@ -106,7 +117,12 @@ def sample(
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2, sim_params)
-    psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params)
+
+    current_time = sim_params.times[j]
+    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+        psi = apply_scheduled_jumps(psi, noise_model, current_time, sim_params)
+    else:
+        psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params)
     if j == len(sim_params.times) - 1 and sim_params.get_state:
         sim_params.output_state = psi
 
@@ -151,7 +167,7 @@ def analog_tjm_2(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
         sample(phi, hamiltonian, noise_model, sim_params, results, j=1)
 
     for j, _ in enumerate(sim_params.times[2:], start=2):
-        phi = step_through(phi, hamiltonian, noise_model, sim_params)
+        phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j])
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
             sample(phi, hamiltonian, noise_model, sim_params, results, j)
 
@@ -192,7 +208,11 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
         local_dynamic_tdvp(state, hamiltonian, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt, sim_params)
-            state = stochastic_process(state, noise_model, sim_params.dt, sim_params)
+            current_time = sim_params.times[j]
+            if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+                state = apply_scheduled_jumps(state, noise_model, current_time, sim_params)
+            else:
+                state = stochastic_process(state, noise_model, sim_params.dt, sim_params)
 
         if sim_params.sample_timesteps:
             state.evaluate_observables(sim_params, results, j)

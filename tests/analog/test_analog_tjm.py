@@ -105,7 +105,7 @@ def test_step_through() -> None:
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
-        step_through(state, H, noise_model, sim_params)
+        step_through(state, H, noise_model, sim_params, current_time=0.2)
         mock_dynamic_tdvp(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
@@ -260,7 +260,7 @@ def test_analog_simulation_twositeprocesses() -> None:
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,
         dt=0.05,
-        num_traj=150,
+        num_traj=200,
         max_bond_dim=8,
         order=2,
         sample_timesteps=True,
@@ -385,7 +385,7 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,
         dt=0.05,
-        num_traj=100,
+        num_traj=200,
         max_bond_dim=8,
         order=2,
         sample_timesteps=True,
