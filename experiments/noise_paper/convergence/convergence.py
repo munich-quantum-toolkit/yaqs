@@ -157,66 +157,77 @@ def tdvp_simulator(H_0, noise_model, dt=0.01, state=None):
     return sim_params.observables
 
 if __name__ == "__main__":
-    L = 10
+    L = 5
     J = 1
     h = 1
     T = 5
-    dt = 0.01
 
     H = ising_hamiltonian(L, J, h)
-    H_0 = MPO()
-    H_0.init_ising(L, J, h)
-
-    dp_list = [1e-3, 1e-2, 1e-1, 1]
+    H_0 = MPO.ising(L, J, h)
 
     # -----------------------------
-    # QuTiP + YAQS comparison
+    # Scan parameters (matching practical.py)
     # -----------------------------
-    results1 = []
-    results2 = []
-    results3 = []
-    for j, dp in enumerate(dp_list):
-        print(j+1, "of", len(dp_list))
-        gamma = dp / dt
+    dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1]
+    gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 
-        # ----- YAQS -----
-        # Unraveling 1
-        noise_model = NoiseModel([
-            {"name": name, "sites": [i], "strength": gamma}
-            for i in range(L)
-            for name in ["pauli_z", "pauli_x", "pauli_y"]
-        ])
-        cost = tdvp_simulator(H_0, noise_model, dt)
-        results1.append(cost)
+    for k, dt in enumerate(dt_list):
+        print(f"dt index {k+1}/{len(dt_list)} (dt={dt})")
+        
+        results1 = []
+        results2 = []
+        results3 = []
+        
+        for j, gamma in enumerate(gamma_list):
+            print(f"  gamma index {j+1}/{len(gamma_list)} (gamma={gamma})")
 
-        # Unraveling 2
-        noise_model = NoiseModel([
-            {"name": name, "sites": [i], "strength": 2*gamma}
-            for i in range(L)
-            for name in [
-                "measure_0", "measure_1",
-                "measure_x_0", "measure_x_1",
-                "measure_y_0", "measure_y_1",
-            ]
-        ])
-        cost = tdvp_simulator(H_0, noise_model, dt)
-        results2.append(cost)
+            # Stability check (optional, but consistent with practical.py)
+            if dt * gamma > 1.0:
+                results1.append(None)
+                results2.append(None)
+                results3.append(None)
+                continue
 
-        # ----- QuTiP Lindblad -----
-        c_ops = pauli_c_ops(L, gamma)
-        cost, tlist = qutip_lindblad_simulator(
-            H, c_ops, L, dt=dt, T=T
-        )
-        results3.append(cost)
+            # ----- YAQS -----
+            # Unraveling 1
+            noise_model = NoiseModel([
+                {"name": name, "sites": [i], "strength": gamma}
+                for i in range(L)
+                for name in ["pauli_z", "pauli_x", "pauli_y"]
+            ])
+            cost = tdvp_simulator(H_0, noise_model, dt)
+            results1.append(cost)
 
-        filename = f"convergence_u1_{j}.pickle"
+            # Unraveling 2
+            noise_model = NoiseModel([
+                {"name": name, "sites": [i], "strength": 2*gamma}
+                for i in range(L)
+                for name in [
+                    "measure_0", "measure_1",
+                    "measure_x_0", "measure_x_1",
+                    "measure_y_0", "measure_y_1",
+                ]
+            ])
+            cost = tdvp_simulator(H_0, noise_model, dt)
+            results2.append(cost)
+
+            # ----- QuTiP Lindblad -----
+            # Recalculate c_ops for current gamma
+            c_ops = pauli_c_ops(L, gamma)
+            cost_q, tlist = qutip_lindblad_simulator(
+                H, c_ops, L, dt=dt, T=T
+            )
+            results3.append(cost_q)
+
+        # Save per dt index
+        filename = f"convergence_u1_{k}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results1, handle)
 
-        filename = f"convergence_u2_{j}.pickle"
+        filename = f"convergence_u2_{k}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results2, handle)
 
-        filename = f"convergence_qutip_{j}.pickle"
+        filename = f"convergence_qutip_{k}.pickle"
         with open(filename, 'wb') as handle:
             pickle.dump(results3, handle)
