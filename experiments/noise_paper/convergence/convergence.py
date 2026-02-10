@@ -144,7 +144,7 @@ def tdvp_simulator(H_0, noise_model, dt=0.01, state=None):
     sim_params = AnalogSimParams(observables=measurements,
                                 elapsed_time=5,
                                 dt=dt,
-                                num_traj=100,
+                                num_traj=1000,
                                 threshold=1e-6,
                                 trunc_mode="discarded_weight",
                                 order=2,
@@ -157,7 +157,7 @@ def tdvp_simulator(H_0, noise_model, dt=0.01, state=None):
     return sim_params.observables
 
 if __name__ == "__main__":
-    L = 5
+    L = 10
     J = 1
     h = 1
     T = 5
