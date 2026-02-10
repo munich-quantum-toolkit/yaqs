@@ -23,8 +23,8 @@ from qiskit.quantum_info import DensityMatrix
 
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.simulator import run as sim_run
+from mqt.yaqs.core.libraries.gate_library import X, Y, Z
+import mqt.yaqs.simulator as simulator
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -118,11 +118,11 @@ def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]
     rho = 0.5 * (I + <X>X + <Y>Y + <Z>Z)
     """
     I = np.eye(2, dtype=complex)
-    X = GateLibrary.x().matrix
-    Y = GateLibrary.y().matrix
-    Z = GateLibrary.z().matrix
+    x = X().matrix
+    y = Y().matrix
+    z = Z().matrix
     
-    rho = 0.5 * (I + expectations["x"] * X + expectations["y"] * Y + expectations["z"] * Z)
+    rho = 0.5 * (I + expectations["x"] * x + expectations["y"] * y + expectations["z"] * z)
     return rho
 
 
@@ -165,39 +165,20 @@ def run(operator: MPO, sim_params: AnalogSimParams) -> NDArray[np.complex128]:
         # We use the state name for init if supported, or manually set tensor
         mps = MPS(length=length, state="zeros")
         
-        # For mixed states or specific superpositions not in standard init, we might need manual tensor setting.
-        # But our basis states are pure states well-defined.
-        # However, MPS init strings are "zeros", "ones", "x+", "x-", "y+", "y-".
-        # These match our basis_set names exactly.
-        # But MPS constructor sets *all* sites to that state. We only want site 0.
-        
-        # Initialize all to |0> ("zeros"), then fix site 0.
-        # We need the vector for the specific state.
-        # The basis_set has density matrices, let's get the vectors again or store them.
-        # Actually _get_basis_states constructs them from vectors. 
-        # Let's just create a temporary MPS of length 1 with the desired state and copy the tensor.
-        
         target_state_mps = MPS(length=1, state=name)
-        # Copy the first tensor to our full MPS
-        # Note: MPS tensors have shape (phys, left, right).
-        # Site 0 of full MPS: (2, 1, 1). target_state_mps tensor: (2, 1, 1).
         mps.tensors[0] = target_state_mps.tensors[0]
         
         # Set up observables for X, Y, Z on site 0
         tomo_params = copy.deepcopy(sim_params)
         tomo_params.observables = [
-            Observable(GateLibrary.x(), sites=[0]),
-            Observable(GateLibrary.y(), sites=[0]),
-            Observable(GateLibrary.z(), sites=[0]),
+            Observable(X(), sites=[0]),
+            Observable(Y(), sites=[0]),
+            Observable(Z(), sites=[0]),
         ]
-        # Sync sorted_observables (all on site 0, so order doesn't strictly matter for correctness of simulation, but must be present)
         tomo_params.sorted_observables = tomo_params.observables
-        # Ensure we sort/prep them as the simulator expects (simulator usually does this, but good to be safe)
-        # Actually simulator.run calls aggregate_trajectories which needs proper setup.
-        # We just pass the params to run.
-        
+
         # Run Simulation
-        sim_run(mps, operator, tomo_params)
+        simulator.run(mps, operator, tomo_params)
         
         # Collect Results (expectations at final time)
         res_x = tomo_params.observables[0].results[-1]
@@ -209,46 +190,23 @@ def run(operator: MPO, sim_params: AnalogSimParams) -> NDArray[np.complex128]:
         output_rhos.append(rho_out)
 
     # 4. Construct Process Tensor
-    # Lambda = sum_k rho_out_k (x) D_k^*  (using outer product vectorization convention)
-    # The user asked for "tensor product of the density and the duals".
-    # Typically this means the Choi matrix represented as a tensor.
-    # Let's return the Lambda tensor of shape (2, 2, 2, 2) acting on rho.
-    # E(rho)_{ij} = sum_{mn} Lambda_{ijmn} rho_{mn}
-    # This corresponds to constructing the superoperator matrix.
-    
-    # Let's build the superoperator matrix S first, shape (4, 4).
     # S = sum_k |rho_out_k>> <<D_k|
-    
     dim = 2
     superop = np.zeros((4, 4), dtype=complex)
     for rho_out, dual in zip(output_rhos, duals):
         rho_vec = rho_out.reshape(-1, 1) # column vector
         dual_vec = dual.reshape(-1, 1)
-        # Outer product |rho_out>> <<dual_conj| ?
-        # Formula: E(rho) = sum_k Tr(D_k^dag rho) rho_out_k
-        # Tr(A^dag B) is inner product <<A|B>>.
-        # So E(rho) = sum_k <<D_k|rho>> |rho_out_k>>
-        #           = sum_k |rho_out_k>> <<D_k| |rho>>
-        # So S = sum_k |rho_out_k>> <<D_k|
-        # Note: duals calculated earlier were such that sum_k |F_k>> <<D_k| = I.
-        # D_k in _calculate_dual_frame corresponds to the "dual vector".
-        # The inner product uses conjugate of D_k.
-        # <<D_k| is D_k.conj().T (as a vector).
-        
-        # dual_vec is the vector form of the dual matrix.
         superop += rho_vec @ dual_vec.conj().T
         
     print("Process Tomography Complete.")
     
     # 5. Simple Verification (Log fidelity with Identity if nearly identity)
-    # Or test evolution of a random state as requested.
     
     # Test with a random state (not in basis)
     test_psi = np.array([np.cos(0.4), np.exp(1j*0.2)*np.sin(0.4)])
     test_rho_in = np.outer(test_psi, test_psi.conj())
     
     # Predict using Process Tensor
-    # Vectorize input
     test_rho_vec = test_rho_in.reshape(-1)
     predicted_rho_vec = superop @ test_rho_vec
     predicted_rho = predicted_rho_vec.reshape(2, 2)
@@ -256,31 +214,27 @@ def run(operator: MPO, sim_params: AnalogSimParams) -> NDArray[np.complex128]:
     # Run Actual Simulation for this state
     print("Verifying with a test state...")
     mps_test = MPS(length=length, state="zeros")
+
     # Manually set first qubit
     tensor = np.expand_dims(test_psi, axis=(1, 2)) # (2, 1, 1)
     mps_test.tensors[0] = tensor
     
     test_params = copy.deepcopy(sim_params)
     test_params.observables = [
-        Observable(GateLibrary.x(), sites=[0]),
-        Observable(GateLibrary.y(), sites=[0]),
-        Observable(GateLibrary.z(), sites=[0]),
+        Observable(X(), sites=[0]),
+        Observable(Y(), sites=[0]),
+        Observable(Z(), sites=[0]),
     ]
     test_params.sorted_observables = test_params.observables
-    sim_run(mps_test, operator, test_params)
-    
+    simulator.run(mps_test, operator, test_params)
+
     rx = test_params.observables[0].results[-1]
     ry = test_params.observables[1].results[-1]
     rz = test_params.observables[2].results[-1]
     actual_rho = _reconstruct_state({"x": rx, "y": ry, "z": rz})
     
-    
     # Compute Frobenius distance
     diff = np.linalg.norm(predicted_rho - actual_rho)
     print(f"Verification Frobenius Distance: {diff:.6e}")
-    
-    # Return the process tensor reshaped to (2, 2, 2, 2)
-    # Indices: out_row, out_col, in_row, in_col
-    # S maps (in_row, in_col) -> (out_row, out_col)
-    # S has shape (4, 4). element S_{IJ} where I = 2*r_out + c_out, J = 2*r_in + c_in.
+
     return superop.reshape(2, 2, 2, 2)
