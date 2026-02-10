@@ -12,7 +12,7 @@ def create_ising_jump_example():
     dt = 0.1
     J = 1.0
     g = 1.0
-    jump_time = 1
+    jump_time = 4
     
     # 1. Setup Hamiltonian
     hamiltonian = MPO.ising(length=L, J=J, g=g)
@@ -49,7 +49,7 @@ def create_ising_jump_example():
         initial_state = MPS(L, state="zeros")
         initial_state.normalize("B")
         
-        scheduled_jumps = [{"time": jump_time, "sites": [jump_site], "name": "lowering"}]
+        scheduled_jumps = [{"time": jump_time, "sites": [jump_site], "name": "x"}]
         noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
         
         z_obs = Observable(GateLibrary.z(), sites=0)
