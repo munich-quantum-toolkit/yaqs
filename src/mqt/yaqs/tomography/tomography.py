@@ -177,8 +177,6 @@ def _reprepare_site_zero_selective(mps: MPS, new_state: np.ndarray, rng: np.rand
     2. Project onto |m⟩ and keep conditional environment branch
     3. Reprepare to new_state while preserving the branch's bond vector
     
-    This is the preferred method for trajectory-resolved process tensors.
-    
     Args:
         mps: The MPS to modify (modified in-place)
         new_state: The new state vector for site 0, shape (d,)
@@ -198,31 +196,63 @@ def _reprepare_site_zero_selective(mps: MPS, new_state: np.ndarray, rng: np.rand
     assert left_bond == 1, f"Expected left bond=1, got {left_bond}"
     assert d == new_state.shape[0], f"Physical dim mismatch"
     
-    # Extract environment vectors
+    # Extract environment vectors (rows of the site-0 tensor)
     env_vecs = old_tensor[:, 0, :]  # shape (d, chi)
     
-    # Compute Born probabilities
-    probs = np.linalg.norm(env_vecs, axis=1) ** 2
-    probs = probs / (np.sum(probs) + 1e-15)
+    # Compute Born probabilities from tensor norms (valid if center is at 0)
+    probs_norm = np.linalg.norm(env_vecs, axis=1) ** 2
+    probs_norm = probs_norm / (np.sum(probs_norm) + 1e-15)
+    
+    # --- DEBUG: Verify matching with global expectation ---
+    if np.abs(mps.norm() - 1.0) > 1e-6:
+         print(f"WARNING: MPS norm deviates from 1.0 before intervention: {mps.norm():.6f}")
+
+    # Calculate <Z> on site 0 => P0 - P1
+    z_expect = mps.expect(Observable(Z(), sites=[0]))
+    p0_expect = 0.5 * (1.0 + z_expect)
+    p0_norm = probs_norm[0]
+    
+    if abs(p0_norm - p0_expect) > 1e-8:
+        print(f"WARNING: Probability mismatch! Norm={p0_norm:.6f}, Expect={p0_expect:.6f}")
+    # ----------------------------------------------------
     
     # Sample outcome
-    outcome = rng.choice(d, p=probs)
+    outcome = rng.choice(d, p=probs_norm)
     
-    # Extract conditional environment for this outcome
-    env_vec = env_vecs[outcome]
-    env_vec = env_vec / (np.linalg.norm(env_vec) + 1e-15)
+    # --- Projective Collapse ---
+    # Zero out the non-outcome branch
+    mask = np.zeros(d, dtype=complex)
+    mask[outcome] = 1.0
     
-    # Construct new tensor with new physical state and conditional environment
+    # Apply projection to tensor
+    mps.tensors[0] = old_tensor * mask[:, np.newaxis, np.newaxis]
+    
+    # Renormalize the entire MPS to fix the norm of the collapsed branch
+    # This divides by ||env_outcome|| effectively
+    norm = mps.norm()
+    if norm < 1e-15:
+         raise RuntimeError("Collapsed state has zero norm.")
+    
+    mps.tensors[0] /= norm
+    
+    # --- Reprepare ---
+    # The state is now |outcome> \otimes |env_conditional_normalized>
+    # We want to replace it with |new_state> \otimes |env_conditional_normalized>
+    # The environment vector is sitting in mps.tensors[0][outcome, 0, :]
+    env_vec_cond = mps.tensors[0][outcome, 0, :]
+    
+    # Construct new tensor
     new_tensor = np.zeros((d, 1, chi), dtype=np.complex128)
     for s in range(d):
-        new_tensor[s, 0, :] = new_state[s] * env_vec
-    
+        new_tensor[s, 0, :] = new_state[s] * env_vec_cond
+        
     mps.tensors[0] = new_tensor
     
-    # Renormalize
-    norm = mps.norm()
-    if abs(norm) > 1e-15:
-        mps.tensors[0] = mps.tensors[0] / norm
+    # Final Renormalization (Critical Fix)
+    # Ensure global norm is 1 after inserting new state
+    final_norm = mps.norm()
+    if abs(final_norm) > 1e-15:
+        mps.tensors[0] /= final_norm
     
     return outcome
 
@@ -391,7 +421,52 @@ class ProcessTensor:
     def to_choi_matrix(self) -> NDArray[np.complex128]:
         """Deprecated: use as_matrix_final_output() instead."""
         return self.as_matrix_final_output()
+    
+    def predict_final_state(self, rho_sequence: list[NDArray[np.complex128]], duals: list[NDArray[np.complex128]]) -> NDArray[np.complex128]:
+        """Predict final state for a sequence of input states using dual-frame contraction.
         
+        This method enables prediction on held-out state sequences not used during tomography.
+        It computes dual-frame coefficients for each input state and contracts them with the
+        process tensor to predict the final output state.
+        
+        Args:
+            rho_sequence: List of density matrices (2x2), one per time step
+            duals: Dual frame matrices from tomography (same as used in reconstruction)
+            
+        Returns:
+            Predicted final density matrix (2x2)
+            
+        Example:
+            >>> # Build PT from tomography
+            >>> pt = run_process_tensor_tomography(...)
+            >>> # Predict on new sequence
+            >>> rho0 = np.array([[0.5, 0.5], [0.5, 0.5]])  # |+⟩⟨+|
+            >>> rho1 = np.array([[1, 0], [0, 0]])  # |0⟩⟨0|
+            >>> duals = _calculate_dual_frame(_get_pauli_basis_set())
+            >>> predicted = pt.predict_final_state([rho0, rho1], duals)
+        """
+        if len(rho_sequence) != len(self.timesteps):
+            msg = f"Sequence length {len(rho_sequence)} must match number of timesteps {len(self.timesteps)}"
+            raise ValueError(msg)
+        
+        # Compute coefficients: c_k = Tr(D_k† ρ) for each input state
+        coeffs_per_step = []
+        for rho in rho_sequence:
+            coeffs = [np.trace(d.conj().T @ rho) for d in duals]
+            coeffs_per_step.append(coeffs)
+        
+        # Contract with tensor: ρ_pred = Σ_{i0,...,ik} c_i0^(0) ... c_ik^(k) T[:,i0,...,ik]
+        result = np.zeros(4, dtype=complex)
+        for idx in np.ndindex(*self.tensor.shape[1:]):  # Iterate over all input frame indices
+            # Compute product of coefficients for this index combination
+            coeff = 1.0
+            for step, frame_idx in enumerate(idx):
+                coeff *= coeffs_per_step[step][frame_idx]
+            # Add weighted contribution from this tensor element
+            result += coeff * self.tensor[(slice(None),) + idx]
+        
+        return result.reshape(2, 2)
+    
     def __repr__(self) -> str:
         return f"<ProcessTensor steps={len(self.timesteps)}, shape={self.tensor.shape}>"
 
@@ -447,6 +522,9 @@ def run_process_tensor_tomography(
         time_outputs = [[[] for _ in range(num_trajectories)] for _ in range(num_steps + 1)]
         
         for traj_idx in range(num_trajectories):
+            # One RNG per trajectory for consistent sampling discipline
+            rng = np.random.default_rng(traj_idx)
+            
             # Initialize fresh MPS
             mps = MPS(length=operator.length, state="zeros")
             
@@ -467,6 +545,7 @@ def run_process_tensor_tomography(
                 step_params = copy.deepcopy(sim_params)
                 step_params.elapsed_time = duration
                 step_params.dt = sim_params.dt
+                step_params.num_traj = 1  # Crucial: evolve single trajectory for selective intervention
                 # Use linspace to avoid floating-point overshoot
                 n_steps = int(np.round(duration / step_params.dt))
                 step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
@@ -487,7 +566,6 @@ def run_process_tensor_tomography(
                     
                     # Use bond-consistent reprepare
                     if mode == "selective":
-                        rng = np.random.default_rng()
                         _reprepare_site_zero_selective(mps, psi_next, rng)
                     elif mode == "pure_env_approx":
                         _reprepare_site_zero_pure_env_approx(mps, psi_next)
