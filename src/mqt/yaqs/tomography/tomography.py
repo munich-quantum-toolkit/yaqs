@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
-from qiskit.quantum_info import DensityMatrix
+from qiskit.quantum_info import DensityMatrix, entropy
 
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -33,6 +33,16 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.networks import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+
+
+def _vec_to_rho(vec4: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Convert a 4-element vector to a 2x2 density matrix."""
+    rho = vec4.reshape(2, 2)
+    rho = 0.5 * (rho + rho.conj().T)
+    tr = np.trace(rho)
+    if abs(tr) > 1e-15:
+        rho = rho / tr
+    return rho
 
 
 def _get_basis_states() -> list[tuple[str, NDArray[np.complex128]]]:
@@ -467,6 +477,108 @@ class ProcessTensor:
             result += coeff * self.tensor[(slice(None),) + idx]
         
         return result.reshape(2, 2)
+
+    def holevo_information(self, p: dict[tuple[int, ...], float] | None = None, base: int = 2) -> float:
+        """Calculate the Holevo information of the process tensor.
+        
+        Args:
+            p: Optional dictionary mapping sequence tuples to probabilities.
+               If None, assumes uniform distribution over all input sequences.
+            base: Logarithm base for entropy calculation (default 2 for bits).
+            
+        Returns:
+            float: The Holevo information.
+        """
+        import itertools
+        
+        # Tensor shape: (4, N, N, ..., N)
+        # N is number of basis states (6 for Pauli)
+        # k is number of steps (input slots)
+        out_dim = self.tensor.shape[0]
+        assert out_dim == 4
+        N = self.tensor.shape[1]
+        k = self.tensor.ndim - 1
+        
+        # Generate all input sequences
+        seqs = list(itertools.product(range(N), repeat=k))
+        
+        if p is None:
+            p = {seq: 1.0 / len(seqs) for seq in seqs}
+            
+        # Build ensemble and average output
+        rhos = {}
+        rho_avg = np.zeros((2, 2), dtype=np.complex128)
+        
+        for seq in seqs:
+            # Extract output vector for this sequence
+            vec = self.tensor[(slice(None),) + seq]  # shape (4,)
+            rho = _vec_to_rho(vec)
+            rhos[seq] = rho
+            rho_avg += p[seq] * rho
+            
+        # Compute Entropies
+        # S(rho_avg)
+        S_avg = entropy(DensityMatrix(rho_avg), base=base)
+        
+        # sum p_i S(rho_i)
+        S_cond = 0.0
+        for seq in seqs:
+            S_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
+            
+        return S_avg - S_cond
+
+    def holevo_information_conditional(self, fixed_step: int, fixed_idx: int, base: int = 2) -> float:
+        """Calculate the Holevo information conditioned on a fixed input at a specific step.
+        
+        Args:
+            fixed_step: The time step index to fix (0-indexed).
+            fixed_idx: The basis state index to fix at that step.
+            base: Logarithm base for entropy calculation (default 2 for bits).
+            
+        Returns:
+            float: The conditional Holevo information.
+        """
+        import itertools
+        
+        out_dim = self.tensor.shape[0]
+        assert out_dim == 4
+        N = self.tensor.shape[1]
+        k = self.tensor.ndim - 1
+        
+        if fixed_step < 0 or fixed_step >= k:
+            raise ValueError(f"fixed_step {fixed_step} out of bounds for {k} steps.")
+        if fixed_idx < 0 or fixed_idx >= N:
+            raise ValueError(f"fixed_idx {fixed_idx} out of bounds for {N} basis states.")
+
+        # Generate all sequences of length k where seq[fixed_step] == fixed_idx
+        # We can optimize this by only generating the varying parts, but filtering is easier to write clearly
+        seqs = [seq for seq in itertools.product(range(N), repeat=k) if seq[fixed_step] == fixed_idx]
+        
+        if not seqs:
+            return 0.0
+
+        # Uniform probability over this subset
+        p_val = 1.0 / len(seqs)
+        p = {seq: p_val for seq in seqs}
+        
+        # Build ensemble and average output
+        rhos = {}
+        rho_avg = np.zeros((2, 2), dtype=np.complex128)
+        
+        for seq in seqs:
+            vec = self.tensor[(slice(None),) + seq]
+            rho = _vec_to_rho(vec)
+            rhos[seq] = rho
+            rho_avg += p[seq] * rho
+            
+        # Compute Entropies
+        S_avg = entropy(DensityMatrix(rho_avg), base=base)
+        
+        S_cond = 0.0
+        for seq in seqs:
+            S_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
+            
+        return S_avg - S_cond
     
     def __repr__(self) -> str:
         return f"<ProcessTensor steps={len(self.timesteps)}, shape={self.tensor.shape}>"
@@ -552,8 +664,16 @@ def run_process_tensor_tomography(
                 n_steps = int(np.round(duration / step_params.dt))
                 step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
                 step_params.observables = []
+                step_params.get_state = True  # Ensure we get the state back
                 
                 simulator.run(mps, operator, step_params, noise_model=noise_model)
+                
+                # Update MPS with evolved state
+                # In serial execution (forced by num_traj=1), step_params.output_state is populated.
+                if step_params.output_state is not None:
+                    mps = step_params.output_state
+                else:
+                    raise RuntimeError("Simulator did not return output state. Ensure get_state=True and serial execution.")
                 
                 # Measure output AFTER evolution
                 x_out = mps.expect(Observable(X(), sites=[0]))
