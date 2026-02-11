@@ -10,7 +10,7 @@ import matplotlib.patheffects as pe
 # -------------------------
 # Parameters (must match convergence.py)
 # -------------------------
-dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1]
+dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04]
 gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 gamma_min = 0.01
 gamma_max = 50
