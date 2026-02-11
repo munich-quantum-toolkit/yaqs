@@ -172,8 +172,6 @@ if __name__ == "__main__":
     gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 
     for k, dt in enumerate(dt_list):
-        if k < 4:
-            continue
         print(f"dt index {k+1}/{len(dt_list)} (dt={dt})")
         
         results1 = []
