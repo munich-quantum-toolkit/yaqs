@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.core.data_structures.networks import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
 def _get_basis_states() -> list[tuple[str, NDArray[np.complex128]]]:
@@ -80,10 +81,10 @@ def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[
     the map is E(rho) = sum_k Tr(D_k^dag rho) rho_out^k.
 
     Args:
-        basis_matrices: List of density matrices (2x2) forming the frame.
+        basis_matrices (list): List of density matrices (2x2) forming the frame.
 
     Returns:
-        List of dual matrices D_k.
+        list: List of dual matrices D_k.
     """
     # Stack matrices as columns of a Frame Operator F
     # Shape (4, 6) for single qubit (dim=2^2=4)
@@ -476,7 +477,8 @@ def run_process_tensor_tomography(
     sim_params: AnalogSimParams, 
     timesteps: list[float], 
     num_trajectories: int = 100,
-    mode: str = "selective"
+    mode: str = "selective",
+    noise_model: NoiseModel | None = None,
 ) -> ProcessTensor:
     """Run multi-step Process Tensor Tomography.
     
@@ -551,7 +553,7 @@ def run_process_tensor_tomography(
                 step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
                 step_params.observables = []
                 
-                simulator.run(mps, operator, step_params)
+                simulator.run(mps, operator, step_params, noise_model=noise_model)
                 
                 # Measure output AFTER evolution
                 x_out = mps.expect(Observable(X(), sites=[0]))
