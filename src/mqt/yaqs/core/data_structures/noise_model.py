@@ -193,10 +193,6 @@ class NoiseModel:
                     new_proc["strength"] = float(sampled_val)
                 else:
                     # Fallback or error for unknown distributions
-                    # For now, default to mean if unknown, or treated as error?
-                    # Let's assume normal is the primary one requested.
-                    # If unknown, maybe just keep it? But downstream expects float.
-                    # Let's raise an error for unsupported distributions to be safe.
                     msg = f"Unsupported distribution type: {dist_type}"
                     raise ValueError(msg)
             else:
