@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-import numpy as np
-from qiskit import QuantumCircuit
-
+from mqt.yaqs.core.data_structures.networks import MPS, MPO
 from mqt.yaqs.simulator import run
-from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
-from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams, Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
 
 def test_noise_distribution_integration():
-    """Test that running a simulation with a distributed noise model works."""
+    """Test that running a simulation with a distributed noise model works.
+
+    The noise model should be sampled once per run, meaning all trajectories
+    share the same (randomly sampled) noise strengths.
+    """
     num_qubits = 2
-    qc = QuantumCircuit(num_qubits)
-    qc.h(0)
-    qc.cx(0, 1)
-    qc.measure_all()
+    # Define Hamiltonian: Ising model
+    H = MPO.ising(num_qubits, J=1.0, g=0.5)
 
     # Define noise model with distribution
     processes = [
@@ -32,14 +31,16 @@ def test_noise_distribution_integration():
     initial_state = MPS(num_qubits)
 
     # Simulation parameters
-    sim_params = StrongSimParams(
+    sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
-        sample_layers=False,
-        num_traj=10,  # Run multiple trajectories to trigger sampling
+        dt=0.1,
+        elapsed_time=1.0,
+        num_traj=10,  # Run multiple trajectories to confirm it runs
+        sample_timesteps=False
     )
 
     # Run simulation
-    run(initial_state, qc, sim_params, noise_model)
+    run(initial_state, H, sim_params, noise_model)
 
     # If we reached here without error, the integration works (at least doesn't crash)
     assert True
