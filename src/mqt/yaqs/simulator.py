@@ -679,7 +679,9 @@ def run(
             or a QuantumCircuit for circuit simulations.
         sim_params: Simulation parameters specifying
                                                                          the simulation mode and settings.
-        noise_model: The noise model to apply during simulation.
+        noise_model: The noise model to apply during simulation. If provided, it is sampled once
+            at the beginning of the run to generate a concrete noise realization (static disorder).
+            The sampled noise model is then saved to `sim_params.noise_model`.
         parallel: Whether to run trajectories in parallel. Defaults to True.
 
     """

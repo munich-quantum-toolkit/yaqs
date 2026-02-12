@@ -175,7 +175,9 @@ class NoiseModel:
             - If 'strength' is a dict describing a distribution, a value is sampled.
 
         Returns:
-            NoiseModel: A new NoiseModel instance with concrete float strengths.
+            NoiseModel: A new NoiseModel instance where all process strengths are concrete floats.
+                        This sampled model represents the specific realization of static disorder used
+                        for a simulation run.
         """
         new_processes: list[dict[str, Any]] = []
         for proc in self.processes:
@@ -203,18 +205,6 @@ class NoiseModel:
 
             new_processes.append(new_proc)
 
-        # Scheduled jumps are typically time-based and might not have 'strength' distribution
-        # in the same way, or maybe they do?
-        # The user request specifically mentioned "local site gamma".
-        # We will just copy scheduled jumps as is for now unless they also have distributions.
-        # If scheduled jumps have 'strength', we should probably sample them too if they follow the same pattern.
-        # Glancing at `scheduled_jumps` usage, they have `strength` too usually?
-        # Let's check `apply_scheduled_jumps`. It uses `jump["strength"]`?
-        # Actually `scheduled_jumps` in `__init__` does not explicitly check for `strength`.
-        # But `apply_scheduled_jumps` likely uses it if it's a dissipative jump?
-        # Wait, scheduled jumps often *are* the operator application, implying strength=1 or implicit.
-        # Let's peek at `scheduled_jumps.py`? No, I'll stick to `processes` for now as requested.
-        
         return NoiseModel(processes=new_processes, scheduled_jumps=copy.deepcopy(self.scheduled_jumps))
 
     @staticmethod

@@ -162,6 +162,8 @@ class AnalogSimParams:
         If True, output MPS is returned.
     how_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
@@ -310,6 +312,8 @@ class WeakSimParams:
         If True, sample layers.
     show_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
@@ -423,6 +427,8 @@ class StrongSimParams:
         If True, output MPS is returned.
     show_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
