@@ -40,9 +40,10 @@ def test_normal_distribution_sampling() -> None:
     nm = NoiseModel(processes)
 
     # Sample multiple times and check statistics
+    rng = np.random.default_rng(42)  # Fixed seed for reproducibility
     samples = []
     for _ in range(1000):
-        sampled_nm = nm.sample()
+        sampled_nm = nm.sample(rng=rng)
         samples.append(sampled_nm.processes[0]["strength"])
 
     assert np.isclose(np.mean(samples), mean, atol=0.02)
@@ -66,8 +67,10 @@ def test_normal_clamping_warning(caplog: pytest.LogCaptureFixture) -> None:
     ]
     nm = NoiseModel(processes)
 
+    # Use a fixed seed that is known to produce a negative value for mean=-0.5
+    rng = np.random.default_rng(42)
     with caplog.at_level(logging.WARNING):
-        sampled_nm = nm.sample()
+        sampled_nm = nm.sample(rng=rng)
         # Ensure at least one sample was clamped (likely, given mean=-0.5)
         # We can force it by seeding if needed, but mean=-0.5 is robust enough.
 
@@ -90,9 +93,10 @@ def test_truncated_normal_sampling() -> None:
     ]
     nm = NoiseModel(processes)
 
+    rng = np.random.default_rng(42)
     samples = []
     for _ in range(2000):
-        sampled_nm = nm.sample()
+        sampled_nm = nm.sample(rng=rng)
         # Truncated normal (a=0) should strictly be >= 0
         s = sampled_nm.processes[0]["strength"]
         assert s >= 0
@@ -116,6 +120,7 @@ def test_truncated_normal_zero_std() -> None:
         }
     ]
     nm = NoiseModel(processes)
+    # No need for specific RNG here as it's deterministic, but good practice
     sampled_nm = nm.sample()
     assert sampled_nm.processes[0]["strength"] == mean
 
@@ -134,13 +139,16 @@ def test_lognormal_distribution_sampling() -> None:
     ]
     nm = NoiseModel(processes)
 
+    rng = np.random.default_rng(42)
     # Sample multiple times and check statistics
     samples = []
     for _ in range(5000):
-        sampled_nm = nm.sample()
+        sampled_nm = nm.sample(rng=rng)
         samples.append(sampled_nm.processes[0]["strength"])
 
     # Expected mean and std for lognormal distribution
+    # E[X] = exp(mu + sigma^2/2)
+    # Var[X] = (exp(sigma^2) - 1) * exp(2*mu + sigma^2)
     expected_mean = np.exp(mean + (std**2) / 2)
     expected_var = (np.exp(std**2) - 1) * np.exp(2 * mean + std**2)
     expected_std = np.sqrt(expected_var)
@@ -161,7 +169,8 @@ def test_mixed_static_and_distribution() -> None:
         },
     ]
     nm = NoiseModel(processes)
-    sampled_nm = nm.sample()
+    rng = np.random.default_rng(42)
+    sampled_nm = nm.sample(rng=rng)
 
     assert len(sampled_nm.processes) == 2
     assert sampled_nm.processes[0]["strength"] == 0.5
@@ -196,8 +205,9 @@ def test_independent_site_sampling() -> None:
     ]
     nm = NoiseModel(processes)
 
+    rng = np.random.default_rng(42)
     # Sample once
-    sampled_nm = nm.sample()
+    sampled_nm = nm.sample(rng=rng)
 
     # Extract strengths
     strengths = [proc["strength"] for proc in sampled_nm.processes]
