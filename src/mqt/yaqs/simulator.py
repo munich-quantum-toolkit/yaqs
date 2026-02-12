@@ -420,7 +420,8 @@ def _run_strong_sim(
 
     # Pack per-trajectory argument tuples (index used to place results later)
     args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
-        (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
+        (i, initial_state, noise_model.sample() if noise_model else None, sim_params, operator)
+        for i in range(sim_params.num_traj)
     ]
 
     if parallel and sim_params.num_traj > 1:
@@ -505,7 +506,8 @@ def _run_weak_sim(
 
     # Bundle args for each trajectory
     args: list[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]] = [
-        (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
+        (i, initial_state, noise_model.sample() if noise_model else None, sim_params, operator)
+        for i in range(sim_params.num_traj)
     ]
 
     if parallel and sim_params.num_traj > 1:
@@ -624,7 +626,8 @@ def _run_analog(
 
     # Argument bundles per trajectory
     args: list[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]] = [
-        (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
+        (i, initial_state, noise_model.sample() if noise_model else None, sim_params, operator)
+        for i in range(sim_params.num_traj)
     ]
 
     if parallel and sim_params.num_traj > 1:

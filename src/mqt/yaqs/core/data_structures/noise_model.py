@@ -15,6 +15,7 @@ the effects of noise in quantum simulations.
 
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -166,6 +167,56 @@ class NoiseModel:
 
         self.processes = filled_processes
 
+    def sample(self) -> NoiseModel:
+        """Sample a concrete NoiseModel from any distribution-based strengths.
+
+        For each process:
+            - If 'strength' is a float, it is kept as is.
+            - If 'strength' is a dict describing a distribution, a value is sampled.
+
+        Returns:
+            NoiseModel: A new NoiseModel instance with concrete float strengths.
+        """
+        new_processes: list[dict[str, Any]] = []
+        for proc in self.processes:
+            new_proc = proc.copy()
+            strength_val = proc["strength"]
+
+            if isinstance(strength_val, dict):
+                dist_type = strength_val.get("distribution", "normal")
+                if dist_type == "normal":
+                    mean = strength_val.get("mean", 0.0)
+                    std = strength_val.get("std", 0.0)
+                    sampled_val = np.random.normal(loc=mean, scale=std)
+                    new_proc["strength"] = float(sampled_val)
+                else:
+                    # Fallback or error for unknown distributions
+                    # For now, default to mean if unknown, or treated as error?
+                    # Let's assume normal is the primary one requested.
+                    # If unknown, maybe just keep it? But downstream expects float.
+                    # Let's raise an error for unsupported distributions to be safe.
+                    msg = f"Unsupported distribution type: {dist_type}"
+                    raise ValueError(msg)
+            else:
+                # Assume it's already a float/int
+                new_proc["strength"] = float(strength_val)
+
+            new_processes.append(new_proc)
+
+        # Scheduled jumps are typically time-based and might not have 'strength' distribution
+        # in the same way, or maybe they do?
+        # The user request specifically mentioned "local site gamma".
+        # We will just copy scheduled jumps as is for now unless they also have distributions.
+        # If scheduled jumps have 'strength', we should probably sample them too if they follow the same pattern.
+        # Glancing at `scheduled_jumps` usage, they have `strength` too usually?
+        # Let's check `apply_scheduled_jumps`. It uses `jump["strength"]`?
+        # Actually `scheduled_jumps` in `__init__` does not explicitly check for `strength`.
+        # But `apply_scheduled_jumps` likely uses it if it's a dissipative jump?
+        # Wait, scheduled jumps often *are* the operator application, implying strength=1 or implicit.
+        # Let's peek at `scheduled_jumps.py`? No, I'll stick to `processes` for now as requested.
+        
+        return NoiseModel(processes=new_processes, scheduled_jumps=copy.deepcopy(self.scheduled_jumps))
+
     @staticmethod
     def get_operator(name: str) -> NDArray[np.complex128]:
         """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
@@ -182,3 +233,4 @@ class NoiseModel:
 
         operator: BaseGate = operator_class()
         return operator.matrix
+
