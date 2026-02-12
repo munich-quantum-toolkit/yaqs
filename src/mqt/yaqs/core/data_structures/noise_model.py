@@ -16,9 +16,11 @@ the effects of noise in quantum simulations.
 from __future__ import annotations
 
 import copy
+import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from scipy.stats import truncnorm
 
 from ..libraries.noise_library import NoiseLibrary
 
@@ -34,6 +36,8 @@ PAULI_MAP = {
     "y": NoiseLibrary.pauli_y().matrix,
     "z": NoiseLibrary.pauli_z().matrix,
 }
+
+logger = logging.getLogger(__name__)
 
 
 class NoiseModel:
@@ -194,11 +198,31 @@ class NoiseModel:
 
             if isinstance(strength_val, dict):
                 dist_type = strength_val.get("distribution", "normal")
+                mean = strength_val.get("mean", 0.0)
+                std = strength_val.get("std", 0.0)
+
                 if dist_type == "normal":
-                    mean = strength_val.get("mean", 0.0)
-                    std = strength_val.get("std", 0.0)
                     sampled_val = generator.normal(loc=mean, scale=std)
+                    if sampled_val < 0:
+                        logger.warning(
+                            "Sampled noise strength %f using 'normal' distribution (mean=%f, std=%f) "
+                            "was negative and clamped to 0.0.",
+                            sampled_val,
+                            mean,
+                            std,
+                        )
                     new_proc["strength"] = float(max(0.0, sampled_val))
+                elif dist_type == "lognormal":
+                    # For lognormal, mean/std refer to the underlying normal distribution parameters
+                    sampled_val = generator.lognormal(mean=mean, sigma=std)
+                    new_proc["strength"] = float(sampled_val)
+                elif dist_type == "truncated_normal":
+                    # Truncate at 0 (a=0) and +inf (b=inf)
+                    a, b = 0.0, np.inf
+                    a_norm = (a - mean) / std
+                    b_norm = (b - mean) / std
+                    sampled_val = truncnorm.rvs(a_norm, b_norm, loc=mean, scale=std, random_state=generator)
+                    new_proc["strength"] = float(sampled_val)
                 else:
                     # Fallback or error for unknown distributions
                     msg = f"Unsupported distribution type: {dist_type}"

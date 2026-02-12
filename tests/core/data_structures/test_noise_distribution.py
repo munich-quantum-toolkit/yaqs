@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pytest
 
@@ -50,6 +52,88 @@ def test_normal_distribution_sampling() -> None:
     assert isinstance(samples[0], float)
 
 
+def test_normal_clamping_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Test that a warning is logged when normal distribution samples are clamped."""
+    # Mean is negative, so most samples will be negative and clamped to 0
+    mean = -0.5
+    std = 0.1
+    processes = [
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": {"distribution": "normal", "mean": mean, "std": std},
+        }
+    ]
+    nm = NoiseModel(processes)
+
+    with caplog.at_level(logging.WARNING):
+        sampled_nm = nm.sample()
+        # Ensure at least one sample was clamped (likely, given mean=-0.5)
+        # We can force it by seeding if needed, but mean=-0.5 is robust enough.
+
+    assert "was negative and clamped to 0.0" in caplog.text
+    # usage of max(0.0, ...) implies strength should be 0.0
+    assert sampled_nm.processes[0]["strength"] == 0.0
+
+
+def test_truncated_normal_sampling() -> None:
+    """Test sampling from a truncated normal distribution (lower bound 0)."""
+    # Mean near 0, std large enough that normal would produce negatives
+    mean = 0.0
+    std = 1.0
+    processes = [
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": {"distribution": "truncated_normal", "mean": mean, "std": std},
+        }
+    ]
+    nm = NoiseModel(processes)
+
+    samples = []
+    for _ in range(2000):
+        sampled_nm = nm.sample()
+        # Truncated normal (a=0) should strictly be >= 0
+        s = sampled_nm.processes[0]["strength"]
+        assert s >= 0
+        samples.append(s)
+
+    # For standard half-normal (mean=0, sigma=1, lower=0),
+    # expected mean = sigma * sqrt(2/pi) approx 0.798
+    expected_mean = std * np.sqrt(2 / np.pi)
+    assert np.isclose(np.mean(samples), expected_mean, atol=0.05)
+
+
+def test_lognormal_distribution_sampling() -> None:
+    """Test sampling from a log-normal distribution."""
+    # Parameters for the underlying normal distribution
+    mean = 0.0
+    std = 0.1
+    processes = [
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": {"distribution": "lognormal", "mean": mean, "std": std},
+        }
+    ]
+    nm = NoiseModel(processes)
+
+    # Sample multiple times and check statistics
+    samples = []
+    for _ in range(5000):
+        sampled_nm = nm.sample()
+        samples.append(sampled_nm.processes[0]["strength"])
+
+    # Expected mean and std for lognormal distribution
+    expected_mean = np.exp(mean + (std**2) / 2)
+    expected_var = (np.exp(std**2) - 1) * np.exp(2 * mean + std**2)
+    expected_std = np.sqrt(expected_var)
+
+    assert np.isclose(np.mean(samples), expected_mean, atol=0.05)
+    assert np.isclose(np.std(samples), expected_std, atol=0.05)
+    assert all(s > 0 for s in samples)
+
+
 def test_mixed_static_and_distribution() -> None:
     """Test mixing static and distributed strengths."""
     processes = [
@@ -57,7 +141,7 @@ def test_mixed_static_and_distribution() -> None:
         {
             "name": "pauli_z",
             "sites": [1],
-            "strength": {"distribution": "normal", "mean": 0.2, "std": 0.01},
+            "strength": {"distribution": "lognormal", "mean": 0.0, "std": 0.1},
         },
     ]
     nm = NoiseModel(processes)
@@ -66,7 +150,7 @@ def test_mixed_static_and_distribution() -> None:
     assert len(sampled_nm.processes) == 2
     assert sampled_nm.processes[0]["strength"] == 0.5
     assert isinstance(sampled_nm.processes[1]["strength"], float)
-    assert sampled_nm.processes[1]["strength"] != 0.2  # Unlikely to be exactly mean
+    assert sampled_nm.processes[1]["strength"] > 0.0
 
 
 def test_invalid_distribution_type() -> None:
@@ -90,7 +174,7 @@ def test_independent_site_sampling() -> None:
         {
             "name": "pauli_x",
             "sites": [i],
-            "strength": {"distribution": "normal", "mean": 0.5, "std": 0.2},
+            "strength": {"distribution": "lognormal", "mean": 0.0, "std": 0.1},
         }
         for i in range(10)
     ]
@@ -115,6 +199,5 @@ def test_independent_site_sampling() -> None:
         "All sampled strengths were identical, implying they were not sampled independently."
     )
 
-    # Optional: check that they are somewhat distributed (rough range check)
-    # With mean 0.5 and std 0.2, most values should be within [-0.1, 1.1]
-    assert all(-0.5 < s < 1.5 for s in strengths)
+    # Check that they are positive (lognormal range)
+    assert all(s > 0 for s in strengths)
