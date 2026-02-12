@@ -192,7 +192,7 @@ class NoiseModel:
                 if dist_type == "normal":
                     mean = strength_val.get("mean", 0.0)
                     std = strength_val.get("std", 0.0)
-                    sampled_val = np.random.normal(loc=mean, scale=std) # noqa: NPY002 
+                    sampled_val = np.random.normal(loc=mean, scale=std)  # noqa: NPY002
                     new_proc["strength"] = float(max(0.0, sampled_val))
                 else:
                     # Fallback or error for unknown distributions
