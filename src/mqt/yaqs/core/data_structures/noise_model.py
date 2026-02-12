@@ -184,7 +184,7 @@ class NoiseModel:
         """
         new_processes: list[dict[str, Any]] = []
         for proc in self.processes:
-            new_proc = proc.copy()
+            new_proc = copy.deepcopy(proc)
             strength_val = proc["strength"]
 
             if isinstance(strength_val, dict):
