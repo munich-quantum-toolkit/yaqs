@@ -15,9 +15,12 @@ the effects of noise in quantum simulations.
 
 from __future__ import annotations
 
+import copy
+import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from scipy.stats import truncnorm
 
 from ..libraries.noise_library import NoiseLibrary
 
@@ -33,6 +36,8 @@ PAULI_MAP = {
     "y": NoiseLibrary.pauli_y().matrix,
     "z": NoiseLibrary.pauli_z().matrix,
 }
+
+logger = logging.getLogger(__name__)
 
 
 class NoiseModel:
@@ -165,6 +170,80 @@ class NoiseModel:
             filled_processes.append(proc)
 
         self.processes = filled_processes
+
+    def sample(self, rng: np.random.Generator | int | None = None) -> NoiseModel:
+        """Sample a concrete NoiseModel from any distribution-based strengths.
+
+        For each process:
+            - If 'strength' is a float, it is kept as is.
+            - If 'strength' is a dict describing a distribution, a value is sampled.
+
+        Args:
+            rng: The random number generator or seed to use for sampling.
+                 If None, a new generator is created.
+
+        Returns:
+            NoiseModel: A new NoiseModel instance where all process strengths are concrete floats.
+                        This sampled model represents the specific realization of static disorder used
+                        for a simulation run.
+
+        Raises:
+            ValueError: If an unsupported distribution type is provided.
+        """
+        generator = np.random.default_rng(rng)
+        new_processes: list[dict[str, Any]] = []
+        for proc in self.processes:
+            new_proc = copy.deepcopy(proc)
+            strength_val = proc["strength"]
+
+            if isinstance(strength_val, dict):
+                if "distribution" not in strength_val:
+                    msg = "Noise strength dict must contain 'distribution' key."
+                    raise ValueError(msg)
+                dist_type = strength_val["distribution"]
+                mean = strength_val.get("mean", 0.0)
+                std = strength_val.get("std", 0.0)
+
+                if dist_type == "normal":
+                    sampled_val = generator.normal(loc=mean, scale=std)
+                    if sampled_val < 0:
+                        logger.warning(
+                            "Sampled noise strength %f using 'normal' distribution (mean=%f, std=%f) "
+                            "was negative and clamped to 0.0.",
+                            sampled_val,
+                            mean,
+                            std,
+                        )
+                    new_proc["strength"] = float(max(0.0, sampled_val))
+                elif dist_type == "lognormal":
+                    # For lognormal, mean/std refer to the underlying normal distribution parameters
+                    sampled_val = generator.lognormal(mean=mean, sigma=std)
+                    new_proc["strength"] = float(sampled_val)
+                elif dist_type == "truncated_normal":
+                    if std == 0.0:
+                        new_proc["strength"] = float(max(0.0, mean))
+                    else:
+                        # Truncate at 0 (a=0) and +inf (b=inf)
+                        a, b = 0.0, np.inf
+                        a_norm = (a - mean) / std
+                        b_norm = (b - mean) / std
+                        sampled_val = truncnorm.rvs(a_norm, b_norm, loc=mean, scale=std, random_state=generator)
+                        new_proc["strength"] = float(sampled_val)
+                else:
+                    # Fallback or error for unknown distributions
+                    msg = f"Unsupported distribution type: {dist_type}"
+                    raise ValueError(msg)
+            else:
+                # Assume it's already a float/int
+                new_proc["strength"] = float(strength_val)
+
+            new_processes.append(new_proc)
+
+        # Create new instance without re-validation
+        new_model = object.__new__(NoiseModel)
+        new_model.processes = new_processes
+        new_model.scheduled_jumps = copy.deepcopy(self.scheduled_jumps)
+        return new_model
 
     @staticmethod
     def get_operator(name: str) -> NDArray[np.complex128]:
