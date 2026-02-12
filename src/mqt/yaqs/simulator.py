@@ -689,6 +689,7 @@ def run(
     # Sample a concrete noise model once for this run (static disorder)
     if noise_model is not None:
         noise_model = noise_model.sample()
+    sim_params.noise_model = noise_model
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         assert isinstance(operator, QuantumCircuit)
