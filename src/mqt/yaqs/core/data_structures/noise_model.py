@@ -223,4 +223,3 @@ class NoiseModel:
 
         operator: BaseGate = operator_class()
         return operator.matrix
-
