@@ -436,3 +436,34 @@ def test_independent_site_sampling() -> None:
 
     # Check that they are positive (lognormal range)
     assert all(s > 0 for s in strengths)
+
+
+def test_truncated_normal_negative_mean_zero_std() -> None:
+    """Test that truncated normal sampling with negative mean and zero std returns 0.0."""
+    mean = -0.5
+    std = 0.0
+    processes = [
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": {"distribution": "truncated_normal", "mean": mean, "std": std},
+        }
+    ]
+    nm = NoiseModel(processes)
+    rng = np.random.default_rng(42)
+    sampled_nm = nm.sample(rng=rng)
+    assert sampled_nm.processes[0]["strength"] == 0.0
+
+
+def test_missing_distribution_key() -> None:
+    """Test that missing 'distribution' key raises ValueError."""
+    processes = [
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": {"mean": 0.5, "std": 0.1},  # Missing distribution key
+        }
+    ]
+    nm = NoiseModel(processes)
+    with pytest.raises(ValueError, match="Noise strength dict must contain 'distribution' key"):
+        nm.sample()

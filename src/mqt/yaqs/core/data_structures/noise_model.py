@@ -197,7 +197,10 @@ class NoiseModel:
             strength_val = proc["strength"]
 
             if isinstance(strength_val, dict):
-                dist_type = strength_val.get("distribution", "normal")
+                if "distribution" not in strength_val:
+                    msg = "Noise strength dict must contain 'distribution' key."
+                    raise ValueError(msg)
+                dist_type = strength_val["distribution"]
                 mean = strength_val.get("mean", 0.0)
                 std = strength_val.get("std", 0.0)
 
@@ -218,7 +221,7 @@ class NoiseModel:
                     new_proc["strength"] = float(sampled_val)
                 elif dist_type == "truncated_normal":
                     if std == 0.0:
-                        new_proc["strength"] = float(mean)
+                        new_proc["strength"] = float(max(0.0, mean))
                     else:
                         # Truncate at 0 (a=0) and +inf (b=inf)
                         a, b = 0.0, np.inf
@@ -236,7 +239,11 @@ class NoiseModel:
 
             new_processes.append(new_proc)
 
-        return NoiseModel(processes=new_processes, scheduled_jumps=copy.deepcopy(self.scheduled_jumps))
+        # Create new instance without re-validation
+        new_model = object.__new__(NoiseModel)
+        new_model.processes = new_processes
+        new_model.scheduled_jumps = copy.deepcopy(self.scheduled_jumps)
+        return new_model
 
     @staticmethod
     def get_operator(name: str) -> NDArray[np.complex128]:
