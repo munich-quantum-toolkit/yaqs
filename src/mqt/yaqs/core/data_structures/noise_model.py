@@ -178,6 +178,9 @@ class NoiseModel:
             NoiseModel: A new NoiseModel instance where all process strengths are concrete floats.
                         This sampled model represents the specific realization of static disorder used
                         for a simulation run.
+
+        Raises:
+            ValueError: If an unsupported distribution type is provided.
         """
         new_processes: list[dict[str, Any]] = []
         for proc in self.processes:
@@ -189,7 +192,7 @@ class NoiseModel:
                 if dist_type == "normal":
                     mean = strength_val.get("mean", 0.0)
                     std = strength_val.get("std", 0.0)
-                    sampled_val = np.random.normal(loc=mean, scale=std)
+                    sampled_val = np.random.normal(loc=mean, scale=std)  # noqa: NPY002
                     new_proc["strength"] = float(sampled_val)
                 else:
                     # Fallback or error for unknown distributions

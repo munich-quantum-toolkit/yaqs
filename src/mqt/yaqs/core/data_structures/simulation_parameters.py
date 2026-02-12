@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 

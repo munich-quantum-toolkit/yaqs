@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+"""Integration tests for noise distribution support."""
+
 from __future__ import annotations
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
@@ -22,7 +24,7 @@ def test_noise_distribution_integration() -> None:
     """
     num_qubits = 2
     # Define Hamiltonian: Ising model
-    H = MPO.ising(num_qubits, J=1.0, g=0.5)
+    hamiltonian = MPO.ising(num_qubits, J=1.0, g=0.5)
 
     # Define noise model with distribution
     processes = [
@@ -47,7 +49,7 @@ def test_noise_distribution_integration() -> None:
     )
 
     # Run simulation
-    run(initial_state, H, sim_params, noise_model)
+    run(initial_state, hamiltonian, sim_params, noise_model)
 
     # If we reached here without error, the integration works (at least doesn't crash)
     assert True

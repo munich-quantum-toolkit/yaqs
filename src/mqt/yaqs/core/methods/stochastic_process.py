@@ -169,7 +169,7 @@ def stochastic_process(
         ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.
     """
     dp = calculate_stochastic_factor(state)
-    if noise_model is None or np.random.random() >= dp:
+    if noise_model is None or np.random.random() >= dp:  # noqa: NPY002
         # No jump occurs; shift the state to canonical form at site 0.
         state.shift_orthogonality_center_left(0)
         return state
@@ -185,7 +185,7 @@ def stochastic_process(
     # Select process by index using probabilities over all processes
     assert len(probabilities) == len(noise_model.processes), "Probabilities and processes must have the same length"
 
-    choice_idx = np.random.choice(len(noise_model.processes), p=probabilities)
+    choice_idx = np.random.choice(len(noise_model.processes), p=probabilities)  # noqa: NPY002
     chosen_process = noise_model.processes[choice_idx]
 
     # Extract information from chosen process
