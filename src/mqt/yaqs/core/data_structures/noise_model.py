@@ -167,12 +167,16 @@ class NoiseModel:
 
         self.processes = filled_processes
 
-    def sample(self) -> NoiseModel:
+    def sample(self, rng: np.random.Generator | int | None = None) -> NoiseModel:
         """Sample a concrete NoiseModel from any distribution-based strengths.
 
         For each process:
             - If 'strength' is a float, it is kept as is.
             - If 'strength' is a dict describing a distribution, a value is sampled.
+
+        Args:
+            rng: The random number generator or seed to use for sampling.
+                 If None, a new generator is created.
 
         Returns:
             NoiseModel: A new NoiseModel instance where all process strengths are concrete floats.
@@ -182,6 +186,7 @@ class NoiseModel:
         Raises:
             ValueError: If an unsupported distribution type is provided.
         """
+        generator = np.random.default_rng(rng)
         new_processes: list[dict[str, Any]] = []
         for proc in self.processes:
             new_proc = copy.deepcopy(proc)
@@ -192,7 +197,7 @@ class NoiseModel:
                 if dist_type == "normal":
                     mean = strength_val.get("mean", 0.0)
                     std = strength_val.get("std", 0.0)
-                    sampled_val = np.random.normal(loc=mean, scale=std)  # noqa: NPY002
+                    sampled_val = generator.normal(loc=mean, scale=std)
                     new_proc["strength"] = float(max(0.0, sampled_val))
                 else:
                     # Fallback or error for unknown distributions

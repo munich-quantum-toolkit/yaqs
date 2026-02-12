@@ -146,6 +146,7 @@ def stochastic_process(
     noise_model: NoiseModel | None,
     dt: float,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    rng: np.random.Generator | None = None,
 ) -> MPS:
     """Perform a stochastic process on the given state, simulating a quantum jump.
 
@@ -161,6 +162,7 @@ def stochastic_process(
         noise_model: The noise model, or None for no jumps.
         dt: The time step for the evolution.
         sim_params: Simulation parameters (for splitting tensors, required for 2-site jumps).
+        rng: The random number generator to use. If None, valid global rng or new generator is used.
 
     Returns:
         MPS: The updated Matrix Product State after the stochastic process.
@@ -168,8 +170,11 @@ def stochastic_process(
     Raises:
         ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.
     """
+    if rng is None:
+        rng = np.random.default_rng()
+
     dp = calculate_stochastic_factor(state)
-    if noise_model is None or np.random.random() >= dp:  # noqa: NPY002
+    if noise_model is None or rng.random() >= dp:
         # No jump occurs; shift the state to canonical form at site 0.
         state.shift_orthogonality_center_left(0)
         return state
@@ -185,7 +190,7 @@ def stochastic_process(
     # Select process by index using probabilities over all processes
     assert len(probabilities) == len(noise_model.processes), "Probabilities and processes must have the same length"
 
-    choice_idx = np.random.choice(len(noise_model.processes), p=probabilities)  # noqa: NPY002
+    choice_idx = rng.choice(len(noise_model.processes), p=probabilities)
     chosen_process = noise_model.processes[choice_idx]
 
     # Extract information from chosen process
