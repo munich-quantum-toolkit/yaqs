@@ -21,7 +21,8 @@ def test_static_noise_strength() -> None:
     """Test that static float strengths are preserved."""
     processes = [{"name": "pauli_x", "sites": [0], "strength": 0.5}]
     nm = NoiseModel(processes)
-    sampled_nm = nm.sample()
+    rng = np.random.default_rng(42)
+    sampled_nm = nm.sample(rng=rng)
     assert len(sampled_nm.processes) == 1
     assert sampled_nm.processes[0]["strength"] == 0.5
 
@@ -120,8 +121,8 @@ def test_truncated_normal_zero_std() -> None:
         }
     ]
     nm = NoiseModel(processes)
-    # No need for specific RNG here as it's deterministic, but good practice
-    sampled_nm = nm.sample()
+    rng = np.random.default_rng(42)
+    sampled_nm = nm.sample(rng=rng)
     assert sampled_nm.processes[0]["strength"] == mean
 
 
