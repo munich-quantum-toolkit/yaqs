@@ -217,12 +217,15 @@ class NoiseModel:
                     sampled_val = generator.lognormal(mean=mean, sigma=std)
                     new_proc["strength"] = float(sampled_val)
                 elif dist_type == "truncated_normal":
-                    # Truncate at 0 (a=0) and +inf (b=inf)
-                    a, b = 0.0, np.inf
-                    a_norm = (a - mean) / std
-                    b_norm = (b - mean) / std
-                    sampled_val = truncnorm.rvs(a_norm, b_norm, loc=mean, scale=std, random_state=generator)
-                    new_proc["strength"] = float(sampled_val)
+                    if std == 0.0:
+                        new_proc["strength"] = float(mean)
+                    else:
+                        # Truncate at 0 (a=0) and +inf (b=inf)
+                        a, b = 0.0, np.inf
+                        a_norm = (a - mean) / std
+                        b_norm = (b - mean) / std
+                        sampled_val = truncnorm.rvs(a_norm, b_norm, loc=mean, scale=std, random_state=generator)
+                        new_proc["strength"] = float(sampled_val)
                 else:
                     # Fallback or error for unknown distributions
                     msg = f"Unsupported distribution type: {dist_type}"

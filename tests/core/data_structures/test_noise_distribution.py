@@ -104,6 +104,22 @@ def test_truncated_normal_sampling() -> None:
     assert np.isclose(np.mean(samples), expected_mean, atol=0.05)
 
 
+def test_truncated_normal_zero_std() -> None:
+    """Test that truncated normal sampling with zero std returns the mean."""
+    mean = 0.5
+    std = 0.0
+    processes = [
+        {
+            "name": "pauli_x",
+            "sites": [0],
+            "strength": {"distribution": "truncated_normal", "mean": mean, "std": std},
+        }
+    ]
+    nm = NoiseModel(processes)
+    sampled_nm = nm.sample()
+    assert sampled_nm.processes[0]["strength"] == mean
+
+
 def test_lognormal_distribution_sampling() -> None:
     """Test sampling from a log-normal distribution."""
     # Parameters for the underlying normal distribution
