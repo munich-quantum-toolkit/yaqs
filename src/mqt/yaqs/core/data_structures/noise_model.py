@@ -214,7 +214,7 @@ class NoiseModel:
         # But `apply_scheduled_jumps` likely uses it if it's a dissipative jump?
         # Wait, scheduled jumps often *are* the operator application, implying strength=1 or implicit.
         # Let's peek at `scheduled_jumps.py`? No, I'll stick to `processes` for now as requested.
-        
+
         return NoiseModel(processes=new_processes, scheduled_jumps=copy.deepcopy(self.scheduled_jumps))
 
     @staticmethod
@@ -233,4 +233,3 @@ class NoiseModel:
 
         operator: BaseGate = operator_class()
         return operator.matrix
-
