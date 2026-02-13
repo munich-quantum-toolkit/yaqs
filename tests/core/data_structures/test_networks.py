@@ -384,11 +384,11 @@ def test_from_matrix()
     """Test that from_matrix() constructs a correct MPO.
 
     This test constructs a dense Bose-Hubbard Hamiltonian and creates an MPO via from_matrix(). This
-    is converted back via to_matrix and is compared to the original. The same is done for a random 
+    is converted back via to_matrix and is compared to the original. The same is done for a random
     matrix at maximal bond dimension.
-    """   
+    """
     length = 5
-    # local dimenstion
+    # local dimension
     d = 3
     H = _bose_hubbard_dense(length,d,.9,.6,.2)
     # exact down to bond dimension 4
