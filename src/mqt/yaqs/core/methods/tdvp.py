@@ -862,7 +862,7 @@ def local_dynamic_tdvp(
     if num_sites != state.length:
         msg = "State and Hamiltonian must have the same length"
         raise ValueError(msg)
-    
+
     if num_sites == 1:
         single_site_tdvp(state, hamiltonian, sim_params)
         return

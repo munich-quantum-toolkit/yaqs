@@ -609,13 +609,14 @@ def _run_analog(
     """
     # Choose integrator order (1 or 2) for the analog TJM backend
     backend: Callable[[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]], NDArray[np.float64]]
-    if sim_params.solver == "Lindblad":
-        backend = lindblad
-    else:
-        backend = analog_tjm_1 if sim_params.order == 1 else analog_tjm_2
+    backend = lindblad if sim_params.solver == "Lindblad" else analog_tjm_1 if sim_params.order == 1 else analog_tjm_2
 
     # If no noise, determinism implies a single trajectory suffices
-    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes) or sim_params.solver == "Lindblad":
+    if (
+        noise_model is None
+        or all(proc["strength"] == 0 for proc in noise_model.processes)
+        or sim_params.solver == "Lindblad"
+    ):
         sim_params.num_traj = 1
     else:
         # With stochastic noise, returning final state is ill-defined
