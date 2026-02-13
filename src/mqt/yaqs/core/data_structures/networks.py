@@ -1921,10 +1921,10 @@ class MPO:
         if not np.isclose(n_float, n):
             raise ValueError(f"Matrix dimension {rows} is not a power of d={d}.")
 
-        M = np.asarray(mat, dtype=np.complex128, order="F")
+        mat = np.asarray(mat, dtype=np.complex128)
 
         left_rank = 1
-        rem = M.reshape(1, rows, cols)
+        rem = mat.reshape(1, rows, cols)
 
         tensors: list[np.ndarray] = []
 
