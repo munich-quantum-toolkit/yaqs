@@ -402,7 +402,7 @@ def test_from_matrix() -> None:
     matrix at maximal bond dimension.
     """
     length = 5
-    # local dimenstion
+    # local dimension
     d = 3
     H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)
     # exact down to bond dimension 4
