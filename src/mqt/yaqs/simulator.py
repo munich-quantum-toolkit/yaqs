@@ -78,6 +78,7 @@ from tqdm import tqdm
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from .analog.lindblad import lindblad
 from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .digital.digital_tjm import digital_tjm
@@ -607,12 +608,14 @@ def _run_analog(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # Choose integrator order (1 or 2) for the analog TJM backend
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]], NDArray[np.float64]] = (
-        analog_tjm_1 if sim_params.order == 1 else analog_tjm_2
-    )
+    backend: Callable[[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]], NDArray[np.float64]]
+    if sim_params.solver == "Lindblad":
+        backend = lindblad
+    else:
+        backend = analog_tjm_1 if sim_params.order == 1 else analog_tjm_2
 
     # If no noise, determinism implies a single trajectory suffices
-    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
+    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes) or sim_params.solver == "Lindblad":
         sim_params.num_traj = 1
     else:
         # With stochastic noise, returning final state is ill-defined

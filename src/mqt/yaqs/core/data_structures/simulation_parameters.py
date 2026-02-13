@@ -191,6 +191,7 @@ class AnalogSimParams:
         get_state: bool = False,
         show_progress: bool = True,
         num_threads: int = 1,
+        solver: str = "TJM",
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -227,8 +228,11 @@ class AnalogSimParams:
         num_threads:
             Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
             Defaults to 1 for efficiency on small/medium bond dimensions.
+        solver:
+            The solver to use for the simulation. Options are "TJM" (default) and "Lindblad".
         """
         self.noise_model: NoiseModel | None = None
+        self.solver = solver
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
