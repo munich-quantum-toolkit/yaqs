@@ -401,16 +401,12 @@ def test_from_matrix() -> None:
     Hmpo = MPO.from_matrix(H, d, 4)
     assert np.allclose(H, Hmpo.to_matrix())
 
-    H = np.random.rand(d**length, d**length) + 1j * np.random.rand(
-        d**length, d ** (length)
-    )
+    H = np.random.rand(d**length, d**length) + 1j * np.random.rand(d**length, d ** (length))
     Hmpo = MPO.from_matrix(H, d, 1000000)
     assert np.allclose(H, Hmpo.to_matrix())
 
     length = 6
-    H = np.random.rand(d**length, d ** (length)) + 1j * np.random.rand(
-        d**length, d ** (length)
-    )
+    H = np.random.rand(d**length, d ** (length)) + 1j * np.random.rand(d**length, d ** (length))
     Hmpo = MPO.from_matrix(H, d, 728)
     assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
 
