@@ -28,12 +28,7 @@ def test_lindblad_amplitude_damping() -> None:
     # Noise: Amplitude Damping
     sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
     gamma = 1.0
-    noise_processes = [{
-        "name": "destroy",
-        "sites": [0],
-        "strength": gamma,
-        "matrix": sigma_minus
-    }]
+    noise_processes = [{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}]
     noise_model = NoiseModel(processes=noise_processes)
 
     t_max = 2.0
@@ -45,7 +40,7 @@ def test_lindblad_amplitude_damping() -> None:
         elapsed_time=t_max,
         dt=dt,
         solver="Lindblad",
-        num_traj=1  # Deterministic
+        num_traj=1,  # Deterministic
     )
 
     run(initial_state, hamiltonian, sim_params, noise_model)
@@ -73,12 +68,7 @@ def test_lindblad_unitary_rabi() -> None:
     dt = 0.05
     obs = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(
-        observables=[obs],
-        elapsed_time=t_max,
-        dt=dt,
-        solver="Lindblad"
-    )
+    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, solver="Lindblad")
 
     run(initial_state, hamiltonian, sim_params, None)
 
@@ -104,12 +94,7 @@ def test_lindblad_dephasing() -> None:
     # Dephasing on qubit 0 (sigma_z)
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
     gamma = 0.5
-    noise_processes = [{
-        "name": "dephasing",
-        "sites": [0],
-        "strength": gamma,
-        "matrix": sigma_z
-    }]
+    noise_processes = [{"name": "dephasing", "sites": [0], "strength": gamma, "matrix": sigma_z}]
 
     noise_model = NoiseModel(processes=noise_processes)
 
@@ -118,12 +103,7 @@ def test_lindblad_dephasing() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    sim_params = AnalogSimParams(
-        observables=[obs0, obs1],
-        elapsed_time=t_max,
-        dt=dt,
-        solver="Lindblad"
-    )
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="Lindblad")
 
     run(initial_state, hamiltonian, sim_params, noise_model)
 
