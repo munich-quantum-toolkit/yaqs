@@ -21,7 +21,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import scipy.sparse as sp
 from scipy.integrate import solve_ivp
 
 if TYPE_CHECKING:
@@ -180,8 +179,6 @@ def lindblad(
 
     # 2. Convert Hamiltonian MPO to dense matrix
     h_mat = hamiltonian.to_matrix()
-    if sp.issparse(h_mat):
-        h_mat = h_mat.toarray()
 
     # 3. Prepare Jump Operators
     jump_ops = []
