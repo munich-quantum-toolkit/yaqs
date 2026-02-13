@@ -120,6 +120,52 @@ def test_lindblad_dephasing() -> None:
     assert np.allclose(x1_sim, x1_exact, atol=1e-4), f"Qubit 1 failed. Max diff: {np.max(np.abs(x1_sim - x1_exact))}"
 
 
+def test_lindblad_dephasing_both_qubits() -> None:
+    """Test 2-qubit system with dephasing on both qubits (multiple jump operators).
+
+    This test exposes potential anti-commutator over-counting bugs when
+    multiple jump operators are present. Both qubits should decay identically.
+    """
+    n_sites = 2
+    initial_state = MPS(n_sites, state="x+")  # |++> = (|0>+|1>)(|0>+|1>)/2
+
+    hamiltonian = MPO()
+    hamiltonian.identity(n_sites)
+    for i in range(len(hamiltonian.tensors)):
+        hamiltonian.tensors[i] *= 0.0
+
+    # Dephasing on BOTH qubits with the same gamma and sigma_z
+    sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
+    gamma = 0.5
+    noise_processes = [
+        {"name": "dephasing_0", "sites": [0], "strength": gamma, "matrix": sigma_z},
+        {"name": "dephasing_1", "sites": [1], "strength": gamma, "matrix": sigma_z},
+    ]
+
+    noise_model = NoiseModel(processes=noise_processes)
+
+    t_max = 2.0
+    dt = 0.05
+    obs0 = Observable("x", sites=[0])
+    obs1 = Observable("x", sites=[1])
+
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="Lindblad")
+
+    run(initial_state, hamiltonian, sim_params, noise_model)
+
+    times = sim_params.times
+    x0_sim = obs0.results
+    x1_sim = obs1.results
+    assert x0_sim is not None
+    assert x1_sim is not None
+
+    # Both qubits should decay identically
+    x_exact = np.exp(-2 * gamma * times)
+
+    assert np.allclose(x0_sim, x_exact, atol=1e-4), f"Qubit 0 failed. Max diff: {np.max(np.abs(x0_sim - x_exact))}"
+    assert np.allclose(x1_sim, x_exact, atol=1e-4), f"Qubit 1 failed. Max diff: {np.max(np.abs(x1_sim - x_exact))}"
+
+
 def test_lindblad_system_size_error() -> None:
     """Test that Lindblad solver raises error for large systems."""
     n_sites = 11

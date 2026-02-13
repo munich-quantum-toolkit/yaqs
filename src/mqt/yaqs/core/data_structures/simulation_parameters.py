@@ -89,8 +89,14 @@ class Observable:
                 gate = GateLibrary.entropy()
             elif gate == "schmidt_spectrum":
                 gate = GateLibrary.schmidt_spectrum()
+            elif gate == "pvm":
+                gate = GateLibrary.pvm(gate)
             elif hasattr(GateLibrary, gate):
-                gate = getattr(GateLibrary, gate)()
+                attr = getattr(GateLibrary, gate)
+                try:
+                    gate = attr()
+                except TypeError:
+                    gate = GateLibrary.pvm(gate)
             else:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
@@ -232,8 +238,14 @@ class AnalogSimParams:
             Defaults to 1 for efficiency on small/medium bond dimensions.
         solver:
             The solver to use for the simulation. Options are "TJM" (default) and "Lindblad".
+
+        Raises:
+            ValueError: If the solver is not "TJM" or "Lindblad".
         """
         self.noise_model: NoiseModel | None = None
+        if solver not in {"TJM", "Lindblad"}:
+            msg = f"Invalid solver '{solver}'. Allowed values are 'TJM' or 'Lindblad'."
+            raise ValueError(msg)
         self.solver = solver
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (

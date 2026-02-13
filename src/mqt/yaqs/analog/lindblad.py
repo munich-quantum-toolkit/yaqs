@@ -168,14 +168,20 @@ def lindblad(
 
     Raises:
         ValueError: If the system size is too large for the exact Lindblad solver.
+        RuntimeError: If the Lindblad integration fails.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
+
+    # Check dimensions
+    num_sites = initial_state.length
+    dim = 2**num_sites
+    if num_sites > 10:
+        msg = f"System size too large for exact Lindblad solver (N={num_sites}, dim={dim})."
+        raise ValueError(msg)
 
     # 1. Initial State to Rho
     psi = initial_state.to_vec()
     rho_initial = np.outer(psi, psi.conj())
-    dim = rho_initial.shape[0]
-    num_sites = initial_state.length
 
     # 2. Convert Hamiltonian MPO to dense matrix
     h_mat = hamiltonian.to_matrix()
@@ -208,12 +214,7 @@ def lindblad(
     t_span = (0, t_end)
     t_eval = sim_params.times
 
-    # Check dimensions
-    if num_sites > 10:
-        msg = f"System size too large for exact Lindblad solver (N={num_sites}, dim={dim})."
-        raise ValueError(msg)
-
-    def lindblad_rhs(rho_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    def lindblad_rhs(_t: float, rho_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
         rho = rho_flat.reshape((dim, dim))
 
         # Unitary part: -i [H, rho]
@@ -221,13 +222,15 @@ def lindblad(
         drho = -1j * (h_mat @ rho - rho @ h_mat)
 
         # Dissipative part
+        # 1. Accumulate sum( L rho L+ )
         for l_op in jump_ops:
             l_dag = l_op.conj().T
-            # L rho L+
-            term1 = l_op @ rho @ l_dag
-            # - 0.5 {L+ L, rho}
-            term2 = 0.5 * (l_dag_l_sum @ rho + rho @ l_dag_l_sum)
-            drho += term1 - term2
+            drho += l_op @ rho @ l_dag
+
+        # 2. Subtract anti-commutator term once: - 0.5 { sum(L+ L), rho }
+        # Note: l_dag_l_sum = sum( L+ L ) was precomputed outside
+        ac_term = 0.5 * (l_dag_l_sum @ rho + rho @ l_dag_l_sum)
+        drho -= ac_term
 
         return drho.flatten()
 
@@ -240,6 +243,13 @@ def lindblad(
         rtol=sim_params.threshold,
         atol=sim_params.threshold * 1e-2,
     )
+
+    if not result.success:
+        msg = (
+            f"Lindblad integration failed: {result.message} "
+            f"(rtol={sim_params.threshold}, atol={sim_params.threshold * 1e-2}, t_span={t_span})"
+        )
+        raise RuntimeError(msg)
 
     # 6. Compute Observables
     # result.y has shape (dim^2, num_time_points)
