@@ -399,19 +399,28 @@ def test_from_matrix() -> None:
 
     This test constructs a dense Bose-Hubbard Hamiltonian and creates an MPO via from_matrix(). This
     is converted back via to_matrix and is compared to the original. The same is done for a random
-    matrix at maximal bond dimension.
+    matrix at maximal bond dimension and close-to maximal bond dimension.
     """
     length = 5
     # local dimension
     d = 3
     H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)
     # exact down to bond dimension 4
-    Hmpo = MPO.from_matrix(H, d, d, 4)
+    Hmpo = MPO.from_matrix(H, d, 4)
     assert np.allclose(H, Hmpo.to_matrix())
 
-    H = np.random.rand(d**length, d**length)
-    Hmpo = MPO.from_matrix(H, d, d, 1000000)
+    H = np.random.rand(d**length, d**length) + 1j * np.random.rand(
+        d**length, d ** (length)
+    )
+    Hmpo = MPO.from_matrix(H, d, 1000000)
     assert np.allclose(H, Hmpo.to_matrix())
+
+    length = 6
+    H = np.random.rand(d**length, d ** (length)) + 1j * np.random.rand(
+        d**length, d ** (length)
+    )
+    Hmpo = MPO.from_matrix(H, d, 728)
+    assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
 
 
 def test_to_mps() -> None:
