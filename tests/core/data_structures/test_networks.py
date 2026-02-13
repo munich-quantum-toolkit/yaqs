@@ -380,6 +380,24 @@ def test_custom() -> None:
         assert original.shape == created.shape
         assert np.allclose(original, created)
 
+def test_from_matrix()
+    """Test that from_matrix() constructs a correct MPO.
+
+    This test constructs a dense Bose-Hubbard Hamiltonian and creates an MPO via from_matrix(). This
+    is converted back via to_matrix and is compared to the original. The same is done for a random 
+    matrix at maximal bond dimension.
+    """   
+    length = 5
+    # local dimenstion
+    d = 3
+    H = _bose_hubbard_dense(length,d,.9,.6,.2)
+    # exact down to bond dimension 4
+    Hmpo = MPO.from_matrix(H,d,d,4)
+    assert np.allclose(H, Hmpo.to_matrix())
+
+    H=np.random.rand(d**length,d**length)
+    Hmpo = MPO.from_matrix(H,d,d,1000000)
+    assert np.allclose(H, Hmpo.to_matrix())
 
 def test_to_mps() -> None:
     """Test converting an MPO to an MPS.
