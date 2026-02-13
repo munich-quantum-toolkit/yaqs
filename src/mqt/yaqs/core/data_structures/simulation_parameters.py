@@ -89,6 +89,8 @@ class Observable:
                 gate = GateLibrary.entropy()
             elif gate == "schmidt_spectrum":
                 gate = GateLibrary.schmidt_spectrum()
+            elif hasattr(GateLibrary, gate):
+                gate = getattr(GateLibrary, gate)()
             else:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
