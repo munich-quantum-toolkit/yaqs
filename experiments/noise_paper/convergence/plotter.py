@@ -136,21 +136,25 @@ def load_grid_N_req(target_error: float = 0.02, obs_index: int = 0):
 # Plotting
 # -------------------------
 def plot_heatmaps(N1, N2, target_error):
-    # Setup
+    # Setup styling
     plt.rcParams.update({
         "font.size": 10,
-        "axes.titlesize": 11,
+        "axes.titlesize": 13,
         "axes.labelsize": 11,
-        "xtick.labelsize": 9,
-        "ytick.labelsize": 9
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+        "font.family": "sans-serif",
     })
     
-    fig = plt.figure(figsize=(10.5, 2.6))
+    # Figure geometry
+    fig = plt.figure(figsize=(12, 3.5))
     gs = fig.add_gridspec(
         1, 6,
-        left=0.06, right=0.92, bottom=0.18, top=0.88,
-        width_ratios=[1.0, 1.0, 0.03, 0.12, 1.0, 0.03], 
-        wspace=0.08
+        left=0.08, right=0.92, bottom=0.2, top=0.82,
+        width_ratios=[1.0, 1.0, 0.04, 0.15, 1.0, 0.04], 
+        wspace=0.15
     )
     
     ax_u1 = fig.add_subplot(gs[0, 0])
@@ -160,116 +164,132 @@ def plot_heatmaps(N1, N2, target_error):
     ax_al = fig.add_subplot(gs[0, 4])
     cax_al = fig.add_subplot(gs[0, 5])
     
-    # Grid edges
-    dt_edges = np.arange(len(dt_list) + 1, dtype=float) - 0.5
-    g_edges = np.arange(len(gamma_list) + 1, dtype=float) - 0.5
-    dt_centers = np.arange(len(dt_list), dtype=float)
-    g_centers = np.arange(len(gamma_list), dtype=float)
+    # Calculate log-edges for pcolormesh
+    def get_log_edges(centers):
+        centers = np.asarray(centers)
+        log_c = np.log10(centers)
+        d_log = np.diff(log_c)
+        edges_log = np.concatenate([
+            [log_c[0] - d_log[0]/2],
+            log_c[:-1] + d_log/2,
+            [log_c[-1] + d_log[-1]/2]
+        ])
+        return 10**edges_log
+
+    dt_edges = get_log_edges(dt_list)
+    g_edges = get_log_edges(gamma_list)
     
     # 1. N required heatmaps
-    # Shared norm
-    vmin = min(np.nanmin(N1), np.nanmin(N2))
+    vmin = max(1, min(np.nanmin(N1), np.nanmin(N2)))
     vmax = max(np.nanmax(N1), np.nanmax(N2))
-    # LogNorm for N? N varies from 1 to 1000.
-    norm_n = LogNorm(vmin=max(vmin, 1), vmax=vmax)
+    norm_n = LogNorm(vmin=vmin, vmax=vmax)
+    cmap_n = "viridis_r"
     
-    cmap_n = "viridis_r" # Less N is better -> brighter/better color? Or standard?
-    # Usually dark is low, bright is high.
-    # If using viridis_r: Yellow (low N, good) -> Purple (high N, bad)
+    pc_opts = dict(shading="flat", edgecolors="white", linewidths=0.2, alpha=0.95)
     
-    m1 = ax_u1.pcolormesh(dt_edges, g_edges, N1, cmap=cmap_n, norm=norm_n, shading="auto")
-    m2 = ax_u2.pcolormesh(dt_edges, g_edges, N2, cmap=cmap_n, norm=norm_n, shading="auto")
+    m1 = ax_u1.pcolormesh(dt_edges, g_edges, N1, cmap=cmap_n, norm=norm_n, **pc_opts)
+    m2 = ax_u2.pcolormesh(dt_edges, g_edges, N2, cmap=cmap_n, norm=norm_n, **pc_opts)
     
-    # 2. Kappa (N2 / N1) - wait, user said N_B / N_A. U2 is B.
+    # 2. Kappa heatmap
     Kappa = N2 / N1
-    
-    # Kappa norm
-    # typically kappa > 1 means B is worse (needs more traj).
-    # kappa < 1 means B is better.
-    # Let's center around 1? or just linear/log?
-    # Usually we look for improvement.
     k_min, k_max = np.nanmin(Kappa), np.nanmax(Kappa)
-    norm_k = Normalize(vmin=1, vmax=10) # Adjust based on data
     
-    # Diagnostics
-    total_points = Kappa.size
-    nan_count = np.count_nonzero(np.isnan(Kappa))
-    print(f"Kappa Stats:")
-    print(f"  Mean:   {np.nanmean(Kappa):.3f}")
-    print(f"  Median: {np.nanmedian(Kappa):.3f}")
-    print(f"  Range:  [{k_min:.3f}, {k_max:.3f}]")
-    print(f"  NaNs:   {nan_count} / {total_points} ({100*nan_count/total_points:.1f}%)")
-    print(f"  (Note: NaNs are likely from Stability Skip dt*gamma > 1 or convergence failures)")
-    
+    # Decide norm for Kappa: Log if span > 5
+    if k_max / max(k_min, 1e-3) > 5:
+        norm_k = LogNorm(vmin=1, vmax=max(10, k_max))
+    else:
+        norm_k = Normalize(vmin=1, vmax=max(5, k_max))
+        
     cmap_k = plt.get_cmap("RdBu_r").copy()
     cmap_k.set_under("black")
-    m3 = ax_al.pcolormesh(dt_edges, g_edges, Kappa, cmap=cmap_k, norm=norm_k, shading="auto")
-    # Red = High Kappa (B needs more = A better). Blue = Low Kappa (B needs less = B better). 
-    # Or cividis like practical?
-    # user said "alpha plot... what we call a kappa plot".
-    # practical.py used cividis.
     
-    # Labels
-    tick_idx = np.arange(len(dt_list))
-    tick_labels = [f"{x:g}" for x in dt_list]
+    m3 = ax_al.pcolormesh(dt_edges, g_edges, Kappa, cmap=cmap_k, norm=norm_k, **pc_opts)
+    
+    # Shared Axis configuration
+    from matplotlib.ticker import FixedLocator, FixedFormatter
+    dt_loc = FixedLocator(dt_list)
+    dt_fmt = FixedFormatter([f"{x:g}" for x in dt_list])
+    g_loc = FixedLocator(gamma_list)
+    g_fmt = FixedFormatter([f"{x:g}" for x in gamma_list])
     
     for ax in (ax_u1, ax_u2, ax_al):
-        ax.set_xticks(tick_idx)
-        ax.set_xticklabels(tick_labels)
-        ax.set_xlabel(r"$\delta t$")
-        ax.set_ylim(-0.5, len(gamma_list)-0.5)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.xaxis.set_major_locator(dt_loc)
+        ax.xaxis.set_major_formatter(dt_fmt)
+        ax.set_xlabel(r"Time step $\delta t$")
+        ax.tick_params(axis='x', rotation=30)
         
-    # Y labels
-    g_tick_idx = np.arange(len(gamma_list))
-    g_tick_labels = [f"{x:g}" for x in gamma_list]
-    ax_u1.set_yticks(g_tick_idx)
-    ax_u1.set_yticklabels(g_tick_labels)
-    ax_u1.set_ylabel(r"$\gamma$")
+    ax_u1.yaxis.set_major_locator(g_loc)
+    ax_u1.yaxis.set_major_formatter(g_fmt)
+    ax_u1.set_ylabel(r"Stength $\gamma$")
     
     ax_u2.tick_params(labelleft=False)
-    ax_al.tick_params(labelleft=False)
+    ax_al.yaxis.set_major_locator(g_loc)
+    ax_al.yaxis.set_major_formatter(g_fmt)
+    ax_al.set_ylabel(r"$\gamma$")
     
     # Titles
     ax_u1.set_title("Unraveling A")
     ax_u2.set_title("Unraveling B")
-    
-    mean_k = np.nanmean(Kappa)
-    var_k = np.nanvar(Kappa)
-    ax_al.set_title(rf"$\mu={mean_k:.2f}, \sigma={np.sqrt(var_k):.2f}$")
+    ax_al.set_title("Sampling Inflation")
 
     # Colorbars
-    fig.colorbar(m1, cax=cax_n)
-    cax_n.set_title("N", pad=5)
-    fig.colorbar(m3, cax=cax_al, extend="min")
-    cax_al.set_title(r"$\kappa$", pad=5)
+    cb1 = fig.colorbar(m1, cax=cax_n)
+    cax_n.set_title(rf"$N$ ($\epsilon={target_error}$)", pad=8, fontsize=10)
     
-    # DP lines
-    def add_dp_lines(ax):
-        logg = np.log(g)
-        dt_dense = np.linspace(dt.min(), dt.max(), 100)
-        x_dense = np.interp(dt_dense, dt, dt_centers)
-        
+    cb3 = fig.colorbar(m3, cax=cax_al, extend="min")
+    cax_al.set_title(r"$\kappa = N_B / N_A$", pad=8, fontsize=10)
+    
+    # Stats box for Kappa
+    mean_k = np.nanmean(Kappa)
+    std_k = np.nanstd(Kappa)
+    stats_text = rf"$\mu_\kappa = {mean_k:.2f}$"+"\n"+rf"$\sigma_\kappa = {std_k:.2f}$"
+    ax_al.text(0.05, 0.95, stats_text, transform=ax_al.transAxes, 
+               verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='none'))
+
+    # DP lines & Contours
+    def add_dp_lines(ax, annotate=False):
+        dt_fine = np.logspace(np.log10(min(dt_list)), np.log10(max(dt_list)), 100)
         for dp in dp_levels:
-            gamma_dense = dp / dt_dense
-            # Filter range
-            mask = (gamma_dense >= np.min(g)) & (gamma_dense <= np.max(g))
-            if not np.any(mask): continue
+            g_fine = dp / dt_fine
+            mask = (g_fine >= min(gamma_list)) & (g_fine <= max(gamma_list))
+            if np.any(mask):
+                line, = ax.plot(dt_fine[mask], g_fine[mask], "k--", lw=1.2, alpha=0.8, zorder=5)
+                if annotate and dp == 0.01:
+                    # Place label at middle of visible segment
+                    idx = np.where(mask)[0][len(np.where(mask)[0])//2]
+                    ax.text(dt_fine[idx], g_fine[idx], rf"$\delta p = {dp:g}$", 
+                            fontsize=8, rotation=-40, ha='center', va='bottom',
+                            path_effects=[pe.withStroke(linewidth=2, foreground="white")])
             
-            y_dense = np.interp(np.log(gamma_dense[mask]), logg, g_centers)
-            ax.plot(x_dense[mask], y_dense, "k--", lw=0.8, alpha=0.7)
-            
-    for ax in (ax_u1, ax_u2):
-        add_dp_lines(ax)
+    for ax in (ax_u1, ax_u2, ax_al):
+        add_dp_lines(ax, annotate=(ax==ax_u1))
         
-    plt.savefig("convergence_heatmap.pdf", dpi=300)
+    fig.suptitle(rf"Fixed-accuracy sampling cost maps: required trajectories to reach error $\epsilon={target_error}$", 
+                 y=0.98, fontsize=11, fontweight='bold')
+    
+    plt.savefig("convergence_heatmap.pdf", dpi=300, bbox_inches="tight")
+    plt.savefig("convergence_heatmap.png", dpi=300, bbox_inches="tight")
     plt.show()
 
 if __name__ == "__main__":
-    target_err = 0.05 # Example target error
+    target_err = 0.04 # Match user requested epsilon
     N1, N2 = load_grid_N_req(target_error=target_err)
     
     # Check if we have data
     if np.all(np.isnan(N1)):
         print("No data found or all NaNs. Run convergence.py first.")
     else:
+        # Diagnostics
+        Kappa = N2 / N1
+        total_points = Kappa.size
+        nan_count = np.count_nonzero(np.isnan(Kappa))
+        print(f"Kappa Stats:")
+        print(f"  Mean:   {np.nanmean(Kappa):.3f}")
+        print(f"  Median: {np.nanmedian(Kappa):.3f}")
+        print(f"  Range:  [{np.nanmin(Kappa):.3f}, {np.nanmax(Kappa):.3f}]")
+        print(f"  NaNs:   {nan_count} / {total_points} ({100*nan_count/total_points:.1f}%)")
+        
         plot_heatmaps(N1, N2, target_err)
+
