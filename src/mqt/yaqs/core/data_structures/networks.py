@@ -1738,7 +1738,10 @@ class MPO:
             MPS: An MPS object containing the reshaped tensors.
         """
         converted_tensors: list[NDArray[np.complex128]] = [
-            np.reshape(tensor, (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]))
+            np.reshape(
+                tensor,
+                (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]),
+            )
             for tensor in self.tensors
         ]
 
@@ -1760,11 +1763,109 @@ class MPO:
         for tensor in self.tensors[1:]:
             mat = oe.contract("abcd, efdg->aebfcg", mat, tensor)
             mat = np.reshape(
-                mat, (mat.shape[0] * mat.shape[1], mat.shape[2] * mat.shape[3], mat.shape[4], mat.shape[5])
+                mat,
+                (
+                    mat.shape[0] * mat.shape[1],
+                    mat.shape[2] * mat.shape[3],
+                    mat.shape[4],
+                    mat.shape[5],
+                ),
             )
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
+
+    @classmethod
+    def from_matrix(
+        cls,
+        mat: np.ndarray,
+        d: int,
+        max_bond: int | None = None,
+        cutoff: float = 0.0,
+    ) -> MPO:
+        """Factorize a dense matrix into an MPO with uniform local dimension d.
+
+        Each site has shape (d, d). The number of sites n is inferred from
+
+            mat.shape = (d**n, d**n)
+
+        Parameters
+        ----------
+        mat : np.ndarray
+            Square matrix of shape (d**n, d**n).
+        d : int
+            Physical dimension per site.
+        max_bond : Optional[int]
+            Max bond dimension.
+        cutoff : float
+            Singular values <= cutoff are discarded.
+        """
+        rows, cols = mat.shape
+
+        if rows != cols:
+            msg = "Matrix must be square for uniform MPO factorization."
+            raise ValueError(msg)
+
+        # --- infer chain length ---
+        n_float = np.log(rows) / np.log(d)
+        n = round(n_float)
+
+        if not np.isclose(n_float, n):
+            msg = f"Matrix dimension {rows} is not a power of d={d}."
+            raise ValueError(msg)
+
+        mat = np.asarray(mat, dtype=np.complex128)
+
+        left_rank = 1
+        rem = mat.reshape(1, rows, cols)
+
+        tensors: list[np.ndarray] = []
+
+        def _truncate(s: np.ndarray) -> int:
+            r = s.size
+            if cutoff > 0.0:
+                r = max(int(np.sum(s > cutoff)), 1)
+            if max_bond is not None:
+                r = min(r, max_bond)
+            return r
+
+        # SVD sweep
+        for k in range(n - 1):
+            rest = d ** (n - k - 1)
+
+            rem = rem.reshape(left_rank, d, rest, d, rest)
+
+            rem_perm = np.transpose(rem, (1, 3, 0, 2, 4))
+            X = rem_perm.reshape(d * d * left_rank, rest * rest)
+
+            U, s, Vh = np.linalg.svd(X, full_matrices=False)
+
+            r_keep = _truncate(s)
+
+            U = U[:, :r_keep]
+            s = s[:r_keep]
+            Vh = Vh[:r_keep, :]
+
+            T_k = U.reshape(d, d, left_rank, r_keep)
+            tensors.append(T_k)
+
+            rem = (s[:, None] * Vh).reshape(r_keep, rest, rest)
+            left_rank = r_keep
+
+        # last site
+        rem = rem.reshape(left_rank, d, d)
+
+        T_last = np.transpose(rem, (1, 2, 0)).reshape(d, d, left_rank, 1)
+        tensors.append(T_last)
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = n
+        mpo.physical_dimension = d
+
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+
+        return mpo
 
     def check_if_valid_mpo(self) -> bool:
         """MPO validity check.

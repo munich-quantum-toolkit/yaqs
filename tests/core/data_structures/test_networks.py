@@ -204,7 +204,9 @@ def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex1
 
 
 def crandn(
-    size: int | tuple[int, ...], *args: int, seed: np.random.Generator | int | None = None
+    size: int | tuple[int, ...],
+    *args: int,
+    seed: np.random.Generator | int | None = None,
 ) -> NDArray[np.complex128]:
     """Draw random samples from the standard complex normal distribution.
 
@@ -222,7 +224,10 @@ def crandn(
         size = (size,)
     rng = np.random.default_rng(seed)
     # 1 / sqrt(2) is a normalization factor
-    return np.asarray((rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2), dtype=np.complex128)
+    return np.asarray(
+        (rng.standard_normal(size) + 1j * rng.standard_normal(size)) / np.sqrt(2),
+        dtype=np.complex128,
+    )
 
 
 def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) -> MPS:
@@ -381,6 +386,31 @@ def test_custom() -> None:
         assert np.allclose(original, created)
 
 
+def test_from_matrix() -> None:
+    """Test that from_matrix() constructs a correct MPO.
+
+    This test constructs a dense Bose-Hubbard Hamiltonian and creates an MPO via from_matrix(). This
+    is converted back via to_matrix and is compared to the original. The same is done for a random
+    matrix at maximal bond dimension and close-to maximal bond dimension.
+    """
+    length = 5
+    # local dimension
+    d = 3
+    H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)
+    # exact down to bond dimension 4
+    Hmpo = MPO.from_matrix(H, d, 4)
+    assert np.allclose(H, Hmpo.to_matrix())
+
+    H = np.random.rand(d**length, d**length) + 1j * np.random.rand(d**length, d ** (length))
+    Hmpo = MPO.from_matrix(H, d, 1000000)
+    assert np.allclose(H, Hmpo.to_matrix())
+
+    length = 6
+    H = np.random.rand(d**length, d ** (length)) + 1j * np.random.rand(d**length, d ** (length))
+    Hmpo = MPO.from_matrix(H, d, 728)
+    assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
+
+
 def test_to_mps() -> None:
     """Test converting an MPO to an MPS.
 
@@ -431,7 +461,12 @@ def test_rotate() -> None:
 
     mpo.rotate(conjugate=False)
     for orig, rotated in zip(original_tensors, mpo.tensors, strict=False):
-        assert rotated.shape == (orig.shape[1], orig.shape[0], orig.shape[2], orig.shape[3])
+        assert rotated.shape == (
+            orig.shape[1],
+            orig.shape[0],
+            orig.shape[2],
+            orig.shape[3],
+        )
         np.testing.assert_allclose(rotated, np.transpose(orig, (1, 0, 2, 3)))
 
     mpo.rotate(conjugate=True)
@@ -474,7 +509,12 @@ def test_mps_initialization(state: str) -> None:
     basis_string = "1001"
 
     if state == "basis":
-        mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state, basis_string=basis_string)
+        mps = MPS(
+            length=length,
+            physical_dimensions=[pdim] * length,
+            state=state,
+            basis_string=basis_string,
+        )
     else:
         mps = MPS(length=length, physical_dimensions=[pdim] * length, state=state)
 
@@ -552,12 +592,20 @@ def test_flip_network() -> None:
     t2 = rng.random(size=(pdim, 2, 2)).astype(np.complex128)
     t3 = rng.random(size=(pdim, 2, 1)).astype(np.complex128)
     original_tensors = [t1, t2, t3]
-    mps = MPS(length, tensors=copy.deepcopy(original_tensors), physical_dimensions=[pdim] * length)
+    mps = MPS(
+        length,
+        tensors=copy.deepcopy(original_tensors),
+        physical_dimensions=[pdim] * length,
+    )
 
     mps.flip_network()
     flipped_tensors = mps.tensors
     assert len(flipped_tensors) == length
-    assert flipped_tensors[0].shape == (pdim, original_tensors[2].shape[2], original_tensors[2].shape[1])
+    assert flipped_tensors[0].shape == (
+        pdim,
+        original_tensors[2].shape[2],
+        original_tensors[2].shape[1],
+    )
     mps.flip_network()
     for orig, now in zip(original_tensors, mps.tensors, strict=False):
         assert np.allclose(orig, now)
@@ -870,7 +918,9 @@ def test_convert_to_vector_fidelity() -> None:
 
     # Define the simulation parameters
     sim_params = StrongSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)], get_state=True, show_progress=False
+        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        get_state=True,
+        show_progress=False,
     )
     simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
@@ -894,7 +944,9 @@ def test_convert_to_vector_fidelity_long_range() -> None:
 
     # Define the simulation parameters
     sim_params = StrongSimParams(
-        observables=[Observable(Z(), site) for site in range(num_qubits)], get_state=True, show_progress=False
+        observables=[Observable(Z(), site) for site in range(num_qubits)],
+        get_state=True,
+        show_progress=False,
     )
     simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
@@ -1243,7 +1295,10 @@ def test_evaluate_observables_meta_validation_errors() -> None:
 
     # Wrong length (entropy expects exactly two adjacent indices)
     sim_bad_len = AnalogSimParams(
-        [Observable(GateLibrary.entropy(), [1])], elapsed_time=0.1, dt=0.1, show_progress=False
+        [Observable(GateLibrary.entropy(), [1])],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
     )
     results_len = np.empty((1, 1), dtype=np.float64)
     with pytest.raises(AssertionError):
@@ -1251,7 +1306,10 @@ def test_evaluate_observables_meta_validation_errors() -> None:
 
     # Non-adjacent Schmidt cut
     sim_non_adj = AnalogSimParams(
-        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])], elapsed_time=0.1, dt=0.1, show_progress=False
+        [Observable(GateLibrary.schmidt_spectrum(), [0, 2])],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
     )
     results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
@@ -1322,7 +1380,9 @@ def test_from_pauli_sum_raises_on_nonpositive_length() -> None:
         mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=-5)
 
 
-def test_from_pauli_sum_raises_on_site_index_out_of_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_from_pauli_sum_raises_on_site_index_out_of_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Pauli-sum MPO validation: parsed site indices outside [0, L-1] must raise."""
     mpo = MPO()
 
@@ -1333,7 +1393,9 @@ def test_from_pauli_sum_raises_on_site_index_out_of_bounds(monkeypatch: pytest.M
         mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=4)
 
 
-def test_from_pauli_sum_raises_on_invalid_local_op_label(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_from_pauli_sum_raises_on_invalid_local_op_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Pauli-sum MPO validation: parsed local operator labels must be in _VALID."""
     mpo = MPO()
 
@@ -1367,14 +1429,22 @@ def test_compress_raises_on_invalid_directions() -> None:
     """MPO compress input validation: invalid sweep schedule strings must raise."""
     mpo = MPO()
     mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex)]
-    with pytest.raises(ValueError, match=r"directions must be one of \{'lr', 'rl', 'lr_rl', 'rl_lr'\}\."):
+    with pytest.raises(
+        ValueError,
+        match=r"directions must be one of \{'lr', 'rl', 'lr_rl', 'rl_lr'\}\.",
+    ):
         mpo.compress(directions="lr,rl")
 
 
-def test_compress_n_sweeps_zero_returns_without_calling_sweeps(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compress_n_sweeps_zero_returns_without_calling_sweeps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """MPO compress control flow: n_sweeps=0 must return without invoking sweeps."""
     mpo = MPO()
-    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex), np.zeros((2, 2, 1, 1), dtype=complex)]
+    mpo.tensors = [
+        np.zeros((2, 2, 1, 1), dtype=complex),
+        np.zeros((2, 2, 1, 1), dtype=complex),
+    ]
 
     called = False
 
@@ -1393,7 +1463,10 @@ def test_compress_n_sweeps_zero_returns_without_calling_sweeps(monkeypatch: pyte
 def test_compress_one_sweep_raises_on_invalid_direction() -> None:
     """MPO _compress_one_sweep input validation: direction must be 'lr' or 'rl'."""
     mpo = MPO()
-    mpo.tensors = [np.zeros((2, 2, 1, 1), dtype=complex), np.zeros((2, 2, 1, 1), dtype=complex)]
+    mpo.tensors = [
+        np.zeros((2, 2, 1, 1), dtype=complex),
+        np.zeros((2, 2, 1, 1), dtype=complex),
+    ]
     with pytest.raises(ValueError, match=r"direction must be 'lr' or 'rl'\."):
         mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)  # noqa: SLF001
 
