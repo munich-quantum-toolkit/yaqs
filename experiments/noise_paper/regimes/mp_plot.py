@@ -219,12 +219,12 @@ if __name__ == "__main__":
     L = 1024
     chi_B = 256
     bytes_per_complex = 16 # Could also be 8
-    overhead = 2.0
+    overhead = 1.0
     M_B_gb = overhead * (L * chi_B**2 * bytes_per_complex) / 1e9
 
     plot_m_P_decision_map_prx(
-        alpha=1.5,
-        kappa=5.0,
+        alpha=1.45,
+        kappa=3.19,
         m_range=(0.5, 1e3),
         P_range=(1, 68),
         M_B_gb=M_B_gb,
