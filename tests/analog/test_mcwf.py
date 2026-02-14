@@ -138,6 +138,7 @@ def test_mcwf_dephasing() -> None:
     assert np.all(np.abs(x0_sim - x0_exact) < 0.25), f"Qubit 0 failed. Max diff: {np.max(np.abs(x0_sim - x0_exact))}"
     assert np.all(np.abs(x1_sim - x1_exact) < 0.05), f"Qubit 1 failed. Max diff: {np.max(np.abs(x1_sim - x1_exact))}"
 
+
 def test_mcwf_zero_strength_noise() -> None:
     """Test MCWF with zero strength noise process (should be ignored)."""
     n_sites = 2
@@ -145,12 +146,13 @@ def test_mcwf_zero_strength_noise() -> None:
     h = MPO.ising(n_sites, J=1.0, g=1.0)
     # Define noise with 0 strength
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
-    
+
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="MCWF", observables=[Observable("z", sites=[0])])
-    
+
     # Preprocess should not add any jump ops
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
     assert len(ctx.jump_ops) == 0
+
 
 def test_mcwf_system_size_limit() -> None:
     """Test that MCWF raises ValueError for system size > 27."""
@@ -158,35 +160,31 @@ def test_mcwf_system_size_limit() -> None:
     psi = MPS(n_sites)
     h = MPO.ising(n_sites, J=1.0, g=1.0)
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=1.0, observables=[Observable("z", sites=[0])])
-    
+
     with pytest.raises(ValueError, match="System size too large"):
         preprocess_mcwf(psi, h, None, sim_params)
+
 
 def test_mcwf_diagnostic_observables() -> None:
     """Test that diagnostic observables are handled (converted to None/0.0) in MCWF."""
     n_sites = 2
     psi = MPS(n_sites)
     h = MPO.ising(n_sites, J=1.0, g=1.0)
-    
+
     # "runtime_cost" is a special diagnostic observable name
     obs_diag = Observable("runtime_cost", sites=[])
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
-    
-    sim_params = AnalogSimParams(
-        dt=0.1, 
-        elapsed_time=0.1, 
-        solver="MCWF", 
-        observables=[obs_diag, obs_real]
-    )
-    
+
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="MCWF", observables=[obs_diag, obs_real])
+
     # MCWF Preprocess
     ctx = preprocess_mcwf(psi, h, None, sim_params)
-    
+
     # Check that we have one None and one array in embedded_observables
     assert any(op is None for op in ctx.embedded_observables)
     assert any(op is not None for op in ctx.embedded_observables)
-    
+
     # Identify the index of the diagnostic observable
     diag_idx = -1
     for i, obs in enumerate(sim_params.sorted_observables):
@@ -195,7 +193,7 @@ def test_mcwf_diagnostic_observables() -> None:
             break
     assert diag_idx != -1
     assert ctx.embedded_observables[diag_idx] is None
-    
+
     # Run MCWF
     res_mcwf = mcwf((0, ctx))
     # Result for diagnostic should be 0.0
