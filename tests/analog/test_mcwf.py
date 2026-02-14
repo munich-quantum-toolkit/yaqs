@@ -158,7 +158,7 @@ def test_mcwf_zero_strength_noise() -> None:
 
 def test_mcwf_system_size_limit() -> None:
     """Test that MCWF raises ValueError for system size > 27."""
-    n_sites = 27
+    n_sites = 28
     psi = MPS(n_sites)
     h = MPO.ising(n_sites, J=1.0, g=1.0)
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=1.0, observables=[Observable("z", sites=[0])])

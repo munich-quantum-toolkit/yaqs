@@ -169,7 +169,7 @@ def test_lindblad_dephasing_both_qubits() -> None:
 
 def test_lindblad_system_size_error() -> None:
     """Test that Lindblad solver raises error for large systems."""
-    n_sites = 11
+    n_sites = 13
     initial_state = MPS(n_sites)
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)
