@@ -136,7 +136,7 @@ def load_grid_N_req(target_error: float = 0.02, obs_index: int = 0):
 # Plotting
 # -------------------------
 def plot_heatmaps(N1, N2, target_error):
-    # Setup styling
+    # Setup styling (match practical style)
     plt.rcParams.update({
         "font.size": 10,
         "axes.titlesize": 13,
@@ -148,21 +148,20 @@ def plot_heatmaps(N1, N2, target_error):
         "font.family": "sans-serif",
     })
     
-    # Figure geometry
-    fig = plt.figure(figsize=(12, 3.5))
+    # Figure geometry (match 3-panel geometry)
+    fig = plt.figure(figsize=(12, 3.8))
     gs = fig.add_gridspec(
         1, 6,
-        left=0.08, right=0.92, bottom=0.2, top=0.82,
+        left=0.08, right=0.92, bottom=0.2, top=0.85,
         width_ratios=[1.0, 1.0, 0.04, 0.15, 1.0, 0.04], 
         wspace=0.15
     )
     
-    ax_u1 = fig.add_subplot(gs[0, 0])
-    ax_u2 = fig.add_subplot(gs[0, 1])
+    axA = fig.add_subplot(gs[0, 0])
+    axB = fig.add_subplot(gs[0, 1])
     cax_n = fig.add_subplot(gs[0, 2])
-    
-    ax_al = fig.add_subplot(gs[0, 4])
-    cax_al = fig.add_subplot(gs[0, 5])
+    axKappa = fig.add_subplot(gs[0, 4])
+    cax_k = fig.add_subplot(gs[0, 5])
     
     # Calculate log-edges for pcolormesh
     def get_log_edges(centers):
@@ -179,127 +178,115 @@ def plot_heatmaps(N1, N2, target_error):
     dt_edges = get_log_edges(dt_list)
     g_edges = get_log_edges(gamma_list)
     
+    # ------------------------
     # 1. N required heatmaps
+    # ------------------------
     vmin = max(1, min(np.nanmin(N1), np.nanmin(N2)))
     vmax = max(np.nanmax(N1), np.nanmax(N2))
     norm_n = LogNorm(vmin=vmin, vmax=vmax)
     cmap_n = "magma_r"
 
-    pc_opts = dict(shading="flat", edgecolors="white", linewidths=0.2, alpha=0.95)
+    pc_opts = dict(shading="flat", edgecolors="none", antialiased=False)
     
-    m1 = ax_u1.pcolormesh(dt_edges, g_edges, N1, cmap=cmap_n, norm=norm_n, **pc_opts)
-    m2 = ax_u2.pcolormesh(dt_edges, g_edges, N2, cmap=cmap_n, norm=norm_n, **pc_opts)
+    pcmA = axA.pcolormesh(dt_edges, g_edges, N1, cmap=cmap_n, norm=norm_n, **pc_opts)
+    pcmB = axB.pcolormesh(dt_edges, g_edges, N2, cmap=cmap_n, norm=norm_n, **pc_opts)
     
+    # ------------------------
     # 2. Kappa heatmap
+    # ------------------------
     Kappa = N2 / N1
-    k_min, k_max = np.nanmin(Kappa), np.nanmax(Kappa)
-    
-    # Decide norm for Kappa: Log if span > 5
-    if False: #k_max / max(k_min, 1e-3) > 5:
-        norm_k = LogNorm(vmin=1, vmax=10)
-    else:
-        norm_k = Normalize(vmin=1, vmax=8)
-        
-    cmap_k = plt.get_cmap("viridis").copy()
+    norm_k = Normalize(vmin=1, vmax=6) # Matching alpha vmin/vmax range
+    cmap_k = plt.get_cmap("plasma").copy()
+    cmap_k.set_bad(color="0.85")
     cmap_k.set_under("black")
     
-    m3 = ax_al.pcolormesh(dt_edges, g_edges, Kappa, cmap=cmap_k, norm=norm_k, **pc_opts)
+    pcm_k = axKappa.pcolormesh(dt_edges, g_edges, Kappa, cmap=cmap_k, norm=norm_k, **pc_opts)
     
-    # Shared Axis configuration
-    from matplotlib.ticker import FixedLocator, FixedFormatter
-    dt_loc = FixedLocator(dt_list)
-    dt_fmt = FixedFormatter([f"{x:g}" for x in dt_list])
-    g_loc = FixedLocator(gamma_list)
-    g_fmt = FixedFormatter([f"{x:g}" for x in gamma_list])
-    
-    for ax in (ax_u1, ax_u2, ax_al):
+    # Subtle Grid
+    for ax in (axA, axB, axKappa):
+        ax.grid(which="both", color="w", alpha=0.12, linewidth=0.5)
+
+    # ------------------------
+    # Axes & Ticking
+    # ------------------------
+    from matplotlib.ticker import LogLocator, LogFormatterMathtext, NullFormatter
+    def set_scientific_log_ticks(ax, axis='x'):
+        target = ax.xaxis if axis == 'x' else ax.yaxis
+        target.set_major_locator(LogLocator(base=10))
+        target.set_major_formatter(LogFormatterMathtext(base=10))
+        target.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10) * 0.1))
+        target.set_minor_formatter(NullFormatter())
+
+    for ax, label in zip([axA, axB, axKappa], ["(a)", "(b)", "(c)"]):
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.xaxis.set_major_locator(dt_loc)
-        ax.xaxis.set_major_formatter(dt_fmt)
         ax.set_xlabel(r"Time step $\delta t$")
-        ax.tick_params(axis='x', rotation=30)
+        set_scientific_log_ticks(ax, 'x')
+        set_scientific_log_ticks(ax, 'y')
+        ax.tick_params(axis='x', rotation=15)
         
-    ax_u1.yaxis.set_major_locator(g_loc)
-    ax_u1.yaxis.set_major_formatter(g_fmt)
-    ax_u1.set_ylabel(r"Noise strength $\gamma$")
-    
-    ax_u2.tick_params(labelleft=False)
-    ax_al.tick_params(labelleft=False)
-    ax_al.yaxis.set_major_locator(g_loc)
-    ax_al.yaxis.set_major_formatter(g_fmt)
-    # ax_al.set_ylabel(r"$\gamma$") # Removed per request
-    
-    # Titles
-    ax_u1.set_title("Unraveling A")
-    ax_u2.set_title("Unraveling B")
-    ax_al.set_title("Sampling Inflation")
+        # Internal Labels
+        ax.text(0.04, 0.96, label, transform=ax.transAxes, va="top", fontweight="bold",
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.8, pad=2))
 
+    axA.set_ylabel(r"Noise strength $\gamma$")
+    axB.tick_params(labelleft=False)
+    axKappa.tick_params(labelleft=False)
+    
+    axA.set_title("Unraveling A")
+    axB.set_title("Unraveling B")
+    axKappa.set_title("Sampling Inflation")
+
+    # ------------------------
     # Colorbars
-    from matplotlib.ticker import LogLocator, NullFormatter
-    cb1 = fig.colorbar(m1, cax=cax_n)
+    # ------------------------
+    cb_n = fig.colorbar(pcmA, cax=cax_n)
     cax_n.set_title(rf"$N(\epsilon={target_error})$", pad=12, fontsize=10)
-
     # Add specific ticks to N colorbar
     tick_vals = [5, 10, 20, 30, 50]
-    from matplotlib.ticker import FixedLocator, FixedFormatter
-    cb1.ax.yaxis.set_major_locator(FixedLocator(tick_vals))
-    cb1.ax.yaxis.set_major_formatter(FixedFormatter([f"{v}" for v in tick_vals]))
+    cb_n.ax.yaxis.set_major_locator(plt.FixedLocator(tick_vals))
+    cb_n.ax.yaxis.set_major_formatter(plt.FixedFormatter([f"{v}" for v in tick_vals]))
     
-    cb3 = fig.colorbar(m3, cax=cax_al, extend="min")
-    cax_al.set_title(r"$\kappa = N_B / N_A$", pad=12, fontsize=10)
+    cb_k = fig.colorbar(pcm_k, cax=cax_k, ticks=[2.0, 4.0, 6.0, 8.0])
+    cax_k.set_title(r"$\kappa = N_B / N_A$", pad=12, fontsize=10)
     
-    # Stats box for Kappa - moved to top right
-    mean_k = np.nanmean(Kappa)
-    std_k = np.nanstd(Kappa)
+    # ------------------------
+    # Stats box for Kappa
+    # ------------------------
+    valid_kappa = Kappa[~np.isnan(Kappa)]
+    mean_k = np.nanmean(valid_kappa) if valid_kappa.size > 0 else 0
+    std_k = np.nanstd(valid_kappa) if valid_kappa.size > 0 else 0
     stats_text = rf"$\mu_\kappa = {mean_k:.2f}$"+"\n"+rf"$\sigma_\kappa = {std_k:.2f}$"
-    ax_al.text(0.95, 0.95, stats_text, transform=ax_al.transAxes, 
+    axKappa.text(0.95, 0.95, stats_text, transform=axKappa.transAxes, 
                verticalalignment='top', horizontalalignment='right',
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.85, edgecolor='none'))
+               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='none'))
 
     # Kappa=1 contour
-    g_fine = np.logspace(np.log10(min(gamma_list)), np.log10(max(gamma_list)), 100)
-    dt_fine = np.logspace(np.log10(min(dt_list)), np.log10(max(dt_list)), 100)
-    X, Y = np.meshgrid(dt_list, gamma_list)
-    # We use contour for kappa=1
-    valid = ~np.isnan(Kappa)
-    if np.any(valid):
-        # We need to interpolate Kappa or just use a masked array for contour
-        ax_al.contour(dt_list, gamma_list, Kappa, levels=[1.0], colors="black", linewidths=1.5, zorder=6)
+    if np.any(~np.isnan(Kappa)):
+        cs_k = axKappa.contour(dt_list, gamma_list, Kappa, levels=[1.0], colors="black", linewidths=1.3, zorder=6)
+        axKappa.clabel(cs_k, fmt={1.0: r"$\kappa=1$"}, inline=True, fontsize=8, colors="black")
 
-    # DP lines & Contours
+    # ------------------------
+    # DP Lines
+    # ------------------------
     def add_dp_lines(ax, annotate=False):
-        dt_fine_curve = np.logspace(np.log10(min(dt_list)), np.log10(max(dt_list)), 100)
-        # Choose a fixed dt for alignment
+        dt_fine = np.logspace(np.log10(min(dt_list)), np.log10(max(dt_list)), 100)
         dt_label = 0.04
-        
         for dp in dp_levels:
-            g_fine_curve = dp / dt_fine_curve
-            mask = (g_fine_curve >= min(gamma_list)) & (g_fine_curve <= max(gamma_list))
+            g_fine = dp / dt_fine
+            mask = (g_fine >= min(gamma_list)) & (g_fine <= max(gamma_list))
             if np.any(mask):
-                line, = ax.plot(dt_fine_curve[mask], g_fine_curve[mask], "k--", lw=1.3, alpha=0.8, zorder=5)
-                
+                ax.plot(dt_fine[mask], g_fine[mask], "w--", lw=1.1, alpha=0.7, zorder=5)
                 if annotate and dp in [1e-3, 1e-2, 1e-1]:
-                    # Find gamma value at dt_label
-                    g_at_dt = 1.5*(dp / dt_label)
-                    # Check if within axis limits
+                    g_at_dt = 1.5 * (dp / dt_label)
                     if min(gamma_list) <= g_at_dt <= max(gamma_list):
-                        # Rotation on log-log for y = k/x is -45 degrees IF aspect is balanced
-                        # Here we manually tune to match the visual slope in the specific figure aspect
-                        rot = -15
-                        
                         label_text = rf"$\delta p = 10^{{{int(np.log10(dp))}}}$"
-                        if dp == 1.0: label_text = r"$\delta p = 1$"
-                        
-                        ax.text(dt_label, g_at_dt, label_text, 
-                                fontsize=8, rotation=rot, ha='center', va='center',
-                                color='black', weight='bold',
-                                path_effects=[pe.withStroke(linewidth=3, foreground="white", alpha=0.9)])
+                        txt = ax.text(dt_label, g_at_dt, label_text, fontsize=8, rotation=-15, ha='center', va='center',
+                                      color='white', weight='bold')
+                        txt.set_path_effects([pe.withStroke(linewidth=2, foreground="black", alpha=0.6)])
             
-    for ax in (ax_u1,):
-        add_dp_lines(ax, annotate=(ax==ax_u1))
-        
-    # fig.suptitle removed per request
+    add_dp_lines(axA, annotate=True)
+    add_dp_lines(axB, annotate=False)
     
     plt.savefig("convergence_heatmap.pdf", dpi=300, bbox_inches="tight")
     plt.savefig("convergence_heatmap.png", dpi=300, bbox_inches="tight")
