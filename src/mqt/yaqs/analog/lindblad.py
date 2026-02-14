@@ -12,8 +12,9 @@ It converts the Matrix Product State (MPS) and Matrix Product Operator (MPO) rep
 into dense matrices and solves the Lindblad master equation:
     drho/dt = -i[H, rho] + sum_k (L_k rho L_k^dag - 0.5 * {L_k^dag L_k, rho})
 
-This solver scales exponentially with system size and is intended primarily for benchmarking
-and validating the Tensor Jump Method (TJM) on small systems (N <= 8-10).
+It is suitable for small systems (N <= 12).
+For larger systems or when stochastic trajectories are preferred, consider
+using the MCWF solver or the Tensor Jump Method (TJM).
 """
 
 from __future__ import annotations
@@ -59,8 +60,14 @@ def lindblad(
     # Check dimensions
     num_sites = initial_state.length
     dim = 2**num_sites
+    # Limit system size to avoid OOM
+    # 2^12 * 16 bytes is small, but 2^13 starts getting large for dense solver
     if num_sites > 12:
-        msg = f"System size too large for exact Lindblad solver (N={num_sites}, dim={dim})."
+        msg = (
+            f"System size {num_sites} is too large for exact Lindblad solver. "
+            "Lindblad uses dense 2^N x 2^N matrices which scale exponentially. "
+            "Please use the TJM solver for larger systems."
+        )
         raise ValueError(msg)
 
     # 1. Initial State to Rho

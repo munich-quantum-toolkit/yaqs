@@ -13,8 +13,9 @@ into dense vectors and matrices, and evolves the wavefunction under an effective
     H_eff = H - 0.5 * i * sum_k (L_k^dag L_k)
 stochastically applying quantum jumps.
 
-This solver scales exponentially with system size and is intended primarily for benchmarking
-and validating the Tensor Jump Method (TJM) on small systems (N <= 8-10).
+This solver scales exponentially. It is suitable for small systems (N <= 14).
+For larger systems, consider using the Tensor Jump Method (TJM) which uses
+Matrix Product States (MPS).
 """
 
 from __future__ import annotations
@@ -71,8 +72,14 @@ def preprocess_mcwf(
     # Check dimensions
     num_sites = initial_state.length
     dim = 2**num_sites
-    if num_sites > 27:
-        msg = f"System size too large for MCWF solver (N={num_sites}, dim={dim})."
+    # Limit system size to avoid OOM
+    # 2^14 * 16 bytes (complex128) is manageable, but larger is risky for dense matrices
+    if num_sites > 14:
+        msg = (
+            f"System size {num_sites} is too large for MCWF solver. "
+            "MCWF uses dense 2^N x 2^N matrices which scale exponentially. "
+            "Please use the TJM solver for larger systems."
+        )
         raise ValueError(msg)
 
     # 1. Initial State to Vector

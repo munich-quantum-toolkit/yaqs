@@ -91,3 +91,7 @@ plt.legend()
 plt.title("Solver Comparison")
 plt.show()
 ```
+
+> **Note on Statistical Uncertainty**:
+> The results for `MCWF` and `TJM` are averaged over 500 trajectories. As these are stochastic methods, the plotted curves represent the mean value and carry statistical uncertainty (standard error $\propto 1/\sqrt{N_{traj}}$).
+> For production-quality results, we recommend increasing `num_traj` (e.g., to 1000 or more) or plotting confidence intervals to visualize the uncertainty. The exact Lindblad solution, in contrast, is deterministic.

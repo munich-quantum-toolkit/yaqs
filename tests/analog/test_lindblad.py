@@ -175,7 +175,7 @@ def test_lindblad_system_size_error() -> None:
     hamiltonian.identity(n_sites)
     sim_params = AnalogSimParams(solver="Lindblad", get_state=True)
 
-    with pytest.raises(ValueError, match="System size too large"):
+    with pytest.raises(ValueError, match=r"System size .* too large"):
         run(initial_state, hamiltonian, sim_params, None)
 
 
@@ -204,7 +204,7 @@ def test_lindblad_system_size_limit() -> None:
     # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
     args = (0, psi, None, sim_params, h)
 
-    with pytest.raises(ValueError, match="System size too large"):
+    with pytest.raises(ValueError, match=r"System size .* too large"):
         lindblad(args)
 
 
