@@ -46,9 +46,9 @@ dt = 0.05
 # 3. Solver 1: Lindblad (Exact)
 print("Running Lindblad...")
 params_lindblad = AnalogSimParams(
-    observables=[obs], 
-    elapsed_time=t_max, 
-    dt=dt, 
+    observables=[obs],
+    elapsed_time=t_max,
+    dt=dt,
     solver="Lindblad"
 )
 run(psi_0, H, params_lindblad, noise)
@@ -58,9 +58,9 @@ times = params_lindblad.times
 # 4. Solver 2: MCWF (Stochastic)
 print("Running MCWF...")
 params_mcwf = AnalogSimParams(
-    observables=[obs], 
-    elapsed_time=t_max, 
-    dt=dt, 
+    observables=[obs],
+    elapsed_time=t_max,
+    dt=dt,
     solver="MCWF",
     num_traj=500
 )
@@ -70,9 +70,9 @@ res_mcwf = obs.results.flatten()
 # 5. Solver 3: TJM (Default Stochastic)
 print("Running TJM...")
 params_tjm = AnalogSimParams(
-    observables=[obs], 
-    elapsed_time=t_max, 
-    dt=dt, 
+    observables=[obs],
+    elapsed_time=t_max,
+    dt=dt,
     solver="TJM",
     num_traj=500,
     max_bond_dim=16
