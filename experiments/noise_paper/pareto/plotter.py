@@ -68,7 +68,7 @@ def add_contours(ax: plt.Axes, DPc: np.ndarray, Lc: np.ndarray, Z: np.ndarray) -
     cs = ax.contour(DPc, Lc, Z, levels=levels, colors="white", linewidths=1.0, alpha=0.95)
     ax.clabel(
         cs,
-        fmt=lambda v: rf"$\chi={int(v)}$",
+        fmt=lambda v: r"$\overline{\chi}_{\mathrm{max}}={int(v)}$",
         inline=True,
         fontsize=8,
         colors="white",
@@ -245,10 +245,10 @@ if __name__ == "__main__":
     cb_chi = fig.colorbar(pcmA, cax=cax_chi)
     cb_chi.set_ticks([4, 8, 16, 32, 64])
     cb_chi.set_ticklabels(["4", "8", "16", "32", "64"])
-    cax_chi.set_title(r"$\overline{\chi}_{\mathrm{peak}}$", pad=12, fontsize=10)
+    cax_chi.set_title(r"$\overline{\chi}_{\mathrm{max}}$", pad=12, fontsize=10)
     
     cb_al = fig.colorbar(pcm_al, cax=cax_alpha, ticks=[1.0, 1.5, 2.0, 2.5])
-    cax_alpha.set_title(r"$\alpha = \chi_A / \chi_B$", pad=12, fontsize=10)
+    cax_alpha.set_title(r"$\alpha = \overline{\chi}_{\mathrm{max}, A} / \overline{\chi}_{\mathrm{max}, B}$", pad=12, fontsize=10)
 
     # 9. Stats for Alpha (computed on plotted masked data)
     valid_alpha = Z_alpha[~np.isnan(Z_alpha)]

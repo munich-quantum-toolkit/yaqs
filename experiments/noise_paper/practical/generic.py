@@ -41,10 +41,11 @@ x = np.linspace(0, 1, nx)
 y = np.linspace(0, 1, ny)
 X, Y = np.meshgrid(x, y)
 
-# --- CPU vs RAM regimes (sharp vertical boundary) ---
-img = np.zeros((ny, nx, 3))
-img[X < 0.5] = col_cpu
-img[X >= 0.5] = col_ram
+# --- CPU vs RAM regimes (smooth horizontal fade) ---
+center_x = 0.50
+w = 0.20  # fade width
+t = np.clip((X - (center_x - w)) / (2 * w), 0.0, 1.0)[..., None]
+img = (1 - t) * col_cpu + t * col_ram
 
 # --- dp>1 wedge ---
 tri_x1, tri_y1 = 0.00, 1.00
