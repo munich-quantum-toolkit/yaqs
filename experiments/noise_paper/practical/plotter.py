@@ -4,7 +4,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, LogNorm
 import matplotlib.patheffects as pe
-import matplotlib.ticker as mticker
+from matplotlib.ticker import LogLocator, LogFormatterMathtext, NullFormatter, FixedLocator, FixedFormatter
+from scipy.ndimage import gaussian_filter
 
 # ------------------------
 # Data + parameters
@@ -12,7 +13,7 @@ import matplotlib.ticker as mticker
 dt_list = [0.01, 0.0125, 0.02, 0.025, 0.04, 0.05, 0.1]
 gamma_list = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 gamma_min = 0.01
-gamma_max = 50
+gamma_max = 10.0 # Standard plotting range
 
 data_dir = Path(".")
 dp_levels = [1e-3, 1e-2, 1e-1, 1.0]
@@ -20,247 +21,221 @@ dp_levels = [1e-3, 1e-2, 1e-1, 1.0]
 dt = np.array(dt_list, dtype=float)
 g = np.array(gamma_list, dtype=float)
 
+def get_log_edges(centers):
+    centers = np.asarray(centers)
+    log_c = np.log10(centers)
+    d_log = np.diff(log_c)
+    edges_log = np.concatenate([
+        [log_c[0] - d_log[0]/2],
+        log_c[:-1] + d_log/2,
+        [log_c[-1] + d_log[-1]/2]
+    ])
+    return 10**edges_log
+
+dt_edges = get_log_edges(dt_list)
+g_edges = get_log_edges(gamma_list)
+DTc, Gc = np.meshgrid(dt, g)
+
 # ------------------------
 # Loader for U1 / U2
 # ------------------------
 def load_gamma_dt_heatmaps_for_u(u_tag: str):
     bond_grid = np.full((len(gamma_list), len(dt_list)), np.nan, dtype=float)
     time_grid = np.full_like(bond_grid, np.nan)
-
     gamma_to_idx = {gg: i for i, gg in enumerate(gamma_list)}
 
     for k, _dt in enumerate(dt_list):
         fname = data_dir / f"practical_{u_tag}_{k}.pickle"
-        if not fname.exists():
-            continue
-
+        if not fname.exists(): continue
         with open(fname, "rb") as f:
             results = pickle.load(f)
-
-        if len(results) != len(gamma_list):
-            raise ValueError(f"{fname} has {len(results)} entries, expected {len(gamma_list)}")
-
         for j, obs_list in enumerate(results):
-            if obs_list is None:
-                continue
-
-            # max bond dimension
+            if obs_list is None: continue
             obs_bond = obs_list[0]
             vals = np.asarray(obs_bond[0].results, dtype=float)
             row = gamma_to_idx[gamma_list[j]]
             bond_grid[row, k] = float(np.max(vals))
+    return bond_grid
 
-            # wall time per trajectory
-            time_grid[row, k] = float(np.asarray(obs_list[1]))
-
-    return bond_grid, time_grid
-
-u1_bond, u1_time = load_gamma_dt_heatmaps_for_u("u1")
-u2_bond, u2_time = load_gamma_dt_heatmaps_for_u("u2")
-max_time = np.nanmax([u1_time, u2_time])
-u1_time = u1_time / np.nanmax(max_time)
-u2_time = u2_time / np.nanmax(max_time)
+u1_bond = load_gamma_dt_heatmaps_for_u("u1")
+u2_bond = load_gamma_dt_heatmaps_for_u("u2")
 
 # ------------------------
-# PRX-ish style
+# PRX Style Params
 # ------------------------
 plt.rcParams.update({
     "font.size": 10,
-    "axes.titlesize": 11,
+    "axes.titlesize": 13,
     "axes.labelsize": 11,
-    "xtick.labelsize": 9,
-    "ytick.labelsize": 9,
-    "axes.linewidth": 0.8,
-    "xtick.major.size": 3,
-    "ytick.major.size": 3,
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+    "font.family": "sans-serif",
 })
 
-def panel_label(ax, s):
-    t = ax.text(
-        0.02, 0.98, s, transform=ax.transAxes,
-        ha="left", va="top", fontweight="bold",
-        bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.5)
-    )
-    t.set_path_effects([pe.withStroke(linewidth=1.3, foreground="white")])
+# ------------------------
+# Normalization
+# ------------------------
+all_bond = np.concatenate([u1_bond.flatten(), u2_bond.flatten()])
+vmin_chi = 2.0
+vmax_chi = np.nanpercentile(all_bond, 99)
+norm_chi = LogNorm(vmin=vmin_chi, vmax=vmax_chi)
+
+# Alpha: A/B ratio
+with np.errstate(divide='ignore', invalid='ignore'):
+    Z_alpha = np.divide(u1_bond, u2_bond, out=np.full_like(u1_bond, np.nan), where=(u1_bond > 0) & (u2_bond > 0))
+
+norm_al = Normalize(vmin=1.0, vmax=2.0)
+cmap_al = plt.get_cmap("viridis").copy()
+cmap_al.set_bad(color="0.85")
 
 # ------------------------
-# pcolormesh edges (index axes for dt AND gamma -> perfect grid alignment)
+# Layout
 # ------------------------
-dt_centers = np.arange(len(dt_list), dtype=float)
-dt_edges   = np.arange(len(dt_list) + 1, dtype=float) - 0.5
-
-g_centers  = np.arange(len(gamma_list), dtype=float)
-g_edges    = np.arange(len(gamma_list) + 1, dtype=float) - 0.5
-
-# ------------------------
-# Norms (shared per column)
-# ------------------------
-bond_norm = Normalize(
-    vmin=np.nanmin([u1_bond, u2_bond]),
-    vmax=np.nanmax([u1_bond, u2_bond]),
-)
-
-time_norm = LogNorm(
-    vmin=np.nanmin([u1_time, u2_time]),
-    vmax=np.nanmax([u1_time, u2_time]),
-)
-
-# ------------------------
-# dp lines in true (dt, gamma) coordinates
-# ------------------------
-def add_dp_lines_true(ax, *, add_labels=False, gamma_top=10.0):
-    dt_dense = np.linspace(dt.min(), dt.max(), 800)
-    x_dense = np.interp(dt_dense, dt, dt_centers)
-
-    logg = np.log(g)
-    for dp in dp_levels:
-        gamma_dense = dp / dt_dense
-        mask = (gamma_dense >= gamma_min) & (gamma_dense <= gamma_top)
-        if not np.any(mask):
-            continue
-
-        y_dense = np.interp(np.log(gamma_dense[mask]), logg, g_centers)
-        ax.plot(x_dense[mask], y_dense, "--", color="k", lw=1.0, alpha=0.65)
-
-    if add_labels:
-        dt_label = dt[1]
-        x_lab = np.interp(dt_label, dt, dt_centers)
-        for dp in dp_levels:
-            gamma_label = dp / dt_label
-            if not (gamma_min <= gamma_label <= gamma_top):
-                continue
-            y_lab = np.interp(np.log(gamma_label), logg, g_centers)
-            txt = ax.text(
-                x_lab + 0.15, y_lab + 0.10,
-                rf"$\delta p={dp:g}$", color="w", fontsize=8
-            )
-            txt.set_path_effects([pe.withStroke(linewidth=2.5, foreground="black", alpha=0.6)])
-
-# ------------------------
-# Heatmap helper
-# ------------------------
-def heat(ax, Z, *, cmap, norm, gamma_top=10.0):
-    m = ax.pcolormesh(dt_edges, g_edges, Z, cmap=cmap, norm=norm, shading="auto")
-    ax.set_xlim(dt_edges[0], dt_edges[-1])
-
-    top_idx = int(np.where(g == gamma_top)[0][0])
-    ax.set_ylim(-0.5, top_idx + 0.5)
-
-    ax.tick_params(direction="out")
-    return m
-
-# ------------------------
-# ------------------------
-# Alpha Calculation
-# ------------------------
-# Bond Alpha
-alpha_bond = u1_bond / u2_bond  
-# Handle 0/0 or inf? usually bond > 1.
-
-# Time Alpha
-alpha_time = u1_time / u2_time
-
-# ------------------------
-# Figure
-# ------------------------
-# Figure
-# ------------------------
-# Figure: make it true PRX figure* width (double column)
-fig = plt.figure(figsize=(10.5, 2.6)) # Single row height
-
-# 1 row (Bond)
-# Layout: [U1] [U2] [CbarShared] [Sp] [Alpha] [CbarAlpha]
+fig = plt.figure(figsize=(12, 3.8))
 gs = fig.add_gridspec(
     1, 6,
-    left=0.06, right=0.92, bottom=0.18, top=0.88,
-    width_ratios=[1.0, 1.0, 0.03, 0.12, 1.0, 0.03], 
-    wspace=0.08
+    left=0.08, right=0.92, bottom=0.2, top=0.85,
+    width_ratios=[1.0, 1.0, 0.04, 0.15, 1.0, 0.04],
+    wspace=0.15
 )
 
-# Row 0: Bond
-ax_u1_bond = fig.add_subplot(gs[0, 0])
-ax_u2_bond = fig.add_subplot(gs[0, 1])
-cax_bond   = fig.add_subplot(gs[0, 2])
-# Spacer at 3
-ax_al_bond = fig.add_subplot(gs[0, 4])
-cax_al_bond= fig.add_subplot(gs[0, 5])
+axA = fig.add_subplot(gs[0, 0])
+axB = fig.add_subplot(gs[0, 1])
+cax_chi = fig.add_subplot(gs[0, 2])
+axAlpha = fig.add_subplot(gs[0, 4])
+cax_alpha = fig.add_subplot(gs[0, 5])
 
-gamma_top = 10.0
+pc_opts = dict(shading="flat", edgecolors="none", antialiased=False)
 
-# --- Plot Bond ---
-m1 = heat(ax_u1_bond, u1_bond, cmap="magma_r", norm=bond_norm, gamma_top=gamma_top)
-m3 = heat(ax_u2_bond, u2_bond, cmap="magma_r", norm=bond_norm, gamma_top=gamma_top)
+# ------------------------
+# Plot Panels
+# ------------------------
+pcmA = axA.pcolormesh(dt_edges, g_edges, u1_bond, cmap="magma_r", norm=norm_chi, **pc_opts)
+pcmB = axB.pcolormesh(dt_edges, g_edges, u2_bond, cmap="magma_r", norm=norm_chi, **pc_opts)
+pcm_al = axAlpha.pcolormesh(dt_edges, g_edges, Z_alpha, cmap=cmap_al, norm=norm_al, **pc_opts)
 
-# Alpha Bond
-from scipy.ndimage import gaussian_filter
-alpha_bond_smooth = gaussian_filter(alpha_bond, sigma=0.8) # Light smoothing
-vm_ab = 1 # np.nanpercentile(alpha_bond, 2)
-vx_ab = 2 # np.nanpercentile(alpha_bond, 98)
-if vx_ab <= vm_ab: vx_ab = vm_ab + 1.0
-m5 = heat(ax_al_bond, alpha_bond, cmap="cividis", norm=Normalize(vmin=vm_ab, vmax=vx_ab), gamma_top=gamma_top)
+# Subtle Grid
+for ax in (axA, axB, axAlpha):
+    ax.grid(which="both", color="w", alpha=0.15, linewidth=0.5)
 
-# --- Formatting ---
+# ------------------------
+# Contours
+# ------------------------
+chi_levels = [16, 32, 48, 64, 80]
+chi_rotations = 10
+# for ax, Z in [(axA, u1_bond), (axB, u2_bond)]:
+#     Z_smooth = gaussian_filter(Z, sigma=0.8)
+#     cs = ax.contour(DTc, Gc, Z_smooth, levels=chi_levels, colors="white", linewidths=1.2, alpha=0.95)
+#     labels = ax.clabel(cs, levels=chi_levels, fmt=lambda v: rf"$\chi={int(v)}$", inline=True, fontsize=8, colors="white", inline_spacing=2)
+#     if labels:
+#         for l in labels:
+#             l.set_rotation(chi_rotations)
+#             l.set_path_effects([pe.withStroke(linewidth=2, foreground="black", alpha=0.5)])
 
-# X-Labels (now on all plots)
-tick_idx = np.arange(len(dt_list))
-tick_labels = [f"{x:g}" for x in dt_list]
-for ax in (ax_u1_bond, ax_u2_bond, ax_al_bond):
-    ax.set_xticks(tick_idx)
-    ax.set_xticklabels(tick_labels, rotation=0, ha="center")
-    ax.set_xlabel(r"$\delta t$", labelpad=4)
+# Alpha Contours: Smooth A and B in log space
+alpha_levels = [1.1, 1.3, 1.5]
+chi_floor = 2.0
+with np.errstate(divide='ignore', invalid='ignore'):
+    A_log = np.log(u1_bond)
+    B_log = np.log(u2_bond)
+    A_f = np.nan_to_num(A_log, nan=np.nanmean(A_log) if not np.all(np.isnan(A_log)) else 0)
+    B_f = np.nan_to_num(B_log, nan=np.nanmean(B_log) if not np.all(np.isnan(B_log)) else 0)
+    A_s = gaussian_filter(A_f, sigma=(0.8, 1.0))
+    B_s = gaussian_filter(B_f, sigma=(0.8, 1.0))
+    Z_al_smooth = np.exp(A_s - B_s)
+    # Mask unstable regions
+    unstable_mask = (u1_bond < chi_floor) | (u2_bond < chi_floor) | np.isnan(Z_alpha)
+    Z_al_smooth[unstable_mask] = np.nan
 
-# Y-Labels (only left col)
-for ax in (ax_u2_bond, ax_al_bond):
-    ax.tick_params(labelleft=False)
+cs_al = axAlpha.contour(DTc, Gc, Z_al_smooth, levels=alpha_levels, colors="white", linewidths=0.8, alpha=0.8)
+labels_al = axAlpha.clabel(cs_al, fmt=lambda v: f"{v:.1f}", inline=True, fontsize=7, colors="white")
+if labels_al:
+    for l in labels_al:
+        l.set_path_effects([pe.withStroke(linewidth=1.5, foreground="black", alpha=0.4)])
 
-top_idx = int(np.where(g == gamma_top)[0][0])
-g_tick_idx = np.arange(top_idx + 1)
-g_tick_labels = [f"{x:g}" for x in g[:top_idx + 1]]
-for ax in (ax_u1_bond,):
-    ax.set_yticks(g_tick_idx)
-    ax.set_yticklabels(g_tick_labels)
-    ax.set_ylabel(r"$\gamma$", labelpad=4)
+# Anchor alpha=1
+cs_anchor = axAlpha.contour(DTc, Gc, Z_al_smooth, levels=[1.0], colors="black", linewidths=1.3, zorder=6)
+axAlpha.clabel(cs_anchor, fmt={1.0: r"$\alpha=1$"}, inline=True, fontsize=8, colors="black")
 
-# Contours for Alphas
-# Need grid for contour
-DT_c, G_c = np.meshgrid(dt_centers, g_centers[:top_idx+1])
-# We need to slice alpha to gamma_top
-alpha_bond_cut = alpha_bond_smooth[:top_idx+1, :]
+# ------------------------
+# Axes & Ticking
+# ------------------------
+dt_loc = FixedLocator(dt_list)
+dt_fmt = FixedFormatter([f"{x:g}" for x in dt_list])
+g_loc = FixedLocator(gamma_list)
+g_fmt = FixedFormatter([f"{x:g}" for x in gamma_list])
 
-# Contour Bond
-lev_ab = [1.0, 1.2, 1.4, 1.6, 1.8] # np.linspace(vm_ab, vx_ab, 5)
-cs_ab = ax_al_bond.contour(DT_c, G_c, alpha_bond_cut, levels=lev_ab, colors="white", linewidths=0.8, alpha=0.8)
-ax_al_bond.clabel(cs_ab, fmt="%.2f", inline=True, fontsize=7, colors="white")
+for ax, label in zip([axA, axB, axAlpha], ["(a)", "(b)", "(c)"]):
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel(r"Time step $\delta t$")
+    ax.xaxis.set_major_locator(dt_loc)
+    ax.xaxis.set_major_formatter(dt_fmt)
+    ax.tick_params(axis='x', rotation=30)
+    
+    # Internal Labels
+    ax.text(0.04, 0.96, label, transform=ax.transAxes, va="top", fontweight="bold",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.8, pad=2))
 
+axA.yaxis.set_major_locator(g_loc)
+axA.yaxis.set_major_formatter(g_fmt)
+axA.set_ylabel(r"Noise strength $\gamma$")
 
-# dp lines (ONLY on U1/U2 plots, REMOVE from Alpha)
-for ax in (ax_u1_bond, ax_u2_bond):
-    add_dp_lines_true(ax, add_labels=False, gamma_top=gamma_top)
+axB.tick_params(labelleft=False)
+axAlpha.tick_params(labelleft=False)
+axAlpha.yaxis.set_major_locator(g_loc)
+axAlpha.yaxis.set_major_formatter(g_fmt)
 
-# Only add labels to first one?
-add_dp_lines_true(ax_u1_bond, add_labels=True, gamma_top=gamma_top)
+axA.set_title("Unraveling A")
+axB.set_title("Unraveling B")
+axAlpha.set_title("Bond Inflation")
 
-# Titles / Panels
-panel_label(ax_u1_bond, "(a)")
-panel_label(ax_u2_bond, "(b)")
-panel_label(ax_al_bond, "(c)")
+# ------------------------
+# DP Lines (from convergence)
+# ------------------------
+def add_dp_lines(ax, annotate=False):
+    dt_fine = np.logspace(np.log10(min(dt_list)), np.log10(max(dt_list)), 100)
+    dt_label = 0.04
+    for dp in dp_levels:
+        g_fine = dp / dt_fine
+        mask = (g_fine >= min(gamma_list)) & (g_fine <= max(gamma_list))
+        if np.any(mask):
+            ax.plot(dt_fine[mask], g_fine[mask], "w--", lw=1.3, alpha=0.8, zorder=5)
+            if annotate and dp in [1e-3, 1e-2, 1e-1]:
+                g_at_dt = 1.5*(dp / dt_label)
+                if min(gamma_list) <= g_at_dt <= max(gamma_list):
+                    label_text = rf"$\delta p = 10^{{{int(np.log10(dp))}}}$"
+                    ax.text(dt_label, g_at_dt, label_text, fontsize=8, rotation=-15, ha='center', va='center',
+                            color='black', weight='bold',
+                            path_effects=[pe.withStroke(linewidth=3, foreground="white", alpha=0.9)])
 
-# Titles
-ax_u1_bond.set_title("Unraveling A", fontsize=10)
-ax_u2_bond.set_title("Unraveling B", fontsize=10)
-# No title for Alpha column per request
-# ax_al_bond.set_title("", fontsize=10)
+add_dp_lines(axA, annotate=True)
+add_dp_lines(axB, annotate=False)
 
+# ------------------------
 # Colorbars
-# 1. Bond Shared
-cb_b = fig.colorbar(m1, cax=cax_bond)
-cax_bond.set_title(r"$\bar{\chi}$", pad=5, fontsize=10)
+# ------------------------
+cb_chi = fig.colorbar(pcmA, cax=cax_chi)
+cb_chi.set_ticks([4, 8, 16, 32, 64])
+cb_chi.set_ticklabels(["4", "8", "16", "32", "64"])
+cax_chi.set_title(r"$\overline{\chi}_{\mathrm{peak}}$", pad=12, fontsize=10)
 
-# 2. Alpha Bond
-cb_ab = fig.colorbar(m5, cax=cax_al_bond)
-cax_al_bond.set_title(r"$\alpha$", pad=5, fontsize=10) # Renamed
+cb_al = fig.colorbar(pcm_al, cax=cax_alpha, ticks=[1.0, 1.5, 2.0])
+cax_alpha.set_title(r"$\alpha = \chi_A / \chi_B$", pad=12, fontsize=10)
 
-fig.savefig("gamma_dt_alpha.pdf", dpi=300)
+# ------------------------
+# Alpha Stats
+# ------------------------
+valid_alpha = Z_alpha[~np.isnan(Z_alpha)]
+mean_al = np.nanmean(valid_alpha) if valid_alpha.size > 0 else 0
+std_al = np.nanstd(valid_alpha) if valid_alpha.size > 0 else 0
+stats_text = rf"$\mu_\alpha = {mean_al:.2f}$"+"\n"+rf"$\sigma_\alpha = {std_al:.2f}$"
+axAlpha.text(0.95, 0.95, stats_text, transform=axAlpha.transAxes, 
+             verticalalignment='top', horizontalalignment='right',
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='none'))
+
+plt.savefig("gamma_dt_alpha.pdf", dpi=300, bbox_inches="tight")
+plt.savefig("gamma_dt_alpha.png", dpi=300, bbox_inches="tight")
 plt.show()
