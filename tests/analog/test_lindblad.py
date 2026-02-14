@@ -176,3 +176,63 @@ def test_lindblad_system_size_error() -> None:
 
     with pytest.raises(ValueError, match="System size too large"):
         run(initial_state, hamiltonian, sim_params, None)
+
+def test_lindblad_zero_strength_noise() -> None:
+    """Test Lindblad with zero strength noise process."""
+    n_sites = 2
+    psi = MPS(n_sites)
+    h = MPO.ising(n_sites, J=1.0, g=1.0)
+    noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
+    
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="Lindblad", observables=[obs])
+    
+    args = (0, psi, noise, sim_params, h)
+    # Should run without error
+    lindblad(args)
+
+def test_lindblad_system_size_limit() -> None:
+    """Test that Lindblad raises ValueError for system size > 12."""
+    n_sites = 13
+    psi = MPS(n_sites)
+    h = MPO.ising(n_sites, J=1.0, g=1.0)
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=1.0, observables=[Observable("z", sites=[0])])
+    
+    # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
+    args = (0, psi, None, sim_params, h)
+    
+    with pytest.raises(ValueError, match="System size too large"):
+        lindblad(args)
+
+def test_lindblad_diagnostic_observables() -> None:
+    """Test that diagnostic observables are handled (converted to None/0.0) in Lindblad."""
+    n_sites = 2
+    psi = MPS(n_sites)
+    h = MPO.ising(n_sites, J=1.0, g=1.0)
+    
+    # "runtime_cost" is a special diagnostic observable name
+    obs_diag = Observable("runtime_cost", sites=[])
+    # Also add a real observable to verify mixing
+    obs_real = Observable("z", sites=[0])
+    
+    sim_params = AnalogSimParams(
+        dt=0.1, 
+        elapsed_time=0.1, 
+        solver="Lindblad", 
+        observables=[obs_diag, obs_real]
+    )
+    
+    # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
+    args = (0, psi, None, sim_params, h)
+    res_lindblad = lindblad(args)
+    
+    # Identify the index of the diagnostic observable
+    diag_idx = -1
+    for i, obs in enumerate(sim_params.sorted_observables):
+        if obs.gate.name == "runtime_cost":
+            diag_idx = i
+            break
+            
+    assert diag_idx != -1
+    # Result for diagnostic should be 0.0
+    assert np.all(res_lindblad[diag_idx, :] == 0.0)
