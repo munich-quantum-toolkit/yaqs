@@ -181,15 +181,24 @@ if __name__ == "__main__":
 
     alpha_levels = [1.1, 1.2, 1.3]
     
-    # Smooth contours in log-space ONLY (keeping heatmap discrete)
+    # Smooth contours by smoothing A and B separately in log-space (keeping heatmap discrete)
+    # chi_floor helps mask unstable ratio regions where signal is low
+    chi_floor = 10.0
     with np.errstate(divide='ignore', invalid='ignore'):
-        Zc = np.log(Z_alpha)
-        # Handle NaNs: interpolate slightly or use constant padding for smoothing
-        Zc_filled = np.nan_to_num(Zc, nan=np.nanmean(Zc) if not np.all(np.isnan(Zc)) else 0)
-        Zc_smooth = gaussian_filter(Zc_filled, sigma=(0.8, 1.0))
-        Z_alpha_smooth = np.exp(Zc_smooth)
-        # Restore mask for contours
-        Z_alpha_smooth[np.isnan(Z_alpha)] = np.nan
+        A = np.log(Z_A)
+        B = np.log(Z_B)
+        
+        # Replace NaNs for smoothing
+        A_f = np.nan_to_num(A, nan=np.nanmean(A) if not np.all(np.isnan(A)) else 0)
+        B_f = np.nan_to_num(B, nan=np.nanmean(B) if not np.all(np.isnan(B)) else 0)
+        
+        A_s = gaussian_filter(A_f, sigma=(0.8, 1.0))
+        B_s = gaussian_filter(B_f, sigma=(0.8, 1.0))
+        Z_alpha_smooth = np.exp(A_s - B_s)
+        
+        # Mask unstable regions and original invalid points
+        unstable_mask = (Z_A < chi_floor) | (Z_B < chi_floor) | np.isnan(Z_alpha)
+        Z_alpha_smooth[unstable_mask] = np.nan
 
     # Anchor at alpha=1
     cs_anchor = axAlpha.contour(DPc, Lc, Z_alpha_smooth, levels=[1.0], colors="black", linewidths=1.3, zorder=6)
