@@ -243,8 +243,8 @@ class AnalogSimParams:
             ValueError: If the solver is not "TJM" or "Lindblad".
         """
         self.noise_model: NoiseModel | None = None
-        if solver not in {"TJM", "Lindblad"}:
-            msg = f"Invalid solver '{solver}'. Allowed values are 'TJM' or 'Lindblad'."
+        if solver not in {"TJM", "Lindblad", "MCWF"}:
+            msg = f"Invalid solver '{solver}'. Allowed values are 'TJM', 'Lindblad', or 'MCWF'."
             raise ValueError(msg)
         self.solver = solver
         obs_list: list[Observable] = [] if observables is None else list(observables)
