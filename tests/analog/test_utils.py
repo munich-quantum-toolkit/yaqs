@@ -7,18 +7,20 @@
 
 """Tests for analog solver utility functions."""
 
+from dataclasses import dataclass
+
 import numpy as np
 import pytest
 
-from mqt.yaqs.analog.utils import _embed_observable, _embed_operator, _kron_all
+from mqt.yaqs.analog.utils import _embed_observable, _embed_operator, _kron_all  # noqa: PLC2701
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 
 
 def test_kron_all() -> None:
     """Test Kronecker product of multiple matrices."""
-    i = np.eye(2)
-    x = np.array([[0, 1], [1, 0]])
-    z = np.array([[1, 0], [0, -1]])
+    i = np.eye(2, dtype=complex)
+    x = np.array([[0, 1], [1, 0]], dtype=complex)
+    z = np.array([[1, 0], [0, -1]], dtype=complex)
 
     # I x X
     res = _kron_all([i, x])
@@ -81,8 +83,8 @@ def test_embed_operator_errors() -> None:
         _embed_operator({"sites": [0], "unknown": "value"}, num_sites)
 
     # 2-site matrix non-adjacent
+    cnot = np.eye(4)
     with pytest.raises(AssertionError, match="must be adjacent"):
-        cnot = np.eye(4)
         _embed_operator({"sites": [0, 2], "matrix": cnot}, num_sites)
 
 
@@ -99,15 +101,23 @@ def test_embed_observable_1site() -> None:
     assert np.allclose(op, expected)
 
 
+@dataclass
 class DummyGate:
-    def __init__(self, matrix: np.ndarray) -> None:
-        self.matrix = matrix
+    """Dummy gate for testing."""
+
+    matrix: np.ndarray
 
 
+@dataclass
 class DummyObservable:
-    def __init__(self, sites: int | list[int], matrix: np.ndarray) -> None:
-        self.sites = sites
-        self.gate = DummyGate(matrix)
+    """Dummy observable for testing."""
+
+    sites: int | list[int]
+    matrix: np.ndarray
+
+    def __post_init__(self) -> None:
+        """Initialize the gate after dataclass init."""
+        self.gate = DummyGate(self.matrix)
 
 
 def test_embed_observable_2site_adjacent() -> None:
@@ -129,11 +139,11 @@ def test_embed_observable_errors() -> None:
     num_sites = 3
 
     # Non-adjacent 2-site
+    obs = DummyObservable(sites=[0, 2], matrix=np.eye(4))
     with pytest.raises(NotImplementedError, match="Non-adjacent"):
-        obs = DummyObservable(sites=[0, 2], matrix=np.eye(4))
         _embed_observable(obs, num_sites)  # type: ignore[arg-type]
 
     # >2 sites
+    obs = DummyObservable(sites=[0, 1, 2], matrix=np.eye(8))
     with pytest.raises(NotImplementedError, match="Unsupported observable site count"):
-        obs = DummyObservable(sites=[0, 1, 2], matrix=np.eye(8))
         _embed_observable(obs, num_sites)  # type: ignore[arg-type]

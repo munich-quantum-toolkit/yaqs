@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
     from ..core.data_structures.networks import MPO, MPS
     from ..core.data_structures.noise_model import NoiseModel
-    from ..core.data_structures.simulation_parameters import AnalogSimParams, Observable
+    from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
 from .utils import _embed_observable, _embed_operator

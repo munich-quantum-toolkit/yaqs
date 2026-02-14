@@ -19,7 +19,6 @@ and validating the Tensor Jump Method (TJM) on small systems (N <= 8-10).
 
 from __future__ import annotations
 
-import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -30,13 +29,13 @@ if TYPE_CHECKING:
 
     from ..core.data_structures.networks import MPO, MPS
     from ..core.data_structures.noise_model import NoiseModel
-    from ..core.data_structures.simulation_parameters import AnalogSimParams, Observable
-
-
-from .utils import _embed_observable, _embed_operator
+    from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
 from dataclasses import dataclass
+
+from .utils import _embed_observable, _embed_operator
+
 
 @dataclass
 class MCWFContext:
@@ -65,6 +64,9 @@ def preprocess_mcwf(
 
     Returns:
         MCWFContext containing dense arrays ready for trajectory simulation.
+
+    Raises:
+        ValueError: If the system size is too large.
     """
     # Check dimensions
     num_sites = initial_state.length
@@ -75,7 +77,7 @@ def preprocess_mcwf(
 
     # 1. Initial State to Vector
     psi = initial_state.to_vec()
-    psi = psi / np.linalg.norm(psi)
+    psi /= np.linalg.norm(psi)
 
     # 2. Convert Hamiltonian MPO to dense matrix
     h_mat = hamiltonian.to_matrix()
@@ -132,12 +134,12 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     """
     _traj_idx, ctx = args
     sim_params = ctx.sim_params
-    
+
     # Copy initial state for this trajectory
     psi = ctx.psi_initial.copy()
-    
+
     rng = np.random.default_rng()
-    
+
     # Storage for results
     num_obs = len(sim_params.sorted_observables)
     num_steps = len(sim_params.times)
@@ -160,18 +162,18 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     for t_idx in range(1, num_steps):
         # 1. Evolve with H_eff
         psi_next = ctx.u_eff @ psi
-        
+
         # 2. Norm check
         norm_sq = np.vdot(psi_next, psi_next).real
         p_jump = 1.0 - norm_sq
-        
+
         # 3. Random number for jump
         r = rng.random()
-        
+
         if r < p_jump:
             # Jump occurs!
             weights = []
-            param_psi = psi # Use state at start of step
+            param_psi = psi  # Use state at start of step
 
             normalization_sum = 0.0
             for op in ctx.jump_ops:
@@ -179,21 +181,21 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
                 w = np.vdot(l_psi, l_psi).real
                 weights.append(w)
                 normalization_sum += w
-            
+
             if normalization_sum < 1e-15:
                 psi = psi_next / np.sqrt(norm_sq)
             else:
                 weights = np.array(weights)
                 weights /= normalization_sum
-                
+
                 k_idx = rng.choice(len(ctx.jump_ops), p=weights)
-                
+
                 psi = ctx.jump_ops[k_idx] @ param_psi
-                psi = psi / np.linalg.norm(psi)
+                psi /= np.linalg.norm(psi)
         else:
             # No jump
             psi = psi_next / np.sqrt(norm_sq)
-            
+
         # Measurement
         if sim_params.sample_timesteps or t_idx == num_steps - 1:
             measure(psi, t_idx)
