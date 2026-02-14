@@ -73,7 +73,7 @@ def test_initialize() -> None:
     ):
         initialize(state, noise_model, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt / 2, sim_params)
-        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
+        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
 
 
 def test_step_through() -> None:
@@ -108,7 +108,7 @@ def test_step_through() -> None:
         step_through(state, H, noise_model, sim_params, current_time=0.2)
         mock_dynamic_tdvp(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
-        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
+        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
 
 
 def test_analog_tjm_2() -> None:

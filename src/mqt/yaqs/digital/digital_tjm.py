@@ -276,6 +276,9 @@ def digital_tjm(
         else:
             results = np.zeros((len(sim_params.sorted_observables), 1))
 
+    # Instantiate a fresh RNG for this trajectory
+    rng = np.random.default_rng()
+
     col_idx = 0
     canonical_form_lost = False
     while dag.op_nodes():
@@ -298,7 +301,7 @@ def digital_tjm(
                 else:
                     local_noise_model = create_local_noise_model(noise_model, first_site, last_site)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params)
+                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
                 dag.remove_op_node(node)
 
