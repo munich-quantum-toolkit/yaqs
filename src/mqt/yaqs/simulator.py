@@ -38,6 +38,7 @@ import multiprocessing
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
 import os
+from collections.abc import Callable, Sequence
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
@@ -79,6 +80,7 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .analog.lindblad import lindblad
+from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .digital.digital_tjm import digital_tjm
@@ -224,7 +226,7 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
 # Wrap a single backend call in a context that (again) caps threadpools.
 # This protects against libraries that spawn pools lazily during the call.
 # ---------------------------------------------------------------------------
-def _call_backend(backend: Callable[[TArg], TRes], arg: TArg, n_threads: int = 1) -> TRes:
+def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) -> TRes:  # noqa: ANN401
     """Invoke a backend function under a strict temporary thread cap.
 
     Wraps a single backend call in a context that forces threadpool limits
@@ -284,8 +286,8 @@ def _spawn_context() -> multiprocessing.context.BaseContext:
 # order while updating a tqdm progress bar.
 # ---------------------------------------------------------------------------
 def _run_backend_parallel(
-    backend: Callable[[TArg], TRes],
-    args: Sequence[TArg],
+    backend: Callable[[Any], TRes],
+    args: Sequence[Any],
     *,
     max_workers: int,
     show_progress: bool = True,
@@ -608,9 +610,11 @@ def _run_analog(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # Choose integrator order (1 or 2) for the analog TJM backend
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]], NDArray[np.float64]]
+    backend: Callable[[Any], NDArray[np.float64]]
     if sim_params.solver == "Lindblad":
         backend = lindblad
+    elif sim_params.solver == "MCWF":
+        backend = mcwf
     elif sim_params.order == 1:
         backend = analog_tjm_1
     else:
@@ -632,9 +636,14 @@ def _run_analog(
         observable.initialize(sim_params)
 
     # Argument bundles per trajectory
-    args: list[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]] = [
-        (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
-    ]
+    args: list[Any]
+    if sim_params.solver == "MCWF":
+        # Optimization: Pre-compute dense operators once
+        ctx = preprocess_mcwf(initial_state, operator, noise_model, sim_params)
+        args = [(i, ctx) for i in range(sim_params.num_traj)]
+    else:
+        # Standard TJM/Lindblad arguments
+        args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
 
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)

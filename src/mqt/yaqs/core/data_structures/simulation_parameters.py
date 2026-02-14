@@ -236,15 +236,16 @@ class AnalogSimParams:
         num_threads:
             Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
             Defaults to 1 for efficiency on small/medium bond dimensions.
-        solver:
-            The solver to use for the simulation. Options are "TJM" (default) and "Lindblad".
+        solver : str, optional
+            The solver method to use. Must be one of "TJM" (Tensor Jump Method), "Lindblad" (exact density matrix),
+            or "MCWF" (Monte Carlo Wavefunction). Defaults to "TJM" if not specified.r is not "TJM" or "Lindblad".
 
         Raises:
-            ValueError: If the solver is not "TJM" or "Lindblad".
+            ValueError: If the solver is not "TJM", "Lindblad", or "MCWF".
         """
         self.noise_model: NoiseModel | None = None
-        if solver not in {"TJM", "Lindblad"}:
-            msg = f"Invalid solver '{solver}'. Allowed values are 'TJM' or 'Lindblad'."
+        if solver not in {"TJM", "Lindblad", "MCWF"}:
+            msg = f"Invalid solver '{solver}'. Allowed values are 'TJM', 'Lindblad', or 'MCWF'."
             raise ValueError(msg)
         self.solver = solver
         obs_list: list[Observable] = [] if observables is None else list(observables)
