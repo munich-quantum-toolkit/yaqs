@@ -33,7 +33,7 @@ def monotone_envelope_decreasing(y: np.ndarray) -> np.ndarray:
     y = np.asarray(y, dtype=float)
     return np.minimum.accumulate(y)
 
-def error_for_N(samples: np.ndarray, ref_val: float, N_grid: np.ndarray, n_batches: int = 200) -> np.ndarray:
+def error_for_N(samples: np.ndarray, ref_val: float, N_grid: np.ndarray, n_batches: int = 1000) -> np.ndarray:
     """Returns mean error for each N."""
     rng = np.random.default_rng(42)
     samples = samples.flatten()
@@ -52,7 +52,7 @@ def error_for_N(samples: np.ndarray, ref_val: float, N_grid: np.ndarray, n_batch
 
 def get_N_required(err_vs_N: np.ndarray, N_grid: np.ndarray, target_error: float) -> float:
     """Find smallest N such that error <= target_error."""
-    idx = np.where(err_vs_N <= target_error)[0]
+    idx = np.where(err_vs_N <= target_error + 1e-3)[0]
     if idx.size > 0:
         return float(N_grid[idx[0]])
     return np.nan
@@ -189,10 +189,21 @@ def plot_heatmaps(N1, N2, target_error):
     # Let's center around 1? or just linear/log?
     # Usually we look for improvement.
     k_min, k_max = np.nanmin(Kappa), np.nanmax(Kappa)
-    norm_k = Normalize(vmin=1, vmax=max(k_max, 2)) # Adjust based on data
-    print(np.mean(Kappa), np.median(Kappa), k_min, k_max)
+    norm_k = Normalize(vmin=1, vmax=10) # Adjust based on data
     
-    m3 = ax_al.pcolormesh(dt_edges, g_edges, Kappa, cmap="RdBu_r", norm=norm_k, shading="auto")
+    # Diagnostics
+    total_points = Kappa.size
+    nan_count = np.count_nonzero(np.isnan(Kappa))
+    print(f"Kappa Stats:")
+    print(f"  Mean:   {np.nanmean(Kappa):.3f}")
+    print(f"  Median: {np.nanmedian(Kappa):.3f}")
+    print(f"  Range:  [{k_min:.3f}, {k_max:.3f}]")
+    print(f"  NaNs:   {nan_count} / {total_points} ({100*nan_count/total_points:.1f}%)")
+    print(f"  (Note: NaNs are likely from Stability Skip dt*gamma > 1 or convergence failures)")
+    
+    cmap_k = plt.get_cmap("RdBu_r").copy()
+    cmap_k.set_under("black")
+    m3 = ax_al.pcolormesh(dt_edges, g_edges, Kappa, cmap=cmap_k, norm=norm_k, shading="auto")
     # Red = High Kappa (B needs more = A better). Blue = Low Kappa (B needs less = B better). 
     # Or cividis like practical?
     # user said "alpha plot... what we call a kappa plot".
@@ -219,13 +230,18 @@ def plot_heatmaps(N1, N2, target_error):
     ax_al.tick_params(labelleft=False)
     
     # Titles
-    ax_u1.set_title(r"$N_{req}$ (Unraveling A)")
-    ax_u2.set_title(r"$N_{req}$ (Unraveling B)")
-    ax_al.set_title(r"$\kappa = N_B / N_A$")
+    ax_u1.set_title("Unraveling A")
+    ax_u2.set_title("Unraveling B")
     
+    mean_k = np.nanmean(Kappa)
+    var_k = np.nanvar(Kappa)
+    ax_al.set_title(rf"$\mu={mean_k:.2f}, \sigma={np.sqrt(var_k):.2f}$")
+
     # Colorbars
-    fig.colorbar(m1, cax=cax_n, label="Trajectories")
-    fig.colorbar(m3, cax=cax_al, label=r"$\kappa$")
+    fig.colorbar(m1, cax=cax_n)
+    cax_n.set_title("N", pad=5)
+    fig.colorbar(m3, cax=cax_al, extend="min")
+    cax_al.set_title(r"$\kappa$", pad=5)
     
     # DP lines
     def add_dp_lines(ax):
