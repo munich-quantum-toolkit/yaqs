@@ -59,7 +59,7 @@ def lindblad(
     # Check dimensions
     num_sites = initial_state.length
     dim = 2**num_sites
-    if num_sites > 10:
+    if num_sites > 12:
         msg = f"System size too large for exact Lindblad solver (N={num_sites}, dim={dim})."
         raise ValueError(msg)
 

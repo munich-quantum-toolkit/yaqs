@@ -71,7 +71,7 @@ def preprocess_mcwf(
     # Check dimensions
     num_sites = initial_state.length
     dim = 2**num_sites
-    if num_sites > 10:
+    if num_sites > 27:
         msg = f"System size too large for MCWF solver (N={num_sites}, dim={dim})."
         raise ValueError(msg)
 
