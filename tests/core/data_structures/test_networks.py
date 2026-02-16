@@ -64,7 +64,9 @@ def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
     return out
 
 
-def _embed_two_body(op1: np.ndarray, op2: np.ndarray, length: int, i: int) -> np.ndarray:
+def _embed_two_body(
+    op1: np.ndarray, op2: np.ndarray, length: int, i: int
+) -> np.ndarray:
     """Embed a nearest-neighbor two-site operator into a length-L qubit Hilbert space.
 
     Args:
@@ -113,7 +115,9 @@ def _ising_dense(length: int, j_val: float, g: float) -> np.ndarray:
     return H
 
 
-def _heisenberg_dense(length: int, jx: float, jy: float, jz: float, h: float) -> np.ndarray:
+def _heisenberg_dense(
+    length: int, jx: float, jy: float, jz: float, h: float
+) -> np.ndarray:
     """Construct the dense Heisenberg Hamiltonian for an open chain.
 
     The Hamiltonian is
@@ -142,7 +146,9 @@ def _heisenberg_dense(length: int, jx: float, jy: float, jz: float, h: float) ->
     return H
 
 
-def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: float, hubbard_u: float) -> np.ndarray:
+def _bose_hubbard_dense(
+    length: int, local_dim: int, omega: float, hopping_j: float, hubbard_u: float
+) -> np.ndarray:
     """Construct the exact dense Bose-Hubbard Hamiltonian for comparison.
 
     Returns:
@@ -300,7 +306,9 @@ def test_bose_hubbard_correct_operator() -> None:
     assert mpo.length == length
     assert mpo.physical_dimension == local_dim
     assert len(mpo.tensors) == length
-    assert all(t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors), "Bond dimension should be 4"
+    assert all(
+        t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors
+    ), "Bond dimension should be 4"
 
     # Dense comparison
     H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)
@@ -396,14 +404,8 @@ def test_from_matrix() -> None:
     - random matrices at moderately truncated bond dimension
     - all validation error branches (Codecov)
     """
-    import numpy as np
-    import pytest
 
     rng = np.random.default_rng()
-
-    # -------------------------------------------------
-    # 1) Bose–Hubbard Hamiltonian (exact up to bond dim 4)
-    # -------------------------------------------------
 
     length = 5
     d = 3  # local dimension
@@ -412,28 +414,15 @@ def test_from_matrix() -> None:
     Hmpo = MPO.from_matrix(H, d, 4)
     assert np.allclose(H, Hmpo.to_matrix())
 
-    # -------------------------------------------------
-    # 2) Random matrix, max bond dimension
-    # -------------------------------------------------
-
     H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
     Hmpo = MPO.from_matrix(H, d, 1_000_000)
     assert np.allclose(H, Hmpo.to_matrix())
-
-    # -------------------------------------------------
-    # 3) Random matrix, moderately truncated
-    # -------------------------------------------------
 
     length = 6
     H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
     Hmpo = MPO.from_matrix(H, d, 728)
     assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
 
-    # -------------------------------------------------
-    # 4) Boundary cases: hit ALL validation branches
-    # -------------------------------------------------
-
-    # d <= 0
     mat = np.eye(1)
     with pytest.raises(ValueError, match="Physical dimension d must be > 0"):
         MPO.from_matrix(mat, d=0)
@@ -542,7 +531,9 @@ def test_check_if_identity() -> None:
 ##############################################################################
 
 
-@pytest.mark.parametrize("state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall", "basis"])
+@pytest.mark.parametrize(
+    "state", ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall", "basis"]
+)
 def test_mps_initialization(state: str) -> None:
     """Test that MPS initializes with the correct chain length, physical dimensions, and tensor shapes.
 
@@ -596,10 +587,18 @@ def test_mps_initialization(state: str) -> None:
             expected = np.array([1, -1j], dtype=complex) / np.sqrt(2)
             np.testing.assert_allclose(vec, expected)
         elif state == "Neel":
-            expected = np.array([1, 0], dtype=complex) if i % 2 else np.array([0, 1], dtype=complex)
+            expected = (
+                np.array([1, 0], dtype=complex)
+                if i % 2
+                else np.array([0, 1], dtype=complex)
+            )
             np.testing.assert_allclose(vec, expected)
         elif state == "wall":
-            expected = np.array([1, 0], dtype=complex) if i < length // 2 else np.array([0, 1], dtype=complex)
+            expected = (
+                np.array([1, 0], dtype=complex)
+                if i < length // 2
+                else np.array([0, 1], dtype=complex)
+            )
             np.testing.assert_allclose(vec, expected)
         elif state == "basis":
             bit = int(basis_string[i])
@@ -1051,7 +1050,9 @@ def test_pad_raises_on_shrink() -> None:
     mps = MPS(length=5, state="zeros")
     mps.pad_bond_dimension(4)  # enlarge first
 
-    with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
+    with pytest.raises(
+        ValueError, match="Target bond dim must be at least current bond dim"
+    ):
         mps.pad_bond_dimension(2)  # would shrink - must fail
 
 
@@ -1277,7 +1278,9 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
         Observable(GateLibrary.entropy(), [1, 2]),
         Observable(GateLibrary.schmidt_spectrum(), [1, 2]),
     ]
-    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1, show_progress=False)
+    sim_diag = AnalogSimParams(
+        diagnostics_and_meta, elapsed_time=0.1, dt=0.1, show_progress=False
+    )
 
     results_diag = np.empty((len(diagnostics_and_meta), 2), dtype=object)
     mps.evaluate_observables(sim_diag, results_diag, column_index=0)
@@ -1516,7 +1519,9 @@ def test_compress_one_sweep_raises_on_invalid_direction() -> None:
         np.zeros((2, 2, 1, 1), dtype=complex),
     ]
     with pytest.raises(ValueError, match=r"direction must be 'lr' or 'rl'\."):
-        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)  # noqa: SLF001
+        mpo._compress_one_sweep(
+            direction="xx", tol=1e-12, max_bond_dim=None
+        )  # noqa: SLF001
 
 
 def test_from_pauli_sum_empty_spec_is_identity_term() -> None:
