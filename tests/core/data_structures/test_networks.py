@@ -397,47 +397,74 @@ def test_custom() -> None:
 def test_from_matrix() -> None:
     """Test that from_matrix() constructs a correct MPO.
 
-    This test constructs a dense Bose-Hubbard Hamiltonian and creates an MPO via from_matrix(). This
-    is converted back via to_matrix and is compared to the original. The same is done for a random
-    matrix at maximal bond dimension and close-to maximal bond dimension.
+    This test constructs a dense Bose-Hubbard Hamiltonian and creates an MPO via from_matrix().
+    It checks:
+    - reconstruction correctness for Bose-Hubbard
+    - random matrices at very large bond dimension
+    - random matrices at moderately truncated bond dimension
+    - all validation error branches (Codecov)
     """
+    import numpy as np
+    import pytest
+
+    rng = np.random.default_rng()
+
+    # -------------------------------------------------
+    # 1) Bose–Hubbard Hamiltonian (exact up to bond dim 4)
+    # -------------------------------------------------
+
     length = 5
-    # local dimension
-    d = 3
+    d = 3  # local dimension
     H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)
-    # exact down to bond dimension 4
+
     Hmpo = MPO.from_matrix(H, d, 4)
     assert np.allclose(H, Hmpo.to_matrix())
 
-    H = np.random.rand(d**length, d**length) + 1j * np.random.rand(
-        d**length, d ** (length)
-    )
-    Hmpo = MPO.from_matrix(H, d, 1000000)
+    # -------------------------------------------------
+    # 2) Random matrix, max bond dimension
+    # -------------------------------------------------
+
+    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
+    Hmpo = MPO.from_matrix(H, d, 1_000_000)
     assert np.allclose(H, Hmpo.to_matrix())
 
-    length = 6
-    H = np.random.rand(d**length, d ** (length)) + 1j * np.random.rand(
-        d**length, d ** (length)
-    )
-    Hmpo = MPO.from_matrix(H, d, 728)
+    # -------------------------------------------------
+    # 3) Random matrix, moderately truncated
+    # -------------------------------------------------
 
-    # test boundary cases
-    # single value
+    length = 6
+    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
+    Hmpo = MPO.from_matrix(H, d, 728)
+    assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
+
+    # -------------------------------------------------
+    # 4) Boundary cases: hit ALL validation branches
+    # -------------------------------------------------
+
+    # d <= 0
     mat = np.eye(1)
     with pytest.raises(ValueError, match="Physical dimension d must be > 0"):
         MPO.from_matrix(mat, d=0)
 
-    # non square
+    # non-square matrix
     mat = np.zeros((4, 2))
     with pytest.raises(ValueError, match="Matrix must be square"):
         MPO.from_matrix(mat, d=2)
 
-    # impossible matrix
-    mat = np.eye(6)  # 6 is not a power of 2, 3, etc.
+    # d == 1 but matrix not 1x1
+    mat = np.eye(4)
+    with pytest.raises(ValueError, match="1x1"):
+        MPO.from_matrix(mat, d=1)
+
+    # matrix dimension not a power of d
+    mat = np.eye(6)
     with pytest.raises(ValueError, match="not a power"):
         MPO.from_matrix(mat, d=2)
 
-    assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
+    # inferred n < 1 (log(1)/log(100) = 0)
+    mat = np.eye(1)
+    with pytest.raises(ValueError, match="invalid"):
+        MPO.from_matrix(mat, d=100)
 
 
 def test_to_mps() -> None:
