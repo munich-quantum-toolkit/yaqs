@@ -2000,7 +2000,7 @@ class MPO:
 
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
 
-    return mpo
+        return mpo
 
     def check_if_valid_mpo(self) -> bool:
         """MPO validity check.
