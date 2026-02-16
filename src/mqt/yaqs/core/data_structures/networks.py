@@ -1905,7 +1905,7 @@ class MPO:
             max_bond (int | None):
                 Maximum allowed bond dimension (before truncation).
             cutoff (float):
-                Singular values ``<= cutoff`` are discarded. By default all singular
+                Singular values ``<= cutoff`` are discarded. By default cutoff=0: all singular
                 values are included.
 
         Returns:
@@ -1960,7 +1960,7 @@ class MPO:
 
         def _truncate(s: np.ndarray) -> int:
             r = s.size
-            if cutoff > 0.0:
+            if cutoff >= 0.0:
                 r = max(int(np.sum(s > cutoff)), 1)
             if max_bond is not None:
                 r = min(r, max_bond)
