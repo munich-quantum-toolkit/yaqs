@@ -1783,7 +1783,37 @@ class MPO:
         max_bond: int | None = None,
         cutoff: float = 0.0,
     ) -> MPO:
-        """Factorize a dense matrix into an MPO with uniform local dimension ``d``."""
+        """Factorize a dense matrix into an MPO with uniform local dimension ``d``.
+
+        Each site has local shape ``(d, d)``.
+        The number of sites ``n`` is inferred from the relation:
+
+            mat.shape = (d**n, d**n)
+
+        Args:
+            mat (np.ndarray):
+                Square matrix of shape ``(d**n, d**n)``.
+            d (int):
+                Physical dimension per site. Must satisfy ``d > 0``.
+            max_bond (int | None):
+                Maximum allowed bond dimension (before truncation).
+            cutoff (float):
+                Singular values ``<= cutoff`` are discarded. By default cutoff=0: all non-zero singular
+                values are included.
+
+        Returns:
+            MPO:
+                An MPO with ``n`` sites, uniform physical dimension ``d`` per site,
+                and bond dimensions determined by SVD truncation.
+
+        Raises:
+            ValueError:
+                If ``d <= 0``;
+                If ``d == 1`` but the matrix is not ``1 x 1``;
+                If the matrix is not square;
+                If ``rows`` is not a power of ``d``;
+                If the inferred number of sites ``n < 1``.
+        """
         if d <= 0:
             msg = f"Physical dimension d must be > 0, got d={d}."
             raise ValueError(msg)
