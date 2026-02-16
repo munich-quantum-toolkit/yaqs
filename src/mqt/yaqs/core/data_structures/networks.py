@@ -1837,9 +1837,7 @@ class MPO:
 
             if n < 1:
                 msg = f"Inferred chain length n={n} is invalid; matrix dimension {rows} too small for base d={d}."
-                raise ValueError(
-                    msg
-                )
+                raise ValueError(msg)
 
             if not np.isclose(n_float, n):
                 msg = f"Matrix dimension {rows} is not a power of d={d}."
