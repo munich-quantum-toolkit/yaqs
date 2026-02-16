@@ -234,4 +234,4 @@ def test_lindblad_diagnostic_observables() -> None:
 
     assert diag_idx != -1
     # Result for diagnostic should be 0.0
-    assert np.all(res_lindblad[diag_idx, :] == 0.0)
+    assert np.allclose(res_lindblad[diag_idx, :], 0.0)

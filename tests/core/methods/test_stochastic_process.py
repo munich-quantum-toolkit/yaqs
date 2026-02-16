@@ -13,6 +13,7 @@ import copy
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -133,7 +134,7 @@ def test_create_probability_distribution_one_site() -> None:
     # Check process properties
     process = noise_model.processes[0]
     assert process["sites"] == [1]
-    assert process["strength"] == 0.5
+    assert process["strength"] == pytest.approx(0.5)
     # Check probability normalization
     assert np.isclose(sum(probabilities), 1.0)
 
@@ -199,6 +200,6 @@ def test_create_probability_distribution_two_site() -> None:
     # Check process properties
     process = noise_model.processes[0]
     assert process["sites"] == [0, 1]
-    assert process["strength"] == 0.2
+    assert process["strength"] == pytest.approx(0.2)
     # Check probability normalization
     assert np.isclose(sum(probabilities), 1.0)

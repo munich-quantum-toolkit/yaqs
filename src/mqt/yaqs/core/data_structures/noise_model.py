@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -220,7 +221,7 @@ class NoiseModel:
                     sampled_val = generator.lognormal(mean=mean, sigma=std)
                     new_proc["strength"] = float(sampled_val)
                 elif dist_type == "truncated_normal":
-                    if std == 0.0:
+                    if math.isclose(std, 0.0, abs_tol=1e-8):
                         new_proc["strength"] = float(max(0.0, mean))
                     else:
                         # Truncate at 0 (a=0) and +inf (b=inf)
