@@ -15,6 +15,8 @@ Target Scenario:
 """
 
 from __future__ import annotations
+import os
+os.environ["YAQS_MAX_WORKERS"] = "8"  # Must be set BEFORE mqt.yaqs imports
 
 from dataclasses import dataclass, field
 from typing import Callable, Optional, List, Any
@@ -64,11 +66,11 @@ class SimulationResult:
 DEFAULT_L = 16
 DEFAULT_J = 1.0
 DEFAULT_H = 1.0
-DEFAULT_GAMMA = 0.5
+DEFAULT_GAMMA = 0.1
 DEFAULT_DT = 0.1
 DEFAULT_T = 2.0
 DEFAULT_TARGET_SE = 0.001
-DEFAULT_PILOT_N = 200
+DEFAULT_PILOT_N = 1000
 
 
 def get_default_observables(L: int) -> List[Observable]:
@@ -161,7 +163,7 @@ def run_unraveling_pilot(
         sample_timesteps=False,
     )
     
-    simulator.run(state, H, sim_params, noise_model=noise_model)
+    simulator.run(state, H, sim_params, noise_model=noise_model, parallel=True)
     print("Obs val", sim_params.observables[0].results)
 
     # Extraction
