@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+import scipy.linalg
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -63,8 +64,6 @@ def robust_svd(
         v_mat: Right singular vectors conjugate-transposed (complex128), shape depends
             on `full_matrices`.
     """
-    import scipy.linalg
-
     try:
         u_mat, s_vec, v_mat = scipy.linalg.svd(
             a_mat,

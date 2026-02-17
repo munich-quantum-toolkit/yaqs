@@ -38,14 +38,13 @@ import multiprocessing
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
     ProcessPoolExecutor,
     wait,
 )
-import concurrent
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 if TYPE_CHECKING:
@@ -81,7 +80,7 @@ from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterator
     from concurrent.futures import Future
 
     import numpy as np
@@ -89,7 +88,14 @@ if TYPE_CHECKING:
 
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
-    from qiskit.circuit import QuantumCircuit
+
+from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
+
+from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from .analog.lindblad import lindblad
+from .analog.mcwf import mcwf, preprocess_mcwf
+from .digital.digital_tjm import digital_tjm
 
 __all__ = ["available_cpus", "run"]  # public API of this module
 
@@ -162,7 +168,6 @@ def available_cpus() -> int:
         count = 1
 
     return count
-
 
 
 # ---------------------------------------------------------------------------
@@ -250,13 +255,12 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
             threadpool_info()
 
 
-
 # ---------------------------------------------------------------------------
 # 7) WORKER WRAPPERS
 # These functions are pickled and sent to workers. They retrieve large objects
 # from the global _WORKER_CTX instead of receiving them as arguments.
 # ---------------------------------------------------------------------------
-def _digital_strong_worker(traj_idx: int) -> Any:
+def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64]:
     """Execute a single digital strong simulation trajectory.
 
     Retrieves the required simulation objects (initial state, noise model,
@@ -267,20 +271,16 @@ def _digital_strong_worker(traj_idx: int) -> Any:
         traj_idx: The integer index of the trajectory to execute.
 
     Returns:
-        Any: The result of the single-trajectory simulation (typically an
-        observable trajectory or final state).
+        dict[int, int] | NDArray[np.float64]: The result of the single-trajectory simulation
+        (typically an observable trajectory or final state).
     """
-    from .digital.digital_tjm import digital_tjm
-
-    return digital_tjm(
-        (
-            traj_idx,
-            _WORKER_CTX["initial_state"],
-            _WORKER_CTX["noise_model"],
-            _WORKER_CTX["sim_params"],
-            _WORKER_CTX["operator"],
-        )
-    )
+    return digital_tjm((
+        traj_idx,
+        _WORKER_CTX["initial_state"],
+        _WORKER_CTX["noise_model"],
+        _WORKER_CTX["sim_params"],
+        _WORKER_CTX["operator"],
+    ))
 
 
 def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
@@ -296,23 +296,19 @@ def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
         dict[int, int]: A dictionary mapping outcome bitstrings (as integers)
         to counts (typically {outcome: 1} for a single shot).
     """
-    from .digital.digital_tjm import digital_tjm
-
     return cast(
         "dict[int, int]",
-        digital_tjm(
-            (
-                traj_idx,
-                _WORKER_CTX["initial_state"],
-                _WORKER_CTX["noise_model"],
-                _WORKER_CTX["sim_params"],
-                _WORKER_CTX["operator"],
-            )
-        ),
+        digital_tjm((
+            traj_idx,
+            _WORKER_CTX["initial_state"],
+            _WORKER_CTX["noise_model"],
+            _WORKER_CTX["sim_params"],
+            _WORKER_CTX["operator"],
+        )),
     )
 
 
-def _analog_worker(traj_idx: int) -> Any:
+def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
     """Execute a single analog simulation trajectory (TJM or Lindblad).
 
     Retrieves the appropriate backend function and simulation arguments from
@@ -322,22 +318,20 @@ def _analog_worker(traj_idx: int) -> Any:
         traj_idx: The integer index of the trajectory to execute.
 
     Returns:
-        Any: The result of the simulation (typically observable values over time).
+        NDArray[np.float64]: The result of the simulation (typically observable values over time).
     """
     # backend is chosen in _run_analog and stored in context
     backend = _WORKER_CTX["backend"]
-    return backend(
-        (
-            traj_idx,
-            _WORKER_CTX["initial_state"],
-            _WORKER_CTX["noise_model"],
-            _WORKER_CTX["sim_params"],
-            _WORKER_CTX["operator"],
-        )
-    )
+    return backend((
+        traj_idx,
+        _WORKER_CTX["initial_state"],
+        _WORKER_CTX["noise_model"],
+        _WORKER_CTX["sim_params"],
+        _WORKER_CTX["operator"],
+    ))
 
 
-def _mcwf_worker(traj_idx: int) -> Any:
+def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
     """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
 
     Retrieves the preprocessed MCWF context from `_WORKER_CTX` and executes
@@ -347,10 +341,8 @@ def _mcwf_worker(traj_idx: int) -> Any:
         traj_idx: The integer index of the trajectory to execute.
 
     Returns:
-        Any: The result of the MCWF trajectory.
+        NDArray[np.float64]: The result of the MCWF trajectory.
     """
-    from .analog.mcwf import mcwf
-
     return mcwf((traj_idx, _WORKER_CTX["ctx"]))
 
 
@@ -470,7 +462,7 @@ def _run_backend_parallel(
     ):
         # Retry bookkeeping per index
         retries = dict.fromkeys(range(n_jobs), 0)
-        
+
         # In-flight tracking
         futures: dict[Future[TRes], int] = {}
         next_job_idx = 0
@@ -499,7 +491,7 @@ def _run_backend_parallel(
                         continue
                     # Exceeded retry budget → propagate
                     raise
-                
+
                 # Yield in completion order and update progress
                 yield i, res
                 pbar.update(1)
@@ -542,8 +534,6 @@ def _run_strong_sim(
     """
     # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
     # We type as Any to keep ty happy without over-constraining element types.
-    from .digital.digital_tjm import digital_tjm
-
     backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # If there's no noise at all, we don't need multiple trajectories
@@ -555,8 +545,6 @@ def _run_strong_sim(
 
     # If requested, count mid-measurement sampling barriers (optional feature)
     if sim_params.sample_layers:
-        from qiskit.converters import circuit_to_dag
-
         dag = circuit_to_dag(operator)
         sim_params.num_mid_measurements = sum(
             1
@@ -597,7 +585,7 @@ def _run_strong_sim(
         # Serial path (debugging/single-core/short runs)
         # Use all available cores for multithreading in serial mode
         n_threads = available_cpus()
-        
+
         # Reconstruct args locally for serial execution
         args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
             (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
@@ -605,7 +593,7 @@ def _run_strong_sim(
 
         # Use tqdm if show_progress is True
         iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
-        
+
         for i, arg in enumerate(iterator):
             result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
@@ -653,8 +641,6 @@ def _run_weak_sim(
         TypeError: If a measurement result is not of the expected type.
     """
     # digital_tjm returns a measurement outcome structure for weak sim
-    from .digital.digital_tjm import digital_tjm
-
     backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # Trajectory count policy
@@ -690,12 +676,12 @@ def _run_weak_sim(
             if not isinstance(result, dict):
                 msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
                 raise TypeError(msg)
-            sim_params.measurements[i] = cast("dict[int, int]", result)
+            sim_params.measurements[i] = result
     else:
         # Serial path
         # Use all available cores for multithreading in serial mode
         n_threads = available_cpus()
-        
+
         # Reconstruct args locally
         args: list[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]] = [
             (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
@@ -743,8 +729,6 @@ def _run_circuit(
         sim_params: Simulation parameters for circuit simulation.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
-
-
     """
     # Sanity check: MPS length must equal circuit qubit count
     assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
@@ -784,9 +768,6 @@ def _run_analog(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # Choose integrator order (1 or 2) for the analog TJM backend
-    from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
-    from .analog.lindblad import lindblad
-    from .analog.mcwf import mcwf, preprocess_mcwf
 
     backend: Callable[[Any], NDArray[np.float64]]
     if sim_params.solver == "Lindblad":
@@ -813,20 +794,16 @@ def _run_analog(
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
 
-    # Argument bundles per trajectory
-    # args: list[Any]
     payload: dict[str, Any]
     worker_fn: Callable[[int], Any]
 
     if sim_params.solver == "MCWF":
         # Optimization: Pre-compute dense operators once
         ctx = preprocess_mcwf(initial_state, operator, noise_model, sim_params)
-        # args = [(i, ctx) for i in range(sim_params.num_traj)]
         payload = {"ctx": ctx}
         worker_fn = _mcwf_worker
     else:
         # Standard TJM/Lindblad arguments
-        # args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
         payload = {
             "initial_state": initial_state,
             "noise_model": noise_model,
@@ -856,7 +833,7 @@ def _run_analog(
         # Serial fallback
         # Use all available cores for multithreading in serial mode
         n_threads = available_cpus()
-        
+
         # Reconstruct args locally for serial execution
         args: list[Any]
         if sim_params.solver == "MCWF":
@@ -864,7 +841,7 @@ def _run_analog(
             # ctx is already in local scope from above if block
             args = [(i, ctx) for i in range(sim_params.num_traj)]
         else:
-             args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+            args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
 
         # Use tqdm if show_progress is True
         iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
@@ -901,8 +878,7 @@ def run(
         initial_state: The initial state of the system as an MPS. Must be B normalized.
         operator: The operator representing the evolution; an MPO for analog simulations
             or a QuantumCircuit for circuit simulations.
-        sim_params: Simulation parameters specifying
-                                                                         the simulation mode and settings.
+        sim_params: Simulation parameters specifying the simulation mode and settings.
         noise_model: The noise model to apply during simulation. If provided, it is sampled once
             at the beginning of the run to generate a concrete noise realization (static disorder).
             The sampled noise model is then saved to `sim_params.noise_model`.
@@ -916,10 +892,8 @@ def run(
     if noise_model is not None:
         noise_model = noise_model.sample()
     sim_params.noise_model = noise_model
-    
+
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
-        from qiskit.circuit import QuantumCircuit
-        
         assert isinstance(operator, QuantumCircuit)
         _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, AnalogSimParams):
