@@ -585,6 +585,7 @@ def _run_strong_sim(
             payload=payload,
             n_jobs=sim_params.num_traj,
             max_workers=max_workers,
+            show_progress=sim_params.show_progress,
             desc="Running trajectories",
             max_retries=10,
             retry_exceptions=(CancelledError, TimeoutError, OSError),
@@ -594,16 +595,18 @@ def _run_strong_sim(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial path (debugging/single-core/short runs)
-        # If running a single trajectory, process pool overhead is usually not worth it.
-        # However, we can use BLAS threading if the user requested it via num_threads.
-        n_threads = getattr(sim_params, "num_threads", 1)  # Default to 1 if not present (e.g. WeakSimParams)
+        # Use all available cores for multithreading in serial mode
+        n_threads = available_cpus()
         
         # Reconstruct args locally for serial execution
         args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
             (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
         ]
 
-        for i, arg in enumerate(args):
+        # Use tqdm if show_progress is True
+        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
+        
+        for i, arg in enumerate(iterator):
             result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
@@ -678,6 +681,7 @@ def _run_weak_sim(
             payload=payload,
             n_jobs=sim_params.num_traj,
             max_workers=max_workers,
+            show_progress=sim_params.show_progress,
             desc="Running trajectories",
             max_retries=10,
             retry_exceptions=(CancelledError, TimeoutError, OSError),
@@ -689,14 +693,18 @@ def _run_weak_sim(
             sim_params.measurements[i] = cast("dict[int, int]", result)
     else:
         # Serial path
-        n_threads = getattr(sim_params, "num_threads", 1)
+        # Use all available cores for multithreading in serial mode
+        n_threads = available_cpus()
         
         # Reconstruct args locally
         args: list[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]] = [
             (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
         ]
 
-        for i, arg in enumerate(args):
+        # Use tqdm if show_progress is True
+        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
+
+        for i, arg in enumerate(iterator):
             result = _call_backend(backend, arg, n_threads=n_threads)
             if not isinstance(result, dict):
                 msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
@@ -835,6 +843,7 @@ def _run_analog(
             payload=payload,
             n_jobs=sim_params.num_traj,
             max_workers=max_workers,
+            show_progress=sim_params.show_progress,
             desc="Running trajectories",
             max_retries=10,
             retry_exceptions=(CancelledError, TimeoutError, OSError),
@@ -845,7 +854,8 @@ def _run_analog(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial fallback
-        n_threads = getattr(sim_params, "num_threads", 1)  # Default to 1 if not present (e.g. WeakSimParams)
+        # Use all available cores for multithreading in serial mode
+        n_threads = available_cpus()
         
         # Reconstruct args locally for serial execution
         args: list[Any]
@@ -856,7 +866,10 @@ def _run_analog(
         else:
              args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
 
-        for i, arg in enumerate(args):
+        # Use tqdm if show_progress is True
+        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
+
+        for i, arg in enumerate(iterator):
             result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
