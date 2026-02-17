@@ -24,7 +24,7 @@ import numpy as np
 from mqt.yaqs.core.data_structures.networks import MPS, MPO
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 
@@ -64,11 +64,11 @@ class SimulationResult:
 DEFAULT_L = 16
 DEFAULT_J = 1.0
 DEFAULT_H = 1.0
-DEFAULT_GAMMA = 0.1
+DEFAULT_GAMMA = 0.5
 DEFAULT_DT = 0.1
 DEFAULT_T = 2.0
-DEFAULT_TARGET_SE = 0.01
-DEFAULT_PILOT_N = 50
+DEFAULT_TARGET_SE = 0.001
+DEFAULT_PILOT_N = 200
 
 
 def get_default_observables(L: int) -> List[Observable]:
@@ -86,6 +86,7 @@ def get_default_observables(L: int) -> List[Observable]:
 def build_heisenberg_mpo(L: int, J: float, h: float) -> MPO:
     """Build the Heisenberg Hamiltonian MPO."""
     return MPO.heisenberg(L, J, J, J, h)
+    # return MPO.ising(L, J, h)
 
 
 def noise_jump_bitflip(L: int, gamma: float) -> NoiseModel:
@@ -157,11 +158,12 @@ def run_unraveling_pilot(
         threshold=1e-6,
         trunc_mode="discarded_weight",
         order=2,
-        sample_timesteps=True,
+        sample_timesteps=False,
     )
     
     simulator.run(state, H, sim_params, noise_model=noise_model)
-    
+    print("Obs val", sim_params.observables[0].results)
+
     # Extraction
     obs_avg = np.array(sim_params.observables[0].results, dtype=float)
     chi_max = extract_chi_max(sim_params)
