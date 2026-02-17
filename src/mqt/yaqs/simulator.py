@@ -45,6 +45,7 @@ from concurrent.futures import (
     ProcessPoolExecutor,
     wait,
 )
+import concurrent
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 if TYPE_CHECKING:
@@ -146,10 +147,23 @@ def available_cpus() -> int:
             pass
 
     # 4) Fallback
+    count = 0
     try:
-        return os.cpu_count() or multiprocessing.cpu_count() or 1
+        count = os.cpu_count() or multiprocessing.cpu_count() or 1
     except (NotImplementedError, OSError):
-        return 1
+        count = 1
+
+    # 5) Apply Safety Cap (unless overridden by YAQS_MAX_WORKERS)
+    # We cap at 16 by default for safety.
+    if "YAQS_MAX_WORKERS" in os.environ:
+        try:
+            val = int(os.environ["YAQS_MAX_WORKERS"])
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+
+    return min(count, 64)
 
 
 # ---------------------------------------------------------------------------
