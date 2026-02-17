@@ -71,19 +71,13 @@ import importlib
 # ---------------------------------------------------------------------------
 # 2) THIRD-PARTY IMPORTS
 # ---------------------------------------------------------------------------
-from qiskit.circuit import QuantumCircuit
-from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
-from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
-from .analog.lindblad import lindblad
-from .analog.mcwf import mcwf, preprocess_mcwf
 from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
-from .digital.digital_tjm import digital_tjm
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -94,6 +88,7 @@ if TYPE_CHECKING:
 
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
+    from qiskit.circuit import QuantumCircuit
 
 __all__ = ["available_cpus", "run"]  # public API of this module
 
@@ -399,6 +394,8 @@ def _run_strong_sim(
     """
     # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
     # We type as Any to keep ty happy without over-constraining element types.
+    from .digital.digital_tjm import digital_tjm
+
     backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # If there's no noise at all, we don't need multiple trajectories
@@ -410,6 +407,8 @@ def _run_strong_sim(
 
     # If requested, count mid-measurement sampling barriers (optional feature)
     if sim_params.sample_layers:
+        from qiskit.converters import circuit_to_dag
+
         dag = circuit_to_dag(operator)
         sim_params.num_mid_measurements = sum(
             1
@@ -495,6 +494,8 @@ def _run_weak_sim(
         TypeError: If a measurement result is not of the expected type.
     """
     # digital_tjm returns a measurement outcome structure for weak sim
+    from .digital.digital_tjm import digital_tjm
+
     backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # Trajectory count policy
@@ -610,6 +611,10 @@ def _run_analog(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # Choose integrator order (1 or 2) for the analog TJM backend
+    from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+    from .analog.lindblad import lindblad
+    from .analog.mcwf import mcwf, preprocess_mcwf
+
     backend: Callable[[Any], NDArray[np.float64]]
     if sim_params.solver == "Lindblad":
         backend = lindblad
@@ -710,8 +715,10 @@ def run(
     if noise_model is not None:
         noise_model = noise_model.sample()
     sim_params.noise_model = noise_model
-
+    
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
+        from qiskit.circuit import QuantumCircuit
+        
         assert isinstance(operator, QuantumCircuit)
         _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, AnalogSimParams):
