@@ -117,8 +117,16 @@ def available_cpus() -> int:
     Returns:
         int: The number of available CPU cores for parallel execution.
     """
+    # 0) Priority Override: YAQS_MAX_WORKERS
+    if "YAQS_MAX_WORKERS" in os.environ:
+        try:
+            val = int(os.environ["YAQS_MAX_WORKERS"])
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+
     # 1) Detect xdist: running inside a pytest worker?
-    # If so, force 1 CPU to avoid "process explosion" (nested pools).
     if os.environ.get("PYTEST_XDIST_WORKER", ""):
         return 1
 
@@ -152,16 +160,6 @@ def available_cpus() -> int:
         count = os.cpu_count() or multiprocessing.cpu_count() or 1
     except (NotImplementedError, OSError):
         count = 1
-
-    # 5) Apply Safety Cap (unless overridden by YAQS_MAX_WORKERS)
-    # We cap at 16 by default for safety.
-    if "YAQS_MAX_WORKERS" in os.environ:
-        try:
-            val = int(os.environ["YAQS_MAX_WORKERS"])
-            if val > 0:
-                return val
-        except ValueError:
-            pass
 
     return min(count, 64)
 
