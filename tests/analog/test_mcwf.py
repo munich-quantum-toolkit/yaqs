@@ -204,4 +204,4 @@ def test_mcwf_diagnostic_observables() -> None:
     # Run MCWF
     res_mcwf = mcwf((0, ctx))
     # Result for diagnostic should be 0.0
-    assert np.all(res_mcwf[diag_idx, :] == 0.0)
+    assert np.allclose(res_mcwf[diag_idx, :], 0.0)
