@@ -152,8 +152,19 @@ def available_cpus() -> int:
 
     # 4) Fallback
     try:
-        return os.cpu_count() or multiprocessing.cpu_count() or 1
-    except (NotImplementedError, OSError):
+        # Get the physical/logical CPU count
+        count = os.cpu_count() or multiprocessing.cpu_count() or 1
+        
+        # Check for user override via environment variable
+        # Default cap is 61 (60 workers + 1 parent) to prevent OOM/fork-bomb on high-core machines
+        max_workers_env = os.environ.get("YAQS_MAX_WORKERS")
+        if max_workers_env:
+             limit = int(max_workers_env)
+        else:
+             limit = 61
+             
+        return min(count, limit)
+    except (NotImplementedError, OSError, ValueError):
         return 1
 
 
