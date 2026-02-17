@@ -152,19 +152,8 @@ def available_cpus() -> int:
 
     # 4) Fallback
     try:
-        # Get the physical/logical CPU count
-        count = os.cpu_count() or multiprocessing.cpu_count() or 1
-        
-        # Check for user override via environment variable
-        # Default cap is 61 (60 workers + 1 parent) to prevent OOM/fork-bomb on high-core machines
-        max_workers_env = os.environ.get("YAQS_MAX_WORKERS")
-        if max_workers_env:
-             limit = int(max_workers_env)
-        else:
-             limit = 61
-             
-        return min(count, limit)
-    except (NotImplementedError, OSError, ValueError):
+        return os.cpu_count() or multiprocessing.cpu_count() or 1
+    except (NotImplementedError, OSError):
         return 1
 
 
@@ -189,6 +178,8 @@ THREAD_ENV_VARS: dict[str, str] = {
     "VECLIB_MAXIMUM_THREADS": "1",
     # BLIS BLAS implementation (used in some NumPy builds instead of OpenBLAS/MKL).
     "BLIS_NUM_THREADS": "1",
+    # Numba JIT-compiled parallel loops (used in TDVP kernels).
+    "NUMBA_NUM_THREADS": "1",
 }
 
 
@@ -222,6 +213,10 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
     with contextlib.suppress(Exception):
         mkl = importlib.import_module("mkl")
         mkl.set_num_threads(n_threads)
+
+    with contextlib.suppress(Exception):
+        numba = importlib.import_module("numba")
+        numba.set_num_threads(n_threads)
 
     if threadpool_limits is not None:
         with contextlib.suppress(Exception):
@@ -337,45 +332,57 @@ def _run_backend_parallel(
         - Caps threads per worker via the ``_limit_worker_threads`` initializer.
         - Retries only the specified transient exception types; others
           propagate immediately.
+        - If BrokenProcessPool occurs, we raise a helpful error suggesting to lower YAQS_MAX_WORKERS.
     """
     # Default progress bar length to number of arguments
     total = len(args) if total is None else total
     # Use a spawn context to avoid fork+OpenMP problems
     ctx = _spawn_context()
 
-    # Create a pool of worker processes with per-worker thread caps
-    with (
-        ProcessPoolExecutor(
-            max_workers=max_workers,
-            mp_context=ctx,
-            initializer=_limit_worker_threads,
-            initargs=(1,),  # enforce 1 thread per worker
-        ) as ex,
-        tqdm(total=total, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
-    ):
-        # Retry bookkeeping per index
-        retries = dict.fromkeys(range(len(args)), 0)
-        # Submit all tasks upfront; map Future -> index
-        futures: dict[Future[TRes], int] = {ex.submit(backend, args[i]): i for i in range(len(args))}
+    try:
+        # Create a pool of worker processes with per-worker thread caps
+        with (
+            ProcessPoolExecutor(
+                max_workers=max_workers,
+                mp_context=ctx,
+                initializer=_limit_worker_threads,
+                initargs=(1,),  # enforce 1 thread per worker
+            ) as ex,
+            tqdm(total=total, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
+        ):
+            # Retry bookkeeping per index
+            retries = dict.fromkeys(range(len(args)), 0)
+            # Submit all tasks upfront; map Future -> index
+            futures: dict[Future[TRes], int] = {ex.submit(backend, args[i]): i for i in range(len(args))}
 
-        # Drain as futures complete
-        while futures:
-            done, _ = wait(futures, return_when=FIRST_COMPLETED)
-            for fut in done:
-                i = futures.pop(fut)
-                try:
-                    res = fut.result()
-                except retry_exceptions:
-                    # Retry a bounded number of times on selected transient errors
-                    if retries[i] < max_retries:
-                        retries[i] += 1
-                        futures[ex.submit(backend, args[i])] = i
-                        continue
-                    # Exceeded retry budget → propagate
-                    raise
-                # Yield in completion order and update progress
-                yield i, res
-                pbar.update(1)
+            # Drain as futures complete
+            while futures:
+                done, _ = wait(futures, return_when=FIRST_COMPLETED)
+                for fut in done:
+                    i = futures.pop(fut)
+                    try:
+                        res = fut.result()
+                    except retry_exceptions:
+                        # Retry a bounded number of times on selected transient errors
+                        if retries[i] < max_retries:
+                            retries[i] += 1
+                            futures[ex.submit(backend, args[i])] = i
+                            continue
+                        # Exceeded retry budget → propagate
+                        raise
+                    # Yield in completion order and update progress
+                    yield i, res
+                    pbar.update(1)
+
+    except concurrent.futures.process.BrokenProcessPool as e:
+        msg = (
+            "The parallel process pool crashed. This is often due to running out of "
+            "memory or file descriptors when spawning many worker processes.\n"
+            "Try reducing the number of workers by setting the environment variable:\n"
+            "    export YAQS_MAX_WORKERS=4  (or some low number)\n"
+            f"Current max_workers: {max_workers}"
+        )
+        raise RuntimeError(msg) from e
 
 
 # ---------------------------------------------------------------------------
