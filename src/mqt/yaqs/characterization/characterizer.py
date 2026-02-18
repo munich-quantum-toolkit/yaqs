@@ -77,135 +77,77 @@ class SimpleMLP(nn.Module):
         return self.network(x)
 
 
-def generate_training_data(
-    hamiltonian: MPO,
-    initial_state: MPS,
-    expected_gamma: float,
-    sim_params: AnalogSimParams,
-    num_samples: int,
-    num_traj: int | None = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Generate training data for the characterizer.
+class SimpleCNN(nn.Module):
+    """A simple 2D Convolutional Neural Network (CNN) for noise characterization.
 
-    Runs simulations with randomized noise models to create a dataset mapping
-    observed time evolution to noise parameters.
-
-    Args:
-        hamiltonian: The system Hamiltonian (MPO).
-        initial_state: The initial state (MPS).
-        expected_gamma: The expected magnitude of the noise strength (gamma).
-                        Used as the mean for lognormal sampling.
-        sim_params: Simulation parameters.
-        num_samples: Number of training samples (noise realizations) to generate.
-        num_traj: Number of trajectories per simulation. If provided, overrides sim_params.num_traj.
-
-    Returns:
-        tuple[torch.Tensor, torch.Tensor]:
-            - X_train: Input features (evolution data) of shape (num_samples, feature_dim).
-            - y_train: Labels (noise strengths) of shape (num_samples, label_dim).
+    Assumes input shape (Batch, Channels, Sites, Time).
     """
-    if num_traj is not None:
-        sim_params.num_traj = num_traj
-    
-    # We enforce tracking X and Z observables for characterization on all sites
-    # Flattened output vector will be constructed from these.
-    # Note: Using existing observables in sim_params might be preferred, but 
-    # to ensure coverage we might want to check or override.
-    # For now, let's assume the user configures sim_params correctly or we append if missing.
-    # Actually, simpler to force X and Z on all sites as per the prompt requirement.
-    
-    # Identify sites from the Hamiltonian or state
-    num_sites = initial_state.length
-    
-    # Setup observables: X and Z for each site
-    characterization_observables = []
-    for site in range(num_sites):
-        characterization_observables.append(Observable(GateLibrary.x(), site))
-        characterization_observables.append(Observable(GateLibrary.z(), site))
-    
-    # Update sim_params with these observables
-    sim_params.observables = characterization_observables
-    sim_params.get_state = False # Ensure no state return for characterization
-    # Trigger re-sorting/initialization internals
-    # (We re-create or manually set sorted_observables as AnalogSimParams.__init__ does)
-    # Re-initialization of sim_params with new observables is safer but expensive if we copy 
-    # large structures. Just re-sorting:
-    sortable = [obs for obs in sim_params.observables if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}]
-    unsorted = [obs for obs in sim_params.observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}]
-    sorted_obs = sorted(
-        sortable, 
-        key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites
-    )
-    sim_params.sorted_observables = sorted_obs + unsorted
 
-    # Storage
-    evolution_data: list[np.ndarray] = []
-    noise_labels: list[np.ndarray] = []
+    def __init__(self, input_dim: int, output_dim: int, hidden_channels: int = 32) -> None:
+        """Initialize the CNN.
 
-    # Calculate log-normal parameters
-    # If X ~ Lognormal(mu, sigma), then E[X] = exp(mu + sigma^2 / 2).
-    # We want E[X] = expected_gamma.
-    # Let's pick a fixed sigma (variance width) or allow it to be configured? 
-    # For simplicity, let's assume sigma=0.5 (moderate spread) and solve for mu.
-    sigma = 0.5
-    mu = np.log(expected_gamma) - (sigma**2 / 2)
+        Args:
+            input_dim: Number of input channels (usually 1 for scalar observables).
+            output_dim: Dimension of the output vector (noise parameters).
+            hidden_channels: Number of channels in hidden layers. Defaults to 32.
+        """
+        super().__init__()
+        
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(input_dim, hidden_channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(hidden_channels, hidden_channels * 2, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1, 1)) # Global Average Pooling
+        )
+        
+        self.fc_layers = nn.Sequential(
+            nn.Linear(hidden_channels * 2, output_dim),
+            nn.Softplus()
+        )
 
-    logger.info("Generating %d training samples with expected gamma %f", num_samples, expected_gamma)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass."""
+        # x shape: (N, C, H, W) -> (N, hidden*2, 1, 1)
+        x = self.conv_layers(x)
+        x = x.view(x.size(0), -1) # Flatten
+        return self.fc_layers(x)
 
-    for _ in tqdm(range(num_samples), desc="Generating Data"):
-        # 1. Create a random noise model
-        processes = []
-        current_labels = []
-        
-        # We assume independent noise on each site for X, Y, Z (as per prompt implication)
-        # prompt: "lognormal distribution for X, Y, Z"
-        for site in range(num_sites):
-            for axis in ["x", "y", "z"]:
-                # Sample strength
-                strength = float(np.random.lognormal(mean=mu, sigma=sigma))
-                
-                processes.append({
-                    "name": axis,  # "x", "y", "z" are valid keys in NoiseLibrary/NoiseModel
-                    "sites": [site],
-                    "strength": strength
-                })
-                current_labels.append(strength)
 
-        noise_model = NoiseModel(processes=processes)
-        
-        # 2. Run simulation
-        # Note: simulator.run typically modifies initial_state in-place for state evolution 
-        # but for analog sim it uses MPO evolution.
-        # However, run() normalizes initial_state. To avoid side effects on the passed 
-        # initial_state across loops, we should deepcopy it.
-        state_copy = copy.deepcopy(initial_state)
-        
-        # Run simulation
-        simulator.run(state_copy, hamiltonian, sim_params, noise_model=noise_model)
-        
-        # 3. Extract data
-        # sim_params.observables now contains results.
-        # results structure: sim_params.observables[i].results is array of shape (len(times),)
-        
-        # We need to flatten all observables into a single vector
-        # Order: [Obs1_t0, Obs1_t1, ..., Obs2_t0, ...] or [t0_Obs1, t0_Obs2...]
-        # Let's stack them: (Num_Observables, Num_TimeSteps)
-        features = []
-        for obs in sim_params.sorted_observables:
-             if obs.results is not None:
-                 features.append(obs.results)
-        
-        # Stack feature: Shape (2*N, T) -> flatten
-        feature_vector = np.concatenate(features, axis=0) # Flattened array
-        
-        evolution_data.append(feature_vector)
-        noise_labels.append(np.array(current_labels))
+class SimpleRNN(nn.Module):
+    """A simple Recurrent Neural Network (RNN) for noise characterization.
 
-    # Convert to Tensors
-    X_train = torch.tensor(np.array(evolution_data), dtype=torch.float32)
-    y_train = torch.tensor(np.array(noise_labels), dtype=torch.float32)
-    
-    return X_train, y_train
+    Assumes input shape (Batch, Time, Features).
+    """
+
+    def __init__(self, input_dim: int, output_dim: int, hidden_size: int = 64, num_layers: int = 2) -> None:
+        """Initialize the RNN.
+
+        Args:
+            input_dim: Number of features per time step (e.g., number of sites).
+            output_dim: Dimension of the output vector.
+            hidden_size: Hidden state size of LSTM.
+            num_layers: Number of LSTM layers.
+        """
+        super().__init__()
+        
+        self.lstm = nn.LSTM(input_dim, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, output_dim),
+            nn.Softplus()
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass."""
+        # x shape: (Batch, Time, Features)
+        # output shape: (Batch, Time, Hidden)
+        lstm_out, _ = self.lstm(x)
+        
+        # Take the output from the last time step
+        last_step_out = lstm_out[:, -1, :]
+        
+        return self.fc(last_step_out)
 
 
 def train_model(
@@ -253,6 +195,7 @@ def train_model(
         loss_history.append(avg_loss)
     
     model.eval()
+    test_loss = 0.0
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
@@ -315,9 +258,11 @@ def run(
         model = model_class(input_dim, output_dim, **model_kwargs)
     else:
         try:
+            # Try initializing with dimensions first (common pattern)
             model = model_class(input_dim, output_dim, **model_kwargs)
         except TypeError:
-            model = model_class(**model_kwargs)
+            # Fallback for models with different signatures
+             model = model_class(**model_kwargs)
 
     # 4. Train
     device = "cuda" if torch.cuda.is_available() else "cpu"
