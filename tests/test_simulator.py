@@ -62,6 +62,42 @@ def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
     importlib.reload(simulator)
 
     assert simulator.available_cpus() == 8
+    
+    
+def test_threading_config() -> None:
+    """Verify correct multiprocessing context and Numba threading configuration."""
+    import os
+    import numba
+    from mqt.yaqs.simulator import _get_parallel_context, _worker_init
+    
+    # 1. Context Selection
+    ctx = _get_parallel_context()
+    if os.name == "nt":
+        assert ctx.get_start_method() == "spawn"
+    else:
+        # On Linux/macOS, we expect fork (or user-configured context)
+        assert ctx.get_start_method() == "fork"
+
+    # 2. Worker Initialization Logic
+    # Verify _worker_init caps Numba threads
+    
+    # Save current state
+    original_numba_threads = numba.get_num_threads()
+    
+    try:
+        # Simulate worker init with strict thread cap
+        _worker_init({}, n_threads=1)
+        
+        # Check if Numba threads are set to 1
+        assert numba.get_num_threads() == 1
+        # Check if env var is set (best effort)
+        assert os.environ.get("NUMBA_NUM_THREADS") == "1"
+        
+    finally:
+        # Restore state
+        numba.set_num_threads(original_numba_threads)
+        if "NUMBA_NUM_THREADS" in os.environ:
+             pass
 
 
 def test_analog_simulation() -> None:
