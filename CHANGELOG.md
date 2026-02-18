@@ -11,7 +11,13 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added Monte Carlo Wavefunction solver ([#333]) ([**@aaronleesander**])
+- added Lindblad solver for small systems ([#330]) ([**@aaronleesander**])
 - Noise model strengths can now be sampled from a normal distribution ([#329]) ([**@aaronleesander**])
+
+### Fixed
+
+- fixed potential memory leak in parallelization ([#336]) ([**@aaronleesander**])
 
 ## [0.4.0] - 2026-02-05
 
@@ -80,6 +86,9 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#336]: https://github.com/munich-quantum-toolkit/yaqs/pull/336
+[#333]: https://github.com/munich-quantum-toolkit/yaqs/pull/333
+[#330]: https://github.com/munich-quantum-toolkit/yaqs/pull/330
 [#329]: https://github.com/munich-quantum-toolkit/yaqs/pull/329
 [#319]: https://github.com/munich-quantum-toolkit/yaqs/pull/319
 [#316]: https://github.com/munich-quantum-toolkit/yaqs/pull/316

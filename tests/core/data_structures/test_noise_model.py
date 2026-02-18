@@ -53,8 +53,8 @@ def test_noise_model_creation() -> None:
     assert len(model.processes) == 2
     assert model.processes[0]["name"] == "lowering"
     assert model.processes[1]["name"] == "pauli_z"
-    assert model.processes[0]["strength"] == 0.1
-    assert model.processes[1]["strength"] == 0.05
+    assert model.processes[0]["strength"] == pytest.approx(0.1)
+    assert model.processes[1]["strength"] == pytest.approx(0.05)
     assert model.processes[0]["sites"] == [0]
     assert model.processes[1]["sites"] == [1]
     assert model.processes[0]["matrix"].shape == (2, 2)
@@ -235,7 +235,7 @@ def test_static_noise_strength() -> None:
     rng = np.random.default_rng(42)
     sampled_nm = nm.sample(rng=rng)
     assert len(sampled_nm.processes) == 1
-    assert sampled_nm.processes[0]["strength"] == 0.5
+    assert sampled_nm.processes[0]["strength"] == pytest.approx(0.5)
 
 
 def test_normal_distribution_sampling() -> None:
@@ -288,7 +288,7 @@ def test_normal_clamping_warning(caplog: pytest.LogCaptureFixture) -> None:
 
     assert "was negative and clamped to 0.0" in caplog.text
     # usage of max(0.0, ...) implies strength should be 0.0
-    assert sampled_nm.processes[0]["strength"] == 0.0
+    assert sampled_nm.processes[0]["strength"] == pytest.approx(0.0, abs=1e-8)
 
 
 def test_truncated_normal_sampling() -> None:
@@ -382,7 +382,7 @@ def test_mixed_static_and_distribution() -> None:
     sampled_nm = nm.sample(rng=rng)
 
     assert len(sampled_nm.processes) == 2
-    assert sampled_nm.processes[0]["strength"] == 0.5
+    assert sampled_nm.processes[0]["strength"] == pytest.approx(0.5)
     assert isinstance(sampled_nm.processes[1]["strength"], float)
     assert sampled_nm.processes[1]["strength"] > 0.0
 
@@ -452,7 +452,7 @@ def test_truncated_normal_negative_mean_zero_std() -> None:
     nm = NoiseModel(processes)
     rng = np.random.default_rng(42)
     sampled_nm = nm.sample(rng=rng)
-    assert sampled_nm.processes[0]["strength"] == 0.0
+    assert sampled_nm.processes[0]["strength"] == pytest.approx(0.0, abs=1e-8)
 
 
 def test_missing_distribution_key() -> None:
