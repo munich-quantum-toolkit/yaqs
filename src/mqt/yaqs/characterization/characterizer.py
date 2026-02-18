@@ -209,7 +209,7 @@ def train_model(
     return loss_history
 
 
-def run(
+def characterize(
     training_data: tuple[torch.Tensor, torch.Tensor] | None = None,
     epochs: int = 100,
     batch_size: int = 32,
