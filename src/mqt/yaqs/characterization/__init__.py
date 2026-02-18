@@ -8,5 +8,6 @@
 """Characterization package for MQT YAQS."""
 
 from .characterizer import characterize
+from .emulator import emulate
 
-__all__ = ["characterize"]
+__all__ = ["characterize", "emulate"]
