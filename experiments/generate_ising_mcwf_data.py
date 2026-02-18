@@ -24,8 +24,8 @@ def generate_mcwf_data(test_run: bool = False):
         L = 4
         num_traj = 10
     else:
-        L = 8
-        num_traj = 1000
+        L = 9
+        num_traj = 200
         
     J = 1.0
     g = 1.0
