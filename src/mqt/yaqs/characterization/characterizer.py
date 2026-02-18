@@ -192,6 +192,7 @@ def train_model(
             epoch_loss += loss.item() * data.size(0)
         
         avg_loss = epoch_loss / len(train_loader.dataset)
+        print(f"Epoch {_ + 1}/{epochs}, Loss: {avg_loss:.6f}")
         loss_history.append(avg_loss)
     
     model.eval()
@@ -209,8 +210,10 @@ def train_model(
     return loss_history
 
 
+from pathlib import Path
+
 def characterize(
-    training_data: tuple[torch.Tensor, torch.Tensor] | None = None,
+    training_data: tuple[torch.Tensor, torch.Tensor] | str | Path | None = None,
     epochs: int = 100,
     batch_size: int = 32,
     lr: float = 0.001,
@@ -222,20 +225,57 @@ def characterize(
     Orchestrates model initialization and training.
 
     Args:
-        training_data: Optional tuple (X, y) of pre-generated training data.
-        num_samples: Number of samples to generate if training_data is None.
-        training_num_traj: Override for number of trajectories during data generation.
+        training_data: Training data. Can be:
+            - A tuple (X, y) of pre-generated PyTorch tensors.
+            - A path (str or Path) to a .npz file containing 'observables' and 'gammas'.
         epochs: Number of training epochs.
         batch_size: Batch size for training.
         lr: Learning rate.
-        model_class: PyTorch Model class to use.
+        model_class: PyTorch Model class to use (SimpleMLP, SimpleCNN, SimpleRNN).
         model_kwargs: Keyword arguments for model initialization.
 
     Returns:
         nn.Module: The trained PyTorch model.
     """
     # 1. Prepare Data
-    x_data, y_data = training_data
+    if isinstance(training_data, (str, Path)):
+        data_path = Path(training_data)
+        if not data_path.exists():
+             raise FileNotFoundError(f"Data file not found at {data_path}")
+        
+        logger.info(f"Loading data from {data_path}...")
+        data = np.load(data_path)
+        
+        # Assume specific keys for now based on user's generation script
+        # In a more general version, these keys could be arguments
+        if "observables" not in data or "gammas" not in data:
+            raise ValueError("Data file must contain 'observables' and 'gammas' keys.")
+            
+        X_raw = data["observables"] # Shape (N, L, T)
+        y_raw = data["gammas"]      # Shape (N,)
+        
+        N, L, T = X_raw.shape
+        
+        # Reshape based on model class requirements
+        if model_class == SimpleCNN:
+            # (N, Channels=1, Height=L, Width=T)
+            X_data = X_raw.reshape(N, 1, L, T)
+        elif model_class == SimpleRNN:
+            # (N, Time=T, Features=L)
+            X_data = X_raw.transpose(0, 2, 1)
+        else: # SimpleMLP or generic
+            # Flatten: (N, Features=L*T)
+            X_data = X_raw.reshape(N, -1)
+            
+        y_data = y_raw.reshape(N, 1)
+        
+        x_data = torch.tensor(X_data, dtype=torch.float32)
+        y_data = torch.tensor(y_data, dtype=torch.float32)
+        
+    elif isinstance(training_data, tuple):
+        x_data, y_data = training_data
+    else:
+        raise ValueError("training_data must be a tuple of tensors or a file path.")
 
     # 2. Setup DataLoader
     X_train, X_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2, random_state=42)
