@@ -33,6 +33,7 @@ import importlib
 # 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
 # ---------------------------------------------------------------------------
 import multiprocessing
+import sys
 
 # ---------------------------------------------------------------------------
 # 0) IMPORTS
@@ -407,16 +408,17 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
 def _get_parallel_context() -> multiprocessing.context.BaseContext:
     """Return the appropriate multiprocessing context for the OS.
 
-    On Windows, 'spawn' is the only option.
-    On Linux/macOS, 'fork' is faster and avoids the OOM issues associated with 'spawn'
-    in some environments, provided that threading libraries are properly caped (which we do).
+    On Windows and macOS, 'spawn' is the standard/required option.
+    On Linux, 'fork' is faster and avoids the OOM issues associated with 'spawn'
+    in some environments, provided that threading libraries are properly capped (which we do).
     """
-    if os.name == "nt":
-        return multiprocessing.get_context("spawn")
+    if sys.platform == "linux":
+        # On Linux, 'fork' is generally safe if we ensure OpenMP/etc are single-threaded
+        # BEFORE forking or strictly cap them in the worker.
+        return multiprocessing.get_context("fork")
 
-    # On POSIX, 'fork' is generally safe if we ensure OpenMP/etc are single-threaded
-    # BEFORE forking or strictly cap them in the worker.
-    return multiprocessing.get_context("fork")
+    # On Windows (win32) and macOS (darwin), use 'spawn'
+    return multiprocessing.get_context("spawn")
 
 
 def _run_backend_parallel(
