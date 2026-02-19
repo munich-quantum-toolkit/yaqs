@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import importlib
 import multiprocessing
+import os
 
+import numba
 import numpy as np
 import pytest
 
@@ -35,6 +37,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
+from mqt.yaqs.simulator import _get_parallel_context, _worker_init  # noqa: PLC2701
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,14 +65,10 @@ def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
     importlib.reload(simulator)
 
     assert simulator.available_cpus() == 8
-    
-    
+
+
 def test_threading_config() -> None:
     """Verify correct multiprocessing context and Numba threading configuration."""
-    import os
-    import numba
-    from mqt.yaqs.simulator import _get_parallel_context, _worker_init
-    
     # 1. Context Selection
     ctx = _get_parallel_context()
     if os.name == "nt":
@@ -80,24 +79,24 @@ def test_threading_config() -> None:
 
     # 2. Worker Initialization Logic
     # Verify _worker_init caps Numba threads
-    
+
     # Save current state
     original_numba_threads = numba.get_num_threads()
-    
+
     try:
         # Simulate worker init with strict thread cap
         _worker_init({}, n_threads=1)
-        
+
         # Check if Numba threads are set to 1
         assert numba.get_num_threads() == 1
         # Check if env var is set (best effort)
         assert os.environ.get("NUMBA_NUM_THREADS") == "1"
-        
+
     finally:
         # Restore state
         numba.set_num_threads(original_numba_threads)
         if "NUMBA_NUM_THREADS" in os.environ:
-             pass
+            pass
 
 
 def test_analog_simulation() -> None:
