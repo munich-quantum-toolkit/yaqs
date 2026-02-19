@@ -24,6 +24,10 @@ All simulation results (e.g., observables, measurements) are aggregated and retu
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import importlib
+
 # ruff: noqa: E402
 # ---------------------------------------------------------------------------
 # 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
@@ -38,6 +42,7 @@ import multiprocessing
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
 import os
+import sys
 from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -64,13 +69,12 @@ else:
     threadpool_limits = _threadpool_limits
     threadpool_info = _threadpool_info
 
-import contextlib
-import copy
-import importlib
 
 # ---------------------------------------------------------------------------
 # 2) THIRD-PARTY IMPORTS
 # ---------------------------------------------------------------------------
+from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
@@ -88,9 +92,6 @@ if TYPE_CHECKING:
 
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
-
-from qiskit.circuit import QuantumCircuit
-from qiskit.converters import circuit_to_dag
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .analog.lindblad import lindblad
@@ -192,6 +193,8 @@ THREAD_ENV_VARS: dict[str, str] = {
     "VECLIB_MAXIMUM_THREADS": "1",
     # BLIS BLAS implementation (used in some NumPy builds instead of OpenBLAS/MKL).
     "BLIS_NUM_THREADS": "1",
+    # Numba threading (used for parallel=True kernels)
+    "NUMBA_NUM_THREADS": "1",
 }
 
 
@@ -219,6 +222,15 @@ def _worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
     # 2. Context Initialization
     _WORKER_CTX.clear()
     _WORKER_CTX.update(payload)
+
+    # 3. Numba Threading (Runtime)
+    # Some Numba versions ignore env vars if imported before.
+    try:
+        import numba  # noqa: PLC0415
+
+        numba.set_num_threads(n_threads)
+    except ImportError:
+        pass
 
 
 def _limit_worker_threads(n_threads: int = 1) -> None:
@@ -371,11 +383,20 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
         - If ``threadpoolctl`` is not available, falls back to direct call.
         - If enforcing thread limits fails, falls back silently to direct call.
     """
+    # Numba threading must be set BEFORE the threadpoolctl context limits backend threads,
+    try:
+        import numba  # noqa: PLC0415
+
+        numba.set_num_threads(n_threads)
+    except (ImportError, AttributeError):
+        pass
+
     if threadpool_limits is not None:
         # Caps any pools entered/created within the context
         with contextlib.suppress(Exception), threadpool_limits(limits=n_threads):
             return backend(arg)
-    # If threadpoolctl fails for any reason, fallback to direct call
+
+    # If threadpoolctl fails or is missing, fallback to direct call
     return backend(arg)
 
 
@@ -384,23 +405,19 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
 # On Linux, using "fork" with heavy numerical libs can hang/crash due to
 # non-fork-safe OpenMP/BLAS state. "spawn" is the robust cross-platform choice.
 # ---------------------------------------------------------------------------
-def _spawn_context() -> multiprocessing.context.BaseContext:
-    """Return a multiprocessing context using the 'spawn' start method.
+def _get_parallel_context() -> multiprocessing.context.BaseContext:
+    """Return the appropriate multiprocessing context for the OS.
 
-    The 'spawn' start method launches a fresh Python interpreter for each
-    worker process. This is safer than 'fork' when working with OpenMP/BLAS
-    libraries, which may leave non-fork-safe state (e.g., initialized thread
-    pools) in the parent process.
-
-    Returns:
-        multiprocessing.context.BaseContext: A multiprocessing context
-        configured to use 'spawn'.
-
-    Notes:
-        - On Linux, 'fork' is the default but can cause deadlocks/crashes
-          with numerical libraries.
-        - 'spawn' is slower to start but cross-platform safe.
+    On Windows and macOS, 'spawn' is the standard/required option.
+    On Linux, 'fork' is faster and avoids the OOM issues associated with 'spawn'
+    in some environments, provided that threading libraries are properly capped (which we do).
     """
+    if sys.platform == "linux":
+        # On Linux, 'fork' is generally safe if we ensure OpenMP/etc are single-threaded
+        # BEFORE forking or strictly cap them in the worker.
+        return multiprocessing.get_context("fork")
+
+    # On Windows (win32) and macOS (darwin), use 'spawn'
     return multiprocessing.get_context("spawn")
 
 
@@ -442,8 +459,8 @@ def _run_backend_parallel(
         tuple[int, TRes]: A tuple containing the job index and its result,
         yielded in the order of completion.
     """
-    # Use a spawn context to avoid fork+OpenMP problems
-    ctx = _spawn_context()
+    # Use appropriate context (fork on Linux, spawn on Windows)
+    ctx = _get_parallel_context()
 
     # Bounded in-flight factor (keep 2-4x workers busy to hide latency)
     inflight_factor = 2
