@@ -21,6 +21,7 @@ from __future__ import annotations
 import importlib
 import multiprocessing
 import os
+import sys
 
 import numba
 import numpy as np
@@ -69,8 +70,6 @@ def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_threading_config() -> None:
     """Verify correct multiprocessing context and Numba threading configuration."""
-    import sys
-
     # 1. Context Selection
     ctx = _get_parallel_context()
     if sys.platform == "linux":
@@ -85,11 +84,7 @@ def test_threading_config() -> None:
 
     # Save current state
     original_numba_threads = numba.get_num_threads()
-    # Save environment variables that _limit_worker_threads modifies
-    # We copy the entire environ to be safe, or just the keys we care about
-    # Since _limit_worker_threads sets many vars, let's snapshot the whole environ
-    # or better, just the ones we know about + the ones in THREAD_ENV_VARS
-
+    # Save environment variables that _limit_worker_threads modified
     env_snapshot = os.environ.copy()
 
     try:
@@ -107,7 +102,7 @@ def test_threading_config() -> None:
 
         # Restore environment variables
         # 1. Remove keys that were added
-        for key in os.environ:
+        for key in list(os.environ):
             if key not in env_snapshot:
                 del os.environ[key]
 
