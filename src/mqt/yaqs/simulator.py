@@ -24,6 +24,10 @@ All simulation results (e.g., observables, measurements) are aggregated and retu
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import importlib
+
 # ruff: noqa: E402
 # ---------------------------------------------------------------------------
 # 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
@@ -64,13 +68,12 @@ else:
     threadpool_limits = _threadpool_limits
     threadpool_info = _threadpool_info
 
-import contextlib
-import copy
-import importlib
 
 # ---------------------------------------------------------------------------
 # 2) THIRD-PARTY IMPORTS
 # ---------------------------------------------------------------------------
+from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
@@ -88,9 +91,6 @@ if TYPE_CHECKING:
 
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
-
-from qiskit.circuit import QuantumCircuit
-from qiskit.converters import circuit_to_dag
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .analog.lindblad import lindblad
@@ -225,7 +225,8 @@ def _worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
     # 3. Numba Threading (Runtime)
     # Some Numba versions ignore env vars if imported before.
     try:
-        import numba
+        import numba  # noqa: PLC0415
+
         numba.set_num_threads(n_threads)
     except ImportError:
         pass
@@ -383,7 +384,8 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
     """
     # Numba threading must be set BEFORE the threadpoolctl context limits backend threads,
     try:
-        import numba
+        import numba  # noqa: PLC0415
+
         numba.set_num_threads(n_threads)
     except (ImportError, AttributeError):
         pass
@@ -392,7 +394,7 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
         # Caps any pools entered/created within the context
         with contextlib.suppress(Exception), threadpool_limits(limits=n_threads):
             return backend(arg)
-            
+
     # If threadpoolctl fails or is missing, fallback to direct call
     return backend(arg)
 
@@ -411,7 +413,7 @@ def _get_parallel_context() -> multiprocessing.context.BaseContext:
     """
     if os.name == "nt":
         return multiprocessing.get_context("spawn")
-    
+
     # On POSIX, 'fork' is generally safe if we ensure OpenMP/etc are single-threaded
     # BEFORE forking or strictly cap them in the worker.
     return multiprocessing.get_context("fork")
