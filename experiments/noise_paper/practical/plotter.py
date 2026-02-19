@@ -221,7 +221,7 @@ cb_chi.set_ticklabels(["8", "16", "32", "64"])
 cax_chi.set_title(r"$\overline{\chi}_{\mathrm{max}}$", pad=12, fontsize=10)
 
 cb_al = fig.colorbar(pcm_al, cax=cax_alpha, ticks=[1.0, 1.5, 2.0])
-cax_alpha.set_title(r"$\alpha = \chi_A / \chi_B$", pad=12, fontsize=10)
+cax_alpha.set_title(r"$\alpha$", pad=12, fontsize=10)
 
 # ------------------------
 # Alpha Stats

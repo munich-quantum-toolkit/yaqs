@@ -248,7 +248,7 @@ def plot_heatmaps(N1, N2, target_error):
     cb_n.ax.yaxis.set_major_formatter(plt.FixedFormatter([f"{v}" for v in tick_vals]))
     
     cb_k = fig.colorbar(pcm_k, cax=cax_k, ticks=[2.0, 4.0, 6.0, 8.0])
-    cax_k.set_title(r"$\kappa = N_B / N_A$", pad=12, fontsize=10)
+    cax_k.set_title(r"$\kappa$", pad=12, fontsize=10)
     
     # ------------------------
     # Stats box for Kappa

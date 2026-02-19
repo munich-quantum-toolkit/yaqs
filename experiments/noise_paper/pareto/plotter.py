@@ -248,7 +248,7 @@ if __name__ == "__main__":
     cax_chi.set_title(r"$\overline{\chi}_{\mathrm{max}}$", pad=12, fontsize=10)
     
     cb_al = fig.colorbar(pcm_al, cax=cax_alpha, ticks=[1.0, 1.5, 2.0, 2.5])
-    cax_alpha.set_title(r"$\alpha = \overline{\chi}_{\mathrm{max}, A} / \overline{\chi}_{\mathrm{max}, B}$", pad=12, fontsize=10)
+    cax_alpha.set_title(r"$\alpha$", pad=12, fontsize=10)
 
     # 9. Stats for Alpha (computed on plotted masked data)
     valid_alpha = Z_alpha[~np.isnan(Z_alpha)]
