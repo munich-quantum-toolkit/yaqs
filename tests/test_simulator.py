@@ -82,36 +82,35 @@ def test_threading_config() -> None:
 
     # 2. Worker Initialization Logic
     # Verify _worker_init caps Numba threads
-    
+
     # Save current state
     original_numba_threads = numba.get_num_threads()
     # Save environment variables that _limit_worker_threads modifies
     # We copy the entire environ to be safe, or just the keys we care about
     # Since _limit_worker_threads sets many vars, let's snapshot the whole environ
     # or better, just the ones we know about + the ones in THREAD_ENV_VARS
-    from mqt.yaqs.simulator import THREAD_ENV_VARS
-    
+
     env_snapshot = os.environ.copy()
-    
+
     try:
         # Simulate worker init with strict thread cap
         _worker_init({}, n_threads=1)
-        
+
         # Check if Numba threads are set to 1
         assert numba.get_num_threads() == 1
         # Check if env var is set (best effort)
         assert os.environ.get("NUMBA_NUM_THREADS") == "1"
-        
+
     finally:
         # Restore state
         numba.set_num_threads(original_numba_threads)
-        
+
         # Restore environment variables
         # 1. Remove keys that were added
         for key in os.environ:
             if key not in env_snapshot:
                 del os.environ[key]
-        
+
         # 2. Restore keys that were modified/deleted
         for key, value in env_snapshot.items():
             if os.environ.get(key) != value:

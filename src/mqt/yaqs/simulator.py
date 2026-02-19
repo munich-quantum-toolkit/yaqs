@@ -33,7 +33,6 @@ import importlib
 # 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
 # ---------------------------------------------------------------------------
 import multiprocessing
-import sys
 
 # ---------------------------------------------------------------------------
 # 0) IMPORTS
@@ -43,6 +42,7 @@ import sys
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
 import os
+import sys
 from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
