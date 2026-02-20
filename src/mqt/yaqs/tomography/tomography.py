@@ -123,63 +123,7 @@ def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[
     return [D[:, k].reshape(dim, dim) for k in range(D.shape[1])]
 
 
-def _reprepare_site_zero_pure_env_approx(mps: MPS, new_state: np.ndarray) -> None:
-    """Reprepare site 0 using pure-state approximation of environment.
-
-    **WARNING**: This is an approximation! It approximates the unconditional environment
-    marginal by a single pure vector. This is exact only if the environment marginal
-    is rank-1 (pure). For mixed environment states, this introduces error.
-
-    For exact nonselective operation, use MPO (mixed-state) representation.
-    For trajectory-consistent operation, use _reprepare_site_zero_selective.
-
-    Args:
-        mps: The MPS to modify (modified in-place)
-        new_state: The new state vector for site 0, shape (d,)
-    """
-    # Shift orthogonality center to site 0 for clean bond structure
-    # Cost: O(L) per intervention; can be optimized by tracking center
-    for i in range(mps.length - 1, 0, -1):
-        mps.shift_orthogonality_center_left(i, decomposition="QR")
-
-    old_tensor = mps.tensors[0]  # shape (d, 1, chi)
-    d, left_bond, chi = old_tensor.shape
-
-    # Assertions for gauge and shape consistency
-    assert left_bond == 1, f"Expected left bond=1 after shifting to site 0, got {left_bond}"
-    assert d == new_state.shape[0], f"Physical dim mismatch: tensor={d}, state={new_state.shape[0]}"
-
-    # Extract environment vectors for each physical state
-    env_vecs = old_tensor[:, 0, :]  # shape (d, chi)
-
-    # Compute weights from current physical state (probabilities)
-    weights = np.linalg.norm(env_vecs, axis=1) ** 2
-    weights /= (np.sum(weights) + 1e-15)  # Normalize
-
-    # Average environment vector (pure-state approximation of mixed marginal)
-    avg_env = np.zeros(chi, dtype=np.complex128)
-    for s in range(d):
-        if weights[s] > 1e-12:
-            env_normalized = env_vecs[s] / (np.linalg.norm(env_vecs[s]) + 1e-15)
-            avg_env += np.sqrt(weights[s]) * env_normalized
-
-    # Normalize the average environment
-    avg_env /= (np.linalg.norm(avg_env) + 1e-15)
-
-    # Construct new tensor: new_state[s] * avg_env for each s
-    new_tensor = np.zeros((d, 1, chi), dtype=np.complex128)
-    for s in range(d):
-        new_tensor[s, 0, :] = new_state[s] * avg_env
-
-    mps.tensors[0] = new_tensor
-
-    # Renormalize MPS to prevent norm drift
-    norm = mps.norm()
-    if abs(norm) > 1e-15:
-        mps.tensors[0] /= norm
-
-
-def _reprepare_site_zero_selective(mps: MPS, new_state: np.ndarray, rng: np.random.Generator) -> int:
+def _reprepare_site_zero(mps: MPS, new_state: np.ndarray, rng: np.random.Generator) -> int:
     """Reprepare site 0 with selective (trajectory-resolved) intervention.
 
     This implements a clean trajectory-consistent operation:
@@ -222,7 +166,7 @@ def _reprepare_site_zero_selective(mps: MPS, new_state: np.ndarray, rng: np.rand
     return outcome
 
 
-def _reprepare_site_zero_vector_selective(
+def _reprepare_site_zero_vector(
     psi: NDArray[np.complex128], new_state: NDArray[np.complex128], rng: np.random.Generator
 ) -> tuple[NDArray[np.complex128], int]:
     """Reprepare site 0 for a dense vector state with selective intervention.
@@ -595,7 +539,6 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
     timesteps = WORKER_CTX["timesteps"]
     basis_set = WORKER_CTX["basis_set"]
     sequences = WORKER_CTX["sequences"]
-    mode = WORKER_CTX["mode"]
     noise_model = WORKER_CTX["noise_model"]
 
     seq = sequences[seq_idx]
@@ -683,12 +626,9 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             _, psi_next, _ = basis_set[next_idx]
 
             if is_mcwf:
-                current_state, _ = _reprepare_site_zero_vector_selective(current_state, psi_next, rng)
+                current_state, _ = _reprepare_site_zero_vector(current_state, psi_next, rng)
             else:
-                if mode == "selective":
-                    _reprepare_site_zero_selective(current_state, psi_next, rng)
-                else:
-                    _reprepare_site_zero_pure_env_approx(current_state, psi_next)
+                _reprepare_site_zero(current_state, psi_next, rng)
 
     return (seq_idx, traj_idx, trajectory_results)
 
@@ -698,7 +638,6 @@ def run_process_tensor_tomography(
     sim_params: AnalogSimParams,
     timesteps: list[float],
     num_trajectories: int = 100,
-    mode: str = "selective",
     noise_model: NoiseModel | None = None,
 ) -> ProcessTensor:
     """Run multi-step Process Tensor Tomography using parallelized backend.
@@ -712,8 +651,6 @@ def run_process_tensor_tomography(
         sim_params: Simulation parameters.
         timesteps: List of time durations for each evolution segment.
         num_trajectories: Number of trajectories to average.
-        mode: Intervention mode - "selective" (trajectory-resolved, preferred) or
-              "pure_env_approx" (pure-state approximation of mixed environment).
         noise_model: Noise model for development. If None, uses sim_params.noise_model.
 
     Returns:
@@ -750,7 +687,6 @@ def run_process_tensor_tomography(
         "timesteps": timesteps,
         "basis_set": basis_set,
         "sequences": sequences,
-        "mode": mode,
         "noise_model": noise_model,
         "num_trajectories": num_trajectories,
         "mcwf_static_ctx": mcwf_static_ctx,
