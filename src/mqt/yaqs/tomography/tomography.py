@@ -220,109 +220,6 @@ def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]
     return 0.5 * (I + expectations["x"] * x + expectations["y"] * y + expectations["z"] * z)
 
 
-def run(operator: MPO, sim_params: AnalogSimParams) -> NDArray[np.complex128]:
-    """Run process tomography for the given operator and parameters.
-
-    Args:
-        operator: The MPO describing the system evolution.
-        sim_params: Simulation parameters. WARNING: Observables in these params
-                    will be ignored/overridden for the tomography process.
-
-    Returns:
-        NDArray: The process tensor Lambda defining the map E(rho) = Tr_env(U rho_sys x 0_env U^dag).
-                 The tensor is constructed such that E(rho) = sum_k Tr(D_k^dag rho) rho_out_k.
-    """
-    length = operator.length
-    if length < 1:
-        msg = "Operator must have at least length 1."
-        raise ValueError(msg)
-
-    # 1. Prepare Basis States
-    basis_set = _get_basis_states()
-    [b[0] for b in basis_set]
-    basis_rhos = [b[2] for b in basis_set]
-
-    # 2. Calculate Dual Frame
-    duals = _calculate_dual_frame(basis_rhos)
-
-    output_rhos = []
-
-    # 3. Evolution Loop
-    for (name, _, _) in basis_set:
-
-        # Prepare MPS: Site 0 is basis state, others |0>
-        # We use the state name for init if supported, or manually set tensor
-        mps = MPS(length=length, state="zeros")
-
-        target_state_mps = MPS(length=1, state=name)
-        # Ensure shape (2, 1, 1) and type
-        mps.tensors[0] = target_state_mps.tensors[0].astype(np.complex128).reshape(2, 1, 1)
-
-        # Set up observables for X, Y, Z on site 0
-        tomo_params = copy.deepcopy(sim_params)
-        tomo_params.observables = [
-            Observable(X(), sites=[0]),
-            Observable(Y(), sites=[0]),
-            Observable(Z(), sites=[0]),
-        ]
-        tomo_params.sorted_observables = tomo_params.observables
-
-        # Run Simulation
-        simulator.run(mps, operator, tomo_params)
-
-        # Collect Results (expectations at final time)
-        res_x = tomo_params.observables[0].results[-1]
-        res_y = tomo_params.observables[1].results[-1]
-        res_z = tomo_params.observables[2].results[-1]
-
-        expectations = {"x": res_x, "y": res_y, "z": res_z}
-        rho_out = _reconstruct_state(expectations)
-        output_rhos.append(rho_out)
-
-    # 4. Construct Process Tensor
-    # S = sum_k |rho_out_k>> <<D_k|
-    superop = np.zeros((4, 4), dtype=complex)
-    for rho_out, dual in zip(output_rhos, duals, strict=False):
-        rho_vec = rho_out.reshape(-1, 1)  # column vector
-        dual_vec = dual.reshape(-1, 1)
-        superop += rho_vec @ dual_vec.conj().T
-
-    # 5. Simple Verification (Log fidelity with Identity if nearly identity)
-
-    # Test with a random state (not in basis)
-    test_psi = np.array([np.cos(0.4), np.exp(1j * 0.2) * np.sin(0.4)])
-    test_rho_in = np.outer(test_psi, test_psi.conj())
-
-    # Predict using Process Tensor
-    test_rho_vec = test_rho_in.reshape(-1)
-    predicted_rho_vec = superop @ test_rho_vec
-    predicted_rho = predicted_rho_vec.reshape(2, 2)
-
-    # Run Actual Simulation for this state
-    mps_test = MPS(length=length, state="zeros")
-
-    # Manually set first qubit
-    tensor = np.expand_dims(test_psi, axis=(1, 2))  # (2, 1, 1)
-    mps_test.tensors[0] = tensor
-
-    test_params = copy.deepcopy(sim_params)
-    test_params.observables = [
-        Observable(X(), sites=[0]),
-        Observable(Y(), sites=[0]),
-        Observable(Z(), sites=[0]),
-    ]
-    test_params.sorted_observables = test_params.observables
-    simulator.run(mps_test, operator, test_params)
-
-    rx = test_params.observables[0].results[-1]
-    ry = test_params.observables[1].results[-1]
-    rz = test_params.observables[2].results[-1]
-    actual_rho = _reconstruct_state({"x": rx, "y": ry, "z": rz})
-
-    # Compute Frobenius distance
-    np.linalg.norm(predicted_rho - actual_rho)
-
-    return superop.reshape(2, 2, 2, 2)
 
 
 class ProcessTensor:
@@ -633,32 +530,37 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
     return (seq_idx, traj_idx, trajectory_results)
 
 
-def run_process_tensor_tomography(
+def run(
     operator: MPO,
     sim_params: AnalogSimParams,
-    timesteps: list[float],
+    timesteps: list[float] | None = None,
     num_trajectories: int = 100,
     noise_model: NoiseModel | None = None,
 ) -> ProcessTensor:
-    """Run multi-step Process Tensor Tomography using parallelized backend.
+    """Run Process Tomography / Process Tensor Tomography using parallelized backend.
 
-    Reconstructs a restricted process tensor (state-injection comb) under the chosen
-    intervention set. Measures outputs at each time step and applies system-only
-    interventions to preserve environment correlations.
+    Reconstructs a single-step or multi-step restricted process tensor (state-injection comb)
+    under the chosen intervention set. Measures outputs at each time step and applies
+    system-only interventions to preserve environment correlations.
 
     Args:
         operator: System evolution MPO.
         sim_params: Simulation parameters.
         timesteps: List of time durations for each evolution segment.
-        num_trajectories: Number of trajectories to average.
-        noise_model: Noise model for development. If None, uses sim_params.noise_model.
+                   If None, defaults to [sim_params.elapsed_time] (standard 1-step tomography).
+        num_trajectories: Number of trajectories to average per sequence.
+        noise_model: Noise model to apply. If None, uses sim_params.noise_model.
 
     Returns:
-        ProcessTensor object representing the final-time map conditioned on preparation sequence.
+        ProcessTensor object representing the final-time map conditioned on preparation sequences.
     """
     import itertools
 
     from mqt.yaqs.analog.mcwf import preprocess_mcwf
+
+    # 0. Handle default timesteps
+    if timesteps is None:
+        timesteps = [sim_params.elapsed_time]
 
     # 1. Prepare Basis and Duals
     basis_set = _get_basis_states()
