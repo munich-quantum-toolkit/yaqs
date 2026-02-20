@@ -883,7 +883,7 @@ class MPS:
 
         # Ensure probabilities are normalized (site is center)
         norm_factor = np.sum(probabilities)
-        probabilities = probabilities / norm_factor
+        probabilities /= norm_factor
 
         rng = np.random.default_rng()
         chosen_index = rng.choice(len(probabilities), p=probabilities)
