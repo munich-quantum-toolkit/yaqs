@@ -22,6 +22,7 @@ import numpy as np
 from qiskit.quantum_info import DensityMatrix, entropy
 
 from mqt.yaqs import simulator
+from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
@@ -219,6 +220,47 @@ def _reprepare_site_zero_selective(mps: MPS, new_state: np.ndarray, rng: np.rand
         mps.tensors[0] /= final_norm
 
     return outcome
+
+
+def _reprepare_site_zero_vector_selective(
+    psi: NDArray[np.complex128], new_state: NDArray[np.complex128], rng: np.random.Generator
+) -> tuple[NDArray[np.complex128], int]:
+    """Reprepare site 0 for a dense vector state with selective intervention.
+
+    Args:
+        psi: The current state vector, shape (2^N,)
+        new_state: The new state vector for site 0, shape (2,)
+        rng: Random number generator for sampling
+
+    Returns:
+        tuple: (updated_psi, outcome)
+    """
+    dim_total = psi.shape[0]
+    dim_env = dim_total // 2
+    psi_reshaped = psi.reshape(2, dim_env)
+
+    # 1. Born probabilities
+    p0 = np.linalg.norm(psi_reshaped[0, :]) ** 2
+    p1 = np.linalg.norm(psi_reshaped[1, :]) ** 2
+    norm = p0 + p1
+    if norm > 1e-15:
+        p0 /= norm
+        p1 /= norm
+    else:
+        p0, p1 = 0.5, 0.5  # Neutral choice for zero vector
+
+    # 2. Sample outcome
+    outcome = rng.choice([0, 1], p=[p0, p1])
+
+    # 3. Project and reprepare
+    env_cond = psi_reshaped[outcome, :].copy()
+    env_norm = np.linalg.norm(env_cond)
+    if env_norm > 1e-15:
+        env_cond /= env_norm
+
+    # New state: new_state \otimes env_cond
+    new_psi = np.outer(new_state, env_cond).flatten()
+    return new_psi, outcome
 
 
 def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]:
@@ -524,8 +566,131 @@ class ProcessTensor:
 
         return S_avg - S_cond
 
-    def __repr__(self) -> str:
-        return f"<ProcessTensor steps={len(self.timesteps)}, shape={self.tensor.shape}>"
+def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[np.complex128]]]:
+    """Worker function for a single tomography trajectory.
+
+    Args:
+        job_idx: Flat index mapping to (seq_idx, traj_idx).
+
+    Returns:
+        tuple: (seq_idx, traj_idx, list of output states/results)
+    """
+    import copy
+
+    import numpy as np
+
+    from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
+    from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
+    from mqt.yaqs.core.data_structures.networks import MPS
+    from mqt.yaqs.simulator import WORKER_CTX
+
+    # 1. Decode job
+    num_trajectories = WORKER_CTX["num_trajectories"]
+    seq_idx = job_idx // num_trajectories
+    traj_idx = job_idx % num_trajectories
+
+    # 2. Get segment parameters
+    operator = WORKER_CTX["operator"]
+    sim_params = WORKER_CTX["sim_params"]
+    timesteps = WORKER_CTX["timesteps"]
+    basis_set = WORKER_CTX["basis_set"]
+    sequences = WORKER_CTX["sequences"]
+    mode = WORKER_CTX["mode"]
+    noise_model = WORKER_CTX["noise_model"]
+
+    seq = sequences[seq_idx]
+    rng = np.random.default_rng(traj_idx)
+
+    # 3. Initialize state
+    initial_idx = seq[0]
+    _, psi_0, _ = basis_set[initial_idx]
+
+    # Persistent state (either MPS or Vector)
+    is_mcwf = sim_params.solver == "MCWF"
+    current_state: MPS | NDArray[np.complex128]
+
+    if is_mcwf:
+        # MCWF uses dense vectors. Initialize product state |psi_0> \otimes |0...0>
+        num_sites = operator.length
+        current_state = np.array([1.0], dtype=np.complex128)
+        # Site 0
+        current_state = np.kron(current_state, psi_0)
+        # Sites 1..N-1
+        for _ in range(1, num_sites):
+            current_state = np.kron(current_state, np.array([1.0, 0.0], dtype=np.complex128))
+    else:
+        # TJM uses MPS
+        current_state = MPS(length=operator.length, state="zeros")
+        current_state.tensors[0] = np.expand_dims(psi_0, axis=(1, 2)).astype(np.complex128)
+
+    # Storage for output states (each step)
+    trajectory_results = []
+
+    # Initial measurement (t=0)
+    def get_rho_site_zero(state):
+        if isinstance(state, np.ndarray):
+            # Dense vector: reshape to (2, 2^(N-1)) and compute partial trace
+            rho = state.reshape(2, -1)
+            return rho @ rho.conj().T
+        # MPS: use expect/measure-like logic to get reduced rho
+        # Faster: just get expectations of X, Y, Z
+        rx = state.expect(Observable(X(), sites=[0]))
+        ry = state.expect(Observable(Y(), sites=[0]))
+        rz = state.expect(Observable(Z(), sites=[0]))
+        return _reconstruct_state({"x": rx, "y": ry, "z": rz})
+
+    trajectory_results.append(get_rho_site_zero(current_state))
+
+    # 4. Multi-step loop
+    for step_i, duration in enumerate(timesteps):
+        # Segment Simulation
+        step_params = copy.deepcopy(sim_params)
+        step_params.elapsed_time = duration
+        step_params.dt = sim_params.dt
+        step_params.num_traj = 1
+        step_params.show_progress = False
+        step_params.get_state = True
+
+        # Handle times array correctly (linspace to avoid drift)
+        n_steps = int(np.round(duration / step_params.dt))
+        step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
+
+        if is_mcwf:
+            # For MCWF, we need to wrap the vector in a Context
+            # We can skip full preprocess_mcwf if we only update psi_initial
+            # BUT: jump_ops and heff might depend on global operator/noise.
+            # We assume they are pre-calculated in WORKER_CTX["mcwf_static_ctx"]
+            static_ctx = WORKER_CTX["mcwf_static_ctx"]
+            # Create a shallow copy and update psi
+            dynamic_ctx = copy.copy(static_ctx)
+            dynamic_ctx.psi_initial = current_state
+            dynamic_ctx.sim_params = step_params
+
+            mcwf((0, dynamic_ctx))
+            current_state = dynamic_ctx.output_state
+        else:
+            # TJM
+            backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
+            backend((0, current_state, noise_model, step_params, operator))
+            current_state = step_params.output_state
+
+        # Measure AFTER evolution
+        trajectory_results.append(get_rho_site_zero(current_state))
+
+        # Intervention
+        if step_i < len(timesteps) - 1:
+            next_idx = seq[step_i + 1]
+            _, psi_next, _ = basis_set[next_idx]
+
+            if is_mcwf:
+                current_state, _ = _reprepare_site_zero_vector_selective(current_state, psi_next, rng)
+            else:
+                if mode == "selective":
+                    _reprepare_site_zero_selective(current_state, psi_next, rng)
+                else:
+                    _reprepare_site_zero_pure_env_approx(current_state, psi_next)
+
+    return (seq_idx, traj_idx, trajectory_results)
 
 
 def run_process_tensor_tomography(
@@ -536,7 +701,7 @@ def run_process_tensor_tomography(
     mode: str = "selective",
     noise_model: NoiseModel | None = None,
 ) -> ProcessTensor:
-    """Run multi-step Process Tensor Tomography.
+    """Run multi-step Process Tensor Tomography using parallelized backend.
 
     Reconstructs a restricted process tensor (state-injection comb) under the chosen
     intervention set. Measures outputs at each time step and applies system-only
@@ -549,148 +714,84 @@ def run_process_tensor_tomography(
         num_trajectories: Number of trajectories to average.
         mode: Intervention mode - "selective" (trajectory-resolved, preferred) or
               "pure_env_approx" (pure-state approximation of mixed environment).
+        noise_model: Noise model for development. If None, uses sim_params.noise_model.
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequence.
     """
     import itertools
 
-    from tqdm import tqdm
+    from mqt.yaqs.analog.mcwf import preprocess_mcwf
 
     # 1. Prepare Basis and Duals
     basis_set = _get_basis_states()
     basis_rhos = [b[2] for b in basis_set]
-    duals = _calculate_dual_frame(basis_rhos)
+    _calculate_dual_frame(basis_rhos)
 
     num_steps = len(timesteps)
     basis_indices = list(range(len(basis_set)))
     sequences = list(itertools.product(basis_indices, repeat=num_steps))
+    num_sequences = len(sequences)
 
-    # Storage: sequence -> list of output states at each time
-    # outputs[seq][time_idx] = averaged density matrix
-    sequence_outputs = {}
+    # 2. Prepare Simulation Context
+    if noise_model is None:
+        noise_model = sim_params.noise_model
 
-    for seq in tqdm(sequences, desc="Simulating Sequences"):
-        # Storage for this sequence: [time_step][trajectory] -> (x, y, z)
-        time_outputs = [[[] for _ in range(num_trajectories)] for _ in range(num_steps + 1)]
+    mcwf_static_ctx = None
+    if sim_params.solver == "MCWF":
+        # Pre-calculate jump ops and effective Hamiltonian once
+        # Using a dummy initial state as it will be updated per worker/trajectory
+        dummy_mps = MPS(length=operator.length, state="zeros")
+        mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
 
-        for traj_idx in range(num_trajectories):
-            # One RNG per trajectory for consistent sampling discipline
-            rng = np.random.default_rng(traj_idx)
+    payload = {
+        "operator": operator,
+        "sim_params": sim_params,
+        "timesteps": timesteps,
+        "basis_set": basis_set,
+        "sequences": sequences,
+        "mode": mode,
+        "noise_model": noise_model,
+        "num_trajectories": num_trajectories,
+        "mcwf_static_ctx": mcwf_static_ctx,
+    }
 
-            # Initialize fresh MPS
-            mps = MPS(length=operator.length, state="zeros")
+    # 3. Parallel Execution
+    total_jobs = num_sequences * num_trajectories
+    max_workers = max(1, available_cpus() - 1)
 
-            # Prepare initial state
-            initial_idx = seq[0]
-            _, psi_0, _ = basis_set[initial_idx]
-            mps.tensors[0] = np.expand_dims(psi_0, axis=(1, 2)).astype(np.complex128)
+    # Storage: sequence_idx -> list of [num_steps+1] averaged density matrices
+    # Initialize with zeros
+    aggregated_outputs = [
+        [np.zeros((2, 2), dtype=np.complex128) for _ in range(num_steps + 1)] for _ in range(num_sequences)
+    ]
 
-            # Measure output at t=0 (initial state)
-            x0 = mps.expect(Observable(X(), sites=[0]))
-            y0 = mps.expect(Observable(Y(), sites=[0]))
-            z0 = mps.expect(Observable(Z(), sites=[0]))
-            time_outputs[0][traj_idx] = (x0, y0, z0)
+    results_iterator = run_backend_parallel(
+        worker_fn=_tomography_trajectory_worker,
+        payload=payload,
+        n_jobs=total_jobs,
+        max_workers=max_workers,
+        show_progress=sim_params.show_progress,
+        desc="Simulating Tomography Trajectories",
+    )
 
-            # Evolution loop
-            for step_i, duration in enumerate(timesteps):
-                # Evolve
-                step_params = copy.deepcopy(sim_params)
-                step_params.elapsed_time = duration
-                step_params.dt = sim_params.dt
-                step_params.num_traj = 1  # Crucial: evolve single trajectory for selective intervention
-                # Use linspace to avoid floating-point overshoot
-                n_steps = int(np.round(duration / step_params.dt))
-                step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
-                step_params.observables = []
-                step_params.get_state = True  # Ensure we get the state back
+    for job_idx, (seq_idx, _traj_idx, trajectory_rhos) in results_iterator:
+        for t_idx, rho in enumerate(trajectory_rhos):
+            aggregated_outputs[seq_idx][t_idx] += rho / num_trajectories
 
-                simulator.run(mps, operator, step_params, noise_model=noise_model)
-
-                # Update MPS with evolved state
-                # In serial execution (forced by num_traj=1), step_params.output_state is populated.
-                if step_params.output_state is not None:
-                    mps = step_params.output_state
-                else:
-                    msg = "Simulator did not return output state. Ensure get_state=True and serial execution."
-                    raise RuntimeError(msg)
-
-                # Measure output AFTER evolution
-                x_out = mps.expect(Observable(X(), sites=[0]))
-                y_out = mps.expect(Observable(Y(), sites=[0]))
-                z_out = mps.expect(Observable(Z(), sites=[0]))
-                time_outputs[step_i + 1][traj_idx] = (x_out, y_out, z_out)
-
-                # Intervention: reprepare site 0 while preserving environment
-                if step_i < num_steps - 1:
-                    next_idx = seq[step_i + 1]
-                    _, psi_next, _ = basis_set[next_idx]
-
-                    # Use bond-consistent reprepare
-                    if mode == "selective":
-                        _reprepare_site_zero_selective(mps, psi_next, rng)
-                    elif mode == "pure_env_approx":
-                        _reprepare_site_zero_pure_env_approx(mps, psi_next)
-                    else:
-                        msg = f"Unknown mode: {mode}"
-                        raise ValueError(msg)
-
-        # Average over trajectories for each time
-        avg_outputs = []
-        for time_idx in range(num_steps + 1):
-            x_vals = [time_outputs[time_idx][t][0] for t in range(num_trajectories)]
-            y_vals = [time_outputs[time_idx][t][1] for t in range(num_trajectories)]
-            z_vals = [time_outputs[time_idx][t][2] for t in range(num_trajectories)]
-
-            avg_x = np.mean(x_vals)
-            avg_y = np.mean(y_vals)
-            avg_z = np.mean(z_vals)
-
-            rho = _reconstruct_state({"x": avg_x, "y": avg_y, "z": avg_z})
-            avg_outputs.append(rho)
-
-        sequence_outputs[seq] = avg_outputs
-
-        # Debug: print final output
-        final_rho = avg_outputs[-1]
-        np.trace(final_rho @ Z().matrix).real
-
-    # 2. Construct Process Tensor
-    # Structure: (out_final, in_frame_0, in_frame_1, ...)
-    # Output is in 4D operator basis (vectorized density matrix)
-    # Inputs are in 6-state frame basis (the actual measurement basis)
-
-    num_frame_states = len(basis_set)  # 6 for Pauli frame
-    tensor_shape = [4] + [num_frame_states] * num_steps  # [Out_final, In_frame0, In_frame1, ...]
+    # 4. Construct Process Tensor
+    num_frame_states = len(basis_set)
+    tensor_shape = [4] + [num_frame_states] * num_steps
     process_tensor = np.zeros(tensor_shape, dtype=complex)
 
-    for seq, outputs in sequence_outputs.items():
-        # Use FINAL output
-        rho_final = outputs[-1]
+    for seq_idx, avg_rhos in enumerate(aggregated_outputs):
+        seq = sequences[seq_idx]
+        rho_final = avg_rhos[-1]
+        rho_vec = rho_final.reshape(-1)
 
-        # Get duals for input sequence
-        [duals[idx] for idx in seq]
-
-        # Build term using matrix outer products (not tensor products!)
-        # For each dual, we do: rho_vec @ dual_vec.conj().T
-        # This gives a (4,4) matrix for each dual
-        # We need to combine them into a single (4,) output vector
-
-        # Start with rho_final as output
-        rho_vec = rho_final.reshape(-1)  # Shape: (4,)
-
-        # For multi-step PT, we need to compute:
-        # T[out, in0, in1, ...] = Tr(D_in0^† D_in1^† ... ρ_in) ρ_out[out]
-        #
-        # But we're building it differently: we measure with each input state
-        # and get an output, so we just store: T[:, in0, in1, ...] = rho_out
-
-        # Index into process_tensor at the frame indices for this sequence
-        idx = (slice(None),) + tuple(seq)  # (all outputs, frame_idx_0, frame_idx_1, ...)
+        idx = (slice(None),) + tuple(seq)
         process_tensor[idx] = rho_vec
 
-    # Create ProcessTensor object
     pt = ProcessTensor(process_tensor, timesteps)
-    pt.data = process_tensor  # Store for analysis
-
+    pt.data = process_tensor
     return pt
