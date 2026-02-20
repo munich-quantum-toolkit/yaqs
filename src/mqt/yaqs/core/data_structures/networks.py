@@ -793,9 +793,7 @@ class MPS:
 
             # Propagate the measurement to the next site.
             if site != self.length - 1:
-                # We need to use the original (unrotated) tensor projected onto the rotated basis state
-                original_basis_selection = oe.contract("ab, a->b", np.conj(rotation), selected_state)
-                projected_tensor = oe.contract("b, bcd->cd", original_basis_selection, tensor)
+                projected_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
 
                 temp_state.tensors[site + 1] = (  # noqa: B909
                     1
@@ -897,7 +895,7 @@ class MPS:
         projected_rotated_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
 
         # Rotate back to original basis for the new tensor
-        original_basis_selection = oe.contract("ba, b->a", np.conj(rotation), selected_state)
+        original_basis_selection = oe.contract("ab, a->b", np.conj(rotation), selected_state)
 
         # Normalize and update the site tensor
         self.tensors[site] = (1.0 / np.sqrt(probabilities[chosen_index])) * oe.contract(
