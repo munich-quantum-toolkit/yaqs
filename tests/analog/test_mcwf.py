@@ -8,7 +8,6 @@
 """Tests for the Monte Carlo Wavefunction (MCWF) Solver."""
 
 import numpy as np
-import pytest
 
 from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
@@ -159,8 +158,6 @@ def test_mcwf_zero_strength_noise() -> None:
     # Preprocess should not add any jump ops
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
     assert len(ctx.jump_ops) == 0
-
-
 
 
 def test_mcwf_diagnostic_observables() -> None:

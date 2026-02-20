@@ -8,7 +8,6 @@
 """Tests for the Exact Lindblad Solver."""
 
 import numpy as np
-import pytest
 
 from mqt.yaqs.analog.lindblad import lindblad
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
@@ -167,8 +166,6 @@ def test_lindblad_dephasing_both_qubits() -> None:
     assert np.allclose(x1_sim, x_exact, atol=1e-4), f"Qubit 1 failed. Max diff: {np.max(np.abs(x1_sim - x_exact))}"
 
 
-
-
 def test_lindblad_zero_strength_noise() -> None:
     """Test Lindblad with zero strength noise process."""
     n_sites = 2
@@ -182,8 +179,6 @@ def test_lindblad_zero_strength_noise() -> None:
     args = (0, psi, noise, sim_params, h)
     # Should run without error
     lindblad(args)
-
-
 
 
 def test_lindblad_diagnostic_observables() -> None:

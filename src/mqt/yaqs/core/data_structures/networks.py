@@ -1791,7 +1791,7 @@ class MPO:
         current_operators = {0: scipy.sparse.csr_matrix(np.eye(1, dtype=complex))}
 
         for tensor in self.tensors:
-            d_out, d_in, D_left, D_right = tensor.shape  # noqa: N806
+            _d_out, _d_in, D_left, D_right = tensor.shape  # noqa: N806
 
             next_operators = {}
 
@@ -1816,10 +1816,7 @@ class MPO:
                     # Kronecker product: Left (X) Local
                     term = scipy.sparse.kron(op_left, op_local, format="csr")
 
-                    if accumulated is None:
-                        accumulated = term
-                    else:
-                        accumulated = accumulated + term
+                    accumulated = term if accumulated is None else accumulated + term
 
                 if accumulated is not None:
                     next_operators[beta] = accumulated
@@ -1828,9 +1825,9 @@ class MPO:
 
         # Final result should be in current_operators[0] because the last bond dim is 1
         if 0 not in current_operators:
-             # Should practically not happen for valid MPOs unless it's a zero operator
-             dim = d**self.length
-             return scipy.sparse.csr_matrix((dim, dim), dtype=complex)
+            # Should practically not happen for valid MPOs unless it's a zero operator
+            dim = d**self.length
+            return scipy.sparse.csr_matrix((dim, dim), dtype=complex)
 
         return current_operators[0]
 
