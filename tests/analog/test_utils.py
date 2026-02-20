@@ -105,10 +105,6 @@ def test_embed_operator_sparse_2site() -> None:
     process = {"sites": [1, 2], "matrix": cnot}
 
     op = _embed_operator_sparse(process, num_sites)
-    # Correct construction: I(2) x CNOT x I(2)
-    # _embed_operator logic:
-    # left_id = eye(2**1) = eye(2)
-    # right_id = eye(2**(4-1-2)) = eye(2**1) = eye(2)
     expected = scipy.sparse.kron(scipy.sparse.eye(2), scipy.sparse.kron(cnot, scipy.sparse.eye(2)))
 
     assert scipy.sparse.issparse(op)
