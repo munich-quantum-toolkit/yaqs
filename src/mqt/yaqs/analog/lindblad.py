@@ -12,7 +12,7 @@ It converts the Matrix Product State (MPS) and Matrix Product Operator (MPO) rep
 into dense matrices and solves the Lindblad master equation:
     drho/dt = -i[H, rho] + sum_k (L_k rho L_k^dag - 0.5 * {L_k^dag L_k, rho})
 
-It is suitable for small systems (N <= 12).
+It is suitable for small systems (N <= 10).
 For larger systems or when stochastic trajectories are preferred, consider
 using the MCWF solver or the Tensor Jump Method (TJM).
 """
@@ -63,9 +63,9 @@ def lindblad(
     dim = 2**num_sites
 
     # Limit system size to avoid OOM
-    if num_sites > 9:
+    if num_sites > 10:
         msg = (
-            f"System size {num_sites} exceeds the recommended limit (14) for the exact Lindblad solver. "
+            f"System size {num_sites} exceeds the recommended limit (10) for the exact Lindblad solver. "
             "Lindblad uses dense-like scaling for the density matrix (2^2N elements). "
             "Simulation may be very slow or run out of memory. "
             "Consider using the TJM solver for larger systems."
