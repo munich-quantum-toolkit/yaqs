@@ -10,7 +10,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ## [Unreleased]
 
 ### Added
-
+- changed Lindblad and MCWF solvers to use sparse implementation ([#338]) ([**@aaronleesander**])
 - added Monte Carlo Wavefunction solver ([#333]) ([**@aaronleesander**])
 - added MPO.from_matrix() method ([#331]) ([**@lucello**])
 - added Lindblad solver for small systems ([#330]) ([**@aaronleesander**])
@@ -88,6 +88,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#338]: https://github.com/munich-quantum-toolkit/yaqs/pull/338
 [#337]: https://github.com/munich-quantum-toolkit/yaqs/pull/337
 [#336]: https://github.com/munich-quantum-toolkit/yaqs/pull/336
 [#333]: https://github.com/munich-quantum-toolkit/yaqs/pull/333
