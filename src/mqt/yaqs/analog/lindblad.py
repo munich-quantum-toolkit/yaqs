@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
-from .utils import _embed_observable, _embed_operator
+from .utils import _embed_observable_sparse, _embed_operator_sparse
 
 
 def lindblad(
@@ -54,8 +54,7 @@ def lindblad(
         An array of expectation values for each observable over time.
 
     Raises:
-        ValueError: If the system size is too large for the exact Lindblad solver.
-        RuntimeError: If the Lindblad integration fails.
+        RuntimeError: If the integration fails.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
 
@@ -89,7 +88,7 @@ def lindblad(
                 continue
 
             # Convert local operator to full-space sparse operator
-            op_full = _embed_operator(process, num_sites, sparse=True)
+            op_full = _embed_operator_sparse(process, num_sites)
 
             # Scale by sqrt(gamma)
             jump_ops.append(np.sqrt(strength) * op_full)
@@ -151,13 +150,13 @@ def lindblad(
     obs_results = np.zeros((num_obs, len(result.t)), dtype=np.float64)
 
     # Pre-embed observable operators to full space
-    embedded_observables: list[scipy.sparse.csr_matrix | None] = []
+    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
         if obs.gate.name in {"runtime_cost", "max_bond", "total_bond", "entropy", "schmidt_spectrum"}:
             # These are structural/diagnostic metrics not straightforwardly defined on rho
             embedded_observables.append(None)
         else:
-            op = _embed_observable(obs, num_sites, sparse=True)
+            op = _embed_observable_sparse(obs, num_sites)
             embedded_observables.append(op)
 
     for t_idx, rho_flat_t in enumerate(result.y.T):
