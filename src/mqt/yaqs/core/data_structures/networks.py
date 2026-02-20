@@ -1791,14 +1791,14 @@ class MPO:
         current_operators = {0: scipy.sparse.csr_matrix(np.eye(1, dtype=complex))}
 
         for tensor in self.tensors:
-            _d_out, _d_in, D_left, D_right = tensor.shape  # noqa: N806
+            _d_out, _d_in, d_left, d_right = tensor.shape
 
             next_operators = {}
 
-            for beta in range(D_right):
+            for beta in range(d_right):
                 accumulated = None
 
-                for alpha in range(D_left):
+                for alpha in range(d_left):
                     if alpha not in current_operators:
                         continue
 

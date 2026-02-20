@@ -21,7 +21,7 @@ Matrix Product States (MPS).
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import scipy.sparse
@@ -154,9 +154,11 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
         for i, op_mat in enumerate(ctx.embedded_observables):
             if op_mat is not None:
                 if scipy.sparse.issparse(op_mat):
-                    val = np.vdot(current_psi, op_mat.dot(current_psi))
+                    op_mat_sparse = cast("Any", op_mat)
+                    val = np.vdot(current_psi, op_mat_sparse.dot(current_psi))
                 else:
-                    val = np.vdot(current_psi, op_mat @ current_psi)
+                    op_mat_dense = cast("NDArray[np.complex128]", op_mat)
+                    val = np.vdot(current_psi, op_mat_dense @ current_psi)
                 results[i, t_idx] = val.real
             else:
                 results[i, t_idx] = 0.0

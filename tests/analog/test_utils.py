@@ -97,11 +97,12 @@ def test_embed_operator_dense_2site() -> None:
 def test_embed_operator_sparse_2site() -> None:
     """Test embedding a 2-site adjacent matrix operator (sparse)."""
     num_sites = 4
-    cnot = scipy.sparse.eye(4, format="csr", dtype=complex)
-    cnot[2, 2] = 0
-    cnot[2, 3] = 1
-    cnot[3, 3] = 0
-    cnot[3, 2] = 1
+    cnot_dense = np.eye(4, dtype=complex)
+    cnot_dense[2, 2] = 0
+    cnot_dense[2, 3] = 1
+    cnot_dense[3, 3] = 0
+    cnot_dense[3, 2] = 1
+    cnot = scipy.sparse.csr_matrix(cnot_dense)
     process = {"sites": [1, 2], "matrix": cnot}
 
     op = _embed_operator_sparse(process, num_sites)
@@ -116,6 +117,9 @@ def test_embed_operator_errors() -> None:
     num_sites = 3
     with pytest.raises(NotImplementedError, match="Cannot embed operator"):
         _embed_operator_dense({"sites": [0], "unknown": "value"}, num_sites)
+
+    with pytest.raises(NotImplementedError, match="Cannot embed operator"):
+        _embed_operator_sparse({"sites": [0], "unknown": "value"}, num_sites)
 
 
 def test_embed_observable_dense_1site() -> None:
