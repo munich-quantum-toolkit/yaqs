@@ -800,6 +800,52 @@ def test_single_shot() -> None:
     np.testing.assert_allclose(val, 0, atol=1e-12)
 
 
+def test_single_shot_basis() -> None:
+    """Test measure_single_shot with different bases.
+
+    Verify that:
+    - x+ state measured in X basis always yields 0.
+    - x- state measured in X basis always yields 1.
+    - y+ state measured in Y basis always yields 0.
+    - y- state measured in Y basis always yields 1.
+    """
+    # X basis tests
+    psi_x_plus = MPS(length=1, state="x+")
+    for _ in range(10):
+        assert psi_x_plus.measure_single_shot(basis="X") == 0
+
+    psi_x_minus = MPS(length=1, state="x-")
+    for _ in range(10):
+        assert psi_x_minus.measure_single_shot(basis="X") == 1
+
+    # Y basis tests
+    psi_y_plus = MPS(length=1, state="y+")
+    for _ in range(10):
+        assert psi_y_plus.measure_single_shot(basis="Y") == 0
+
+    psi_y_minus = MPS(length=1, state="y-")
+    for _ in range(10):
+        assert psi_y_minus.measure_single_shot(basis="Y") == 1
+
+
+def test_measure_shots_basis() -> None:
+    """Test measure_shots with different bases."""
+    psi_x_plus = MPS(length=1, state="x+")
+    results = psi_x_plus.measure_shots(shots=10, basis="X")
+    assert results == {0: 10}
+
+    psi_y_plus = MPS(length=1, state="y+")
+    results = psi_y_plus.measure_shots(shots=10, basis="Y")
+    assert results == {0: 10}
+
+    # Verify that X measurement on Z state gives 50/50
+    psi_zero = MPS(length=1, state="zeros")
+    results = psi_zero.measure_shots(shots=100, basis="X")
+    assert results.get(0, 0) > 0
+    assert results.get(1, 0) > 0
+    assert sum(results.values()) == 100
+
+
 def test_multi_shot() -> None:
     """Test measure over multiple shots on an MPS initialized in the |1> state.
 

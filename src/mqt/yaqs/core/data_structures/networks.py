@@ -745,7 +745,7 @@ class MPS:
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 
-    def measure_single_shot(self) -> int:
+    def measure_single_shot(self, basis: str = "Z") -> int:
         """Perform a single-shot measurement on a Matrix Product State (MPS).
 
         This function simulates a projective measurement on an MPS. For each site, it computes the
@@ -753,23 +753,53 @@ class MPS:
         basis states, and randomly selects an outcome. The overall measurement result is encoded as an
         integer corresponding to the measured bitstring.
 
+        Args:
+            basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
+
         Returns:
             int: The measurement outcome represented as an integer.
+
+        Raises:
+            ValueError: If an invalid basis is provided.
         """
         temp_state = copy.deepcopy(self)
         bitstring = []
+
+        basis = basis.upper()
+        if basis == "Z":
+            rotation = np.eye(2, dtype=complex)
+        elif basis == "X":
+            # H gate to rotate X to Z
+            rotation = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+        elif basis == "Y":
+            # Rotate Y to Z: SH^\dagger (or equivalent)
+            rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
+        else:
+            msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
+            raise ValueError(msg)
+
         for site, tensor in enumerate(temp_state.tensors):
-            reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
+            # Rotate the tensor to the measurement basis
+            # tensor shape is (p, l, r)
+            rotated_tensor = oe.contract("ab, bcd->acd", rotation, tensor)
+
+            reduced_density_matrix = oe.contract("abc, dbc->ad", rotated_tensor, np.conj(rotated_tensor))
             probabilities = np.diag(reduced_density_matrix).real
             rng = np.random.default_rng()
-            chosen_index = rng.choice(len(probabilities), p=probabilities)
+            chosen_index = rng.choice(len(probabilities), p=probabilities / np.sum(probabilities))
             bitstring.append(chosen_index)
             selected_state = np.zeros(len(probabilities))
             selected_state[chosen_index] = 1
-            # Multiply state: project the tensor onto the selected state.
-            projected_tensor = oe.contract("a, acd->cd", selected_state, tensor)
+            # Multiply state: project the rotated tensor onto the selected state.
+            projected_rotated_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
+
             # Propagate the measurement to the next site.
             if site != self.length - 1:
+                # We need to use the original (unrotated) tensor projected onto the rotated basis state
+                # The rotated basis state in the original basis is: rotation^H @ selected_state
+                original_basis_selection = oe.contract("ba, b->a", np.conj(rotation), selected_state)
+                projected_tensor = oe.contract("a, acd->cd", original_basis_selection, tensor)
+
                 temp_state.tensors[site + 1] = (  # noqa: B909
                     1
                     / np.sqrt(probabilities[chosen_index])
@@ -777,7 +807,7 @@ class MPS:
                 )
         return sum(c << i for i, c in enumerate(bitstring))
 
-    def measure_shots(self, shots: int) -> dict[int, int]:
+    def measure_shots(self, shots: int, basis: str = "Z") -> dict[int, int]:
         """Perform multiple single-shot measurements on an MPS and aggregate the results.
 
         This function executes a specified number of measurement shots on the given MPS. For each shot,
@@ -786,6 +816,7 @@ class MPS:
 
         Args:
             shots: The number of measurement shots to perform.
+            basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
 
         Returns:
             A dictionary where keys are measured basis states (as integers) and values are the corresponding counts.
@@ -801,13 +832,13 @@ class MPS:
                 concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor,
                 tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
             ):
-                futures = [executor.submit(self.measure_single_shot) for _ in range(shots)]
+                futures = [executor.submit(self.measure_single_shot, basis) for _ in range(shots)]
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
                     results[result] = results.get(result, 0) + 1
                     pbar.update(1)
             return results
-        basis_state = self.measure_single_shot()
+        basis_state = self.measure_single_shot(basis)
         results[basis_state] = results.get(basis_state, 0) + 1
         return results
 
