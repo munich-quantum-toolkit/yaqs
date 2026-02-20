@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**]) 
+- added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
 - added Arnoldi iteration as alternative to Lanczos method ([#338]) ([**@aaronleesander**])
 - added Monte Carlo Wavefunction solver ([#333]) ([**@aaronleesander**])
 - added MPO.from_matrix() method ([#331]) ([**@lucello**])
