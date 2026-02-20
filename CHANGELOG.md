@@ -10,6 +10,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ## [Unreleased]
 
 ### Added
+
 - changed Lindblad and MCWF solvers to use sparse implementation ([#338]) ([**@aaronleesander**])
 - added Monte Carlo Wavefunction solver ([#333]) ([**@aaronleesander**])
 - added MPO.from_matrix() method ([#331]) ([**@lucello**])
