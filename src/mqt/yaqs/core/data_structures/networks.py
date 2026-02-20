@@ -797,8 +797,8 @@ class MPS:
             if site != self.length - 1:
                 # We need to use the original (unrotated) tensor projected onto the rotated basis state
                 # The rotated basis state in the original basis is: rotation^H @ selected_state
-                original_basis_selection = oe.contract("ba, b->a", np.conj(rotation), selected_state)
-                projected_tensor = oe.contract("a, acd->cd", original_basis_selection, tensor)
+                original_basis_selection = oe.contract("ab, a->b", np.conj(rotation), selected_state)
+                projected_tensor = oe.contract("b, bcd->cd", original_basis_selection, tensor)
 
                 temp_state.tensors[site + 1] = (  # noqa: B909
                     1
