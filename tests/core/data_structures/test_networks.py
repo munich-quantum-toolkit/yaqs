@@ -846,6 +846,65 @@ def test_measure_shots_basis() -> None:
     assert sum(results.values()) == 100
 
 
+def test_inplace_measure() -> None:
+    """Test the in-place .measure(site, basis) method.
+
+    Verify that:
+    - Measuring a |+> state in Z basis collapses it to |0> or |1>.
+    - Measuring a GHZ-like state |00> + |11> collapses the other site.
+    """
+    # 1. Single qubit collapse
+    psi = MPS(length=1, state="x+")
+    psi.normalize(form="B")  # Ensure center is at 0
+    outcome = psi.measure(site=0, basis="Z")
+    assert outcome in {0, 1}
+    # Check that expectation value matches the outcome
+    expected_val = 1.0 if outcome == 0 else -1.0
+    assert np.isclose(psi.expect(Observable(Z(), 0)), expected_val)
+
+    # 2. GHZ state collapse (2 sites)
+    psi = MPS(length=2, state="zeros")
+    h_gate = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
+    psi.tensors[0] = oe.contract("ab, bcd->acd", h_gate, psi.tensors[0])
+
+    a = psi.tensors[0]
+    b = psi.tensors[1]
+
+    theta = np.tensordot(a, b, axes=(2, 1))  # (d1, l1, d2, r2) = (2, 1, 2, 1)
+    theta = theta.transpose(1, 0, 2, 3)  # (l1, d1, d2, r2)
+    theta = theta.reshape(1, 4, 1)
+    cx_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
+    theta = oe.contract("ab, cbd->cad", cx_mat, theta)
+
+    u, s, v = np.linalg.svd(theta.reshape(2, 2), full_matrices=False)
+    psi.tensors[0] = u.reshape(2, 1, 2)
+    psi.tensors[1] = (np.diag(s) @ v).reshape(2, 2, 1)
+
+    psi.normalize(form="B")
+    # State is now (|00> + |11>) / sqrt(2)
+    # Measure site 0 in Z
+    outcome = psi.measure(site=0, basis="Z")
+    assert outcome in {0, 1}
+
+    # After measurement, the state should be |00> or |11>.
+    # Verification via state vector is robust to normalization/canonical form.
+    vec = psi.to_vec()
+    expected_vec = np.array([1, 0, 0, 0]) if outcome == 0 else np.array([0, 0, 0, 1])
+
+    # We might have a global phase or sign depending on SVD
+    fidelity = np.abs(np.vdot(vec, expected_vec)) ** 2
+    assert np.isclose(fidelity, 1.0)
+
+    # 3. Multiple sites and basis
+    psi = MPS(length=3, state="zeros")
+    psi.normalize(form="B")
+    # Measure site 2 in X basis
+    outcome = psi.measure(site=2, basis="X")
+    assert outcome in {0, 1}
+
+    assert np.isclose(psi.expect(Observable(X(), 2)), 1.0 if outcome == 0 else -1.0)
+
+
 def test_multi_shot() -> None:
     """Test measure over multiple shots on an MPS initialized in the |1> state.
 

@@ -772,7 +772,7 @@ class MPS:
             # H gate to rotate X to Z
             rotation = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
         elif basis == "Y":
-            # Rotate Y to Z: SH^\dagger (or equivalent)
+            # Rotate Y to Z: H Sdag (or equivalent)
             rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
         else:
             msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
@@ -790,13 +790,10 @@ class MPS:
             bitstring.append(chosen_index)
             selected_state = np.zeros(len(probabilities))
             selected_state[chosen_index] = 1
-            # Multiply state: project the rotated tensor onto the selected state.
-            oe.contract("a, acd->cd", selected_state, rotated_tensor)
 
             # Propagate the measurement to the next site.
             if site != self.length - 1:
                 # We need to use the original (unrotated) tensor projected onto the rotated basis state
-                # The rotated basis state in the original basis is: rotation^H @ selected_state
                 original_basis_selection = oe.contract("ab, a->b", np.conj(rotation), selected_state)
                 projected_tensor = oe.contract("b, bcd->cd", original_basis_selection, tensor)
 
@@ -841,6 +838,73 @@ class MPS:
         basis_state = self.measure_single_shot(basis)
         results[basis_state] = results.get(basis_state, 0) + 1
         return results
+
+    def measure(self, site: int, basis: str = "Z") -> int:
+        """Perform an in-place projective measurement on a single site of the MPS.
+
+        This method modifies the MPS tensors to reflect the measurement outcome. It assumes the MPS
+        is initially in a right-canonical form (orthogonality center at site 0) and shifts the center
+        to the target site before measuring.
+
+        Args:
+            site: The index of the site to measure.
+            basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
+
+        Returns:
+            int: The measurement outcome (0 or 1 for qubits).
+
+        Raises:
+            ValueError: If an invalid site or basis is provided.
+        """
+        if site < 0 or site >= self.length:
+            msg = f"Invalid site {site} for MPS of length {self.length}."
+            raise ValueError(msg)
+
+        # Shift orthogonality center to target site (assuming starts at 0)
+        for i in range(site):
+            self.shift_orthogonality_center_right(i)
+
+        basis = basis.upper()
+        if basis == "Z":
+            rotation = np.eye(2, dtype=complex)
+        elif basis == "X":
+            rotation = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+        elif basis == "Y":
+            rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
+        else:
+            msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
+            raise ValueError(msg)
+
+        tensor = self.tensors[site]
+        # Rotate the tensor to the measurement basis
+        rotated_tensor = oe.contract("ab, bcd->acd", rotation, tensor)
+
+        # Compute reduced density matrix at the orthogonality center
+        reduced_density_matrix = oe.contract("abc, dbc->ad", rotated_tensor, np.conj(rotated_tensor))
+        probabilities = np.diag(reduced_density_matrix).real
+
+        # Ensure probabilities are normalized (site is center)
+        norm_factor = np.sum(probabilities)
+        probabilities /= norm_factor
+
+        rng = np.random.default_rng()
+        chosen_index = rng.choice(len(probabilities), p=probabilities)
+
+        selected_state = np.zeros(len(probabilities), dtype=complex)
+        selected_state[chosen_index] = 1.0
+
+        # Project the rotated tensor onto the selected outcome
+        projected_rotated_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
+
+        # Rotate back to original basis for the new tensor
+        original_basis_selection = oe.contract("ba, b->a", np.conj(rotation), selected_state)
+
+        # Normalize and update the site tensor
+        self.tensors[site] = (1.0 / np.sqrt(probabilities[chosen_index])) * oe.contract(
+            "a, cd->acd", original_basis_selection, projected_rotated_tensor
+        )
+
+        return int(chosen_index)
 
     def project_onto_bitstring(self, bitstring: str) -> np.complex128:
         """Projection-valued measurement.
