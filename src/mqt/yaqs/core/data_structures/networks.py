@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 import opt_einsum as oe
+import scipy.sparse
 from numpy.typing import NDArray
 from tqdm import tqdm
 
@@ -1774,6 +1775,61 @@ class MPO:
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
+
+    def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
+        """MPO to sparse matrix conversion.
+
+        Efficiently constructs a sparse matrix from the MPO tensors by iterating
+        over the terms in the MPO sum. This avoids creating the full dense matrix
+        intermediate.
+
+        Returns:
+            The sparse matrix representation of the MPO in CSR format.
+        """
+        d = self.physical_dimension
+
+        current_operators = {0: scipy.sparse.csr_matrix(np.eye(1, dtype=complex))}
+
+        for tensor in self.tensors:
+            _d_out, _d_in, d_left, d_right = tensor.shape
+
+            next_operators = {}
+
+            for beta in range(d_right):
+                accumulated = None
+
+                for alpha in range(d_left):
+                    if alpha not in current_operators:
+                        continue
+
+                    # Extract local operator for this bond transition (alpha -> beta)
+                    op_local_dense = tensor[:, :, alpha, beta]
+
+                    # Optimization: Skip if local op is zero
+                    if np.all(op_local_dense == 0):
+                        continue
+
+                    # Convert to sparse
+                    op_local = scipy.sparse.csr_matrix(op_local_dense)
+                    op_left = current_operators[alpha]
+
+                    # Kronecker product: Left (X) Local
+                    term = scipy.sparse.kron(op_left, op_local, format="csr")
+
+                    accumulated = term if accumulated is None else accumulated + term
+
+                if accumulated is not None:
+                    next_operators[beta] = accumulated
+
+            current_operators = next_operators
+
+        # Final result should be in current_operators[0] because the last bond dim is 1
+        if 0 not in current_operators:
+            # Should practically not happen for valid MPOs unless it's a zero operator
+            dim = d**self.length
+            return scipy.sparse.csr_matrix((dim, dim), dtype=complex)
+
+        return current_operators[0]
 
     @classmethod
     def from_matrix(

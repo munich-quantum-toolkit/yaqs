@@ -20,10 +20,13 @@ Matrix Product States (MPS).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import warnings
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-from scipy.linalg import expm
+import scipy.sparse
+
+from ..core.methods.matrix_exponential import expm_arnoldi
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -35,17 +38,17 @@ if TYPE_CHECKING:
 
 from dataclasses import dataclass
 
-from .utils import _embed_observable, _embed_operator
+from .utils import _embed_observable_sparse, _embed_operator_sparse
 
 
 @dataclass
 class MCWFContext:
-    """Context for MCWF simulation containing pre-computed dense operators."""
+    """Context for MCWF simulation containing pre-computed sparse operators."""
 
     psi_initial: NDArray[np.complex128]
-    u_eff: NDArray[np.complex128]
-    jump_ops: list[NDArray[np.complex128]]
-    embedded_observables: list[NDArray[np.complex128] | None]
+    heff: scipy.sparse.spmatrix
+    jump_ops: list[scipy.sparse.spmatrix]
+    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None]
     sim_params: AnalogSimParams
 
 
@@ -65,29 +68,26 @@ def preprocess_mcwf(
 
     Returns:
         MCWFContext containing dense arrays ready for trajectory simulation.
-
-    Raises:
-        ValueError: If the system size is too large.
     """
     # Check dimensions
     num_sites = initial_state.length
     dim = 2**num_sites
+
     # Limit system size to avoid OOM
-    # 2^14 * 16 bytes (complex128) is manageable, but larger is risky for dense matrices
     if num_sites > 14:
         msg = (
-            f"System size {num_sites} is too large for MCWF solver. "
-            "MCWF uses dense 2^N x 2^N matrices which scale exponentially. "
-            "Please use the TJM solver for larger systems."
+            f"System size {num_sites} is too large for MCWF solver even with sparse matrices. "
+            "Simulation may be very slow or run out of memory. "
+            "Consider using the TJM solver for larger systems."
         )
-        raise ValueError(msg)
+        warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
     # 1. Initial State to Vector
     psi = initial_state.to_vec()
     psi /= np.linalg.norm(psi)
 
-    # 2. Convert Hamiltonian MPO to dense matrix
-    h_mat = hamiltonian.to_matrix()
+    # 2. Convert Hamiltonian MPO to sparse matrix
+    h_mat = hamiltonian.to_sparse_matrix()
 
     # 3. Prepare Jump Operators
     jump_ops = []
@@ -96,32 +96,29 @@ def preprocess_mcwf(
             strength = process["strength"]
             if strength <= 0:
                 continue
-            op_full = _embed_operator(process, num_sites)
+            op_full = _embed_operator_sparse(process, num_sites)
             jump_ops.append(np.sqrt(strength) * op_full)
 
     # 4. Construct Effective Hamiltonian
     heff = h_mat.copy()
     if jump_ops:
-        sum_ldag_l = np.zeros((dim, dim), dtype=complex)
+        sum_ldag_l = scipy.sparse.csr_matrix((dim, dim), dtype=complex)
         for op in jump_ops:
             sum_ldag_l += op.conj().T @ op
         heff -= 0.5j * sum_ldag_l
 
-    # Pre-compute time evolution operator
-    u_eff = expm(-1j * heff * sim_params.dt)
-
     # 5. Prepare Observables
-    embedded_observables: list[NDArray[np.complex128] | None] = []
+    embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
         if obs.gate.name in {"runtime_cost", "max_bond", "total_bond", "entropy", "schmidt_spectrum"}:
             embedded_observables.append(None)
         else:
-            op = _embed_observable(obs, num_sites)
+            op = _embed_observable_sparse(obs, num_sites)
             embedded_observables.append(op)
 
     return MCWFContext(
         psi_initial=psi,
-        u_eff=u_eff,
+        heff=heff,
         jump_ops=jump_ops,
         embedded_observables=embedded_observables,
         sim_params=sim_params,
@@ -156,7 +153,12 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     def measure(current_psi: NDArray[np.complex128], t_idx: int) -> None:
         for i, op_mat in enumerate(ctx.embedded_observables):
             if op_mat is not None:
-                val = np.vdot(current_psi, op_mat @ current_psi)
+                if scipy.sparse.issparse(op_mat):
+                    op_mat_sparse = cast("Any", op_mat)
+                    val = np.vdot(current_psi, op_mat_sparse.dot(current_psi))
+                else:
+                    op_mat_dense = cast("NDArray[np.complex128]", op_mat)
+                    val = np.vdot(current_psi, op_mat_dense @ current_psi)
                 results[i, t_idx] = val.real
             else:
                 results[i, t_idx] = 0.0
@@ -168,7 +170,12 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     # Time evolution loop
     for t_idx in range(1, num_steps):
         # 1. Evolve with H_eff
-        psi_next = ctx.u_eff @ psi
+        # Arnoldi approximation: exp(-i * heff * dt) * psi
+        psi_next = expm_arnoldi(
+            lambda v: ctx.heff @ v,
+            psi,
+            sim_params.dt,
+        )
 
         # 2. Norm check
         norm_sq = np.vdot(psi_next, psi_next).real
@@ -178,7 +185,7 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
         r = rng.random()
 
         if r < p_jump:
-            # Jump occurs!
+            # Jump occurs
             weights = []
             param_psi = psi  # Use state at start of step
 
