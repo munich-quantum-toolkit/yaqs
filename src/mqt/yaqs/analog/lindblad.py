@@ -19,9 +19,11 @@ using the MCWF solver or the Tensor Jump Method (TJM).
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
+import scipy.sparse
 from scipy.integrate import solve_ivp
 
 if TYPE_CHECKING:
@@ -60,22 +62,23 @@ def lindblad(
     # Check dimensions
     num_sites = initial_state.length
     dim = 2**num_sites
+
     # Limit system size to avoid OOM
-    # 2^12 * 16 bytes is small, but 2^13 starts getting large for dense solver
-    if num_sites > 12:
+    if num_sites > 9:
         msg = (
-            f"System size {num_sites} is too large for exact Lindblad solver. "
-            "Lindblad uses dense 2^N x 2^N matrices which scale exponentially. "
-            "Please use the TJM solver for larger systems."
+            f"System size {num_sites} exceeds the recommended limit (14) for the exact Lindblad solver. "
+            "Lindblad uses dense-like scaling for the density matrix (2^2N elements). "
+            "Simulation may be very slow or run out of memory. "
+            "Consider using the TJM solver for larger systems."
         )
-        raise ValueError(msg)
+        warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
     # 1. Initial State to Rho
     psi = initial_state.to_vec()
     rho_initial = np.outer(psi, psi.conj())
 
-    # 2. Convert Hamiltonian MPO to dense matrix
-    h_mat = hamiltonian.to_matrix()
+    # 2. Convert Hamiltonian MPO to sparse matrix
+    h_mat = hamiltonian.to_sparse_matrix()
 
     # 3. Prepare Jump Operators
     jump_ops = []
@@ -85,8 +88,8 @@ def lindblad(
             if strength <= 0:
                 continue
 
-            # Convert local operator to full-space operator
-            op_full = _embed_operator(process, num_sites)
+            # Convert local operator to full-space sparse operator
+            op_full = _embed_operator(process, num_sites, sparse=True)
 
             # Scale by sqrt(gamma)
             jump_ops.append(np.sqrt(strength) * op_full)
@@ -95,7 +98,7 @@ def lindblad(
     # drho/dt = -i[H, rho] + sum( L rho L+ - 0.5 {L+ L, rho} )
 
     # Preconstruct L_dag + L sum for efficiency (dissipator anti-commutator part)
-    l_dag_l_sum = np.zeros((dim, dim), dtype=complex)
+    l_dag_l_sum = scipy.sparse.csr_matrix((dim, dim), dtype=complex)
     for l_op in jump_ops:
         l_dag_l_sum += l_op.conj().T @ l_op
 
@@ -148,13 +151,13 @@ def lindblad(
     obs_results = np.zeros((num_obs, len(result.t)), dtype=np.float64)
 
     # Pre-embed observable operators to full space
-    embedded_observables: list[NDArray[np.complex128] | None] = []
+    embedded_observables: list[scipy.sparse.csr_matrix | None] = []
     for obs in sim_params.sorted_observables:
         if obs.gate.name in {"runtime_cost", "max_bond", "total_bond", "entropy", "schmidt_spectrum"}:
             # These are structural/diagnostic metrics not straightforwardly defined on rho
             embedded_observables.append(None)
         else:
-            op = _embed_observable(obs, num_sites)
+            op = _embed_observable(obs, num_sites, sparse=True)
             embedded_observables.append(op)
 
     for t_idx, rho_flat_t in enumerate(result.y.T):
