@@ -778,6 +778,7 @@ class MPS:
             msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
             raise ValueError(msg)
 
+        rng = np.random.default_rng()
         for site, tensor in enumerate(temp_state.tensors):
             # Rotate the tensor to the measurement basis
             # tensor shape is (p, l, r)
@@ -785,7 +786,6 @@ class MPS:
 
             reduced_density_matrix = oe.contract("abc, dbc->ad", rotated_tensor, np.conj(rotated_tensor))
             probabilities = np.diag(reduced_density_matrix).real
-            rng = np.random.default_rng()
             chosen_index = rng.choice(len(probabilities), p=probabilities / np.sum(probabilities))
             bitstring.append(chosen_index)
             selected_state = np.zeros(len(probabilities))
@@ -883,7 +883,7 @@ class MPS:
 
         # Ensure probabilities are normalized (site is center)
         norm_factor = np.sum(probabilities)
-        probabilities /= norm_factor
+        probabilities = probabilities / norm_factor
 
         rng = np.random.default_rng()
         chosen_index = rng.choice(len(probabilities), p=probabilities)
