@@ -71,9 +71,9 @@ def _embed_generic(
     eye_fn: Callable[[int], Any],
     kron_two_fn: Callable[[Any, Any], Any],
     kron_all_fn: Callable[[list[Any]], Any],
-    op_matrix: Any | None = None,
+    op_matrix: Any | None = None,  # noqa: ANN401
     op_factors: tuple[Any, Any] | None = None,
-) -> Any:
+) -> Any:  # noqa: ANN401
     """Generic driver for embedding operators into the full Hilbert space.
 
     Handles the logic for 1-site, 2-site adjacent, and factorized embeddings
