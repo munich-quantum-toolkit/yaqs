@@ -21,12 +21,12 @@ Matrix Product States (MPS).
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import scipy.sparse
 
-from ..core.methods.matrix_exponential import expm_krylov
+from ..core.methods.matrix_exponential import expm_arnoldi
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -153,9 +153,10 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     def measure(current_psi: NDArray[np.complex128], t_idx: int) -> None:
         for i, op_mat in enumerate(ctx.embedded_observables):
             if op_mat is not None:
-                # Allows op_mat to be either a sparse matrix or a dense numpy array
-                op_mat_any = cast("Any", op_mat)
-                val = np.vdot(current_psi, op_mat_any.dot(current_psi))
+                if scipy.sparse.issparse(op_mat):
+                    val = np.vdot(current_psi, op_mat.dot(current_psi))
+                else:
+                    val = np.vdot(current_psi, op_mat @ current_psi)
                 results[i, t_idx] = val.real
             else:
                 results[i, t_idx] = 0.0
@@ -167,8 +168,8 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     # Time evolution loop
     for t_idx in range(1, num_steps):
         # 1. Evolve with H_eff
-        # Krylov approximation: exp(-i * heff * dt) * psi
-        psi_next = expm_krylov(
+        # Arnoldi approximation: exp(-i * heff * dt) * psi
+        psi_next = expm_arnoldi(
             lambda v: ctx.heff @ v,
             psi,
             sim_params.dt,
