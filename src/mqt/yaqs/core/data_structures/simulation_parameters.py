@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
@@ -88,6 +89,14 @@ class Observable:
                 gate = GateLibrary.entropy()
             elif gate == "schmidt_spectrum":
                 gate = GateLibrary.schmidt_spectrum()
+            elif gate == "pvm":
+                gate = GateLibrary.pvm(gate)
+            elif hasattr(GateLibrary, gate):
+                attr = getattr(GateLibrary, gate)
+                try:
+                    gate = attr()
+                except TypeError:
+                    gate = GateLibrary.pvm(gate)
             else:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
@@ -162,6 +171,8 @@ class AnalogSimParams:
         If True, output MPS is returned.
     how_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
@@ -188,6 +199,7 @@ class AnalogSimParams:
         get_state: bool = False,
         show_progress: bool = True,
         num_threads: int = 1,
+        solver: str = "TJM",
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -224,7 +236,18 @@ class AnalogSimParams:
         num_threads:
             Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
             Defaults to 1 for efficiency on small/medium bond dimensions.
+        solver : str, optional
+            The solver method to use. Must be one of "TJM" (Tensor Jump Method), "Lindblad" (exact density matrix),
+            or "MCWF" (Monte Carlo Wavefunction). Defaults to "TJM" if not specified.r is not "TJM" or "Lindblad".
+
+        Raises:
+            ValueError: If the solver is not "TJM", "Lindblad", or "MCWF".
         """
+        self.noise_model: NoiseModel | None = None
+        if solver not in {"TJM", "Lindblad", "MCWF"}:
+            msg = f"Invalid solver '{solver}'. Allowed values are 'TJM', 'Lindblad', or 'MCWF'."
+            raise ValueError(msg)
+        self.solver = solver
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -309,6 +332,8 @@ class WeakSimParams:
         If True, sample layers.
     show_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
@@ -355,6 +380,7 @@ class WeakSimParams:
         show_progress:
             If True, a progress bar is printed as trajectories finish.
         """
+        self.noise_model: NoiseModel | None = None
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
@@ -421,6 +447,8 @@ class StrongSimParams:
         If True, output MPS is returned.
     show_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
@@ -474,6 +502,7 @@ class StrongSimParams:
             Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
             Defaults to 1 for efficiency on small/medium bond dimensions.
         """
+        self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."

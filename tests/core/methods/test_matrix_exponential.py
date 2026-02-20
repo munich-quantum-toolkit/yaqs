@@ -188,3 +188,110 @@ def test_expm_krylov_linalg_error_fallback() -> None:
         assert mock_eigh.call_args_list[0][1]["lapack_driver"] == "stemr"
         # Second call should be stebz
         assert mock_eigh.call_args_list[1][1]["lapack_driver"] == "stebz"
+
+
+def test_expm_arnoldi_2x2_exact() -> None:
+    """Test exact Arnoldi matrix exponential for a Hermitian matrix.
+
+    Arnoldi should match Lanczos and direct expm for Hermitian matrices when
+    iterations >= dimension.
+    """
+    mat = np.array([[2.0, 1.0], [1.0, 3.0]], dtype=complex)
+
+    def op(v: np.ndarray) -> np.ndarray:
+        return mat @ v
+
+    vec = np.array([1.0, 0.0], dtype=complex)
+    dt = 0.1
+
+    approx = matrix_exponential.expm_arnoldi(op, vec, dt, max_arnoldi_iterations=2)
+    direct = scipy.linalg.expm(-1j * dt * mat) @ vec
+
+    np.testing.assert_allclose(approx, direct, atol=1e-12)
+
+
+def test_expm_arnoldi_non_hermitian() -> None:
+    """Test Arnoldi matrix exponential for a non-Hermitian matrix."""
+    # A simple non-Hermitian matrix (e.g., from an effective Hamiltonian)
+    mat = np.array([[1.0 + 0.5j, 0.2], [-0.1j, 2.0 - 0.3j]], dtype=complex)
+
+    def op(v: np.ndarray) -> np.ndarray:
+        return mat @ v
+
+    vec = np.array([0.6, 0.8j], dtype=complex)
+    dt = 0.05
+
+    approx = matrix_exponential.expm_arnoldi(op, vec, dt, max_arnoldi_iterations=5)
+    direct = scipy.linalg.expm(-1j * dt * mat) @ vec
+
+    np.testing.assert_allclose(approx, direct, atol=1e-10)
+
+
+def test_expm_arnoldi_zero_norm() -> None:
+    """Test that Arnoldi handles zero vector input correctly."""
+    vec = np.zeros(4, dtype=complex)
+    mock_op = MagicMock()
+
+    res = matrix_exponential.expm_arnoldi(mock_op, vec, dt=0.1)
+
+    np.testing.assert_array_equal(res, vec)
+    mock_op.assert_not_called()
+
+
+def test_expm_arnoldi_breakdown() -> None:
+    """Test early convergence (breakdown) in Arnoldi iteration."""
+    # Start vector is an eigenvector
+    mat = np.diag([1.0, 2.0, 3.0, 4.0]).astype(complex)
+    vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=complex)
+
+    def op(v: np.ndarray) -> np.ndarray:
+        return mat @ v
+
+    # Breakdown should happen at j=1 (one dimensional subspace)
+    res = matrix_exponential.expm_arnoldi(op, vec, dt=0.1, max_arnoldi_iterations=10)
+
+    expected = np.exp(-1j * 0.1 * 1.0) * vec
+    np.testing.assert_allclose(res, expected, atol=1e-12)
+
+
+def test_expm_arnoldi_convergence_tol() -> None:
+    """Test that Arnoldi respects the tolerance parameter."""
+    # Large random matrix where small iteration count isn't exact
+    rng = np.random.default_rng(42)
+    size = 20
+    mat = rng.standard_normal((size, size)) + 1j * rng.standard_normal((size, size))
+
+    def op(v: np.ndarray) -> np.ndarray:
+        return mat @ v
+
+    vec = rng.standard_normal(size) + 1j * rng.standard_normal(size)
+    vec /= np.linalg.norm(vec)
+
+    dt = 0.01
+
+    # Large tolerance -> fewer iterations
+    res_quick = matrix_exponential.expm_arnoldi(op, vec, dt, max_arnoldi_iterations=10, tol=1e-2)
+
+    # Tight tolerance -> more accurate
+    res_tight = matrix_exponential.expm_arnoldi(op, vec, dt, max_arnoldi_iterations=15, tol=1e-12)
+
+    direct = scipy.linalg.expm(-1j * dt * mat) @ vec
+
+    err_quick = np.linalg.norm(res_quick - direct)
+    err_tight = np.linalg.norm(res_tight - direct)
+
+    assert err_tight < err_quick
+    assert err_tight < 1e-10
+
+
+def test_compute_arnoldi_result() -> None:
+    """Test the internal _compute_arnoldi_result helper."""
+    h_mat = np.array([[1.0, 0.5], [0.1, 1.2]], dtype=complex)
+    v_mat = np.eye(2, dtype=complex)
+    nrm = 2.0
+    dt = 0.1
+
+    res = matrix_exponential._compute_arnoldi_result(h_mat, v_mat, nrm, dt)  # noqa: SLF001
+    direct = scipy.linalg.expm(-1j * dt * h_mat) @ np.array([nrm, 0.0], dtype=complex)
+
+    np.testing.assert_allclose(res, direct, atol=1e-12)

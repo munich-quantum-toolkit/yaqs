@@ -17,6 +17,7 @@ ranges for gate application.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from qiskit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
@@ -103,7 +104,7 @@ def test_convert_dag_to_tensor_algorithm_single_dagopnode() -> None:
     gate = gates[0]
     assert gate.name.lower() == "rx", "Gate name should match 'rx'."
     assert isinstance(gate, Rx), "Gate should be an Rx instance."
-    assert gate.theta == np.pi / 4, "Gate should capture the rotation parameter (pi/4)."
+    assert gate.theta == pytest.approx(np.pi / 4), "Gate should capture the rotation parameter (pi/4)."
     assert gate.sites == [0], "Gate should act on qubit 0."
 
 

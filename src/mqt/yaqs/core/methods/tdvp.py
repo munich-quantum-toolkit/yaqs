@@ -863,6 +863,10 @@ def local_dynamic_tdvp(
         msg = "State and Hamiltonian must have the same length"
         raise ValueError(msg)
 
+    if num_sites == 1:
+        single_site_tdvp(state, hamiltonian, sim_params)
+        return
+
     # Prepare environments
     right_blocks = initialize_right_environments(state, hamiltonian)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
@@ -1036,6 +1040,10 @@ def global_dynamic_tdvp(
             such as the maximum allowable bond dimension for the MPS.
     """
     current_max_bond_dim = state.get_max_bond()
+    if state.length == 1:
+        single_site_tdvp(state, hamiltonian, sim_params)
+        return
+
     if current_max_bond_dim < sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_tdvp(state, hamiltonian, sim_params, dynamic=True)
