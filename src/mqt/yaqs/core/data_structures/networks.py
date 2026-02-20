@@ -791,7 +791,7 @@ class MPS:
             selected_state = np.zeros(len(probabilities))
             selected_state[chosen_index] = 1
             # Multiply state: project the rotated tensor onto the selected state.
-            projected_rotated_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
+            oe.contract("a, acd->cd", selected_state, rotated_tensor)
 
             # Propagate the measurement to the next site.
             if site != self.length - 1:
