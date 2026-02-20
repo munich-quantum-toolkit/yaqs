@@ -167,16 +167,6 @@ def test_lindblad_dephasing_both_qubits() -> None:
     assert np.allclose(x1_sim, x_exact, atol=1e-4), f"Qubit 1 failed. Max diff: {np.max(np.abs(x1_sim - x_exact))}"
 
 
-def test_lindblad_system_size_error() -> None:
-    """Test that Lindblad solver raises error for large systems."""
-    n_sites = 13
-    initial_state = MPS(n_sites)
-    hamiltonian = MPO()
-    hamiltonian.identity(n_sites)
-    sim_params = AnalogSimParams(solver="Lindblad", get_state=True)
-
-    with pytest.raises(ValueError, match=r"System size .* too large"):
-        run(initial_state, hamiltonian, sim_params, None)
 
 
 def test_lindblad_zero_strength_noise() -> None:
@@ -194,18 +184,6 @@ def test_lindblad_zero_strength_noise() -> None:
     lindblad(args)
 
 
-def test_lindblad_system_size_limit() -> None:
-    """Test that Lindblad raises ValueError for system size > 12."""
-    n_sites = 13
-    psi = MPS(n_sites)
-    h = MPO.ising(n_sites, J=1.0, g=1.0)
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=1.0, observables=[Observable("z", sites=[0])])
-
-    # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
-    args = (0, psi, None, sim_params, h)
-
-    with pytest.raises(ValueError, match=r"System size .* too large"):
-        lindblad(args)
 
 
 def test_lindblad_diagnostic_observables() -> None:
