@@ -1,3 +1,4 @@
+# ruff: noqa: ANN401
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
@@ -16,6 +17,8 @@ import scipy.sparse
 from scipy.sparse import issparse
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from ..core.data_structures.simulation_parameters import Observable
@@ -60,6 +63,74 @@ def _kron_all_sparse(
     return cast("scipy.sparse.spmatrix", res)
 
 
+# --- Generic Embedding Driver ---
+
+
+def _embed_generic(
+    sites: list[int],
+    num_sites: int,
+    eye_fn: Callable[[int], Any],
+    kron_two_fn: Callable[[Any, Any], Any],
+    kron_all_fn: Callable[[list[Any]], Any],
+    op_matrix: Any | None = None,
+    op_factors: tuple[Any, Any] | None = None,
+) -> Any:
+    """Generic driver for embedding operators into the full Hilbert space.
+
+    Handles the logic for 1-site, 2-site adjacent, and factorized embeddings
+    using provided primitive functions for identity and kroenecker products.
+
+    Args:
+        sites: List of site indices the operator acts on.
+        num_sites: Total number of sites in the system.
+        eye_fn: Function to create an identity matrix of size N.
+        kron_two_fn: Function to compute the Kronecker product of two matrices.
+        kron_all_fn: Function to compute the Kronecker product of a list of matrices.
+        op_matrix: Optional matrix operator to embed (for 1-site or 2-site adjacent).
+        op_factors: Optional tuple of operators to embed (for 2-site non-adjacent).
+
+    Returns:
+        The embedded operator/observable (type depends on generic functions).
+
+    Raises:
+        ValueError: If 2-site matrix is not adjacent or factors are not 2-site.
+        NotImplementedError: If neither matrix nor factors provided.
+    """
+    if op_matrix is not None:
+        if len(sites) == 1:
+            site = sites[0]
+            ops = [eye_fn(2) for _ in range(num_sites)]
+            ops[site] = op_matrix
+            return kron_all_fn(ops)
+
+        if len(sites) == 2:
+            s1, s2 = sorted(sites)
+            if s2 != s1 + 1:
+                msg = "Matrix-based 2-site op must be adjacent"
+                raise ValueError(msg)
+
+            left_id = eye_fn(2**s1) if s1 > 0 else eye_fn(1)
+            right_id = eye_fn(2 ** (num_sites - 1 - s2)) if s2 < num_sites - 1 else eye_fn(1)
+
+            # Construct: left_id (x) op_matrix (x) right_id
+            res = kron_two_fn(left_id, op_matrix)
+            return kron_two_fn(res, right_id)
+
+    if op_factors is not None:
+        op1, op2 = op_factors
+        if len(sites) != 2:
+            msg = f"Factors require exactly 2 sites, got {len(sites)}"
+            raise ValueError(msg)
+        s1, s2 = sites  # factors assumes sites order matches ops order
+        ops = [eye_fn(2) for _ in range(num_sites)]
+        ops[s1] = op1
+        ops[s2] = op2
+        return kron_all_fn(ops)
+
+    msg = "Invalid embedding request: neither matrix nor factors provided."
+    raise NotImplementedError(msg)
+
+
 # --- Dense Embedding ---
 
 
@@ -67,62 +138,47 @@ def _embed_operator_dense(process: dict, num_sites: int) -> NDArray[np.complex12
     """Embeds a local noise process operator into the full Hilbert space (dense).
 
     Args:
-        process: A dictionary defining the noise process. Must contain "sites" and either
-            "matrix" (for 1-site or adjacent 2-site ops) or "factors" (for tensor factors).
-        num_sites: The total number of sites in the system.
+        process: Dictionary containing "sites" (list of ints) and either "matrix" (operator matrix)
+                 or "factors" (tuple of operators).
+        num_sites: Total number of sites in the system.
 
     Returns:
-        The full-system size operator as a dense numpy array.
+        The embedded operator as a dense matrix.
 
     Raises:
-        NotImplementedError: If the process definition is invalid or unsupported.
+        NotImplementedError: If the process dictionary is missing required keys.
     """
     sites = process["sites"]
 
     def eye(n: int) -> NDArray[np.complex128]:
         return np.eye(n, dtype=complex)
 
+    params: dict[str, Any] = {}
     if "matrix" in process:
-        op_local = process["matrix"]
-        if len(sites) == 1:
-            site = sites[0]
-            ops = [eye(2) for _ in range(num_sites)]
-            ops[site] = op_local
-            return _kron_all_dense(ops)
+        params["op_matrix"] = process["matrix"]
+    elif "factors" in process:
+        params["op_factors"] = process["factors"]
+    else:
+        msg = f"Cannot embed operator for process: {process}"
+        raise NotImplementedError(msg)
 
-        if len(sites) == 2:
-            s1, s2 = sorted(sites)
-            assert s2 == s1 + 1, "Matrix-based 2-site op must be adjacent"
-            left_id = eye(2**s1) if s1 > 0 else eye(1)
-            right_id = eye(2 ** (num_sites - 1 - s2)) if s2 < num_sites - 1 else eye(1)
-            res = np.kron(left_id, op_local)
-            return np.kron(res, right_id)
-
-    if "factors" in process:
-        op1, op2 = process["factors"]
-        s1, s2 = sites
-        ops = [eye(2) for _ in range(num_sites)]
-        ops[s1] = op1
-        ops[s2] = op2
-        return _kron_all_dense(ops)
-
-    msg = f"Cannot embed operator for process: {process}"
-    raise NotImplementedError(msg)
+    return _embed_generic(
+        sites=sites, num_sites=num_sites, eye_fn=eye, kron_two_fn=np.kron, kron_all_fn=_kron_all_dense, **params
+    )
 
 
 def _embed_observable_dense(obs: Observable, num_sites: int) -> NDArray[np.complex128]:
     """Embeds an observable into the full Hilbert space (dense).
 
     Args:
-        obs: The observable to embed.
-        num_sites: The total number of sites in the system.
+        obs: Observable object containing sites and the gate/operator definition.
+        num_sites: Total number of sites in the system.
 
     Returns:
-        The full-system size observable operator as a dense numpy array.
+        The embedded observable as a dense matrix.
 
     Raises:
-        NotImplementedError: If the observable targets non-adjacent 2-site operations
-            or an unsupported number of sites (>2).
+        NotImplementedError: If the observable involves more than 2 sites.
     """
     sites = obs.sites
     if isinstance(sites, int):
@@ -131,25 +187,19 @@ def _embed_observable_dense(obs: Observable, num_sites: int) -> NDArray[np.compl
     def eye(n: int) -> NDArray[np.complex128]:
         return np.eye(n, dtype=complex)
 
-    if len(sites) == 1:
-        site = sites[0]
-        ops = [eye(2) for _ in range(num_sites)]
-        ops[site] = obs.gate.matrix
-        return _kron_all_dense(ops)
-
-    if len(sites) == 2:
-        s1, s2 = sorted(sites)
-        if s2 == s1 + 1:
-            op_local = obs.gate.matrix
-            left_id = eye(2**s1) if s1 > 0 else eye(1)
-            right_id = eye(2 ** (num_sites - 1 - s2)) if s2 < num_sites - 1 else eye(1)
-            res = np.kron(left_id, op_local)
-            return np.asarray(np.kron(res, right_id), dtype=complex)
-        msg = "Non-adjacent 2-site observables not yet supported in exact solver."
+    if len(sites) > 2:
+        msg = f"Unsupported observable site count: {len(sites)}"
         raise NotImplementedError(msg)
 
-    msg = f"Unsupported observable site count: {len(sites)}"
-    raise NotImplementedError(msg)
+    # Observables are always matrix-based in this context
+    return _embed_generic(
+        sites=sites,
+        num_sites=num_sites,
+        eye_fn=eye,
+        kron_two_fn=np.kron,
+        kron_all_fn=_kron_all_dense,
+        op_matrix=obs.gate.matrix,
+    )
 
 
 # --- Sparse Embedding ---
@@ -159,15 +209,15 @@ def _embed_operator_sparse(process: dict, num_sites: int) -> scipy.sparse.spmatr
     """Embeds a local noise process operator into the full Hilbert space (sparse).
 
     Args:
-        process: A dictionary defining the noise process. Must contain "sites" and either
-            "matrix" (for 1-site or adjacent 2-site ops) or "factors" (for tensor factors).
-        num_sites: The total number of sites in the system.
+        process: Dictionary containing "sites" (list of ints) and either "matrix" (operator matrix)
+                 or "factors" (tuple of operators).
+        num_sites: Total number of sites in the system.
 
     Returns:
-        The full-system size operator as a sparse matrix (CSR).
+        The embedded operator as a sparse matrix.
 
     Raises:
-        NotImplementedError: If the process definition is invalid or unsupported.
+        NotImplementedError: If the process dictionary is missing required keys.
     """
     sites = process["sites"]
 
@@ -179,49 +229,36 @@ def _embed_operator_sparse(process: dict, num_sites: int) -> scipy.sparse.spmatr
             return cast("Any", op)
         return scipy.sparse.csr_matrix(op)
 
+    def sparse_kron(a: scipy.sparse.spmatrix, b: scipy.sparse.spmatrix) -> scipy.sparse.spmatrix:
+        return scipy.sparse.kron(a, b, format="csr")
+
+    params: dict[str, Any] = {}
     if "matrix" in process:
-        op_local = to_sparse(process["matrix"])
-        if len(sites) == 1:
-            site = sites[0]
-            ops: list[NDArray[np.complex128] | scipy.sparse.spmatrix] = [eye(2) for _ in range(num_sites)]
-            ops[site] = op_local
-            return _kron_all_sparse(ops)
-
-        if len(sites) == 2:
-            s1, s2 = sorted(sites)
-            assert s2 == s1 + 1, "Matrix-based 2-site op must be adjacent"
-            left_id = eye(2**s1) if s1 > 0 else eye(1)
-            right_id = eye(2 ** (num_sites - 1 - s2)) if s2 < num_sites - 1 else eye(1)
-
-            res = scipy.sparse.kron(left_id, op_local, format="csr")
-            final_res = scipy.sparse.kron(res, right_id, format="csr")
-            return cast("Any", final_res)
-
-    if "factors" in process:
+        params["op_matrix"] = to_sparse(process["matrix"])
+    elif "factors" in process:
         op1, op2 = process["factors"]
-        s1, s2 = sites
-        ops = [eye(2) for _ in range(num_sites)]
-        ops[s1] = to_sparse(op1)
-        ops[s2] = to_sparse(op2)
-        return _kron_all_sparse(ops)
+        params["op_factors"] = (to_sparse(op1), to_sparse(op2))
+    else:
+        msg = f"Cannot embed operator for process: {process}"
+        raise NotImplementedError(msg)
 
-    msg = f"Cannot embed operator for process: {process}"
-    raise NotImplementedError(msg)
+    return _embed_generic(
+        sites=sites, num_sites=num_sites, eye_fn=eye, kron_two_fn=sparse_kron, kron_all_fn=_kron_all_sparse, **params
+    )
 
 
 def _embed_observable_sparse(obs: Observable, num_sites: int) -> scipy.sparse.spmatrix:
     """Embeds an observable into the full Hilbert space (sparse).
 
     Args:
-        obs: The observable to embed.
-        num_sites: The total number of sites in the system.
+        obs: Observable object containing sites and the gate/operator definition.
+        num_sites: Total number of sites in the system.
 
     Returns:
-        The full-system size observable operator as a sparse matrix (CSR).
+        The embedded observable as a sparse matrix.
 
     Raises:
-        NotImplementedError: If the observable targets non-adjacent 2-site operations
-            or an unsupported number of sites (>2).
+        NotImplementedError: If the observable involves more than 2 sites.
     """
     sites = obs.sites
     if isinstance(sites, int):
@@ -235,24 +272,18 @@ def _embed_observable_sparse(obs: Observable, num_sites: int) -> scipy.sparse.sp
             return cast("Any", op)
         return scipy.sparse.csr_matrix(op)
 
-    if len(sites) == 1:
-        site = sites[0]
-        ops: list[NDArray[np.complex128] | scipy.sparse.spmatrix] = [eye(2) for _ in range(num_sites)]
-        ops[site] = to_sparse(obs.gate.matrix)
-        return _kron_all_sparse(ops)
+    def sparse_kron(a: scipy.sparse.spmatrix, b: scipy.sparse.spmatrix) -> scipy.sparse.spmatrix:
+        return scipy.sparse.kron(a, b, format="csr")
 
-    if len(sites) == 2:
-        s1, s2 = sorted(sites)
-        if s2 == s1 + 1:
-            op_local = to_sparse(obs.gate.matrix)
-            left_id = eye(2**s1) if s1 > 0 else eye(1)
-            right_id = eye(2 ** (num_sites - 1 - s2)) if s2 < num_sites - 1 else eye(1)
-
-            res = scipy.sparse.kron(left_id, op_local, format="csr")
-            final_res = scipy.sparse.kron(res, right_id, format="csr")
-            return cast("Any", final_res)
-        msg = "Non-adjacent 2-site observables not yet supported in exact solver."
+    if len(sites) > 2:
+        msg = f"Unsupported observable site count: {len(sites)}"
         raise NotImplementedError(msg)
 
-    msg = f"Unsupported observable site count: {len(sites)}"
-    raise NotImplementedError(msg)
+    return _embed_generic(
+        sites=sites,
+        num_sites=num_sites,
+        eye_fn=eye,
+        kron_two_fn=sparse_kron,
+        kron_all_fn=_kron_all_sparse,
+        op_matrix=to_sparse(obs.gate.matrix),
+    )
