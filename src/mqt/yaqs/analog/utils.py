@@ -1,4 +1,3 @@
-# ruff: noqa: ANN401
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
