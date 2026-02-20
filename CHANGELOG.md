@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
 - added Arnoldi iteration as alternative to Lanczos method ([#338]) ([**@aaronleesander**])
 - added Monte Carlo Wavefunction solver ([#333]) ([**@aaronleesander**])
 - added MPO.from_matrix() method ([#331]) ([**@lucello**])
@@ -93,6 +94,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#339]: https://github.com/munich-quantum-toolkit/yaqs/pull/339
 [#338]: https://github.com/munich-quantum-toolkit/yaqs/pull/338
 [#337]: https://github.com/munich-quantum-toolkit/yaqs/pull/337
 [#336]: https://github.com/munich-quantum-toolkit/yaqs/pull/336
