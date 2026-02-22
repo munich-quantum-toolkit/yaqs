@@ -907,6 +907,10 @@ def run(
     if noise_model is not None:
         noise_model = noise_model.sample()
     sim_params.noise_model = noise_model
+    
+    # Deferred output validation
+    if isinstance(sim_params, (StrongSimParams, AnalogSimParams)):
+        assert sim_params.get_state or sim_params.observables, "No output specified: either observables or get_state must be set."
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         assert isinstance(operator, QuantumCircuit)

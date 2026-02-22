@@ -363,6 +363,9 @@ def run(
         timesteps = [sim_params.elapsed_time]
 
     sim_params.get_state = True
+    
+    # Deferred output validation (safety check)
+    assert sim_params.get_state or sim_params.observables, "No output specified: either observables or get_state must be set."
 
     # 1. Prepare Basis and Duals
     basis_set = _get_basis_states()
