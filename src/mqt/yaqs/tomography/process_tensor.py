@@ -8,6 +8,7 @@ from qiskit.quantum_info import DensityMatrix, entropy
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+
 def _vec_to_rho(vec4: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Convert a 4-element vector to a 2x2 density matrix."""
     rho = vec4.reshape(2, 2)
@@ -55,7 +56,9 @@ class ProcessTensor:
         """Deprecated: use as_matrix_final_output() instead."""
         return self.as_matrix_final_output()
 
-    def predict_final_state(self, rho_sequence: list[NDArray[np.complex128]], duals: list[NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    def predict_final_state(
+        self, rho_sequence: list[NDArray[np.complex128]], duals: list[NDArray[np.complex128]]
+    ) -> NDArray[np.complex128]:
         """Predict final state for a sequence of input states using dual-frame contraction.
 
         This method enables prediction on held-out state sequences not used during tomography.

@@ -10,4 +10,4 @@
 from .process_tensor import ProcessTensor
 from .tomography import run
 
-__all__ = ["run", "ProcessTensor"]
+__all__ = ["ProcessTensor", "run"]
