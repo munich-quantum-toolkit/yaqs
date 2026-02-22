@@ -7,143 +7,142 @@
 
 """Tests for analog solver utility functions."""
 
-from dataclasses import dataclass
+from typing import Any, cast
 
 import numpy as np
 import pytest
+import scipy.sparse
 
-from mqt.yaqs.analog.utils import _embed_observable, _embed_operator, _kron_all  # noqa: PLC2701
+from mqt.yaqs.analog.utils import (
+    _embed_observable_dense,  # noqa: PLC2701
+    _embed_observable_sparse,  # noqa: PLC2701
+    _embed_operator_dense,  # noqa: PLC2701
+    _embed_operator_sparse,  # noqa: PLC2701
+    _kron_all_dense,  # noqa: PLC2701
+    _kron_all_sparse,  # noqa: PLC2701
+)
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 
 
-def test_kron_all() -> None:
-    """Test Kronecker product of multiple matrices."""
+def test_kron_all_dense() -> None:
+    """Test Kronecker product of multiple dense matrices."""
     i = np.eye(2, dtype=complex)
     x = np.array([[0, 1], [1, 0]], dtype=complex)
     z = np.array([[1, 0], [0, -1]], dtype=complex)
 
     # I x X
-    res = _kron_all([i, x])
+    res = _kron_all_dense([i, x])
     expected = np.kron(i, x)
+    assert isinstance(res, np.ndarray)
     assert np.allclose(res, expected)
 
     # X x Z x I
-    res = _kron_all([x, z, i])
+    res = _kron_all_dense([x, z, i])
     expected = np.kron(np.kron(x, z), i)
+    assert isinstance(res, np.ndarray)
     assert np.allclose(res, expected)
 
 
-def test_embed_operator_matrix_1site() -> None:
-    """Test embedding a 1-site matrix operator."""
+def test_kron_all_sparse() -> None:
+    """Test Kronecker product of sparse matrices."""
+    i = scipy.sparse.eye(2, format="csr", dtype=complex)
+    x = scipy.sparse.csr_matrix([[0, 1], [1, 0]], dtype=complex)
+
+    # I x X
+    res = _kron_all_sparse([i, x])
+    expected = scipy.sparse.kron(i, x, format="csr")
+    assert scipy.sparse.issparse(res)
+    assert cast("Any", (res != expected)).nnz == 0
+
+
+def test_embed_operator_dense_1site() -> None:
+    """Test embedding a 1-site matrix operator (dense)."""
     num_sites = 3
     sigma_x = np.array([[0, 1], [1, 0]], dtype=complex)
     process = {"sites": [1], "matrix": sigma_x}
 
-    # Expected: I x X x I
-    op = _embed_operator(process, num_sites)
+    op = _embed_operator_dense(process, num_sites)
     expected = np.kron(np.eye(2), np.kron(sigma_x, np.eye(2)))
 
+    assert isinstance(op, np.ndarray)
     assert np.allclose(op, expected)
 
 
-def test_embed_operator_matrix_2site_adjacent() -> None:
-    """Test embedding a 2-site adjacent matrix operator."""
+def test_embed_operator_sparse_1site() -> None:
+    """Test embedding a 1-site matrix operator (sparse)."""
+    num_sites = 3
+    sigma_x = scipy.sparse.csr_matrix([[0, 1], [1, 0]], dtype=complex)
+    process = {"sites": [1], "matrix": sigma_x}
+
+    op = _embed_operator_sparse(process, num_sites)
+    expected = scipy.sparse.kron(scipy.sparse.eye(2), scipy.sparse.kron(sigma_x, scipy.sparse.eye(2)))
+
+    assert scipy.sparse.issparse(op)
+    assert cast("Any", (op != expected)).nnz == 0
+
+
+def test_embed_operator_dense_2site() -> None:
+    """Test embedding a 2-site adjacent matrix operator (dense)."""
     num_sites = 4
-    # CNOT on 1, 2
     cnot = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=complex)
     process = {"sites": [1, 2], "matrix": cnot}
 
-    # Expected: I x CNOT x I
-    op = _embed_operator(process, num_sites)
+    op = _embed_operator_dense(process, num_sites)
     expected = np.kron(np.eye(2), np.kron(cnot, np.eye(2)))
 
+    assert isinstance(op, np.ndarray)
     assert np.allclose(op, expected)
 
 
-def test_embed_operator_factors() -> None:
-    """Test embedding a factor-based operator (e.g. X_0 Z_2)."""
-    num_sites = 3
-    x = np.array([[0, 1], [1, 0]], dtype=complex)
-    z = np.array([[1, 0], [0, -1]], dtype=complex)
-    process = {"sites": [0, 2], "factors": (x, z)}
+def test_embed_operator_sparse_2site() -> None:
+    """Test embedding a 2-site adjacent matrix operator (sparse)."""
+    num_sites = 4
+    cnot_dense = np.eye(4, dtype=complex)
+    cnot_dense[2, 2] = 0
+    cnot_dense[2, 3] = 1
+    cnot_dense[3, 3] = 0
+    cnot_dense[3, 2] = 1
+    cnot = scipy.sparse.csr_matrix(cnot_dense)
+    process = {"sites": [1, 2], "matrix": cnot}
 
-    # Expected: X x I x Z
-    op = _embed_operator(process, num_sites)
-    expected = np.kron(x, np.kron(np.eye(2), z))
+    op = _embed_operator_sparse(process, num_sites)
+    expected = scipy.sparse.kron(scipy.sparse.eye(2), scipy.sparse.kron(cnot, scipy.sparse.eye(2)))
 
-    assert np.allclose(op, expected)
+    assert scipy.sparse.issparse(op)
+    assert cast("Any", (op != expected)).nnz == 0
 
 
 def test_embed_operator_errors() -> None:
-    """Test error handling in _embed_operator."""
+    """Test error handling."""
     num_sites = 3
-
-    # Unknown process type
     with pytest.raises(NotImplementedError, match="Cannot embed operator"):
-        _embed_operator({"sites": [0], "unknown": "value"}, num_sites)
+        _embed_operator_dense({"sites": [0], "unknown": "value"}, num_sites)
 
-    # 2-site matrix non-adjacent
-    cnot = np.eye(4)
-    with pytest.raises(AssertionError, match="must be adjacent"):
-        _embed_operator({"sites": [0, 2], "matrix": cnot}, num_sites)
+    with pytest.raises(NotImplementedError, match="Cannot embed operator"):
+        _embed_operator_sparse({"sites": [0], "unknown": "value"}, num_sites)
 
 
-def test_embed_observable_1site() -> None:
-    """Test embedding a 1-site observable."""
+def test_embed_observable_dense_1site() -> None:
+    """Test embedding a 1-site observable (dense)."""
     num_sites = 3
     obs = Observable("z", sites=[1])
 
-    # Expected: I x Z x I
-    op = _embed_observable(obs, num_sites)
+    op = _embed_observable_dense(obs, num_sites)
     z = np.array([[1, 0], [0, -1]], dtype=complex)
     expected = np.kron(np.eye(2), np.kron(z, np.eye(2)))
 
+    assert isinstance(op, np.ndarray)
     assert np.allclose(op, expected)
 
 
-@dataclass
-class DummyGate:
-    """Dummy gate for testing."""
-
-    matrix: np.ndarray
-
-
-@dataclass
-class DummyObservable:
-    """Dummy observable for testing."""
-
-    sites: int | list[int]
-    matrix: np.ndarray
-
-    def __post_init__(self) -> None:
-        """Initialize the gate after dataclass init."""
-        self.gate = DummyGate(self.matrix)
-
-
-def test_embed_observable_2site_adjacent() -> None:
-    """Test embedding a 2-site adjacent observable."""
+def test_embed_observable_sparse_1site() -> None:
+    """Test embedding a 1-site observable (sparse)."""
     num_sites = 3
-    # Use dummy observable to avoid GateLibrary validation
-    sites = [0, 1]
-    matrix = np.eye(4, dtype=complex)
-    obs = DummyObservable(sites, matrix)
+    obs = Observable("z", sites=[1])
 
-    op = _embed_observable(obs, num_sites)  # type: ignore[arg-type]
-    # Expected: I4 x I
-    expected = np.kron(np.eye(4), np.eye(2))
-    assert np.allclose(op, expected)
+    op = _embed_observable_sparse(obs, num_sites)
+    z = scipy.sparse.csr_matrix([[1, 0], [0, -1]], dtype=complex)
+    expected = scipy.sparse.kron(scipy.sparse.eye(2), scipy.sparse.kron(z, scipy.sparse.eye(2)))
 
-
-def test_embed_observable_errors() -> None:
-    """Test error handling in _embed_observable."""
-    num_sites = 3
-
-    # Non-adjacent 2-site
-    obs = DummyObservable(sites=[0, 2], matrix=np.eye(4))
-    with pytest.raises(NotImplementedError, match="Non-adjacent"):
-        _embed_observable(obs, num_sites)  # type: ignore[arg-type]
-
-    # >2 sites
-    obs = DummyObservable(sites=[0, 1, 2], matrix=np.eye(8))
-    with pytest.raises(NotImplementedError, match="Unsupported observable site count"):
-        _embed_observable(obs, num_sites)  # type: ignore[arg-type]
+    assert scipy.sparse.issparse(op)
+    assert cast("Any", (op != expected)).nnz == 0
