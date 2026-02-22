@@ -38,7 +38,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _get_parallel_context, _worker_init  # noqa: PLC2701
+from mqt.yaqs.simulator import _get_parallel_context, worker_init  # noqa: PLC2701
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,7 +89,7 @@ def test_threading_config() -> None:
 
     try:
         # Simulate worker init with strict thread cap
-        _worker_init({}, n_threads=1)
+        worker_init({}, n_threads=1)
 
         # Check if Numba threads are set to 1
         assert numba.get_num_threads() == 1
