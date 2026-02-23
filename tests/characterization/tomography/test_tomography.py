@@ -9,7 +9,7 @@ from mqt.yaqs.analog.analog_tjm import analog_tjm_1
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
-from mqt.yaqs.tomography.tomography import (
+from mqt.yaqs.characterization.tomography.tomography import (
     _calculate_dual_frame,
     _get_basis_states,
     _reprepare_site_zero,
@@ -53,7 +53,7 @@ def test_measurement_bases() -> None:
     # 2. Multiple bases
     pt_all = run(op, params, timesteps=timesteps, num_trajectories=1, measurement_bases=["X", "Y", "Z"])
     assert pt_all.tensor.shape == (4, 6, 6)
-    
+
     # 3. Default (should be equivalent to [X, Y, Z])
     pt_default = run(op, params, timesteps=timesteps, num_trajectories=1)
     assert pt_default.tensor.shape == (4, 6, 6)
@@ -82,7 +82,10 @@ def test_tomography_run_multistep() -> None:
 
 def test_tomography_prediction_accuracy() -> None:
     """Verify that PT prediction matches direct standalone simulation."""
-    from mqt.yaqs.tomography.tomography import _calculate_dual_frame, _get_basis_states
+    from mqt.yaqs.characterization.tomography.tomography import (
+        _calculate_dual_frame,
+        _get_basis_states,
+    )
 
     L = 2
     op = MPO.ising(length=L, J=1.0, g=1.0)
@@ -218,7 +221,10 @@ def test_reconstruction_depolarizing() -> None:
     assert h < 0.2
 
 
-from mqt.yaqs.tomography.process_tensor import ProcessTensor, _vec_to_rho
+from mqt.yaqs.characterization.tomography.process_tensor import (
+    ProcessTensor,
+    _vec_to_rho,
+)
 
 
 def test_vec_to_rho() -> None:
@@ -337,7 +343,10 @@ def test_holevo_information_conditional() -> None:
 
 
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.tomography.tomography import _calculate_dual_frame, _get_basis_states
+from mqt.yaqs.characterization.tomography.tomography import (
+    _calculate_dual_frame,
+    _get_basis_states,
+)
 
 
 def test_algebraic_consistency() -> None:

@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-from mqt.yaqs.tomography.process_tensor import ProcessTensor
+from .process_tensor import ProcessTensor
 
 
 def _get_basis_states() -> list[tuple[str, NDArray[np.complex128]]]:
@@ -373,9 +373,11 @@ def run(
         timesteps = [sim_params.elapsed_time]
 
     sim_params.get_state = True
-    
+
     # Deferred output validation (safety check)
-    assert sim_params.get_state or sim_params.observables, "No output specified: either observables or get_state must be set."
+    assert sim_params.get_state or sim_params.observables, (
+        "No output specified: either observables or get_state must be set."
+    )
 
     # 1. Prepare Basis and Duals
     basis_set = _get_basis_states()
@@ -385,7 +387,7 @@ def run(
     num_steps = len(timesteps)
     prep_basis_indices = list(range(len(basis_set)))
     prep_sequences = list(itertools.product(prep_basis_indices, repeat=num_steps))
-    
+
     # Handle measurement bases
     if measurement_bases is None:
         measurement_bases = ["Z"]
