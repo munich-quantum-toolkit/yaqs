@@ -1,6 +1,23 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Unit tests for the ProcessTensor class."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
-from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho
+
+from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho  # noqa: PLC2701
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def test_vec_to_rho() -> None:
@@ -23,11 +40,15 @@ def test_vec_to_rho() -> None:
     vec_unnorm = np.array([2, 0, 0, 0], dtype=complex)
     rho_out = _vec_to_rho(vec_unnorm)
     assert np.isclose(np.trace(rho_out), 1.0)
-    assert rho_out[0, 0] == 1.0
+    assert np.isclose(rho_out[0, 0], 1.0)
 
 
-def get_standard_basis():
-    """Returns the standard 6-state Pauli basis for testing."""
+def get_standard_basis() -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
+    """Returns the standard 6-state Pauli basis for testing.
+
+    Returns:
+        Standard 6-state basis.
+    """
     psi_0 = np.array([1, 0], dtype=complex)
     psi_1 = np.array([0, 1], dtype=complex)
     psi_plus = np.array([1, 1], dtype=complex) / np.sqrt(2)
@@ -59,22 +80,13 @@ def test_process_tensor_init() -> None:
     assert pt.tensor is tensor
     assert pt.data is tensor
     assert pt.timesteps == timesteps
-    assert pt.rank == 1  # 3 dimensions // 2 = 1. Wait, rank definition in ProcessTensor is len(shape)//2.
-    # shape (4, 6, 6) -> len=3 -> rank=1.
-    # For k=2 steps, shape is (4, 6, 6) -> rank 1?
-    # Usually rank refers to input slots. Let's check process_tensor.py:37
-    # self.rank = len(tensor.shape) // 2.
-    # (4, 6) -> rank 1. (4, 6, 6) -> rank 1. (4, 6, 6, 6, 6) -> rank 2.
-    # This seems to be counting "pairs" of indices if it was a Cho matrix,
-    # but here it's (out, in1, in2, ...).
-    # So k steps gives 1 + k indices. rank = (1+k)//2.
-    # For k=1, rank=1. For k=2, rank=1. For k=3, rank=2.
-    # This might be a slightly non-standard definition of rank, but let's verify it works as intended.
+    assert pt.rank == 1
 
 
 def test_to_choi_matrix() -> None:
     """Test reshaping to Choi matrix representation."""
-    tensor = np.random.randn(4, 6, 6) + 1j * np.random.randn(4, 6, 6)
+    rng = np.random.default_rng(42)
+    tensor = rng.standard_normal((4, 6, 6)) + 1j * rng.standard_normal((4, 6, 6))
     pt = ProcessTensor(tensor, [0.1, 0.1])
     choi = pt.to_choi_matrix()
     assert choi.shape == (4, 36)
@@ -83,9 +95,9 @@ def test_to_choi_matrix() -> None:
 
 def test_predict_final_state_error() -> None:
     """Test error handling in prediction."""
-    pt = ProcessTensor(np.zeros((4, 6)), [0.1])
+    pt = ProcessTensor(np.zeros((4, 6), dtype=complex), [0.1])
     with pytest.raises(ValueError, match="Sequence length 2 must match number of timesteps 1"):
-        pt.predict_final_state([np.eye(2), np.eye(2)], [])
+        pt.predict_final_state([np.eye(2, dtype=complex), np.eye(2, dtype=complex)], [])
 
 
 def test_holevo_information_identity() -> None:
@@ -122,7 +134,6 @@ def test_holevo_information_conditional() -> None:
     """Test conditional Holevo information."""
     basis = get_standard_basis()
     num_frames = len(basis)
-    # T[out, i, j] = rho_i (identity from step 0, ignores step 1)
     tensor = np.zeros((4, num_frames, num_frames), dtype=complex)
 
     for i in range(num_frames):
@@ -150,17 +161,7 @@ def test_holevo_information_conditional() -> None:
 
 def test_holevo_information_empty_sequences() -> None:
     """Test Holevo information when no sequences match (edge case)."""
-    # This is hard to trigger with valid inputs because the loops are consistent,
-    # but we can mock or force it if we want to hit that line 100%.
-    # Actually, the code has:
-    # seqs = [seq for seq in itertools.product(range(N), repeat=k) if seq[fixed_step] == fixed_idx]
-    # If N>0 and k>0 and fixed_idx < N, seqs will NEVER be empty.
-    # The only way it's empty is if N=0 or k=0, but PT init ensures rank > 0?
-    # No, (4,) tensor would have k=0.
-
-    # Let's test with k=0 (standard 1-site density matrix, no input steps)
     tensor = np.array([1, 0, 0, 0], dtype=complex)
-    pt = ProcessTensor(tensor, [])  # Empty timesteps -> k=0
-    # fixed_step=0 would be out of bounds.
+    pt = ProcessTensor(tensor, [])
     with pytest.raises(ValueError, match="fixed_step 0 out of bounds for 0 steps"):
         pt.holevo_information_conditional(0, 0)

@@ -4,5 +4,4 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
-
-"""Characterization module for YAQS."""
+"""Integration tests for tomography module."""  

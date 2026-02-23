@@ -16,10 +16,13 @@ basis states and measuring the output state in the Pauli basis.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+import itertools
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
+from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
@@ -35,11 +38,11 @@ if TYPE_CHECKING:
 from .process_tensor import ProcessTensor
 
 
-def _get_basis_states() -> list[tuple[str, NDArray[np.complex128]]]:
-    """Returns the 6 single-qubit basis states for tomography.
+def _get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
+    """Return the 6 single-qubit basis states for tomography.
 
     Returns:
-        list of tuples (name, density_matrix_4x1_vector).
+        List of tuples (name, state_vector, density_matrix).
     """
     # Define the 6 basis states
     # Z basis
@@ -62,7 +65,7 @@ def _get_basis_states() -> list[tuple[str, NDArray[np.complex128]]]:
     ]
 
     # Convert to density matrices
-    basis_set = []
+    basis_set: list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]] = []
     for name, psi in states:
         rho = np.outer(psi, psi.conj())
         basis_set.append((name, psi, rho))
@@ -70,7 +73,7 @@ def _get_basis_states() -> list[tuple[str, NDArray[np.complex128]]]:
 
 
 def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[NDArray[np.complex128]]:
-    """Calculates the dual frame for the given basis states.
+    """Calculate the dual frame for the given basis states.
 
     The dual frame {D_k} allows reconstruction of any operator A via:
     A = sum_k Tr(D_k^dag A) F_k
@@ -84,29 +87,29 @@ def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[
         basis_matrices (list): List of density matrices (2x2) forming the frame.
 
     Returns:
-        list: List of dual matrices D_k.
+        list[NDArray[np.complex128]]: List of dual matrices D_k.
     """
     # Stack matrices as columns of a Frame Operator F
     # Shape (4, 6) for single qubit (dim=2^2=4)
     dim = basis_matrices[0].shape[0]
     dim * dim
 
-    # F matrix: columns are vectorized density matrices
-    F = np.column_stack([m.reshape(-1) for m in basis_matrices])
+    # frame_matrix: columns are vectorized density matrices
+    frame_matrix = np.column_stack([m.reshape(-1) for m in basis_matrices])
 
     # Calculate dual frame using Moore-Penrose pseudoinverse
     # Vectorized: |Rho>> = sum_k (<<D_k|Rho>>) |F_k>>
     #                    = sum_k |F_k>> <<D_k| |Rho>>
 
-    F_pinv = np.linalg.pinv(F)
-    D_dag = F_pinv
-    D = D_dag.conj().T
+    frame_pinv = np.linalg.pinv(frame_matrix)
+    dual_frame_dag = frame_pinv
+    dual_frame = dual_frame_dag.conj().T
 
-    # Unpack columns of D into matrices
-    return [D[:, k].reshape(dim, dim) for k in range(D.shape[1])]
+    # Unpack columns of dual_frame into matrices
+    return [dual_frame[:, k].reshape(dim, dim) for k in range(dual_frame.shape[1])]
 
 
-def _reprepare_site_zero(mps: MPS, new_state: np.ndarray, rng: np.random.Generator, meas_basis: str = "Z") -> int:
+def _reprepare_site_zero(mps: MPS, new_state: NDArray[np.complex128], rng: np.random.Generator, meas_basis: str = "Z") -> int:
     """Reprepare site 0 with selective (trajectory-resolved) intervention.
 
     This implements a clean trajectory-consistent operation:
@@ -150,35 +153,34 @@ def _reprepare_site_zero(mps: MPS, new_state: np.ndarray, rng: np.random.Generat
 
 
 def _reprepare_site_zero_vector(
-    psi: NDArray[np.complex128], new_state: NDArray[np.complex128], rng: np.random.Generator, meas_basis: str = "Z"
+    state_vec: NDArray[np.complex128],
+    new_state: NDArray[np.complex128],
+    rng: np.random.Generator,
+    meas_basis: str = "Z",
 ) -> tuple[NDArray[np.complex128], int]:
-    """Reprepare site 0 for a dense vector state with selective intervention.
+    """Reprepare site 0 for a dense vector state.
 
     Args:
-        psi: The current state vector, shape (2^N,)
-        new_state: The new state vector for site 0, shape (2,)
+        state_vec: The dense state vector (length 2^N)
+        new_state: The new state vector for site 0 (length 2)
         rng: Random number generator for sampling
         meas_basis: The basis to measure in ("X", "Y", or "Z"). Defaults to "Z".
 
     Returns:
-        tuple: (updated_psi, outcome)
+        tuple[NDArray[np.complex128], int]: (new_state_vector, outcome)
+
+    Raises:
+        ValueError: If the measurement basis is not supported.
     """
-    dim_total = psi.shape[0]
+    dim_total = state_vec.shape[0]
     dim_env = dim_total // 2
-    psi_reshaped = psi.reshape(2, dim_env)
+    psi_reshaped = state_vec.reshape(2, dim_env)
 
     # 1. Basis Rotation
-    # Extract the site 0 part (shape 2, dim_env)
-    # To measure in X or Y, we apply the inverse rotation H or H S^\dagger to site 0,
-    # which is equivalent to rotating the state forward before Z measurement.
     if meas_basis == "X":
-        # H = 1/sqrt(2) [1  1]
-        #               [1 -1]
         rot = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
         psi_reshaped = rot @ psi_reshaped
     elif meas_basis == "Y":
-        # H S^\dagger = 1/sqrt(2) [1 -i]
-        #                         [1  i]
         rot = np.array([[1, -1j], [1, 1j]], dtype=np.complex128) / np.sqrt(2)
         psi_reshaped = rot @ psi_reshaped
     elif meas_basis != "Z":
@@ -209,16 +211,20 @@ def _reprepare_site_zero_vector(
 
 
 def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]:
-    """Reconstructs single-qubit density matrix from Pauli expectations.
+    """Reconstruct single-qubit density matrix from Pauli expectations.
 
-    rho = 0.5 * (I + <X>X + <Y>Y + <Z>Z)
+    Args:
+        expectations: Dictionary of Pauli expectations.
+
+    Returns:
+        NDArray[np.complex128]: The reconstructed single-qubit density matrix.
     """
-    I = np.eye(2, dtype=complex)
-    x = X().matrix
-    y = Y().matrix
-    z = Z().matrix
+    eye = np.eye(2, dtype=complex)
+    x_matrix = X().matrix
+    y_matrix = Y().matrix
+    z_matrix = Z().matrix
 
-    return 0.5 * (I + expectations["x"] * x + expectations["y"] * y + expectations["z"] * z)
+    return 0.5 * (eye + expectations["x"] * x_matrix + expectations["y"] * y_matrix + expectations["z"] * z_matrix)
 
 
 def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[np.complex128]]]:
@@ -228,14 +234,8 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
         job_idx: Flat index mapping to (seq_idx, traj_idx).
 
     Returns:
-        tuple: (seq_idx, traj_idx, list of output states/results)
+        tuple[int, int, list[NDArray[np.complex128]]]: (seq_idx, traj_idx, list of output states/results)
     """
-    import numpy as np
-
-    from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
-    from mqt.yaqs.analog.mcwf import mcwf
-    from mqt.yaqs.core.data_structures.networks import MPS
-
     # 1. Decode job
     num_trajectories = WORKER_CTX["num_trajectories"]
     seq_idx = job_idx // num_trajectories
@@ -278,17 +278,18 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
     trajectory_results = []
 
     # Initial measurement (t=0)
-    def get_rho_site_zero(state):
+    def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
         if isinstance(state, np.ndarray):
             # Dense vector: reshape to (2, 2^(N-1)) and compute partial trace
-            rho = state.reshape(2, -1)
+            rho = np.reshape(state, (2, -1))
             return rho @ rho.conj().T
+        assert isinstance(state, MPS)
         rx = state.expect(Observable(X(), sites=[0]))
         ry = state.expect(Observable(Y(), sites=[0]))
         rz = state.expect(Observable(Z(), sites=[0]))
         return _reconstruct_state({"x": rx, "y": ry, "z": rz})
 
-    trajectory_results.append(get_rho_site_zero(current_state))
+    trajectory_results.append(_get_rho_site_zero(current_state))
 
     # 4. Multi-step loop
     for step_i, duration in enumerate(timesteps):
@@ -312,15 +313,18 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             dynamic_ctx.sim_params = step_params
 
             mcwf((0, dynamic_ctx))
-            current_state = dynamic_ctx.output_state
+            assert dynamic_ctx.output_state is not None
+            current_state = cast("NDArray[np.complex128]", dynamic_ctx.output_state)
         else:
             # TJM
             backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
+            assert isinstance(current_state, MPS)
             backend((0, current_state, noise_model, step_params, operator))
-            current_state = step_params.output_state
+            assert step_params.output_state is not None
+            current_state = cast(MPS, step_params.output_state)
 
         # Measure AFTER evolution
-        trajectory_results.append(get_rho_site_zero(current_state))
+        trajectory_results.append(_get_rho_site_zero(current_state))
 
         # Intervention
         if step_i < len(timesteps) - 1:
@@ -329,8 +333,12 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             _, psi_next, _ = basis_set[next_idx]
 
             if is_mcwf:
-                current_state, _ = _reprepare_site_zero_vector(current_state, psi_next, rng, meas_basis=meas_basis)
+                assert isinstance(current_state, np.ndarray)
+                current_state, _ = _reprepare_site_zero_vector(
+                    cast("NDArray[np.complex128]", current_state), psi_next, rng, meas_basis=meas_basis
+                )
             else:
+                assert isinstance(current_state, MPS)
                 _reprepare_site_zero(current_state, psi_next, rng, meas_basis=meas_basis)
 
     return (seq_idx, traj_idx, trajectory_results)
@@ -364,10 +372,6 @@ def run(
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.
     """
-    import itertools
-
-    from mqt.yaqs.analog.mcwf import preprocess_mcwf
-
     # 0. Handle default timesteps
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]
@@ -394,11 +398,7 @@ def run(
     if isinstance(measurement_bases, str):
         measurement_bases = [measurement_bases]
 
-    if num_steps > 1:
-        meas_sequences = list(itertools.product(measurement_bases, repeat=num_steps - 1))
-    else:
-        # Standard tomography (1-step) has no interventions
-        meas_sequences = [()]
+    meas_sequences = list(itertools.product(measurement_bases, repeat=num_steps - 1)) if num_steps > 1 else [()]
 
     worker_sequences = list(itertools.product(prep_sequences, meas_sequences))
     num_prep_sequences = len(prep_sequences)
@@ -452,19 +452,16 @@ def run(
         for t_idx, rho in enumerate(trajectory_rhos):
             aggregated_outputs[prep_seq_idx][t_idx] += rho / total_averages
 
-    # 4. Construct Process Tensor
     num_frame_states = len(basis_set)
     tensor_shape = [4] + [num_frame_states] * num_steps
-    process_tensor = np.zeros(tensor_shape, dtype=complex)
+    process_tensor_data: NDArray[np.complex128] = np.zeros(tensor_shape, dtype=np.complex128)
 
     for prep_seq_idx, avg_rhos in enumerate(aggregated_outputs):
         seq = prep_sequences[prep_seq_idx]
         rho_final = avg_rhos[-1]
         rho_vec = rho_final.reshape(-1)
 
-        idx = (slice(None), *tuple(seq))
-        process_tensor[idx] = rho_vec
+        idx = (slice(None), *seq)
+        process_tensor_data[idx] = rho_vec
 
-    pt = ProcessTensor(process_tensor, timesteps)
-    pt.data = process_tensor
-    return pt
+    return ProcessTensor(process_tensor_data, timesteps)

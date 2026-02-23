@@ -1,5 +1,15 @@
+# Copyright (c) 2025 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Process Tensor representation."""
+
 from __future__ import annotations
 
+import itertools
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -10,7 +20,14 @@ if TYPE_CHECKING:
 
 
 def _vec_to_rho(vec4: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Convert a 4-element vector to a 2x2 density matrix."""
+    """Convert a 4-element vector to a 2x2 density matrix.
+
+    Args:
+        vec4: A 4-element vector.
+
+    Returns:
+        A 2x2 density matrix.
+    """
     rho = vec4.reshape(2, 2)
     rho = 0.5 * (rho + rho.conj().T)
     tr = np.trace(rho)
@@ -31,6 +48,12 @@ class ProcessTensor:
     """
 
     def __init__(self, tensor: NDArray[np.complex128], timesteps: list[float]) -> None:
+        """Initialize the ProcessTensor.
+
+        Args:
+            tensor: The raw tensor data.
+            timesteps: The time points where interventions/measurements occurred.
+        """
         self.tensor = tensor
         self.data = tensor
         self.timesteps = timesteps
@@ -45,6 +68,9 @@ class ProcessTensor:
         - k: number of steps
 
         For Pauli frame (N=6), k=2 gives shape (4, 36).
+
+        Returns:
+            NDArray[np.complex128]: Matrix of shape (4, N^k).
         """
         # Shape is [4, N, N, ...] -> reshape to [4, N^k]
         num_inputs = np.prod(self.tensor.shape[1:])  # Product of all input dimensions
@@ -66,6 +92,9 @@ class ProcessTensor:
         Returns:
             Predicted final density matrix (2x2)
 
+        Raises:
+            ValueError: If the sequence length does not match the number of timesteps.
+
         Example:
             >>> # Build PT from tomography
             >>> pt = run_process_tensor_tomography(...)
@@ -79,13 +108,13 @@ class ProcessTensor:
             msg = f"Sequence length {len(rho_sequence)} must match number of timesteps {len(self.timesteps)}"
             raise ValueError(msg)
 
-        # Compute coefficients: c_k = Tr(D_k† ρ) for each input state
+        # Compute coefficients: c_k = Tr(D_k† rho) for each input state
         coeffs_per_step = []
         for rho in rho_sequence:
             coeffs = [np.trace(d.conj().T @ rho) for d in duals]
             coeffs_per_step.append(coeffs)
 
-        # Contract with tensor: ρ_pred = Σ_{i0,...,ik} c_i0^(0) ... c_ik^(k) T[:,i0,...,ik]
+        # Contract with tensor: rho_pred = sum_{i0,...,ik} c_i0^(0) ... c_ik^(k) T[:,i0,...,ik]
         result = np.zeros(4, dtype=complex)
         for idx in np.ndindex(*self.tensor.shape[1:]):  # Iterate over all input frame indices
             # Compute product of coefficients for this index combination
@@ -108,23 +137,21 @@ class ProcessTensor:
         Returns:
             float: The Holevo information.
         """
-        import itertools
-
         # Tensor shape: (4, N, N, ..., N)
         # k is number of steps (input slots)
-        k = self.tensor.ndim - 1
+        steps_k = self.tensor.ndim - 1
         out_dim = self.tensor.shape[0]
         assert out_dim == 4
 
-        if k == 0:
+        if steps_k == 0:
             # No inputs, just a single state
             rho = _vec_to_rho(self.tensor.reshape(4))
             return 0.0  # Information about inputs is zero if there are no inputs
 
-        N = self.tensor.shape[1]
+        states_n = self.tensor.shape[1]
 
         # Generate all input sequences
-        seqs = list(itertools.product(range(N), repeat=k))
+        seqs = list(itertools.product(range(states_n), repeat=steps_k))
 
         if p is None:
             p = {seq: 1.0 / len(seqs) for seq in seqs}
@@ -141,15 +168,15 @@ class ProcessTensor:
             rho_avg += p[seq] * rho
 
         # Compute Entropies
-        # S(rho_avg)
-        S_avg = entropy(DensityMatrix(rho_avg), base=base)
+        # Calculate entropy S(rho_avg)
+        s_avg = entropy(DensityMatrix(rho_avg), base=base)
 
         # sum p_i S(rho_i)
-        S_cond = 0.0
+        s_cond = 0.0
         for seq in seqs:
-            S_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
+            s_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
 
-        return S_avg - S_cond
+        return s_avg - s_cond
 
     def holevo_information_conditional(self, fixed_step: int, fixed_idx: int, base: int = 2) -> float:
         """Calculate the Holevo information conditioned on a fixed input at a specific step.
@@ -161,25 +188,26 @@ class ProcessTensor:
 
         Returns:
             float: The conditional Holevo information.
-        """
-        import itertools
 
+        Raises:
+            ValueError: If fixed_step or fixed_idx are out of bounds.
+        """
         out_dim = self.tensor.shape[0]
         assert out_dim == 4
-        k = self.tensor.ndim - 1
+        steps_k = self.tensor.ndim - 1
 
-        if fixed_step < 0 or fixed_step >= k:
-            msg = f"fixed_step {fixed_step} out of bounds for {k} steps."
+        if fixed_step < 0 or fixed_step >= steps_k:
+            msg = f"fixed_step {fixed_step} out of bounds for {steps_k} steps."
             raise ValueError(msg)
 
-        N = self.tensor.shape[1]
-        if fixed_idx < 0 or fixed_idx >= N:
-            msg = f"fixed_idx {fixed_idx} out of bounds for {N} basis states."
+        states_n = self.tensor.shape[1]
+        if fixed_idx < 0 or fixed_idx >= states_n:
+            msg = f"fixed_idx {fixed_idx} out of bounds for {states_n} basis states."
             raise ValueError(msg)
 
-        # Generate all sequences of length k where seq[fixed_step] == fixed_idx
+        # Generate all sequences of length steps_k where seq[fixed_step] == fixed_idx
         # We can optimize this by only generating the varying parts, but filtering is easier to write clearly
-        seqs = [seq for seq in itertools.product(range(N), repeat=k) if seq[fixed_step] == fixed_idx]
+        seqs = [seq for seq in itertools.product(range(states_n), repeat=steps_k) if seq[fixed_step] == fixed_idx]
 
         if not seqs:
             return 0.0
@@ -199,10 +227,10 @@ class ProcessTensor:
             rho_avg += p[seq] * rho
 
         # Compute Entropies
-        S_avg = entropy(DensityMatrix(rho_avg), base=base)
+        entropy_avg = entropy(DensityMatrix(rho_avg), base=base)
 
-        S_cond = 0.0
+        entropy_cond = 0.0
         for seq in seqs:
-            S_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
+            entropy_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
 
-        return S_avg - S_cond
+        return entropy_avg - entropy_cond
