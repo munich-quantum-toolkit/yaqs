@@ -19,7 +19,7 @@ from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor
 from mqt.yaqs.characterization.tomography.tomography import (
     _reprepare_site_zero,  # noqa: PLC2701
     calculate_dual_frame,
-    get_basis_statess,
+    get_basis_states,
     run,
 )
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
@@ -107,7 +107,7 @@ def test_holevo_information() -> None:
     # In 1-step, pt[out, in] stores the output density matrix (vectorized)
     # for each of the 6 Pauli basis inputs.
     # Basis: |0>, |1>, |+>, |->, |i+>, |i->
-    basis_set = get_basis_statess()
+    basis_set = get_basis_states()
     for i in range(6):
         _, _, rho = basis_set[i]
         tensor[:, i] = rho.reshape(-1)
@@ -184,7 +184,7 @@ def test_pt_prediction_consistency() -> None:
     timesteps = [0.1, 0.1]
     pt = run(op, params, timesteps=timesteps, num_trajectories=10)
 
-    basis_set = get_basis_statess()
+    basis_set = get_basis_states()
     basis_rhos = [b[2] for b in basis_set]
     duals = calculate_dual_frame(basis_rhos)
 
@@ -267,7 +267,7 @@ def test_algebraic_consistency() -> None:
     pt = run(op, AnalogSimParams(dt=0.05, order=2), timesteps)
 
     # Test prediction vs dual contraction
-    basis_set = get_basis_statess()
+    basis_set = get_basis_states()
     basis_rhos = [b[2] for b in basis_set]
     duals = calculate_dual_frame(basis_rhos)
 
@@ -340,7 +340,7 @@ def test_held_out_prediction() -> None:
     rho_1 = _get_random_rho(rng)
     rho_sequence = [rho_0, rho_1]
 
-    basis_set = get_basis_statess()
+    basis_set = get_basis_states()
     duals = calculate_dual_frame([b[2] for b in basis_set])
 
     # 3. Predict final state using PT

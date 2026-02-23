@@ -113,12 +113,12 @@ The prediction uses a dual-frame contraction — an efficient linear-algebraic o
 ```{code-cell} ipython3
 import numpy as np
 from mqt.yaqs.characterization.tomography.tomography import (
-    calculate_dual_frame,  # noqa: PLC2701
-    get_basis_statess,       # noqa: PLC2701
+    calculate_dual_frame,
+    get_basis_states,
 )
 
 # Build the dual frame from the same basis used during tomography
-basis_set = get_basis_statess()
+basis_set = get_basis_states()
 duals = calculate_dual_frame([b[2] for b in basis_set])
 
 # Choose two arbitrary mixed input states
