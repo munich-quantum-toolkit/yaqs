@@ -28,6 +28,7 @@ def _vec_to_rho(vec4: NDArray[np.complex128]) -> NDArray[np.complex128]:
     Returns:
         A 2x2 density matrix.
     """
+    assert len(vec4) == 4, "Vector must have 4 elements"
     rho = vec4.reshape(2, 2)
     rho = 0.5 * (rho + rho.conj().T)
     tr = np.trace(rho)
@@ -55,9 +56,7 @@ class ProcessTensor:
             timesteps: The time points where interventions/measurements occurred.
         """
         self.tensor = tensor
-        self.data = tensor
         self.timesteps = timesteps
-        self.rank = len(tensor.shape) // 2
 
     def to_choi_matrix(self) -> NDArray[np.complex128]:
         """Convert to matrix view (final output vs all inputs).
@@ -101,7 +100,7 @@ class ProcessTensor:
             >>> # Predict on new sequence
             >>> rho0 = np.array([[0.5, 0.5], [0.5, 0.5]])  # |+⟩⟨+|
             >>> rho1 = np.array([[1, 0], [0, 0]])  # |0⟩⟨0|
-            >>> duals = _calculate_dual_frame(_get_pauli_basis_set())
+            >>> duals = calculate_dual_frame(_get_pauli_basis_set())
             >>> predicted = pt.predict_final_state([rho0, rho1], duals)
         """
         if len(rho_sequence) != len(self.timesteps):
