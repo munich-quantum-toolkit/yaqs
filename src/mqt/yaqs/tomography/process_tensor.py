@@ -28,11 +28,11 @@ class ProcessTensor:
     Attributes:
         tensor (NDArray): The raw tensor data.
         timesteps (list[float]): The time points where interventions/measurements occurred.
-        basis_set (str): The basis used for reconstruction (default "Pauli").
     """
 
     def __init__(self, tensor: NDArray[np.complex128], timesteps: list[float]) -> None:
         self.tensor = tensor
+        self.data = tensor
         self.timesteps = timesteps
         self.rank = len(tensor.shape) // 2
 
