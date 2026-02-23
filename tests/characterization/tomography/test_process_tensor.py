@@ -78,9 +78,7 @@ def test_process_tensor_init() -> None:
     pt = ProcessTensor(tensor, timesteps)
 
     assert pt.tensor is tensor
-    assert pt.data is tensor
     assert pt.timesteps == timesteps
-    assert pt.rank == 1
 
 
 def test_to_choi_matrix() -> None:

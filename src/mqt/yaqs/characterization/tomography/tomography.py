@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 from .process_tensor import ProcessTensor
 
 
-def _get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
+def get_basis_statess() -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
     """Return the 6 single-qubit basis states for tomography.
 
     Returns:
@@ -72,7 +72,7 @@ def _get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.co
     return basis_set
 
 
-def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[NDArray[np.complex128]]:
+def calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[NDArray[np.complex128]]:
     """Calculate the dual frame for the given basis states.
 
     The dual frame {D_k} allows reconstruction of any operator A via:
@@ -386,9 +386,9 @@ def run(
     )
 
     # 1. Prepare Basis and Duals
-    basis_set = _get_basis_states()
+    basis_set = get_basis_statess()
     basis_rhos = [b[2] for b in basis_set]
-    _calculate_dual_frame(basis_rhos)
+    calculate_dual_frame(basis_rhos)
 
     num_steps = len(timesteps)
     prep_basis_indices = list(range(len(basis_set)))
