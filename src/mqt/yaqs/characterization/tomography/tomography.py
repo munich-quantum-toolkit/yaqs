@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -109,7 +109,9 @@ def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[
     return [dual_frame[:, k].reshape(dim, dim) for k in range(dual_frame.shape[1])]
 
 
-def _reprepare_site_zero(mps: MPS, new_state: NDArray[np.complex128], rng: np.random.Generator, meas_basis: str = "Z") -> int:
+def _reprepare_site_zero(
+    mps: MPS, new_state: NDArray[np.complex128], rng: np.random.Generator, meas_basis: str = "Z"
+) -> int:
     """Reprepare site 0 with selective (trajectory-resolved) intervention.
 
     This implements a clean trajectory-consistent operation:
@@ -321,7 +323,7 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             assert isinstance(current_state, MPS)
             backend((0, current_state, noise_model, step_params, operator))
             assert step_params.output_state is not None
-            current_state = cast(MPS, step_params.output_state)
+            current_state = cast("MPS", step_params.output_state)
 
         # Measure AFTER evolution
         trajectory_results.append(_get_rho_site_zero(current_state))
