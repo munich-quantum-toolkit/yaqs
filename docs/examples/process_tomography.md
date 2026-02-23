@@ -15,7 +15,7 @@ mystnb:
 # Process Tensor Tomography
 
 Process Tensor Tomography (PTT) characterises multi-time correlations in an open quantum system
-by reconstructing a *process tensor*, a generalisation of the quantum channel concept to several
+by reconstructing a _process tensor_, a generalisation of the quantum channel concept to several
 time steps.
 Given an MPO Hamiltonian and a set of state preparations, YAQS runs the simulation in parallel,
 injects probe states at each intervention point, and assembles the result into a {class}`ProcessTensor`
@@ -80,8 +80,8 @@ a value near 0 indicates a fully depolarising channel.
 
 ## 4. Multi-step tomography and conditional Holevo information
 
-For two successive evolution segments we can ask: *how much information injected at step 0
-survives to the output after step 1?*
+For two successive evolution segments we can ask: _how much information injected at step 0
+survives to the output after step 1?_
 
 ```{code-cell} ipython3
 ---
@@ -106,7 +106,7 @@ print(f"Conditional Holevo χ (fix step=1): {chi_cond:.4f} bits")
 
 ## 5. Predicting held-out states
 
-Once the process tensor is available, you can predict the output for *any* input density matrix
+Once the process tensor is available, you can predict the output for _any_ input density matrix
 sequence without additional simulation runs.
 The prediction uses a dual-frame contraction — an efficient linear-algebraic operation:
 
