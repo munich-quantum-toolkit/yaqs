@@ -33,11 +33,10 @@ class ProcessTensor:
 
     def __init__(self, tensor: NDArray[np.complex128], timesteps: list[float]) -> None:
         self.tensor = tensor
-        self.data = tensor
         self.timesteps = timesteps
         self.rank = len(tensor.shape) // 2
 
-    def as_matrix_final_output(self) -> NDArray[np.complex128]:
+    def to_choi_matrix(self) -> NDArray[np.complex128]:
         """Convert to matrix view (final output vs all inputs).
 
         Returns matrix of shape (4, N^k) where:
@@ -47,14 +46,9 @@ class ProcessTensor:
 
         For Pauli frame (N=6), k=2 gives shape (4, 36).
         """
-        len(self.timesteps)
         # Shape is [4, N, N, ...] -> reshape to [4, N^k]
         num_inputs = np.prod(self.tensor.shape[1:])  # Product of all input dimensions
         return self.tensor.reshape(4, num_inputs)
-
-    def to_choi_matrix(self) -> NDArray[np.complex128]:
-        """Deprecated: use as_matrix_final_output() instead."""
-        return self.as_matrix_final_output()
 
     def predict_final_state(
         self, rho_sequence: list[NDArray[np.complex128]], duals: list[NDArray[np.complex128]]

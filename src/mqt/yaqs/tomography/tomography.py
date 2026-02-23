@@ -95,15 +95,8 @@ def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[
     F = np.column_stack([m.reshape(-1) for m in basis_matrices])
 
     # Calculate dual frame using Moore-Penrose pseudoinverse
-    # F_dual = (F F^dag)^-1 F  if F is invertible/overcomplete?
-    # Actually, simply D = (F^dag)+ ?
-    # Let's verify: We want Rho = sum_k Tr(D_k^dag Rho) F_k
     # Vectorized: |Rho>> = sum_k (<<D_k|Rho>>) |F_k>>
     #                    = sum_k |F_k>> <<D_k| |Rho>>
-    # So we need sum_k |F_k>> <<D_k| = Identity.
-    # Matrix form: F * D^dag = I.
-    # So D^dag = F_pinv.
-    # D = (F_pinv)^dag.
 
     F_pinv = np.linalg.pinv(F)
     D_dag = F_pinv
@@ -148,7 +141,6 @@ def _reprepare_site_zero(mps: MPS, new_state: np.ndarray, rng: np.random.Generat
     mps.tensors[0] = new_tensor
 
     # Final Renormalization
-    # Ensure global norm is 1 after inserting new state
     final_norm = mps.norm()
     if abs(final_norm) > 1e-15:
         mps.tensors[0] /= final_norm
@@ -192,7 +184,6 @@ def _reprepare_site_zero_vector(
     if env_norm > 1e-15:
         env_cond /= env_norm
 
-    # New state: new_state \otimes env_cond
     new_psi = np.outer(new_state, env_cond).flatten()
     return new_psi, outcome
 
@@ -272,8 +263,6 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             # Dense vector: reshape to (2, 2^(N-1)) and compute partial trace
             rho = state.reshape(2, -1)
             return rho @ rho.conj().T
-        # MPS: use expect/measure-like logic to get reduced rho
-        # Faster: just get expectations of X, Y, Z
         rx = state.expect(Observable(X(), sites=[0]))
         ry = state.expect(Observable(Y(), sites=[0]))
         rz = state.expect(Observable(Z(), sites=[0]))
@@ -296,12 +285,8 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
         step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
 
         if is_mcwf:
-            # For MCWF, we need to wrap the vector in a Context
-            # We can skip full preprocess_mcwf if we only update psi_initial
-            # BUT: jump_ops and heff might depend on global operator/noise.
-            # We assume they are pre-calculated in WORKER_CTX["mcwf_static_ctx"]
             static_ctx = WORKER_CTX["mcwf_static_ctx"]
-            # Create a shallow copy and update psi
+
             dynamic_ctx = copy.copy(static_ctx)
             dynamic_ctx.psi_initial = current_state
             dynamic_ctx.sim_params = step_params
