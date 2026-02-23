@@ -4,4 +4,5 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
 """Integration tests for characterization module."""
