@@ -59,6 +59,23 @@ def test_measurement_bases() -> None:
     assert pt_default.tensor.shape == (4, 6, 6)
 
 
+def test_tomography_mcwf_multistep() -> None:
+    """Verify tomography with MCWF solver and multiple steps (vector interventions)."""
+    L = 2
+    op = MPO.ising(L, J=1.0, g=1.0)
+    # Use MCWF solver
+    params = AnalogSimParams(dt=0.1, order=1, solver="MCWF")
+    timesteps = [0.1, 0.1]
+
+    # Run Tomography - this will trigger _reprepare_site_zero_vector
+    pt = run(op, params, timesteps=timesteps, num_trajectories=10, measurement_bases="Z")
+    assert pt.tensor.shape == (4, 6, 6)
+    # Check that identity is somewhat preserved (rough check)
+    # For a very short time, diagonal elements of Process Tensor should be close to 1
+    # Choosing first entry (rho_0 -> rho_0)
+    assert np.real(pt.tensor[0, 0, 0]) > 0.5
+
+
 def test_tomography_run_multistep() -> None:
     """Integration test for multi-step tomography.run() API."""
     L = 2
