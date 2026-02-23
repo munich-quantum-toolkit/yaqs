@@ -111,12 +111,17 @@ class ProcessTensor:
         import itertools
 
         # Tensor shape: (4, N, N, ..., N)
-        # N is number of basis states (6 for Pauli)
         # k is number of steps (input slots)
+        k = self.tensor.ndim - 1
         out_dim = self.tensor.shape[0]
         assert out_dim == 4
+        
+        if k == 0:
+            # No inputs, just a single state
+            rho = _vec_to_rho(self.tensor.reshape(4))
+            return 0.0 # Information about inputs is zero if there are no inputs
+            
         N = self.tensor.shape[1]
-        k = self.tensor.ndim - 1
 
         # Generate all input sequences
         seqs = list(itertools.product(range(N), repeat=k))
@@ -161,12 +166,13 @@ class ProcessTensor:
 
         out_dim = self.tensor.shape[0]
         assert out_dim == 4
-        N = self.tensor.shape[1]
         k = self.tensor.ndim - 1
 
         if fixed_step < 0 or fixed_step >= k:
             msg = f"fixed_step {fixed_step} out of bounds for {k} steps."
             raise ValueError(msg)
+
+        N = self.tensor.shape[1]
         if fixed_idx < 0 or fixed_idx >= N:
             msg = f"fixed_idx {fixed_idx} out of bounds for {N} basis states."
             raise ValueError(msg)
