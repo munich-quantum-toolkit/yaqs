@@ -199,10 +199,6 @@ def _reprepare_site_zero_vector(
     outcome = rng.choice([0, 1], p=[p0, p1])
 
     # 4. Project and reprepare
-    # The environment condition is just the un-rotated branch of the projected state,
-    # but since we want the true environment conditional vector, we use the correctly formulated measurement.
-    # Actually, we should just use the projected rotated branch as the environment.
-    # The new state will be created completely anew.
     env_cond = psi_reshaped[outcome, :].copy()
     env_norm = np.linalg.norm(env_cond)
     if env_norm > 1e-15:
@@ -392,14 +388,10 @@ def run(
     
     # Handle measurement bases
     if measurement_bases is None:
-        measurement_bases = ["X", "Y", "Z"]
+        measurement_bases = ["Z"]
     if isinstance(measurement_bases, str):
         measurement_bases = [measurement_bases]
-    
-    # Interventions happen between steps. If k steps, there are k-1 interventions.
-    # However, the worker loop iterates `step_i` in `enumerate(timesteps)`.
-    # Interventions happen if `step_i < len(timesteps) - 1`.
-    # So we need `num_steps - 1` measurement bases for interventions.
+
     if num_steps > 1:
         meas_sequences = list(itertools.product(measurement_bases, repeat=num_steps - 1))
     else:
