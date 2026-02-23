@@ -1043,7 +1043,7 @@ def test_no_output_error() -> None:
         dt=0.1,
         get_state=False,
     )
-    with pytest.raises(AssertionError, match=r"No output specified: either observables or get_state must be set."):
+    with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
         simulator.run(state, H, sim_params_analog)
 
     # 2. StrongSimParams (No observables, get_state=False)
@@ -1051,5 +1051,5 @@ def test_no_output_error() -> None:
         observables=[],
         get_state=False,
     )
-    with pytest.raises(AssertionError, match=r"No output specified: either observables or get_state must be set."):
+    with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
         simulator.run(state, circ, sim_params_strong)
