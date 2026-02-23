@@ -899,6 +899,9 @@ def run(
             The sampled noise model is then saved to `sim_params.noise_model`.
         parallel: Whether to run trajectories in parallel. Defaults to True.
 
+    Raises:
+        ValueError: If no output is specified (neither observables nor get_state is set).
+
     """
     # Ensure the state is in B-normalization before any evolution
     initial_state.normalize("B")
@@ -910,9 +913,9 @@ def run(
 
     # Deferred output validation
     if isinstance(sim_params, (StrongSimParams, AnalogSimParams)):
-        assert sim_params.get_state or sim_params.observables, (
-            "No output specified: either observables or get_state must be set."
-        )
+        if not sim_params.get_state and not sim_params.observables:
+            msg = "No output specified: either observables or get_state must be set."
+            raise ValueError(msg)
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         assert isinstance(operator, QuantumCircuit)
