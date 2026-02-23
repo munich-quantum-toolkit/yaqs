@@ -50,6 +50,7 @@ class MCWFContext:
     jump_ops: list[scipy.sparse.spmatrix]
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None]
     sim_params: AnalogSimParams
+    output_state: NDArray[np.complex128] | None = None
 
 
 def preprocess_mcwf(
@@ -210,8 +211,10 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
             # No jump
             psi = psi_next / np.sqrt(norm_sq)
 
-        # Measurement
         if sim_params.sample_timesteps or t_idx == num_steps - 1:
             measure(psi, t_idx)
+
+    if sim_params.get_state:
+        ctx.output_state = psi
 
     return results

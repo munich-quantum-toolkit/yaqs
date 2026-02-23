@@ -98,7 +98,7 @@ from .analog.lindblad import lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 
-__all__ = ["available_cpus", "run"]  # public API of this module
+__all__ = ["available_cpus", "run", "run_backend_parallel"]  # public API of this module
 
 # ---------------------------------------------------------------------------
 # 4) TYPE VARS FOR GENERIC PARALLEL RUNNERS
@@ -199,15 +199,15 @@ THREAD_ENV_VARS: dict[str, str] = {
 
 
 # Global worker state (initialized once per process)
-_WORKER_CTX: dict[str, Any] = {}
+WORKER_CTX: dict[str, Any] = {}
 
 
-def _worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
+def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
     """Initialize the worker process state.
 
     This function is called once per worker process upon startup. It enforces
     thread limits for numerical libraries (BLAS, OpenMP, etc.) and populates
-    the global `_WORKER_CTX` dictionary with shared simulation objects. This
+    the global `WORKER_CTX` dictionary with shared simulation objects. This
     strategy avoids repeated pickling of large objects for every task.
 
     Args:
@@ -220,8 +220,8 @@ def _worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
     _limit_worker_threads(n_threads)
 
     # 2. Context Initialization
-    _WORKER_CTX.clear()
-    _WORKER_CTX.update(payload)
+    WORKER_CTX.clear()
+    WORKER_CTX.update(payload)
 
     # 3. Numba Threading (Runtime)
     # Some Numba versions ignore env vars if imported before.
@@ -276,7 +276,7 @@ def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64
     """Execute a single digital strong simulation trajectory.
 
     Retrieves the required simulation objects (initial state, noise model,
-    parameters, circuit) from the global `_WORKER_CTX` and delegates to the
+    parameters, circuit) from the global `WORKER_CTX` and delegates to the
     `digital_tjm` backend.
 
     Args:
@@ -288,17 +288,17 @@ def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64
     """
     return digital_tjm((
         traj_idx,
-        _WORKER_CTX["initial_state"],
-        _WORKER_CTX["noise_model"],
-        _WORKER_CTX["sim_params"],
-        _WORKER_CTX["operator"],
+        WORKER_CTX["initial_state"],
+        WORKER_CTX["noise_model"],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
     ))
 
 
 def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
     """Execute a single digital weak simulation trajectory.
 
-    Retrieves simulation objects from `_WORKER_CTX` and executes a 'shots=1'
+    Retrieves simulation objects from `WORKER_CTX` and executes a 'shots=1'
     weak simulation using `digital_tjm`.
 
     Args:
@@ -312,10 +312,10 @@ def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
         "dict[int, int]",
         digital_tjm((
             traj_idx,
-            _WORKER_CTX["initial_state"],
-            _WORKER_CTX["noise_model"],
-            _WORKER_CTX["sim_params"],
-            _WORKER_CTX["operator"],
+            WORKER_CTX["initial_state"],
+            WORKER_CTX["noise_model"],
+            WORKER_CTX["sim_params"],
+            WORKER_CTX["operator"],
         )),
     )
 
@@ -324,7 +324,7 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
     """Execute a single analog simulation trajectory (TJM or Lindblad).
 
     Retrieves the appropriate backend function and simulation arguments from
-    `_WORKER_CTX` and executes the trajectory.
+    `WORKER_CTX` and executes the trajectory.
 
     Args:
         traj_idx: The integer index of the trajectory to execute.
@@ -333,20 +333,20 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
         NDArray[np.float64]: The result of the simulation (typically observable values over time).
     """
     # backend is chosen in _run_analog and stored in context
-    backend = _WORKER_CTX["backend"]
+    backend = WORKER_CTX["backend"]
     return backend((
         traj_idx,
-        _WORKER_CTX["initial_state"],
-        _WORKER_CTX["noise_model"],
-        _WORKER_CTX["sim_params"],
-        _WORKER_CTX["operator"],
+        WORKER_CTX["initial_state"],
+        WORKER_CTX["noise_model"],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
     ))
 
 
 def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
     """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
 
-    Retrieves the preprocessed MCWF context from `_WORKER_CTX` and executes
+    Retrieves the preprocessed MCWF context from `WORKER_CTX` and executes
     the trajectory.
 
     Args:
@@ -355,7 +355,7 @@ def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
     Returns:
         NDArray[np.float64]: The result of the MCWF trajectory.
     """
-    return mcwf((traj_idx, _WORKER_CTX["ctx"]))
+    return mcwf((traj_idx, WORKER_CTX["ctx"]))
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +421,7 @@ def _get_parallel_context() -> multiprocessing.context.BaseContext:
     return multiprocessing.get_context("spawn")
 
 
-def _run_backend_parallel(
+def run_backend_parallel(
     worker_fn: Callable[[int], TRes],
     *,
     payload: dict[str, Any] | None,
@@ -472,7 +472,7 @@ def _run_backend_parallel(
         ProcessPoolExecutor(
             max_workers=max_workers,
             mp_context=ctx,
-            initializer=_worker_init,
+            initializer=worker_init,
             initargs=(payload or {}, 1),  # enforce 1 thread per worker
         ) as ex,
         tqdm(total=n_jobs, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
@@ -582,10 +582,8 @@ def _run_strong_sim(
     }
 
     if parallel and sim_params.num_traj > 1:
-        # Reserve one logical CPU for the parent; use the rest for workers
         max_workers = max(1, available_cpus() - 1)
-        # Submit task indices in parallel and stitch results back in place
-        for i, result in _run_backend_parallel(
+        for i, result in run_backend_parallel(
             worker_fn=_digital_strong_worker,
             payload=payload,
             n_jobs=sim_params.num_traj,
@@ -679,7 +677,7 @@ def _run_weak_sim(
 
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
-        for i, result in _run_backend_parallel(
+        for i, result in run_backend_parallel(
             worker_fn=_digital_weak_worker,
             payload=payload,
             n_jobs=sim_params.num_traj,
@@ -832,7 +830,7 @@ def _run_analog(
 
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
-        for i, result in _run_backend_parallel(
+        for i, result in run_backend_parallel(
             worker_fn=worker_fn,
             payload=payload,
             n_jobs=sim_params.num_traj,
@@ -901,6 +899,9 @@ def run(
             The sampled noise model is then saved to `sim_params.noise_model`.
         parallel: Whether to run trajectories in parallel. Defaults to True.
 
+    Raises:
+        ValueError: If no output is specified (neither observables nor get_state is set).
+
     """
     # Ensure the state is in B-normalization before any evolution
     initial_state.normalize("B")
@@ -909,6 +910,15 @@ def run(
     if noise_model is not None:
         noise_model = noise_model.sample()
     sim_params.noise_model = noise_model
+
+    # Deferred output validation
+    if (
+        isinstance(sim_params, (StrongSimParams, AnalogSimParams))
+        and not sim_params.get_state
+        and not sim_params.observables
+    ):
+        msg = "No output specified: either observables or get_state must be set."
+        raise ValueError(msg)
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         assert isinstance(operator, QuantumCircuit)

@@ -745,7 +745,7 @@ class MPS:
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 
-    def measure_single_shot(self, basis: str = "Z") -> int:
+    def measure_single_shot(self, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Perform a single-shot measurement on a Matrix Product State (MPS).
 
         This function simulates a projective measurement on an MPS. For each site, it computes the
@@ -755,6 +755,7 @@ class MPS:
 
         Args:
             basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
+            rng: Optional random number generator for outcome sampling.
 
         Returns:
             int: The measurement outcome represented as an integer.
@@ -778,7 +779,9 @@ class MPS:
             msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
             raise ValueError(msg)
 
-        rng = np.random.default_rng()
+        if rng is None:
+            rng = np.random.default_rng()
+
         for site, tensor in enumerate(temp_state.tensors):
             # Rotate the tensor to the measurement basis
             # tensor shape is (p, l, r)
@@ -837,7 +840,7 @@ class MPS:
         results[basis_state] = results.get(basis_state, 0) + 1
         return results
 
-    def measure(self, site: int, basis: str = "Z") -> int:
+    def measure(self, site: int, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Perform an in-place projective measurement on a single site of the MPS.
 
         This method modifies the MPS tensors to reflect the measurement outcome. It assumes the MPS
@@ -847,6 +850,7 @@ class MPS:
         Args:
             site: The index of the site to measure.
             basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
+            rng: Optional random number generator for outcome sampling.
 
         Returns:
             int: The measurement outcome (0 or 1 for qubits).
@@ -885,7 +889,9 @@ class MPS:
         norm_factor = np.sum(probabilities)
         probabilities /= norm_factor
 
-        rng = np.random.default_rng()
+        if rng is None:
+            rng = np.random.default_rng()
+
         chosen_index = rng.choice(len(probabilities), p=probabilities)
 
         selected_state = np.zeros(len(probabilities), dtype=complex)
