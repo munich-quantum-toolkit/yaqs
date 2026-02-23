@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho
 
+
 def test_vec_to_rho() -> None:
     """Test the vector to density matrix conversion."""
     # Test with |0><0|
@@ -17,7 +18,7 @@ def test_vec_to_rho() -> None:
     vec_plus = rho_plus.reshape(-1)
     rho_out = _vec_to_rho(vec_plus)
     np.testing.assert_allclose(rho_out, rho_plus, atol=1e-15)
-    
+
     # Test with non-normalized input (should normalize)
     vec_unnorm = np.array([2, 0, 0, 0], dtype=complex)
     rho_out = _vec_to_rho(vec_unnorm)
@@ -54,21 +55,22 @@ def test_process_tensor_init() -> None:
     tensor = np.zeros((4, 6, 6), dtype=complex)
     timesteps = [0.1, 0.2]
     pt = ProcessTensor(tensor, timesteps)
-    
+
     assert pt.tensor is tensor
     assert pt.data is tensor
     assert pt.timesteps == timesteps
-    assert pt.rank == 1 # 3 dimensions // 2 = 1. Wait, rank definition in ProcessTensor is len(shape)//2.
-    # shape (4, 6, 6) -> len=3 -> rank=1. 
-    # For k=2 steps, shape is (4, 6, 6) -> rank 1? 
+    assert pt.rank == 1  # 3 dimensions // 2 = 1. Wait, rank definition in ProcessTensor is len(shape)//2.
+    # shape (4, 6, 6) -> len=3 -> rank=1.
+    # For k=2 steps, shape is (4, 6, 6) -> rank 1?
     # Usually rank refers to input slots. Let's check process_tensor.py:37
-    # self.rank = len(tensor.shape) // 2. 
+    # self.rank = len(tensor.shape) // 2.
     # (4, 6) -> rank 1. (4, 6, 6) -> rank 1. (4, 6, 6, 6, 6) -> rank 2.
-    # This seems to be counting "pairs" of indices if it was a Cho matrix, 
-    # but here it's (out, in1, in2, ...). 
+    # This seems to be counting "pairs" of indices if it was a Cho matrix,
+    # but here it's (out, in1, in2, ...).
     # So k steps gives 1 + k indices. rank = (1+k)//2.
     # For k=1, rank=1. For k=2, rank=1. For k=3, rank=2.
     # This might be a slightly non-standard definition of rank, but let's verify it works as intended.
+
 
 def test_to_choi_matrix() -> None:
     """Test reshaping to Choi matrix representation."""
@@ -138,7 +140,7 @@ def test_holevo_information_conditional() -> None:
     # Fix step 1: output varies with step 0, Holevo=1
     h_cond_1 = pt.holevo_information_conditional(fixed_step=1, fixed_idx=0, base=2)
     assert np.isclose(h_cond_1, 1.0, atol=1e-10)
-    
+
     # Test out of bounds
     with pytest.raises(ValueError, match="fixed_step 2 out of bounds for 2 steps"):
         pt.holevo_information_conditional(fixed_step=2, fixed_idx=0)
@@ -155,10 +157,10 @@ def test_holevo_information_empty_sequences() -> None:
     # If N>0 and k>0 and fixed_idx < N, seqs will NEVER be empty.
     # The only way it's empty is if N=0 or k=0, but PT init ensures rank > 0?
     # No, (4,) tensor would have k=0.
-    
+
     # Let's test with k=0 (standard 1-site density matrix, no input steps)
     tensor = np.array([1, 0, 0, 0], dtype=complex)
-    pt = ProcessTensor(tensor, []) # Empty timesteps -> k=0
+    pt = ProcessTensor(tensor, [])  # Empty timesteps -> k=0
     # fixed_step=0 would be out of bounds.
     with pytest.raises(ValueError, match="fixed_step 0 out of bounds for 0 steps"):
         pt.holevo_information_conditional(0, 0)

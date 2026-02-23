@@ -115,12 +115,12 @@ class ProcessTensor:
         k = self.tensor.ndim - 1
         out_dim = self.tensor.shape[0]
         assert out_dim == 4
-        
+
         if k == 0:
             # No inputs, just a single state
             rho = _vec_to_rho(self.tensor.reshape(4))
-            return 0.0 # Information about inputs is zero if there are no inputs
-            
+            return 0.0  # Information about inputs is zero if there are no inputs
+
         N = self.tensor.shape[1]
 
         # Generate all input sequences
