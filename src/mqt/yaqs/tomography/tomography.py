@@ -106,25 +106,26 @@ def _calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[
     return [D[:, k].reshape(dim, dim) for k in range(D.shape[1])]
 
 
-def _reprepare_site_zero(mps: MPS, new_state: np.ndarray, rng: np.random.Generator) -> int:
+def _reprepare_site_zero(mps: MPS, new_state: np.ndarray, rng: np.random.Generator, meas_basis: str = "Z") -> int:
     """Reprepare site 0 with selective (trajectory-resolved) intervention.
 
     This implements a clean trajectory-consistent operation:
     1. Sample measurement outcome m with Born probabilities
-    2. Project onto |m⟩ and keep conditional environment branch
+    2. Project onto |m⟩ in the chosen basis and keep conditional environment branch
     3. Reprepare to new_state while preserving the branch's bond vector
 
     Args:
         mps: The MPS to modify (modified in-place)
         new_state: The new state vector for site 0, shape (d,)
         rng: Random number generator for sampling
+        meas_basis: The basis to measure in ("X", "Y", or "Z"). Defaults to "Z".
 
     Returns:
         int: The measurement outcome (0 or 1 for qubits)
     """
     # 1. Perform in-place projective measurement
     # This also handles shifting the center to site 0 correctly.
-    outcome = mps.measure(site=0, basis="Z", rng=rng)
+    outcome = mps.measure(site=0, basis=meas_basis, rng=rng)
 
     # 2. Extract environment part and reprepare with new_state
     # The state is now |outcome> \otimes |env_conditional_normalized>
@@ -149,7 +150,7 @@ def _reprepare_site_zero(mps: MPS, new_state: np.ndarray, rng: np.random.Generat
 
 
 def _reprepare_site_zero_vector(
-    psi: NDArray[np.complex128], new_state: NDArray[np.complex128], rng: np.random.Generator
+    psi: NDArray[np.complex128], new_state: NDArray[np.complex128], rng: np.random.Generator, meas_basis: str = "Z"
 ) -> tuple[NDArray[np.complex128], int]:
     """Reprepare site 0 for a dense vector state with selective intervention.
 
@@ -157,6 +158,7 @@ def _reprepare_site_zero_vector(
         psi: The current state vector, shape (2^N,)
         new_state: The new state vector for site 0, shape (2,)
         rng: Random number generator for sampling
+        meas_basis: The basis to measure in ("X", "Y", or "Z"). Defaults to "Z".
 
     Returns:
         tuple: (updated_psi, outcome)
@@ -165,7 +167,25 @@ def _reprepare_site_zero_vector(
     dim_env = dim_total // 2
     psi_reshaped = psi.reshape(2, dim_env)
 
-    # 1. Born probabilities
+    # 1. Basis Rotation
+    # Extract the site 0 part (shape 2, dim_env)
+    # To measure in X or Y, we apply the inverse rotation H or H S^\dagger to site 0,
+    # which is equivalent to rotating the state forward before Z measurement.
+    if meas_basis == "X":
+        # H = 1/sqrt(2) [1  1]
+        #               [1 -1]
+        rot = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
+        psi_reshaped = rot @ psi_reshaped
+    elif meas_basis == "Y":
+        # H S^\dagger = 1/sqrt(2) [1 -i]
+        #                         [1  i]
+        rot = np.array([[1, -1j], [1, 1j]], dtype=np.complex128) / np.sqrt(2)
+        psi_reshaped = rot @ psi_reshaped
+    elif meas_basis != "Z":
+        msg = f"Unsupported measurement basis: {meas_basis}"
+        raise ValueError(msg)
+
+    # 2. Born probabilities (in the rotated basis)
     p0 = np.linalg.norm(psi_reshaped[0, :]) ** 2
     p1 = np.linalg.norm(psi_reshaped[1, :]) ** 2
     norm = p0 + p1
@@ -175,10 +195,14 @@ def _reprepare_site_zero_vector(
     else:
         p0, p1 = 0.5, 0.5  # Neutral choice for zero vector
 
-    # 2. Sample outcome
+    # 3. Sample outcome
     outcome = rng.choice([0, 1], p=[p0, p1])
 
-    # 3. Project and reprepare
+    # 4. Project and reprepare
+    # The environment condition is just the un-rotated branch of the projected state,
+    # but since we want the true environment conditional vector, we use the correctly formulated measurement.
+    # Actually, we should just use the projected rotated branch as the environment.
+    # The new state will be created completely anew.
     env_cond = psi_reshaped[outcome, :].copy()
     env_norm = np.linalg.norm(env_cond)
     if env_norm > 1e-15:
@@ -226,14 +250,14 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
     sim_params = WORKER_CTX["sim_params"]
     timesteps = WORKER_CTX["timesteps"]
     basis_set = WORKER_CTX["basis_set"]
-    sequences = WORKER_CTX["sequences"]
+    worker_sequences = WORKER_CTX["worker_sequences"]
     noise_model = WORKER_CTX["noise_model"]
 
-    seq = sequences[seq_idx]
+    prep_seq, meas_seq = worker_sequences[seq_idx]
     rng = np.random.default_rng(traj_idx)
 
     # 3. Initialize state
-    initial_idx = seq[0]
+    initial_idx = prep_seq[0]
     _, psi_0, _ = basis_set[initial_idx]
 
     # Persistent state (either MPS or Vector)
@@ -304,13 +328,14 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
 
         # Intervention
         if step_i < len(timesteps) - 1:
-            next_idx = seq[step_i + 1]
+            next_idx = prep_seq[step_i + 1]
+            meas_basis = meas_seq[step_i]
             _, psi_next, _ = basis_set[next_idx]
 
             if is_mcwf:
-                current_state, _ = _reprepare_site_zero_vector(current_state, psi_next, rng)
+                current_state, _ = _reprepare_site_zero_vector(current_state, psi_next, rng, meas_basis=meas_basis)
             else:
-                _reprepare_site_zero(current_state, psi_next, rng)
+                _reprepare_site_zero(current_state, psi_next, rng, meas_basis=meas_basis)
 
     return (seq_idx, traj_idx, trajectory_results)
 
@@ -321,6 +346,7 @@ def run(
     timesteps: list[float] | None = None,
     num_trajectories: int = 100,
     noise_model: NoiseModel | None = None,
+    measurement_bases: list[str] | str | None = None,
 ) -> ProcessTensor:
     """Run Process Tomography / Process Tensor Tomography using parallelized backend.
 
@@ -335,6 +361,9 @@ def run(
                    If None, defaults to [sim_params.elapsed_time] (standard 1-step tomography).
         num_trajectories: Number of trajectories to average per sequence.
         noise_model: Noise model to apply. If None, uses sim_params.noise_model.
+        measurement_bases: Bases to use for measurement interventions.
+                           Can be a single string (e.g., "Z") or a list (e.g., ["X", "Y", "Z"]).
+                           If None, defaults to ["X", "Y", "Z"].
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.
@@ -358,9 +387,29 @@ def run(
     _calculate_dual_frame(basis_rhos)
 
     num_steps = len(timesteps)
-    basis_indices = list(range(len(basis_set)))
-    sequences = list(itertools.product(basis_indices, repeat=num_steps))
-    num_sequences = len(sequences)
+    prep_basis_indices = list(range(len(basis_set)))
+    prep_sequences = list(itertools.product(prep_basis_indices, repeat=num_steps))
+    
+    # Handle measurement bases
+    if measurement_bases is None:
+        measurement_bases = ["X", "Y", "Z"]
+    if isinstance(measurement_bases, str):
+        measurement_bases = [measurement_bases]
+    
+    # Interventions happen between steps. If k steps, there are k-1 interventions.
+    # However, the worker loop iterates `step_i` in `enumerate(timesteps)`.
+    # Interventions happen if `step_i < len(timesteps) - 1`.
+    # So we need `num_steps - 1` measurement bases for interventions.
+    if num_steps > 1:
+        meas_sequences = list(itertools.product(measurement_bases, repeat=num_steps - 1))
+    else:
+        # Standard tomography (1-step) has no interventions
+        meas_sequences = [()]
+
+    worker_sequences = list(itertools.product(prep_sequences, meas_sequences))
+    num_prep_sequences = len(prep_sequences)
+    num_worker_sequences = len(worker_sequences)
+    num_meas_sequences = len(meas_sequences)
 
     # 2. Prepare Simulation Context
     if noise_model is None:
@@ -378,20 +427,19 @@ def run(
         "sim_params": sim_params,
         "timesteps": timesteps,
         "basis_set": basis_set,
-        "sequences": sequences,
+        "worker_sequences": worker_sequences,
         "noise_model": noise_model,
         "num_trajectories": num_trajectories,
         "mcwf_static_ctx": mcwf_static_ctx,
     }
 
     # 3. Parallel Execution
-    total_jobs = num_sequences * num_trajectories
+    total_jobs = num_worker_sequences * num_trajectories
     max_workers = max(1, available_cpus() - 1)
 
-    # Storage: sequence_idx -> list of [num_steps+1] averaged density matrices
-    # Initialize with zeros
+    # Storage: prep_sequence_idx -> list of [num_steps+1] averaged density matrices
     aggregated_outputs = [
-        [np.zeros((2, 2), dtype=np.complex128) for _ in range(num_steps + 1)] for _ in range(num_sequences)
+        [np.zeros((2, 2), dtype=np.complex128) for _ in range(num_steps + 1)] for _ in range(num_prep_sequences)
     ]
 
     results_iterator = run_backend_parallel(
@@ -403,17 +451,20 @@ def run(
         desc="Simulating Tomography Trajectories",
     )
 
-    for _job_idx, (seq_idx, _traj_idx, trajectory_rhos) in results_iterator:
+    # Average over BOTH trajectories AND measurement bases for the same prep sequence
+    total_averages = num_trajectories * num_meas_sequences
+    for _job_idx, (worker_seq_idx, _traj_idx, trajectory_rhos) in results_iterator:
+        prep_seq_idx = worker_seq_idx // num_meas_sequences
         for t_idx, rho in enumerate(trajectory_rhos):
-            aggregated_outputs[seq_idx][t_idx] += rho / num_trajectories
+            aggregated_outputs[prep_seq_idx][t_idx] += rho / total_averages
 
     # 4. Construct Process Tensor
     num_frame_states = len(basis_set)
     tensor_shape = [4] + [num_frame_states] * num_steps
     process_tensor = np.zeros(tensor_shape, dtype=complex)
 
-    for seq_idx, avg_rhos in enumerate(aggregated_outputs):
-        seq = sequences[seq_idx]
+    for prep_seq_idx, avg_rhos in enumerate(aggregated_outputs):
+        seq = prep_sequences[prep_seq_idx]
         rho_final = avg_rhos[-1]
         rho_vec = rho_final.reshape(-1)
 

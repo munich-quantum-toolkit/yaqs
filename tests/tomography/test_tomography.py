@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -25,6 +26,26 @@ def test_tomography_run_basic() -> None:
     # Verify output
     assert pt.data.shape == (4, 6)
     assert np.isclose(pt.holevo_information(), 0.0, atol=2.0)  # Dummy check, just ensuring it runs
+
+
+def test_measurement_bases() -> None:
+    """Verify that tomography.run() accepts and correctly handles measurement_bases."""
+    L = 2
+    op = MPO.ising(L, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, order=1, max_bond_dim=4)
+    timesteps = [0.1, 0.1]
+
+    # 1. Single basis
+    pt_z = run(op, params, timesteps=timesteps, num_trajectories=1, measurement_bases="Z")
+    assert pt_z.tensor.shape == (4, 6, 6)
+
+    # 2. Multiple bases
+    pt_all = run(op, params, timesteps=timesteps, num_trajectories=1, measurement_bases=["X", "Y", "Z"])
+    assert pt_all.tensor.shape == (4, 6, 6)
+    
+    # 3. Default (should be equivalent to [X, Y, Z])
+    pt_default = run(op, params, timesteps=timesteps, num_trajectories=1)
+    assert pt_default.tensor.shape == (4, 6, 6)
 
 
 def test_tomography_run_multistep() -> None:
@@ -65,7 +86,7 @@ def test_tomography_prediction_accuracy() -> None:
     timesteps = [0.1, 0.1]
 
     # 1. Run Tomography
-    pt = run(op, params, timesteps=timesteps, num_trajectories=1)
+    pt = run(op, params, timesteps=timesteps, num_trajectories=1, measurement_bases="Z")
 
     # 2. Pick a sequence, e.g., |0> then |+>
     basis_set = _get_basis_states()
