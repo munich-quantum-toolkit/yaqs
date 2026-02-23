@@ -149,7 +149,6 @@ class ProcessTensor:
 
         if steps_k == 0:
             # No inputs, just a single state
-            rho = _vec_to_rho(self.tensor.reshape(4))
             return 0.0  # Information about inputs is zero if there are no inputs
 
         states_n = self.tensor.shape[1]
