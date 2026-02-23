@@ -92,7 +92,6 @@ def calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[N
     # Stack matrices as columns of a Frame Operator F
     # Shape (4, 6) for single qubit (dim=2^2=4)
     dim = basis_matrices[0].shape[0]
-    dim * dim
 
     # frame_matrix: columns are vectorized density matrices
     frame_matrix = np.column_stack([m.reshape(-1) for m in basis_matrices])
@@ -369,7 +368,7 @@ def run(
         noise_model: Noise model to apply. If None, uses sim_params.noise_model.
         measurement_bases: Bases to use for measurement interventions.
                            Can be a single string (e.g., "Z") or a list (e.g., ["X", "Y", "Z"]).
-                           If None, defaults to ["X", "Y", "Z"].
+                           If None, defaults to ["Z"].
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.

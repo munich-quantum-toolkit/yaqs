@@ -135,12 +135,17 @@ class ProcessTensor:
 
         Returns:
             float: The Holevo information.
+
+        Raises:
+            ValueError: If the output dimension is not 4.
         """
         # Tensor shape: (4, N, N, ..., N)
         # k is number of steps (input slots)
         steps_k = self.tensor.ndim - 1
         out_dim = self.tensor.shape[0]
-        assert out_dim == 4
+        if out_dim != 4:
+            msg = f"Expected output dimension 4, got {out_dim}."
+            raise ValueError(msg)
 
         if steps_k == 0:
             # No inputs, just a single state
@@ -192,7 +197,9 @@ class ProcessTensor:
             ValueError: If fixed_step or fixed_idx are out of bounds.
         """
         out_dim = self.tensor.shape[0]
-        assert out_dim == 4
+        if out_dim != 4:
+            msg = f"Expected output dimension 4, got {out_dim}."
+            raise ValueError(msg)
         steps_k = self.tensor.ndim - 1
 
         if fixed_step < 0 or fixed_step >= steps_k:
