@@ -1,9 +1,20 @@
+import copy
+from typing import cast
+
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
-from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.tomography.tomography import run
+from mqt.yaqs.analog.analog_tjm import analog_tjm_1
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.libraries.gate_library import X, Y, Z
+from mqt.yaqs.tomography.tomography import (
+    _calculate_dual_frame,
+    _get_basis_states,
+    _reprepare_site_zero,
+    run,
+)
 
 
 def test_tomography_run_basic() -> None:
@@ -425,3 +436,98 @@ def test_markovian_limit() -> None:
 
     # Large damping rate (10.0) relative to time (0.5) should erase memory effectively
     assert diff < 0.2
+
+
+def _get_random_rho() -> NDArray[np.complex128]:
+    """Generate a random 2x2 density matrix."""
+    # Create random complex matrix
+    A = np.random.randn(2, 2) + 1j * np.random.randn(2, 2)
+    # rho = A* A / Tr(A* A)
+    rho = A @ A.conj().T
+    return rho / np.trace(rho)
+
+
+def _sample_pure_state(rho: NDArray[np.complex128], rng: np.random.Generator) -> NDArray[np.complex128]:
+    """Sample a pure state from the eigen-decomposition of rho."""
+    evals, evecs = np.linalg.eigh(rho)
+    # Ensure probabilities are non-negative and sum to 1
+    p = np.maximum(evals, 0)
+    p /= np.sum(p)
+    idx = rng.choice([0, 1], p=p)
+    return evecs[:, idx]
+
+
+def test_held_out_prediction() -> None:
+    """Verify PT prediction accuracy for random held-out mixed state sequences."""
+    np.random.seed(42)
+    L = 2
+    op = MPO.ising(length=L, J=1.0, g=0.5)
+
+    params = AnalogSimParams(
+        dt=0.1,
+        max_bond_dim=16,
+        order=1,
+    )
+    timesteps = [0.1, 0.1]
+    num_trajectories = 200  # Higher trajectories for better statistics in direct sim
+
+    # 1. Build Process Tensor using standard tomography
+    # Defaulting to ["Z"] for simplicity in this consistency check
+    pt = run(op, params, timesteps=timesteps, num_trajectories=num_trajectories, measurement_bases="Z")
+
+    # 2. Pick random sequence
+    rho_0 = _get_random_rho()
+    rho_1 = _get_random_rho()
+    rho_sequence = [rho_0, rho_1]
+
+    basis_set = _get_basis_states()
+    duals = _calculate_dual_frame([b[2] for b in basis_set])
+
+    # 3. Predict final state using PT
+    rho_pred = pt.predict_final_state(rho_sequence, duals)
+
+    # 4. Direct Simulation of the sequence [rho_0, rho_1]
+    num_direct_trajectories = 400
+    rng = np.random.default_rng(42)
+    results = []
+
+    for _ in range(num_direct_trajectories):
+        # Sample initial pure state from rho_0
+        psi_0 = _sample_pure_state(rho_0, rng)
+        state = MPS(length=L, state="zeros")
+        state.tensors[0] = np.expand_dims(psi_0, axis=(1, 2)).astype(np.complex128)
+
+        # Step 1: Evolution
+        step_params = copy.deepcopy(params)
+        step_params.elapsed_time = 0.1
+        step_params.num_traj = 1
+        step_params.get_state = True
+        analog_tjm_1((0, state, None, step_params, op))
+        state = step_params.output_state
+
+        # Step 2: Intervention (Sample new state from rho_1)
+        psi_1 = _sample_pure_state(rho_1, rng)
+        _reprepare_site_zero(state, psi_1, rng, meas_basis="Z")
+
+        # Step 3: Evolution
+        step_params.output_state = None
+        analog_tjm_1((0, state, None, step_params, op))
+        state = step_params.output_state
+
+        # Reconstruct rho from Pauli expectations
+        rx = state.expect(Observable(X(), sites=[0]))
+        ry = state.expect(Observable(Y(), sites=[0]))
+        rz = state.expect(Observable(Z(), sites=[0]))
+
+        # Reconstruct rho from Pauli expectations
+        I = np.eye(2, dtype=complex)
+        sigma_x = X().matrix
+        sigma_y = Y().matrix
+        sigma_z = Z().matrix
+        rho_final = 0.5 * (I + rx * sigma_x + ry * sigma_y + rz * sigma_z)
+        results.append(rho_final)
+
+    rho_direct = np.mean(results, axis=0)
+
+    # 5. Compare
+    assert np.allclose(rho_pred, rho_direct, atol=0.1)
