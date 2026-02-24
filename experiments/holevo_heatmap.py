@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from mqt.yaqs.characterization.tomography.tomography import run
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -23,17 +24,20 @@ def main() -> None:
     # ----- simulation params -----
     # To get exact results matching Mathematica, we use TJM with max_bond_dim=4
     # which is exact for L=2.
-    dt = 0.1
+    dt = 0.5
     ntraj = 10
-    sim_params = AnalogSimParams(dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, get_state=True, solver="MCWF")
-
+    sim_params = AnalogSimParams(dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, get_state=True, solver="MCWF", show_progress=False)
+    gamma = 0.1
+    noise_model = NoiseModel([
+        {"name": name, "sites": [i], "strength": gamma} for i in range(num_sites) for name in ["lowering"]
+    ])
     # ----- scan settings -----
-    T1_max = 10.0
-    T2_max = 10.0
+    T1_max = 6.0
+    T2_max = 6.0
     
     # We use step=0.2 for a 51x51 resolution. Change to 0.1 for 101x101 (exact match to Mathematica notebook, but slower).
-    step1 = 0.2
-    step2 = 0.2
+    step1 = 0.5
+    step2 = 0.5
 
     t1_grid = np.arange(0.0, T1_max + 1e-12, step1)
     t2_grid = np.arange(0.0, T2_max + 1e-12, step2)
@@ -74,9 +78,6 @@ def main() -> None:
             t2 = t2_grid[j]
             if done[i, j]:
                 continue
-            else:
-                chi = 0
-                continue
 
             # As per the Mathematica notebook, t2 is the first evolution duration (t)
             # and t1 is the second evolution duration (tau).
@@ -89,6 +90,7 @@ def main() -> None:
                 sim_params=sim_params,
                 timesteps=timesteps,
                 num_trajectories=ntraj,
+                noise_model=noise_model,
                 measurement_bases=["Z"],
             )
 
