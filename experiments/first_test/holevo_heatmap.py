@@ -70,8 +70,12 @@ def main() -> None:
     for i in range(n1):
         t1 = t1_grid[i]
         for j in range(n2):
+            print(i, j)
             t2 = t2_grid[j]
             if done[i, j]:
+                continue
+            else:
+                chi = 0
                 continue
 
             # As per the Mathematica notebook, t2 is the first evolution duration (t)
