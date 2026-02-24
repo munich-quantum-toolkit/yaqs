@@ -173,6 +173,11 @@ def analog_tjm_2(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
 
     if sim_params.sample_timesteps:
         state.evaluate_observables(sim_params, results, 0)
+        
+    if len(sim_params.times) <= 1:
+        if sim_params.get_state:
+            sim_params.output_state = state
+        return results
 
     phi = initialize(state, noise_model, sim_params, rng=rng)
     if sim_params.sample_timesteps:
@@ -218,6 +223,11 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
 
     if sim_params.sample_timesteps:
         state.evaluate_observables(sim_params, results, 0)
+        
+    if len(sim_params.times) <= 1:
+        if sim_params.get_state:
+            sim_params.output_state = state
+        return results
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         local_dynamic_tdvp(state, hamiltonian, sim_params)
