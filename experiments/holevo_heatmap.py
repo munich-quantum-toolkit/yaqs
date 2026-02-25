@@ -29,7 +29,7 @@ def main() -> None:
     sim_params = AnalogSimParams(dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, get_state=True, solver="MCWF", show_progress=False)
     gamma = 0.1
     noise_model = NoiseModel([
-        {"name": name, "sites": [i], "strength": gamma} for i in range(num_sites) for name in ["lowering"]
+        {"name": name, "sites": [i], "strength": gamma} for i in [-1] for name in ["pauli_z"]
     ])
     # ----- scan settings -----
     T1_max = 6.0
