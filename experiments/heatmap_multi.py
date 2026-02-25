@@ -202,35 +202,61 @@ def main() -> None:
         plt.savefig(f"holevo_multi_grid_{plot_type}.png", dpi=200)
         plt.close(fig)
 
-    # 3) Plotting Max Memory vs L and vs Gamma
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    # 3) Plotting Max Memory and Integrated Memory
+    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
 
-    # Plot 1: Max memory vs L (for fixed gammas)
+    # --- Row 0: Max Memory ---
+    # Plot 0,0: Max memory vs L
     for gamma in gammas:
         max_mems = [np.nanmax(results[(gamma, L)][2]) for L in system_sizes]
-        axes[0].plot(system_sizes, max_mems, marker='o', label=f"$\\gamma = {gamma}$")
+        axes[0, 0].plot(system_sizes, max_mems, marker='o', label=f"$\\gamma = {gamma}$")
     
-    axes[0].set_xlabel("System Size (L)")
-    axes[0].set_ylabel("Max Conditional Memory")
-    axes[0].set_title("Max Memory vs. System Size")
-    axes[0].legend()
-    axes[0].grid(True, linestyle="--", alpha=0.7)
-    axes[0].set_xticks(system_sizes)
+    axes[0, 0].set_xlabel("System Size (L)")
+    axes[0, 0].set_ylabel("Max Conditional Memory")
+    axes[0, 0].set_title("Max Memory vs. System Size")
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, linestyle="--", alpha=0.7)
+    axes[0, 0].set_xticks(system_sizes)
 
-    # Plot 2: Max memory vs Gamma (for fixed Ls)
+    # Plot 0,1: Max memory vs Gamma
     for L in system_sizes:
         max_mems = [np.nanmax(results[(gamma, L)][2]) for gamma in gammas]
-        axes[1].plot(gammas, max_mems, marker='s', label=f"L = {L}")
+        axes[0, 1].plot(gammas, max_mems, marker='s', label=f"L = {L}")
 
-    axes[1].set_xlabel(r"Noise Strength ($\gamma$)")
-    axes[1].set_ylabel("Max Conditional Memory")
-    axes[1].set_title("Max Memory vs. Noise Strength")
-    axes[1].set_xscale("log")
-    axes[1].legend()
-    axes[1].grid(True, linestyle="--", alpha=0.7)
+    axes[0, 1].set_xlabel(r"Noise Strength ($\gamma$)")
+    axes[0, 1].set_ylabel("Max Conditional Memory")
+    axes[0, 1].set_title("Max Memory vs. Noise Strength")
+    axes[0, 1].set_xscale("log")
+    axes[0, 1].legend()
+    axes[0, 1].grid(True, linestyle="--", alpha=0.7)
+
+    # --- Row 1: Integrated Memory ---
+    # Plot 1,0: Integrated memory vs L
+    for gamma in gammas:
+        int_mems = [np.nansum(results[(gamma, L)][2]) for L in system_sizes]
+        axes[1, 0].plot(system_sizes, int_mems, marker='o', label=f"$\\gamma = {gamma}$")
+    
+    axes[1, 0].set_xlabel("System Size (L)")
+    axes[1, 0].set_ylabel("Integrated Memory (Sum)")
+    axes[1, 0].set_title("Integrated Memory vs. System Size")
+    axes[1, 0].legend()
+    axes[1, 0].grid(True, linestyle="--", alpha=0.7)
+    axes[1, 0].set_xticks(system_sizes)
+
+    # Plot 1,1: Integrated memory vs Gamma
+    for L in system_sizes:
+        int_mems = [np.nansum(results[(gamma, L)][2]) for gamma in gammas]
+        axes[1, 1].plot(gammas, int_mems, marker='s', label=f"L = {L}")
+
+    axes[1, 1].set_xlabel(r"Noise Strength ($\gamma$)")
+    axes[1, 1].set_ylabel("Integrated Memory (Sum)")
+    axes[1, 1].set_title("Integrated Memory vs. Noise Strength")
+    axes[1, 1].set_xscale("log")
+    axes[1, 1].legend()
+    axes[1, 1].grid(True, linestyle="--", alpha=0.7)
 
     plt.tight_layout()
-    plt.savefig("holevo_max_memory_scaling.png", dpi=200)
+    plt.savefig("holevo_memory_scaling.png", dpi=200)
     plt.close(fig)
 
     print("All multi-plots generated successfully.")
