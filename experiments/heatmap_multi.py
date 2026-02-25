@@ -126,41 +126,66 @@ def main() -> None:
     for plot_type in plot_types:
         fig, axes = plt.subplots(len(gammas), len(system_sizes), figsize=(14, 12), sharex=True, sharey=True)
         
-        for i, gamma in enumerate(gammas):
-            for j, L in enumerate(system_sizes):
-                ax = axes[i, j]
+        # Calculate global min and max for normalization
+        plot_data_dict = {}
+        global_min = np.inf
+        global_max = -np.inf
+        
+        for gamma in gammas:
+            for L in system_sizes:
                 t1_grid, t2_grid, chi_map = results[(gamma, L)]
                 
-                n1 = len(t1_grid)
-                n2 = len(t2_grid)
-                
                 if plot_type == "contours":
-                    X, Y = np.meshgrid(t2_grid, t1_grid)
-                    im = ax.contourf(X, Y, chi_map, levels=40)
+                    plot_data = chi_map
                     cbar_label = "Conditional Holevo Information"
-                    
                 elif plot_type == "fft" or plot_type == "fft_log":
-                    dt1 = float(t1_grid[1] - t1_grid[0])
-                    dt2 = float(t2_grid[1] - t2_grid[0])
-                    
                     F = np.fft.fftshift(np.fft.fft2(chi_map))
                     Fmag = np.abs(F)
-                    
-                    f1 = np.fft.fftshift(np.fft.fftfreq(n1, d=dt1))
-                    f2 = np.fft.fftshift(np.fft.fftfreq(n2, d=dt2))
-                    
                     if plot_type == "fft_log":
                         plot_data = np.log10(Fmag + 1e-12)
                         cbar_label = "log10(|FFT2(Z)|)"
                     else:
                         plot_data = Fmag
                         cbar_label = "|FFT2(Z)|"
+                
+                plot_data_dict[(gamma, L)] = plot_data
+                global_min = min(global_min, np.nanmin(plot_data))
+                global_max = max(global_max, np.nanmax(plot_data))
+
+        for i, gamma in enumerate(gammas):
+            for j, L in enumerate(system_sizes):
+                ax = axes[i, j]
+                t1_grid, t2_grid, chi_map = results[(gamma, L)]
+                plot_data = plot_data_dict[(gamma, L)]
+                
+                n1 = len(t1_grid)
+                n2 = len(t2_grid)
+                
+                if plot_type == "contours":
+                    im = ax.imshow(
+                        plot_data,
+                        origin="lower",
+                        aspect="auto",
+                        extent=[t2_grid[0], t2_grid[-1], t1_grid[0], t1_grid[-1]],
+                        interpolation="none",
+                        vmin=global_min,
+                        vmax=global_max
+                    )
+                elif plot_type == "fft" or plot_type == "fft_log":
+                    dt1 = float(t1_grid[1] - t1_grid[0])
+                    dt2 = float(t2_grid[1] - t2_grid[0])
+                    
+                    f1 = np.fft.fftshift(np.fft.fftfreq(n1, d=dt1))
+                    f2 = np.fft.fftshift(np.fft.fftfreq(n2, d=dt2))
                         
                     im = ax.imshow(
                         plot_data,
                         origin="lower",
                         aspect="auto",
                         extent=[f2[0], f2[-1], f1[0], f1[-1]],
+                        interpolation="none",
+                        vmin=global_min,
+                        vmax=global_max
                     )
 
                 ax.set_title(f"L = {L}, $\\gamma = {gamma}$")
@@ -170,15 +195,43 @@ def main() -> None:
                 if j == 0:
                     ax.set_ylabel("t1 (second step)" if plot_type == "contours" else "frequency along t1")
                 
-                # Add individual colorbars to ensure clear reading of scales
-                cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                if j == len(system_sizes) - 1:
-                    cbar.set_label(cbar_label)
-
         plt.suptitle(f"{plot_type.replace('_', ' ').title().replace('Fft', 'FFT')} Grid (Rows: $\\gamma$, Cols: L)", fontsize=16)
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 0.9, 1])
+        cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+        fig.colorbar(im, cax=cbar_ax, label=cbar_label)
         plt.savefig(f"holevo_multi_grid_{plot_type}.png", dpi=200)
         plt.close(fig)
+
+    # 3) Plotting Max Memory vs L and vs Gamma
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Plot 1: Max memory vs L (for fixed gammas)
+    for gamma in gammas:
+        max_mems = [np.nanmax(results[(gamma, L)][2]) for L in system_sizes]
+        axes[0].plot(system_sizes, max_mems, marker='o', label=f"$\\gamma = {gamma}$")
+    
+    axes[0].set_xlabel("System Size (L)")
+    axes[0].set_ylabel("Max Conditional Memory")
+    axes[0].set_title("Max Memory vs. System Size")
+    axes[0].legend()
+    axes[0].grid(True, linestyle="--", alpha=0.7)
+    axes[0].set_xticks(system_sizes)
+
+    # Plot 2: Max memory vs Gamma (for fixed Ls)
+    for L in system_sizes:
+        max_mems = [np.nanmax(results[(gamma, L)][2]) for gamma in gammas]
+        axes[1].plot(gammas, max_mems, marker='s', label=f"L = {L}")
+
+    axes[1].set_xlabel(r"Noise Strength ($\gamma$)")
+    axes[1].set_ylabel("Max Conditional Memory")
+    axes[1].set_title("Max Memory vs. Noise Strength")
+    axes[1].set_xscale("log")
+    axes[1].legend()
+    axes[1].grid(True, linestyle="--", alpha=0.7)
+
+    plt.tight_layout()
+    plt.savefig("holevo_max_memory_scaling.png", dpi=200)
+    plt.close(fig)
 
     print("All multi-plots generated successfully.")
 
