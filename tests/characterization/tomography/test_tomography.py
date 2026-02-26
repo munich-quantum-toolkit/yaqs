@@ -334,3 +334,29 @@ def test_unnormalized_branch_semantics_h0() -> None:
         # Optionally, verify the state itself is proportional to rho_p
         expected_rho_branch = expected_trace * rho_p
         np.testing.assert_allclose(rho_branch, expected_rho_branch, atol=1e-10)
+
+
+def test_tomography_with_noise() -> None:
+    """Verify that the tomography pipeline runs correctly with a noise model and multiple trajectories.
+    
+    This is an integration test to ensure that the parallelized worker handles `num_trajectories > 1`
+    and stochastic noise operators without crashing. It does not perform an exact arithmetic assertion
+    against the output.
+    """
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+    from mqt.yaqs.core.libraries.gate_library import X, Y
+    
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
+    
+    # Create a simple noise model (e.g. amplitude damping on site 0)
+    noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
+    
+    # Run tomography computationally with noise
+    pt = run(op, params, timesteps=[0.1], num_trajectories=5, noise_model=noise_model)
+    
+    # Check that the tensor built properly without None outputs
+    assert pt.tensor.shape == (4, 16)
+    assert not np.isnan(pt.tensor).any()
+    assert pt.weights.shape == (16,)
+    assert not np.isnan(pt.weights).any()
