@@ -69,7 +69,7 @@ def get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.com
 
 
 def get_choi_basis() -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]]]:
-    """Generate the 16 basis CP maps (Choi matrices) from the 4 basis states.
+    r"""Generate the 16 basis CP maps (Choi matrices) from the 4 basis states.
 
     A basis CP map is A_{p,m}(rho) = Tr(E_m rho) rho_p.
     Its Choi matrix is B_{p,m} = rho_p \\otimes E_m^T,
@@ -140,28 +140,28 @@ def _reprepare_site_zero_forced(
     # Force right-canonical form at site 0 to extract proper environment state
     mps.set_canonical_form(orthogonality_center=0)
     T = mps.tensors[0]
-    
+
     # Contract site 0 with <proj_state|
     # T shape: (d, 1, chi). proj_state shape: (d,)
     env_vec = np.einsum("s c, s -> c", T[:, 0, :], proj_state.conj())
     prob = float(np.linalg.norm(env_vec) ** 2)
-    
+
     if prob > 1e-15:
         env_vec /= np.sqrt(prob)
-        
+
     d = new_state.shape[0]
     chi = env_vec.shape[0]
     new_tensor = np.zeros((d, 1, chi), dtype=np.complex128)
     for s in range(d):
         new_tensor[s, 0, :] = new_state[s] * env_vec
-        
+
     mps.tensors[0] = new_tensor
-    
+
     # Final Renormalization
     final_norm = mps.norm()
     if abs(final_norm) > 1e-15:
         mps.tensors[0] /= final_norm
-        
+
     return prob
 
 
@@ -236,7 +236,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
     noise_model = WORKER_CTX["noise_model"]
 
     alpha_seq = worker_sequences[seq_idx]
-    
+
     # 3. Initialize state to |0...0>
     is_mcwf = sim_params.solver == "MCWF"
     current_state: MPS | NDArray[np.complex128]
@@ -262,9 +262,11 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         ry = state.expect(Observable(Y(), sites=[0]))
         rz = state.expect(Observable(Z(), sites=[0]))
         # Scale the normalized Pauli reconstruction by the actual trace
-        return trace * _reconstruct_state({"x": rx / trace if trace > 1e-15 else 0, 
-                                          "y": ry / trace if trace > 1e-15 else 0, 
-                                          "z": rz / trace if trace > 1e-15 else 0})
+        return trace * _reconstruct_state({
+            "x": rx / trace if trace > 1e-15 else 0,
+            "y": ry / trace if trace > 1e-15 else 0,
+            "z": rz / trace if trace > 1e-15 else 0,
+        })
 
     # 4. Multi-step loop
     for step_i, duration in enumerate(timesteps):
@@ -282,7 +284,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         else:
             assert isinstance(current_state, MPS)
             step_prob = _reprepare_site_zero_forced(current_state, psi_proj, psi_next)
-            
+
         sequence_weight *= step_prob
 
         # Skip evolution if branch is physically dead
@@ -305,7 +307,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
             dynamic_ctx = copy.copy(static_ctx)
             dynamic_ctx.psi_initial = current_state
             dynamic_ctx.sim_params = step_params
-            
+
             mcwf((traj_idx, dynamic_ctx))
             assert dynamic_ctx.output_state is not None
             current_state = cast("NDArray[np.complex128]", dynamic_ctx.output_state)
@@ -436,7 +438,7 @@ def run(
     for worker_seq_idx, avg_rho in enumerate(aggregated_outputs):
         seq_tuple = worker_sequences[worker_seq_idx]
         rho_vec = avg_rho.reshape(-1)
-        
+
         idx = (slice(None), *seq_tuple)
         process_tensor_data[idx] = rho_vec
         process_tensor_weights[seq_tuple] = aggregated_weights[worker_seq_idx]

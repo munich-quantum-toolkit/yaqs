@@ -7,10 +7,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
-import pytest
 from scipy.linalg import expm
 
 from mqt.yaqs.characterization.tomography.tomography import (
@@ -23,6 +22,8 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
 
@@ -176,7 +177,7 @@ def test_reconstruction_identity_random_choi() -> None:
 
     coeffs = np.array([np.trace(d.conj().T @ j_rand) for d in duals])
     j_rec = np.zeros((4, 4), dtype=complex)
-    for c, b in zip(coeffs, choi_basis):
+    for c, b in zip(coeffs, choi_basis, strict=False):
         j_rec += c * b
 
     np.testing.assert_allclose(j_rec, j_rand, atol=1e-10)
@@ -184,7 +185,7 @@ def test_reconstruction_identity_random_choi() -> None:
 
 def test_dual_extracts_one_hot_for_basis_maps() -> None:
     """Verify duals extract one-hot coefficients for basis maps under the strict Choi build convention.
-    
+
     This locks the `predict_final_state` Choi builder convention to the duals.
     """
     basis = get_basis_states()
@@ -196,7 +197,9 @@ def test_dual_extracts_one_hot_for_basis_maps() -> None:
         rho_p = basis[p][2]
         E_m = basis[m][2]
 
-        def A_alpha(rho: NDArray[np.complex128], E_m_: NDArray[np.complex128] = E_m, rho_p_: NDArray[np.complex128] = rho_p) -> NDArray[np.complex128]:
+        def A_alpha(
+            rho: NDArray[np.complex128], E_m_: NDArray[np.complex128] = E_m, rho_p_: NDArray[np.complex128] = rho_p
+        ) -> NDArray[np.complex128]:
             return np.trace(E_m_ @ rho) * rho_p_
 
         J = np.zeros((4, 4), dtype=complex)
@@ -298,7 +301,7 @@ def test_multi_step_correctness() -> None:
 
 def test_unnormalized_branch_semantics_h0() -> None:
     """Verify trace-weight consistency in the deterministic H=0 case.
-    
+
     For each basis map A_{p,m}(rho) = Tr(E_m rho) rho_p, starting from |0><0| on site 0,
     the unnormalized output branch rho_out should have:
     - trace(rho_out) == pt.weights[alpha]
@@ -330,7 +333,7 @@ def test_unnormalized_branch_semantics_h0() -> None:
         np.testing.assert_allclose(np.trace(rho_branch), weight, atol=1e-10)
         # Assert trace matches theoretical expectation Tr(E_m rho_0)
         np.testing.assert_allclose(np.trace(rho_branch), expected_trace, atol=1e-10)
-        
+
         # Optionally, verify the state itself is proportional to rho_p
         expected_rho_branch = expected_trace * rho_p
         np.testing.assert_allclose(rho_branch, expected_rho_branch, atol=1e-10)
@@ -338,23 +341,22 @@ def test_unnormalized_branch_semantics_h0() -> None:
 
 def test_tomography_with_noise() -> None:
     """Verify that the tomography pipeline runs correctly with a noise model and multiple trajectories.
-    
+
     This is an integration test to ensure that the parallelized worker handles `num_trajectories > 1`
     and stochastic noise operators without crashing. It does not perform an exact arithmetic assertion
     against the output.
     """
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-    from mqt.yaqs.core.libraries.gate_library import X, Y
-    
+
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
-    
+
     # Create a simple noise model (e.g. amplitude damping on site 0)
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
-    
+
     # Run tomography computationally with noise
     pt = run(op, params, timesteps=[0.1], num_trajectories=5, noise_model=noise_model)
-    
+
     # Check that the tensor built properly without None outputs
     assert pt.tensor.shape == (4, 16)
     assert not np.isnan(pt.tensor).any()

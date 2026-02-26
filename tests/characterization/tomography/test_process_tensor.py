@@ -128,7 +128,7 @@ def test_qmi_fully_depolarizing() -> None:
     num_frames = len(basis)
     tensor = np.zeros((4, num_frames), dtype=complex)
     weights = np.ones(num_frames, dtype=float) / num_frames
-    
+
     rho_mixed = 0.5 * np.eye(2, dtype=complex)
     vec_mixed = rho_mixed.reshape(-1)
 

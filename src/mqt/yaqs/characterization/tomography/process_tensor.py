@@ -10,13 +10,14 @@
 from __future__ import annotations
 
 import itertools
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import numpy as np
 from qiskit.quantum_info import DensityMatrix, entropy
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
 
@@ -51,9 +52,9 @@ class ProcessTensor:
     """
 
     def __init__(
-        self, 
-        tensor: NDArray[np.complex128], 
-        weights: NDArray[np.float64], 
+        self,
+        tensor: NDArray[np.complex128],
+        weights: NDArray[np.float64],
         timesteps: list[float],
         choi_duals: list[NDArray[np.complex128]],
         choi_indices: list[tuple[int, int]],
@@ -117,7 +118,7 @@ class ProcessTensor:
         # Precompute the Choi matrices and their projection onto the dual basis.
         # For a CP map E(\\rho), its Choi matrix is J(E) = sum_{i,j} E(|i><j|) \\otimes |i><j|^T
         # which in our basis choice maps directly to \\rho_p \\otimes E_m^T.
-        
+
         c_maps = []
         for emap in interventions:
             J = np.zeros((4, 4), dtype=complex)
@@ -175,10 +176,7 @@ class ProcessTensor:
 
         # Normalize weights if they are provided
         total_weight = np.sum(self.weights)
-        if total_weight > 0:
-            norm_weights = self.weights / total_weight
-        else:
-            norm_weights = np.ones_like(self.weights) / len(seqs)
+        norm_weights = self.weights / total_weight if total_weight > 0 else np.ones_like(self.weights) / len(seqs)
 
         for seq in seqs:
             vec = self.tensor[(slice(None), *seq)]
@@ -187,10 +185,7 @@ class ProcessTensor:
             rho_avg += norm_weights[seq] * rho
 
         # Compute Entropies
-        if np.trace(rho_avg) > 1e-12:
-            entropy_b = entropy(DensityMatrix(rho_avg), base=base)
-        else:
-            entropy_b = 0.0
+        entropy_b = entropy(DensityMatrix(rho_avg), base=base) if np.trace(rho_avg) > 1e-12 else 0.0
 
         entropy_b_given_a = 0.0
         for seq in seqs:
