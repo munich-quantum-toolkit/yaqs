@@ -182,6 +182,36 @@ def test_reconstruction_identity_random_choi() -> None:
     np.testing.assert_allclose(j_rec, j_rand, atol=1e-10)
 
 
+def test_dual_extracts_one_hot_for_basis_maps() -> None:
+    """Verify duals extract one-hot coefficients for basis maps under the strict Choi build convention.
+    
+    This locks the `predict_final_state` Choi builder convention to the duals.
+    """
+    basis = get_basis_states()
+    choi_basis, choi_indices = get_choi_basis()
+    duals = calculate_dual_choi_basis(choi_basis)
+
+    for alpha in range(16):
+        p, m = choi_indices[alpha]
+        rho_p = basis[p][2]
+        E_m = basis[m][2]
+
+        def A_alpha(rho: NDArray[np.complex128], E_m_: NDArray[np.complex128] = E_m, rho_p_: NDArray[np.complex128] = rho_p) -> NDArray[np.complex128]:
+            return np.trace(E_m_ @ rho) * rho_p_
+
+        J = np.zeros((4, 4), dtype=complex)
+        for i in range(2):
+            for j in range(2):
+                e = np.zeros((2, 2), dtype=complex)
+                e[i, j] = 1.0
+                J += np.kron(A_alpha(e), e)  # NO transpose
+
+        c = np.array([np.trace(d.conj().T @ J) for d in duals])
+        expected = np.zeros(16, dtype=complex)
+        expected[alpha] = 1.0
+        np.testing.assert_allclose(c, expected, atol=1e-10)
+
+
 def test_held_out_prediction() -> None:
     """Test PT prediction against direct evolution for a random preparation map (1-step)."""
     rng = np.random.default_rng(42)
@@ -264,3 +294,43 @@ def test_multi_step_correctness() -> None:
 
     # Assert tight tolerance
     np.testing.assert_allclose(rho_pred, rho_final, atol=1e-6)
+
+
+def test_unnormalized_branch_semantics_h0() -> None:
+    """Verify trace-weight consistency in the deterministic H=0 case.
+    
+    For each basis map A_{p,m}(rho) = Tr(E_m rho) rho_p, starting from |0><0| on site 0,
+    the unnormalized output branch rho_out should have:
+    - trace(rho_out) == pt.weights[alpha]
+    - trace(rho_out) == Tr(E_m |0><0|)
+    """
+    op = MPO.ising(length=2, J=0.0, g=0.0)  # H = 0
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
+    pt = run(op, params, timesteps=[0.1])
+
+    basis = get_basis_states()
+    _, choi_indices = get_choi_basis()
+
+    # Initial state is |0><0| on site 0
+    rho_0 = np.zeros((2, 2), dtype=complex)
+    rho_0[0, 0] = 1.0
+
+    for alpha in range(16):
+        # Extract the branch density matrix (unnormalized output for this basis map)
+        rho_branch = pt.tensor[:, alpha].reshape(2, 2)
+        weight = pt.weights[alpha]
+
+        p, m = choi_indices[alpha]
+        E_m = basis[m][2]
+        rho_p = basis[p][2]  # The expected output state proportional to rho_p
+
+        expected_trace = np.trace(E_m @ rho_0)
+
+        # Assert trace matches weight
+        np.testing.assert_allclose(np.trace(rho_branch), weight, atol=1e-10)
+        # Assert trace matches theoretical expectation Tr(E_m rho_0)
+        np.testing.assert_allclose(np.trace(rho_branch), expected_trace, atol=1e-10)
+        
+        # Optionally, verify the state itself is proportional to rho_p
+        expected_rho_branch = expected_trace * rho_p
+        np.testing.assert_allclose(rho_branch, expected_rho_branch, atol=1e-10)
