@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -50,7 +51,13 @@ class ProcessTensor:
     """
 
     def __init__(
-        self, tensor: NDArray[np.complex128], weights: NDArray[np.float64], timesteps: list[float]
+        self, 
+        tensor: NDArray[np.complex128], 
+        weights: NDArray[np.float64], 
+        timesteps: list[float],
+        choi_duals: list[NDArray[np.complex128]],
+        choi_indices: list[tuple[int, int]],
+        choi_basis: list[NDArray[np.complex128]] | None = None,
     ) -> None:
         """Initialize the ProcessTensor.
 
@@ -58,12 +65,18 @@ class ProcessTensor:
             tensor: The raw tensor data.
             weights: The probabilities of each sequence.
             timesteps: The time points where interventions/measurements occurred.
+            choi_duals: List of 16 dual matrices (4x4) used for tensor contraction.
+            choi_indices: List mapping tensor index alpha to (prep_idx, meas_idx).
+            choi_basis: Optional list of 16 original basis matrices (4x4).
         """
         self.tensor = tensor
         self.weights = weights
         self.timesteps = timesteps
+        self.choi_duals = choi_duals
+        self.choi_indices = choi_indices
+        self.choi_basis = choi_basis
 
-    def to_choi_matrix(self) -> NDArray[np.complex128]:
+    def to_linear_map_matrix(self) -> NDArray[np.complex128]:
         """Convert to matrix view (final output vs all inputs).
 
         Returns matrix of shape (4, N^k) where:
@@ -82,15 +95,13 @@ class ProcessTensor:
 
     def predict_final_state(
         self,
-        interventions: list[typing.Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
-        duals: list[NDArray[np.complex128]],
+        interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
         """Predict final state using dual-frame contraction for arbitrary interventions.
 
         Args:
             interventions: A list of callables representing CPTP maps for each intervention step.
                            The first callable is the initial state preparation at t=0.
-            duals: Dual frame matrices from tomography.
 
         Returns:
             Predicted final density matrix (2x2)
@@ -98,7 +109,6 @@ class ProcessTensor:
         Raises:
             ValueError: If the number of interventions does not match num_steps.
         """
-        import typing
         k_steps = len(self.timesteps)
         if len(interventions) != k_steps:
             msg = f"Expected {k_steps} interventions (including t=0 prep), got {len(interventions)}."
@@ -116,10 +126,10 @@ class ProcessTensor:
                     e_in = np.zeros((2, 2), dtype=complex)
                     e_in[i, j] = 1.0
                     rho_out = emap(e_in)
-                    J += np.kron(rho_out, e_in)
+                    J += np.kron(rho_out, e_in.T)
 
             # Project onto duals: c_a = Tr(D_a^dag J)
-            c_a = np.array([np.trace(d.conj().T @ J) for d in duals])
+            c_a = np.array([np.trace(d.conj().T @ J) for d in self.choi_duals])
             c_maps.append(c_a)
 
         # Tensor contraction
