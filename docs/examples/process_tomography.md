@@ -92,7 +92,7 @@ pt_two = run(
     num_trajectories=100,
 )
 
-print(f"Process tensor shape: {pt_two.tensor.shape}")  # (4, 4, 4, 4)
+print(f"Process tensor shape: {pt_two.tensor.shape}")  # (4, 16, 16)
 ```
 
 ````
