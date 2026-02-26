@@ -212,8 +212,8 @@ def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]
     return 0.5 * (eye + expectations["x"] * x_matrix + expectations["y"] * y_matrix + expectations["z"] * z_matrix)
 
 
-def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[np.complex128]], float]:
-    """Worker function for a single tomography trajectory.
+def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np.complex128]], float]:
+    """Worker function for a single tomography sequence.
 
     Args:
         job_idx: Flat index mapping to (seq_idx, traj_idx).
@@ -249,7 +249,7 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
     else:
         current_state = MPS(length=operator.length, state="zeros")
 
-    trajectory_weight = 1.0
+    sequence_weight = 1.0
 
     # We only need the final output state after all evolution steps
     def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -283,10 +283,10 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             assert isinstance(current_state, MPS)
             step_prob = _reprepare_site_zero_forced(current_state, psi_proj, psi_next)
             
-        trajectory_weight *= step_prob
+        sequence_weight *= step_prob
 
         # Skip evolution if branch is physically dead
-        if trajectory_weight < 1e-15:
+        if sequence_weight < 1e-15:
             break
 
         # Segment Simulation
@@ -316,8 +316,8 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             assert step_params.output_state is not None
             current_state = cast("MPS", step_params.output_state)
 
-    trajectory_results = [_get_rho_site_zero(current_state)]
-    return (seq_idx, traj_idx, trajectory_results, trajectory_weight)
+    sequence_results = [_get_rho_site_zero(current_state)]
+    return (seq_idx, traj_idx, sequence_results, sequence_weight)
 
 
 def run(
@@ -405,18 +405,18 @@ def run(
     aggregated_weights = np.zeros(num_worker_sequences, dtype=np.float64)
 
     results_iterator = run_backend_parallel(
-        worker_fn=_tomography_trajectory_worker,
+        worker_fn=_tomography_sequence_worker,
         payload=payload,
         n_jobs=total_jobs,
         max_workers=max_workers,
         show_progress=sim_params.show_progress,
-        desc="Simulating Tomography Trajectories",
+        desc="Simulating Tomography Sequences",
     )
 
-    for _job_idx, (worker_seq_idx, _traj_idx, trajectory_rhos, trajectory_weight) in results_iterator:
-        rho_final = trajectory_rhos[0]
-        aggregated_outputs[worker_seq_idx] += rho_final * trajectory_weight
-        aggregated_weights[worker_seq_idx] += trajectory_weight
+    for _job_idx, (worker_seq_idx, _traj_idx, sequence_rhos, sequence_weight) in results_iterator:
+        rho_final = sequence_rhos[0]
+        aggregated_outputs[worker_seq_idx] += rho_final * sequence_weight
+        aggregated_weights[worker_seq_idx] += sequence_weight
 
     # Average normalized to the number of trajectories
     for i in range(num_worker_sequences):
