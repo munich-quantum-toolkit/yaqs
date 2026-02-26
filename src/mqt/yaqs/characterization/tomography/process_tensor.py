@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Process Tensor representation."""
+"""Restricted Process Tensor representation."""
 
 from __future__ import annotations
 
@@ -44,18 +44,23 @@ class ProcessTensor:
     capturing non-Markovian memory effects.
 
     Attributes:
-        tensor (NDArray): The raw tensor data.
+        tensor (NDArray): The raw tensor data of shape (4, N, ..., N).
+        weights (NDArray): The probabilities of each sequence of shape (N, ..., N).
         timesteps (list[float]): The time points where interventions/measurements occurred.
     """
 
-    def __init__(self, tensor: NDArray[np.complex128], timesteps: list[float]) -> None:
+    def __init__(
+        self, tensor: NDArray[np.complex128], weights: NDArray[np.float64], timesteps: list[float]
+    ) -> None:
         """Initialize the ProcessTensor.
 
         Args:
             tensor: The raw tensor data.
+            weights: The probabilities of each sequence.
             timesteps: The time points where interventions/measurements occurred.
         """
         self.tensor = tensor
+        self.weights = weights
         self.timesteps = timesteps
 
     def to_choi_matrix(self) -> NDArray[np.complex128]:
@@ -76,166 +81,104 @@ class ProcessTensor:
         return self.tensor.reshape(4, num_inputs)
 
     def predict_final_state(
-        self, rho_sequence: list[NDArray[np.complex128]], duals: list[NDArray[np.complex128]]
+        self,
+        initial_state: NDArray[np.complex128],
+        interventions: list[typing.Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+        duals: list[NDArray[np.complex128]],
     ) -> NDArray[np.complex128]:
-        """Predict final state for a sequence of input states using dual-frame contraction.
-
-        This method enables prediction on held-out state sequences not used during tomography.
-        It computes dual-frame coefficients for each input state and contracts them with the
-        process tensor to predict the final output state.
+        """Predict final state using dual-frame contraction for arbitrary interventions.
 
         Args:
-            rho_sequence: List of density matrices (2x2), one per time step
-            duals: Dual frame matrices from tomography (same as used in reconstruction)
+            initial_state: The initial density matrix (2x2).
+            interventions: A list of callables representing CPTP maps for each intervention step.
+            duals: Dual frame matrices from tomography.
 
         Returns:
             Predicted final density matrix (2x2)
 
         Raises:
-            ValueError: If the sequence length does not match the number of timesteps.
-
-        Example:
-            >>> # Build PT from tomography
-            >>> pt = run_process_tensor_tomography(...)
-            >>> # Predict on new sequence
-            >>> rho0 = np.array([[0.5, 0.5], [0.5, 0.5]])  # |+⟩⟨+|
-            >>> rho1 = np.array([[1, 0], [0, 0]])  # |0⟩⟨0|
-            >>> duals = calculate_dual_frame(_get_pauli_basis_set())
-            >>> predicted = pt.predict_final_state([rho0, rho1], duals)
+            ValueError: If the number of interventions does not match num_steps - 1.
         """
-        if len(rho_sequence) != len(self.timesteps):
-            msg = f"Sequence length {len(rho_sequence)} must match number of timesteps {len(self.timesteps)}"
+        import typing
+        k_steps = len(self.timesteps)
+        if len(interventions) != k_steps - 1:
+            msg = f"Expected {k_steps - 1} interventions, got {len(interventions)}."
             raise ValueError(msg)
 
-        # Compute coefficients: c_k = Tr(D_k† rho) for each input state
-        coeffs_per_step = []
-        for rho in rho_sequence:
-            coeffs = [np.trace(d.conj().T @ rho) for d in duals]
-            coeffs_per_step.append(coeffs)
+        # Coefficients for initial state: c_0 = Tr(D_m^DAG rho_0)
+        c_0 = [np.trace(d.conj().T @ initial_state) for d in duals]
 
-        # Contract with tensor: rho_pred = sum_{i0,...,ik} c_i0^(0) ... c_ik^(k) T[:,i0,...,ik]
+        # Coefficients for each intervention map
+        # c^{(s)}_{m, p} = Tr(D_p^DAG E_s(D_m))
+        c_maps = []
+        for emap in interventions:
+            cmap = np.zeros((len(duals), len(duals)), dtype=complex)
+            for m, dm in enumerate(duals):
+                edm = emap(dm)
+                for p, dp in enumerate(duals):
+                    cmap[m, p] = np.trace(dp.conj().T @ edm)
+            c_maps.append(cmap)
+
         result = np.zeros(4, dtype=complex)
-        for idx in np.ndindex(*self.tensor.shape[1:]):  # Iterate over all input frame indices
-            # Compute product of coefficients for this index combination
-            coeff = 1.0
-            for step, frame_idx in enumerate(idx):
-                coeff *= coeffs_per_step[step][frame_idx]
-            # Add weighted contribution from this tensor element
+        for idx in np.ndindex(*self.tensor.shape[1:]):
+            coeff = c_0[idx[0]]
+            for step in range(len(interventions)):
+                m = idx[2 * step + 1]
+                p = idx[2 * step + 2]
+                coeff *= c_maps[step][m, p]
             result += coeff * self.tensor[(slice(None), *idx)]
 
         return result.reshape(2, 2)
 
-    def holevo_information(self, p: dict[tuple[int, ...], float] | None = None, base: int = 2) -> float:
-        """Calculate the Holevo information of the process tensor.
+    def quantum_mutual_information(self, base: int = 2) -> float:
+        """Calculate the Quantum Mutual Information between the input sequence and the output state.
+
+        I(A:B) = S(B) - sum_a p(a) S(B|a)
+        where A is the sequence distribution, B is the output state.
 
         Args:
-            p: Optional dictionary mapping sequence tuples to probabilities.
-               If None, assumes uniform distribution over all input sequences.
             base: Logarithm base for entropy calculation (default 2 for bits).
 
         Returns:
-            float: The Holevo information.
+            float: The Quantum Mutual Information.
 
         Raises:
             ValueError: If the output dimension is not 4.
         """
-        # Tensor shape: (4, N, N, ..., N)
-        # k is number of steps (input slots)
-        steps_k = self.tensor.ndim - 1
         out_dim = self.tensor.shape[0]
         if out_dim != 4:
             msg = f"Expected output dimension 4, got {out_dim}."
             raise ValueError(msg)
 
+        steps_k = self.tensor.ndim - 1
         if steps_k == 0:
-            # No inputs, just a single state
-            return 0.0  # Information about inputs is zero if there are no inputs
-
-        states_n = self.tensor.shape[1]
-
-        # Generate all input sequences
-        seqs = list(itertools.product(range(states_n), repeat=steps_k))
-
-        if p is None:
-            p = {seq: 1.0 / len(seqs) for seq in seqs}
-
-        # Build ensemble and average output
-        rhos = {}
-        rho_avg = np.zeros((2, 2), dtype=np.complex128)
-
-        for seq in seqs:
-            # Extract output vector for this sequence
-            vec = self.tensor[(slice(None), *seq)]  # shape (4,)
-            rho = _vec_to_rho(vec)
-            rhos[seq] = rho
-            rho_avg += p[seq] * rho
-
-        # Compute Entropies
-        # Calculate entropy S(rho_avg)
-        s_avg = entropy(DensityMatrix(rho_avg), base=base)
-
-        # sum p_i S(rho_i)
-        s_cond = 0.0
-        for seq in seqs:
-            s_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
-
-        return s_avg - s_cond
-
-    def holevo_information_conditional(self, fixed_step: int, fixed_idx: int, base: int = 2) -> float:
-        """Calculate the Holevo information conditioned on a fixed input at a specific step.
-
-        Args:
-            fixed_step: The time step index to fix (0-indexed).
-            fixed_idx: The basis state index to fix at that step.
-            base: Logarithm base for entropy calculation (default 2 for bits).
-
-        Returns:
-            float: The conditional Holevo information.
-
-        Raises:
-            ValueError: If fixed_step or fixed_idx are out of bounds.
-        """
-        out_dim = self.tensor.shape[0]
-        if out_dim != 4:
-            msg = f"Expected output dimension 4, got {out_dim}."
-            raise ValueError(msg)
-        steps_k = self.tensor.ndim - 1
-
-        if fixed_step < 0 or fixed_step >= steps_k:
-            msg = f"fixed_step {fixed_step} out of bounds for {steps_k} steps."
-            raise ValueError(msg)
-
-        states_n = self.tensor.shape[1]
-        if fixed_idx < 0 or fixed_idx >= states_n:
-            msg = f"fixed_idx {fixed_idx} out of bounds for {states_n} basis states."
-            raise ValueError(msg)
-
-        # Generate all sequences of length steps_k where seq[fixed_step] == fixed_idx
-        # We can optimize this by only generating the varying parts, but filtering is easier to write clearly
-        seqs = [seq for seq in itertools.product(range(states_n), repeat=steps_k) if seq[fixed_step] == fixed_idx]
-
-        if not seqs:
             return 0.0
 
-        # Uniform probability over this subset
-        p_val = 1.0 / len(seqs)
-        p = dict.fromkeys(seqs, p_val)
+        states_n = self.tensor.shape[1]
+        seqs = list(itertools.product(range(states_n), repeat=steps_k))
 
         # Build ensemble and average output
         rhos = {}
         rho_avg = np.zeros((2, 2), dtype=np.complex128)
+
+        # Normalize weights if they are provided
+        total_weight = np.sum(self.weights)
+        if total_weight > 0:
+            norm_weights = self.weights / total_weight
+        else:
+            norm_weights = np.ones_like(self.weights) / len(seqs)
 
         for seq in seqs:
             vec = self.tensor[(slice(None), *seq)]
             rho = _vec_to_rho(vec)
             rhos[seq] = rho
-            rho_avg += p[seq] * rho
+            rho_avg += norm_weights[seq] * rho
 
         # Compute Entropies
-        entropy_avg = entropy(DensityMatrix(rho_avg), base=base)
+        entropy_b = entropy(DensityMatrix(rho_avg), base=base)
 
-        entropy_cond = 0.0
+        entropy_b_given_a = 0.0
         for seq in seqs:
-            entropy_cond += p[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
+            entropy_b_given_a += norm_weights[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
 
-        return entropy_avg - entropy_cond
+        return entropy_b - entropy_b_given_a
