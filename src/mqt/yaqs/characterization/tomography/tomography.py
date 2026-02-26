@@ -371,6 +371,8 @@ def run(
     num_steps = len(timesteps)
     alpha_indices = list(range(16))
     worker_sequences = list(itertools.product(alpha_indices, repeat=num_steps))
+    rng = np.random.default_rng()
+    rng.shuffle(worker_sequences)
     num_worker_sequences = len(worker_sequences)
 
     # 2. Prepare Simulation Context
