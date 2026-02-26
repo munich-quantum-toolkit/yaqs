@@ -95,7 +95,7 @@ pt_two = run(
 print(f"Process tensor shape: {pt_two.tensor.shape}")  # (4, 4, 4, 4)
 ```
 
-```
+````
 
 ## 5. Predicting held-out states
 
@@ -134,7 +134,7 @@ rho_pred = pt_two.predict_final_state(
 )
 print("Predicted output density matrix:")
 print(np.round(rho_pred, 4))
-```
+````
 
 The result `rho_pred` is a `(2, 2)` density matrix giving the expected output state at the final
 time step given the initial state and the local unitary intervention applied to the system between the two segments.
