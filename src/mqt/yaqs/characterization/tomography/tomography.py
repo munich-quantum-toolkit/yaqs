@@ -137,6 +137,8 @@ def _reprepare_site_zero_forced(
     Returns:
         float: The probability of this projection occurring.
     """
+    # Force right-canonical form at site 0 to extract proper environment state
+    mps.set_canonical_form(orthogonality_center=0)
     T = mps.tensors[0]
     
     # Contract site 0 with <proj_state|
@@ -255,10 +257,14 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
             rho = np.reshape(state, (2, -1))
             return rho @ rho.conj().T
         assert isinstance(state, MPS)
+        trace = float(state.norm() ** 2)
         rx = state.expect(Observable(X(), sites=[0]))
         ry = state.expect(Observable(Y(), sites=[0]))
         rz = state.expect(Observable(Z(), sites=[0]))
-        return _reconstruct_state({"x": rx, "y": ry, "z": rz})
+        # Scale the normalized Pauli reconstruction by the actual trace
+        return trace * _reconstruct_state({"x": rx / trace if trace > 1e-15 else 0, 
+                                          "y": ry / trace if trace > 1e-15 else 0, 
+                                          "z": rz / trace if trace > 1e-15 else 0})
 
     # 4. Multi-step loop
     for step_i, duration in enumerate(timesteps):
