@@ -100,7 +100,7 @@ def test_predict_final_state_error() -> None:
     mock_duals = [np.eye(4, dtype=complex)] * 16
     mock_indices = [(0, 0)] * 16
     pt = ProcessTensor(np.zeros((4, 4), dtype=complex), np.ones(4), [0.1], mock_duals, mock_indices)
-    with pytest.raises(ValueError, match="Expected 1 interventions \\(including t=0 prep\\), got 2."):
+    with pytest.raises(ValueError, match=r"Expected 1 interventions \(including t=0 prep\), got 2."):
         pt.predict_final_state([lambda x: x, lambda x: x])
 
 

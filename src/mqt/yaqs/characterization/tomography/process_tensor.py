@@ -121,16 +121,16 @@ class ProcessTensor:
 
         c_maps = []
         for emap in interventions:
-            J = np.zeros((4, 4), dtype=complex)
+            j_choi = np.zeros((4, 4), dtype=complex)
             for i in range(2):
                 for j in range(2):
                     e_in = np.zeros((2, 2), dtype=complex)
                     e_in[i, j] = 1.0
                     rho_out = emap(e_in)
-                    J += np.kron(rho_out, e_in)
+                    j_choi += np.kron(rho_out, e_in)
 
             # Project onto duals: c_a = Tr(D_a^dag J)
-            c_a = np.array([np.trace(d.conj().T @ J) for d in self.choi_duals])
+            c_a = np.array([np.trace(d.conj().T @ j_choi) for d in self.choi_duals])
             c_maps.append(c_a)
 
         # Tensor contraction

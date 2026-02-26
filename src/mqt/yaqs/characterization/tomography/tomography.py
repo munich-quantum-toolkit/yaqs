@@ -139,11 +139,11 @@ def _reprepare_site_zero_forced(
     """
     # Force right-canonical form at site 0 to extract proper environment state
     mps.set_canonical_form(orthogonality_center=0)
-    T = mps.tensors[0]
+    t_mps = mps.tensors[0]
 
     # Contract site 0 with <proj_state|
     # T shape: (d, 1, chi). proj_state shape: (d,)
-    env_vec = np.einsum("s c, s -> c", T[:, 0, :], proj_state.conj())
+    env_vec = np.einsum("s c, s -> c", t_mps[:, 0, :], proj_state.conj())
     prob = float(np.linalg.norm(env_vec) ** 2)
 
     if prob > 1e-15:
@@ -347,6 +347,9 @@ def run(
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.
+
+    Raises:
+        ValueError: If dual basis creation fails.
     """
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]

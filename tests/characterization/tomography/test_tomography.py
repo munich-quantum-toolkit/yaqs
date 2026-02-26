@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+"""Tests for the Process Tomography Module."""
 
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from mqt.yaqs.characterization.tomography.tomography import (
     run,
 )
 from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 if TYPE_CHECKING:
@@ -28,7 +30,14 @@ if TYPE_CHECKING:
 
 
 def _get_random_rho(rng: np.random.Generator) -> NDArray[np.complex128]:
-    """Generate a random 2x2 density matrix."""
+    """Generate a random 2x2 density matrix.
+
+    Args:
+        rng: The random number generator.
+
+    Returns:
+        NDArray[np.complex128]: The resulting 2x2 density matrix.
+    """
     # General mixed state via Ginibre ensemble
     z = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     rho = z @ z.conj().T
@@ -44,6 +53,16 @@ def _apply_local_map_site0(
     Assumes rho_full uses ordering kron(site0, site1).
     Reshape convention: rho[i, k, j, l] where
       i,j index site0 (row/col), k,l index site1 (row/col).
+
+    Args:
+        rho_full: The 2-qubit density matrix.
+        local_map: The local CP map to apply to site 0.
+
+    Returns:
+        NDArray[np.complex128]: The resulting 2-qubit density matrix.
+
+    Raises:
+        ValueError: If local_map does not return a (2,2) matrix.
     """
     rho4 = rho_full.reshape(2, 2, 2, 2)  # (i,k,j,l)
     out4 = np.zeros_like(rho4, dtype=np.complex128)
@@ -53,14 +72,13 @@ def _apply_local_map_site0(
             e_ij = np.zeros((2, 2), dtype=np.complex128)
             e_ij[i, j] = 1.0
 
-            A_eij = local_map(e_ij)
-            if A_eij.shape != (2, 2):
-                msg = f"local_map must return (2,2), got {A_eij.shape}"
+            a_eij = local_map(e_ij)
+            if a_eij.shape != (2, 2):
+                msg = f"local_map must return (2,2), got {a_eij.shape}"
                 raise ValueError(msg)
 
             block_ij = rho4[i, :, j, :]  # (k,l) environment operator
-            # out[a,k,b,l] += A_eij[a,b] * block_ij[k,l]
-            out4 += np.einsum("ab,kl->akbl", A_eij, block_ij)
+            out4 += np.einsum("ab,kl->akbl", a_eij, block_ij)
 
     return out4.reshape(4, 4)
 
@@ -127,7 +145,7 @@ def test_predict_linearity() -> None:
     def map1(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return rho
 
-    def map2(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    def map2(_rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return np.zeros((2, 2), dtype=complex)
 
     def sum_map(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -195,21 +213,23 @@ def test_dual_extracts_one_hot_for_basis_maps() -> None:
     for alpha in range(16):
         p, m = choi_indices[alpha]
         rho_p = basis[p][2]
-        E_m = basis[m][2]
+        e_m = basis[m][2]
 
-        def A_alpha(
-            rho: NDArray[np.complex128], E_m_: NDArray[np.complex128] = E_m, rho_p_: NDArray[np.complex128] = rho_p
+        def a_alpha(
+            rho: NDArray[np.complex128],
+            e_m_sub: NDArray[np.complex128] = e_m,
+            rho_p_sub: NDArray[np.complex128] = rho_p,
         ) -> NDArray[np.complex128]:
-            return np.trace(E_m_ @ rho) * rho_p_
+            return np.trace(e_m_sub @ rho) * rho_p_sub
 
-        J = np.zeros((4, 4), dtype=complex)
+        j_choi = np.zeros((4, 4), dtype=complex)
         for i in range(2):
             for j in range(2):
                 e = np.zeros((2, 2), dtype=complex)
                 e[i, j] = 1.0
-                J += np.kron(A_alpha(e), e)  # NO transpose
+                j_choi += np.kron(a_alpha(e), e)  # NO transpose
 
-        c = np.array([np.trace(d.conj().T @ J) for d in duals])
+        c = np.array([np.trace(d.conj().T @ j_choi) for d in duals])
         expected = np.zeros(16, dtype=complex)
         expected[alpha] = 1.0
         np.testing.assert_allclose(c, expected, atol=1e-10)
@@ -233,11 +253,10 @@ def test_held_out_prediction() -> None:
     rho_pred = pt.predict_final_state([prep_map])
 
     # 2) Direct evolution
-    H = op.to_matrix()
-    u_evol = expm(-1j * H * 0.1)
+    h_mat = expm(-1j * op.to_matrix() * 0.1)
     # Start with rho_0 on site 0, |0> on site 1
     rho_init = np.kron(rho_0, np.array([[1.0, 0.0], [0.0, 0.0]]))
-    rho_final_full = u_evol @ rho_init @ u_evol.conj().T
+    rho_final_full = h_mat @ rho_init @ h_mat.conj().T
     # Partial trace over site 1
     rho_final = np.trace(rho_final_full.reshape(2, 2, 2, 2), axis1=1, axis2=3)
 
@@ -246,8 +265,6 @@ def test_held_out_prediction() -> None:
 
 def test_multi_step_correctness() -> None:
     """Verify 2-step PT correctness against explicit global evolution."""
-    from scipy.linalg import expm
-
     rng = np.random.default_rng(42)
     op = MPO.ising(length=2, J=1.0, g=0.5)
 
@@ -259,36 +276,33 @@ def test_multi_step_correctness() -> None:
 
     # Make a proper unitary intervention for step 1
     theta = float(rng.uniform(0.0, 2.0 * np.pi))
-    u_mat = np.array(
-        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]],
-        dtype=np.complex128,
-    )
+    u_mat = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]], dtype=np.complex128)
 
-    def A0_prep(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    def a0_prep(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         # Prep random mixed state
         return np.trace(rho) * rho_0
 
-    def A1_unitary(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    def a1_unitary(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         # Unitary channel
         return u_mat @ rho @ u_mat.conj().T
 
     # 1) PT prediction
-    rho_pred = pt.predict_final_state([A0_prep, A1_unitary])
+    rho_pred = pt.predict_final_state([a0_prep, a1_unitary])
 
     # 2) Direct dense evolution
-    H = op.to_matrix()
-    u_evol = expm(-1j * H * 0.1)
+    h_mat = op.to_matrix()
+    u_evol = expm(-1j * h_mat * 0.1)
 
     # Start from |00><00|
     rho_full = np.zeros((4, 4), dtype=np.complex128)
     rho_full[0, 0] = 1.0
 
     # Apply A0 on site0 (step 0 intervention)
-    rho_full = _apply_local_map_site0(rho_full, A0_prep)
+    rho_full = _apply_local_map_site0(rho_full, a0_prep)
     # Evolve 1
     rho_full = u_evol @ rho_full @ u_evol.conj().T
     # Apply A1 on site0 (step 1 intervention)
-    rho_full = _apply_local_map_site0(rho_full, A1_unitary)
+    rho_full = _apply_local_map_site0(rho_full, a1_unitary)
     # Evolve 2
     rho_full = u_evol @ rho_full @ u_evol.conj().T
 
@@ -324,10 +338,10 @@ def test_unnormalized_branch_semantics_h0() -> None:
         weight = pt.weights[alpha]
 
         p, m = choi_indices[alpha]
-        E_m = basis[m][2]
+        e_m = basis[m][2]
         rho_p = basis[p][2]  # The expected output state proportional to rho_p
 
-        expected_trace = np.trace(E_m @ rho_0)
+        expected_trace = np.trace(e_m @ rho_0)
 
         # Assert trace matches weight
         np.testing.assert_allclose(np.trace(rho_branch), weight, atol=1e-10)
@@ -346,8 +360,6 @@ def test_tomography_with_noise() -> None:
     and stochastic noise operators without crashing. It does not perform an exact arithmetic assertion
     against the output.
     """
-    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
 
