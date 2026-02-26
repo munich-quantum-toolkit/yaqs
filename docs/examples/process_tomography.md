@@ -105,16 +105,8 @@ The prediction uses a dual-frame polynomial sum — an efficient linear-algebrai
 
 ```{code-cell} ipython3
 import numpy as np
-from mqt.yaqs.characterization.tomography.tomography import (
-    calculate_dual_frame,
-    get_basis_states,
-)
 
-# Build the dual frame from the same basis used during tomography
-basis_set = get_basis_states()
-duals = calculate_dual_frame([b[2] for b in basis_set])
-
-# Choose two arbitrary mixed input states
+# Choose an arbitrary mixed input state
 rng = np.random.default_rng(0)
 
 def _random_rho(rng: np.random.Generator) -> np.ndarray:
@@ -127,6 +119,10 @@ def _random_rho(rng: np.random.Generator) -> np.ndarray:
 
 rho_0 = _random_rho(rng)
 
+# The first intervention is the preparation of the initial state at t=0
+def initial_prep(rho: np.ndarray) -> np.ndarray:
+    return rho_0
+
 # Define an arbitrary CPTP intervention map applied at the intermediate timestep
 def x_gate_intervention(rho: np.ndarray) -> np.ndarray:
     x_mat = np.array([[0, 1], [1, 0]], dtype=complex)
@@ -134,9 +130,7 @@ def x_gate_intervention(rho: np.ndarray) -> np.ndarray:
 
 # Predict final state — no simulator call needed!
 rho_pred = pt_two.predict_final_state(
-    initial_state=rho_0, 
-    interventions=[x_gate_intervention], 
-    duals=duals
+    interventions=[initial_prep, x_gate_intervention]
 )
 print("Predicted output density matrix:")
 print(np.round(rho_pred, 4))
