@@ -240,7 +240,7 @@ def test_held_out_prediction() -> None:
     rng = np.random.default_rng(42)
     op = MPO.ising(length=2, J=1.0, g=0.5)
 
-    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=4)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
     pt = run(op, params, timesteps=[0.1])
 
     # Hold-out intervention: prepare arbitrary mixed state rho_0
