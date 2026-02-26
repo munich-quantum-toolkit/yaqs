@@ -72,7 +72,9 @@ def get_choi_basis() -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]
     """Generate the 16 basis CP maps (Choi matrices) from the 4 basis states.
 
     A basis CP map is A_{p,m}(rho) = Tr(E_m rho) rho_p.
-    Its Choi matrix is B_{p,m} = rho_p \\otimes E_m^T.
+    Its Choi matrix is B_{p,m} = rho_p \\otimes E_m^T,
+    because J(A) = sum_{ij} A(|i><j|) otimes |i><j| = rho_p otimes sum_{ij} Tr(E_m |i><j|) |i><j|
+    = rho_p otimes E_m^T.
 
     Returns:
         tuple containing:
@@ -92,25 +94,19 @@ def get_choi_basis() -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]
     return choi_matrices, indices
 
 
-def calculate_dual_frame(basis_matrices: list[NDArray[np.complex128]]) -> list[NDArray[np.complex128]]:
-    """Calculate the dual frame for the given basis states.
+def calculate_dual_choi_basis(basis_matrices: list[NDArray[np.complex128]]) -> list[NDArray[np.complex128]]:
+    """Calculate the dual frame for the given Choi basis matrices.
 
-    The dual frame {D_k} allows reconstruction of any operator A via:
-    A = sum_k Tr(D_k^dag A) F_k
-    or
-    A = sum_k Tr(F_k^dag A) D_k  <-- this is what we use if we treat basis_matrices as input basis F_k.
-
-    If we have input states rho_in^k, and we measure output states rho_out^k,
-    the map is E(rho) = sum_k Tr(D_k^dag rho) rho_out^k.
+    The dual frame {D_k} allows reconstruction of any map or process tensor component.
 
     Args:
-        basis_matrices (list): List of density matrices (2x2) forming the frame.
+        basis_matrices (list): List of Choi matrices (4x4) forming the generalized basis.
 
     Returns:
-        list[NDArray[np.complex128]]: List of dual matrices D_k.
+        list[NDArray[np.complex128]]: List of dual Choi matrices D_k.
     """
     # Stack matrices as columns of a Frame Operator F
-    # Shape (4, 6) for single qubit (dim=2^2=4)
+    # Shape (16, 16) for Choi basis maps
     dim = basis_matrices[0].shape[0]
 
     # frame_matrix: columns are vectorized density matrices
@@ -285,7 +281,7 @@ def _tomography_trajectory_worker(job_idx: int) -> tuple[int, int, list[NDArray[
 
         # Skip evolution if branch is physically dead
         if trajectory_weight < 1e-15:
-            continue
+            break
 
         # Segment Simulation
         step_params = copy.deepcopy(sim_params)
@@ -355,7 +351,16 @@ def run(
     # 1. Prepare Basis and Duals
     basis_set = get_basis_states()
     choi_basis, choi_indices = get_choi_basis()
-    calculate_dual_frame(choi_basis)
+    duals = calculate_dual_choi_basis(choi_basis)
+
+    # Sanity check duality
+    for i in range(16):
+        for j in range(16):
+            inner = np.trace(duals[i].conj().T @ choi_basis[j])
+            expected = 1.0 if i == j else 0.0
+            if not np.isclose(inner, expected, atol=1e-10):
+                msg = f"Dual basis creation failed: <D_{i}|B_{j}> = {inner}"
+                raise ValueError(msg)
 
     num_steps = len(timesteps)
     alpha_indices = list(range(16))
@@ -428,4 +433,11 @@ def run(
         process_tensor_data[idx] = rho_vec
         process_tensor_weights[seq_tuple] = aggregated_weights[worker_seq_idx]
 
-    return ProcessTensor(process_tensor_data, process_tensor_weights, timesteps)
+    return ProcessTensor(
+        tensor=process_tensor_data,
+        weights=process_tensor_weights,
+        timesteps=timesteps,
+        choi_duals=duals,
+        choi_indices=choi_indices,
+        choi_basis=choi_basis,
+    )
