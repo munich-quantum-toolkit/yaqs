@@ -82,53 +82,55 @@ class ProcessTensor:
 
     def predict_final_state(
         self,
-        initial_state: NDArray[np.complex128],
         interventions: list[typing.Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
         duals: list[NDArray[np.complex128]],
     ) -> NDArray[np.complex128]:
         """Predict final state using dual-frame contraction for arbitrary interventions.
 
         Args:
-            initial_state: The initial density matrix (2x2).
             interventions: A list of callables representing CPTP maps for each intervention step.
+                           The first callable is the initial state preparation at t=0.
             duals: Dual frame matrices from tomography.
 
         Returns:
             Predicted final density matrix (2x2)
 
         Raises:
-            ValueError: If the number of interventions does not match num_steps - 1.
+            ValueError: If the number of interventions does not match num_steps.
         """
         import typing
         k_steps = len(self.timesteps)
-        if len(interventions) != k_steps - 1:
-            msg = f"Expected {k_steps - 1} interventions, got {len(interventions)}."
+        if len(interventions) != k_steps:
+            msg = f"Expected {k_steps} interventions (including t=0 prep), got {len(interventions)}."
             raise ValueError(msg)
 
-        # Coefficients for initial state: c_0 = Tr(D_m^DAG rho_0)
-        c_0 = [np.trace(d.conj().T @ initial_state) for d in duals]
-
-        # Coefficients for each intervention map
-        # c^{(s)}_{m, p} = Tr(D_p^DAG E_s(D_m))
+        # Precompute the Choi matrices and their projection onto the dual basis.
+        # For a CP map E(\\rho), its Choi matrix is J(E) = sum_{i,j} E(|i><j|) \\otimes |i><j|^T
+        # which in our basis choice maps directly to \\rho_p \\otimes E_m^T.
+        
         c_maps = []
         for emap in interventions:
-            cmap = np.zeros((len(duals), len(duals)), dtype=complex)
-            for m, dm in enumerate(duals):
-                edm = emap(dm)
-                for p, dp in enumerate(duals):
-                    cmap[m, p] = np.trace(dp.conj().T @ edm)
-            c_maps.append(cmap)
+            J = np.zeros((4, 4), dtype=complex)
+            for i in range(2):
+                for j in range(2):
+                    e_in = np.zeros((2, 2), dtype=complex)
+                    e_in[i, j] = 1.0
+                    rho_out = emap(e_in)
+                    J += np.kron(rho_out, e_in)
 
-        result = np.zeros(4, dtype=complex)
-        for idx in np.ndindex(*self.tensor.shape[1:]):
-            coeff = c_0[idx[0]]
-            for step in range(len(interventions)):
-                m = idx[2 * step + 1]
-                p = idx[2 * step + 2]
-                coeff *= c_maps[step][m, p]
-            result += coeff * self.tensor[(slice(None), *idx)]
+            # Project onto duals: c_a = Tr(D_a^dag J)
+            c_a = np.array([np.trace(d.conj().T @ J) for d in duals])
+            c_maps.append(c_a)
 
-        return result.reshape(2, 2)
+        # Tensor contraction
+        # self.tensor has shape (4, 16, 16, ..., 16).
+        # We want to contract the k_steps indices (dimensions 1 to k_steps) with the c_maps coefficients.
+        result_tensor = self.tensor
+        for step in reversed(range(k_steps)):
+            # Multiply and sum out the last axis (axis -1) with c_maps[step]
+            result_tensor = np.tensordot(result_tensor, c_maps[step], axes=([-1], [0]))
+
+        return result_tensor.reshape(2, 2)
 
     def quantum_mutual_information(self, base: int = 2) -> float:
         """Calculate the Quantum Mutual Information between the input sequence and the output state.
@@ -175,10 +177,14 @@ class ProcessTensor:
             rho_avg += norm_weights[seq] * rho
 
         # Compute Entropies
-        entropy_b = entropy(DensityMatrix(rho_avg), base=base)
+        if np.trace(rho_avg) > 1e-12:
+            entropy_b = entropy(DensityMatrix(rho_avg), base=base)
+        else:
+            entropy_b = 0.0
 
         entropy_b_given_a = 0.0
         for seq in seqs:
-            entropy_b_given_a += norm_weights[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
+            if norm_weights[seq] > 1e-12 and np.trace(rhos[seq]) > 1e-12:
+                entropy_b_given_a += norm_weights[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
 
         return entropy_b - entropy_b_given_a

@@ -93,8 +93,8 @@ def test_to_choi_matrix() -> None:
 def test_predict_final_state_error() -> None:
     """Test error handling in prediction."""
     pt = ProcessTensor(np.zeros((4, 4), dtype=complex), np.ones(4), [0.1])
-    with pytest.raises(ValueError, match="Expected 0 interventions, got 1."):
-        pt.predict_final_state(np.eye(2, dtype=complex), [lambda x: x], [])
+    with pytest.raises(ValueError, match="Expected 1 interventions \\(including t=0 prep\\), got 2."):
+        pt.predict_final_state([lambda x: x, lambda x: x], [])
 
 
 def test_qmi_identity() -> None:
