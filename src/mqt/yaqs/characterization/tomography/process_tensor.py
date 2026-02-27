@@ -228,7 +228,7 @@ class ProcessTensor:
             ins = past.T.reshape(dim_p, dim_p)
 
             # rho_{s,s'} = Σ_{p,p'} U_{s,p,s',p'} * ins_{p',p}
-            rho = np.einsum("s p a b, b p -> s a", U4, ins)
+            rho = np.einsum("s p q r, r p -> s q", U4, ins)
             return rho
 
         # Choose the best candidate by checking a small sample of alphas (or all, for k small)
@@ -562,3 +562,127 @@ class ProcessTensor:
             return float(entropy(DensityMatrix(rH), base=base))
 
         return _S(rho_P) + _S(rho_F) - _S(rho_PF)
+
+    def conditional_mutual_information_from_upsilon(
+    self,
+    base: int = 2,
+    A: str = "first",
+    B: str = "final",
+    C: str = "last",
+    normalize: bool = True,
+    check_psd: bool = True,
+) -> float:
+    """Conditional mutual information I(A:B|C) from the reconstructed comb Choi operator Υ.
+
+    We reconstruct the genuine comb Choi operator Υ (dense), normalize it to a state ρ=Υ/Tr(Υ),
+    then compute
+
+        I(A:B|C) = S(AC) + S(BC) - S(C) - S(ABC).
+
+    Default choice corresponds to the “memory beyond last operation” metric:
+        I(first_slot : final | last_slot).
+
+    Subsystem conventions:
+        - The total Hilbert space is ordered as [F, step1, step2, ..., stepk]
+        - dims = [2, 4, 4, ..., 4]
+          where dim(F)=2 and each step leg is dim 4 (because each intervention basis element is a 4x4 Choi matrix).
+
+    Args:
+        base: Log base for entropy (2 => bits).
+        A: Which past register is A: {"first","last"} (extendable).
+        B: Which register is B: currently only {"final"}.
+        C: Which past register is C: {"first","last"} (must be different from A for meaningful use).
+        normalize: If True, normalize Υ to trace 1 before entropies.
+        check_psd: If True, sanity check that Υ is Hermitian PSD up to tolerance.
+
+    Returns:
+        Conditional mutual information I(A:B|C).
+
+    Raises:
+        ValueError: If k<2 or invalid subsystem selections.
+    """
+    # Need at least two intervention legs to define a nontrivial conditioning.
+    k_steps = self.tensor.ndim - 1
+    if k_steps < 2:
+        raise ValueError("Conditional MI requires at least k>=2 intervention legs.")
+
+    # 1) Reconstruct Υ and form density operator ρ
+    Upsilon = self.reconstruct_comb_choi(check=True)
+    Upsilon = 0.5 * (Upsilon + Upsilon.conj().T)
+
+    if check_psd:
+        lam_min = float(np.linalg.eigvalsh(Upsilon).min().real)
+        if lam_min < -1e-9:
+            raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
+
+    if normalize:
+        tr = np.trace(Upsilon)
+        if abs(tr) < 1e-15:
+            return 0.0
+        rho = Upsilon / tr
+    else:
+        rho = Upsilon
+
+    # 2) Define subsystem indices for partial traces.
+    # Order: [F, step1, ..., stepk]
+    dims = [2] + [4] * k_steps
+    idx_final = 0
+    idx_first = 1
+    idx_last = k_steps  # because steps run 1..k
+
+    def _idx(which: str) -> int:
+        if which == "final":
+            return idx_final
+        if which == "first":
+            return idx_first
+        if which == "last":
+            return idx_last
+        raise ValueError(f"Unknown subsystem spec '{which}'. Use 'final', 'first', or 'last'.")
+
+    iA = _idx(A)
+    iB = _idx(B)
+    iC = _idx(C)
+
+    if len({iA, iB, iC}) != 3:
+        raise ValueError("A, B, C must refer to three distinct subsystems.")
+
+    # 3) Partial trace helper
+    def _partial_trace(r: NDArray[np.complex128], dims_: list[int], keep: list[int]) -> NDArray[np.complex128]:
+        keep = sorted(keep)
+        n = len(dims_)
+        if any(i < 0 or i >= n for i in keep):
+            raise ValueError("keep indices out of range")
+
+        reshaped = r.reshape(*dims_, *dims_)
+        trace_out = [i for i in range(n) if i not in keep]
+        perm = keep + trace_out
+        reshaped = reshaped.transpose(*(perm + [i + n for i in perm]))
+
+        dim_keep = int(np.prod([dims_[i] for i in keep])) if keep else 1
+        dim_out = int(np.prod([dims_[i] for i in trace_out])) if trace_out else 1
+        reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
+        return np.einsum("a b c b -> a c", reshaped)
+
+    # 4) Entropy helper (eigenvalues, stable, no qiskit dependency needed here)
+    log_base = np.log(base)
+
+    def _S(r: NDArray[np.complex128]) -> float:
+        rH = 0.5 * (r + r.conj().T)
+        tr = np.trace(rH)
+        if abs(tr) < 1e-15:
+            return 0.0
+        rH = rH / tr
+        evals = np.linalg.eigvalsh(rH).real
+        evals = np.clip(evals, 0.0, 1.0)
+        nz = evals[evals > 1e-15]
+        if nz.size == 0:
+            return 0.0
+        return float(-(nz * (np.log(nz) / log_base)).sum())
+
+    # 5) Compute CMI
+    rho_ABC = rho
+    rho_AC = _partial_trace(rho_ABC, dims, keep=[iA, iC])
+    rho_BC = _partial_trace(rho_ABC, dims, keep=[iB, iC])
+    rho_C = _partial_trace(rho_ABC, dims, keep=[iC])
+
+    return _S(rho_AC) + _S(rho_BC) - _S(rho_C) - _S(rho_ABC)
