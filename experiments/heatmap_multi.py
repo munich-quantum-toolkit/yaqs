@@ -23,9 +23,9 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
     # To get exact results matching Mathematica, we use TJM with max_bond_dim=4
     # which is exact for L=2. Here we keep it max_bond_dim=4.
     dt = 0.5
-    ntraj = 1
+    ntraj = 10
     sim_params = AnalogSimParams(
-        dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, solver="MCWF", show_progress=True
+        dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, solver="MCWF", show_progress=False
     )
 
     noise_model = NoiseModel([
@@ -33,8 +33,8 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
     ])
 
     # ----- scan settings -----
-    T1_max = 2.0
-    T2_max = 2.0
+    T1_max = 10.0
+    T2_max = 10.0
     
     # We use step=0.2 for a 51x51 resolution. Change to 0.1 for 101x101 (exact match to Mathematica notebook).
     # Setting to 0.5 as in the original provided file to keep test relatively fast.
@@ -94,7 +94,7 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
                 noise_model=noise_model,
             )
 
-            chi = pt.quantum_mutual_information(base=base)
+            chi = pt.conditional_mutual_information_from_upsilon(base=np.e, A="first", B="final", C="last")
             chi_map[i, j] = chi
             done[i, j] = True
 
@@ -109,9 +109,9 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
 
 
 def main() -> None:
-    gammas = [0, 0.01, 0.1]
+    gammas = [0, 0.1]
     system_sizes = [2, 3, 4]
-    
+
     # 1) Run simulations and gather data
     results = {}
     for gamma in gammas:
@@ -164,9 +164,9 @@ def main() -> None:
                     im = ax.imshow(
                         plot_data,
                         origin="lower",
-                        aspect="auto",
+                        #aspect="auto",
                         extent=[t2_grid[0], t2_grid[-1], t1_grid[0], t1_grid[-1]],
-                        interpolation="none",
+                        #interpolation="none",
                         vmin=global_min,
                         vmax=global_max
                     )

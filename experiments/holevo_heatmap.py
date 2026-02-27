@@ -25,15 +25,15 @@ def main() -> None:
     # To get exact results matching Mathematica, we use TJM with max_bond_dim=4
     # which is exact for L=2.
     dt = 0.5
-    ntraj = 10
+    ntraj = 1
     sim_params = AnalogSimParams(dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, get_state=True, solver="MCWF", show_progress=False)
-    gamma = 0.1
+    gamma = 0
     noise_model = NoiseModel([
         {"name": name, "sites": [i], "strength": gamma} for i in [-1] for name in ["pauli_z"]
     ])
     # ----- scan settings -----
-    T1_max = 6.0
-    T2_max = 6.0
+    T1_max = 10.0
+    T2_max = 10.0
     
     # We use step=0.2 for a 51x51 resolution. Change to 0.1 for 101x101 (exact match to Mathematica notebook, but slower).
     step1 = 0.5
@@ -91,10 +91,10 @@ def main() -> None:
                 timesteps=timesteps,
                 num_trajectories=ntraj,
                 noise_model=noise_model,
-                measurement_bases=["Z"],
             )
 
-            chi = pt.holevo_information_conditional(fixed_step=fixed_step, fixed_idx=fixed_idx, base=base)
+            chi = pt.conditional_mutual_information_from_upsilon(base=np.e, A="first", B="final", C="last")
+            # chi = pt.comb_qmi_from_upsilon(base=base)
             chi_map[i, j] = chi
             done[i, j] = True
 
