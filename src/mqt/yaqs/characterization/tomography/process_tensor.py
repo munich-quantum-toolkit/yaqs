@@ -143,58 +143,230 @@ class ProcessTensor:
 
         return result_tensor.reshape(2, 2)
 
-    def quantum_mutual_information(self, base: int = 2) -> float:
-        """Calculate the Quantum Mutual Information between the input sequence and the output state.
-
-        I(A:B) = S(B) - sum_a p(a) S(B|a)
-        where A is the sequence distribution, B is the output state.
-
-        Args:
-            base: Logarithm base for entropy calculation (default 2 for bits).
+    def reconstruct_comb_choi(
+        self,
+        check: bool = True,
+        atol: float = 1e-8,
+    ) -> NDArray[np.complex128]:
+        """Reconstruct the *actual* comb Choi operator Υ from tomography data.
 
         Returns:
-            float: The Quantum Mutual Information.
+            Υ as a dense matrix of shape (2*4^k, 2*4^k), i.e. on H_F ⊗ (⊗_{t=1}^k H_{choi,t},
+            where dim(H_F)=2 and each dim(H_{choi,t})=4 (a two-qubit Choi leg flattened as a Hilbert space).
 
-        Raises:
-            ValueError: If the output dimension is not 4.
+        Notes:
+            - Uses the stored primal basis `choi_basis` and duals `choi_duals`.
+            - Automatically selects the correct transpose/conjugation convention by validating that
+              contracting Υ with the primal basis reproduces the stored outputs.
         """
-        out_dim = self.tensor.shape[0]
-        if out_dim != 4:
-            msg = f"Expected output dimension 4, got {out_dim}."
-            raise ValueError(msg)
+        if self.choi_basis is None or len(self.choi_basis) != 16:
+            raise ValueError("Need `self.choi_basis` of length 16 to reconstruct Υ.")
+        if self.choi_duals is None or len(self.choi_duals) != 16:
+            raise ValueError("Need `self.choi_duals` of length 16 to reconstruct Υ.")
+        if self.tensor.shape[0] != 4:
+            raise ValueError(f"Expected tensor[0] dim 4 (vec of 2x2 output), got {self.tensor.shape[0]}.")
 
-        steps_k = self.tensor.ndim - 1
-        if steps_k == 0:
-            return 0.0
+        k = self.tensor.ndim - 1
+        if k == 0:
+            # Single output state only; comb is just that state on the final leg.
+            rho = self.tensor.reshape(2, 2)
+            return rho
 
-        states_n = self.tensor.shape[1]
-        seqs = list(itertools.product(range(states_n), repeat=steps_k))
+        # Helper: vec <-> mat for final output
+        def v2rho(v: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            return v.reshape(2, 2)
 
-        # Build ensemble and average output
-        rhos = {}
-        rho_avg = np.zeros((2, 2), dtype=np.complex128)
+        # Candidate transforms applied to the duals in the reconstruction
+        # (we'll choose the one that makes the forward prediction match stored outputs)
+        def _T_id(x): return x
+        def _T_T(x): return x.T
+        def _T_conj(x): return x.conj()
+        def _T_dag(x): return x.conj().T
 
-        # Normalize weights if they are provided
-        total_weight = np.sum(self.weights)
-        norm_weights = self.weights / total_weight if total_weight > 0 else np.ones_like(self.weights) / len(seqs)
+        candidates = {
+            "id": _T_id,
+            "T": _T_T,
+            "conj": _T_conj,
+            "dag": _T_dag,
+        }
 
-        for seq in seqs:
-            vec = self.tensor[(slice(None), *seq)]
-            rho = _vec_to_rho(vec)
-            rhos[seq] = rho
-            rho_avg += norm_weights[seq] * rho
+        # Build Υ given a transform on duals
+        def build_upsilon(dual_transform) -> NDArray[np.complex128]:
+            # Υ lives on H_F (dim 2) ⊗ ⊗_{t=1}^k H_choi,t (dim 4 each)
+            dim = (2 * (4**k))
+            U = np.zeros((dim, dim), dtype=np.complex128)
 
-        # Compute Entropies
-        entropy_b = entropy(DensityMatrix(rho_avg), base=base) if np.trace(rho_avg) > 1e-12 else 0.0
+            # Enumerate all alpha tuples (16^k)
+            for alphas in itertools.product(range(16), repeat=k):
+                rho_out = v2rho(self.tensor[(slice(None), *alphas)])
 
-        entropy_b_given_a = 0.0
-        for seq in seqs:
-            if norm_weights[seq] > 1e-12 and np.trace(rhos[seq]) > 1e-12:
-                entropy_b_given_a += norm_weights[seq] * entropy(DensityMatrix(rhos[seq]), base=base)
+                # Past operator on ⊗_t H_choi,t, each factor is 4x4
+                past = dual_transform(self.choi_duals[alphas[0]])
+                for a in alphas[1:]:
+                    past = np.kron(past, dual_transform(self.choi_duals[a]))
 
-        return entropy_b - entropy_b_given_a
+                # Υ = Σ ρ_out ⊗ past
+                U += np.kron(rho_out, past)
 
-    def comb_quantum_mutual_information(
+            return U
+
+        # Forward contraction: given Υ, recover rho_out(alpha) by contracting with primal basis
+        # We test: rho_pred(alpha) = Tr_past[ (I ⊗ (⊗_t B_alpha_t^†)) Υ ]    (or without dag depending on convention)
+        # Rather than overcomplicate, we test multiple simple variants consistent with our dual choice.
+        def predict_from_upsilon(U: NDArray[np.complex128], alphas: tuple[int, ...]) -> NDArray[np.complex128]:
+            past = self.choi_basis[alphas[0]]
+            for a in alphas[1:]:
+                past = np.kron(past, self.choi_basis[a])
+
+            # reshape Υ as blocks: (2 x 4^k) by (2 x 4^k)
+            # Take partial trace over past with an operator insertion.
+            # Implement: rho = Tr_past[ Υ (I ⊗ past^T) ]  -- this matches common Choi/link conventions.
+            dim_p = 4**k
+            U4 = U.reshape(2, dim_p, 2, dim_p)  # indices: s, p, s', p'
+
+            # choose insertion = past^T (this is the only remaining convention; dual_transform handles the rest)
+            ins = past.T.reshape(dim_p, dim_p)
+
+            # rho_{s,s'} = Σ_{p,p'} U_{s,p,s',p'} * ins_{p',p}
+            rho = np.einsum("s p s2 p2, p2 p -> s s2", U4, ins)
+            return rho
+
+        # Choose the best candidate by checking a small sample of alphas (or all, for k small)
+        seqs = list(itertools.product(range(16), repeat=k))
+        test_seqs = seqs if (check and len(seqs) <= 256) else (seqs[:64] if check else [])
+
+        best_name = None
+        best_err = np.inf
+        best_U = None
+
+        for name, dual_T in candidates.items():
+            U = build_upsilon(dual_T)
+
+            if check:
+                err = 0.0
+                for alphas in test_seqs:
+                    rho_true = self.tensor[(slice(None), *alphas)].reshape(2, 2)
+                    rho_pred = predict_from_upsilon(U, alphas)
+                    err += np.linalg.norm(rho_true - rho_pred)
+                err /= max(1, len(test_seqs))
+            else:
+                err = 0.0
+
+            if err < best_err:
+                best_err, best_name, best_U = err, name, U
+
+        assert best_U is not None
+
+        if check and best_err > atol:
+            raise ValueError(
+                f"Could not find a consistent Υ reconstruction (best convention={best_name}, "
+                f"mean test error={best_err:.3e} > atol={atol}). "
+                "This usually means a convention mismatch in how basis/duals are defined or how outputs are stored."
+            )
+
+        return best_U
+
+    def comb_qmi_from_upsilon(
+        self,
+        base: int = 2,
+        past: str = "all",
+        normalize: bool = True,
+        check_psd: bool = True,
+    ) -> float:
+        """Quantum mutual information from the reconstructed comb Choi operator Υ.
+
+        We reconstruct the genuine comb Choi operator Υ (dense), normalize it to a state ρ=Υ/Tr(Υ),
+        then compute I(P:F)=S(ρ_P)+S(ρ_F)-S(ρ).
+
+        Partition convention:
+            - F is the final system output leg (dim 2)
+            - Each step contributes one Choi-leg Hilbert space of dim 4
+              (because your basis elements are 4x4 Choi matrices).
+
+        Args:
+            base: log base for entropy (2 => bits).
+            past: "all", "last", "first" (which Choi legs are included in P).
+            normalize: normalize Υ to trace 1 before entropies.
+            check_psd: if True, sanity check Υ is Hermitian PSD (up to numerical tolerance).
+
+        Returns:
+            I(P:F) as float.
+        """
+        # 1) reconstruct true comb Choi tensor Υ
+        Upsilon = self.reconstruct_comb_choi(check=True)  # uses your dual/primal consistency
+
+        # 2) Hermitize + (optional) PSD check
+        Upsilon = 0.5 * (Upsilon + Upsilon.conj().T)
+
+        if check_psd:
+            # allow tiny negatives from numerics
+            lam_min = float(np.linalg.eigvalsh(Upsilon).min().real)
+            if lam_min < -1e-9:
+                raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
+
+        # 3) normalize to density operator
+        if normalize:
+            tr = np.trace(Upsilon)
+            if abs(tr) < 1e-15:
+                return 0.0
+            rho = Upsilon / tr
+        else:
+            rho = Upsilon
+
+        # 4) subsystem dims: [F, step1, ..., stepk] = [2, 4, 4, ..., 4]
+        k_steps = self.tensor.ndim - 1  # number of intervention slots (same k)
+        dims = [2] + [4] * k_steps
+
+        # choose which past legs to keep
+        if past == "all":
+            keep_P = list(range(1, k_steps + 1))
+        elif past == "last":
+            keep_P = [k_steps]
+        elif past == "first":
+            keep_P = [1]
+        else:
+            raise ValueError(f"Unknown past='{past}'. Use 'all', 'last', or 'first'.")
+
+        # partial trace helper
+        def _partial_trace(r: NDArray[np.complex128], dims_: list[int], keep: list[int]) -> NDArray[np.complex128]:
+            keep = sorted(keep)
+            n = len(dims_)
+            if any(i < 0 or i >= n for i in keep):
+                raise ValueError("keep indices out of range")
+
+            reshaped = r.reshape(*dims_, *dims_)  # (i0..in-1, j0..jn-1)
+            trace_out = [i for i in range(n) if i not in keep]
+            perm = keep + trace_out
+            reshaped = reshaped.transpose(*(perm + [i + n for i in perm]))
+
+            dim_keep = int(np.prod([dims_[i] for i in keep])) if keep else 1
+            dim_out = int(np.prod([dims_[i] for i in trace_out])) if trace_out else 1
+            reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
+
+            return np.einsum("a b c b -> a c", reshaped)
+
+        rho_F = _partial_trace(rho, dims, keep=[0])
+        rho_P = _partial_trace(rho, dims, keep=keep_P)
+
+        # von Neumann entropy (eigenvalues)
+        log_base = np.log(base)
+
+        def _S(r: NDArray[np.complex128]) -> float:
+            rH = 0.5 * (r + r.conj().T)
+            tr = np.trace(rH)
+            if abs(tr) < 1e-15:
+                return 0.0
+            rH = rH / tr
+            evals = np.linalg.eigvalsh(rH).real
+            evals = np.clip(evals, 0.0, 1.0)
+            nz = evals[evals > 1e-15]
+            if nz.size == 0:
+                return 0.0
+            return float(-(nz * (np.log(nz) / log_base)).sum())
+
+        return _S(rho_P) + _S(rho_F) - _S(rho)
+
+    def quantum_mutual_information(
         self,
         base: int = 2,
         past: str = "all",
