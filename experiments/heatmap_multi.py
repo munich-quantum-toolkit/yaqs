@@ -23,9 +23,9 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
     # To get exact results matching Mathematica, we use TJM with max_bond_dim=4
     # which is exact for L=2. Here we keep it max_bond_dim=4.
     dt = 0.5
-    ntraj = 10
+    ntraj = 1
     sim_params = AnalogSimParams(
-        dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, get_state=True, solver="MCWF", show_progress=False
+        dt=dt, num_traj=ntraj, max_bond_dim=4, order=2, solver="MCWF", show_progress=True
     )
 
     noise_model = NoiseModel([
@@ -33,8 +33,8 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
     ])
 
     # ----- scan settings -----
-    T1_max = 6.0
-    T2_max = 6.0
+    T1_max = 2.0
+    T2_max = 2.0
     
     # We use step=0.2 for a 51x51 resolution. Change to 0.1 for 101x101 (exact match to Mathematica notebook).
     # Setting to 0.5 as in the original provided file to keep test relatively fast.
@@ -92,10 +92,9 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
                 timesteps=timesteps,
                 num_trajectories=ntraj,
                 noise_model=noise_model,
-                measurement_bases=["Z"],
             )
 
-            chi = pt.holevo_information_conditional(fixed_step=fixed_step, fixed_idx=fixed_idx, base=base)
+            chi = pt.quantum_mutual_information(base=base)
             chi_map[i, j] = chi
             done[i, j] = True
 
@@ -110,7 +109,7 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
 
 
 def main() -> None:
-    gammas = [0.001, 0.01, 0.1]
+    gammas = [0, 0.01, 0.1]
     system_sizes = [2, 3, 4]
     
     # 1) Run simulations and gather data
