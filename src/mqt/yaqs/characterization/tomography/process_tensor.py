@@ -228,7 +228,7 @@ class ProcessTensor:
             ins = past.T.reshape(dim_p, dim_p)
 
             # rho_{s,s'} = Σ_{p,p'} U_{s,p,s',p'} * ins_{p',p}
-            rho = np.einsum("s p s2 p2, p2 p -> s s2", U4, ins)
+            rho = np.einsum("s p a b, b p -> s a", U4, ins)
             return rho
 
         # Choose the best candidate by checking a small sample of alphas (or all, for k small)
@@ -543,7 +543,7 @@ class ProcessTensor:
 
             reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
             # trace over dim_out
-            return np.einsum("a b c b -> a c", reshaped)
+            return np.einsum("abcb ->ac", reshaped)
 
         # Reduced states
         rho_PF = Upsilon
