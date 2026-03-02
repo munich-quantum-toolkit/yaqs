@@ -109,7 +109,7 @@ def calculate_holevo_map(num_sites: int, gamma: float) -> tuple[np.ndarray, np.n
 
 
 def main() -> None:
-    gammas = [0, 0.1]
+    gammas = [0, 0.01, 0.1]
     system_sizes = [2, 3, 4]
 
     # 1) Run simulations and gather data
