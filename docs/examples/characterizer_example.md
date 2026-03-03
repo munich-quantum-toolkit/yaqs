@@ -28,7 +28,6 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 )
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z, Create, Destroy
 
-
 if __name__ == "__main__":
     work_dir = "test/scikit_characterizer/"
     work_dir_path = Path(work_dir)

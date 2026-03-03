@@ -22,10 +22,9 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel, NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 from mqt.yaqs.simulator import run
 
