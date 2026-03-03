@@ -188,11 +188,11 @@ class BaseGate:
         Args:
             other: The gate to be added.
 
-        Raises:
-            ValueError: If the gates have different interaction levels.
-
         Returns:
             A new gate representing the sum of the two gates.
+
+        Raises:
+            ValueError: If the gates have different interaction levels.
         """
         if self.interaction != other.interaction:
             msg = "Cannot add gates with different interaction"
@@ -205,11 +205,11 @@ class BaseGate:
         Args:
             other: The gate to be subtracted.
 
-        Raises:
-            ValueError: If the gates have different interaction levels.
-
         Returns:
             A new gate representing the difference between the two gates.
+
+        Raises:
+            ValueError: If the gates have different interaction levels.
         """
         if self.interaction != other.interaction:
             msg = "Cannot subtract gates with different interaction"
@@ -222,11 +222,11 @@ class BaseGate:
         Args:
             other: The gate or scalar to multiply.
 
-        Raises:
-            ValueError: If the gates have different interaction levels (when multiplying two gates).
-
         Returns:
             A new gate representing the product of the two gates or the scaled gate.
+
+        Raises:
+            ValueError: If the gates have different interaction levels (when multiplying two gates).
         """
         if isinstance(other, BaseGate):
             if self.interaction != other.interaction:

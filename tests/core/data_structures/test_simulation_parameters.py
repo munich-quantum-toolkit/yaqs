@@ -75,14 +75,14 @@ def test_analog_simparams_defaults() -> None:
     obs_list = [Observable(X(), 0)]
     params = AnalogSimParams(observables=obs_list)
 
-    assert params.elapsed_time == 0.1
-    assert params.dt == 0.1
+    assert params.elapsed_time == pytest.approx(0.1)
+    assert params.dt == pytest.approx(0.1)
     assert params.sample_timesteps is True
     # times should be np.arange(0, elapsed_time+dt, dt)
     assert np.isclose(params.times[-1], 0.1)
     assert params.num_traj == 1000
     assert params.max_bond_dim == 4096
-    assert params.threshold == 1e-9
+    assert params.threshold == pytest.approx(1e-9)
     assert params.order == 1
 
 
@@ -124,7 +124,7 @@ def test_observable_initialize_without_sample_timesteps() -> None:
     assert obs.trajectories is not None
     assert obs.results.shape == (len(sim_params.times),)
     assert obs.trajectories.shape == (sim_params.num_traj, 1)
-    assert obs.times == 1.0, "If sample_timesteps=False, obs.times should be equal to elapsed_time."
+    assert obs.times == pytest.approx(1.0), "If sample_timesteps=False, obs.times should be equal to elapsed_time."
 
 
 def test_observable_from_string_runtime_cost() -> None:

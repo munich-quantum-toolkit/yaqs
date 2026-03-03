@@ -118,6 +118,11 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         else:
             raise NotImplementedError
 
+    # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
+    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # noqa: SLF001
+    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
+    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
+
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
 
@@ -271,6 +276,9 @@ def digital_tjm(
         else:
             results = np.zeros((len(sim_params.sorted_observables), 1))
 
+    # Instantiate a fresh RNG for this trajectory
+    rng = np.random.default_rng()
+
     col_idx = 0
     canonical_form_lost = False
     while dag.op_nodes():
@@ -293,7 +301,7 @@ def digital_tjm(
                 else:
                     local_noise_model = create_local_noise_model(noise_model, first_site, last_site)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params)
+                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
                 dag.remove_op_node(node)
 

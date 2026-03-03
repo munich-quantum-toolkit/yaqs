@@ -24,6 +24,7 @@ import numpy as np
 from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
+from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import local_dynamic_tdvp
 
@@ -35,7 +36,9 @@ if TYPE_CHECKING:
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
-def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSimParams) -> MPS:
+def initialize(
+    state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSimParams, rng: np.random.Generator | None = None
+) -> MPS:
     """Initialize the sampling MPS for second-order Trotterization.
 
     This function prepares the initial sampling MPS (denoted as Phi(0)) by applying a half time step of dissipation
@@ -45,15 +48,27 @@ def initialize(state: MPS, noise_model: NoiseModel | None, sim_params: AnalogSim
         state (MPS): The initial state of the system.
         noise_model (NoiseModel | None): The noise model to apply to the system.
         sim_params (AnalogSimParams): Simulation parameters including the time step (dt).
+        rng: The random number generator to use.
 
     Returns:
         MPS: The initialized sampling MPS Phi(0).
     """
     apply_dissipation(state, noise_model, sim_params.dt / 2, sim_params)
-    return stochastic_process(state, noise_model, sim_params.dt, sim_params)
+    # Check for scheduled jumps at start time
+    current_time = sim_params.times[0]
+    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+        return apply_scheduled_jumps(state, noise_model, current_time, sim_params)
+    return stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
 
 
-def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, sim_params: AnalogSimParams) -> MPS:
+def step_through(
+    state: MPS,
+    hamiltonian: MPO,
+    noise_model: NoiseModel | None,
+    sim_params: AnalogSimParams,
+    current_time: float,
+    rng: np.random.Generator | None = None,
+) -> MPS:
     """Perform a single time step evolution of the system state using the TJM.
 
     Corresponding to Fj in the TJM paper, this function evolves the state by applying dynamic TDVP,
@@ -64,6 +79,8 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
         hamiltonian (MPO): The Hamiltonian operator for the system.
         noise_model (NoiseModel | None): The noise model to apply to the system.
         sim_params (AnalogSimParams): Simulation parameters including the time step and measurement settings.
+        current_time (float): The current simulation time.
+        rng: The random number generator to use.
 
     Returns:
         MPS: The updated state after one time step evolution.
@@ -73,7 +90,10 @@ def step_through(state: MPS, hamiltonian: MPO, noise_model: NoiseModel | None, s
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt, sim_params)
-    return stochastic_process(state, noise_model, sim_params.dt, sim_params)
+
+    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+        return apply_scheduled_jumps(state, noise_model, current_time, sim_params)
+    return stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
 
 
 def sample(
@@ -83,6 +103,7 @@ def sample(
     sim_params: AnalogSimParams,
     results: NDArray[np.float64],
     j: int,
+    rng: np.random.Generator | None = None,
 ) -> None:
     """Sample the quantum state and record observable measurements from the sampling MPS.
 
@@ -97,8 +118,7 @@ def sample(
         sim_params (AnalogSimParams): Simulation parameters including time step and measurement settings.
         results (NDArray[np.float64]): An array to store the measured observable values.
         j (int): The time step or shot index at which the measurement is recorded.
-
-
+        rng: The random number generator to use.
     """
     psi = copy.deepcopy(phi)
     if sim_params.evolution_mode == EvolutionMode.TDVP:
@@ -106,7 +126,12 @@ def sample(
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2, sim_params)
-    psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params)
+
+    current_time = sim_params.times[j]
+    if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+        psi = apply_scheduled_jumps(psi, noise_model, current_time, sim_params)
+    else:
+        psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params, rng=rng)
     if j == len(sim_params.times) - 1 and sim_params.get_state:
         sim_params.output_state = psi
 
@@ -137,6 +162,9 @@ def analog_tjm_2(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
 
+    # Instantiate a fresh RNG for this trajectory (independent if spawned, or rely on distinct seeds if we passed them)
+    rng = np.random.default_rng()
+
     state = copy.deepcopy(initial_state)
     if sim_params.sample_timesteps:
         results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
@@ -146,14 +174,14 @@ def analog_tjm_2(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
     if sim_params.sample_timesteps:
         state.evaluate_observables(sim_params, results, 0)
 
-    phi = initialize(state, noise_model, sim_params)
+    phi = initialize(state, noise_model, sim_params, rng=rng)
     if sim_params.sample_timesteps:
-        sample(phi, hamiltonian, noise_model, sim_params, results, j=1)
+        sample(phi, hamiltonian, noise_model, sim_params, results, j=1, rng=rng)
 
     for j, _ in enumerate(sim_params.times[2:], start=2):
-        phi = step_through(phi, hamiltonian, noise_model, sim_params)
+        phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
-            sample(phi, hamiltonian, noise_model, sim_params, results, j)
+            sample(phi, hamiltonian, noise_model, sim_params, results, j, rng=rng)
 
     return results
 
@@ -178,6 +206,9 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
 
+    # Instantiate a fresh RNG for this trajectory
+    rng = np.random.default_rng()
+
     state = copy.deepcopy(initial_state)
 
     if sim_params.sample_timesteps:
@@ -192,7 +223,11 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
         local_dynamic_tdvp(state, hamiltonian, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt, sim_params)
-            state = stochastic_process(state, noise_model, sim_params.dt, sim_params)
+            current_time = sim_params.times[j]
+            if has_scheduled_jump(noise_model, current_time, sim_params.dt):
+                state = apply_scheduled_jumps(state, noise_model, current_time, sim_params)
+            else:
+                state = stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
 
         if sim_params.sample_timesteps:
             state.evaluate_observables(sim_params, results, j)

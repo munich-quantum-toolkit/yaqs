@@ -12,11 +12,11 @@ permissions:
 jobs:
   build-sdist:
     name: 🐍 Packaging
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-sdist.yml@d6314c45667c131055a0389afc110e8dedc6da3f # v1.17.11
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-sdist.yml@c54be38945ae206affae9925ecd9c346f54c71b7 # v1.17.12
 
   build-wheel:
     name: 🐍 Packaging
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-wheel-build.yml@d6314c45667c131055a0389afc110e8dedc6da3f # v1.17.11
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-wheel-build.yml@c54be38945ae206affae9925ecd9c346f54c71b7 # v1.17.12
 
   # Downloads the previously generated artifacts and deploys to PyPI on published releases.
   deploy:
@@ -28,13 +28,13 @@ jobs:
       url: https://pypi.org/p/mqt.yaqs
     needs: [build-sdist, build-wheel]
     steps:
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           pattern: cibw-*
           path: dist
           merge-multiple: true
       - name: Generate artifact attestation for sdist and wheel
-        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
           subject-path: dist/*
       - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
