@@ -358,15 +358,15 @@ class LossClass:
         Args:
             x (np.ndarray): Array of gamma parameters to be set in the simulation.
 
-        Raises:
-            ValueError: If the length of the input array `x` does not match the expected dimensionality `self.d`.
-
         Returns:
             tuple:
                 - f (float): The value of the objective function (sum of squared differences).
                 - grad (np.ndarray): The gradient of the objective function with respect to gamma parameters.
                 - sim_time (float): The time taken to run the simulation (in seconds).
                 - avg_min_max_traj_time (Any): Average, minimum and maximum trajectory running times.
+
+        Raises:
+            ValueError: If the length of the input array `x` does not match the expected dimensionality `self.d`.
         """
         if len(x) != self.d:
             msg = f"Input array must have length {self.d}, got {len(x)}"

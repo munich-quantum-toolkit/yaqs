@@ -22,10 +22,9 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel, NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.noise_model import CompactNoiseModel
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 from mqt.yaqs.simulator import run
 
@@ -82,16 +81,16 @@ def test_compact_noise_model_creation() -> None:
     assert len(model.compact_processes) == 2
     assert model.compact_processes[0]["name"] == "lowering"
     assert model.compact_processes[1]["name"] == "pauli_z"
-    assert model.compact_processes[0]["strength"] == 0.1
-    assert model.compact_processes[1]["strength"] == 0.05
+    assert model.compact_processes[0]["strength"] == pytest.approx(0.1)
+    assert model.compact_processes[1]["strength"] == pytest.approx(0.05)
 
     assert model.expanded_processes[0]["name"] == "lowering"
     assert model.expanded_processes[1]["name"] == "lowering"
     assert model.expanded_processes[2]["name"] == "pauli_z"
 
-    assert model.expanded_processes[0]["strength"] == 0.1
-    assert model.expanded_processes[1]["strength"] == 0.1
-    assert model.expanded_processes[2]["strength"] == 0.05
+    assert model.expanded_processes[0]["strength"] == pytest.approx(0.1)
+    assert model.expanded_processes[1]["strength"] == pytest.approx(0.1)
+    assert model.expanded_processes[2]["strength"] == pytest.approx(0.05)
 
     assert model.expanded_processes[0]["sites"] == [0]
     assert model.expanded_processes[1]["sites"] == [1]

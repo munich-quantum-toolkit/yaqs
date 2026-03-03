@@ -20,27 +20,46 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
-import torch
-from botorch.acquisition import (
-    LogExpectedImprovement,
-    ProbabilityOfImprovement,
-    UpperConfidenceBound,
-)
-from botorch.models import SingleTaskGP
 
-from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import (
-    bayesian_opt,
-    get_acquisition_function,
-)
+try:
+    import torch
+    from botorch.acquisition import (
+        LogExpectedImprovement,
+        ProbabilityOfImprovement,
+        UpperConfidenceBound,
+    )
+    from botorch.models import SingleTaskGP
 
-# Suppress botorch warnings:
-# - Deprecation warnings related to numpy 2.0 compatibility
-# - InputDataWarning about float32 (we intentionally test with float32)
-# These are external library warnings, not issues with our code
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::DeprecationWarning:botorch.*",
-    "ignore:The model inputs are of type torch.float32.*:UserWarning",  # InputDataWarning about float32
-)
+    from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import (
+        bayesian_opt,
+        get_acquisition_function,
+    )
+
+    TORCH_AVAILABLE = True
+    TORCH_IMPORT_ERROR = ""
+except ImportError as e:
+    TORCH_AVAILABLE = False
+    TORCH_IMPORT_ERROR = str(e)
+    # Create dummy imports to avoid NameError
+    torch = None  # type: ignore[assignment]
+    LogExpectedImprovement = None  # type: ignore[assignment]
+    ProbabilityOfImprovement = None  # type: ignore[assignment]
+    UpperConfidenceBound = None  # type: ignore[assignment]
+    SingleTaskGP = None  # type: ignore[assignment]
+    bayesian_opt = None  # type: ignore[assignment]
+    get_acquisition_function = None  # type: ignore[assignment]
+
+# Skip all tests if torch is not available
+pytestmark = [
+    pytest.mark.skipif(
+        not TORCH_AVAILABLE,
+        reason=f"torch/botorch not available: {TORCH_IMPORT_ERROR}",
+    ),
+    pytest.mark.filterwarnings(
+        "ignore::DeprecationWarning:botorch.*",
+        "ignore:The model inputs are of type torch.float32.*:UserWarning",  # InputDataWarning about float32
+    ),
+]
 
 if TYPE_CHECKING:
     from collections.abc import Callable

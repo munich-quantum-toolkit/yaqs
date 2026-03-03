@@ -30,13 +30,19 @@ from botorch.optim import optimize_acqf
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 if TYPE_CHECKING:
+    from botorch.acquisition import (
+        AcquisitionFunction,
+    )
+
     from mqt.yaqs.noise_char.loss import LossClass
 # --------------------------------------------
 # Select acquisition function
 # --------------------------------------------
 
 
-def get_acquisition_function(name: str, model: SingleTaskGP, best_f: float | None = None, beta: float = 2.0) -> object:
+def get_acquisition_function(
+    name: str, model: SingleTaskGP, best_f: float | None = None, beta: float = 2.0
+) -> AcquisitionFunction:
     """Get an acquisition function for Bayesian optimization.
 
     Parameters
@@ -58,11 +64,11 @@ def get_acquisition_function(name: str, model: SingleTaskGP, best_f: float | Non
 
     Returns:
     -------
-    object
+    AcquisitionFunction
         An acquisition function object of the specified type.
 
     Raises:
-        ValueError: If the acquisition function name is not recognized.
+        ValueError: If the acquisition function name is not recognized or if best_f is None when required.
 
     Examples:
     --------
@@ -71,8 +77,14 @@ def get_acquisition_function(name: str, model: SingleTaskGP, best_f: float | Non
     """
     name = name.upper()
     if name == "LEI":
+        if best_f is None:
+            msg = "best_f is required for LogExpectedImprovement"
+            raise ValueError(msg)
         return LogExpectedImprovement(model=model, best_f=best_f, maximize=True)
     if name == "PI":
+        if best_f is None:
+            msg = "best_f is required for ProbabilityOfImprovement"
+            raise ValueError(msg)
         return ProbabilityOfImprovement(model=model, best_f=best_f, maximize=True)
     if name == "UCB":
         return UpperConfidenceBound(model=model, beta=beta)
@@ -180,7 +192,8 @@ def bayesian_opt(
         mll = ExactMarginalLogLikelihood(model.likelihood, model)
         fit_gpytorch_mll(mll)
 
-        best_f = y_train.max()
+        best_f_tensor = y_train.max()
+        best_f = float(best_f_tensor.item())
         acq_func = get_acquisition_function(acq_name, model, best_f=best_f, beta=beta)
 
         new_x_unit, _ = optimize_acqf(

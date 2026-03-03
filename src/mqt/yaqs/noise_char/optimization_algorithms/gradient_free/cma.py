@@ -76,7 +76,7 @@ def cma_opt(
     x_up = np.array(x_up, dtype=float)
 
     # CMA-ES configuration
-    es = cma.CMAEvolutionStrategy(
+    es = cma.CMAEvolutionStrategy(  # type: ignore[possibly-missing-attribute]
         x0,
         sigma0,
         {
