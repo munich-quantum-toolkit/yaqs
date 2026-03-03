@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-from .process_tensor import ProcessTensor
+from .process_tensor import ProcessTensor, canonicalize_upsilon
 
 
 def get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
@@ -212,18 +212,20 @@ def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]
     return 0.5 * (eye + expectations["x"] * x_matrix + expectations["y"] * y_matrix + expectations["z"] * z_matrix)
 
 
-def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np.complex128]], float]:
+def _tomography_sequence_worker(
+    job_idx: int,
+) -> tuple[int, int, tuple[int, ...], NDArray[np.complex128], float]:
     """Worker function for a single tomography sequence.
 
     Args:
-        job_idx: Flat index mapping to (seq_idx, traj_idx).
+        job_idx: Flat index mapping to (seq_idx/s_idx, traj_idx).
 
     Returns:
-        tuple[int, int, list[NDArray[np.complex128]], float]: (seq_idx, traj_idx, [final_rho], prob weight)
+        tuple[int, int, tuple, NDArray, float]: (s_idx, traj_idx, alpha_seq, rho_final, sequence_weight)
     """
     # 1. Decode job
     num_trajectories = WORKER_CTX["num_trajectories"]
-    seq_idx = job_idx // num_trajectories
+    s_idx = job_idx // num_trajectories
     traj_idx = job_idx % num_trajectories
 
     # 2. Get segment parameters
@@ -232,10 +234,22 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
     timesteps = WORKER_CTX["timesteps"]
     basis_set = WORKER_CTX["basis_set"]
     choi_indices = WORKER_CTX["choi_indices"]
-    worker_sequences = WORKER_CTX["worker_sequences"]
+    worker_sequences = WORKER_CTX.get("worker_sequences")
+    sampled_sequences = WORKER_CTX.get("sampled_sequences")
     noise_model = WORKER_CTX["noise_model"]
 
-    alpha_seq = worker_sequences[seq_idx]
+    if sampled_sequences is not None:
+        alpha_seq = sampled_sequences[s_idx]
+    else:
+        assert worker_sequences is not None
+        alpha_seq = worker_sequences[s_idx]
+
+    # Determinism guard: when no noise, traj_idx must be 0 and results must be identical
+    if noise_model is None:
+        assert num_trajectories == 1, (
+            f"Expected num_trajectories=1 when noise_model is None, got {num_trajectories}. "
+            "Setting num_trajectories=1 in run/run_mc_upsilon ensures deterministic evolution."
+        )
 
     # 3. Initialize state to |0...0>
     is_mcwf = sim_params.solver == "MCWF"
@@ -318,8 +332,8 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
             assert step_params.output_state is not None
             current_state = cast("MPS", step_params.output_state)
 
-    sequence_results = [_get_rho_site_zero(current_state)]
-    return (seq_idx, traj_idx, sequence_results, sequence_weight)
+    rho_final = _get_rho_site_zero(current_state)
+    return (s_idx, traj_idx, tuple(alpha_seq), rho_final, sequence_weight)
 
 
 def run(
@@ -420,8 +434,7 @@ def run(
         desc="Simulating Tomography Sequences",
     )
 
-    for _job_idx, (worker_seq_idx, _traj_idx, sequence_rhos, sequence_weight) in results_iterator:
-        rho_final = sequence_rhos[0]
+    for _job_idx, (worker_seq_idx, _traj_idx, _alpha, rho_final, sequence_weight) in results_iterator:
         aggregated_outputs[worker_seq_idx] += rho_final * sequence_weight
         aggregated_weights[worker_seq_idx] += sequence_weight
 
@@ -454,3 +467,158 @@ def run(
         choi_indices=choi_indices,
         choi_basis=choi_basis,
     )
+
+
+def _apply_dual_transform(D: NDArray[np.complex128], transform: str) -> NDArray[np.complex128]:
+    """Apply a transformation to a dual matrix."""
+    if transform == "id":
+        return D
+    if transform == "T":
+        return D.T
+    if transform == "conj":
+        return D.conj()
+    if transform == "dag":
+        return D.conj().T
+    raise ValueError(f"Invalid dual_transform: {transform}. Must be one of {{'id', 'T', 'conj', 'dag'}}.")
+
+
+def run_mc_upsilon(
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    timesteps: list[float] | None = None,
+    num_sequences: int = 256,
+    num_trajectories: int = 100,
+    noise_model: NoiseModel | None = None,
+    seed: int | None = None,
+    dual_transform: str = "id",
+    replace: bool = True,
+) -> tuple[NDArray[np.complex128], dict]:
+    """Run Monte Carlo Process Tomography (Phase A: Uniform Sampling).
+
+    Accumulates the Upsilon matrix directly by sampling intervention sequences.
+
+    Args:
+        operator: System evolution MPO.
+        sim_params: Simulation parameters.
+        timesteps: List of time durations for each evolution segment.
+        num_sequences: Number of Monte Carlo sequence samples.
+        num_trajectories: Number of trajectories to average per sequence (unravelling).
+        noise_model: Noise model to apply.
+        seed: Random seed for sampling.
+        dual_transform: Transformation to apply to dual matrices (one of {"id", "T", "conj", "dag"}).
+        replace: Whether to sample sequences with replacement.
+
+    Returns:
+        tuple containing:
+        - Upsilon_hat: Reconstructed Upsilon matrix (2*4^k, 2*4^k).
+        - meta: Dictionary containing simulation metadata.
+    """
+    if timesteps is None:
+        timesteps = [sim_params.elapsed_time]
+
+    k = len(timesteps)
+    rng = np.random.default_rng(seed)
+
+    # 1. Prepare Basis and Duals
+    basis_set = get_basis_states()
+    choi_basis, choi_indices = get_choi_basis()
+    duals = calculate_dual_choi_basis(choi_basis)
+
+    # 2. Sample Sequences
+    if replace:
+        # Sample with replacement
+        sampled_sequences = [tuple(rng.integers(0, 16, size=k).tolist()) for _ in range(num_sequences)]
+        inv_q = 16**k
+    else:
+        # Unique sampling
+        total_possible = 16**k
+        if num_sequences > total_possible:
+            num_sequences = total_possible
+
+        sampled_indices = rng.choice(total_possible, size=num_sequences, replace=False)
+
+        # Convert indices to tuples
+        sampled_sequences = []
+        for idx in sampled_indices:
+            seq = [0] * k
+            temp_idx = idx
+            for i in range(k - 1, -1, -1):
+                seq[i] = int(temp_idx % 16)
+                temp_idx //= 16
+            sampled_sequences.append(tuple(seq))
+        inv_q = 16**k
+
+    # 3. Prepare Simulation Context
+    if noise_model is None:
+        noise_model = sim_params.noise_model
+
+    if noise_model is None:
+        num_trajectories = 1
+
+    mcwf_static_ctx = None
+    if sim_params.solver == "MCWF":
+        dummy_mps = MPS(length=operator.length, state="zeros")
+        mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
+
+    payload = {
+        "operator": operator,
+        "sim_params": sim_params,
+        "timesteps": timesteps,
+        "basis_set": basis_set,
+        "choi_indices": choi_indices,
+        "sampled_sequences": sampled_sequences,
+        "noise_model": noise_model,
+        "num_trajectories": num_trajectories,
+        "mcwf_static_ctx": mcwf_static_ctx,
+    }
+
+    # 4. Parallel Execution
+    total_jobs = num_sequences * num_trajectories
+    max_workers = max(1, available_cpus() - 1)
+
+    avg_rho_weighted = np.zeros((num_sequences, 2, 2), dtype=np.complex128)
+
+    results_iterator = run_backend_parallel(
+        worker_fn=_tomography_sequence_worker,
+        payload=payload,
+        n_jobs=total_jobs,
+        max_workers=max_workers,
+        show_progress=sim_params.show_progress,
+        desc=f"Simulating {num_sequences} MC Sequences",
+    )
+
+    for _job_idx, (s_idx, _traj_idx, _alpha, rho_final, sequence_weight) in results_iterator:
+        avg_rho_weighted[s_idx] += rho_final * sequence_weight
+
+    avg_rho_weighted /= num_trajectories
+
+    # 5. Build Upsilon
+    dim_p = 4**k
+    upsilon = np.zeros((2 * dim_p, 2 * dim_p), dtype=np.complex128)
+
+    for s_idx, alpha_seq in enumerate(sampled_sequences):
+        # Build past operator: kron(dual[a0], dual[a1], ...)
+        past = _apply_dual_transform(duals[alpha_seq[0]], dual_transform)
+        for a in alpha_seq[1:]:
+            past = np.kron(past, _apply_dual_transform(duals[a], dual_transform))
+
+        rho_w = avg_rho_weighted[s_idx]
+        upsilon += np.kron(rho_w, past) * inv_q
+
+    upsilon /= num_sequences
+
+    # NOTE: This is the raw estimator Υ_hat(N).
+    # It is NOT trace-normalized or PSD-projected. Callers should apply
+    # canonicalize_upsilon(...) as needed for their use case.
+    # For convergence analysis, compare raw outputs against raw Υ_full.
+    # For physical use, canonicalize before computing QMI/CMI.
+    meta = {
+        "k": k,
+        "num_sequences": num_sequences,
+        "num_trajectories": num_trajectories,
+        "dual_transform": dual_transform,
+        "replace": replace,
+        "seed": seed,
+    }
+
+    return upsilon, meta

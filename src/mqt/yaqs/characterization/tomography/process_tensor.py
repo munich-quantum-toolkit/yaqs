@@ -35,9 +35,149 @@ def _vec_to_rho(vec4: NDArray[np.complex128]) -> NDArray[np.complex128]:
     rho = vec4.reshape(2, 2)
     rho = 0.5 * (rho + rho.conj().T)
     tr = np.trace(rho)
-    if abs(tr) > 1e-15:
+    if abs(tr) > 1e-13: # Changed from 1e-15 to 1e-13
         rho /= tr
     return rho
+
+
+def canonicalize_upsilon(
+    U: NDArray[np.complex128],
+    *,
+    hermitize: bool = True,
+    psd_project: bool = False,
+    normalize_trace: bool = True,
+    psd_tol: float = 1e-12,
+) -> NDArray[np.complex128]:
+    """Canonicalize a comb Choi operator so that comparisons are meaningful.
+
+    Steps:
+    - Hermitize
+    - Optional PSD projection
+    - Optional trace normalization
+    """
+    U = U.copy()
+
+    if hermitize:
+        U = 0.5 * (U + U.conj().T)
+
+    if psd_project:
+        w, V = np.linalg.eigh(U)
+        w = np.clip(w, 0.0, None)
+        U = (V * w) @ V.conj().T
+
+    if normalize_trace:
+        tr = np.trace(U)
+        if abs(tr) > 1e-15:
+            U = U / tr
+
+    return U
+
+
+def _partial_trace_dense(r: NDArray[np.complex128], dims_: list[int], keep: list[int]) -> NDArray[np.complex128]:
+    """Compute partial trace of a dense operator."""
+    keep = sorted(keep)
+    n = len(dims_)
+    if any(i < 0 or i >= n for i in keep):
+        raise ValueError("keep indices out of range")
+
+    reshaped = r.reshape(*(dims_ + dims_))  # (i0..in-1, j0..jn-1)
+    trace_out = [i for i in range(n) if i not in keep]
+    perm = keep + trace_out
+    reshaped = reshaped.transpose(*(perm + [i + n for i in perm]))
+
+    dim_keep = int(np.prod([dims_[i] for i in keep])) if keep else 1
+    dim_out = int(np.prod([dims_[i] for i in trace_out])) if trace_out else 1
+    reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
+
+    return np.einsum("a b c b -> a c", reshaped)
+
+
+def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
+    """Compute von Neumann entropy of a dense density matrix."""
+    log_base = np.log(base)
+    rH = 0.5 * (r + r.conj().T)
+    tr = np.trace(rH)
+    if abs(tr) < 1e-15:
+        return 0.0
+    rH = rH / tr
+    evals = np.linalg.eigvalsh(rH).real
+    evals = np.clip(evals, 0.0, 1.0)
+    nz = evals[evals > 1e-15]
+    if nz.size == 0:
+        return 0.0
+    return float(-(nz * (np.log(nz) / log_base)).sum())
+
+
+def comb_qmi_from_upsilon_dense(
+    Upsilon: NDArray[np.complex128],
+    base: int = 2,
+    past: str = "all",
+    check_psd: bool = True,
+) -> float:
+    """Quantum mutual information from a reconstructed dense comb Choi operator Υ."""
+    # 1) Hermitize + (optional) PSD check
+    U = 0.5 * (Upsilon + Upsilon.conj().T)
+    if check_psd:
+        lam_min = float(np.linalg.eigvalsh(U).min().real)
+        if lam_min < -1e-9:
+            raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
+
+    # 2) Normalize
+    tr = np.trace(U)
+    rho = U / tr if abs(tr) > 1e-15 else U
+
+    # 3) dims [F, P1, ..., Pk]
+    size = U.shape[0]
+    # size = 2 * 4^k => log4(size/2) = k
+    k_steps = int(np.round(np.log2(size / 2) / 2))
+    dims = [2] + [4] * k_steps
+
+    if past == "all":
+        keep_P = list(range(1, k_steps + 1))
+    elif past == "last":
+        keep_P = [k_steps]
+    elif past == "first":
+        keep_P = [1]
+    else:
+        raise ValueError(f"Unknown past='{past}'.")
+
+    rho_F = _partial_trace_dense(rho, dims, keep=[0])
+    rho_P = _partial_trace_dense(rho, dims, keep=keep_P)
+
+    return _entropy_dense(rho_P, base) + _entropy_dense(rho_F, base) - _entropy_dense(rho, base)
+
+
+def comb_cmi_from_upsilon_dense(
+    Upsilon: NDArray[np.complex128],
+    base: int = 2,
+    check_psd: bool = True,
+) -> float:
+    """Conditional Mutual Information I(F : P_{<k} | P_k) from dense Upsilon."""
+    U = 0.5 * (Upsilon + Upsilon.conj().T)
+    tr = np.trace(U)
+    rho = U / tr if abs(tr) > 1e-15 else U
+
+    size = U.shape[0]
+    k_steps = int(np.round(np.log2(size / 2) / 2))
+    dims = [2] + [4] * k_steps
+
+    if k_steps < 2:
+        return 0.0
+
+    idx_F = [0]
+    idx_Pk = [k_steps]
+    idx_P_less = list(range(1, k_steps))
+
+    rho_FPk = _partial_trace_dense(rho, dims, keep=idx_F + idx_Pk)
+    rho_P = _partial_trace_dense(rho, dims, keep=idx_P_less + idx_Pk)
+    rho_Pk = _partial_trace_dense(rho, dims, keep=idx_Pk)
+
+    return (
+        _entropy_dense(rho_FPk, base)
+        + _entropy_dense(rho_P, base)
+        - _entropy_dense(rho_Pk, base)
+        - _entropy_dense(rho, base)
+    )
 
 
 class ProcessTensor:
@@ -148,7 +288,8 @@ class ProcessTensor:
         self,
         check: bool = True,
         atol: float = 1e-8,
-    ) -> NDArray[np.complex128]:
+        return_convention: bool = False,
+    ) -> NDArray[np.complex128] | tuple[NDArray[np.complex128], str]:
         """Reconstruct the *actual* comb Choi operator Υ from tomography data.
 
         Returns:
@@ -171,6 +312,8 @@ class ProcessTensor:
         if k == 0:
             # Single output state only; comb is just that state on the final leg.
             rho = self.tensor.reshape(2, 2)
+            if return_convention:
+                return rho, "id"
             return rho
 
         # Helper: vec <-> mat for final output
@@ -262,9 +405,11 @@ class ProcessTensor:
             raise ValueError(
                 f"Could not find a consistent Υ reconstruction (best convention={best_name}, "
                 f"mean test error={best_err:.3e} > atol={atol}). "
-                "This usually means a convention mismatch in how basis/duals are defined or how outputs are stored."
+                "This usually means a convention mismatch in how basis/duals are defined or stored."
             )
 
+        if return_convention:
+            return best_U, best_name
         return best_U
 
     def comb_qmi_from_upsilon(
@@ -293,79 +438,27 @@ class ProcessTensor:
         Returns:
             I(P:F) as float.
         """
-        # 1) reconstruct true comb Choi tensor Υ
-        Upsilon = self.reconstruct_comb_choi(check=True)  # uses your dual/primal consistency
+        Upsilon = self.reconstruct_comb_choi(check=True)
+        return comb_qmi_from_upsilon_dense(Upsilon, base=base, past=past, check_psd=check_psd)
 
-        # 2) Hermitize + (optional) PSD check
-        Upsilon = 0.5 * (Upsilon + Upsilon.conj().T)
+    def comb_cmi_from_upsilon(
+        self,
+        base: int = 2,
+        check_psd: bool = True,
+    ) -> float:
+        """Conditional mutual information from the reconstructed comb Choi operator Υ.
 
-        if check_psd:
-            # allow tiny negatives from numerics
-            lam_min = float(np.linalg.eigvalsh(Upsilon).min().real)
-            if lam_min < -1e-9:
-                raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
+        Computes I(F : P_{<k} | P_k).
 
-        # 3) normalize to density operator
-        if normalize:
-            tr = np.trace(Upsilon)
-            if abs(tr) < 1e-15:
-                return 0.0
-            rho = Upsilon / tr
-        else:
-            rho = Upsilon
+        Args:
+            base: log base for entropy (2 => bits).
+            check_psd: if True, sanity check Υ is Hermitian PSD.
 
-        # 4) subsystem dims: [F, step1, ..., stepk] = [2, 4, 4, ..., 4]
-        k_steps = self.tensor.ndim - 1  # number of intervention slots (same k)
-        dims = [2] + [4] * k_steps
-
-        # choose which past legs to keep
-        if past == "all":
-            keep_P = list(range(1, k_steps + 1))
-        elif past == "last":
-            keep_P = [k_steps]
-        elif past == "first":
-            keep_P = [1]
-        else:
-            raise ValueError(f"Unknown past='{past}'. Use 'all', 'last', or 'first'.")
-
-        # partial trace helper
-        def _partial_trace(r: NDArray[np.complex128], dims_: list[int], keep: list[int]) -> NDArray[np.complex128]:
-            keep = sorted(keep)
-            n = len(dims_)
-            if any(i < 0 or i >= n for i in keep):
-                raise ValueError("keep indices out of range")
-
-            reshaped = r.reshape(*dims_, *dims_)  # (i0..in-1, j0..jn-1)
-            trace_out = [i for i in range(n) if i not in keep]
-            perm = keep + trace_out
-            reshaped = reshaped.transpose(*(perm + [i + n for i in perm]))
-
-            dim_keep = int(np.prod([dims_[i] for i in keep])) if keep else 1
-            dim_out = int(np.prod([dims_[i] for i in trace_out])) if trace_out else 1
-            reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
-
-            return np.einsum("a b c b -> a c", reshaped)
-
-        rho_F = _partial_trace(rho, dims, keep=[0])
-        rho_P = _partial_trace(rho, dims, keep=keep_P)
-
-        # von Neumann entropy (eigenvalues)
-        log_base = np.log(base)
-
-        def _S(r: NDArray[np.complex128]) -> float:
-            rH = 0.5 * (r + r.conj().T)
-            tr = np.trace(rH)
-            if abs(tr) < 1e-15:
-                return 0.0
-            rH = rH / tr
-            evals = np.linalg.eigvalsh(rH).real
-            evals = np.clip(evals, 0.0, 1.0)
-            nz = evals[evals > 1e-15]
-            if nz.size == 0:
-                return 0.0
-            return float(-(nz * (np.log(nz) / log_base)).sum())
-
-        return _S(rho_P) + _S(rho_F) - _S(rho)
+        Returns:
+            I(F : P_{<k} | P_k) as float.
+        """
+        Upsilon = self.reconstruct_comb_choi(check=True)
+        return comb_cmi_from_upsilon_dense(Upsilon, base=base, check_psd=check_psd)
 
     def quantum_mutual_information(
         self,

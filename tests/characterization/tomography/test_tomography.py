@@ -19,7 +19,13 @@ from mqt.yaqs.characterization.tomography.tomography import (
     get_basis_states,
     get_choi_basis,
     run,
+    run_mc_upsilon,
 )
+from mqt.yaqs.characterization.tomography.process_tensor import (
+    ProcessTensor,
+    canonicalize_upsilon,
+)
+from mqt.yaqs.characterization.tomography.metrics import rel_fro_error
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -375,3 +381,31 @@ def test_tomography_with_noise() -> None:
     assert not np.isnan(pt.tensor).any()
     assert pt.weights.shape == (16,)
     assert not np.isnan(pt.weights).any()
+def test_run_mc_upsilon_endpoint_correctness() -> None:
+    """Test that run_mc_upsilon matches run exactly when exhaustive in deterministic mode."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    # Force deterministic TJM
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2, show_progress=False)
+    timesteps = [0.1, 0.2]
+
+    # 1. Exact full enumeration
+    pt_exact = run(op, params, timesteps=timesteps)
+    # Let ProcessTensor decide the best convention
+    u_exact, conv = pt_exact.reconstruct_comb_choi(check=True, return_convention=True)
+    u_exact = canonicalize_upsilon(u_exact, hermitize=True, psd_project=False, normalize_trace=True)
+
+    # 2. MC with replace=False and N=256 (exhaustive for k=2)
+    # We pass the same 'conv' found by exact reconstruction
+    u_mc, _ = run_mc_upsilon(
+        op,
+        params,
+        timesteps=timesteps,
+        num_sequences=256,
+        replace=False,
+        seed=42,
+        dual_transform=conv,
+    )
+    u_mc = canonicalize_upsilon(u_mc, hermitize=True, psd_project=False, normalize_trace=True)
+
+    err = rel_fro_error(u_mc, u_exact)
+    assert err < 1e-10
