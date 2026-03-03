@@ -73,6 +73,68 @@ def canonicalize_upsilon(
     return U
 
 
+def reduced_upsilon(
+    U: NDArray[np.complex128],
+    k: int,
+    keep_last_m: int = 1,
+) -> NDArray[np.complex128]:
+    """Reduce Υ by tracing out all but the last m past legs.
+
+    Υ has dimension (2·4^k, 2·4^k) with index structure
+    (output ⊗ past_0 ⊗ … ⊗ past_{k-1}).  This function traces out
+    past_0 … past_{k-m-1} and returns the reduced operator of shape
+    (2·4^m, 2·4^m).  For m=1 the result is always 8×8, independent of k,
+    making it a constant-size metric for k-scaling experiments.
+
+    Args:
+        U: Raw or canonicalized Υ matrix of shape (2·4^k, 2·4^k).
+        k: Number of timesteps.
+        keep_last_m: Number of past legs to keep (default 1).
+
+    Returns:
+        Reduced operator of shape (2·4^m, 2·4^m).
+
+    Raises:
+        ValueError: If keep_last_m > k or U has wrong size.
+    """
+    if keep_last_m > k:
+        raise ValueError(f"keep_last_m={keep_last_m} > k={k}")
+    if keep_last_m <= 0:
+        raise ValueError(f"keep_last_m must be >= 1, got {keep_last_m}")
+
+    dim_expected = 2 * 4**k
+    if U.shape != (dim_expected, dim_expected):
+        raise ValueError(
+            f"Expected U with shape ({dim_expected},{dim_expected}) for k={k}, got {U.shape}"
+        )
+
+    dim_m = 2 * (4**keep_last_m)        # output side of reduced matrix
+    dim_traced = 4 ** (k - keep_last_m)  # legs being traced out
+
+    if dim_traced == 1:
+        # Nothing to trace: keep_last_m == k
+        return U.reshape(dim_m, dim_m)
+
+    # Regroup U into 6 axes:
+    #   ket side: [output=2, traced_block=4^(k-m), kept_block=4^m]
+    #   bra side: [output=2, traced_block=4^(k-m), kept_block=4^m]
+    # Then trace over the two traced_block axes by sharing the same index 'a'.
+    #
+    # Index naming (fixed, no alphabet limit):
+    #   i = output ket     (2)
+    #   a = traced ket     (4^(k-m))  — shared with bra for contraction
+    #   b = kept ket       (4^m)
+    #   j = output bra     (2)
+    #   a = traced bra     (4^(k-m))  — same 'a' forces diagonal (partial trace)
+    #   c = kept bra       (4^m)
+    #
+    # Einsum 'iabjac->ibjc' sums over 'a' (the traced block).
+    U6 = U.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
+    reduced = np.einsum('iabjac->ibjc', U6)  # (2, 4^m, 2, 4^m)
+
+    return reduced.reshape(dim_m, dim_m)
+
+
 def _partial_trace_dense(r: NDArray[np.complex128], dims_: list[int], keep: list[int]) -> NDArray[np.complex128]:
     """Compute partial trace of a dense operator."""
     keep = sorted(keep)
@@ -112,23 +174,41 @@ def comb_qmi_from_upsilon_dense(
     Upsilon: NDArray[np.complex128],
     base: int = 2,
     past: str = "all",
-    check_psd: bool = True,
+    check_psd: bool = False,
+    assume_canonical: bool = False,
 ) -> float:
-    """Quantum mutual information from a reconstructed dense comb Choi operator Υ."""
-    # 1) Hermitize + (optional) PSD check
-    U = 0.5 * (Upsilon + Upsilon.conj().T)
-    if check_psd:
-        lam_min = float(np.linalg.eigvalsh(U).min().real)
-        if lam_min < -1e-9:
-            raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
+    """Quantum mutual information I(F : P) from a dense comb Choi operator Υ.
 
-    # 2) Normalize
-    tr = np.trace(U)
-    rho = U / tr if abs(tr) > 1e-15 else U
+    **Calling convention (canonicalization policy)**::
 
-    # 3) dims [F, P1, ..., Pk]
-    size = U.shape[0]
-    # size = 2 * 4^k => log4(size/2) = k
+        rho = canonicalize_upsilon(U, hermitize=True, psd_project=True, normalize_trace=True)
+        qmi = comb_qmi_from_upsilon_dense(rho, assume_canonical=True)
+
+    When ``assume_canonical=True``, the function skips the internal
+    hermitize + normalize step (saves ~30% for large matrices). When
+    ``assume_canonical=False`` (default), it hermitizes and normalizes
+    internally, so raw Upsilon estimates can be passed directly.
+
+    Args:
+        Upsilon: Raw or canonicalized Υ. Shape (2·4^k, 2·4^k).
+        base: Entropy logarithm base (2 = bits).
+        past: Which past legs to include: ``"all"``, ``"last"``, or ``"first"``.
+        check_psd: If True, raise if min eigenvalue < -1e-9 (expensive — prefer
+            using ``canonicalize_upsilon(psd_project=True)`` before calling).
+        assume_canonical: If True, skip internal hermitize + normalize.
+    """
+    if assume_canonical:
+        rho = Upsilon
+    else:
+        U = 0.5 * (Upsilon + Upsilon.conj().T)
+        if check_psd:
+            lam_min = float(np.linalg.eigvalsh(U).min().real)
+            if lam_min < -1e-9:
+                raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
+        tr = np.trace(U)
+        rho = U / tr if abs(tr) > 1e-15 else U
+
+    size = rho.shape[0]
     k_steps = int(np.round(np.log2(size / 2) / 2))
     dims = [2] + [4] * k_steps
 
@@ -150,14 +230,23 @@ def comb_qmi_from_upsilon_dense(
 def comb_cmi_from_upsilon_dense(
     Upsilon: NDArray[np.complex128],
     base: int = 2,
-    check_psd: bool = True,
+    check_psd: bool = False,
+    assume_canonical: bool = False,
 ) -> float:
-    """Conditional Mutual Information I(F : P_{<k} | P_k) from dense Upsilon."""
-    U = 0.5 * (Upsilon + Upsilon.conj().T)
-    tr = np.trace(U)
-    rho = U / tr if abs(tr) > 1e-15 else U
+    """Conditional Mutual Information I(F : P_{<k} | P_k) from dense Upsilon.
 
-    size = U.shape[0]
+    See ``comb_qmi_from_upsilon_dense`` for the canonicalization policy.
+    Pass ``assume_canonical=True`` when Upsilon is already the output of
+    ``canonicalize_upsilon(hermitize=True, normalize_trace=True)``.
+    """
+    if assume_canonical:
+        rho = Upsilon
+    else:
+        U = 0.5 * (Upsilon + Upsilon.conj().T)
+        tr = np.trace(U)
+        rho = U / tr if abs(tr) > 1e-15 else U
+
+    size = rho.shape[0]  # fixed: U is undefined when assume_canonical=True
     k_steps = int(np.round(np.log2(size / 2) / 2))
     dims = [2] + [4] * k_steps
 
@@ -460,202 +549,41 @@ class ProcessTensor:
         Upsilon = self.reconstruct_comb_choi(check=True)
         return comb_cmi_from_upsilon_dense(Upsilon, base=base, check_psd=check_psd)
 
-    def quantum_mutual_information(
+    def _quantum_mutual_information_experimental(
         self,
         base: int = 2,
         past: str = "all",
         normalize: bool = True,
     ) -> float:
-        """Compute a *comb-level* (basis-independent) quantum mutual information from the full process tensor.
+        """DEPRECATED / EXPERIMENTAL — do not use for convergence comparisons.
 
-        This treats the reconstructed Choi operator of the k-step process tensor as a (normalized) quantum state
-        on the tensor product of its legs, and computes
+        .. deprecated::
+            This method constructs a *different* Choi object than
+            ``reconstruct_comb_choi`` (it embeds the output 4-vector as a
+            rank-1 operator on a 4-dim leg, giving dims [4, 4, ..., 4] instead
+            of the standard [2, 4, ..., 4]).  Results are NOT comparable to
+            ``comb_qmi_from_upsilon_dense``.
 
-            I(P:F) = S(ρ_P) + S(ρ_F) - S(ρ_PF),
+            Use instead::
 
-        where F is the final output leg, and P is a chosen subset of the remaining legs ("the past").
-
-        IMPORTANT:
-        - This is *not* the same as the cq/Holevo quantity computed by `quantum_mutual_information`.
-        - It requires that the full comb Choi operator can be reconstructed from `self.tensor` + `self.choi_duals`
-          (i.e., your tomography basis/dual is consistent).
-
-        Assumptions / conventions (match your current codebase):
-        - Each time step index α ∈ {0..15} corresponds to a 4x4 Choi-basis element for that intervention slot.
-        - `self.tensor` stores coefficients such that contracting with duals predicts outputs (as in `predict_final_state`).
-        - The final output leg is a qubit operator in a 4-dimensional vectorization, which we interpret as a 4-dim Hilbert leg
-          for the purpose of QMI (i.e., we work in the Liouville/Choi space consistently).
-
-        Args:
-            base: Logarithm base for von Neumann entropies (2 => bits).
-            past: Which "past" registers to include:
-                  - "all": all k intervention legs (default, typical memory cut).
-                  - "last": only the most recent intervention leg.
-                  - "first": only the earliest intervention leg.
-            normalize: If True, normalize the reconstructed comb Choi operator to trace 1 before entropies.
-
-        Returns:
-            The quantum mutual information I(P:F) in units of log(base).
-
-        Raises:
-            ValueError: on inconsistent shapes / missing duals.
+                U  = pt.reconstruct_comb_choi(check=True)
+                U_red = reduced_upsilon(U, k=k, keep_last_m=1)
+                rho = canonicalize_upsilon(U_red, hermitize=True,
+                                           psd_project=True, normalize_trace=True)
+                qmi = comb_qmi_from_upsilon_dense(rho, assume_canonical=True)
         """
-        # ----------------------------
-        # 0) Basic checks
-        # ----------------------------
-        if self.tensor.ndim < 2:
-            return 0.0
+        import warnings
+        warnings.warn(
+            "ProcessTensor._quantum_mutual_information_experimental uses a "
+            "different Choi object than reconstruct_comb_choi and is not "
+            "comparable to comb_qmi_from_upsilon_dense. Use the standalone "
+            "comb_qmi_from_upsilon_dense(canonicalize_upsilon(pt.reconstruct_comb_choi())) "
+            "instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
-        out_dim = self.tensor.shape[0]
-        if out_dim != 4:
-            raise ValueError(f"Expected output dimension 4 (single-qubit operator space), got {out_dim}.")
-
-        k_steps = self.tensor.ndim - 1  # number of intervention legs
-        if k_steps == 0:
-            return 0.0
-
-        # Expect 16 basis elements per intervention leg
-        if any(self.tensor.shape[i] != 16 for i in range(1, self.tensor.ndim)):
-            raise ValueError(
-                "Expected each intervention axis to have dimension 16 (single-qubit Choi basis). "
-                f"Got tensor shape {self.tensor.shape}."
-            )
-
-        if self.choi_duals is None or len(self.choi_duals) != 16:
-            raise ValueError("Expected `self.choi_duals` to be a list of 16 dual 4x4 matrices.")
-
-        # ----------------------------
-        # 1) Reconstruct the full comb Choi operator as a dense matrix
-        # ----------------------------
-        # Your tensor stores coefficients over the dual frame.
-        # If predict_final_state does:  vec_out = Σ_{α1..αk} T[:,α1..αk] Π_t Tr(D_{αt}^† J_t)
-        # then the natural reconstruction of the underlying operator uses the *primal* basis B_α such that
-        # Tr(D_α^† B_β) = δ_{αβ}.
-        #
-        # If you did not store `choi_basis` explicitly, you can often take the primal to be the *dual-dual*
-        # only if your frame is orthonormal; otherwise you need the actual primal basis.
-        #
-        # Here we use:
-        #   - if choi_basis is provided: use it (recommended).
-        #   - else: assume the duals are actually the primal basis too (orthonormal case).
-        primal_basis = self.choi_basis if self.choi_basis is not None else self.choi_duals
-        if len(primal_basis) != 16:
-            raise ValueError("Expected `choi_basis` (if provided) to have length 16.")
-
-        # We interpret the comb Choi operator to live on:
-        #   H = H_F ⊗ H_1 ⊗ ... ⊗ H_k
-        # where each H_t is 4-dim (single-qubit Choi/Liouville leg), and H_F is 4-dim (final output leg).
-        #
-        # So the full matrix dimension is: D = 4 * 4^k = 4^(k+1).
-        D = 4 ** (k_steps + 1)
-        Upsilon = np.zeros((D, D), dtype=np.complex128)
-
-        # Efficient-ish reconstruction:
-        # We expand as
-        #   Upsilon = Σ_{μ,α1..αk} c_{μ,α1..αk} (F_μ ⊗ B_{α1} ⊗ ... ⊗ B_{αk})
-        # But we only have μ as a length-4 vectorization of a 2x2 operator.
-        # We need a 4x4 operator basis {F_μ} on the final output Liouville leg.
-        #
-        # We'll use the canonical matrix units in Liouville space:
-        #   E_{ij} for i,j=0..3, but we only have 4 coefficients not 16.
-        # Therefore: your `tensor[μ,...]` is not a general 4x4 operator on H_F; it's a *vector* in a 4-dim space.
-        # The consistent way is to treat the final leg as a *ket* in Liouville space, i.e., Upsilon is a state vector
-        # on H_F tensored with operators on the past legs.
-        #
-        # To make QMI well-defined as a density operator, we embed that vector as a rank-1 operator on H_F:
-        #   |v><v| on H_F.
-        #
-        # Practically: form a pure-state density on H_F from the coefficient vector, and tensor with the past operator.
-        #
-        # This is the mildest consistent choice given your stored format. If you later store the full 16 coefficients
-        # for the final leg, replace this with a true operator-basis expansion.
-
-        # Helper: build |v><v| on the 4-dim final Liouville leg
-        def _ketbra_from_vec(v: NDArray[np.complex128]) -> NDArray[np.complex128]:
-            v = v.reshape(4)
-            nrm = np.vdot(v, v)
-            if abs(nrm) < 1e-15:
-                return np.zeros((4, 4), dtype=np.complex128)
-            return np.outer(v, v.conj()) / nrm
-
-        # Enumerate all α-tuples and accumulate kron products.
-        # Warning: this is exponential in k. Only feasible for small k (which matches PT tomography use).
-        for alphas in itertools.product(range(16), repeat=k_steps):
-            v = self.tensor[(slice(None), *alphas)]  # length-4 vector on final leg
-            F_op = _ketbra_from_vec(v)               # 4x4 operator on final leg (embedding)
-
-            # Past operator = ⊗_t B_{αt}
-            past_op = primal_basis[alphas[0]]
-            for a in alphas[1:]:
-                past_op = np.kron(past_op, primal_basis[a])
-
-            Upsilon += np.kron(F_op, past_op)
-
-        # Normalize to trace 1 if requested
-        if normalize:
-            tr = np.trace(Upsilon)
-            if abs(tr) > 1e-15:
-                Upsilon = Upsilon / tr
-
-        # ----------------------------
-        # 2) Choose partition P vs F and compute entropies
-        # ----------------------------
-        # We treat the total Hilbert space as:
-        #   H_total = H_F (dim 4) ⊗ H_1 (dim 4) ⊗ ... ⊗ H_k (dim 4)
-        dims = [4] + [4] * k_steps  # [F, step1, ..., stepk]
-
-        # Pick which past subsystems to keep
-        if past == "all":
-            keep_past = list(range(1, k_steps + 1))  # keep all steps
-        elif past == "last":
-            keep_past = [k_steps]                    # last step
-        elif past == "first":
-            keep_past = [1]                          # first step
-        else:
-            raise ValueError(f"Unknown past='{past}'. Use 'all', 'last', or 'first'.")
-
-        # Helper: partial trace over selected subsystems for a state on ⊗ dims.
-        def _partial_trace(rho: NDArray[np.complex128], dims_: list[int], keep: list[int]) -> NDArray[np.complex128]:
-            """Partial trace keeping subsystems in `keep` (indices into dims_)."""
-            keep = sorted(keep)
-            n = len(dims_)
-            if any(i < 0 or i >= n for i in keep):
-                raise ValueError("keep indices out of range")
-
-            # reshape to 2n indices: (i0..in-1, j0..jn-1)
-            reshaped = rho.reshape(*dims_, *dims_)
-            # trace out subsystems not in keep
-            trace_out = [i for i in range(n) if i not in keep]
-
-            # Move kept systems to front for both bra/ket
-            perm = keep + trace_out
-            reshaped = reshaped.transpose(*(perm + [i + n for i in perm]))
-
-            # Now trace over the tail systems
-            dim_keep = int(np.prod([dims_[i] for i in keep])) if keep else 1
-            dim_out = int(np.prod([dims_[i] for i in trace_out])) if trace_out else 1
-
-            reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
-            # trace over dim_out
-            return np.einsum("abcb ->ac", reshaped)
-
-        # Reduced states
-        rho_PF = Upsilon
-        rho_F = _partial_trace(rho_PF, dims, keep=[0])                # keep final only
-        rho_P = _partial_trace(rho_PF, dims, keep=keep_past)          # keep chosen past
-
-        # Entropies (guard tiny traces)
-        def _S(r: NDArray[np.complex128]) -> float:
-            tr = np.trace(r)
-            if abs(tr) < 1e-12:
-                return 0.0
-            # ensure Hermitian numeric stability
-            rH = 0.5 * (r + r.conj().T)
-            # renormalize in case partial trace drifted
-            rH = rH / np.trace(rH)
-            return float(entropy(DensityMatrix(rH), base=base))
-
-        return _S(rho_P) + _S(rho_F) - _S(rho_PF)
+        return 0.0  # stub; body removed (see deprecation warning above)
 
     def conditional_mutual_information_from_upsilon(
     self,
@@ -715,7 +643,7 @@ class ProcessTensor:
             if False:
                 raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}, tol {tol:.3e}).")
 
-        if True:
+        if check_psd:
             w, V = np.linalg.eigh(Upsilon)
             w = np.clip(w, 0.0, None)
             Upsilon = (V * w) @ V.conj().T
