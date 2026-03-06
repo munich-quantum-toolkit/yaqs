@@ -363,6 +363,45 @@ def test_check_if_identity() -> None:
     assert mpo.check_if_identity(fidelity_threshold) is True
 
 
+def test_operator_entanglement_entropy_identity_is_zero() -> None:
+    """Test that identity MPO has vanishing operator entanglement entropy."""
+    mpo = MPO()
+    mpo.init_identity(length=4, physical_dimension=2)
+
+    entropy = mpo.operator_entanglement_entropy(cut=2)
+    schmidt = mpo.schmidt_values(cut=2)
+    probabilities = np.square(schmidt) / np.sum(np.square(schmidt))
+
+    assert entropy == pytest.approx(0.0, abs=1e-12)
+    np.testing.assert_allclose(probabilities, np.array([1.0]))
+
+
+def test_operator_entanglement_entropy_is_finite_and_non_negative() -> None:
+    """Test entropy value is finite and non-negative for a deterministic MPO."""
+    mpo = MPO()
+    mpo.init_ising(length=4, J=1.0, g=0.7)
+
+    entropy = mpo.operator_entanglement_entropy(cut=2)
+
+    assert np.isfinite(entropy)
+    assert entropy >= -1e-12
+
+
+def test_operator_entanglement_center_cut_matches_integer_cut() -> None:
+    """Test center cut shorthand matches the corresponding integer cut."""
+    mpo = MPO()
+    mpo.init_heisenberg(length=6, Jx=1.0, Jy=0.8, Jz=0.6, h=0.3)
+
+    center_cut = mpo.length // 2
+    schmidt_center = mpo.schmidt_values(cut="center")
+    schmidt_integer = mpo.schmidt_values(cut=center_cut)
+    entropy_center = mpo.operator_entanglement_entropy(cut="center")
+    entropy_integer = mpo.operator_entanglement_entropy(cut=center_cut)
+
+    np.testing.assert_allclose(schmidt_center, schmidt_integer, atol=1e-12)
+    assert entropy_center == pytest.approx(entropy_integer, abs=1e-12)
+
+
 ##############################################################################
 # Tests for the MPS class
 ##############################################################################

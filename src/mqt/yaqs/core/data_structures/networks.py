@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import copy
+import math
 import multiprocessing
 from typing import TYPE_CHECKING
 
@@ -976,6 +977,10 @@ class MPO:
         Converts the MPO to a Matrix Product State (MPS).
     to_matrix() -> NDArray[np.complex128]
         Converts the MPO to a full matrix representation.
+    schmidt_values(cut: str | int = "center") -> NDArray[np.float64]
+        Returns the Schmidt singular values across the selected bond cut.
+    operator_entanglement_entropy(cut: str | int = "center", base: float = math.e) -> float
+        Returns the von Neumann entropy from the Schmidt spectrum at the selected cut.
     write_tensor_shapes() -> None
         Writes the shapes of the tensors in the MPO.
     check_if_valid_mpo() -> bool
@@ -1294,6 +1299,107 @@ class MPO:
         ]
 
         return MPS(self.length, converted_tensors)
+
+    @staticmethod
+    def _resolve_cut_index(cut: str | int, length: int) -> int:
+        """Resolve a cut specifier to a valid integer cut index."""
+        if cut == "center":
+            cut_index = length // 2
+        elif isinstance(cut, int):
+            cut_index = cut
+        else:
+            msg = f"cut must be 'center' or int, got {cut!r}"
+            raise ValueError(msg)
+
+        if cut_index < 0 or cut_index > length:
+            msg = f"cut out of range: {cut_index} for length={length}"
+            raise ValueError(msg)
+        return cut_index
+
+    def schmidt_values(self, cut: str | int = "center") -> NDArray[np.float64]:
+        """Compute Schmidt singular values across a bond cut.
+
+        The MPO is interpreted as an MPS by fusing the two physical legs
+        at each site. The resulting MPS is brought to mixed-canonical form
+        around the selected cut before extracting singular values.
+
+        Args:
+            cut: Bond cut location. Use ``"center"`` for the middle cut,
+                or provide an integer in ``[0, length]``.
+
+        Returns:
+            NDArray[np.float64]: Schmidt singular values at the selected cut.
+        """
+        tensors_raw = [np.asarray(tensor, dtype=np.complex128) for tensor in self.tensors]
+        if not tensors_raw:
+            raise ValueError("MPO has no tensors.")
+
+        cut_index = self._resolve_cut_index(cut=cut, length=len(tensors_raw))
+        if cut_index in (0, len(tensors_raw)):
+            return np.array([1.0], dtype=np.float64)
+
+        tensors = [
+            np.reshape(
+                np.transpose(tensor, (2, 0, 1, 3)),
+                (tensor.shape[2], tensor.shape[0] * tensor.shape[1], tensor.shape[3]),
+            )
+            for tensor in tensors_raw
+        ]
+
+        for index in range(cut_index):
+            current = np.asarray(tensors[index], dtype=np.complex128)
+            left_dim, physical_dim, right_dim = (int(dim) for dim in current.shape)
+            mat = np.reshape(current, (left_dim * physical_dim, right_dim))
+            q, r = np.linalg.qr(mat, mode="reduced")
+            rank = int(q.shape[1])
+            tensors[index] = np.reshape(q, (left_dim, physical_dim, rank))
+            tensors[index + 1] = np.tensordot(r, np.asarray(tensors[index + 1], dtype=np.complex128), axes=(1, 0))
+
+        for index in range(len(tensors) - 1, cut_index - 1, -1):
+            current = np.asarray(tensors[index], dtype=np.complex128)
+            left_dim, physical_dim, right_dim = (int(dim) for dim in current.shape)
+            mat = np.reshape(current, (left_dim, physical_dim * right_dim))
+            q_t, r_t = np.linalg.qr(mat.T, mode="reduced")
+            q = q_t.T
+            r = r_t.T
+            rank = int(q.shape[0])
+            tensors[index] = np.reshape(q, (rank, physical_dim, right_dim))
+            if index > 0:
+                tensors[index - 1] = np.tensordot(np.asarray(tensors[index - 1], dtype=np.complex128), r, axes=(2, 0))
+
+        center_left = np.asarray(tensors[cut_index - 1], dtype=np.complex128)
+        left_dim, physical_dim, right_dim = (int(dim) for dim in center_left.shape)
+        schmidt_matrix = np.reshape(center_left, (left_dim * physical_dim, right_dim))
+        svals = np.linalg.svd(schmidt_matrix, compute_uv=False, full_matrices=False)
+        return np.asarray(svals, dtype=np.float64)
+
+    def operator_entanglement_entropy(self, cut: str | int = "center", base: float = math.e) -> float:
+        """Compute operator entanglement entropy for an MPO cut.
+
+        Args:
+            cut: Bond cut location. Use ``"center"`` for the middle cut,
+                or provide an integer in ``[0, length]``.
+            base: Logarithm base for entropy (must be finite, positive, and not 1).
+
+        Returns:
+            float: Von Neumann entropy computed from normalized Schmidt weights.
+        """
+        base_float = float(base)
+        if not np.isfinite(base_float) or base_float <= 0.0 or math.isclose(base_float, 1.0):
+            msg = f"Entropy base must be finite, >0, and !=1; got {base!r}"
+            raise ValueError(msg)
+
+        schmidt_values = self.schmidt_values(cut=cut)
+        probabilities = np.square(schmidt_values)
+        normalization = float(np.sum(probabilities))
+        if not np.isfinite(normalization) or normalization <= 0.0:
+            msg = f"Invalid Schmidt normalization: sum(s^2)={normalization!r}"
+            raise RuntimeError(msg)
+
+        probabilities = probabilities / normalization
+        nonzero = probabilities > 0.0
+        entropy = -np.sum(probabilities[nonzero] * np.log(probabilities[nonzero])) / math.log(base_float)
+        return float(entropy)
 
     def to_matrix(self) -> NDArray[np.complex128]:
         """MPO to matrix conversion.
