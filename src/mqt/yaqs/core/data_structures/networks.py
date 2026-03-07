@@ -1305,7 +1305,7 @@ class MPO:
         """Resolve a cut specifier to a valid integer cut index."""
         if cut == "center":
             cut_index = length // 2
-        elif isinstance(cut, int):
+        elif isinstance(cut, int) and not isinstance(cut, bool):
             cut_index = cut
         else:
             msg = f"cut must be 'center' or int, got {cut!r}"
@@ -1389,17 +1389,22 @@ class MPO:
             msg = f"Entropy base must be finite, >0, and !=1; got {base!r}"
             raise ValueError(msg)
 
-        schmidt_values = self.schmidt_values(cut=cut)
-        probabilities = np.square(schmidt_values)
-        normalization = float(np.sum(probabilities))
+        schmidt_values = np.asarray(self.schmidt_values(cut=cut), dtype=np.float64)
+        max_schmidt = float(np.max(np.abs(schmidt_values)))
+        if not np.isfinite(max_schmidt) or max_schmidt <= 0.0:
+            msg = f"Invalid Schmidt values encountered: max(|s|)={max_schmidt!r}"
+            raise RuntimeError(msg)
+
+        probabilities = np.square(schmidt_values / max_schmidt)
+        normalization = float(np.sum(probabilities, dtype=np.float64))
         if not np.isfinite(normalization) or normalization <= 0.0:
             msg = f"Invalid Schmidt normalization: sum(s^2)={normalization!r}"
             raise RuntimeError(msg)
 
         probabilities = probabilities / normalization
-        nonzero = probabilities > 0.0
-        entropy = -np.sum(probabilities[nonzero] * np.log(probabilities[nonzero])) / math.log(base_float)
-        return float(entropy)
+        nonzero = probabilities > np.finfo(np.float64).tiny
+        entropy = -np.sum(probabilities[nonzero] * np.log(probabilities[nonzero]), dtype=np.float64) / math.log(base_float)
+        return float(max(entropy, 0.0))
 
     def to_matrix(self) -> NDArray[np.complex128]:
         """MPO to matrix conversion.

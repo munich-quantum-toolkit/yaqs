@@ -94,6 +94,22 @@ def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) ->
     return mps
 
 
+def dense_operator_schmidt_values(mpo: MPO, cut: int) -> NDArray[np.float64]:
+    """Compute Schmidt values from dense contraction for a given MPO cut."""
+    mps = mpo.to_mps()
+
+    state = mps.tensors[0][:, 0, :]
+    for tensor in mps.tensors[1:]:
+        state = np.tensordot(state, tensor, axes=([-1], [1]))
+
+    state = np.squeeze(state, axis=-1)
+    left_dim = int(np.prod(state.shape[:cut], dtype=np.int64))
+    right_dim = int(np.prod(state.shape[cut:], dtype=np.int64))
+    matrix = np.reshape(state, (left_dim, right_dim))
+    singular_values = np.linalg.svd(matrix, compute_uv=False, full_matrices=False)
+    return np.asarray(singular_values, dtype=np.float64)
+
+
 rng = np.random.default_rng()
 
 ##############################################################################
@@ -400,6 +416,46 @@ def test_operator_entanglement_center_cut_matches_integer_cut() -> None:
 
     np.testing.assert_allclose(schmidt_center, schmidt_integer, atol=1e-12)
     assert entropy_center == pytest.approx(entropy_integer, abs=1e-12)
+
+
+def test_mpo_schmidt_values_and_entropy_match_dense_reference() -> None:
+    """Test MPO Schmidt values and entropy against dense reference contraction."""
+    mpo = MPO()
+    mpo.init_ising(length=4, J=1.0, g=0.7)
+
+    cut = 2
+    schmidt = mpo.schmidt_values(cut=cut)
+    dense_schmidt = dense_operator_schmidt_values(mpo, cut)
+    dense_schmidt = dense_schmidt[dense_schmidt > 1e-12]
+
+    np.testing.assert_allclose(schmidt, dense_schmidt, rtol=1e-10, atol=1e-12)
+
+    probabilities = np.square(dense_schmidt)
+    probabilities = probabilities / np.sum(probabilities)
+    reference_entropy = -np.sum(probabilities * np.log(probabilities))
+
+    entropy = mpo.operator_entanglement_entropy(cut=cut)
+    assert entropy == pytest.approx(reference_entropy, abs=1e-12)
+
+
+@pytest.mark.parametrize("invalid_cut", [True, -1, 5, "left"])
+def test_mpo_schmidt_values_reject_invalid_cut(invalid_cut: bool | int | str) -> None:
+    """Test that invalid cut specifiers raise ValueError."""
+    mpo = MPO()
+    mpo.init_identity(length=4, physical_dimension=2)
+
+    with pytest.raises(ValueError, match="cut"):
+        _ = mpo.schmidt_values(cut=invalid_cut)
+
+
+@pytest.mark.parametrize("invalid_base", [0.0, -2.0, 1.0, np.inf, np.nan])
+def test_mpo_operator_entanglement_entropy_rejects_invalid_base(invalid_base: float) -> None:
+    """Test that invalid logarithm bases are rejected."""
+    mpo = MPO()
+    mpo.init_ising(length=4, J=1.0, g=0.5)
+
+    with pytest.raises(ValueError, match="base"):
+        _ = mpo.operator_entanglement_entropy(cut=2, base=invalid_base)
 
 
 ##############################################################################
