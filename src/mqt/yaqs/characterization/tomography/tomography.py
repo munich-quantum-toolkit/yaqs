@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import copy
 import itertools
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 
@@ -36,6 +36,13 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 from .process_tensor import ProcessTensor, canonicalize_upsilon
+
+
+def _random_pure_state(rng: np.random.Generator) -> NDArray[np.complex128]:
+    """Generate a random pure state vector for continuous tomography."""
+    z = rng.standard_normal(2) + 1j * rng.standard_normal(2)
+    z /= np.linalg.norm(z)
+    return z
 
 
 def get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
@@ -236,13 +243,17 @@ def _tomography_sequence_worker(
     choi_indices = WORKER_CTX["choi_indices"]
     worker_sequences = WORKER_CTX.get("worker_sequences")
     sampled_sequences = WORKER_CTX.get("sampled_sequences")
+    continuous_states = WORKER_CTX.get("continuous_states")
+    ensemble = WORKER_CTX.get("ensemble", "discrete")
     noise_model = WORKER_CTX["noise_model"]
 
-    if sampled_sequences is not None:
-        alpha_seq = sampled_sequences[s_idx]
-    else:
-        assert worker_sequences is not None
-        alpha_seq = worker_sequences[s_idx]
+    alpha_seq = tuple()
+    if ensemble == "discrete":
+        if sampled_sequences is not None:
+            alpha_seq = sampled_sequences[s_idx]
+        else:
+            assert worker_sequences is not None
+            alpha_seq = worker_sequences[s_idx]
 
     # Determinism guard: when no noise, traj_idx must be 0 and results must be identical
     if noise_model is None:
@@ -285,10 +296,16 @@ def _tomography_sequence_worker(
     # 4. Multi-step loop
     for step_i, duration in enumerate(timesteps):
         # Apply intervention for this slot
-        alpha_t = alpha_seq[step_i]
-        p_t, m_t = choi_indices[alpha_t]
-        _, psi_next, _ = basis_set[p_t]
-        _, psi_proj, _ = basis_set[m_t]
+        if ensemble == "continuous":
+            assert continuous_states is not None
+            psi_meas, psi_prep = continuous_states[s_idx][step_i]
+            psi_proj = psi_meas
+            psi_next = psi_prep
+        else:
+            alpha_t = alpha_seq[step_i]
+            p_t, m_t = choi_indices[alpha_t]
+            _, psi_next, _ = basis_set[p_t]
+            _, psi_proj, _ = basis_set[m_t]
 
         if is_mcwf:
             assert isinstance(current_state, np.ndarray)
@@ -492,6 +509,7 @@ def run_mc_upsilon(
     seed: int | None = None,
     dual_transform: str = "id",
     replace: bool = True,
+    ensemble: Literal["discrete", "continuous"] = "discrete",
 ) -> tuple[NDArray[np.complex128], dict]:
     """Run Monte Carlo Process Tomography (Phase A: Uniform Sampling).
 
@@ -507,6 +525,7 @@ def run_mc_upsilon(
         seed: Random seed for sampling.
         dual_transform: Transformation to apply to dual matrices (one of {"id", "T", "conj", "dag"}).
         replace: Whether to sample sequences with replacement.
+        ensemble: Basis sequence ensemble to sample from ("discrete" or "continuous").
 
     Returns:
         tuple containing:
@@ -525,7 +544,18 @@ def run_mc_upsilon(
     duals = calculate_dual_choi_basis(choi_basis)
 
     # 2. Sample Sequences
-    if replace:
+    continuous_states: list[list[tuple[NDArray[np.complex128], NDArray[np.complex128]]]] | None = None
+    if ensemble == "continuous":
+        continuous_states = []
+        for _ in range(num_sequences):
+            seq_states = []
+            for _ in range(k):
+                seq_states.append((_random_pure_state(rng), _random_pure_state(rng)))
+            continuous_states.append(seq_states)
+        sampled_sequences = [tuple()] * num_sequences  # Dummy sequence list
+        inv_q = 1.0  # Continuous Haar duals already integrate directly to the target
+
+    elif replace:
         # Sample with replacement
         sampled_sequences = [tuple(rng.integers(0, 16, size=k).tolist()) for _ in range(num_sequences)]
         inv_q = 16**k
@@ -567,6 +597,8 @@ def run_mc_upsilon(
         "basis_set": basis_set,
         "choi_indices": choi_indices,
         "sampled_sequences": sampled_sequences,
+        "continuous_states": continuous_states,
+        "ensemble": ensemble,
         "noise_model": noise_model,
         "num_trajectories": num_trajectories,
         "mcwf_static_ctx": mcwf_static_ctx,
@@ -597,10 +629,26 @@ def run_mc_upsilon(
     upsilon = np.zeros((2 * dim_p, 2 * dim_p), dtype=np.complex128)
 
     for s_idx, alpha_seq in enumerate(sampled_sequences):
-        # Build past operator: kron(dual[a0], dual[a1], ...)
-        past = _apply_dual_transform(duals[alpha_seq[0]], dual_transform)
-        for a in alpha_seq[1:]:
-            past = np.kron(past, _apply_dual_transform(duals[a], dual_transform))
+        if ensemble == "continuous":
+            assert continuous_states is not None
+            seq_states = continuous_states[s_idx]
+            
+            def _get_dual(psi_m: NDArray[np.complex128], psi_p: NDArray[np.complex128]) -> NDArray[np.complex128]:
+                P = np.outer(psi_m, psi_m.conj())
+                Q = np.outer(psi_p, psi_p.conj())
+                D_Q = 2.0 * (3.0 * Q - np.eye(2, dtype=np.complex128))
+                D_PT = 2.0 * (3.0 * P.T - np.eye(2, dtype=np.complex128))
+                # Tensor dual with applied YAQS convention transpose
+                return np.kron(D_Q, D_PT).T
+
+            past = _apply_dual_transform(_get_dual(*seq_states[0]), dual_transform)
+            for psi_meas, psi_prep in seq_states[1:]:
+                past = np.kron(past, _apply_dual_transform(_get_dual(psi_meas, psi_prep), dual_transform))
+        else:
+            # Build past operator: kron(dual[a0], dual[a1], ...)
+            past = _apply_dual_transform(duals[alpha_seq[0]], dual_transform)
+            for a in alpha_seq[1:]:
+                past = np.kron(past, _apply_dual_transform(duals[a], dual_transform))
 
         rho_w = avg_rho_weighted[s_idx]
         upsilon += np.kron(rho_w, past) * inv_q
@@ -620,6 +668,7 @@ def run_mc_upsilon(
         "dual_transform": dual_transform,
         "replace": replace,
         "seed": seed,
+        "ensemble": ensemble,
     }
 
     return upsilon, meta

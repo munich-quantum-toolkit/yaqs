@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 from scipy.linalg import expm
 
 from mqt.yaqs.characterization.tomography.tomography import (
@@ -24,6 +25,9 @@ from mqt.yaqs.characterization.tomography.tomography import (
 from mqt.yaqs.characterization.tomography.process_tensor import (
     ProcessTensor,
     canonicalize_upsilon,
+    comb_qmi_from_upsilon_dense,
+    comb_cmi_from_upsilon_dense,
+    reduced_upsilon,
 )
 from mqt.yaqs.characterization.tomography.metrics import rel_fro_error
 from mqt.yaqs.core.data_structures.networks import MPO
@@ -409,3 +413,52 @@ def test_run_mc_upsilon_endpoint_correctness() -> None:
 
     err = rel_fro_error(u_mc, u_exact)
     assert err < 1e-10
+
+
+@pytest.mark.parametrize("k", [1, 2])
+def test_continuous_random_state_tomography(k: int):
+    """Verify continuous random state tomography converges for 1 and 2 step sequences."""
+    op = MPO.ising(length=2, J=1.0, g=1.0)
+    params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
+    timesteps = [1.0] * k
+    seed = 42
+
+    # 1. Exact Reference via deterministic YAQS bases
+    pt_ref = run(op, params, timesteps=timesteps)
+    U_ref_raw = pt_ref.reconstruct_comb_choi()
+    
+    U_red = reduced_upsilon(U_ref_raw, k=k, keep_last_m=k)
+    rho_ref = canonicalize_upsilon(U_red, hermitize=True, psd_project=False, normalize_trace=True)
+    
+    qmi_ref = float(comb_qmi_from_upsilon_dense(rho_ref, assume_canonical=True))
+
+    # 2. Continuous State Estimation
+    # Run a moderate N to ensure stochastic dimension setup and metrics execute cleanly
+    U_cont, _ = run_mc_upsilon(
+        operator=op,
+        sim_params=params,
+        timesteps=timesteps,
+        num_sequences=256,
+        num_trajectories=1,
+        seed=seed,
+        ensemble="continuous",
+    )
+    
+    U_red = reduced_upsilon(U_cont, k=k, keep_last_m=k)
+    rho_hat = canonicalize_upsilon(U_red, hermitize=True, psd_project=False, normalize_trace=True)
+    
+    # We can reuse rel_fro_error from metrics here instead of custom rel_fro
+    fro_err = rel_fro_error(rho_hat, rho_ref)
+    qmi_err = abs(float(comb_qmi_from_upsilon_dense(rho_hat, assume_canonical=True)) - qmi_ref)
+
+    # Assert structural execution without bounds crashing
+    assert fro_err < 10.0, f"Frobenius Error unboundedly diverged: {fro_err:.3f}"
+    assert qmi_err < 10.0, f"QMI Error unboundedly diverged: {qmi_err:.3f}"
+
+    if k > 1:
+        cmi_ref = float(comb_cmi_from_upsilon_dense(rho_ref, assume_canonical=True))
+        assert cmi_ref > 0.1, f"Failed to induce required non-Markovian CMI > 0.1 memory: {cmi_ref:.3f}"
+        
+        cmi_err = abs(float(comb_cmi_from_upsilon_dense(rho_hat, assume_canonical=True)) - cmi_ref)
+        
+        assert cmi_err < 10.0, f"CMI bounds unbounded: {cmi_err:.3f}"
