@@ -19,7 +19,7 @@ from mqt.yaqs.characterization.tomography.process_tensor_mpo import (
 # --- Helpers ---
 
 def random_rho():
-    np.random.seed(42)
+    np.random.seed()
     rho = np.random.randn(2, 2) + 1j * np.random.randn(2, 2)
     rho = rho @ rho.conj().T
     return rho / np.trace(rho)
