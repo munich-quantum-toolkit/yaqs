@@ -39,9 +39,6 @@ from mqt.yaqs.characterization.tomography.process_tensor import (
     comb_qmi_from_upsilon_dense,
     comb_cmi_from_upsilon_dense,
     reduced_upsilon,
-)
-
-from mqt.yaqs.characterization.tomography.process_tensor_mpo import (
     rank1_upsilon_mpo_term,
     upsilon_mpo_to_dense,
 )

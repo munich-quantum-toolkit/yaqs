@@ -40,8 +40,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-from .process_tensor import ProcessTensor
-from .process_tensor_mpo import rank1_upsilon_mpo_term, upsilon_mpo_to_dense
+from .process_tensor import ProcessTensor, rank1_upsilon_mpo_term, upsilon_mpo_to_dense
 
 # ═══ Sampling & Sequence Utilities ═══════════════════════════════════════════
 
@@ -1084,7 +1083,7 @@ def estimate_process_tensor(
         Estimation method.
     output : {"mpo", "dense"}
         Return type. ``"dense"`` converts the MPO via
-        :func:`~.process_tensor_mpo.upsilon_mpo_to_dense`.
+        :func:`~.process_tensor.upsilon_mpo_to_dense`.
     num_samples : int
         Number of samples: *particles* for ``"sis"``,
         *sequences* for ``"mc"``, ignored for ``"exact"``.
