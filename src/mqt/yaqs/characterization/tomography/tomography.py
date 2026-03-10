@@ -45,6 +45,47 @@ def _random_pure_state(rng: np.random.Generator) -> NDArray[np.complex128]:
     return z
 
 
+def _sample_intervention_candidate_local(
+    current_state: MPS | NDArray[np.complex128],
+    rng: np.random.Generator,
+    candidates: list[tuple[NDArray[np.complex128], NDArray[np.complex128]]],
+    is_mcwf: bool,
+) -> tuple[MPS | NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128], float]:
+    """Sample an intervention from a candidate pool using local importance sampling."""
+    num_candidates = len(candidates)
+    p_j = np.zeros(num_candidates, dtype=np.float64)
+    next_states = []
+
+    for j, (psi_meas, psi_prep) in enumerate(candidates):
+        if is_mcwf:
+            assert isinstance(current_state, np.ndarray)
+            n_st, p = _reprepare_site_zero_vector_forced(current_state, psi_meas, psi_prep)
+            next_states.append(n_st)
+            p_j[j] = p
+        else:
+            from mqt.yaqs.core.data_structures.networks import MPS
+            assert isinstance(current_state, MPS)
+            cand_state = current_state.copy()
+            p = _reprepare_site_zero_forced(cand_state, psi_meas, psi_prep)
+            next_states.append(cand_state)
+            p_j[j] = p
+
+    sum_p = p_j.sum()
+    if sum_p < 1e-300:
+        # Fallback to uniform
+        q_j = np.ones(num_candidates) / num_candidates
+        inc_weight = sum_p
+    else:
+        q_j = p_j / sum_p
+        inc_weight = sum_p
+
+    # Sample candidate
+    J = rng.choice(num_candidates, p=q_j)
+    psi_meas, psi_prep = candidates[J]
+    
+    return next_states[J], psi_meas, psi_prep, float(inc_weight)
+
+
 def get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
     """Return the 4 minimal single-qubit basis states for tomography.
 
@@ -221,14 +262,14 @@ def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]
 
 def _tomography_sequence_worker(
     job_idx: int,
-) -> tuple[int, int, tuple[int, ...], NDArray[np.complex128], float]:
+) -> tuple[int, int, tuple[int, ...], NDArray[np.complex128], float, list[tuple[NDArray[np.complex128], NDArray[np.complex128]]] | None]:
     """Worker function for a single tomography sequence.
 
     Args:
         job_idx: Flat index mapping to (seq_idx/s_idx, traj_idx).
 
     Returns:
-        tuple[int, int, tuple, NDArray, float]: (s_idx, traj_idx, alpha_seq, rho_final, sequence_weight)
+        tuple[int, int, tuple, NDArray, float, list | None]: (s_idx, traj_idx, alpha_seq, rho_final, sequence_weight, chosen_continuous_states)
     """
     # 1. Decode job
     num_trajectories = WORKER_CTX["num_trajectories"]
@@ -244,8 +285,14 @@ def _tomography_sequence_worker(
     worker_sequences = WORKER_CTX.get("worker_sequences")
     sampled_sequences = WORKER_CTX.get("sampled_sequences")
     continuous_states = WORKER_CTX.get("continuous_states")
+    continuous_candidates = WORKER_CTX.get("continuous_candidates")
     ensemble = WORKER_CTX.get("ensemble", "discrete")
+    sampling = WORKER_CTX.get("sampling", "uniform")
     noise_model = WORKER_CTX["noise_model"]
+    
+    worker_seeds = WORKER_CTX.get("worker_seeds")
+    worker_seed = worker_seeds[job_idx] if worker_seeds is not None else 42 + job_idx
+    rng = np.random.default_rng(worker_seed)
 
     alpha_seq = tuple()
     if ensemble == "discrete":
@@ -293,30 +340,54 @@ def _tomography_sequence_worker(
             "z": rz / trace if trace > 1e-15 else 0,
         })
 
+    # We need to collect the chosen states for the continuous dual builder
+    chosen_continuous_states: list[tuple[NDArray[np.complex128], NDArray[np.complex128]]] | None = [] if ensemble == "continuous" else None
+
     # 4. Multi-step loop
     for step_i, duration in enumerate(timesteps):
         # Apply intervention for this slot
         if ensemble == "continuous":
-            assert continuous_states is not None
-            psi_meas, psi_prep = continuous_states[s_idx][step_i]
-            psi_proj = psi_meas
-            psi_next = psi_prep
+            if sampling == "uniform":
+                assert continuous_states is not None
+                psi_meas, psi_prep = continuous_states[s_idx][step_i]
+                psi_proj = psi_meas
+                psi_next = psi_prep
+
+                if is_mcwf:
+                    assert isinstance(current_state, np.ndarray)
+                    current_state, step_prob = _reprepare_site_zero_vector_forced(
+                        cast("NDArray[np.complex128]", current_state), psi_proj, psi_next
+                    )
+                else:
+                    assert isinstance(current_state, MPS)
+                    step_prob = _reprepare_site_zero_forced(current_state, psi_proj, psi_next)
+
+                sequence_weight *= step_prob
+                chosen_continuous_states.append((psi_meas, psi_prep))
+            elif sampling == "candidate_local":
+                assert continuous_candidates is not None
+                candidates = continuous_candidates[s_idx][step_i]
+                current_state, psi_meas, psi_prep, inc_weight = _sample_intervention_candidate_local(
+                    current_state, rng, candidates, is_mcwf
+                )
+                sequence_weight *= inc_weight
+                chosen_continuous_states.append((psi_meas, psi_prep))
         else:
             alpha_t = alpha_seq[step_i]
             p_t, m_t = choi_indices[alpha_t]
             _, psi_next, _ = basis_set[p_t]
             _, psi_proj, _ = basis_set[m_t]
 
-        if is_mcwf:
-            assert isinstance(current_state, np.ndarray)
-            current_state, step_prob = _reprepare_site_zero_vector_forced(
-                cast("NDArray[np.complex128]", current_state), psi_proj, psi_next
-            )
-        else:
-            assert isinstance(current_state, MPS)
-            step_prob = _reprepare_site_zero_forced(current_state, psi_proj, psi_next)
+            if is_mcwf:
+                assert isinstance(current_state, np.ndarray)
+                current_state, step_prob = _reprepare_site_zero_vector_forced(
+                    cast("NDArray[np.complex128]", current_state), psi_proj, psi_next
+                )
+            else:
+                assert isinstance(current_state, MPS)
+                step_prob = _reprepare_site_zero_forced(current_state, psi_proj, psi_next)
 
-        sequence_weight *= step_prob
+            sequence_weight *= step_prob
 
         # Skip evolution if branch is physically dead
         if sequence_weight < 1e-15:
@@ -350,7 +421,7 @@ def _tomography_sequence_worker(
             current_state = cast("MPS", step_params.output_state)
 
     rho_final = _get_rho_site_zero(current_state)
-    return (s_idx, traj_idx, tuple(alpha_seq), rho_final, sequence_weight)
+    return (s_idx, traj_idx, tuple(alpha_seq), rho_final, sequence_weight, chosen_continuous_states)
 
 
 def run(
@@ -451,7 +522,7 @@ def run(
         desc="Simulating Tomography Sequences",
     )
 
-    for _job_idx, (worker_seq_idx, _traj_idx, _alpha, rho_final, sequence_weight) in results_iterator:
+    for _job_idx, (worker_seq_idx, _traj_idx, _alpha, rho_final, sequence_weight, _seq_states) in results_iterator:
         aggregated_outputs[worker_seq_idx] += rho_final * sequence_weight
         aggregated_weights[worker_seq_idx] += sequence_weight
 
@@ -510,6 +581,8 @@ def run_mc_upsilon(
     dual_transform: str = "id",
     replace: bool = True,
     ensemble: Literal["discrete", "continuous"] = "discrete",
+    sampling: str = "uniform",
+    num_candidates: int = 8,
 ) -> tuple[NDArray[np.complex128], dict]:
     """Run Monte Carlo Process Tomography (Phase A: Uniform Sampling).
 
@@ -526,6 +599,8 @@ def run_mc_upsilon(
         dual_transform: Transformation to apply to dual matrices (one of {"id", "T", "conj", "dag"}).
         replace: Whether to sample sequences with replacement.
         ensemble: Basis sequence ensemble to sample from ("discrete" or "continuous").
+        sampling: Sampling mode ("uniform" or "candidate_local").
+        num_candidates: Number of candidates for local importance sampling.
 
     Returns:
         tuple containing:
@@ -545,13 +620,32 @@ def run_mc_upsilon(
 
     # 2. Sample Sequences
     continuous_states: list[list[tuple[NDArray[np.complex128], NDArray[np.complex128]]]] | None = None
+    continuous_candidates: list[list[list[tuple[NDArray[np.complex128], NDArray[np.complex128]]]]] | None = None
+
     if ensemble == "continuous":
-        continuous_states = []
-        for _ in range(num_sequences):
-            seq_states = []
-            for _ in range(k):
-                seq_states.append((_random_pure_state(rng), _random_pure_state(rng)))
-            continuous_states.append(seq_states)
+        if sampling not in {"uniform", "candidate_local"}:
+            raise ValueError('sampling must be "uniform" or "candidate_local"')
+        if num_candidates < 1:
+            raise ValueError("num_candidates must be >= 1")
+
+        if sampling == "uniform":
+            continuous_states = []
+            for _ in range(num_sequences):
+                seq_states = []
+                for _ in range(k):
+                    seq_states.append((_random_pure_state(rng), _random_pure_state(rng)))
+                continuous_states.append(seq_states)
+        elif sampling == "candidate_local":
+            continuous_candidates = []
+            for _ in range(num_sequences):
+                seq_cands = []
+                for _ in range(k):
+                    step_cands = []
+                    for _ in range(num_candidates):
+                        step_cands.append((_random_pure_state(rng), _random_pure_state(rng)))
+                    seq_cands.append(step_cands)
+                continuous_candidates.append(seq_cands)
+
         sampled_sequences = [tuple()] * num_sequences  # Dummy sequence list
         inv_q = 1.0  # Continuous Haar duals already integrate directly to the target
 
@@ -590,6 +684,9 @@ def run_mc_upsilon(
         dummy_mps = MPS(length=operator.length, state="zeros")
         mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
 
+    total_jobs = num_sequences * num_trajectories
+    worker_seeds = rng.integers(0, 2**31 - 1, size=total_jobs).tolist()
+
     payload = {
         "operator": operator,
         "sim_params": sim_params,
@@ -598,17 +695,23 @@ def run_mc_upsilon(
         "choi_indices": choi_indices,
         "sampled_sequences": sampled_sequences,
         "continuous_states": continuous_states,
+        "continuous_candidates": continuous_candidates,
         "ensemble": ensemble,
+        "sampling": sampling,
         "noise_model": noise_model,
         "num_trajectories": num_trajectories,
         "mcwf_static_ctx": mcwf_static_ctx,
+        "worker_seeds": worker_seeds,
     }
 
     # 4. Parallel Execution
-    total_jobs = num_sequences * num_trajectories
     max_workers = max(1, available_cpus() - 1)
 
     avg_rho_weighted = np.zeros((num_sequences, 2, 2), dtype=np.complex128)
+
+    # 5. Build Upsilon
+    dim_p = 4**k
+    upsilon = np.zeros((2 * dim_p, 2 * dim_p), dtype=np.complex128)
 
     results_iterator = run_backend_parallel(
         worker_fn=_tomography_sequence_worker,
@@ -619,41 +722,35 @@ def run_mc_upsilon(
         desc=f"Simulating {num_sequences} MC Sequences",
     )
 
-    for _job_idx, (s_idx, _traj_idx, _alpha, rho_final, sequence_weight) in results_iterator:
-        avg_rho_weighted[s_idx] += rho_final * sequence_weight
-
-    avg_rho_weighted /= num_trajectories
-
-    # 5. Build Upsilon
-    dim_p = 4**k
-    upsilon = np.zeros((2 * dim_p, 2 * dim_p), dtype=np.complex128)
-
-    for s_idx, alpha_seq in enumerate(sampled_sequences):
+    for _job_idx, (s_idx, _traj_idx, _alpha, rho_final, sequence_weight, seq_states) in results_iterator:
         if ensemble == "continuous":
-            assert continuous_states is not None
-            seq_states = continuous_states[s_idx]
-            
+            assert seq_states is not None
             def _get_dual(psi_m: NDArray[np.complex128], psi_p: NDArray[np.complex128]) -> NDArray[np.complex128]:
                 P = np.outer(psi_m, psi_m.conj())
                 Q = np.outer(psi_p, psi_p.conj())
                 D_Q = 2.0 * (3.0 * Q - np.eye(2, dtype=np.complex128))
                 D_PT = 2.0 * (3.0 * P.T - np.eye(2, dtype=np.complex128))
-                # Tensor dual with applied YAQS convention transpose
                 return np.kron(D_Q, D_PT).T
 
             past = _apply_dual_transform(_get_dual(*seq_states[0]), dual_transform)
             for psi_meas, psi_prep in seq_states[1:]:
                 past = np.kron(past, _apply_dual_transform(_get_dual(psi_meas, psi_prep), dual_transform))
+            
+            # Form expectation per-trajectory to capture candidate dependencies correctly
+            upsilon += np.kron(rho_final * sequence_weight, past) * (inv_q / (num_sequences * num_trajectories))
         else:
-            # Build past operator: kron(dual[a0], dual[a1], ...)
+            avg_rho_weighted[s_idx] += rho_final * sequence_weight
+
+    if ensemble == "discrete":
+        avg_rho_weighted /= num_trajectories
+        for s_idx, alpha_seq in enumerate(sampled_sequences):
             past = _apply_dual_transform(duals[alpha_seq[0]], dual_transform)
             for a in alpha_seq[1:]:
                 past = np.kron(past, _apply_dual_transform(duals[a], dual_transform))
+            rho_w = avg_rho_weighted[s_idx]
+            upsilon += np.kron(rho_w, past) * inv_q
 
-        rho_w = avg_rho_weighted[s_idx]
-        upsilon += np.kron(rho_w, past) * inv_q
-
-    upsilon /= num_sequences
+        upsilon /= num_sequences
 
     # NOTE: This is the raw estimator Υ_hat(N). Targets the POPULATION TOTAL
     # T = Σ_{all α} p(α)·(ρ_out(α) ⊗ D(α)), NOT the mean μ = T/16^k.
