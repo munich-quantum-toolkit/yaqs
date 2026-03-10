@@ -1120,7 +1120,7 @@ class MPO:
 
     tensors: list[ComplexTensor]
     length: int
-    physical_dimension: int
+    physical_dimension: int | list[int]
 
     @classmethod
     def hamiltonian(
@@ -1774,7 +1774,8 @@ class MPO:
             a = self.tensors[k]  # (d, d, Dl, Dm)
             b = self.tensors[k + 1]  # (d, d, Dm, Dr)
 
-            phys_dim = a.shape[0]
+            phys_dim_left = a.shape[0]
+            phys_dim_right = b.shape[0]
             bond_dim_left = a.shape[2]
             bond_dim_right = b.shape[3]
 
@@ -1784,8 +1785,8 @@ class MPO:
             # Group left legs (l,s,t) and right legs (u,v,w)
             theta = np.transpose(theta, (4, 0, 1, 2, 3, 5))
             matrix = theta.reshape(
-                bond_dim_left * phys_dim * phys_dim,
-                phys_dim * phys_dim * bond_dim_right,
+                bond_dim_left * phys_dim_left * phys_dim_left,
+                phys_dim_right * phys_dim_right * bond_dim_right,
             )
 
             u, s, vh = np.linalg.svd(matrix, full_matrices=False)
@@ -1798,15 +1799,99 @@ class MPO:
             s = s[:keep]
             vh = vh[:keep, :]
 
-            # Left tensor: (bond_dim_left, d, d, keep) -> (d, d, bond_dim_left, keep)
-            left = u.reshape(bond_dim_left, phys_dim, phys_dim, keep).transpose(1, 2, 0, 3)
+            # Left tensor: (bond_dim_left, dL, dL, keep) -> (dL, dL, bond_dim_left, keep)
+            left = u.reshape(bond_dim_left, phys_dim_left, phys_dim_left, keep).transpose(1, 2, 0, 3)
 
-            # Right tensor: (keep, d, d, bond_dim_right) -> (d, d, keep, bond_dim_right)
-            svh = (s[:, None] * vh).reshape(keep, phys_dim, phys_dim, bond_dim_right)
+            # Right tensor: (keep, dR, dR, bond_dim_right) -> (dR, dR, keep, bond_dim_right)
+            svh = (s[:, None] * vh).reshape(keep, phys_dim_right, phys_dim_right, bond_dim_right)
             right = svh.transpose(1, 2, 0, 3)
 
             self.tensors[k] = left
             self.tensors[k + 1] = right
+
+    def __add__(self, other: "MPO") -> "MPO":
+        """Add two MPOs via direct bond stacking.
+
+        This builds a new MPO where the tensors are concatenated along their
+        virtual bonds (block diagonal in the bulk, row/column concatenation
+        at the boundaries) such that the resulting operator represents the sum.
+
+        Args:
+            other: The other MPO to add. Must have identical length.
+
+        Returns:
+            A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
+        """
+        import copy
+        import numpy as np
+        if self.length != other.length:
+            msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
+            raise ValueError(msg)
+
+        new_mpo = MPO()
+        new_mpo.length = self.length
+        # physical_dimension might be list or int, keep self's
+        new_mpo.physical_dimension = copy.copy(self.physical_dimension)
+        new_tensors = []
+
+        L = self.length
+        for i in range(L):
+            A = self.tensors[i]   # (d_out, d_in, L_a, R_a)
+            B = other.tensors[i]  # (d_out, d_in, L_b, R_b)
+
+            p_out, p_in, La, Ra = A.shape
+            _, _, Lb, Rb = B.shape
+
+            # First tensor (site 0):
+            # Left bonds are dummy (dim 1). We stack along the right bond.
+            if i == 0:
+                # Result shape: (d_out, d_in, 1, Ra + Rb)
+                new_T = np.concatenate([A, B], axis=3)
+
+            # Last tensor (site L-1):
+            # Right bonds are dummy (dim 1). We stack along the left bond.
+            elif i == L - 1:
+                # Result shape: (d_out, d_in, La + Lb, 1)
+                new_T = np.concatenate([A, B], axis=2)
+
+            # Bulk tensors:
+            # Block diagonal form in the virtual space.
+            else:
+                # Result shape: (d_out, d_in, La + Lb, Ra + Rb)
+                new_T = np.zeros((p_out, p_in, La + Lb, Ra + Rb), dtype=complex)
+                new_T[:, :, :La, :Ra] = A
+                new_T[:, :, La:, Ra:] = B
+
+            new_tensors.append(new_T)
+
+        new_mpo.tensors = new_tensors
+        return new_mpo
+
+    @classmethod
+    def mpo_sum(cls, mpos: list["MPO"]) -> "MPO":
+        """Efficient sequential addition of a batch of MPOs.
+
+        Args:
+            mpos: List of MPOs to sum.
+
+        Returns:
+            A new MPO directly representing the sum.
+        """
+        import copy
+        if not mpos:
+            raise ValueError("mpo_sum requires at least one MPO.")
+
+        if len(mpos) == 1:
+            m = cls()
+            m.length = mpos[0].length
+            m.physical_dimension = copy.copy(mpos[0].physical_dimension)
+            m.tensors = [t.copy() for t in mpos[0].tensors]
+            return m
+
+        res = mpos[0]
+        for other in mpos[1:]:
+            res = res + other
+        return res
 
     def rotate(self, *, conjugate: bool = False) -> None:
         """Rotates MPO.
