@@ -30,10 +30,7 @@ from mqt.yaqs.characterization.tomography.tomography import (
     get_basis_states,
     get_choi_basis,
     run,
-    run_mc_upsilon,
-    run_mc_upsilon_mpo,
-    run_sis_upsilon,
-    run_sis_upsilon_mpo
+    estimate_process_tensor,
 )
 
 from mqt.yaqs.characterization.tomography.process_tensor import (
@@ -417,14 +414,10 @@ def test_run_mc_upsilon_endpoint_correctness() -> None:
 
     # 2. MC with replace=False and N=256 (exhaustive for k=2)
     # We pass the same 'conv' found by exact reconstruction
-    u_mc, _ = run_mc_upsilon(
-        op,
-        params,
-        timesteps=timesteps,
-        num_sequences=256,
-        replace=False,
-        seed=42,
-        dual_transform=conv,
+    u_mc, _ = estimate_process_tensor(
+        op, params, timesteps=timesteps,
+        method="mc", output="dense",
+        num_samples=256, replace=False, seed=42, dual_transform=conv,
     )
     u_mc = canonicalize_upsilon(u_mc, hermitize=True, psd_project=False, normalize_trace=True)
 
@@ -451,14 +444,10 @@ def test_continuous_random_state_tomography(k: int):
 
     # 2. Continuous State Estimation
     # Run a moderate N to ensure stochastic dimension setup and metrics execute cleanly
-    U_cont, _ = run_mc_upsilon(
-        operator=op,
-        sim_params=params,
-        timesteps=timesteps,
-        num_sequences=256,
-        num_trajectories=1,
-        seed=seed,
-        ensemble="continuous",
+    U_cont, _ = estimate_process_tensor(
+        op, params, timesteps=timesteps,
+        method="mc", output="dense",
+        num_samples=256, num_trajectories=1, seed=seed, sampling="continuous",
     )
     
     U_red = reduced_upsilon(U_cont, k=k, keep_last_m=k)
@@ -507,9 +496,10 @@ def _dense_ref_total(k: int) -> np.ndarray:
     the full sum over all paths without sampling variance.
     """
     op, params, timesteps = _make_problem(k)
-    U_ref, _ = run_mc_upsilon(
+    U_ref, _ = estimate_process_tensor(
         op, params, timesteps=timesteps,
-        num_sequences=16**k, num_trajectories=1,
+        method="mc", output="dense",
+        num_samples=16**k, num_trajectories=1,
         noise_model=None, dual_transform="T", replace=False,
     )
     return U_ref
@@ -557,9 +547,10 @@ def test_mc_uniform_converges_frobenius(k: int) -> None:
 
     for nseq, err_list in errs.items():
         for s in range(n_seeds):
-            U_hat, _ = run_mc_upsilon(
+            U_hat, _ = estimate_process_tensor(
                 op, params, timesteps=timesteps,
-                num_sequences=nseq, num_trajectories=1,
+                method="mc", output="dense",
+                num_samples=nseq, num_trajectories=1,
                 noise_model=None, seed=100 + s,
                 dual_transform="T", replace=True,
             )
@@ -587,14 +578,14 @@ def test_sis_local_converges_frobenius(k: int) -> None:
 
     for N, err_list in errs.items():
         for s in range(n_seeds):
-            U_hat, _ = run_sis_upsilon(
+            U_hat, _ = estimate_process_tensor(
                 op, params, timesteps=timesteps,
-                num_particles=N, noise_model=None,
+                method="sis", output="dense",
+                num_samples=N, noise_model=None,
                 seed=200 + s,
                 proposal="local", floor_eps=0.0,
                 stratify_step1=True, resample=True,
-                rejuvenate=False, parallel=False,
-                dual_transform="T",
+                parallel=False, dual_transform="T",
             )
             err_list.append(_rel_fro(_canon_for_compare(U_hat, k), rho_ref))
 
@@ -621,14 +612,14 @@ def test_sis_qmi_converges(k: int) -> None:
 
     for N, err_list in errs.items():
         for s in range(n_seeds):
-            U_hat, _ = run_sis_upsilon(
+            U_hat, _ = estimate_process_tensor(
                 op, params, timesteps=timesteps,
-                num_particles=N, noise_model=None,
+                method="sis", output="dense",
+                num_samples=N, noise_model=None,
                 seed=300 + s,
                 proposal="local", floor_eps=0.0,
                 stratify_step1=True, resample=True,
-                rejuvenate=False, parallel=False,
-                dual_transform="T",
+                parallel=False, dual_transform="T",
             )
             rho_hat = _canon_for_compare(U_hat, k)
             qmi_hat = float(comb_qmi_from_upsilon_dense(rho_hat, assume_canonical=True, past="last"))
@@ -652,9 +643,10 @@ def test_mc_exact_enumeration(k: int) -> None:
     rho_ref = _canon_for_compare(U_ref, k)
     op, params, timesteps = _make_problem(k)
 
-    U_hat, _ = run_mc_upsilon(
+    U_hat, _ = estimate_process_tensor(
         op, params, timesteps=timesteps,
-        num_sequences=16**k, num_trajectories=1,
+        method="mc", output="dense",
+        num_samples=16**k, num_trajectories=1,
         noise_model=None, dual_transform="T", replace=False,
     )
     rho_hat = _canon_for_compare(U_hat, k)
@@ -670,9 +662,10 @@ def test_sis_k1_exact_deterministic() -> None:
     rho_ref = _canon_for_compare(U_ref, k)
     op, params, ts = _make_problem(k)
 
-    U_hat, meta = run_sis_upsilon(
+    U_hat, meta = estimate_process_tensor(
         op, params, timesteps=ts,
-        num_particles=16, noise_model=None, seed=0,
+        method="sis", output="dense",
+        num_samples=16, noise_model=None, seed=0,
         proposal="local", floor_eps=0.0,
         stratify_step1=True, resample=False,
         parallel=False, dual_transform="T",
@@ -804,9 +797,9 @@ def test_yaqs_k1_dephasing() -> None:
     trace_ref = float(np.trace(U_ref_total).real)
 
     # Approximate via MC uniform (replace=True, N=2048 to tighten sampling errors)
-    U_hat, _ = run_mc_upsilon(
-        op, params, timesteps=timesteps,
-        num_sequences=2048, num_trajectories=1,
+    U_hat, _ = estimate_process_tensor(
+        op, params, timesteps=timesteps, method="mc", output="dense",
+        num_samples=2048, num_trajectories=1,
         noise_model=noise, dual_transform="T", replace=True, seed=100
     )
     rho_hat = _canon_for_compare(U_hat, k)
@@ -904,36 +897,31 @@ def test_mc_mpo_parity_discrete(k, dual_transform):
     sp = get_sim_params()
     H = small_hamiltonian()
     
-    ups_dense, _ = run_mc_upsilon(
-        operator=H, sim_params=sp, timesteps=[0.1]*k,
-        num_sequences=4, ensemble="discrete", dual_transform=dual_transform, seed=42
+    ups_dense, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1]*k, method="mc", output="dense",
+        num_samples=4, dual_transform=dual_transform, seed=42
     )
-    ups_mpo, _ = run_mc_upsilon_mpo(
-        operator=H, sim_params=sp, timesteps=[0.1]*k,
-        num_sequences=4, ensemble="discrete", dual_transform=dual_transform, seed=42,
+    ups_mpo, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1]*k, method="mc", output="mpo",
+        num_samples=4, dual_transform=dual_transform, seed=42,
         compress_every=10000, tol=0.0, max_bond_dim=None, n_sweeps=0
     )
     ups_mpo_dense = upsilon_mpo_to_dense(ups_mpo)
     assert rel_err(ups_dense, ups_mpo_dense) < 1e-12
 
-@pytest.mark.parametrize("sampling", ["uniform", "candidate_local"])
+@pytest.mark.parametrize("sampling", ["uniform"])  # continuous MC; candidate_local removed
 def test_mc_mpo_parity_continuous(sampling):
     sp = get_sim_params()
     H = small_hamiltonian()
-    
-    kwargs = {
-        "operator": H, "sim_params": sp, "timesteps": [0.1, 0.1],
-        "ensemble": "continuous", "sampling": sampling, "seed": 42
-    }
-    if sampling == "candidate_local":
-        kwargs["num_candidates"] = 4
-        kwargs["num_sequences"] = 8
-    else:
-        kwargs["num_sequences"] = 8
 
-    ups_dense, _ = run_mc_upsilon(**kwargs)
-    ups_mpo, _ = run_mc_upsilon_mpo(
-        compress_every=10000, tol=0.0, max_bond_dim=None, n_sweeps=0, **kwargs
+    ups_dense, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1, 0.1],
+        method="mc", output="dense", sampling="continuous", num_samples=8, seed=42
+    )
+    ups_mpo, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1, 0.1],
+        method="mc", output="mpo", sampling="continuous", num_samples=8, seed=42,
+        compress_every=10000, tol=0.0, max_bond_dim=None, n_sweeps=0
     )
     assert rel_err(ups_dense, upsilon_mpo_to_dense(ups_mpo)) < 1e-12
 
@@ -942,11 +930,13 @@ def test_mc_mpo_parity_noisy():
     sp.noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
     H = small_hamiltonian()
     
-    ups_dense, _ = run_mc_upsilon(
-        operator=H, sim_params=sp, timesteps=[0.1, 0.1], num_sequences=1, seed=42
+    ups_dense, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1, 0.1],
+        method="mc", output="dense", num_samples=1, seed=42
     )
-    ups_mpo, _ = run_mc_upsilon_mpo(
-        operator=H, sim_params=sp, timesteps=[0.1, 0.1], num_sequences=1, seed=42,
+    ups_mpo, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1, 0.1],
+        method="mc", output="mpo", num_samples=1, seed=42,
         compress_every=10000, tol=0.0, max_bond_dim=None, n_sweeps=0
     )
     assert rel_err(ups_dense, upsilon_mpo_to_dense(ups_mpo)) < 1e-10
@@ -959,13 +949,13 @@ def test_sis_mpo_parity(proposal, dual_transform):
     sp = get_sim_params()
     H = small_hamiltonian()
     
-    ups_dense, _ = run_sis_upsilon(
-        operator=H, sim_params=sp, timesteps=[0.1, 0.1],
-        num_particles=8, proposal=proposal, resample=False, rejuvenate=False, dual_transform=dual_transform, seed=123
+    ups_dense, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1, 0.1], method="sis", output="dense",
+        num_samples=8, proposal=proposal, resample=False, dual_transform=dual_transform, seed=123
     )
-    ups_mpo, _ = run_sis_upsilon_mpo(
-        operator=H, sim_params=sp, timesteps=[0.1, 0.1],
-        num_particles=8, proposal=proposal, resample=False, rejuvenate=False, dual_transform=dual_transform, seed=123,
+    ups_mpo, _ = estimate_process_tensor(
+        operator=H, sim_params=sp, timesteps=[0.1, 0.1], method="sis", output="mpo",
+        num_samples=8, proposal=proposal, resample=False, dual_transform=dual_transform, seed=123,
         compress_every=10000, tol=0.0, max_bond_dim=None, n_sweeps=0
     )
     assert rel_err(ups_dense, upsilon_mpo_to_dense(ups_mpo)) < 1e-12
@@ -976,13 +966,13 @@ def test_compressed_mc_smoke():
     sp = get_sim_params()
     H = small_hamiltonian()
     
-    ups_dense, _ = run_mc_upsilon(
+    ups_dense, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1, 0.1],
-        num_sequences=16, seed=42
+        method="mc", output="dense", num_samples=16, seed=42
     )
-    ups_mpo, meta = run_mc_upsilon_mpo(
+    ups_mpo, meta = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1, 0.1],
-        num_sequences=16, seed=42,
+        method="mc", output="mpo", num_samples=16, seed=42,
         compress_every=4, tol=1e-10, max_bond_dim=32, n_sweeps=1
     )
     ups_mpo_dense = upsilon_mpo_to_dense(ups_mpo)
@@ -995,14 +985,14 @@ def test_compression_delta():
     sp = get_sim_params()
     H = small_hamiltonian()
     
-    ups_uncompressed, _ = run_mc_upsilon_mpo(
+    ups_uncompressed, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1, 0.1],
-        num_sequences=16, seed=777,
+        method="mc", output="mpo", num_samples=16, seed=777,
         compress_every=1000, tol=0.0, max_bond_dim=None, n_sweeps=0
     )
-    ups_compressed, _ = run_mc_upsilon_mpo(
+    ups_compressed, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1, 0.1],
-        num_sequences=16, seed=777,
+        method="mc", output="mpo", num_samples=16, seed=777,
         compress_every=2, tol=1e-12, max_bond_dim=None, n_sweeps=1
     )
     
@@ -1014,19 +1004,19 @@ def test_monotonic_compression():
     sp = get_sim_params()
     H = small_hamiltonian()
     
-    ups_strong, _ = run_mc_upsilon_mpo(
+    ups_strong, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1, 0.1],
-        num_sequences=16, seed=888,
+        method="mc", output="mpo", num_samples=16, seed=888,
         compress_every=2, tol=1e-4, max_bond_dim=8, n_sweeps=1
     )
-    ups_weak, _ = run_mc_upsilon_mpo(
+    ups_weak, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1, 0.1],
-        num_sequences=16, seed=888,
+        method="mc", output="mpo", num_samples=16, seed=888,
         compress_every=2, tol=1e-10, max_bond_dim=64, n_sweeps=1
     )
-    ups_exact, _ = run_mc_upsilon_mpo(
+    ups_exact, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1, 0.1],
-        num_sequences=16, seed=888,
+        method="mc", output="mpo", num_samples=16, seed=888,
         compress_every=1000, tol=0.0, max_bond_dim=None, n_sweeps=0
     )
     
@@ -1041,22 +1031,17 @@ def test_metadata_and_failure_modes():
     sp = get_sim_params()
     H = small_hamiltonian()
     
-    _, meta = run_mc_upsilon_mpo(
+    _, meta = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1],
-        num_sequences=4, seed=42
+        method="mc", output="mpo", num_samples=4, seed=42
     )
-    
+
     assert "bond_dim_final" in meta
     assert "max_bond_final" in meta
     assert "compression_tol" in meta
     assert "compression_max_bond_dim" in meta
-    assert "compression_n_sweeps" in meta
-    
-    with pytest.raises(NotImplementedError):
-        run_sis_upsilon_mpo(
-            operator=H, sim_params=sp, timesteps=[0.1, 0.1],
-            num_particles=4, rejuvenate=True
-        )
+    # Note: compression_n_sweeps not in standardized core meta
+
 
 # --- Small Multi-Qubit Parity ---
 
@@ -1066,13 +1051,13 @@ def test_small_multi_qubit_parity():
     # N=2 hamiltonian
     H = MPO.hamiltonian(length=2, one_body=[(1.0, "X")], two_body=[])
     
-    ups_dense, _ = run_mc_upsilon(
+    ups_dense, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1],
-        num_sequences=4, seed=999
+        method="mc", output="dense", num_samples=4, seed=999
     )
-    ups_mpo, _ = run_mc_upsilon_mpo(
+    ups_mpo, _ = estimate_process_tensor(
         operator=H, sim_params=sp, timesteps=[0.1, 0.1],
-        num_sequences=4, seed=999,
+        method="mc", output="mpo", num_samples=4, seed=999,
         compress_every=1000, tol=0.0, max_bond_dim=None, n_sweeps=0
     )
     
