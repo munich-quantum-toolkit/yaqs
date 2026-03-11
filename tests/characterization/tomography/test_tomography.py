@@ -355,7 +355,7 @@ def test_mc_without_replacement_matches_exact_for_k2() -> None:
     timesteps = [0.1, 0.1]
 
     U_exact = run(op, params, timesteps=timesteps, method="exact", output="dense")
-    U_mc = run(op, params, timesteps=timesteps, method="mc", output="dense", num_samples=256, replace=False, seed=42)
+    U_mc = run(op, params, timesteps=timesteps, method="mc", output="dense", n_sequences=256, replace=False, seed=42)
 
     assert rel_fro_error(U_exact, U_mc) < 1e-10
 
@@ -397,8 +397,8 @@ def test_mc_mpo_parity_discrete():
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     
-    ups_dense = run(op, params, timesteps=[0.1], method="mc", output="dense", num_samples=4, seed=42)
-    ups_mpo = run(op, params, timesteps=[0.1], method="mc", output="mpo", num_samples=4, seed=42)
+    ups_dense = run(op, params, timesteps=[0.1], method="mc", output="dense", n_sequences=4, seed=42)
+    ups_mpo = run(op, params, timesteps=[0.1], method="mc", output="mpo", n_sequences=4, seed=42)
     assert rel_fro_error(ups_dense, upsilon_mpo_to_dense(ups_mpo)) < 1e-12
 
 
@@ -417,7 +417,7 @@ def test_mc_uniform_converges_metrics() -> None:
     errs = {64: [], 256: []}
     for nseq in errs:
         for s in range(3):
-            U_hat = run(op, params, timesteps=timesteps, method="mc", output="dense", num_samples=nseq, seed=100 + s)
+            U_hat = run(op, params, timesteps=timesteps, method="mc", output="dense", n_sequences=nseq, seed=100 + s)
             errs[nseq].append(rel_fro_error(U_hat, U_ref))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
@@ -434,7 +434,7 @@ def test_sis_converges_metrics() -> None:
     errs = {64: [], 256: []}
     for nseq in errs:
         for s in range(3):
-            U_hat = run(op, params, timesteps=timesteps, method="sis", output="dense", num_samples=nseq, seed=200 + s, parallel=False)
+            U_hat = run(op, params, timesteps=timesteps, method="sis", output="dense", n_particles=nseq, seed=200 + s, parallel=False)
             errs[nseq].append(rel_fro_error(U_hat, U_ref))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
@@ -473,7 +473,8 @@ def test_predict_convergence_vs_physics(method, output):
 
     for N in sample_sizes:
         for s in range(n_seeds):
-            U_hat = run(op, params, timesteps=timesteps, method=method, output=output, num_samples=N, seed=700 + s + N, parallel=False)
+            kwargs = {'n_sequences': N} if method == 'mc' else {'n_particles': N}
+            U_hat = run(op, params, timesteps=timesteps, method=method, output=output, **kwargs, seed=700 + s + N, parallel=False)
             if output == "mpo":
                 U_hat = upsilon_mpo_to_dense(U_hat)
                 
@@ -533,7 +534,7 @@ def test_tomography_with_noise() -> None:
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
-    pt = run(op, params, timesteps=[0.1], num_trajectories=5, noise_model=noise_model)
+    pt = run(op, params, timesteps=[0.1], n_trajectories=5, noise_model=noise_model)
     assert pt.tensor.shape == (4, 16)
 
 
@@ -552,5 +553,5 @@ def test_run_return_types():
     """Verify API return types."""
     sp = AnalogSimParams(elapsed_time=0.1, dt=0.01, show_progress=False)
     H = MPO.ising(length=1, J=1.0, g=0.5)
-    res = run(operator=H, sim_params=sp, timesteps=[0.1], method="mc", output="mpo", num_samples=4, seed=42)
+    res = run(operator=H, sim_params=sp, timesteps=[0.1], method="mc", output="mpo", n_sequences=4, seed=42)
     assert isinstance(res, MPO)
