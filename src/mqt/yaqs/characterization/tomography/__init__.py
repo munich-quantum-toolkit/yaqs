@@ -8,6 +8,6 @@
 """Tomography module for YAQS."""
 
 from .process_tensor import ProcessTensor
-from .tomography import estimate_process_tensor, run
+from .tomography import run
 
-__all__ = ["ProcessTensor", "estimate_process_tensor", "run"]
+__all__ = ["ProcessTensor", "run"]
