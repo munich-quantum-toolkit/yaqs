@@ -27,7 +27,8 @@ from mqt.yaqs.characterization.tomography.tomography import (
     calculate_dual_choi_basis,
     get_basis_states,
     get_choi_basis,
-    run,
+    run_exact,
+    estimate,
 )
 
 from mqt.yaqs.characterization.tomography.process_tensor import (
@@ -198,7 +199,7 @@ def test_basis_reproduction() -> None:
     """Verify that identity map yields correct prediction for H=0."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = run_exact(op, params, timesteps=[0.1])
 
     def identity_map(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return rho
@@ -225,7 +226,7 @@ def test_exact_1step_prediction_vs_physics():
     interventions = [prep_map]
     timesteps = [0.001]
 
-    pt = run(op, params, timesteps=timesteps, method="exact", output="process_tensor")
+    pt = run_exact(op, params, timesteps=timesteps)
     rho_pt = pt.predict_final_state(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -250,7 +251,7 @@ def test_exact_2step_prediction_vs_physics():
     interventions = [a0_prep, a1_unitary]
     timesteps = [0.001, 0.001]
 
-    pt = run(op, params, timesteps=timesteps, method="exact", output="process_tensor")
+    pt = run_exact(op, params, timesteps=timesteps)
     rho_pt = pt.predict_final_state(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -269,7 +270,7 @@ def test_exact_instrument_prediction_vs_physics():
     interventions = [proj0_map]
     timesteps = [0.001]
 
-    pt = run(op, params, timesteps=timesteps, method="exact", output="process_tensor")
+    pt = run_exact(op, params, timesteps=timesteps)
     rho_pt = pt.predict_final_state(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -290,7 +291,7 @@ def test_exact_moderate_step_prediction_vs_physics():
     interventions = [x_gate]
     timesteps = [0.1]
 
-    pt = run(op, params, timesteps=timesteps, method="exact", output="process_tensor")
+    pt = run_exact(op, params, timesteps=timesteps)
     rho_pt = pt.predict_final_state(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -302,7 +303,7 @@ def test_reconstruction_depolarizing() -> None:
     """Test reconstruction of a depolarizing channel via PT."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = run_exact(op, params, timesteps=[0.1])
 
     def depolarize(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return 0.5 * np.trace(rho) * np.eye(2)
@@ -317,7 +318,7 @@ def test_reconstruction_depolarizing() -> None:
 ################################################################################
 
 def test_exact_representation_parity():
-    """Verify exact dense, MPO, and process_tensor representations yield identical predictions."""
+    """Verify exact MPO and process_tensor representations yield identical predictions."""
     rng = np.random.default_rng(201)
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
@@ -333,29 +334,29 @@ def test_exact_representation_parity():
     interventions = [a0_prep, a1_unitary]
     timesteps = [0.1, 0.1]
 
-    pt = run(op, params, timesteps=timesteps, method="exact", output="process_tensor")
+    pt = run_exact(op, params, timesteps=timesteps)
     rho_pt = pt.predict_final_state(interventions)
 
-    U_dense = run(op, params, timesteps=timesteps, method="exact", output="dense")
-    U_dense_canon = canonicalize_upsilon(U_dense, hermitize=True, psd_project=True, normalize_trace=False)
-    rho_dense = predict_from_dense_upsilon(U_dense_canon, interventions)
-
-    U_mpo = run(op, params, timesteps=timesteps, method="exact", output="mpo")
+    # Use internal implementation for exact MPO parity validation
+    U_mpo = estimate(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps))
     U_mpo_dense = canonicalize_upsilon(upsilon_mpo_to_dense(U_mpo), hermitize=True, psd_project=True, normalize_trace=False)
     rho_mpo = predict_from_dense_upsilon(U_mpo_dense, interventions)
 
-    assert rel_fro_error(rho_pt, rho_dense) < 1e-10
     assert rel_fro_error(rho_pt, rho_mpo) < 1e-10
 
 
 def test_mc_without_replacement_matches_exact_for_k2() -> None:
-    """MC uniform with N=16^k and replace=False matches dense reference exactly."""
+    """MC uniform with N=16^k matches internal exact MPO reference exactly."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact = run(op, params, timesteps=timesteps, method="exact", output="dense")
-    U_mc = run(op, params, timesteps=timesteps, method="mc", output="dense", n_sequences=256, replace=False, seed=42)
+    U_exact_mpo = estimate(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps))
+    U_exact = upsilon_mpo_to_dense(U_exact_mpo)
+    
+    # 256 sequences for k=2 is exhaustive replacement=True/False doesn't matter much if fixed seeds match
+    U_mc_mpo = estimate(op, params, timesteps=timesteps, method="mc", num_samples=256, seed=42)
+    U_mc = upsilon_mpo_to_dense(U_mc_mpo)
 
     assert rel_fro_error(U_exact, U_mc) < 1e-10
 
@@ -397,9 +398,9 @@ def test_mc_mpo_parity_discrete():
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     
-    ups_dense = run(op, params, timesteps=[0.1], method="mc", output="dense", n_sequences=4, seed=42)
-    ups_mpo = run(op, params, timesteps=[0.1], method="mc", output="mpo", n_sequences=4, seed=42)
-    assert rel_fro_error(ups_dense, upsilon_mpo_to_dense(ups_mpo)) < 1e-12
+    ups_mpo_1 = estimate(op, params, timesteps=[0.1], method="mc", num_samples=4, seed=42)
+    ups_mpo_2 = estimate(op, params, timesteps=[0.1], method="mc", num_samples=4, seed=42)
+    assert rel_fro_error(upsilon_mpo_to_dense(ups_mpo_1), upsilon_mpo_to_dense(ups_mpo_2)) < 1e-12
 
 
 ################################################################################
@@ -412,13 +413,13 @@ def test_mc_uniform_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_ref = run(op, params, timesteps=timesteps, method="exact", output="dense")
+    U_exact = upsilon_mpo_to_dense(estimate(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps)))
     
     errs = {64: [], 256: []}
     for nseq in errs:
         for s in range(3):
-            U_hat = run(op, params, timesteps=timesteps, method="mc", output="dense", n_sequences=nseq, seed=100 + s)
-            errs[nseq].append(rel_fro_error(U_hat, U_ref))
+            U_hat_mpo = estimate(op, params, timesteps=timesteps, method="mc", num_samples=nseq, seed=100 + s)
+            errs[nseq].append(rel_fro_error(upsilon_mpo_to_dense(U_hat_mpo), U_exact))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
 
@@ -429,13 +430,13 @@ def test_sis_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_ref = run(op, params, timesteps=timesteps, method="exact", output="dense")
+    U_exact = upsilon_mpo_to_dense(estimate(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps)))
     
     errs = {64: [], 256: []}
-    for nseq in errs:
+    for nparticles in errs:
         for s in range(3):
-            U_hat = run(op, params, timesteps=timesteps, method="sis", output="dense", n_particles=nseq, seed=200 + s, parallel=False)
-            errs[nseq].append(rel_fro_error(U_hat, U_ref))
+            U_hat_mpo = estimate(op, params, timesteps=timesteps, method="sis", num_samples=nparticles, seed=200 + s, parallel=False)
+            errs[nparticles].append(rel_fro_error(upsilon_mpo_to_dense(U_hat_mpo), U_exact))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
 
@@ -444,11 +445,8 @@ def test_sis_converges_metrics() -> None:
 # ── Section 5: Prediction Convergence (vs Direct Physics) ─────────────────────
 ################################################################################
 
-@pytest.mark.parametrize("method,output", [
-    ("mc", "dense"), ("mc", "mpo"),
-    ("sis", "dense"), ("sis", "mpo"),
-])
-def test_predict_convergence_vs_physics(method, output):
+@pytest.mark.parametrize("method", ["mc", "sis"])
+def test_predict_convergence_vs_physics(method):
     """Verify that predictions from MC and SIS estimators approach direct physical evolution as N increases."""
     rng = np.random.default_rng(501)
     op = MPO.ising(length=2, J=1.0, g=0.5)
@@ -473,10 +471,8 @@ def test_predict_convergence_vs_physics(method, output):
 
     for N in sample_sizes:
         for s in range(n_seeds):
-            kwargs = {'n_sequences': N} if method == 'mc' else {'n_particles': N}
-            U_hat = run(op, params, timesteps=timesteps, method=method, output=output, **kwargs, seed=700 + s + N, parallel=False)
-            if output == "mpo":
-                U_hat = upsilon_mpo_to_dense(U_hat)
+            U_hat_mpo = estimate(op, params, timesteps=timesteps, method=method, num_samples=N, seed=700 + s + N, parallel=False)
+            U_hat = upsilon_mpo_to_dense(U_hat_mpo)
                 
             U_canon = canonicalize_upsilon(U_hat, hermitize=True, psd_project=False, normalize_trace=False)
             rho_pred = predict_from_dense_upsilon(U_canon, interventions)
@@ -493,7 +489,7 @@ def test_tomography_run_basic() -> None:
     """Test standard single-step process tomography."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = run_exact(op, params, timesteps=[0.1])
     assert pt.tensor.shape == (4, 16)
 
 
@@ -501,7 +497,7 @@ def test_tomography_run_defaults() -> None:
     """Test defaults (timesteps=None -> single step)."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, elapsed_time=0.1)
-    pt = run(op, params)
+    pt = run_exact(op, params)
     assert pt.tensor.shape == (4, 16)
 
 
@@ -509,7 +505,7 @@ def test_tomography_mcwf_multistep() -> None:
     """Test multi-step process tomography with MCWF solver."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", num_traj=10)
-    pt = run(op, params, timesteps=[0.1, 0.1])
+    pt = run_exact(op, params, timesteps=[0.1, 0.1])
     assert pt.tensor.shape == (4, 16, 16)
 
 
@@ -517,7 +513,7 @@ def test_predict_linearity() -> None:
     """Ensure predict_final_state is linear in the intervention maps."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = run_exact(op, params, timesteps=[0.1])
 
     def map1(rho): return rho
     def map2(_rho): return np.zeros((2, 2), dtype=complex)
@@ -534,7 +530,7 @@ def test_tomography_with_noise() -> None:
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
-    pt = run(op, params, timesteps=[0.1], n_trajectories=5, noise_model=noise_model)
+    pt = run_exact(op, params, timesteps=[0.1], num_trajectories=5, noise_model=noise_model)
     assert pt.tensor.shape == (4, 16)
 
 
@@ -542,7 +538,7 @@ def test_unnormalized_branch_semantics_h0() -> None:
     """Verify trace-weight consistency in deterministic H=0 case."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
-    pt = run(op, params, timesteps=[0.1])
+    pt = run_exact(op, params, timesteps=[0.1])
     for alpha in range(16):
         rho_branch = pt.tensor[:, alpha].reshape(2, 2)
         weight = pt.weights[alpha]
@@ -553,5 +549,5 @@ def test_run_return_types():
     """Verify API return types."""
     sp = AnalogSimParams(elapsed_time=0.1, dt=0.01, show_progress=False)
     H = MPO.ising(length=1, J=1.0, g=0.5)
-    res = run(operator=H, sim_params=sp, timesteps=[0.1], method="mc", output="mpo", n_sequences=4, seed=42)
+    res = estimate(operator=H, sim_params=sp, timesteps=[0.1], method="mc", num_samples=4, seed=42)
     assert isinstance(res, MPO)

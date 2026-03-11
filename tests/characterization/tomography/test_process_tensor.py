@@ -398,7 +398,7 @@ import numpy as np
 def test_simulated_zero_time_upsilon_is_physical() -> None:
     from mqt.yaqs.core.data_structures.networks import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-    from mqt.yaqs.characterization.tomography import run
+    from mqt.yaqs.characterization.tomography import run_exact
 
     op = MPO.ising(length=2, J=0.0, g=0.0)
 
@@ -406,7 +406,7 @@ def test_simulated_zero_time_upsilon_is_physical() -> None:
     params.show_progress = False
     params.get_state = True
 
-    pt = run(
+    pt = run_exact(
         operator=op,
         sim_params=params,
         timesteps=[0.0, 0.0],
@@ -428,7 +428,7 @@ def test_simulated_zero_time_upsilon_is_physical() -> None:
 def test_simulated_zero_time_conditional_memory_vanishes() -> None:
     from mqt.yaqs.core.data_structures.networks import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-    from mqt.yaqs.characterization.tomography import run
+    from mqt.yaqs.characterization.tomography import run_exact
 
     op = MPO.ising(length=2, J=0.0, g=0.0)
 
@@ -436,7 +436,7 @@ def test_simulated_zero_time_conditional_memory_vanishes() -> None:
     params.show_progress = False
     params.get_state = True
 
-    pt = run(
+    pt = run_exact(
         operator=op,
         sim_params=params,
         timesteps=[0.0, 0.0],
