@@ -542,7 +542,10 @@ def test_unnormalized_branch_semantics_h0() -> None:
     for alpha in range(16):
         rho_branch = pt.tensor[:, alpha].reshape(2, 2)
         weight = pt.weights[alpha]
-        np.testing.assert_allclose(np.trace(rho_branch), weight, atol=1e-10)
+        if weight > 1e-13:
+            np.testing.assert_allclose(np.trace(rho_branch), 1.0, atol=1e-10)
+        else:
+            np.testing.assert_allclose(np.trace(rho_branch), 0.0, atol=1e-10)
 
 
 def test_run_return_types():

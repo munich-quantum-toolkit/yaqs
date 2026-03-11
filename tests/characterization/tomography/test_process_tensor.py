@@ -162,7 +162,8 @@ def test_reconstruct_comb_choi_self_consistency_k2() -> None:
 
     # Test a handful
     for a1, a2 in [(0, 0), (1, 7), (2, 3), (15, 15)]:
-        r_true = tensor[:, a1, a2].reshape(2, 2)
+        w = pt.weights[a1, a2]
+        r_true = (w * tensor[:, a1, a2].reshape(2, 2))
         r_hat = rho_pred(a1, a2)
         np.testing.assert_allclose(r_hat, r_true, atol=1e-6)
 
@@ -312,7 +313,8 @@ def test_reconstruct_upsilon_self_consistency_k2() -> None:
         return np.einsum("s p q r, r p -> s q", U4, ins)
 
     for a1, a2 in [(0, 0), (1, 7), (2, 3), (15, 15), (8, 9)]:
-        r_true = tensor[:, a1, a2].reshape(2, 2)
+        w = pt.weights[a1, a2]
+        r_true = (w * tensor[:, a1, a2].reshape(2, 2))
         r_hat = rho_pred(a1, a2)
         np.testing.assert_allclose(r_hat, r_true, atol=1e-6)
 
