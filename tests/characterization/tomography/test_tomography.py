@@ -336,11 +336,11 @@ def test_exact_representation_parity():
     pt = run(op, params, timesteps=timesteps, method="exact", output="process_tensor")
     rho_pt = pt.predict_final_state(interventions)
 
-    U_dense = run(op, params, timesteps=timesteps, method="exact", output="dense", dual_transform="conj")
+    U_dense = run(op, params, timesteps=timesteps, method="exact", output="dense")
     U_dense_canon = canonicalize_upsilon(U_dense, hermitize=True, psd_project=True, normalize_trace=False)
     rho_dense = predict_from_dense_upsilon(U_dense_canon, interventions)
 
-    U_mpo = run(op, params, timesteps=timesteps, method="exact", output="mpo", dual_transform="conj")
+    U_mpo = run(op, params, timesteps=timesteps, method="exact", output="mpo")
     U_mpo_dense = canonicalize_upsilon(upsilon_mpo_to_dense(U_mpo), hermitize=True, psd_project=True, normalize_trace=False)
     rho_mpo = predict_from_dense_upsilon(U_mpo_dense, interventions)
 
@@ -354,8 +354,8 @@ def test_mc_without_replacement_matches_exact_for_k2() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact = run(op, params, timesteps=timesteps, method="exact", output="dense", dual_transform="conj")
-    U_mc = run(op, params, timesteps=timesteps, method="mc", output="dense", num_samples=256, replace=False, dual_transform="conj", seed=42)
+    U_exact = run(op, params, timesteps=timesteps, method="exact", output="dense")
+    U_mc = run(op, params, timesteps=timesteps, method="mc", output="dense", num_samples=256, replace=False, seed=42)
 
     assert rel_fro_error(U_exact, U_mc) < 1e-10
 
@@ -392,14 +392,13 @@ def test_mpo_addition_matches_dense():
     assert rel_fro_error(dense_added, upsilon_mpo_to_dense(mpo1) + upsilon_mpo_to_dense(mpo2)) < 1e-12
 
 
-@pytest.mark.parametrize("dual_transform", ["id", "T", "conj", "dag"])
-def test_mc_mpo_parity_discrete(dual_transform):
-    """Verify MC dense and MPO outputs are equivalent for various dual transforms."""
+def test_mc_mpo_parity_discrete():
+    """Verify MC dense and MPO outputs are equivalent."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     
-    ups_dense = run(op, params, timesteps=[0.1], method="mc", output="dense", num_samples=4, dual_transform=dual_transform, seed=42)
-    ups_mpo = run(op, params, timesteps=[0.1], method="mc", output="mpo", num_samples=4, dual_transform=dual_transform, seed=42)
+    ups_dense = run(op, params, timesteps=[0.1], method="mc", output="dense", num_samples=4, seed=42)
+    ups_mpo = run(op, params, timesteps=[0.1], method="mc", output="mpo", num_samples=4, seed=42)
     assert rel_fro_error(ups_dense, upsilon_mpo_to_dense(ups_mpo)) < 1e-12
 
 
@@ -413,12 +412,12 @@ def test_mc_uniform_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_ref = run(op, params, timesteps=timesteps, method="exact", output="dense", dual_transform="conj")
+    U_ref = run(op, params, timesteps=timesteps, method="exact", output="dense")
     
     errs = {64: [], 256: []}
     for nseq in errs:
         for s in range(3):
-            U_hat = run(op, params, timesteps=timesteps, method="mc", output="dense", num_samples=nseq, dual_transform="conj", seed=100 + s)
+            U_hat = run(op, params, timesteps=timesteps, method="mc", output="dense", num_samples=nseq, seed=100 + s)
             errs[nseq].append(rel_fro_error(U_hat, U_ref))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
@@ -430,12 +429,12 @@ def test_sis_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_ref = run(op, params, timesteps=timesteps, method="exact", output="dense", dual_transform="conj")
+    U_ref = run(op, params, timesteps=timesteps, method="exact", output="dense")
     
     errs = {64: [], 256: []}
     for nseq in errs:
         for s in range(3):
-            U_hat = run(op, params, timesteps=timesteps, method="sis", output="dense", num_samples=nseq, dual_transform="conj", seed=200 + s, parallel=False)
+            U_hat = run(op, params, timesteps=timesteps, method="sis", output="dense", num_samples=nseq, seed=200 + s, parallel=False)
             errs[nseq].append(rel_fro_error(U_hat, U_ref))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
@@ -474,7 +473,7 @@ def test_predict_convergence_vs_physics(method, output):
 
     for N in sample_sizes:
         for s in range(n_seeds):
-            U_hat = run(op, params, timesteps=timesteps, method=method, output=output, num_samples=N, dual_transform="conj", seed=700 + s + N, parallel=False)
+            U_hat = run(op, params, timesteps=timesteps, method=method, output=output, num_samples=N, seed=700 + s + N, parallel=False)
             if output == "mpo":
                 U_hat = upsilon_mpo_to_dense(U_hat)
                 

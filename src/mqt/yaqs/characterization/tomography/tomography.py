@@ -386,7 +386,6 @@ def _run_exact_mpo(
     parallel: bool = True,
     num_trajectories: int = 1,
     noise_model: NoiseModel | None = None,
-    dual_transform: str = "conj",
 ) -> MPO:
     """Deterministic exact estimator: enumerate all 16^k sequences.
     
@@ -466,7 +465,7 @@ def _run_exact_mpo(
  
     def _terms():
         for s_idx, alpha_seq in enumerate(all_seqs):
-            dual_ops = [_apply_dual_transform(duals[a], dual_transform) for a in alpha_seq]
+            dual_ops = [_apply_dual_transform(duals[a], "conj") for a in alpha_seq]
             yield rank1_upsilon_mpo_term(raw_sum[s_idx], dual_ops, weight=1.0)
  
     return _accumulate_rank1_terms(_terms(), compress_every, tol, max_bond_dim, n_sweeps)
@@ -482,7 +481,6 @@ def _run_mc_mpo(
     noise_model: NoiseModel | None = None,
     seed: int | None = None,
     sampling: str = "discrete",
-    dual_transform: str = "conj",
     replace: bool = True,
 ) -> MPO:
     """Monte Carlo estimator (discrete or continuous ensemble)."""
@@ -588,13 +586,13 @@ def _run_mc_mpo(
         for s_idx in range(num_samples):
             if sampling == "discrete":
                 dual_ops = [
-                    _apply_dual_transform(duals[a], dual_transform)
+                    _apply_dual_transform(duals[a], "conj")
                     for a in alpha_seqs[s_idx]
                 ]
                 w = inv_q / num_samples
             else:
                 dual_ops = [
-                    _apply_dual_transform(_continuous_dual(pm, pp), dual_transform)
+                    _apply_dual_transform(_continuous_dual(pm, pp), "conj")
                     for pm, pp in psi_pair_seqs[s_idx]
                 ]
                 w = inv_q / num_samples
@@ -611,7 +609,6 @@ def _run_sis_mpo(
     num_particles: int = 1000,
     noise_model: NoiseModel | None = None,
     seed: int | None = None,
-    dual_transform: str = "conj",
 ) -> MPO:
     """Sequential Importance Sampling (SMC) estimator — returns MPO."""
     # Internal defaults for advanced parameters
@@ -643,7 +640,7 @@ def _run_sis_mpo(
     basis_set = get_basis_states()
     _cb, choi_indices = get_choi_basis()
     duals = calculate_dual_choi_basis(_cb)
-    dual_mats = [_apply_dual_transform(duals[a], dual_transform) for a in range(16)]
+    dual_mats = [_apply_dual_transform(duals[a], "conj") for a in range(16)]
  
     dummy_mps = MPS(length=operator.length, state="zeros")
     static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, local_params)
@@ -953,7 +950,6 @@ def run(
     num_trajectories: int = 100,
     seed: int | None = None,
     sampling: str = "discrete",
-    dual_transform: str = "conj",
     replace: bool = True,
 ) -> ProcessTensor | MPO | NDArray[np.complex128]:
     """Run process tomography on a quantum system.
@@ -971,14 +967,6 @@ def run(
  
     if output == "process_tensor" and method != "exact":
         msg = f"output='process_tensor' is only supported for method='exact', got method={method!r}."
-        raise ValueError(msg)
-        
-    if output == "process_tensor" and dual_transform != "conj":
-        msg = (
-            f"dual_transform={dual_transform!r} is invalid for output='process_tensor'. "
-            "ProcessTensor implicitly maps via 'conj' when evaluated, so this irrelevant "
-            "argument is rejected to avoid confusion."
-        )
         raise ValueError(msg)
  
     if method == "exact":
@@ -999,7 +987,6 @@ def run(
                 parallel=parallel,
                 num_trajectories=num_trajectories,
                 noise_model=noise_model,
-                dual_transform=dual_transform,
             )
     elif method == "mc":
         res = _run_mc_mpo(
@@ -1012,7 +999,6 @@ def run(
             noise_model=noise_model,
             seed=seed,
             sampling=sampling,
-            dual_transform=dual_transform,
             replace=replace,
         )
     elif method == "sis":
@@ -1024,7 +1010,6 @@ def run(
             num_particles=num_samples,
             noise_model=noise_model,
             seed=seed,
-            dual_transform=dual_transform,
         )
     else:
         msg = f"method must be 'sis', 'mc', or 'exact', got {method!r}."
