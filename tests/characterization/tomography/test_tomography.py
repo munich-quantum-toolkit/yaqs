@@ -608,7 +608,7 @@ def test_sis_tjm_k2_convergence() -> None:
     assert np.mean(errs_150) < np.mean(errs_50)
 
 
-def test_sis_tjm_outputs_process_tensor_and_mpo() -> None:
+def test_sis_tjm_outputs_dense_and_mpo() -> None:
     """Verify both formatters yield consistent predictions for TJM SIS."""
     from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor
     
@@ -619,11 +619,11 @@ def test_sis_tjm_outputs_process_tensor_and_mpo() -> None:
     from mqt.yaqs.characterization.tomography.tomography import (
         _estimate_sis_sequence_data,
         _sequence_data_to_mpo,
-        _sequence_data_to_process_tensor,
+        _sequence_data_to_dense,
     )
     data = _estimate_sis_sequence_data(op, params, timesteps, num_samples=100, seed=42)
     mpo = _sequence_data_to_mpo(data)
-    pt = _sequence_data_to_process_tensor(data)
+    pt = _sequence_data_to_dense(data)
     assert isinstance(pt, ProcessTensor)
     
     # 1. Structural consistency

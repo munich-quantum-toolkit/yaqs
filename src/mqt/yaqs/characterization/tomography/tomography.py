@@ -882,12 +882,12 @@ def _estimate_sis_sequence_data(
 # ═══ Stage-B Formatters (Conversion) ══════════════════════════════════════════
 
 
-def _sequence_data_to_process_tensor(data: SequenceData) -> ProcessTensor:
+def _sequence_data_to_dense(data: SequenceData) -> ProcessTensor:
     """Format SequenceData into a ProcessTensor."""
     k = len(data.timesteps)
     tensor_shape = [4] + [16] * k
-    process_tensor_data = np.zeros(tensor_shape, dtype=np.complex128)
-    process_tensor_weights = np.zeros([16] * k, dtype=np.float64)
+    dense_data = np.zeros(tensor_shape, dtype=np.complex128)
+    dense_weights = np.zeros([16] * k, dtype=np.float64)
 
     for i, seq in enumerate(data.sequences):
         rho = data.outputs[i]
@@ -895,12 +895,12 @@ def _sequence_data_to_process_tensor(data: SequenceData) -> ProcessTensor:
         # Store normalized density matrix; ProcessTensor methods now apply weights separately
         rho_vec = rho.reshape(-1)
         # Using slice(None) for the first dimension (4)
-        process_tensor_data[(slice(None), *seq)] = rho_vec
-        process_tensor_weights[seq] = w
+        dense_data[(slice(None), *seq)] = rho_vec
+        dense_weights[seq] = w
 
     return ProcessTensor(
-        tensor=process_tensor_data,
-        weights=process_tensor_weights,
+        tensor=dense_data,
+        weights=dense_weights,
         timesteps=data.timesteps,
         choi_duals=data.choi_duals,
         choi_indices=data.choi_indices,
@@ -1036,7 +1036,7 @@ def run_exact(
     sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     *,
-    output: Literal["process_tensor", "mpo"] = "process_tensor",
+    output: Literal["dense", "mpo"] = "dense",
     noise_model: NoiseModel | None = None,
     parallel: bool = True,
     num_trajectories: int = 100,
@@ -1062,8 +1062,8 @@ def run_exact(
         noise_model=noise_model,
     )
 
-    if output == "process_tensor":
-        return _sequence_data_to_process_tensor(data)
+    if output == "dense":
+        return _sequence_data_to_dense(data)
     if output == "mpo":
         return _sequence_data_to_mpo(data)
     msg = f"Unknown output format {output!r}."
@@ -1076,7 +1076,7 @@ def estimate(
     timesteps: list[float] | None = None,
     *,
     method: Literal["sis", "mc"] = "sis",
-    output: Literal["process_tensor", "mpo"] = "mpo",
+    output: Literal["dense", "mpo"] = "mpo",
     noise_model: NoiseModel | None = None,
     parallel: bool = True,
     num_samples: int = 1000,
@@ -1117,8 +1117,8 @@ def estimate(
         msg = f"Unknown estimation method {method!r}."
         raise ValueError(msg)
 
-    if output == "process_tensor":
-        return _sequence_data_to_process_tensor(data)
+    if output == "dense":
+        return _sequence_data_to_dense(data)
     if output == "mpo":
         return _sequence_data_to_mpo(data)
     msg = f"Unknown output format {output!r}."
