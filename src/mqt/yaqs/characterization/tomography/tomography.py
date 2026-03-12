@@ -8,12 +8,8 @@
 """Automated Process Tomography Module.
 
 Provides functions for process tomography on a quantum system modeled by MPO
-evolution. The primary entry points are:
- 
-* :func:`run_exact` – Full deterministic enumeration for exact ProcessTensor outcomes.
-* :func:`estimate`  – Approximate estimation (SIS or MC) returning an MPO representation.
- 
-The module supports both exact ProcessTensor reconstruction and approximate Upsilon (MPO) estimation.
+evolution. The module supports exhaustive sequence enumeration as well as approximate SIS or Monte Carlo sampling.
+The primary entry point is :func:`run`.
 
 """
 
@@ -825,6 +821,7 @@ def _estimate_sis_sequence_data(
                         noise_model,
                         step_params_seg,
                         local_params.solver,
+                        traj_idx=i,  # Use particle index to avoid correlation in serial mode
                         static_ctx=static_ctx,
                     )
                 else:
@@ -931,10 +928,10 @@ def _sequence_data_to_mpo(
     return _accumulate_rank1_terms(_terms(), compress_every, tol, max_bond_dim, n_sweeps)
 
 
-# ═══ Exact Simulation & Process Tensor ════════════════════════════════════════
+# ═══ Exhaustive Simulation & Process Tensor ════════════════════════════════════
 
 
-def _run_exact_sequence_data(
+def _run_exhaustive_sequence_data(
     operator: MPO,
     sim_params: AnalogSimParams,
     timesteps: list[float],
@@ -942,7 +939,7 @@ def _run_exact_sequence_data(
     num_trajectories: int = 100,
     noise_model: NoiseModel | None = None,
 ) -> SequenceData:
-    """Runs the core simulation for exact process tensor tomography."""
+    """Runs the core simulation for exhaustive basis-sequence tomography."""
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True
 
@@ -969,7 +966,7 @@ def _run_exact_sequence_data(
         dummy_mps = MPS(length=operator.length, state="zeros")
         mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, local_params)
     elif local_params.solver != "TJM":
-        msg = f"Exact estimator does not support solver {local_params.solver!r}."
+        msg = f"Exhaustive estimator does not support solver {local_params.solver!r}."
         raise ValueError(msg)
 
     payload = {
@@ -1031,19 +1028,51 @@ def _run_exact_sequence_data(
 # ═══ Public API ═══════════════════════════════════════════════════════════════
 
 
-def run_exact(
+# ═══ Public API ═══════════════════════════════════════════════════════════════
+
+
+def run(
     operator: MPO,
     sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     *,
+    method: Literal["exhaustive", "mc", "sis"] = "exhaustive",
     output: Literal["dense", "mpo"] = "dense",
     noise_model: NoiseModel | None = None,
     parallel: bool = True,
+    num_samples: int = 1000,
     num_trajectories: int = 100,
+    seed: int | None = None,
+    compress_every: int = 100,
+    tol: float = 1e-12,
+    max_bond_dim: int | None = None,
+    n_sweeps: int = 2,
 ) -> ProcessTensor | MPO:
-    """Run exact basis-sequence tomography.
+    """Main entry point for Process Tomography.
 
-    This estimator enumerates all 16^k sequences and returns a ProcessTensor or MPO.
+    Args:
+        operator: The Hamiltonian (MPO) representing the system.
+        sim_params: Simulation parameters (solver, dt, etc.).
+        timesteps: List of durations for each step in the combustion sequence.
+            If None, [sim_params.elapsed_time] is used.
+        method: The estimation method to use:
+            - "exhaustive": Enumerates all 16^k sequences. This is exhaustive but
+              still approximate if num_trajectories < infinity for noisy evolution.
+            - "mc": Discrete Monte Carlo sampling of sequences.
+            - "sis": Sequential Importance Sampling (SMC) estimator.
+        output: Output format, either "dense" (ProcessTensor) or "mpo" (Upsilon).
+        noise_model: Optional noise model. If None, uses sim_params.noise_model.
+        parallel: Whether to use multi-processing for simulation.
+        num_samples: Number of sequences to sample (for "mc" and "sis").
+        num_trajectories: Number of trajectories per sequence (for "exhaustive" and "mc").
+        seed: Random seed for reproducibility.
+        compress_every: (MPO only) Frequency of intermediate MPO compression.
+        tol: (MPO only) Relative truncation tolerance for MPO compression.
+        max_bond_dim: (MPO only) Hard bond dimension limit for MPO compression.
+        n_sweeps: (MPO only) Number of sweeps for MPO accumulation.
+
+    Returns:
+        A ProcessTensor (if output="dense") or an Upsilon-MPO (if output="mpo").
     """
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]
@@ -1053,54 +1082,14 @@ def run_exact(
         msg = f"Tomography currently only supports solvers {valid_solvers}, got {sim_params.solver!r}."
         raise ValueError(msg)
 
-    data = _run_exact_sequence_data(
-        operator,
-        sim_params,
-        timesteps,
-        parallel=parallel,
-        num_trajectories=num_trajectories,
-        noise_model=noise_model,
-    )
-
-    if output == "dense":
-        return _sequence_data_to_dense(data)
-    if output == "mpo":
-        return _sequence_data_to_mpo(data)
-    msg = f"Unknown output format {output!r}."
-    raise ValueError(msg)
-
-
-def estimate(
-    operator: MPO,
-    sim_params: AnalogSimParams,
-    timesteps: list[float] | None = None,
-    *,
-    method: Literal["sis", "mc"] = "sis",
-    output: Literal["dense", "mpo"] = "mpo",
-    noise_model: NoiseModel | None = None,
-    parallel: bool = True,
-    num_samples: int = 1000,
-    num_trajectories: int = 1,
-    seed: int | None = None,
-) -> ProcessTensor | MPO:
-    """Estimate the process using SIS or Monte Carlo sampling."""
-    if timesteps is None:
-        timesteps = [sim_params.elapsed_time]
-
-    valid_solvers = {"MCWF", "TJM"}
-    if sim_params.solver not in valid_solvers:
-        msg = f"Solver {sim_params.solver!r} not supported for approximate estimators."
-        raise ValueError(msg)
-
-    if method == "sis":
-        data = _estimate_sis_sequence_data(
+    if method == "exhaustive":
+        data = _run_exhaustive_sequence_data(
             operator,
             sim_params,
             timesteps,
             parallel=parallel,
-            num_samples=num_samples,
+            num_trajectories=num_trajectories,
             noise_model=noise_model,
-            seed=seed,
         )
     elif method == "mc":
         data = _estimate_mc_sequence_data(
@@ -1113,6 +1102,16 @@ def estimate(
             noise_model=noise_model,
             seed=seed,
         )
+    elif method == "sis":
+        data = _estimate_sis_sequence_data(
+            operator,
+            sim_params,
+            timesteps,
+            parallel=parallel,
+            num_samples=num_samples,
+            noise_model=noise_model,
+            seed=seed,
+        )
     else:
         msg = f"Unknown estimation method {method!r}."
         raise ValueError(msg)
@@ -1120,6 +1119,12 @@ def estimate(
     if output == "dense":
         return _sequence_data_to_dense(data)
     if output == "mpo":
-        return _sequence_data_to_mpo(data)
+        return _sequence_data_to_mpo(
+            data,
+            compress_every=compress_every,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+        )
     msg = f"Unknown output format {output!r}."
     raise ValueError(msg)
