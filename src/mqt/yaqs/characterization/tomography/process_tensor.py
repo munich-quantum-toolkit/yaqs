@@ -368,7 +368,9 @@ class ProcessTensor:
         # Tensor contraction
         # self.tensor has shape (4, 16, 16, ..., 16).
         # We want to contract the k_steps indices (dimensions 1 to k_steps) with the c_maps coefficients.
-        result_tensor = self.tensor
+        weighted_tensor = self.tensor * self.weights[None, ...]
+
+        result_tensor = weighted_tensor
         for step in reversed(range(k_steps)):
             # Multiply and sum out the last axis (axis -1) with c_maps[step]
             result_tensor = np.tensordot(result_tensor, c_maps[step], axes=([-1], [0]))
@@ -433,6 +435,8 @@ class ProcessTensor:
 
             # Enumerate all alpha tuples (16^k)
             for alphas in itertools.product(range(16), repeat=k):
+                # self.tensor is normalized, but Upsilon requires weighted contributions J = sum w*rho*D
+                w = self.weights[alphas]
                 rho_out = v2rho(self.tensor[(slice(None), *alphas)])
 
                 # Past operator on ⊗_t H_choi,t, each factor is 4x4
@@ -440,8 +444,8 @@ class ProcessTensor:
                 for a in alphas[1:]:
                     past = np.kron(past, dual_transform(self.choi_duals[a]))
 
-                # Υ = Σ ρ_out ⊗ past
-                U += np.kron(rho_out, past)
+                # Expansion in dual basis.
+                U += np.kron(w * rho_out, past)
 
             return U
 
@@ -480,7 +484,8 @@ class ProcessTensor:
             if check:
                 err = 0.0
                 for alphas in test_seqs:
-                    rho_true = self.tensor[(slice(None), *alphas)].reshape(2, 2)
+                    w = self.weights[alphas]
+                    rho_true = w * self.tensor[(slice(None), *alphas)].reshape(2, 2)
                     rho_pred = predict_from_upsilon(U, alphas)
                     err += np.linalg.norm(rho_true - rho_pred)
                 err /= max(1, len(test_seqs))
