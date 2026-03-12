@@ -554,3 +554,103 @@ def test_run_return_types():
     H = MPO.ising(length=1, J=1.0, g=0.5)
     res = estimate(operator=H, sim_params=sp, timesteps=[0.1], method="mc", num_samples=4, seed=42)
     assert isinstance(res, MPO)
+
+
+def test_sis_tjm_basic() -> None:
+    """Verify that SIS runs with TJM (MPS) backend (k=1 smoke test)."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
+    timesteps = [0.1]
+    
+    # Generic path check
+    res = estimate(op, params, timesteps=timesteps, method="sis", num_samples=10, seed=42)
+    assert isinstance(res, MPO)
+    dense = upsilon_mpo_to_dense(res)
+    assert np.linalg.norm(dense) > 1e-10
+
+
+def test_sis_tjm_k1_matches_exact_prediction() -> None:
+    """Verify TJM SIS matches exact for k=1."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
+    timesteps = [0.1]
+    
+    res_exact = run_exact(op, params, timesteps=timesteps, output="mpo")
+    dense_exact = upsilon_mpo_to_dense(res_exact)
+    
+    res_sis = estimate(op, params, timesteps=timesteps, method="sis", num_samples=100, seed=42, output="mpo")
+    dense_sis = upsilon_mpo_to_dense(res_sis)
+    
+    # k=1 should be reasonably accurate with 100 samples
+    assert rel_fro_error(dense_sis, dense_exact) < 0.15
+
+
+def test_sis_tjm_k2_convergence() -> None:
+    """Verify that TJM SIS mean error decreases from N=50 to N=150 particles for k=2."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
+    timesteps = [0.1, 0.1]
+    
+    res_exact = run_exact(op, params, timesteps=timesteps, output="mpo")
+    dense_exact = upsilon_mpo_to_dense(res_exact)
+    
+    errs_50 = []
+    errs_150 = []
+    # Use multiple seeds to check mean convergence
+    for s in range(3):
+        res_50 = estimate(op, params, timesteps=timesteps, method="sis", num_samples=50, seed=300 + s, output="mpo")
+        errs_50.append(rel_fro_error(upsilon_mpo_to_dense(res_50), dense_exact))
+        
+        res_150 = estimate(op, params, timesteps=timesteps, method="sis", num_samples=150, seed=400 + s, output="mpo")
+        errs_150.append(rel_fro_error(upsilon_mpo_to_dense(res_150), dense_exact))
+        
+    # Mean error should be significantly lower for N=150
+    assert np.mean(errs_150) < np.mean(errs_50)
+
+
+def test_sis_tjm_outputs_process_tensor_and_mpo() -> None:
+    """Verify both formatters yield consistent predictions for TJM SIS."""
+    from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor
+    
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
+    timesteps = [0.1]
+    
+    from mqt.yaqs.characterization.tomography.tomography import (
+        _estimate_sis_sequence_data,
+        _sequence_data_to_mpo,
+        _sequence_data_to_process_tensor,
+    )
+    data = _estimate_sis_sequence_data(op, params, timesteps, num_samples=100, seed=42)
+    mpo = _sequence_data_to_mpo(data)
+    pt = _sequence_data_to_process_tensor(data)
+    assert isinstance(pt, ProcessTensor)
+    
+    # 1. Structural consistency
+    dm = upsilon_mpo_to_dense(mpo)
+    dp = pt.reconstruct_comb_choi()
+    assert rel_fro_error(dm, dp) < 1e-10
+    
+    # 2. Prediction consistency (interpolation check)
+    basis_set = get_basis_states()
+    
+    def get_map(idx: int):
+        p_idx, m_idx = pt.choi_indices[idx]
+        _, _, rho_p = basis_set[p_idx]
+        _, _, e_m = basis_set[m_idx]
+        return lambda rho: np.trace(e_m @ rho) * rho_p
+
+    u4 = dm.reshape(2, 4, 2, 4)
+    for a in [0, 5, 10, 15]:
+        map_a = get_map(a)
+        # ProcessTensor prediction (lookup weighted outcome)
+        rho_out_pt = pt.predict_final_state([map_a])
+        
+        # MPO prediction (contraction of recreated comb)
+        ins = pt.choi_basis[a].T
+        rho_out_mpo = np.einsum("spqr,rp->sq", u4, ins)
+        
+        # Must be identical since dm == dp
+        assert rel_fro_error(rho_out_pt, rho_out_mpo) < 1e-10
+        # Check trace matches weight (stratification ensures weight > 0)
+        assert abs(np.trace(rho_out_pt) - pt.weights[a]) < 1e-10
