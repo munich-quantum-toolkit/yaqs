@@ -55,6 +55,7 @@ UPGRADING
 :titlesonly:
 
 contributing
+ai_usage
 tooling
 support
 ```
