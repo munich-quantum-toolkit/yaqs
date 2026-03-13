@@ -285,22 +285,24 @@ class ProcessTensor:
 
     def __init__(
         self,
-        tensor: NDArray[np.complex128],
-        weights: NDArray[np.float64],
+        tensor: NDArray[np.complex128] | None,
+        weights: NDArray[np.float64] | None,
         timesteps: list[float],
-        choi_duals: list[NDArray[np.complex128]],
-        choi_indices: list[tuple[int, int]],
+        choi_duals: list[NDArray[np.complex128]] | None = None,
+        choi_indices: list[tuple[int, int]] | None = None,
         choi_basis: list[NDArray[np.complex128]] | None = None,
+        dense_choi: NDArray[np.complex128] | None = None,
     ) -> None:
         """Initialize the ProcessTensor.
 
         Args:
-            tensor: The raw tensor data.
-            weights: The probabilities of each sequence.
+            tensor: The raw tensor data (coefficients in a basis).
+            weights: The probabilities of each sequence in that basis.
             timesteps: The time points where interventions/measurements occurred.
-            choi_duals: List of 16 dual matrices (4x4) used for tensor contraction.
+            choi_duals: List of dual matrices used for tensor contraction.
             choi_indices: List mapping tensor index alpha to (prep_idx, meas_idx).
-            choi_basis: Optional list of 16 original basis matrices (4x4).
+            choi_basis: Optional list of original basis matrices.
+            dense_choi: Optional dense matrix representation of the comb Choi operator.
         """
         self.tensor = tensor
         self.weights = weights
@@ -308,6 +310,21 @@ class ProcessTensor:
         self.choi_duals = choi_duals
         self.choi_indices = choi_indices
         self.choi_basis = choi_basis
+        self.dense_choi = dense_choi
+
+    @classmethod
+    def from_dense_choi(
+        cls,
+        dense_choi: NDArray[np.complex128],
+        timesteps: list[float],
+    ) -> ProcessTensor:
+        """Build a ProcessTensor from its dense Choi matrix representation."""
+        return cls(
+            tensor=None,
+            weights=None,
+            timesteps=timesteps,
+            dense_choi=dense_choi,
+        )
 
     def to_linear_map_matrix(self) -> NDArray[np.complex128]:
         """Convert to matrix view (final output vs all inputs).
@@ -347,20 +364,20 @@ class ProcessTensor:
             msg = f"Expected {k_steps} interventions (including t=0 prep), got {len(interventions)}."
             raise ValueError(msg)
 
+        if self.dense_choi is not None:
+            return predict_from_dense_upsilon(self.dense_choi, interventions)
+
+        if self.tensor is None or self.weights is None or self.choi_duals is None:
+            msg = "Predicting from ProcessTensor requires either `dense_choi` or (`tensor`, `weights`, and `choi_duals`)."
+            raise ValueError(msg)
+
         # Precompute the Choi matrices and their projection onto the dual basis.
         # For a CP map E(\\rho), its Choi matrix is J(E) = sum_{i,j} E(|i><j|) \\otimes |i><j|^T
         # which in our basis choice maps directly to \\rho_p \\otimes E_m^T.
 
         c_maps = []
         for emap in interventions:
-            j_choi = np.zeros((4, 4), dtype=complex)
-            for i in range(2):
-                for j in range(2):
-                    e_in = np.zeros((2, 2), dtype=complex)
-                    e_in[i, j] = 1.0
-                    rho_out = emap(e_in)
-                    j_choi += np.kron(rho_out, e_in)
-
+            j_choi = _cptp_to_choi(emap)
             # Project onto duals: c_a = Tr(D_a^dag J)
             c_a = np.array([np.trace(d.conj().T @ j_choi) for d in self.choi_duals])
             c_maps.append(c_a)
@@ -781,12 +798,51 @@ def rank1_upsilon_mpo_term(
 
 
 def upsilon_mpo_to_dense(mpo: MPO) -> NDArray[np.complex128]:
-    """Convert a process-tensor MPO back to its dense matrix representation.
-
-    Args:
-        mpo: The MPO representing the comb Choi operator.
-
-    Returns:
-        Dense matrix of shape (2*4^k, 2*4^k)
-    """
     return mpo.to_matrix()
+
+
+def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Calculate the 4x4 Choi matrix for a given CPTP map."""
+    # Basis: |0><0|, |0><1|, |1><0|, |1><1|
+    basis = [
+        np.array([[1, 0], [0, 0]], dtype=complex),
+        np.array([[0, 1], [0, 0]], dtype=complex),
+        np.array([[0, 0], [1, 0]], dtype=complex),
+        np.array([[0, 0], [0, 1]], dtype=complex),
+    ]
+    # J(E) = sum_{i,j} E(|i><j|) \otimes |i><j|
+    # Note: Using the convention that matches predict_final_state
+    j_choi = np.zeros((4, 4), dtype=complex)
+    for i, eij in enumerate(basis):
+        out = emap(eij)
+        # Vectorize out and place into column i of J or similar structure
+        # Standard Choi: sum E(e_ij) \otimes e_ij
+        term = np.kron(out, eij)
+        j_choi += term
+    return j_choi
+
+
+def predict_from_dense_upsilon(
+    U: NDArray[np.complex128],
+    interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+) -> NDArray[np.complex128]:
+    """Predict final state from a dense Choi matrix U and CPTP interventions."""
+    k = len(interventions)
+    dim_p = 4**k
+    # U lives on H_F (dim 2) \otimes (H1 \otimes ... \otimes Hk) (dim 4 each)
+    # We want: rho = Tr_past[ (I \otimes (\otimes_t J_t^T)) U ]
+    
+    # Bundle interventions into one big operator
+    # NOTE: Since interventions are applied serially, we contract them step by step or all at once.
+    # For a dense matrix, all at once is easier:
+    j_total = _cptp_to_choi(interventions[0])
+    for t in range(1, k):
+        j_total = np.kron(j_total, _cptp_to_choi(interventions[t]))
+    
+    # Contract: rho = Tr_past[ U (I \otimes J_total^T) ]
+    U4 = U.reshape(2, dim_p, 2, dim_p)
+    ins = j_total.T # .T is consistent with predict_final_state basis
+    
+    # rho_{s,s'} = \sum_{p,p'} U_{s,p,s',p'} * ins_{p',p}
+    rho = np.einsum("s p q r, r p -> s q", U4, ins)
+    return rho
