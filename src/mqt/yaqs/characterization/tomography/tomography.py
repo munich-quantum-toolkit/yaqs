@@ -531,18 +531,6 @@ def _run_mc_sampling(
     )
 
 
-def _get_site0_rdm(
-    state: MPS | NDArray[np.complex128], solver: str,
-) -> NDArray[np.complex128]:
-    """Compute the (unnormalized) reduced density matrix of site 0."""
-    if solver == "MCWF":
-        assert isinstance(state, np.ndarray)
-        psi_r = state.reshape(2, -1)
-        return psi_r @ psi_r.conj().T
-    assert isinstance(state, MPS)
-    state.set_canonical_form(orthogonality_center=0)
-    t0 = state.tensors[0]  # (d, 1, chi)
-    return np.einsum("sac,tac->st", t0, t0.conj())
 
 
 def _continuous_dual_step(
@@ -561,39 +549,6 @@ def _continuous_dual_step(
     return np.kron(d_q, d_pt).T
 
 
-def _sample_local_measurement(
-    rho_0: NDArray[np.complex128], rng: np.random.Generator,
-) -> NDArray[np.complex128]:
-    r"""Sample ψ_m from q_local ∝ ⟨ψ|ρ_0|ψ⟩ · dHaar(ψ) on the qubit Bloch sphere.
-
-    For a qubit, the CDF of |α|² under this distribution is a quadratic
-    that can be inverted analytically.
-    """
-    eigenvalues, eigenvectors = np.linalg.eigh(rho_0)
-    # Sort descending
-    idx = np.argsort(eigenvalues)[::-1]
-    lam = eigenvalues[idx]
-    u_mat = eigenvectors[:, idx]
-
-    delta = float(lam[0] - lam[1])
-    z_norm = float(lam[0] + lam[1]) / 2.0  # = Tr(ρ_0)/2
-
-    # Sample t = |α|² from density f(t) = lam[1] + delta*t on [0,1]
-    u = float(rng.random())
-    if abs(delta) < 1e-14 * max(abs(lam[0]), 1e-30):
-        t = u  # uniform (maximally mixed)
-    else:
-        # Solve delta/2 * t² + lam[1]*t - u*z_norm = 0
-        disc = float(lam[1]) ** 2 + 2.0 * delta * u * z_norm
-        t = (-float(lam[1]) + np.sqrt(max(disc, 0.0))) / delta
-        t = np.clip(t, 0.0, 1.0)
-
-    # Sample phase
-    phi = float(rng.random()) * 2.0 * np.pi
-
-    # Build state in eigenbasis then rotate
-    psi_eig = np.array([np.sqrt(t), np.sqrt(1.0 - t) * np.exp(1j * phi)], dtype=np.complex128)
-    return u_mat @ psi_eig
 
 
 def _sis_evolve_worker(job_idx: int) -> MPS | NDArray[np.complex128]:
@@ -638,102 +593,78 @@ def _run_sis_sampling(
     seed: int | None = None,
     ess_threshold: float = 0.5,
     proposal: str = "uniform",
-    mixture_eps: float = 0.1,
 ) -> SamplingData:
-    """Continuous Sequential Importance Sampling (SIS) estimator.
+    """Minimal baseline SIS estimator targeting the same continuous estimator as MC.
 
-    Each particle carries exactly one noisy trajectory realization (num_trajectories=1).
-    Evolution is solver-generic (MCWF or TJM).
-    Interventions are continuous Haar-random states.
+    Args:
+        operator: System Hamiltonian MPO.
+        sim_params: Simulation parameters.
+        timesteps: k time-step durations.
+        parallel: Whether to parallelize particle evolution.
+        num_samples: Number of SIS particles.
+        noise_model: Optional noise model.
+        seed: Random seed.
+        ess_threshold: Threshold for ESS-based resampling.
+        proposal: Sequence proposal method. Only "uniform" is currently supported.
     """
-    from ...analog.mcwf import preprocess_mcwf
-    from ...simulator import available_cpus, run_backend_parallel
-    
+    if proposal != "uniform":
+        msg = f"Proposal {proposal!r} is not currently supported for baseline SIS. Use 'uniform'."
+        raise ValueError(msg)
+
     k = len(timesteps)
     rng = np.random.default_rng(seed)
     solver = sim_params.solver
-    
+
     if noise_model is None:
         noise_model = sim_params.noise_model
 
-    # Preprocess static MCWF context once if needed
+    # 1. Initialize Particles & Weights
+    particles = [_initialize_backend_state(operator, solver) for _ in range(num_samples)]
+    weights = np.ones(num_samples, dtype=np.float64)
+    particles_dual_ops: list[list[NDArray[np.complex128]]] = [[] for _ in range(num_samples)]
+
+    # Preprocess static context for solver efficiency
     static_ctx = None
     if solver == "MCWF":
         dummy_mps = MPS(length=operator.length, state="zeros")
         static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
-
-    # Initialize particles
-    particles = [_initialize_backend_state(operator, solver) for _ in range(num_samples)]
-    weights = np.ones(num_samples, dtype=np.float64)
-    particles_dual_ops: list[list[NDArray[np.complex128]]] = [[] for _ in range(num_samples)]
 
     # Parallel settings
     use_parallel = parallel and num_samples > 32
     max_workers = available_cpus()
 
     for step_idx, duration in enumerate(timesteps):
-        prep_states = []
-        for i in range(num_samples):
-            w_curr = weights[i]
-            if w_curr < 1e-60:
-                # Particle already dead: push dummy nulls and keep weight 0
-                prep_states.append(particles[i])
-                particles_dual_ops[i].append(np.zeros((4, 4), dtype=np.complex128))
-                continue
-
-            # 1. Proposal sampling
-            rho_0 = _get_site0_rdm(particles[i], solver)
-            tr_rho = float(np.trace(rho_0).real)
-            
-            if tr_rho < 1e-60:
-                weights[i] = 0.0
-                prep_states.append(particles[i])
-                particles_dual_ops[i].append(np.zeros((4, 4), dtype=np.complex128))
-                continue
-
-            # Target baseline is Haar (not local)
-            if proposal == "uniform":
-                pm = _sample_haar_pure_state(rng)
-                pp = _sample_haar_pure_state(rng)
-                # Incremental weight Factor = p_s / q_t. 
-                # Since q_t = Haar(psi_m), we just multiply by survival prob p_s.
-                p_mat = np.outer(pm, pm.conj())
-                step_prob = float(np.trace(rho_0 @ p_mat).real)
-                weights[i] *= step_prob
-            elif proposal == "local":
-                # WARNING: Heuristic importance sampler based on predicted site-0 survival.
-                # This proposal is not yet mathematically validated for non-Markovian PT.
-                pm = _sample_local_measurement(rho_0, rng)
-                pp = _sample_haar_pure_state(rng)
-                # w_next = w_curr * p_s / (p_s / (Tr(rho)/2)) = w_curr * Tr(rho)/2
-                weights[i] *= tr_rho / 2.0
-            elif proposal == "mixture":
-                # WARNING: Heuristic mixture of local and uniform.
-                # Not fully validated for PT estimator correctness.
-                if rng.random() < mixture_eps:
-                    pm = _sample_haar_pure_state(rng)
-                else:
-                    pm = _sample_local_measurement(rho_0, rng)
-                pp = _sample_haar_pure_state(rng)
-                
-                p_mat = np.outer(pm, pm.conj())
-                step_prob = float(np.trace(rho_0 @ p_mat).real)
-                q_mix = (1.0 - mixture_eps) * (step_prob / (tr_rho / 2.0)) + mixture_eps
-                weights[i] *= step_prob / q_mix
-            else:
-                raise ValueError(f"Unknown proposal: {proposal}")
-
-            # 2. Reprepare Site 0
-            psi_new, _ = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
-            prep_states.append(psi_new)
-            particles_dual_ops[i].append(_continuous_dual_step(pm, pp))
-
-        # ── 3. Evolution (Parallel or Serial) ──────────────────────────────────
-        alive_indices = [i for i, w in enumerate(weights) if w > 1e-60]
+        # ── 2. Intervene & Weight Update ─────────────────────────────────────
+        # Only track states for particles that stay alive after this intervention
+        prep_states_alive = []
+        alive_indices = []
         
-        if use_parallel and alive_indices:
+        for i in range(num_samples):
+            if weights[i] < 1e-60:
+                continue
+
+            # Purely uniform proposal (pm, pp from Haar)
+            pm = _sample_haar_pure_state(rng)
+            pp = _sample_haar_pure_state(rng)
+
+            # Weight update: w_next = w_curr * Prob(outcome pm)
+            # Reprepare returns the projection probability (step_prob) directly
+            psi_new, step_prob = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
+            weights[i] *= max(0.0, step_prob)
+
+            if weights[i] > 1e-60:
+                prep_states_alive.append(psi_new)
+                alive_indices.append(i)
+                particles_dual_ops[i].append(_continuous_dual_step(pm, pp))
+
+        # ── 3. Evolve Alive Particles (Parallel or Serial) ───────────────────
+        if not alive_indices:
+            weights[:] = 0.0
+            break
+
+        if use_parallel:
             payload = {
-                "prep_states": [prep_states[i] for i in alive_indices],
+                "prep_states": prep_states_alive,
                 "duration": duration,
                 "static_ctx": static_ctx,
                 "sim_params": sim_params,
@@ -745,19 +676,13 @@ def _run_sis_sampling(
                 payload=payload,
                 n_jobs=len(alive_indices),
                 max_workers=max_workers,
-                show_progress=False,
-                desc=f"SIS t={step_idx}"
+                show_progress=sim_params.show_progress,
+                desc=f"SIS Step {step_idx+1}/{k}",
             )
-            # results is an iterator yielding (job_idx, evolved_state)
             for job_idx, evolved_state in results:
-                particle_idx = alive_indices[job_idx]
-                particles[particle_idx] = evolved_state
+                particles[alive_indices[job_idx]] = evolved_state
         else:
-            for i in range(num_samples):
-                if weights[i] < 1e-60:
-                    continue
-                # For serial mode, we can use the same worker-payload logic or just call directly
-                # Direct call is simpler for serial
+            for j, idx in enumerate(alive_indices):
                 sp = copy.deepcopy(sim_params)
                 sp.elapsed_time = duration
                 sp.num_traj = 1
@@ -765,47 +690,44 @@ def _run_sis_sampling(
                 sp.show_progress = False
                 n_steps = max(1, int(np.round(duration / sp.dt)))
                 sp.times = np.linspace(0, n_steps * sp.dt, n_steps + 1)
-                
-                particles[i] = _evolve_backend_state(
-                    prep_states[i],
-                    operator,
-                    noise_model,
-                    sp,
-                    solver,
-                    traj_idx=0,
-                    static_ctx=static_ctx,
+                particles[idx] = _evolve_backend_state(
+                    prep_states_alive[j], operator, noise_model, sp, solver, traj_idx=0, static_ctx=static_ctx
                 )
 
-        # ── 4. Weight collapse check ─────────────────────────────────────────────
+        # ── 4. ESS-triggered Systematic Resampling ─────────────────────────────
         w_sum = float(weights.sum())
         if w_sum < 1e-60:
             weights[:] = 0.0
             break
 
-        # ── 5. ESS-triggered systematic resampling ───────────────────────────────
         w_norm = weights / w_sum
         ess = 1.0 / float(np.sum(w_norm**2))
         if ess < ess_threshold * num_samples:
             positions = (rng.random() + np.arange(num_samples)) / num_samples
             cumsum = np.cumsum(w_norm)
             idxs = np.searchsorted(cumsum, positions)
-            
-            # Use deepcopy for MPS objects to ensure independent particles
+
             if solver == "MCWF":
                 particles = [particles[j].copy() for j in idxs]
             else:
                 particles = [copy.deepcopy(particles[j]) for j in idxs]
-                
-            particles_dual_ops = [copy.deepcopy(particles_dual_ops[j]) for j in idxs]
-            weights[:] = w_sum / num_samples
 
-    # Final conversion to project results
-    outputs = [_get_rho_site_zero(p) for p in particles]
+            particles_dual_ops = [copy.deepcopy(particles_dual_ops[j]) for j in idxs]
+            weights[:] = np.sum(weights) / num_samples
+
+    # ── 5. Finalize Outputs ──────────────────────────────────────────────────
+    # Match MC convention: outputs[i] includes particle weight, global weight = 1/N
+    final_outputs = []
+    for i in range(num_samples):
+        rho_final = _get_rho_site_zero(particles[i])
+        final_outputs.append(weights[i] * rho_final)
+
+    final_weights = [1.0 / num_samples] * num_samples
 
     return SamplingData(
-        outputs=outputs,
+        outputs=final_outputs,
         dual_ops=particles_dual_ops,
-        weights=weights / num_samples,
+        weights=final_weights,
         timesteps=timesteps,
     )
 
@@ -1007,8 +929,7 @@ def run(
     tol: float = 1e-12,
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
-    proposal: Literal["uniform", "local", "mixture"] = "mixture",
-    mixture_eps: float = 0.1,
+    proposal: Literal["uniform"] = "uniform",
     ess_threshold: float = 0.5,
 ) -> ProcessTensor | MPO:
     """Main entry point for Process Tomography.
@@ -1035,11 +956,8 @@ def run(
         tol: (MPO only) Relative truncation tolerance for MPO compression.
         max_bond_dim: (MPO only) Hard bond dimension limit for MPO compression.
         n_sweeps: (MPO only) Number of sweeps for MPO accumulation.
-        proposal: (SIS only) Continuous proposal distribution for interventions:
-            - "uniform": Haar-random (same target as MC).
-            - "local": Heuristic proposal based on site-0 RDM (Warning: implementation is heuristic).
-            - "mixture": (1-ε)·local + ε·Haar (Warning: implementation is heuristic).
-        mixture_eps: (SIS only) Mixing parameter for mixture proposal.
+        proposal: (SIS only) Continuous proposal distribution for interventions.
+             Only "uniform" (Haar-random) is currently supported.
         ess_threshold: (SIS only) Resample when ESS < ess_threshold * N.
 
     Returns:
@@ -1053,9 +971,13 @@ def run(
         msg = f"Tomography currently only supports solvers {valid_solvers}, got {sim_params.solver!r}."
         raise ValueError(msg)
 
-    if method == "sis" and num_trajectories > 1:
-        msg = "SIS currently only supports num_trajectories=1 (one realization per particle)."
-        raise ValueError(msg)
+    if method == "sis":
+        if num_trajectories > 1:
+            msg = "SIS currently only supports num_trajectories=1 (one realization per particle)."
+            raise ValueError(msg)
+        if proposal != "uniform":
+            msg = f"Proposal {proposal!r} is not currently supported for baseline SIS. Use 'uniform'."
+            raise ValueError(msg)
 
     if method == "exhaustive":
         data = _run_exhaustive_sequence_data(
@@ -1088,7 +1010,6 @@ def run(
             seed=seed,
             ess_threshold=ess_threshold,
             proposal=proposal,
-            mixture_eps=mixture_eps,
         )
     else:
         msg = f"Unknown estimation method {method!r}."
