@@ -1301,6 +1301,88 @@ class MPO:
 
         return MPS(self.length, converted_tensors)
 
+    def _full_schmidt_values_for_bond(
+        self,
+        sites: list[int],
+        decomposition: str = "QR",
+    ) -> NDArray[np.float64]:
+        """Return the complete operator Schmidt values across a nearest-neighbor bond."""
+        assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
+        i, j = sites
+        assert i + 1 == j, "Schmidt spectrum is only defined for nearest-neighbor cut."
+
+        mps = self.to_mps()
+        mps.set_canonical_form(orthogonality_center=j, decomposition=decomposition)
+
+        a, b = mps.tensors[i], mps.tensors[j]
+        theta = np.tensordot(a, b, axes=(2, 1))
+        theta_matrix = np.reshape(theta, (a.shape[0] * a.shape[1], b.shape[0] * b.shape[2]))
+        if theta_matrix.size == 0:
+            return np.array([], dtype=np.float64)
+
+        return self._svd_values_with_fallback(
+            np.asarray(theta_matrix, dtype=np.complex128),
+            stage=f"MPO._full_schmidt_values_for_bond sites={sites}",
+        )
+
+    def get_entropy(self, sites: list[int], decomposition: str = "QR") -> np.float64:
+        """Return the operator entanglement entropy across a nearest-neighbor MPO bond.
+
+        The MPO is interpreted as an MPS with fused local physical dimension
+        ``d_out * d_in``. The converted MPS is brought into mixed canonical form
+        with the orthogonality center on the right site of the requested bond,
+        and the entropy is computed from the singular values of the resulting
+        two-site bipartition matrix.
+
+        Args:
+            sites: Two adjacent site indices ``[i, i + 1]`` defining the bond cut.
+            decomposition: Matrix decomposition used by
+                ``MPS.set_canonical_form`` during canonicalization.
+
+        Returns:
+            np.float64: Von Neumann entropy of the operator Schmidt spectrum
+            across the selected bond. Zero-norm local data returns ``0.0``.
+        """
+        assert len(sites) == 2, "Entropy is defined on a bond (two adjacent sites)."
+        i, j = sites
+        assert i + 1 == j, "Entropy is only defined for nearest-neighbor cut."
+
+        singular_values = self._full_schmidt_values_for_bond(sites, decomposition=decomposition)
+        if singular_values.size == 0:
+            return np.float64(0.0)
+
+        return np.float64(self.entropy_from_schmidt_values(singular_values))
+
+    def get_schmidt_spectrum(self, sites: list[int], decomposition: str = "QR") -> NDArray[np.float64]:
+        """Return the operator Schmidt spectrum across a nearest-neighbor MPO bond.
+
+        The MPO is interpreted as an MPS with fused local physical dimension
+        ``d_out * d_in``. After canonicalizing the converted MPS with the
+        orthogonality center on the right site of the requested bond, the
+        singular values of the associated two-site bipartition matrix are
+        returned. The result follows the YAQS observable convention and is
+        padded with ``NaN`` entries to length 500.
+
+        Args:
+            sites: Two adjacent site indices ``[i, i + 1]`` defining the bond cut.
+            decomposition: Matrix decomposition used by
+                ``MPS.set_canonical_form`` during canonicalization.
+
+        Returns:
+            NDArray[np.float64]: Operator Schmidt singular values across the
+            selected bond, padded with ``NaN`` entries to length 500.
+        """
+        assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
+        i, j = sites
+        assert i + 1 == j, "Schmidt spectrum is only defined for nearest-neighbor cut."
+
+        singular_values = self._full_schmidt_values_for_bond(sites, decomposition=decomposition)
+
+        top_schmidt_vals = 500
+        padded = np.full(top_schmidt_vals, np.nan, dtype=np.float64)
+        padded[: min(top_schmidt_vals, singular_values.size)] = singular_values[:top_schmidt_vals]
+        return padded
+
     @staticmethod
     def _resolve_cut_index(cut: str | int, length: int) -> int:
         """Resolve a cut specifier to a valid integer cut index."""
