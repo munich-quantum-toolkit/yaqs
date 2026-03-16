@@ -317,7 +317,7 @@ def test_reconstruction_depolarizing() -> None:
 ################################################################################
 
 def test_exact_representation_parity():
-    """Verify exact MPO and process_tensor representations yield identical predictions."""
+    """Verify exact MPO and ProcessTensor representations yield identical canonical combs."""
     rng = np.random.default_rng(201)
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
@@ -334,14 +334,43 @@ def test_exact_representation_parity():
     timesteps = [0.1, 0.1]
 
     pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.predict_final_state(interventions)
 
-    # Use internal implementation for exact MPO parity validation
-    U_mpo = run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), output="mpo")
-    U_mpo_dense = canonicalize_upsilon(upsilon_mpo_to_dense(U_mpo), hermitize=True, psd_project=True, normalize_trace=False)
-    rho_mpo = predict_from_dense_upsilon(U_mpo_dense, interventions)
+    # Canonical dense comb from ProcessTensor
+    U_pt = pt.reconstruct_comb_choi(check=True)
+    U_pt_canon = canonicalize_upsilon(
+        U_pt,
+        hermitize=True,
+        psd_project=True,
+        normalize_trace=False,
+    )
 
-    assert rel_fro_error(rho_pt, rho_mpo) < 1e-10
+    # Canonical dense comb from MPO path
+    U_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+    U_mpo_dense = upsilon_mpo_to_dense(U_mpo)
+    U_mpo_canon = canonicalize_upsilon(
+        U_mpo_dense,
+        hermitize=True,
+        psd_project=True,
+        normalize_trace=False,
+    )
+
+    # Compare canonicalized dense combs directly
+    assert rel_fro_error(U_pt_canon, U_mpo_canon) < 1e-10
+
+
+def test_exhaustive_dense_and_mpo_comb_match_for_k1() -> None:
+    """Regression: raw combs from exhaustive dense and MPO must agree for k=1."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
+    timesteps = [0.1]
+
+    pt = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+
+    U_pt = pt.reconstruct_comb_choi(check=True)
+    U_mpo = upsilon_mpo_to_dense(mpo)
+
+    assert rel_fro_error(U_pt, U_mpo) < 1e-10
 
 
 def test_mc_without_replacement_matches_exact_for_k2() -> None:
@@ -350,7 +379,7 @@ def test_mc_without_replacement_matches_exact_for_k2() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact_mpo = run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), output="mpo")
+    U_exact_mpo = run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), seed=42, output="mpo")
     U_exact = upsilon_mpo_to_dense(U_exact_mpo)
     
     # 256 sequences for k=2 is exhaustive replacement=True/False doesn't matter much if fixed seeds match
@@ -658,3 +687,136 @@ def test_sis_tjm_outputs_dense_and_mpo() -> None:
         assert rel_fro_error(rho_out_pt, rho_out_mpo) < 1e-10
         # Check trace matches weight (stratification ensures weight > 0)
         assert abs(np.trace(rho_out_pt) - pt.weights[a]) < 1e-10
+
+
+################################################################################
+# ── Section 7: SIS Robustness and Convergence ────────────────────────────────
+################################################################################
+
+def get_matrix(res):
+    """Robustly extract dense Choi matrix from ProcessTensor or ndarray."""
+    if hasattr(res, "dense_choi") and res.dense_choi is not None:
+        return res.dense_choi
+    if hasattr(res, "reconstruct_comb_choi"):
+        return res.reconstruct_comb_choi()
+    return res
+
+
+def test_sis_uniform_baseline_consistency():
+    """Verify that proposal='uniform' SIS still converges to exhaustive target."""
+    op = MPO.hamiltonian(length=1, one_body=[(1.0, "X")])
+    params = AnalogSimParams(dt=0.1, solver="MCWF", get_state=True)
+    timesteps = [0.1]
+
+    # Reference
+    res_ex = run(op, params, timesteps, method="exhaustive", output="dense")
+    ex_mat = get_matrix(res_ex)
+
+    # SIS Uniform
+    res_sis = run(op, params, timesteps, method="sis", proposal="uniform",
+                  output="dense", num_samples=512, seed=42, num_trajectories=1)
+    sis_mat = get_matrix(res_sis)
+
+    err_sis = np.linalg.norm(sis_mat - ex_mat)
+    assert err_sis < 0.6
+
+
+def test_sis_local_baseline_consistency():
+    """Verify that proposal='local' SIS converges to exhaustive target."""
+    op = MPO.hamiltonian(length=1, one_body=[(1.0, "X")])
+    params = AnalogSimParams(dt=0.1, solver="MCWF", get_state=True)
+    timesteps = [0.1]
+
+    # Reference
+    res_ex = run(op, params, timesteps, method="exhaustive", output="dense")
+    ex_mat = get_matrix(res_ex)
+
+    # SIS Local (Default)
+    res_sis = run(op, params, timesteps, method="sis", proposal="local",
+                  output="dense", num_samples=512, seed=42, num_trajectories=1)
+    sis_mat = get_matrix(res_sis)
+
+    err_sis = np.linalg.norm(sis_mat - ex_mat)
+    assert err_sis < 0.6
+
+
+def test_sis_mc_matching_accuracy():
+    """Verify that SIS (both proposals) reach similar accuracy levels to MC."""
+    op = MPO.hamiltonian(length=1, one_body=[(1.0, "X")])
+    params = AnalogSimParams(dt=0.1, solver="MCWF")
+    timesteps = [0.2]
+
+    res_ex = run(op, params, timesteps, method="exhaustive", output="dense")
+    ex_mat = get_matrix(res_ex)
+
+    n_samples = 1000
+    res_mc = run(op, params, timesteps, method="mc", num_samples=n_samples, seed=42, output="dense", num_trajectories=1)
+    res_sis_u = run(op, params, timesteps, method="sis", proposal="uniform", num_samples=n_samples, seed=42, output="dense", num_trajectories=1)
+    res_sis_l = run(op, params, timesteps, method="sis", proposal="local", num_samples=n_samples, seed=42, output="dense", num_trajectories=1)
+
+    err_mc = np.linalg.norm(get_matrix(res_mc) - ex_mat)
+    err_sis_u = np.linalg.norm(get_matrix(res_sis_u) - ex_mat)
+    err_sis_l = np.linalg.norm(get_matrix(res_sis_l) - ex_mat)
+
+    # All should be reasonably accurate
+    assert err_mc < 0.6
+    assert err_sis_u < 0.6
+    assert err_sis_l < 0.6
+
+
+def test_sis_local_dense_mpo_consistency_integrated():
+    """Verify results are consistent between dense and MPO for local proposal."""
+    op = MPO.hamiltonian(length=1, one_body=[(1.0, "X")])
+    params = AnalogSimParams(dt=0.1, solver="TJM", get_state=True)
+    timesteps = [0.1]
+
+    res_dense = run(op, params, timesteps, method="sis", proposal="local", output="dense", num_samples=50, seed=1, num_trajectories=1)
+    res_mpo = run(op, params, timesteps, method="sis", proposal="local", output="mpo", num_samples=50, seed=1, num_trajectories=1)
+
+    mpo_mat = res_mpo.to_matrix()
+    dense_mat = get_matrix(res_dense)
+    np.testing.assert_allclose(dense_mat, mpo_mat, atol=1e-12)
+
+
+def test_sis_variance_reduction_integrated():
+    """Verify that 'local' proposal usually has lower error than 'uniform' for fixed N."""
+    # use a slightly harder system (k=3)
+    op = MPO.hamiltonian(length=1, one_body=[(1.0, "X")])
+    params = AnalogSimParams(dt=0.05, solver="MCWF")
+    timesteps = [0.1, 0.1, 0.1]
+
+    res_ex = run(op, params, timesteps, method="exhaustive", output="dense")
+    ex_mat = get_matrix(res_ex)
+
+    n_samples = 256
+    # Try a few seeds to avoid noise luck
+    errs_u = []
+    errs_l = []
+    for s in [42, 43, 44]:
+        res_u = run(op, params, timesteps, method="sis", proposal="uniform", num_samples=n_samples, seed=s, output="dense", num_trajectories=1)
+        res_l = run(op, params, timesteps, method="sis", proposal="local", num_samples=n_samples, seed=s, output="dense", num_trajectories=1)
+        errs_u.append(np.linalg.norm(get_matrix(res_u) - ex_mat))
+        errs_l.append(np.linalg.norm(get_matrix(res_l) - ex_mat))
+
+    # On average 'local' should be better
+    assert np.mean(errs_l) < np.mean(errs_u)
+
+
+def test_sis_invalid_proposal_integrated():
+    """Verify SIS rejects unknown proposals."""
+    op = MPO.hamiltonian(length=1, one_body=[(1.0, "X")])
+    params = AnalogSimParams(dt=0.1, solver="MCWF")
+    with pytest.raises(ValueError, match="not currently supported"):
+        run(op, params, method="sis", proposal="invalid_heuristic", num_trajectories=1) # type: ignore
+
+
+def test_sis_log_stability_integrated():
+    """Smoke test for log-weight stability (no underflow/overflow on simple run)."""
+    length = 2
+    k = 3
+    op = MPO.hamiltonian(length=length, one_body=[(1.0, "X")])
+    params = AnalogSimParams(dt=0.1, solver="MCWF")
+
+    # This should just run without errors
+    res = run(op, params, [0.1]*k, method="sis", proposal="local", num_samples=100, num_trajectories=1)
+    assert res is not None

@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-from email.policy import strict
 import itertools
 from typing import TYPE_CHECKING
 
@@ -22,6 +21,48 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+
+
+def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Convert a CPTP map callable to its Choi matrix J(E).
+
+    J(E) = sum_{i,j} E(|i><j|) ⊗ |i><j| (order matches predict_from_dense_upsilon).
+    """
+    j_choi = np.zeros((4, 4), dtype=complex)
+    for i in range(2):
+        for j in range(2):
+            e_in = np.zeros((2, 2), dtype=complex)
+            e_in[i, j] = 1.0
+            # E(|i><j|) ⊗ |i><j|
+            j_choi += np.kron(emap(e_in), e_in)
+    return j_choi
+
+
+def predict_from_dense_upsilon(
+    U: NDArray[np.complex128],
+    interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+) -> NDArray[np.complex128]:
+    """Predict final state from a dense Choi operator (Upsilon) by contraction.
+
+    Upsilon index order: output ⊗ past_0 ⊗ past_1 ⊗ ... ⊗ past_{k-1}.
+    """
+    k_steps = len(interventions)
+    past_list = []
+    for emap in interventions:
+        j_choi = _cptp_to_choi(emap)
+        past_list.append(j_choi)
+
+    # Contract
+    # For k=1: rho = Tr_past[ U (I ⊗ J.T) ]
+    # Kronecker order of past: J1 ⊗ J2 ⊗ ... ⊗ Jk
+    past_total = past_list[0]
+    for p in past_list[1:]:
+        past_total = np.kron(past_total, p)
+
+    dim_p = 4**k_steps
+    U4 = U.reshape(2, dim_p, 2, dim_p)
+    ins = past_total.T.reshape(dim_p, dim_p)
+    return np.einsum("s p q r, r p -> s q", U4, ins)
 
 
 def _vec_to_rho(vec4: NDArray[np.complex128]) -> NDArray[np.complex128]:

@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-from .process_tensor import ProcessTensor, rank1_upsilon_mpo_term
+from .process_tensor import ProcessTensor, rank1_upsilon_mpo_term, upsilon_mpo_to_dense
 
 # ═══ Sampling & Sequence Utilities ═══════════════════════════════════════════
 def _enumerate_sequences(k: int) -> list[tuple[int, ...]]:
@@ -881,6 +881,8 @@ def _to_dense(data: SequenceData | SamplingData) -> ProcessTensor:
         dense_data[(slice(None), *seq)] = rho.reshape(-1)
         dense_weights[seq] = w
 
+    # Return a raw discrete ProcessTensor; do not backfill dense_choi here so
+    # that exhaustive predictions use the dual-frame tensor representation.
     return ProcessTensor(
         tensor=dense_data,
         weights=dense_weights,
@@ -921,7 +923,12 @@ def _to_mpo(
         for i, seq in enumerate(data.sequences):
             rho = data.outputs[i]
             w = data.weights[i]
-            dual_ops = [data.choi_duals[a] for a in seq]
+            # Discrete duals in `data.choi_duals` are defined in the same
+            # convention that `ProcessTensor.reconstruct_comb_choi` uses,
+            # where each past-leg factor enters the comb as D_a.T. To keep the
+            # MPO Upsilon representation parity with the dense comb, we must
+            # therefore pass transposed duals into `rank1_upsilon_mpo_term`.
+            dual_ops = [data.choi_duals[a].T for a in seq]
             yield rank1_upsilon_mpo_term(rho, dual_ops, weight=w)
 
     return _accumulate_rank1_terms(_sequence_terms(), k=k, dims=(2, 2), compress_every=compress_every, tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps)
@@ -1028,8 +1035,8 @@ def run(
     sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     *,
-    method: Literal["exhaustive", "mc", "sis"] = "mc",
-    output: Literal["dense", "mpo"] = "mpo",
+    method: Literal["exhaustive", "mc", "sis"] = "exhaustive",
+    output: Literal["dense", "mpo"] = "dense",
     noise_model: NoiseModel | None = None,
     parallel: bool = True,
     num_samples: int = 1000,
