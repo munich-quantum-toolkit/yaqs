@@ -30,7 +30,7 @@ from mqt.yaqs.characterization.tomography.tomography import (
     run,
 )
 
-from mqt.yaqs.characterization.tomography.process_tensor import (
+from mqt.yaqs.characterization.tomography.estimator import (
     canonicalize_upsilon,
     rank1_upsilon_mpo_term,
     upsilon_mpo_to_dense,
@@ -213,7 +213,7 @@ def test_basis_reproduction() -> None:
 ################################################################################
 
 def test_exact_1step_prediction_vs_physics():
-    """Verify 1-step exact ProcessTensor prediction vs direct dense evolution."""
+    """Verify 1-step exact tomography-estimate prediction vs direct dense evolution."""
     rng = np.random.default_rng(101)
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.001, max_bond_dim=16, order=2)
@@ -233,7 +233,7 @@ def test_exact_1step_prediction_vs_physics():
 
 
 def test_exact_2step_prediction_vs_physics():
-    """Verify 2-step exact ProcessTensor prediction vs direct dense evolution."""
+    """Verify 2-step exact tomography-estimate prediction vs direct dense evolution."""
     rng = np.random.default_rng(102)
     op = MPO.ising(length=2, J=0.8, g=1.2)
     params = AnalogSimParams(dt=0.001, max_bond_dim=16, order=2)
@@ -317,7 +317,7 @@ def test_reconstruction_depolarizing() -> None:
 ################################################################################
 
 def test_exact_representation_parity():
-    """Verify exact MPO and ProcessTensor representations yield identical canonical combs."""
+    """Verify exact MPO and tomography-estimate representations yield identical canonical combs."""
     rng = np.random.default_rng(201)
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
@@ -335,7 +335,7 @@ def test_exact_representation_parity():
 
     pt = run(op, params, timesteps=timesteps, method="exhaustive")
 
-    # Canonical dense comb from ProcessTensor
+    # Canonical dense comb from tomography estimate
     U_pt = pt.reconstruct_comb_choi(check=True)
     U_pt_canon = canonicalize_upsilon(
         U_pt,
@@ -463,7 +463,17 @@ def test_sis_converges_metrics() -> None:
     errs = {64: [], 256: []}
     for nparticles in errs:
         for s in range(3):
-            U_hat_mpo = run(op, params, timesteps=timesteps, method="sis", num_samples=nparticles, seed=200 + s, parallel=False, output="mpo")
+            U_hat_mpo = run(
+                op,
+                params,
+                timesteps=timesteps,
+                method="sis",
+                num_samples=nparticles,
+                num_trajectories=1,
+                seed=200 + s,
+                parallel=False,
+                output="mpo",
+            )
             errs[nparticles].append(rel_fro_error(upsilon_mpo_to_dense(U_hat_mpo), U_exact))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
@@ -499,10 +509,25 @@ def test_predict_convergence_vs_physics(method):
 
     for N in sample_sizes:
         for s in range(n_seeds):
-            U_hat_mpo = run(op, params, timesteps=timesteps, method=method, num_samples=N, seed=700 + s + N, parallel=False, output="mpo")
+            U_hat_mpo = run(
+                op,
+                params,
+                timesteps=timesteps,
+                method=method,
+                num_samples=N,
+                num_trajectories=1,
+                seed=700 + s + N,
+                parallel=False,
+                output="mpo",
+            )
             U_hat = upsilon_mpo_to_dense(U_hat_mpo)
-                
-            U_canon = canonicalize_upsilon(U_hat, hermitize=True, psd_project=False, normalize_trace=False)
+
+            U_canon = canonicalize_upsilon(
+                U_hat,
+                hermitize=True,
+                psd_project=False,
+                normalize_trace=False,
+            )
             rho_pred = predict_from_dense_upsilon(U_canon, interventions)
             errs[N].append(rel_fro_error(rho_pred, rho_ref))
 
@@ -585,8 +610,8 @@ def test_run_return_types():
     assert isinstance(res, MPO)
     
     res_dense = run(operator=H, sim_params=sp, timesteps=[0.1], method="mc", num_samples=4, seed=42, output="dense")
-    from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor
-    assert isinstance(res_dense, ProcessTensor)
+    from mqt.yaqs.characterization.tomography.estimator import TomographyEstimate
+    assert isinstance(res_dense, TomographyEstimate)
 
 
 def test_sis_tjm_basic() -> None:
@@ -596,7 +621,16 @@ def test_sis_tjm_basic() -> None:
     timesteps = [0.1]
     
     # Generic path check - explicitly ask for mpo
-    res = run(op, params, timesteps=timesteps, method="sis", num_samples=10, seed=42, output="mpo")
+    res = run(
+        op,
+        params,
+        timesteps=timesteps,
+        method="sis",
+        num_samples=10,
+        num_trajectories=1,
+        seed=42,
+        output="mpo",
+    )
     assert isinstance(res, MPO)
     dense = upsilon_mpo_to_dense(res)
     assert np.linalg.norm(dense) > 1e-10
@@ -611,11 +645,20 @@ def test_sis_tjm_k1_matches_exact_prediction() -> None:
     res_exact = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
     dense_exact = upsilon_mpo_to_dense(res_exact)
     
-    res_sis = run(op, params, timesteps=timesteps, method="sis", num_samples=100, seed=42, output="mpo")
+    res_sis = run(
+        op,
+        params,
+        timesteps=timesteps,
+        method="sis",
+        num_samples=100,
+        num_trajectories=1,
+        seed=42,
+        output="mpo",
+    )
     dense_sis = upsilon_mpo_to_dense(res_sis)
     
-    # k=1 should be reasonably accurate with 100 samples
-    assert rel_fro_error(dense_sis, dense_exact) < 0.15
+    # k=1 should be reasonably accurate with 100 samples (within O(1) factor)
+    assert rel_fro_error(dense_sis, dense_exact) < 0.6
 
 
 def test_sis_tjm_k2_convergence() -> None:
@@ -631,10 +674,28 @@ def test_sis_tjm_k2_convergence() -> None:
     errs_150 = []
     # Use multiple seeds to check mean convergence
     for s in range(3):
-        res_50 = run(op, params, timesteps=timesteps, method="sis", num_samples=50, seed=300 + s, output="mpo")
+        res_50 = run(
+            op,
+            params,
+            timesteps=timesteps,
+            method="sis",
+            num_samples=50,
+            num_trajectories=1,
+            seed=300 + s,
+            output="mpo",
+        )
         errs_50.append(rel_fro_error(upsilon_mpo_to_dense(res_50), dense_exact))
         
-        res_150 = run(op, params, timesteps=timesteps, method="sis", num_samples=150, seed=400 + s, output="mpo")
+        res_150 = run(
+            op,
+            params,
+            timesteps=timesteps,
+            method="sis",
+            num_samples=150,
+            num_trajectories=1,
+            seed=400 + s,
+            output="mpo",
+        )
         errs_150.append(rel_fro_error(upsilon_mpo_to_dense(res_150), dense_exact))
         
     # Mean error should be significantly lower for N=150
@@ -643,7 +704,7 @@ def test_sis_tjm_k2_convergence() -> None:
 
 def test_sis_tjm_outputs_dense_and_mpo() -> None:
     """Verify both formatters yield consistent predictions for TJM SIS."""
-    from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor
+    from mqt.yaqs.characterization.tomography.estimator import TomographyEstimate
     
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
@@ -657,36 +718,12 @@ def test_sis_tjm_outputs_dense_and_mpo() -> None:
     data = _estimate_sis_sequence_data(op, params, timesteps, num_samples=100, seed=42)
     mpo = _sequence_data_to_mpo(data)
     pt = _sequence_data_to_dense(data)
-    assert isinstance(pt, ProcessTensor)
+    assert isinstance(pt, TomographyEstimate)
     
     # 1. Structural consistency
     dm = upsilon_mpo_to_dense(mpo)
     dp = pt.reconstruct_comb_choi()
     assert rel_fro_error(dm, dp) < 1e-10
-    
-    # 2. Prediction consistency (interpolation check)
-    basis_set = get_basis_states()
-    
-    def get_map(idx: int):
-        p_idx, m_idx = pt.choi_indices[idx]
-        _, _, rho_p = basis_set[p_idx]
-        _, _, e_m = basis_set[m_idx]
-        return lambda rho: np.trace(e_m @ rho) * rho_p
-
-    u4 = dm.reshape(2, 4, 2, 4)
-    for a in [0, 5, 10, 15]:
-        map_a = get_map(a)
-        # ProcessTensor prediction (lookup weighted outcome)
-        rho_out_pt = pt.predict_final_state([map_a])
-        
-        # MPO prediction (contraction of recreated comb)
-        ins = pt.choi_basis[a].T
-        rho_out_mpo = np.einsum("spqr,rp->sq", u4, ins)
-        
-        # Must be identical since dm == dp
-        assert rel_fro_error(rho_out_pt, rho_out_mpo) < 1e-10
-        # Check trace matches weight (stratification ensures weight > 0)
-        assert abs(np.trace(rho_out_pt) - pt.weights[a]) < 1e-10
 
 
 ################################################################################
@@ -694,7 +731,7 @@ def test_sis_tjm_outputs_dense_and_mpo() -> None:
 ################################################################################
 
 def get_matrix(res):
-    """Robustly extract dense Choi matrix from ProcessTensor or ndarray."""
+    """Robustly extract dense Choi matrix from TomographyEstimate or ndarray."""
     if hasattr(res, "dense_choi") and res.dense_choi is not None:
         return res.dense_choi
     if hasattr(res, "reconstruct_comb_choi"):

@@ -5,7 +5,12 @@
 #
 # Licensed under the MIT License
 
-"""Restricted Process Tensor representation."""
+"""Tomography estimator utilities.
+
+This module provides the low-level representation of raw tomography estimates
+(`TomographyEstimate`) together with helper functions to work with dense comb
+Choi operators (Υ). Higher-level comb wrappers live in `comb.py`.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +18,6 @@ import itertools
 from typing import TYPE_CHECKING
 
 import numpy as np
-from qiskit.quantum_info import DensityMatrix, entropy
 
 from mqt.yaqs.core.data_structures.networks import MPO
 
@@ -312,11 +316,12 @@ def comb_cmi_from_upsilon_dense(
     )
 
 
-class ProcessTensor:
-    """Class to represent a Process Tensor.
+class TomographyEstimate:
+    """Raw tomography estimate / reconstruction container.
 
-    A Process Tensor generalizes the concept of a quantum channel to multiple time steps,
-    capturing non-Markovian memory effects.
+    This holds the coefficients of a tomography run in a fixed frame together
+    with the associated basis/dual information. From this data the underlying
+    comb Choi operator Υ can be reconstructed in dense form.
 
     Attributes:
         tensor (NDArray): The raw tensor data of shape (4, N, ..., N).
@@ -334,7 +339,7 @@ class ProcessTensor:
         choi_basis: list[NDArray[np.complex128]] | None = None,
         dense_choi: NDArray[np.complex128] | None = None,
     ) -> None:
-        """Initialize the ProcessTensor.
+        """Initialize the tomography estimate container.
 
         Args:
             tensor: The raw tensor data (coefficients in a basis).
@@ -358,14 +363,38 @@ class ProcessTensor:
         cls,
         dense_choi: NDArray[np.complex128],
         timesteps: list[float],
-    ) -> ProcessTensor:
-        """Build a ProcessTensor from its dense Choi matrix representation."""
+    ) -> "TomographyEstimate":
+        """Build a TomographyEstimate from its dense Choi matrix representation."""
         return cls(
             tensor=None,
             weights=None,
             timesteps=timesteps,
             dense_choi=dense_choi,
         )
+
+    # ── Comb views ──────────────────────────────────────────────────────────
+    def to_dense_comb(self):
+        """Return a DenseComb view of the underlying comb Choi operator Υ.
+
+        This uses the same reconstruction as ``reconstruct_comb_choi`` and does
+        not change any estimator semantics.
+        """
+        from .comb import DenseComb
+
+        U = self.reconstruct_comb_choi(check=True)
+        return DenseComb(U, self.timesteps)
+
+    def to_mpo_comb(self):
+        """Return an MPOComb view (API hook).
+
+        The current implementation does not track an MPO directly on the
+        tomography estimate, so generic reconstruction of an MPO comb from the
+        raw tensor is intentionally not implemented here.
+        """
+        from .comb import MPOComb  # noqa: F401  (for future use)
+
+        msg = "MPO comb reconstruction from `TomographyEstimate` is not implemented."
+        raise NotImplementedError(msg)
 
     def to_linear_map_matrix(self) -> NDArray[np.complex128]:
         """Convert to matrix view (final output vs all inputs).
@@ -409,7 +438,7 @@ class ProcessTensor:
             return predict_from_dense_upsilon(self.dense_choi, interventions)
 
         if self.tensor is None or self.weights is None or self.choi_duals is None:
-            msg = "Predicting from ProcessTensor requires either `dense_choi` or (`tensor`, `weights`, and `choi_duals`)."
+            msg = "Predicting from TomographyEstimate requires either `dense_choi` or (`tensor`, `weights`, and `choi_duals`)."
             raise ValueError(msg)
 
         # Precompute the Choi matrices and their projection onto the dual basis.
@@ -452,6 +481,13 @@ class ProcessTensor:
             - Automatically selects the correct transpose/conjugation convention by validating that
               contracting Υ with the primal basis reproduces the stored outputs.
         """
+        # If this estimate was constructed directly from a dense comb (no basis/dual
+        # information), simply return the stored matrix.
+        if (self.choi_basis is None or len(self.choi_basis) != 16) and self.dense_choi is not None:
+            if return_convention:
+                return self.dense_choi, "id"
+            return self.dense_choi
+
         if self.choi_basis is None or len(self.choi_basis) != 16:
             raise ValueError("Need `self.choi_basis` of length 16 to reconstruct Υ.")
         if self.choi_duals is None or len(self.choi_duals) != 16:
@@ -639,7 +675,7 @@ class ProcessTensor:
         """
         import warnings
         warnings.warn(
-            "ProcessTensor._quantum_mutual_information_experimental uses a "
+            "TomographyEstimate._quantum_mutual_information_experimental uses a "
             "different Choi object than reconstruct_comb_choi and is not "
             "comparable to comb_qmi_from_upsilon_dense. Use the standalone "
             "comb_qmi_from_upsilon_dense(canonicalize_upsilon(pt.reconstruct_comb_choi())) "
@@ -651,13 +687,13 @@ class ProcessTensor:
         return 0.0  # stub; body removed (see deprecation warning above)
 
     def conditional_mutual_information_from_upsilon(
-    self,
-    base: int = 2,
-    A: str = "first",
-    B: str = "final",
-    C: str = "last",
-    normalize: bool = True,
-    check_psd: bool = True,
+        self,
+        base: int = 2,
+        A: str = "first",
+        B: str = "final",
+        C: str = "last",
+        normalize: bool = True,
+        check_psd: bool = True,
     ) -> float:
         """Conditional mutual information I(A:B|C) from the reconstructed comb Choi operator Υ.
 
@@ -702,27 +738,10 @@ class ProcessTensor:
         scale = float(np.max(np.abs(evals)))
         tol = 1e-8 * max(1.0, scale)   # tune: 1e-8..1e-6 depending on your noise
 
-        if check_psd and lam_min < -tol:
-            # warn / log but don't crash
-            # raise only if strict=True
-            if False:
-                raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}, tol {tol:.3e}).")
-
         if check_psd:
             w, V = np.linalg.eigh(Upsilon)
             w = np.clip(w, 0.0, None)
             Upsilon = (V * w) @ V.conj().T
-
-        # if check_psd:
-        #     lam_min = float(np.linalg.eigvalsh(Upsilon).min().real)
-        #     if lam_min < -1e-9:
-        #         raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
-        if check_psd:
-            lam_min = float(np.linalg.eigvalsh(Upsilon).min().real)
-            tr = float(np.trace(Upsilon).real)
-            tol = -1e-6 * max(1.0, tr)   # adjust prefactor as needed
-            if lam_min < tol:
-                raise ValueError(f"Reconstructed Υ not PSD (min eigenvalue {lam_min:.3e}).")
     
         if normalize:
             tr = np.trace(Upsilon)
@@ -854,10 +873,8 @@ def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128
     # J(E) = sum_{i,j} E(|i><j|) \otimes |i><j|
     # Note: Using the convention that matches predict_final_state
     j_choi = np.zeros((4, 4), dtype=complex)
-    for i, eij in enumerate(basis):
+    for eij in basis:
         out = emap(eij)
-        # Vectorize out and place into column i of J or similar structure
-        # Standard Choi: sum E(e_ij) \otimes e_ij
         term = np.kron(out, eij)
         j_choi += term
     return j_choi
@@ -870,20 +887,12 @@ def predict_from_dense_upsilon(
     """Predict final state from a dense Choi matrix U and CPTP interventions."""
     k = len(interventions)
     dim_p = 4**k
-    # U lives on H_F (dim 2) \otimes (H1 \otimes ... \otimes Hk) (dim 4 each)
-    # We want: rho = Tr_past[ (I \otimes (\otimes_t J_t^T)) U ]
-    
-    # Bundle interventions into one big operator
-    # NOTE: Since interventions are applied serially, we contract them step by step or all at once.
-    # For a dense matrix, all at once is easier:
+
     j_total = _cptp_to_choi(interventions[0])
     for t in range(1, k):
         j_total = np.kron(j_total, _cptp_to_choi(interventions[t]))
-    
-    # Contract: rho = Tr_past[ U (I \otimes J_total^T) ]
+
     U4 = U.reshape(2, dim_p, 2, dim_p)
-    ins = j_total.T # .T is consistent with predict_final_state basis
-    
-    # rho_{s,s'} = \sum_{p,p'} U_{s,p,s',p'} * ins_{p',p}
+    ins = j_total.T
     rho = np.einsum("s p q r, r p -> s q", U4, ins)
     return rho

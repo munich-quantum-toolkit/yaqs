@@ -7,7 +7,8 @@
 
 """Tomography module for YAQS."""
 
-from .process_tensor import ProcessTensor
+from .estimator import TomographyEstimate
+from .comb import DenseComb, MPOComb
 from .tomography import run
 
-__all__ = ["ProcessTensor", "run"]
+__all__ = ["TomographyEstimate", "DenseComb", "MPOComb", "run"]

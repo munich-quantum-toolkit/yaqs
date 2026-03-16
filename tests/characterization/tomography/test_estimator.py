@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Unit tests for the ProcessTensor class (comb-Υ reconstruction + QMI)."""
+"""Unit tests for the tomography estimator (comb-Υ reconstruction + QMI)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import itertools
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho  # noqa: PLC2701
+from mqt.yaqs.characterization.tomography.estimator import TomographyEstimate, _vec_to_rho  # noqa: PLC2701
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -66,7 +66,7 @@ def _check_duality(duals: list[NDArray[np.complex128]], basis: list[NDArray[np.c
 
 
 def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[int]) -> NDArray[np.complex128]:
-    """Partial trace keeping subsystems in keep, matches ProcessTensor implementation."""
+    """Partial trace keeping subsystems in keep, matches estimator implementation."""
     keep = sorted(keep)
     n = len(dims)
     reshaped = r.reshape(*dims, *dims)
@@ -116,7 +116,7 @@ def test_reconstruct_comb_choi_shape_and_psd_k1() -> None:
         tensor[:, a] = rho_out.reshape(-1)
 
     weights = np.ones((16,), dtype=np.float64) / 16.0
-    pt = ProcessTensor(tensor, weights, [1.0], duals, choi_indices, choi_basis=choi_basis)
+    pt = TomographyEstimate(tensor, weights, [1.0], duals, choi_indices, choi_basis=choi_basis)
 
     U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
     assert U.shape == (8, 8)
@@ -145,7 +145,7 @@ def test_reconstruct_comb_choi_self_consistency_k2() -> None:
         tensor[:, a1, a2] = (rho0 if (a1 % 2 == 0) else rho1).reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = ProcessTensor(tensor, weights, [1.0, 1.0], duals, choi_indices, choi_basis=choi_basis)
+    pt = TomographyEstimate(tensor, weights, [1.0, 1.0], duals, choi_indices, choi_basis=choi_basis)
 
     U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
     assert U.shape == (32, 32)
@@ -183,7 +183,7 @@ def test_comb_qmi_bounds_and_zero_for_product_like_case() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = ProcessTensor(tensor, weights, [1.0, 1.0], duals, choi_indices, choi_basis=choi_basis)
+    pt = TomographyEstimate(tensor, weights, [1.0, 1.0], duals, choi_indices, choi_basis=choi_basis)
 
     qmi = pt.comb_qmi_from_upsilon(base=2, past="all", normalize=True, check_psd=True)
     assert qmi >= -1e-10  # numeric
@@ -273,7 +273,7 @@ def test_reconstruct_upsilon_is_hermitian_and_psd_k2() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = ProcessTensor(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
+    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
 
     U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
     assert U.shape == (32, 32)
@@ -298,7 +298,7 @@ def test_reconstruct_upsilon_self_consistency_k2() -> None:
         tensor[:, a1, a2] = (rho0 if (a1 % 2 == 0) else rho1).reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = ProcessTensor(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
+    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
 
     U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
 
@@ -332,7 +332,7 @@ def test_comb_qmi_zero_for_trivial_product_case_k2() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = ProcessTensor(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
+    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
 
     qmi = pt.comb_qmi_from_upsilon(base=2, past="all", normalize=True, check_psd=True)
     assert qmi >= -1e-10
@@ -352,7 +352,7 @@ def test_factorization_error_small_for_trivial_case_k2() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = ProcessTensor(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
+    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
 
     U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
     rho = _normalize_density(U)

@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-from .process_tensor import ProcessTensor, rank1_upsilon_mpo_term, upsilon_mpo_to_dense
+from .estimator import TomographyEstimate, rank1_upsilon_mpo_term, upsilon_mpo_to_dense
 
 # ═══ Sampling & Sequence Utilities ═══════════════════════════════════════════
 def _enumerate_sequences(k: int) -> list[tuple[int, ...]]:
@@ -561,7 +561,7 @@ def _run_mc_sampling(
     }
 
     # Aggregate trajectories for each sample index
-    # We want to keep samples separate for the ProcessTensor build
+    # We want to keep samples separate for the TomographyEstimate build
     sample_outputs = [np.zeros((2, 2), dtype=np.complex128) for _ in range(num_samples)]
 
     if parallel and total_jobs > 1:
@@ -841,9 +841,35 @@ def _run_sis_sampling(
         timesteps=timesteps,
     )
 
+
+def _estimate_sis_sequence_data(
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    timesteps: list[float],
+    *,
+    parallel: bool = True,
+    num_samples: int = 1000,
+    noise_model: NoiseModel | None = None,
+    seed: int | None = None,
+    ess_threshold: float = 0.5,
+    proposal: str = "uniform",
+) -> SamplingData:
+    """Internal helper used in tests: run SIS and return SamplingData."""
+    return _run_sis_sampling(
+        operator,
+        sim_params,
+        timesteps,
+        parallel=parallel,
+        num_samples=num_samples,
+        noise_model=noise_model,
+        seed=seed,
+        ess_threshold=ess_threshold,
+        proposal=proposal,
+    )
+
 # ═══ Formatters ══════════════════════════════════════════
-def _to_dense(data: SequenceData | SamplingData) -> ProcessTensor:
-    """Format estimation results into a dense ProcessTensor.
+def _to_dense(data: SequenceData | SamplingData) -> TomographyEstimate:
+    """Format estimation results into a dense tomography estimate.
 
     For SamplingData (continuous MC/SIS), reconstructs Υ = (1/N) Σ_i kron(rho_i, past_i).
     The input rho_i already incorporates the per-trajectory weight (e.g. survival prob)
@@ -867,7 +893,7 @@ def _to_dense(data: SequenceData | SamplingData) -> ProcessTensor:
             # rho already contains the accumulated sequence/particle weight.
             # w = 1.0 / num_samples
             ups += w * np.kron(rho, past)
-        return ProcessTensor.from_dense_choi(ups, data.timesteps)
+        return TomographyEstimate.from_dense_choi(ups, data.timesteps)
 
     # SequenceData Path (Discrete)
     k = len(data.timesteps)
@@ -881,9 +907,9 @@ def _to_dense(data: SequenceData | SamplingData) -> ProcessTensor:
         dense_data[(slice(None), *seq)] = rho.reshape(-1)
         dense_weights[seq] = w
 
-    # Return a raw discrete ProcessTensor; do not backfill dense_choi here so
+    # Return a raw discrete TomographyEstimate; do not backfill dense_choi here so
     # that exhaustive predictions use the dual-frame tensor representation.
-    return ProcessTensor(
+    return TomographyEstimate(
         tensor=dense_data,
         weights=dense_weights,
         timesteps=data.timesteps,
@@ -924,7 +950,7 @@ def _to_mpo(
             rho = data.outputs[i]
             w = data.weights[i]
             # Discrete duals in `data.choi_duals` are defined in the same
-            # convention that `ProcessTensor.reconstruct_comb_choi` uses,
+            # convention that the estimator's `reconstruct_comb_choi` uses,
             # where each past-leg factor enters the comb as D_a.T. To keep the
             # MPO Upsilon representation parity with the dense comb, we must
             # therefore pass transposed duals into `rank1_upsilon_mpo_term`.
@@ -932,6 +958,16 @@ def _to_mpo(
             yield rank1_upsilon_mpo_term(rho, dual_ops, weight=w)
 
     return _accumulate_rank1_terms(_sequence_terms(), k=k, dims=(2, 2), compress_every=compress_every, tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps)
+
+
+def _sequence_data_to_mpo(data: SamplingData | SequenceData) -> MPO:
+    """Internal helper used in tests: convert sequence/sampling data to MPO."""
+    return _to_mpo(data)
+
+
+def _sequence_data_to_dense(data: SamplingData | SequenceData) -> TomographyEstimate:
+    """Internal helper used in tests: convert sequence/sampling data to dense estimate."""
+    return _to_dense(data)
 
 
 # ═══ Exhaustive Simulation ═══════════════════════════════════════════════════
@@ -1048,7 +1084,7 @@ def run(
     n_sweeps: int = 2,
     proposal: Literal["uniform", "local"] = "local",
     ess_threshold: float = 0.5,
-) -> ProcessTensor | MPO:
+) -> TomographyEstimate | MPO:
     """Main entry point for Process Tomography.
 
     Args:
@@ -1060,7 +1096,7 @@ def run(
             - "exhaustive": Enumerates all 16^k discrete sequences.
             - "mc": Continuous Monte Carlo sampling of Haar-random interventions.
             - "sis": Continuous Sequential Importance Sampling.
-        output: Output format, either "dense" (ProcessTensor) or "mpo" (Upsilon MPO).
+        output: Output format, either "dense" (TomographyEstimate) or "mpo" (Upsilon MPO).
         noise_model: Optional noise model. If None, uses sim_params.noise_model.
         parallel: Whether to use multi-processing for simulation.
         num_samples: Number of MC/SIS samples (particles).
@@ -1079,7 +1115,7 @@ def run(
         ess_threshold: (SIS only) Resample when ESS < ess_threshold * N.
 
     Returns:
-        A ProcessTensor (if output="dense") or an Upsilon-MPO (if output="mpo").
+        A TomographyEstimate (if output="dense") or an Upsilon-MPO (if output="mpo").
     """
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]
