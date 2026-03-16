@@ -176,6 +176,24 @@ def _call_backend_serial(backend: Callable[..., Any], *args: Any) -> Any:
         return backend(*args)
 
 
+def _logsumexp(x: NDArray[np.float64]) -> float:
+    """Numerically stable log(sum(exp(x)))."""
+    x_max = np.max(x)
+    if not np.isfinite(x_max):
+        return -np.inf
+    return float(x_max + np.log(np.sum(np.exp(x - x_max))))
+
+
+def _normalize_log_weights(log_weights: NDArray[np.float64]) -> tuple[NDArray[np.float64], float]:
+    """Return normalized linear weights and log(sum w)."""
+    log_w_sum = _logsumexp(log_weights)
+    if not np.isfinite(log_w_sum):
+        n = log_weights.shape[0]
+        return np.full(n, 1.0 / n, dtype=np.float64), -np.inf
+    w_norm = np.exp(log_weights - log_w_sum)
+    return w_norm.astype(np.float64), log_w_sum
+
+
 def _accumulate_rank1_terms(
     terms: Iterable[MPO],
     k: int,
@@ -646,7 +664,7 @@ def _run_sis_sampling(
     ess_threshold: float = 0.5,
     proposal: str = "uniform",
 ) -> SamplingData:
-    """Minimal baseline SIS estimator targeting the same continuous estimator as MC.
+    """SIS estimator using log-weights for stability and robust proposals.
 
     Args:
         operator: System Hamiltonian MPO.
@@ -657,9 +675,9 @@ def _run_sis_sampling(
         noise_model: Optional noise model.
         seed: Random seed.
         ess_threshold: Threshold for ESS-based resampling.
-        proposal: Sequence proposal method.
-            - "uniform": Baseline Haar SIS.
-            - "local": Exact qubit state-matched proposal (mathematically unbiased).
+        proposal: Sequence proposal method:
+            - "uniform": Haar-random interventions.
+            - "local": Exact qubit state-matched proposal (unbiased).
     """
     if proposal not in ["uniform", "local"]:
         msg = f"Proposal {proposal!r} is not currently supported. Use 'uniform' or 'local'."
@@ -668,14 +686,21 @@ def _run_sis_sampling(
     k = len(timesteps)
     rng = np.random.default_rng(seed)
     solver = sim_params.solver
+    LOG_ZERO = -np.inf
 
     if noise_model is None:
         noise_model = sim_params.noise_model
 
-    # 1. Initialize Particles & Weights
+    # 1. Initialize Particles & Log-Weights
     particles = [_initialize_backend_state(operator, solver) for _ in range(num_samples)]
-    weights = np.ones(num_samples, dtype=np.float64)
+    log_weights = np.zeros(num_samples, dtype=np.float64)
+    dead = np.zeros(num_samples, dtype=bool)
     particles_dual_ops: list[list[NDArray[np.complex128]]] = [[] for _ in range(num_samples)]
+
+    # Diagnostics
+    ess_history: list[float] = []
+    alive_history: list[int] = []
+    resample_count = 0
 
     # Preprocess static context for solver efficiency
     static_ctx = None
@@ -689,41 +714,48 @@ def _run_sis_sampling(
 
     for step_idx, duration in enumerate(timesteps):
         # ── 2. Intervene & Weight Update ─────────────────────────────────────
-        # Only track states for particles that stay alive after this intervention
         prep_states_alive = []
         alive_indices = []
         
         for i in range(num_samples):
-            if weights[i] < 1e-60:
+            if dead[i] or not np.isfinite(log_weights[i]):
                 continue
 
-            if proposal == "local":
-                # Exact state-matched sampler: q(pm) propto <pm|rho_0|pm>
-                rho_0 = _get_rho_site_zero(particles[i])
-                tr_rho = float(np.trace(rho_0).real)
-                pm = _sample_local_measurement_exact(rho_0, rng)
-                pp = _sample_haar_pure_state(rng)
+            rho_0 = _get_rho_site_zero(particles[i])
+            tr_rho = float(np.trace(rho_0).real)
 
-                # Weight update: w_next = w_curr * P(pm)/q(pm) = w_curr * tr_rho / 2.0
-                psi_new, _ = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
-                weights[i] *= tr_rho / 2.0
-            else:
-                # Baseline "uniform" proposal (pm, pp from Haar)
+            if tr_rho < 1e-300:
+                log_weights[i] = LOG_ZERO
+                dead[i] = True
+                continue
+
+            if proposal == "uniform":
                 pm = _sample_haar_pure_state(rng)
                 pp = _sample_haar_pure_state(rng)
-
-                # Weight update: w_next = w_curr * Prob(outcome pm)
                 psi_new, step_prob = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
-                weights[i] *= max(0.0, step_prob)
+                if step_prob < 1e-300:
+                    log_weights[i] = LOG_ZERO
+                    dead[i] = True
+                    continue
+                log_weights[i] += np.log(step_prob)
 
-            if weights[i] > 1e-60:
+            elif proposal == "local":
+                pm = _sample_local_measurement_exact(rho_0, rng)
+                pp = _sample_haar_pure_state(rng)
+                psi_new, _ = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
+                log_weights[i] += np.log(max(tr_rho / 2.0, 1e-300))
+
+            if np.isfinite(log_weights[i]):
                 prep_states_alive.append(psi_new)
                 alive_indices.append(i)
                 particles_dual_ops[i].append(_continuous_dual_step(pm, pp))
+            else:
+                dead[i] = True
 
         # ── 3. Evolve Alive Particles (Parallel or Serial) ───────────────────
         if not alive_indices:
-            weights[:] = 0.0
+            log_weights[:] = LOG_ZERO
+            dead[:] = True
             break
 
         if use_parallel:
@@ -759,17 +791,24 @@ def _run_sis_sampling(
                 )
 
         # ── 4. ESS-triggered Systematic Resampling ─────────────────────────────
-        w_sum = float(weights.sum())
-        if w_sum < 1e-60:
-            weights[:] = 0.0
+        alive_idx = np.flatnonzero(np.isfinite(log_weights))
+        if len(alive_idx) == 0:
+            log_weights[:] = LOG_ZERO
+            dead[:] = True
             break
 
-        w_norm = weights / w_sum
-        ess = 1.0 / float(np.sum(w_norm**2))
+        w_norm_alive, log_w_sum = _normalize_log_weights(log_weights[alive_idx])
+        ess = 1.0 / float(np.sum(w_norm_alive**2))
+        
+        ess_history.append(ess)
+        alive_history.append(len(alive_idx))
+
         if ess < ess_threshold * num_samples:
+            resample_count += 1
             positions = (rng.random() + np.arange(num_samples)) / num_samples
-            cumsum = np.cumsum(w_norm)
-            idxs = np.searchsorted(cumsum, positions)
+            cumsum = np.cumsum(w_norm_alive)
+            sel_local = np.searchsorted(cumsum, positions)
+            idxs = alive_idx[sel_local]
 
             if solver == "MCWF":
                 particles = [particles[j].copy() for j in idxs]
@@ -777,14 +816,21 @@ def _run_sis_sampling(
                 particles = [copy.deepcopy(particles[j]) for j in idxs]
 
             particles_dual_ops = [copy.deepcopy(particles_dual_ops[j]) for j in idxs]
-            weights[:] = w_sum / num_samples
+            
+            # Reset log-weights to log(sum w) - log(N)
+            new_log_weight = log_w_sum - np.log(num_samples)
+            log_weights = np.full(num_samples, new_log_weight, dtype=np.float64)
+            dead[:] = False
 
     # ── 5. Finalize Outputs ──────────────────────────────────────────────────
     # Match MC convention: outputs[i] includes particle weight, global weight = 1/N
     final_outputs = []
     for i in range(num_samples):
+        if not np.isfinite(log_weights[i]):
+            final_outputs.append(np.zeros((2, 2), dtype=np.complex128))
+            continue
         rho_final = _get_rho_site_zero(particles[i])
-        final_outputs.append(weights[i] * rho_final)
+        final_outputs.append(np.exp(log_weights[i]) * rho_final)
 
     final_weights = [1.0 / num_samples] * num_samples
 
