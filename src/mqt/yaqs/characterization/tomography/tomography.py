@@ -52,6 +52,58 @@ def _sample_haar_pure_state(rng: np.random.Generator) -> NDArray[np.complex128]:
     return z / np.linalg.norm(z)
 
 
+def _sample_local_measurement_exact(
+    rho_0: NDArray[np.complex128],
+    rng: np.random.Generator,
+) -> NDArray[np.complex128]:
+    """Sample a qubit state from the exact local proposal density q(psi) propto <psi|rho_0|psi>.
+
+    This uses the analytic qubit sampler derived from the eigendecomposition of rho_0.
+    1. Diagonalize rho_0 = V D V^dagger.
+    2. Sample t = |alpha|^2 from f(t) propto lambda_2 + (lambda_1 - lambda_2)t.
+    3. Sample a uniform phase for the first coefficient.
+    4. Rotate back to the computational basis.
+    """
+    tr_rho = float(np.trace(rho_0).real)
+    if tr_rho < 1e-18:
+        # Near zero state: fall back to Haar uniform
+        return _sample_haar_pure_state(rng)
+
+    rho = rho_0 / tr_rho
+    evals, evecs = np.linalg.eigh(rho)
+    # Ensure descending order
+    idx = np.argsort(evals.real)[::-1]
+    lam1, lam2 = evals.real[idx]
+    v1, v2 = evecs[:, idx[0]], evecs[:, idx[1]]
+
+    # Quadratic coefficients for sampling t = |alpha|^2
+    diff = lam1 - lam2
+    sum_l = lam1 + lam2
+
+    u = rng.random()
+    if abs(diff) < 1e-12:
+        # Near-degenerate case: t is uniform
+        t = u
+    else:
+        # Solve u * (lam1 + lam2)/2 = lam2*t + (diff/2)*t^2
+        # (diff/2)*t^2 + (lam2)*t - u*(sum_l/2) = 0
+        # a*t^2 + b*t + c = 0
+        a = 0.5 * diff
+        b = lam2
+        c = -0.5 * u * sum_l
+        # Discriminant: b^2 - 4ac
+        # b^2 - 4 * (diff/2) * (-0.5 * u * sum_l) = lam2^2 + diff * u * sum_l
+        disc = b**2 - 4.0 * a * c
+        t = (-b + np.sqrt(max(0.0, disc))) / (2.0 * a)
+
+    t = np.clip(t, 0.0, 1.0)
+    phi = 2.0 * np.pi * rng.random()
+    alpha = np.sqrt(t) * np.exp(1j * phi)
+    beta = np.sqrt(1.0 - t)
+
+    return alpha * v1 + beta * v2
+
+
 def _get_haar_rho_dual(psi: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Return the dual frame operator D = 2*(3|psi><psi| - I) for a Haar pure state.
 
@@ -605,10 +657,12 @@ def _run_sis_sampling(
         noise_model: Optional noise model.
         seed: Random seed.
         ess_threshold: Threshold for ESS-based resampling.
-        proposal: Sequence proposal method. Only "uniform" is currently supported.
+        proposal: Sequence proposal method.
+            - "uniform": Baseline Haar SIS.
+            - "local": Exact qubit state-matched proposal (mathematically unbiased).
     """
-    if proposal != "uniform":
-        msg = f"Proposal {proposal!r} is not currently supported for baseline SIS. Use 'uniform'."
+    if proposal not in ["uniform", "local"]:
+        msg = f"Proposal {proposal!r} is not currently supported. Use 'uniform' or 'local'."
         raise ValueError(msg)
 
     k = len(timesteps)
@@ -643,14 +697,24 @@ def _run_sis_sampling(
             if weights[i] < 1e-60:
                 continue
 
-            # Purely uniform proposal (pm, pp from Haar)
-            pm = _sample_haar_pure_state(rng)
-            pp = _sample_haar_pure_state(rng)
+            if proposal == "local":
+                # Exact state-matched sampler: q(pm) propto <pm|rho_0|pm>
+                rho_0 = _get_rho_site_zero(particles[i])
+                tr_rho = float(np.trace(rho_0).real)
+                pm = _sample_local_measurement_exact(rho_0, rng)
+                pp = _sample_haar_pure_state(rng)
 
-            # Weight update: w_next = w_curr * Prob(outcome pm)
-            # Reprepare returns the projection probability (step_prob) directly
-            psi_new, step_prob = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
-            weights[i] *= max(0.0, step_prob)
+                # Weight update: w_next = w_curr * P(pm)/q(pm) = w_curr * tr_rho / 2.0
+                psi_new, _ = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
+                weights[i] *= tr_rho / 2.0
+            else:
+                # Baseline "uniform" proposal (pm, pp from Haar)
+                pm = _sample_haar_pure_state(rng)
+                pp = _sample_haar_pure_state(rng)
+
+                # Weight update: w_next = w_curr * Prob(outcome pm)
+                psi_new, step_prob = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
+                weights[i] *= max(0.0, step_prob)
 
             if weights[i] > 1e-60:
                 prep_states_alive.append(psi_new)
@@ -713,7 +777,7 @@ def _run_sis_sampling(
                 particles = [copy.deepcopy(particles[j]) for j in idxs]
 
             particles_dual_ops = [copy.deepcopy(particles_dual_ops[j]) for j in idxs]
-            weights[:] = np.sum(weights) / num_samples
+            weights[:] = w_sum / num_samples
 
     # ── 5. Finalize Outputs ──────────────────────────────────────────────────
     # Match MC convention: outputs[i] includes particle weight, global weight = 1/N
@@ -929,7 +993,7 @@ def run(
     tol: float = 1e-12,
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
-    proposal: Literal["uniform"] = "uniform",
+    proposal: Literal["uniform", "local"] = "local",
     ess_threshold: float = 0.5,
 ) -> ProcessTensor | MPO:
     """Main entry point for Process Tomography.
@@ -957,7 +1021,8 @@ def run(
         max_bond_dim: (MPO only) Hard bond dimension limit for MPO compression.
         n_sweeps: (MPO only) Number of sweeps for MPO accumulation.
         proposal: (SIS only) Continuous proposal distribution for interventions.
-             Only "uniform" (Haar-random) is currently supported.
+             - "uniform": Haar-random interventions (baseline).
+             - "local": Exact qubit state-matched proposal (unbiased).
         ess_threshold: (SIS only) Resample when ESS < ess_threshold * N.
 
     Returns:
@@ -975,8 +1040,8 @@ def run(
         if num_trajectories > 1:
             msg = "SIS currently only supports num_trajectories=1 (one realization per particle)."
             raise ValueError(msg)
-        if proposal != "uniform":
-            msg = f"Proposal {proposal!r} is not currently supported for baseline SIS. Use 'uniform'."
+        if proposal not in ["uniform", "local"]:
+            msg = f"Proposal {proposal!r} is not currently supported for SIS. Use 'uniform' or 'local'."
             raise ValueError(msg)
 
     if method == "exhaustive":
