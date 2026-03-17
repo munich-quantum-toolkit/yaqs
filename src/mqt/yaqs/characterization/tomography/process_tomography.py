@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+    from .combs import DenseComb, MPOComb
 
 from .basis import (
     _finalize_sequence_averages,
@@ -461,7 +462,7 @@ def run(
     n_sweeps: int = 2,
     proposal: Literal["uniform", "local"] = "local",
     ess_threshold: float = 0.5,
-) -> TomographyEstimate | MPO:
+) -> "DenseComb | MPOComb":
     """Main entry point for Process Tomography.
 
     Args:
@@ -470,7 +471,7 @@ def run(
         timesteps: List of durations for each evolution segment.
             If None, [sim_params.elapsed_time] is used.
         method: "exhaustive", "mc", or "sis".
-        output: "dense" (TomographyEstimate) or "mpo" (Upsilon MPO).
+        output: "dense" (DenseComb) or "mpo" (MPOComb).
         noise_model: Optional noise model.
         parallel: Whether to use multi-processing.
         num_samples: Number of MC/SIS samples.
@@ -481,7 +482,7 @@ def run(
         ess_threshold: (SIS) Resample when ESS < ess_threshold * N.
 
     Returns:
-        TomographyEstimate (output="dense") or MPO (output="mpo").
+        DenseComb (output="dense") or MPOComb (output="mpo").
     """
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]
@@ -501,35 +502,48 @@ def run(
 
     if method == "exhaustive":
         data = _run_exhaustive_sequence_data(
-            operator, sim_params, timesteps,
-            parallel=parallel, num_trajectories=num_trajectories, noise_model=noise_model,
+            operator,
+            sim_params,
+            timesteps,
+            parallel=parallel,
+            num_trajectories=num_trajectories,
+            noise_model=noise_model,
         )
     elif method == "mc":
         data = _run_mc_sampling(
-            operator, sim_params, timesteps,
-            parallel=parallel, num_samples=num_samples, num_trajectories=num_trajectories,
-            noise_model=noise_model, seed=seed,
+            operator,
+            sim_params,
+            timesteps,
+            parallel=parallel,
+            num_samples=num_samples,
+            num_trajectories=num_trajectories,
+            noise_model=noise_model,
+            seed=seed,
         )
     elif method == "sis":
         data = _run_sis_sampling(
-            operator, sim_params, timesteps,
-            parallel=parallel, num_samples=num_samples, noise_model=noise_model,
-            seed=seed, ess_threshold=ess_threshold, proposal=proposal,
+            operator,
+            sim_params,
+            timesteps,
+            parallel=parallel,
+            num_samples=num_samples,
+            noise_model=noise_model,
+            seed=seed,
+            ess_threshold=ess_threshold,
+            proposal=proposal,
         )
     else:
         msg = f"Unknown estimation method {method!r}."
         raise ValueError(msg)
 
+    # Single tomography estimate as the central object.
+    estimate = _to_dense(data)
+
     if output == "dense":
-        return _to_dense(data)
+        return estimate.to_dense_comb()
     if output == "mpo":
-        return _to_mpo(
-            data,
-            compress_every=compress_every,
-            tol=tol,
-            max_bond_dim=max_bond_dim,
-            n_sweeps=n_sweeps,
-        )
+        # Map compression-related kwargs to MPO factorization options.
+        return estimate.to_mpo_comb(max_bond_dim=max_bond_dim, cutoff=tol)
 
     msg = f"Unknown output format {output!r}."
     raise ValueError(msg)

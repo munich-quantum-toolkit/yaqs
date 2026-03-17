@@ -12,6 +12,7 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
 
+from .combs import MPOComb
 from .estimator_class import TomographyEstimate
 from .sampling import SamplingData, SequenceData
 
@@ -121,8 +122,8 @@ def _to_mpo(
     tol: float = 1e-12,
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
-) -> MPO:
-    """Format estimation results into an MPO (Upsilon) representation."""
+) -> MPOComb:
+    """Format estimation results into an MPOComb (Upsilon) representation."""
     k = len(data.timesteps)
     if isinstance(data, SamplingData):
         def _sampling_terms():
@@ -137,10 +138,16 @@ def _to_mpo(
                     raise ValueError(msg)
                 yield rank1_upsilon_mpo_term(rho, dual_ops, weight=w)
 
-        return _accumulate_rank1_terms(
-            _sampling_terms(), k=k, dims=(2, 2),
-            compress_every=compress_every, tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps
+        mpo = _accumulate_rank1_terms(
+            _sampling_terms(),
+            k=k,
+            dims=(2, 2),
+            compress_every=compress_every,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
         )
+        return MPOComb(mpo, data.timesteps)
 
     def _sequence_terms():
         for i, seq in enumerate(data.sequences):
@@ -149,7 +156,13 @@ def _to_mpo(
             dual_ops = [data.choi_duals[a].T for a in seq]
             yield rank1_upsilon_mpo_term(rho, dual_ops, weight=w)
 
-    return _accumulate_rank1_terms(
-        _sequence_terms(), k=k, dims=(2, 2),
-        compress_every=compress_every, tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps
+    mpo = _accumulate_rank1_terms(
+        _sequence_terms(),
+        k=k,
+        dims=(2, 2),
+        compress_every=compress_every,
+        tol=tol,
+        max_bond_dim=max_bond_dim,
+        n_sweeps=n_sweeps,
     )
+    return MPOComb(mpo, data.timesteps)

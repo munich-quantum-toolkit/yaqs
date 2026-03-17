@@ -92,17 +92,26 @@ class TomographyEstimate:
         U = self.reconstruct_comb_choi(check=True)
         return DenseComb(U, self.timesteps)
 
-    def to_mpo_comb(self):
-        """Return an MPOComb view (API hook).
+    def to_mpo_comb(
+        self,
+        *,
+        d: int = 2,
+        max_bond_dim: int | None = None,
+        cutoff: float = 1e-12,
+    ):
+        """Return an MPOComb view reconstructed from the dense Choi matrix.
 
-        The current implementation does not track an MPO directly on the
-        tomography estimate, so generic reconstruction of an MPO comb from the
-        raw tensor is intentionally not implemented here.
+        This factors the dense comb Choi operator Υ into an MPO with uniform
+        local dimension ``d`` using :meth:`MPO.from_matrix` and then wraps it
+        in an :class:`MPOComb`. By default we choose ``d=2``, which is
+        compatible with the qubit-based process tensors used here.
         """
-        from .combs import MPOComb  # noqa: F401  (for future use)
+        from mqt.yaqs.core.data_structures.networks import MPO
+        from .combs import MPOComb
 
-        msg = "MPO comb reconstruction from `TomographyEstimate` is not implemented."
-        raise NotImplementedError(msg)
+        U = self.reconstruct_comb_choi(check=True)
+        mpo = MPO.from_matrix(U, d=d, max_bond=max_bond_dim, cutoff=cutoff)
+        return MPOComb(mpo, self.timesteps)
 
     def to_linear_map_matrix(self) -> NDArray[np.complex128]:
         """Convert to matrix view (final output vs all inputs).

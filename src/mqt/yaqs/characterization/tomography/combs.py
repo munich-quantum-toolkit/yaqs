@@ -249,16 +249,21 @@ class DenseComb:
         )
 
 
-class MPOComb:
+class MPOComb(MPO):
     """Wrapper around an MPO representation of a comb Choi operator Υ."""
 
     def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
-        self.upsilon_mpo = upsilon_mpo
+        """Initialize MPOComb from an existing MPO and associated timesteps."""
+        # Copy underlying MPO tensors/state into this subclass
+        super().__init__()
+        self.tensors = [t.copy() for t in upsilon_mpo.tensors]
+        self.length = upsilon_mpo.length
+        self.physical_dimension = upsilon_mpo.physical_dimension
         self.timesteps = timesteps
 
     def to_matrix(self) -> NDArray[np.complex128]:
         """Return the dense matrix representation of Υ."""
-        return self.upsilon_mpo.to_matrix()
+        return super().to_matrix()
 
     def to_dense(self) -> DenseComb:
         """Convert the MPO comb to a DenseComb."""
