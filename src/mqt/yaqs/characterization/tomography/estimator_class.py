@@ -5,11 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Tomography estimator utilities.
+"""Tomography estimate container (raw reconstruction data).
 
 This module provides the low-level representation of raw tomography estimates
-(`TomographyEstimate`) together with helper functions to work with dense comb
-Choi operators (Υ). Higher-level comb wrappers live in `comb.py`.
+(`TomographyEstimate`). Higher-level comb wrappers live in `combs.py`.
 """
 
 from __future__ import annotations
@@ -23,8 +22,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
-
-
 
 
 class TomographyEstimate:
@@ -90,7 +87,7 @@ class TomographyEstimate:
         This uses the same reconstruction as ``reconstruct_comb_choi`` and does
         not change any estimator semantics.
         """
-        from .comb import DenseComb
+        from .combs import DenseComb
 
         U = self.reconstruct_comb_choi(check=True)
         return DenseComb(U, self.timesteps)
@@ -102,7 +99,7 @@ class TomographyEstimate:
         tomography estimate, so generic reconstruction of an MPO comb from the
         raw tensor is intentionally not implemented here.
         """
-        from .comb import MPOComb  # noqa: F401  (for future use)
+        from .combs import MPOComb  # noqa: F401  (for future use)
 
         msg = "MPO comb reconstruction from `TomographyEstimate` is not implemented."
         raise NotImplementedError(msg)
@@ -261,4 +258,3 @@ class TomographyEstimate:
         if return_convention:
             return best_U, best_name
         return best_U
-

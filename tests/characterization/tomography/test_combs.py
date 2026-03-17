@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.characterization.tomography.comb import DenseComb, MPOComb
+from mqt.yaqs.characterization.tomography.combs import DenseComb, MPOComb
 
 
 def test_densecomb_predict_matches_helper() -> None:
@@ -44,4 +44,3 @@ def test_mpocomb_qmi_fallback_to_dense() -> None:
     q1 = comb.qmi()
     q2 = comb.to_dense().qmi()
     assert abs(q1 - q2) < 1e-12
-

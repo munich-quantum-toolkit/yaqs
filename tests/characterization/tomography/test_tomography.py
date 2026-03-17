@@ -23,15 +23,15 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
-from mqt.yaqs.characterization.tomography.tomography import (
+from mqt.yaqs.characterization.tomography.process_tomography import (
     calculate_dual_choi_basis,
     get_basis_states,
     get_choi_basis,
     run,
 )
 
-from mqt.yaqs.characterization.tomography.comb import DenseComb
-from mqt.yaqs.characterization.tomography.tomography import rank1_upsilon_mpo_term
+from mqt.yaqs.characterization.tomography.combs import DenseComb
+from mqt.yaqs.characterization.tomography.process_tomography import rank1_upsilon_mpo_term
 
 from mqt.yaqs.characterization.tomography.metrics import rel_fro_error
 
@@ -576,7 +576,7 @@ def test_run_return_types():
     assert isinstance(res, MPO)
     
     res_dense = run(operator=H, sim_params=sp, timesteps=[0.1], method="mc", num_samples=4, seed=42, output="dense")
-    from mqt.yaqs.characterization.tomography.estimator import TomographyEstimate
+    from mqt.yaqs.characterization.tomography.estimator_class import TomographyEstimate
     assert isinstance(res_dense, TomographyEstimate)
 
 
@@ -670,13 +670,13 @@ def test_sis_tjm_k2_convergence() -> None:
 
 def test_sis_tjm_outputs_dense_and_mpo() -> None:
     """Verify both formatters yield consistent predictions for TJM SIS."""
-    from mqt.yaqs.characterization.tomography.estimator import TomographyEstimate
+    from mqt.yaqs.characterization.tomography.estimator_class import TomographyEstimate
     
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
     timesteps = [0.1]
     
-    from mqt.yaqs.characterization.tomography.tomography import (
+    from mqt.yaqs.characterization.tomography.process_tomography import (
         _estimate_sis_sequence_data,
         _sequence_data_to_mpo,
         _sequence_data_to_dense,

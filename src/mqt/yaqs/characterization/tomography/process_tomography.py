@@ -35,7 +35,7 @@ from .basis import (
     get_basis_states,
     get_choi_basis,
 )
-from .estimator import TomographyEstimate
+from .estimator_class import TomographyEstimate
 from .formatters import _to_dense, _to_mpo, rank1_upsilon_mpo_term
 from .sampling import (
     SamplingData,
@@ -47,7 +47,7 @@ from .sampling import (
     _sample_local_measurement_exact,
     _sample_random_intervention_sequence,
 )
-from .simulation import (
+from .tomography_utils import (
     _evolve_backend_state,
     _get_rho_site_zero,
     _initialize_backend_state,

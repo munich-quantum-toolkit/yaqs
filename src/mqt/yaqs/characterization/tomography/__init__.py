@@ -5,10 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Tomography module for YAQS."""
+"""Tomography module for YAQS (process tomography public API)."""
 
-from .estimator import TomographyEstimate
-from .comb import DenseComb, MPOComb
-from .tomography import run
+from .estimator_class import TomographyEstimate
+from .combs import DenseComb, MPOComb
+from .process_tomography import run
 
 __all__ = ["TomographyEstimate", "DenseComb", "MPOComb", "run"]

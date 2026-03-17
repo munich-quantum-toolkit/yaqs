@@ -1,7 +1,7 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 
-"""Backend state evolution and tomography sequence workers."""
+"""Tomography backend state evolution and sequence workers (distinct from simulator.py)."""
 
 from __future__ import annotations
 

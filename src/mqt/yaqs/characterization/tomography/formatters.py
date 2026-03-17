@@ -12,7 +12,7 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
 
-from .estimator import TomographyEstimate
+from .estimator_class import TomographyEstimate
 from .sampling import SamplingData, SequenceData
 
 if TYPE_CHECKING:
