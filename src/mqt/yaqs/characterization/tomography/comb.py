@@ -7,12 +7,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from mqt.yaqs.core.data_structures.networks import MPO
 
-from .estimator import (
-    canonicalize_upsilon,
-    comb_qmi_from_upsilon_dense,
-    comb_cmi_from_upsilon_dense,
-    predict_from_dense_upsilon,
-)
+from .estimator import predict_from_dense_upsilon
+from .metrics import canonicalize_upsilon, comb_cmi_from_upsilon_dense, comb_qmi_from_upsilon_dense
 
 if TYPE_CHECKING:
     from collections.abc import Callable
