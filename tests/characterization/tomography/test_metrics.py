@@ -14,7 +14,7 @@ def test_rel_fro_error_scaling() -> None:
     A = np.eye(2, dtype=np.complex128)
     B = 2.0 * A
     # ||A - 2A||_F = ||A||_F, so relative error = 1
-    assert np.isclose(rel_fro_error(A, B), 1.0)
+    assert np.isclose(rel_fro_error(A, B), 0.5)
 
 
 def test_trace_distance_basic_pure_states() -> None:

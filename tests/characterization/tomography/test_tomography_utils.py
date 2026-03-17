@@ -42,9 +42,9 @@ def test_reconstruct_state_from_expectations() -> None:
     psi0 = np.array([1.0, 0.0], dtype=np.complex128)
     rho0 = np.outer(psi0, psi0.conj())
 
-    ex = float(np.trace(X().matrix @ rho0))
-    ey = float(np.trace(Y().matrix @ rho0))
-    ez = float(np.trace(Z().matrix @ rho0))
+    ex = np.trace(X().matrix @ rho0)
+    ey = np.trace(Y().matrix @ rho0)
+    ez = np.trace(Z().matrix @ rho0)
 
     rho_rec = _reconstruct_state({"x": ex, "y": ey, "z": ez})
     np.testing.assert_allclose(rho_rec, rho0, atol=1e-12)
