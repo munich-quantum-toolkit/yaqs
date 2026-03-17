@@ -1122,6 +1122,139 @@ class MPO:
     length: int
     physical_dimension: int | list[int]
 
+    def apply_local_operator(
+        self,
+        site: int,
+        op: np.ndarray,
+        *,
+        left_action: bool = True,
+    ) -> None:
+        """Apply a local operator to the physical legs of one MPO site in place.
+
+        Args:
+            site: Site index whose tensor will be updated.
+            op: Local operator acting on the physical Hilbert space at ``site``.
+                Expected shape is either ``(d2, d2)`` with ``d2 = d_out * d_in``,
+                or ``(d_out, d_in, d_out, d_in)``.
+            left_action: If True, apply as ``op @ phys_vec`` on the vectorized
+                physical indices. For most Choi/link constructions this corresponds
+                to a left action on the combined (out,in) index. If False, apply
+                from the right (``phys_vec @ op``).
+        """
+        T = self.tensors[site]
+        d_out, d_in, Dl, Dr = T.shape
+        d2 = d_out * d_in
+
+        if op.ndim == 2:
+            if op.shape != (d2, d2):
+                msg = f"op shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op
+        elif op.ndim == 4:
+            if op.shape != (d_out, d_in, d_out, d_in):
+                msg = f"op tensor shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op.reshape(d2, d2)
+        else:
+            msg = f"Expected op with 2 or 4 dims, got {op.ndim}."
+            raise ValueError(msg)
+
+        # Flatten physical legs into a single index.
+        T_phys = T.reshape(d2, Dl * Dr)
+        if left_action:
+            T_new = op_mat @ T_phys
+        else:
+            T_new = T_phys.T @ op_mat
+            T_new = T_new.T
+        self.tensors[site] = T_new.reshape(d_out, d_in, Dl, Dr)
+
+    def partial_trace_site(self, site: int) -> None:
+        """Partial trace over the physical legs of a single MPO site in place.
+
+        After this operation, the site's physical dimensions become 1x1, i.e.,
+        the site no longer carries a local degree of freedom, but the virtual
+        bonds remain unchanged. This is sufficient for building reduced operators
+        on subsets of sites.
+        """
+        T = self.tensors[site]
+        d_out, d_in, Dl, Dr = T.shape
+        if d_out != d_in:
+            msg = f"Cannot trace site with non-square physical dims ({d_out}, {d_in})."
+            raise ValueError(msg)
+
+        traced = np.zeros((1, 1, Dl, Dr), dtype=T.dtype)
+        for s in range(d_out):
+            traced[0, 0] += T[s, s]
+        self.tensors[site] = traced
+
+    def partial_trace_sites(self, keep_sites: list[int]) -> "MPO":
+        """Return a new MPO with all sites not in ``keep_sites`` traced out.
+
+        Sites in ``keep_sites`` retain their physical dimensions; other sites have
+        their physical legs traced, leaving 1x1 local factors that can be further
+        compressed if desired.
+        """
+        if not keep_sites:
+            msg = "keep_sites must be non-empty."
+            raise ValueError(msg)
+
+        keep = sorted(set(keep_sites))
+        if keep[0] < 0 or keep[-1] >= self.length:
+            msg = f"keep_sites indices {keep} out of range for MPO length {self.length}."
+            raise ValueError(msg)
+
+        new = MPO()
+        new.length = self.length
+        new.physical_dimension = copy.copy(self.physical_dimension)
+        new.tensors = [t.copy() for t in self.tensors]
+
+        for i in range(new.length):
+            if i not in keep:
+                new.partial_trace_site(i)
+
+        return new
+
+    @classmethod
+    def from_local_ops(cls, local_ops: list[np.ndarray]) -> "MPO":
+        """Build an MPO that is the tensor product of given local operators.
+
+        Each ``local_ops[i]`` is assumed to act on a single site's physical
+        Hilbert space and is interpreted as a matrix on the vectorized
+        (out,in) indices. The resulting MPO has trivial virtual bonds (Dl=Dr=1)
+        at every site; its site tensors are simply reshaped versions of the
+        provided operators.
+        """
+        if not local_ops:
+            msg = "local_ops must contain at least one operator."
+            raise ValueError(msg)
+
+        tensors: list[np.ndarray] = []
+        d: int | None = None
+        for op in local_ops:
+            if op.ndim != 2 or op.shape[0] != op.shape[1]:
+                msg = f"Each local op must be a square matrix; got shape {op.shape}."
+                raise ValueError(msg)
+            d2 = op.shape[0]
+            local_d = int(np.sqrt(d2))
+            if local_d * local_d != d2:
+                msg = f"Operator dimension {d2} is not a perfect square."
+                raise ValueError(msg)
+            if d is None:
+                d = local_d
+            elif d != local_d:
+                msg = f"Inconsistent local dimensions in local_ops: {d} vs {local_d}."
+                raise ValueError(msg)
+
+            T = op.reshape(local_d, local_d, local_d, local_d).reshape(local_d, local_d, 1, 1)
+            tensors.append(T.astype(np.complex128))
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = len(tensors)
+        mpo.physical_dimension = d if d is not None else 0
+        assert mpo.check_if_valid_mpo(), "Constructed MPO is invalid."
+        return mpo
+
     @classmethod
     def hamiltonian(
         cls,

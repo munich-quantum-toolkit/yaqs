@@ -267,23 +267,104 @@ class MPOComb(MPO):
 
     def to_dense(self) -> DenseComb:
         """Convert the MPO comb to a DenseComb."""
-        return DenseComb(self.upsilon_mpo.to_matrix(), self.timesteps)
+        return DenseComb(self.to_matrix(), self.timesteps)
 
     def predict(
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Predict final state via dense fallback."""
-        return self.to_dense().predict(interventions)
+        """Predict final state given a list of CPTP interventions.
 
-    def qmi(self, **kwargs: object) -> float:
-        """Quantum mutual information computed via dense fallback."""
-        return self.to_dense().qmi(**kwargs)
+        This uses only MPO-local operations:
 
-    def cmi(self, **kwargs: object) -> float:
-        """Conditional mutual information computed via dense fallback."""
-        return self.to_dense().cmi(**kwargs)
+        1. Build local Choi operators J(E_t) for each intervention.
+        2. Apply J(E_t)^T on the corresponding past sites of the comb MPO.
+        3. Trace out all past sites on the physical level.
+        4. Read out the remaining 2x2 final state from the single-site MPO.
+        """
+        if not interventions:
+            msg = "interventions list must be non-empty."
+            raise ValueError(msg)
 
-    def cmi_conditional(self, **kwargs: object) -> float:
-        """I(A:B|C) via dense fallback."""
-        return self.to_dense().cmi_conditional(**kwargs)
+        k_steps = len(interventions)
+        if self.length != k_steps + 1:
+            msg = (
+                f"MPOComb length {self.length} inconsistent with number of "
+                f"interventions {k_steps} (expected length = k + 1)."
+            )
+            raise ValueError(msg)
+
+        # Work on a copy so the original MPOComb remains unchanged.
+        work = MPO()
+        work.length = self.length
+        work.physical_dimension = self.physical_dimension
+        work.tensors = [t.copy() for t in self.tensors]
+
+        # Apply local Choi operators (with transpose as in DenseComb.predict) on past sites.
+        for t, emap in enumerate(interventions):
+            j_choi = _cptp_to_choi(emap)  # 4x4
+            work.apply_local_operator(site=t + 1, op=j_choi.T, left_action=True)
+
+        # Trace out all past sites, keep only the final site (index 0).
+        reduced = work.partial_trace_sites([0])
+
+        # The remaining MPO encodes a single 2x2 density matrix on the final leg.
+        rho = reduced.to_matrix()
+        return rho
+
+    def qmi(
+        self,
+        base: int = 2,
+        past: str = "all",
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Quantum mutual information I(F:P) from this MPO comb.
+
+        This delegates to the dense implementation via ``DenseComb``.
+        """
+        return self.to_dense().qmi(
+            base=base,
+            past=past,
+            check_psd=check_psd,
+            assume_canonical=assume_canonical,
+        )
+
+    def cmi(
+        self,
+        base: int = 2,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
+        """Conditional mutual information I(F:P_{<k} | P_k) from this MPO comb.
+
+        This delegates to the dense implementation via ``DenseComb``.
+        """
+        return self.to_dense().cmi(
+            base=base,
+            check_psd=check_psd,
+            assume_canonical=assume_canonical,
+        )
+
+    def cmi_conditional(
+        self,
+        *,
+        A: str = "first",
+        B: str = "final",
+        C: str = "last",
+        base: int = 2,
+        normalize: bool = True,
+        check_psd: bool = True,
+    ) -> float:
+        """I(A:B|C) with subsystems 'final', 'first', 'last' for this MPO comb.
+
+        This delegates to the dense implementation via ``DenseComb``.
+        """
+        return self.to_dense().cmi_conditional(
+            A=A,
+            B=B,
+            C=C,
+            base=base,
+            normalize=normalize,
+            check_psd=check_psd,
+        )
