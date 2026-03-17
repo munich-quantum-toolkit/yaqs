@@ -585,7 +585,7 @@ def test_mpo_schmidt_values_and_entropy_match_dense_reference() -> None:
     np.testing.assert_allclose(schmidt, dense_schmidt, rtol=1e-10, atol=1e-12)
 
     probabilities = np.square(dense_schmidt)
-    probabilities = probabilities / np.sum(probabilities)
+    probabilities /= np.sum(probabilities)
     reference_entropy = -np.sum(probabilities * np.log(probabilities))
 
     entropy = mpo.operator_entanglement_entropy(cut=cut)

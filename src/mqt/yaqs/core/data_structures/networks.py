@@ -1966,7 +1966,7 @@ class MPO:
         stage: str,
         ndim: int | None = None,
         expected_shape: tuple[int, ...] | None = None,
-        dtype: type[np.complex128] | type[np.float64] = np.complex128,
+        dtype: type[np.complex128 | np.float64] = np.complex128,
     ) -> NDArray[np.complex128] | NDArray[np.float64]:
         """Validate numerical arrays before dense reshapes or decompositions."""
         arr = np.asarray(array, dtype=dtype)
@@ -2034,10 +2034,7 @@ class MPO:
                 )
             except Exception as fallback_exc:
                 norm_value = cls._array_norm(validated)
-                msg = (
-                    f"SVD failed at {stage}: shape={validated.shape}, dtype={validated.dtype}, "
-                    f"norm={norm_value!r}"
-                )
+                msg = f"SVD failed at {stage}: shape={validated.shape}, dtype={validated.dtype}, norm={norm_value!r}"
                 raise RuntimeError(msg) from fallback_exc
         svals = np.asarray(singular_values, dtype=np.float64)
         cls._validate_numeric_array(svals, stage=f"{stage} singular_values", ndim=1, dtype=np.float64)
@@ -2067,10 +2064,7 @@ class MPO:
                 )
             except Exception as fallback_exc:
                 norm_value = cls._array_norm(validated)
-                msg = (
-                    f"SVD failed at {stage}: shape={validated.shape}, dtype={validated.dtype}, "
-                    f"norm={norm_value!r}"
-                )
+                msg = f"SVD failed at {stage}: shape={validated.shape}, dtype={validated.dtype}, norm={norm_value!r}"
                 raise RuntimeError(msg) from fallback_exc
         u_valid = np.asarray(
             cls._validate_numeric_array(u_mat, stage=f"{stage} left_vectors", ndim=2, dtype=np.complex128),
@@ -2110,7 +2104,7 @@ class MPO:
             msg = f"Invalid probability normalization while computing entropy: sum={normalization!r}"
             raise RuntimeError(msg)
 
-        probs = probs / normalization
+        probs /= normalization
         nonzero = probs > np.finfo(np.float64).tiny
         entropy = -np.sum(probs[nonzero] * np.log(probs[nonzero]), dtype=np.float64) / math.log(base_float)
         if not np.isfinite(entropy):
@@ -2139,7 +2133,8 @@ class MPO:
         """
         tensors_raw = [np.asarray(tensor, dtype=np.complex128) for tensor in self.tensors]
         if not tensors_raw:
-            raise ValueError("MPO has no tensors.")
+            msg = "MPO has no tensors."
+            raise ValueError(msg)
 
         cut_index = self._resolve_cut_index(cut=cut, length=len(tensors_raw))
         out_dims = [int(tensor.shape[0]) for tensor in tensors_raw]
@@ -2241,8 +2236,7 @@ class MPO:
         tensor = channel.reshape([int(local_dim)] * (2 * int(n_sites)))
         interleaved_axes: list[int] = []
         for site_index in range(int(n_sites)):
-            interleaved_axes.append(site_index)
-            interleaved_axes.append(site_index + int(n_sites))
+            interleaved_axes.extend((site_index, site_index + int(n_sites)))
         remainder = np.transpose(tensor, interleaved_axes)
 
         tensors: list[NDArray[np.complex128]] = []
@@ -2316,7 +2310,7 @@ class MPO:
     ) -> NDArray[np.float64]:
         """Compute dense fused-site Schmidt values directly from a channel matrix."""
         cut_index = cls._resolve_cut_index(cut=cut, length=int(n_sites))
-        if cut_index in (0, int(n_sites)):
+        if cut_index in {0, int(n_sites)}:
             return np.array([1.0], dtype=np.float64)
 
         channel = cls._validated_dense_channel_matrix(
@@ -2328,8 +2322,7 @@ class MPO:
         tensor = channel.reshape([int(local_dim)] * (2 * int(n_sites)))
         interleaved_axes: list[int] = []
         for site_index in range(int(n_sites)):
-            interleaved_axes.append(site_index)
-            interleaved_axes.append(site_index + int(n_sites))
+            interleaved_axes.extend((site_index, site_index + int(n_sites)))
         fused_tensor = np.transpose(tensor, interleaved_axes)
         left_dim = (int(local_dim) * int(local_dim)) ** int(cut_index)
         right_dim = (int(local_dim) * int(local_dim)) ** (int(n_sites) - int(cut_index))
@@ -2371,7 +2364,9 @@ class MPO:
             svd_cutoff=svd_cutoff,
         )
         reconstructed = np.asarray(mpo.to_matrix(), dtype=np.complex128)
-        cls._validate_numeric_array(reconstructed, stage="dense_channel_diagnostics reconstructed", ndim=2, dtype=np.complex128)
+        cls._validate_numeric_array(
+            reconstructed, stage="dense_channel_diagnostics reconstructed", ndim=2, dtype=np.complex128
+        )
         denom = max(1.0, float(np.linalg.norm(channel, ord="fro")))
         rel_error = float(np.linalg.norm(reconstructed - channel, ord="fro") / denom)
 
@@ -2450,7 +2445,7 @@ class MPO:
             NDArray[np.float64]: Schmidt singular values at the selected cut.
         """
         cut_index = self._resolve_cut_index(cut=cut, length=len(self.tensors))
-        if cut_index in (0, len(self.tensors)):
+        if cut_index in {0, len(self.tensors)}:
             return np.array([1.0], dtype=np.float64)
         schmidt_matrix = self._dense_fused_site_schmidt_matrix(cut=cut_index)
         svals = self._svd_values_with_fallback(schmidt_matrix, stage=f"schmidt_values cut={cut_index}")
