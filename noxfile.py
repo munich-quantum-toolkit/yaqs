@@ -1,5 +1,5 @@
 #!/usr/bin/env -S uv run --script --quiet
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -67,6 +67,8 @@ def _run_tests(
     if "--cov" in session.posargs:
         # try to use the lighter-weight `sys.monitoring` coverage core
         env["COVERAGE_CORE"] = "sysmon"
+        # disable Numba JIT coverage
+        env["NUMBA_DISABLE_JIT"] = "1"
 
     session.run(
         "uv",
@@ -89,7 +91,7 @@ def tests(session: nox.Session) -> None:
     _run_tests(session)
 
 
-@nox.session(python=PYTHON_ALL_VERSIONS, reuse_venv=True, venv_backend="uv", default=True)
+@nox.session(python=PYTHON_ALL_VERSIONS, reuse_venv=True, venv_backend="uv")
 def minimums(session: nox.Session) -> None:
     """Test the minimum versions of dependencies."""
     with preserve_lockfile():

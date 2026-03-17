@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -45,7 +45,7 @@ def test_split_tensor_valid_shape() -> None:
     (expected shape (2, 2, 1, r)) and the second tensor has shape (2, 2, r, 1).
     """
     # Create a simple tensor of shape (2,2,2,2) with values 0..15.
-    tensor = np.arange(16, dtype=float).reshape(2, 2, 2, 2)
+    tensor = np.arange(16, dtype=complex).reshape(2, 2, 2, 2)
     tensors = split_tensor(tensor)
     # Expect a list of two tensors.
     assert isinstance(tensors, list)
@@ -100,7 +100,7 @@ def test_extend_gate_with_identity() -> None:
     assert len(mpo_tensors) == 3
 
     mpo = MPO()
-    mpo.init_custom(mpo_tensors, transpose=False)
+    mpo.custom(mpo_tensors, transpose=False)
     identity_tensor = mpo.tensors[1]
     prev_bond = mpo.tensors[0].shape[3]
     assert identity_tensor.shape == (2, 2, prev_bond, prev_bond)
@@ -120,8 +120,8 @@ def test_extend_gate_reverse_order() -> None:
 
     mpo_forward = MPO()
     mpo_reverse = MPO()
-    mpo_forward.init_custom(mpo_forward_tensors, transpose=False)
-    mpo_reverse.init_custom(mpo_reverse_tensors, transpose=False)
+    mpo_forward.custom(mpo_forward_tensors, transpose=False)
+    mpo_reverse.custom(mpo_reverse_tensors, transpose=False)
 
     mpo_reverse.tensors.reverse()
     for t_f, t_r in zip(mpo_forward.tensors, mpo_reverse.tensors, strict=False):

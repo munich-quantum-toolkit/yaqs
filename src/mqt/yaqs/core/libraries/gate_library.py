@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -188,11 +188,11 @@ class BaseGate:
         Args:
             other: The gate to be added.
 
-        Raises:
-            ValueError: If the gates have different interaction levels.
-
         Returns:
             A new gate representing the sum of the two gates.
+
+        Raises:
+            ValueError: If the gates have different interaction levels.
         """
         if self.interaction != other.interaction:
             msg = "Cannot add gates with different interaction"
@@ -205,11 +205,11 @@ class BaseGate:
         Args:
             other: The gate to be subtracted.
 
-        Raises:
-            ValueError: If the gates have different interaction levels.
-
         Returns:
             A new gate representing the difference between the two gates.
+
+        Raises:
+            ValueError: If the gates have different interaction levels.
         """
         if self.interaction != other.interaction:
             msg = "Cannot subtract gates with different interaction"
@@ -222,11 +222,11 @@ class BaseGate:
         Args:
             other: The gate or scalar to multiply.
 
-        Raises:
-            ValueError: If the gates have different interaction levels (when multiplying two gates).
-
         Returns:
             A new gate representing the product of the two gates or the scaled gate.
+
+        Raises:
+            ValueError: If the gates have different interaction levels (when multiplying two gates).
         """
         if isinstance(other, BaseGate):
             if self.interaction != other.interaction:
@@ -597,6 +597,23 @@ class BaseGate:
             An instance of the Schmidt spectrum diagnostic gate.
         """
         return SchmidtSpectrum()
+
+    @property
+    def mpo_tensors(self) -> list[NDArray[np.complex128]]:
+        """Returns a list of MPO tensors representing the gate.
+
+        Raises:
+            AttributeError: If the gate does not have MPO tensors defined.
+        """
+        try:
+            return self._mpo_tensors
+        except AttributeError:
+            msg = "This gate does not have MPO tensors defined."
+            raise AttributeError(msg) from None
+
+    @mpo_tensors.setter
+    def mpo_tensors(self, tensors: list[NDArray[np.complex128]]) -> None:
+        self._mpo_tensors = tensors
 
 
 class X(BaseGate):

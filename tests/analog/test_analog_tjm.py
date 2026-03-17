@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -54,8 +54,8 @@ def test_initialize() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    MPO.ising(L, J, g)
+
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
     sim_params = AnalogSimParams(
@@ -73,7 +73,7 @@ def test_initialize() -> None:
     ):
         initialize(state, noise_model, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt / 2, sim_params)
-        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
+        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
 
 
 def test_step_through() -> None:
@@ -87,8 +87,8 @@ def test_step_through() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L)
     noise_model = NoiseModel([{"name": "lowering", "sites": [i], "strength": 0.1} for i in range(L)])
     sim_params = AnalogSimParams(
@@ -105,10 +105,10 @@ def test_step_through() -> None:
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
-        step_through(state, H, noise_model, sim_params)
+        step_through(state, H, noise_model, sim_params, current_time=0.2)
         mock_dynamic_tdvp(state, H, sim_params)
         mock_dissipation.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
-        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params)
+        mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
 
 
 def test_analog_tjm_2() -> None:
@@ -121,8 +121,8 @@ def test_analog_tjm_2() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -151,8 +151,8 @@ def test_analog_tjm_2_sample_timesteps() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -181,8 +181,8 @@ def test_analog_tjm_1() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -211,8 +211,8 @@ def test_analog_tjm_1_sample_timesteps() -> None:
     L = 5
     J = 1
     g = 0.5
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L)
     noise_model = None
     measurements = [Observable(Z(), site) for site in range(L)]
@@ -252,15 +252,15 @@ def test_analog_simulation_twositeprocesses() -> None:
     gamma_pair = 0.01
 
     # Setup YAQS simulation
-    H = MPO()
-    H.init_ising(L, J, g)
+    H = MPO.ising(L, J, g)
+
     state = MPS(L, state="zeros")
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,
         dt=0.05,
-        num_traj=150,
+        num_traj=200,
         max_bond_dim=8,
         order=2,
         sample_timesteps=True,
@@ -378,14 +378,14 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
     """
     # Setup YAQS simulation (same parameters as reference)
     L = 3
-    H = MPO()
-    H.init_ising(L, 1.0, 0.5)
+    H = MPO.ising(L, 1.0, 0.5)
+
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,
         dt=0.05,
-        num_traj=100,
+        num_traj=200,
         max_bond_dim=8,
         order=2,
         sample_timesteps=True,

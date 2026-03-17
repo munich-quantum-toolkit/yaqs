@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -24,44 +24,43 @@ All simulation results (e.g., observables, measurements) are aggregated and retu
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# 0) THREAD CAPS — must be set BEFORE importing numpy/scipy/qiskit/etc.
-# We set conservative defaults to avoid worker processes each spawning a
-# large number of BLAS/OpenMP threads (oversubscription → slowdown/crashes).
-# Users can still override these by exporting the vars before import.
-# ---------------------------------------------------------------------------
-import os
-
-for _k, _v in {
-    "OMP_NUM_THREADS": "1",
-    "OPENBLAS_NUM_THREADS": "1",
-    "MKL_NUM_THREADS": "1",
-    "NUMEXPR_NUM_THREADS": "1",
-    "VECLIB_MAXIMUM_THREADS": "1",  # harmless on Linux; relevant on macOS
-    "BLIS_NUM_THREADS": "1",
-}.items():
-    os.environ.setdefault(_k, _v)
+import contextlib
+import copy
+import importlib
 
 # ruff: noqa: E402
-
 # ---------------------------------------------------------------------------
 # 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
 # ---------------------------------------------------------------------------
 import multiprocessing
+
+# ---------------------------------------------------------------------------
+# 0) IMPORTS
+# Thread caps are NOT set at module level to allow single-trajectory
+# simulations to use multi-threading via threadpoolctl.
+# Thread limits are enforced in worker processes via _limit_worker_threads()
+# and in backend calls via _call_backend() with threadpoolctl.
+# ---------------------------------------------------------------------------
+import os
+import sys
+from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
     ProcessPoolExecutor,
     wait,
 )
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
 threadpool_limits: Callable[..., Any] | None
 threadpool_info: Callable[[], Any] | None
 try:
-    from threadpoolctl import threadpool_info as _threadpool_info  # type: ignore[import-not-found]
+    from threadpoolctl import threadpool_info as _threadpool_info
     from threadpoolctl import threadpool_limits as _threadpool_limits
 except ImportError:  # pragma: no cover - optional dependency
     threadpool_limits = None
@@ -70,9 +69,6 @@ else:
     threadpool_limits = _threadpool_limits
     threadpool_info = _threadpool_info
 
-import contextlib
-import copy
-import importlib
 
 # ---------------------------------------------------------------------------
 # 2) THIRD-PARTY IMPORTS
@@ -84,13 +80,11 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
-from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
-from .digital.digital_tjm import digital_tjm
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Iterator
     from concurrent.futures import Future
 
     import numpy as np
@@ -99,7 +93,12 @@ if TYPE_CHECKING:
     from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
 
-__all__ = ["available_cpus", "run"]  # public API of this module
+from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from .analog.lindblad import lindblad
+from .analog.mcwf import mcwf, preprocess_mcwf
+from .digital.digital_tjm import digital_tjm
+
+__all__ = ["available_cpus", "run", "run_backend_parallel"]  # public API of this module
 
 # ---------------------------------------------------------------------------
 # 4) TYPE VARS FOR GENERIC PARALLEL RUNNERS
@@ -116,14 +115,29 @@ TRes = TypeVar("TRes")
 def available_cpus() -> int:
     """Determine the number of available CPU cores for parallel execution.
 
-    This function checks if the SLURM_CPUS_ON_NODE environment variable is set (indicating a SLURM-managed cluster job).
+    This function checks if the PYTEST_XDIST_WORKER environment variable is set. If so, it returns 1 to avoid
+    nested parallelism during tests.
+    Next, it checks if the SLURM_CPUS_ON_NODE environment variable is set (indicating a SLURM-managed cluster job).
     If so, it returns the number of CPUs specified by SLURM. Otherwise, it returns the total number of CPUs available
     on the machine as reported by multiprocessing.cpu_count().
 
     Returns:
         int: The number of available CPU cores for parallel execution.
     """
-    # 1) SLURM hints first (explicit user/job request should win)
+    # 0) Priority Override: YAQS_MAX_WORKERS
+    if "YAQS_MAX_WORKERS" in os.environ:
+        try:
+            val = int(os.environ["YAQS_MAX_WORKERS"])
+            if val > 0:
+                return val
+        except ValueError:
+            pass
+
+    # 1) Detect xdist: running inside a pytest worker?
+    if os.environ.get("PYTEST_XDIST_WORKER", ""):
+        return 1
+
+    # 2) SLURM hints (explicit user/job request should win)
     for var in ("SLURM_CPUS_PER_TASK", "SLURM_CPUS_ON_NODE"):
         value = os.environ.get(var, "").strip()
         if value:
@@ -135,14 +149,26 @@ def available_cpus() -> int:
                 # Ignore malformed values and continue
                 pass
 
-    # 2) Respect Linux affinity / cgroup limits if available
-    try:
-        return len(os.sched_getaffinity(0))
-    except AttributeError:
-        pass
+    # 3) Respect Linux affinity / cgroup limits if available
+    fn = getattr(os, "sched_getaffinity", None)
+    if fn is not None:
+        try:
+            sched_getaffinity = cast("Callable[[int], set[int]]", fn)
+            n = len(sched_getaffinity(0))
+            if n > 0:
+                return n
+        except OSError:
+            # System call failed; fall through to next fallback
+            pass
 
-    # 3) Fallback
-    return multiprocessing.cpu_count() or 1
+    # 4) Fallback
+    count = 0
+    try:
+        count = os.cpu_count() or multiprocessing.cpu_count() or 1
+    except (NotImplementedError, OSError):
+        count = 1
+
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +177,7 @@ def available_cpus() -> int:
 #   - Set environment caps (no-ops if already set)
 #   - Try to cap numexpr and MKL explicitly if present
 #   - Optionally use threadpoolctl to cap vendored OpenMP pools (OpenBLAS, MKL)
+#   - Initialize the worker-global context with large objects (e.g. MPS, NoiseModel)
 # ---------------------------------------------------------------------------
 THREAD_ENV_VARS: dict[str, str] = {
     # OpenMP default thread count (covers any library compiled with OpenMP,
@@ -166,25 +193,56 @@ THREAD_ENV_VARS: dict[str, str] = {
     "VECLIB_MAXIMUM_THREADS": "1",
     # BLIS BLAS implementation (used in some NumPy builds instead of OpenBLAS/MKL).
     "BLIS_NUM_THREADS": "1",
+    # Numba threading (used for parallel=True kernels)
+    "NUMBA_NUM_THREADS": "1",
 }
 
 
-def _limit_worker_threads(n_threads: int = 1) -> None:
-    """Initializer for worker processes to cap BLAS/OpenMP thread usage.
+# Global worker state (initialized once per process)
+WORKER_CTX: dict[str, Any] = {}
 
-    This function is called once at worker process startup. It re-applies
-    environment variable caps (e.g. ``OMP_NUM_THREADS``) inside the child
-    process, and makes best-effort attempts to explicitly cap common math
-    libraries that may spawn their own threadpools.
+
+def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
+    """Initialize the worker process state.
+
+    This function is called once per worker process upon startup. It enforces
+    thread limits for numerical libraries (BLAS, OpenMP, etc.) and populates
+    the global `WORKER_CTX` dictionary with shared simulation objects. This
+    strategy avoids repeated pickling of large objects for every task.
 
     Args:
-        n_threads : Maximum number of threads per library to
-            allow. Defaults to 1.
+        payload: A dictionary containing large, read-only objects (e.g., MPS,
+            MPO, NoiseModel, SimParams) to be stored in the global worker context.
+        n_threads: The maximum number of threads allowed for this worker process.
+            Defaults to 1 to prevent thread oversubscription.
+    """
+    # 1. Thread Capping
+    _limit_worker_threads(n_threads)
 
-    Notes:
-        - Affects OpenMP-based libraries, OpenBLAS, MKL, BLIS, NumExpr.
-        - Uses ``threadpoolctl`` if available to force limits on vendored pools.
-        - Has no effect if libraries are not present or ignore thread caps.
+    # 2. Context Initialization
+    WORKER_CTX.clear()
+    WORKER_CTX.update(payload)
+
+    # 3. Numba Threading (Runtime)
+    # Some Numba versions ignore env vars if imported before.
+    try:
+        import numba  # noqa: PLC0415
+
+        numba.set_num_threads(n_threads)
+    except ImportError:
+        pass
+
+
+def _limit_worker_threads(n_threads: int = 1) -> None:
+    """Limit the number of threads used by numerical libraries in the current process.
+
+    This helper sets environment variables (OMP_NUM_THREADS, MKL_NUM_THREADS, etc.)
+    and calls runtime configuration functions for libraries like `numexpr`, `mkl`,
+    and `threadpoolctl` to prevent thread oversubscription when running many
+    worker processes in parallel.
+
+    Args:
+        n_threads: The maximum number of threads to allow. Defaults to 1.
     """
     for k in THREAD_ENV_VARS:
         os.environ.setdefault(k, str(n_threads))
@@ -210,21 +268,113 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7) SAFETY WRAPPER FOR BACKEND CALLS
+# 7) WORKER WRAPPERS
+# These functions are pickled and sent to workers. They retrieve large objects
+# from the global _WORKER_CTX instead of receiving them as arguments.
+# ---------------------------------------------------------------------------
+def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64]:
+    """Execute a single digital strong simulation trajectory.
+
+    Retrieves the required simulation objects (initial state, noise model,
+    parameters, circuit) from the global `WORKER_CTX` and delegates to the
+    `digital_tjm` backend.
+
+    Args:
+        traj_idx: The integer index of the trajectory to execute.
+
+    Returns:
+        dict[int, int] | NDArray[np.float64]: The result of the single-trajectory simulation
+        (typically an observable trajectory or final state).
+    """
+    return digital_tjm((
+        traj_idx,
+        WORKER_CTX["initial_state"],
+        WORKER_CTX["noise_model"],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
+    ))
+
+
+def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
+    """Execute a single digital weak simulation trajectory.
+
+    Retrieves simulation objects from `WORKER_CTX` and executes a 'shots=1'
+    weak simulation using `digital_tjm`.
+
+    Args:
+        traj_idx: The integer index of the trajectory (effectively a shot index).
+
+    Returns:
+        dict[int, int]: A dictionary mapping outcome bitstrings (as integers)
+        to counts (typically {outcome: 1} for a single shot).
+    """
+    return cast(
+        "dict[int, int]",
+        digital_tjm((
+            traj_idx,
+            WORKER_CTX["initial_state"],
+            WORKER_CTX["noise_model"],
+            WORKER_CTX["sim_params"],
+            WORKER_CTX["operator"],
+        )),
+    )
+
+
+def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
+    """Execute a single analog simulation trajectory (TJM or Lindblad).
+
+    Retrieves the appropriate backend function and simulation arguments from
+    `WORKER_CTX` and executes the trajectory.
+
+    Args:
+        traj_idx: The integer index of the trajectory to execute.
+
+    Returns:
+        NDArray[np.float64]: The result of the simulation (typically observable values over time).
+    """
+    # backend is chosen in _run_analog and stored in context
+    backend = WORKER_CTX["backend"]
+    return backend((
+        traj_idx,
+        WORKER_CTX["initial_state"],
+        WORKER_CTX["noise_model"],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
+    ))
+
+
+def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
+    """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
+
+    Retrieves the preprocessed MCWF context from `WORKER_CTX` and executes
+    the trajectory.
+
+    Args:
+        traj_idx: The integer index of the trajectory to execute.
+
+    Returns:
+        NDArray[np.float64]: The result of the MCWF trajectory.
+    """
+    return mcwf((traj_idx, WORKER_CTX["ctx"]))
+
+
+# ---------------------------------------------------------------------------
+# 8) SAFETY WRAPPER FOR SERIAL BACKEND CALLS
 # Wrap a single backend call in a context that (again) caps threadpools.
 # This protects against libraries that spawn pools lazily during the call.
 # ---------------------------------------------------------------------------
-def _call_backend(backend: Callable[[TArg], TRes], arg: TArg) -> TRes:
+def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) -> TRes:  # noqa: ANN401
     """Invoke a backend function under a strict temporary thread cap.
 
     Wraps a single backend call in a context that forces threadpool limits
     (if ``threadpoolctl`` is available). This ensures that even if a library
     lazily initializes its thread pool inside the backend call, it will still
-    run single-threaded.
+    run single-threaded (or with the specified number of threads).
 
     Args:
         backend : The backend function to execute.
         arg : The argument to pass to the backend function.
+        n_threads: The maximum number of threads to allow. Defaults to 1.
 
     Returns:
         TRes: The result returned by the backend function.
@@ -233,11 +383,20 @@ def _call_backend(backend: Callable[[TArg], TRes], arg: TArg) -> TRes:
         - If ``threadpoolctl`` is not available, falls back to direct call.
         - If enforcing thread limits fails, falls back silently to direct call.
     """
+    # Numba threading must be set BEFORE the threadpoolctl context limits backend threads,
+    try:
+        import numba  # noqa: PLC0415
+
+        numba.set_num_threads(n_threads)
+    except (ImportError, AttributeError):
+        pass
+
     if threadpool_limits is not None:
         # Caps any pools entered/created within the context
-        with contextlib.suppress(Exception), threadpool_limits(limits=1):
+        with contextlib.suppress(Exception), threadpool_limits(limits=n_threads):
             return backend(arg)
-    # If threadpoolctl fails for any reason, fallback to direct call
+
+    # If threadpoolctl fails or is missing, fallback to direct call
     return backend(arg)
 
 
@@ -246,93 +405,93 @@ def _call_backend(backend: Callable[[TArg], TRes], arg: TArg) -> TRes:
 # On Linux, using "fork" with heavy numerical libs can hang/crash due to
 # non-fork-safe OpenMP/BLAS state. "spawn" is the robust cross-platform choice.
 # ---------------------------------------------------------------------------
-def _spawn_context() -> multiprocessing.context.BaseContext:
-    """Return a multiprocessing context using the 'spawn' start method.
+def _get_parallel_context() -> multiprocessing.context.BaseContext:
+    """Return the appropriate multiprocessing context for the OS.
 
-    The 'spawn' start method launches a fresh Python interpreter for each
-    worker process. This is safer than 'fork' when working with OpenMP/BLAS
-    libraries, which may leave non-fork-safe state (e.g., initialized thread
-    pools) in the parent process.
-
-    Returns:
-        multiprocessing.context.BaseContext: A multiprocessing context
-        configured to use 'spawn'.
-
-    Notes:
-        - On Linux, 'fork' is the default but can cause deadlocks/crashes
-          with numerical libraries.
-        - 'spawn' is slower to start but cross-platform safe.
+    On Windows and macOS, 'spawn' is the standard/required option.
+    On Linux, 'fork' is faster and avoids the OOM issues associated with 'spawn'
+    in some environments, provided that threading libraries are properly capped (which we do).
     """
+    if sys.platform == "linux":
+        # On Linux, 'fork' is generally safe if we ensure OpenMP/etc are single-threaded
+        # BEFORE forking or strictly cap them in the worker.
+        return multiprocessing.get_context("fork")
+
+    # On Windows (win32) and macOS (darwin), use 'spawn'
     return multiprocessing.get_context("spawn")
 
 
-# ---------------------------------------------------------------------------
-# 9) GENERIC PARALLEL EXECUTOR WITH RETRIES
-# Submits one future per argument, tracks which index each future maps to,
-# retries a small set of transient exceptions, and yields results in completion
-# order while updating a tqdm progress bar.
-# ---------------------------------------------------------------------------
-def _run_backend_parallel(
-    backend: Callable[[TArg], TRes],
-    args: Sequence[TArg],
+def run_backend_parallel(
+    worker_fn: Callable[[int], TRes],
     *,
+    payload: dict[str, Any] | None,
+    n_jobs: int,
     max_workers: int,
     show_progress: bool = True,
     desc: str,
-    total: int | None = None,
     max_retries: int = 10,
     retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
 ) -> Iterator[tuple[int, TRes]]:
-    """Execute backend calls in parallel with retry logic and progress reporting.
+    """Execute backend calls in parallel with bounded submission and retry logic.
 
-    Submits one future per argument to a worker pool, enforces per-worker
-    thread caps, and yields results in completion order. Transient failures
-    (e.g. worker cancellations, OS errors) are retried up to a fixed limit.
+    This function manages the parallel execution of tasks using a `ProcessPoolExecutor`.
+    refactored to prevent task flooding and memory exhaustion:
+    1.  **Worker-Global State**: Uses `_worker_init` to initialize large objects
+        once per worker, avoiding per-task pickling overhead.
+    2.  **Bounded In-Flight**: Submits tasks in a queue-like manner, keeping
+        only a limited number of futures active (2 * max_workers) at any time.
 
     Args:
-        backend : The backend function to call.
-        args: Sequence of argument objects, one per job.
-        max_workers: Maximum number of worker processes.
-        show_progress: Whether to show a progress bar.
-        desc: Description to display in the tqdm progress bar.
-        total: Expected total jobs for progress bar.
-            Defaults to ``len(args)`` if None.
-        max_retries: Maximum retry attempts per job.
-            Defaults to 10.
-        retry_exceptions:
-            Exception types that should trigger a retry. Defaults to
-            (CancelledError, TimeoutError, OSError).
+        worker_fn: The worker function to execute. It must accept a single
+            integer argument (the job index) and return a result of type `TRes`.
+        payload: A dictionary of large objects (e.g., MPS, NoiseModel) to be
+            initialized in the global worker context. passed to `_worker_init`.
+        n_jobs: The total number of jobs to execute (indices 0 to n_jobs-1).
+        max_workers: The maximum number of worker processes to use.
+        show_progress: If True, displays a tqdm progress bar. Defaults to True.
+        desc: The description string for the progress bar.
+        max_retries: The maximum number of retry attempts for transient errors
+            (e.g., TimeoutError). Defaults to 10.
+        retry_exceptions: A tuple of exception types that trigger a retry.
+            Defaults to (CancelledError, TimeoutError, OSError).
 
     Yields:
-        tuple[int, TRes]: A pair ``(i, result)``, where ``i`` is the
-        index of the argument in ``args`` and ``result`` is the backend's
-        return value.
-
-    Notes:
-        - Uses the 'spawn' start method for process safety with BLAS/OpenMP.
-        - Caps threads per worker via the ``_limit_worker_threads`` initializer.
-        - Retries only the specified transient exception types; others
-          propagate immediately.
+        tuple[int, TRes]: A tuple containing the job index and its result,
+        yielded in the order of completion.
     """
-    # Default progress bar length to number of arguments
-    total = len(args) if total is None else total
-    # Use a spawn context to avoid fork+OpenMP problems
-    ctx = _spawn_context()
+    # Use appropriate context (fork on Linux, spawn on Windows)
+    ctx = _get_parallel_context()
+
+    # Bounded in-flight factor (keep 2-4x workers busy to hide latency)
+    inflight_factor = 2
+    max_inflight = max_workers * inflight_factor
 
     # Create a pool of worker processes with per-worker thread caps
+    # and global context initialization
     with (
         ProcessPoolExecutor(
             max_workers=max_workers,
             mp_context=ctx,
-            initializer=_limit_worker_threads,
-            initargs=(1,),  # enforce 1 thread per worker
+            initializer=worker_init,
+            initargs=(payload or {}, 1),  # enforce 1 thread per worker
         ) as ex,
-        tqdm(total=total, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
+        tqdm(total=n_jobs, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
     ):
         # Retry bookkeeping per index
-        retries = dict.fromkeys(range(len(args)), 0)
-        # Submit all tasks upfront; map Future -> index
-        futures: dict[Future[TRes], int] = {ex.submit(backend, args[i]): i for i in range(len(args))}
+        retries = dict.fromkeys(range(n_jobs), 0)
+
+        # In-flight tracking
+        futures: dict[Future[TRes], int] = {}
+        next_job_idx = 0
+
+        def submit_job(idx: int) -> None:
+            """Submit a job for the given index."""
+            futures[ex.submit(worker_fn, idx)] = idx
+
+        # Initial batch submission (up to max_inflight)
+        while next_job_idx < n_jobs and len(futures) < max_inflight:
+            submit_job(next_job_idx)
+            next_job_idx += 1
 
         # Drain as futures complete
         while futures:
@@ -345,13 +504,19 @@ def _run_backend_parallel(
                     # Retry a bounded number of times on selected transient errors
                     if retries[i] < max_retries:
                         retries[i] += 1
-                        futures[ex.submit(backend, args[i])] = i
+                        submit_job(i)
                         continue
                     # Exceeded retry budget → propagate
                     raise
+
                 # Yield in completion order and update progress
                 yield i, res
                 pbar.update(1)
+
+                # Submit next job if available
+                if next_job_idx < n_jobs:
+                    submit_job(next_job_idx)
+                    next_job_idx += 1
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +550,7 @@ def _run_strong_sim(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
-    # We type as Any to keep mypy happy without over-constraining element types.
+    # We type as Any to keep ty happy without over-constraining element types.
     backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # If there's no noise at all, we don't need multiple trajectories
@@ -408,21 +573,23 @@ def _run_strong_sim(
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
 
-    # Pack per-trajectory argument tuples (index used to place results later)
-    args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
-        (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
-    ]
+    # Create worker-global payload
+    payload: dict[str, Any] = {
+        "initial_state": initial_state,
+        "noise_model": noise_model,
+        "sim_params": sim_params,
+        "operator": operator,
+    }
 
     if parallel and sim_params.num_traj > 1:
-        # Reserve one logical CPU for the parent; use the rest for workers
         max_workers = max(1, available_cpus() - 1)
-        # Submit all trajectories in parallel and stitch results back in place
-        for i, result in _run_backend_parallel(
-            backend=backend,
-            args=args,
+        for i, result in run_backend_parallel(
+            worker_fn=_digital_strong_worker,
+            payload=payload,
+            n_jobs=sim_params.num_traj,
             max_workers=max_workers,
+            show_progress=sim_params.show_progress,
             desc="Running trajectories",
-            total=sim_params.num_traj,
             max_retries=10,
             retry_exceptions=(CancelledError, TimeoutError, OSError),
         ):
@@ -431,8 +598,19 @@ def _run_strong_sim(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial path (debugging/single-core/short runs)
-        for i, arg in enumerate(args):
-            result = _call_backend(backend, arg)
+        # Use all available cores for multithreading in serial mode
+        n_threads = available_cpus()
+
+        # Reconstruct args locally for serial execution
+        args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
+            (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
+        ]
+
+        # Use tqdm if show_progress is True
+        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
+
+        for i, arg in enumerate(iterator):
+            result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]
@@ -469,11 +647,13 @@ def _run_weak_sim(
     Args:
         initial_state : The initial system state as an MPS.
         operator: The quantum circuit representing the operation to simulate.
-        sim_params: Simulation parameters for weak simulation,
-                                    including number of shots, trajectory count,
-                                    and storage for measurements.
+        sim_params: Simulation parameters for weak simulation, including number of shots,
+            trajectory count, and storage for measurements.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
+
+    Raises:
+        TypeError: If a measurement result is not of the expected type.
     """
     # digital_tjm returns a measurement outcome structure for weak sim
     backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
@@ -487,29 +667,50 @@ def _run_weak_sim(
         sim_params.shots = 1
         assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
 
-    # Bundle args for each trajectory
-    args: list[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]] = [
-        (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
-    ]
+    # Create worker-global payload
+    payload: dict[str, Any] = {
+        "initial_state": initial_state,
+        "noise_model": noise_model,
+        "sim_params": sim_params,
+        "operator": operator,
+    }
 
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
-        for i, result in _run_backend_parallel(
-            backend=backend,
-            args=args,
+        for i, result in run_backend_parallel(
+            worker_fn=_digital_weak_worker,
+            payload=payload,
+            n_jobs=sim_params.num_traj,
             max_workers=max_workers,
+            show_progress=sim_params.show_progress,
             desc="Running trajectories",
-            total=sim_params.num_traj,
             max_retries=10,
             retry_exceptions=(CancelledError, TimeoutError, OSError),
         ):
             # For weak sim, write the raw per-trajectory measurement structure
+            if not isinstance(result, dict):
+                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
+                raise TypeError(msg)
             sim_params.measurements[i] = result
     else:
         # Serial path
-        for i, arg in enumerate(args):
-            result = _call_backend(backend, arg)
-            sim_params.measurements[i] = result
+        # Use all available cores for multithreading in serial mode
+        n_threads = available_cpus()
+
+        # Reconstruct args locally
+        args: list[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]] = [
+            (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
+        ]
+
+        # Use tqdm if show_progress is True
+        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
+
+        for i, arg in enumerate(iterator):
+            result = _call_backend(backend, arg, n_threads=n_threads)
+            if not isinstance(result, dict):
+                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
+                raise TypeError(msg)
+            sim_params.measurements[i] = cast("dict[int, int]", result)
 
     # Reset shots back from trajectories
     if not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes)):
@@ -543,8 +744,6 @@ def _run_circuit(
         sim_params: Simulation parameters for circuit simulation.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
-
-
     """
     # Sanity check: MPS length must equal circuit qubit count
     assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
@@ -584,12 +783,23 @@ def _run_analog(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # Choose integrator order (1 or 2) for the analog TJM backend
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]], NDArray[np.float64]] = (
-        analog_tjm_1 if sim_params.order == 1 else analog_tjm_2
-    )
+
+    backend: Callable[[Any], NDArray[np.float64]]
+    if sim_params.solver == "Lindblad":
+        backend = lindblad
+    elif sim_params.solver == "MCWF":
+        backend = mcwf
+    elif sim_params.order == 1:
+        backend = analog_tjm_1
+    else:
+        backend = analog_tjm_2
 
     # If no noise, determinism implies a single trajectory suffices
-    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
+    if (
+        noise_model is None
+        or all(proc["strength"] == 0 for proc in noise_model.processes)
+        or sim_params.solver == "Lindblad"
+    ):
         sim_params.num_traj = 1
     else:
         # With stochastic noise, returning final state is ill-defined
@@ -599,19 +809,34 @@ def _run_analog(
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
 
-    # Argument bundles per trajectory
-    args: list[tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]] = [
-        (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
-    ]
+    payload: dict[str, Any]
+    worker_fn: Callable[[int], Any]
+
+    if sim_params.solver == "MCWF":
+        # Optimization: Pre-compute dense operators once
+        ctx = preprocess_mcwf(initial_state, operator, noise_model, sim_params)
+        payload = {"ctx": ctx}
+        worker_fn = _mcwf_worker
+    else:
+        # Standard TJM/Lindblad arguments
+        payload = {
+            "initial_state": initial_state,
+            "noise_model": noise_model,
+            "sim_params": sim_params,
+            "operator": operator,
+            "backend": backend,
+        }
+        worker_fn = _analog_worker
 
     if parallel and sim_params.num_traj > 1:
         max_workers = max(1, available_cpus() - 1)
-        for i, result in _run_backend_parallel(
-            backend=backend,
-            args=args,
+        for i, result in run_backend_parallel(
+            worker_fn=worker_fn,
+            payload=payload,
+            n_jobs=sim_params.num_traj,
             max_workers=max_workers,
+            show_progress=sim_params.show_progress,
             desc="Running trajectories",
-            total=sim_params.num_traj,
             max_retries=10,
             retry_exceptions=(CancelledError, TimeoutError, OSError),
         ):
@@ -621,8 +846,23 @@ def _run_analog(
                 observable.trajectories[i] = result[obs_index]
     else:
         # Serial fallback
-        for i, arg in enumerate(args):
-            result = _call_backend(backend, arg)
+        # Use all available cores for multithreading in serial mode
+        n_threads = available_cpus()
+
+        # Reconstruct args locally for serial execution
+        args: list[Any]
+        if sim_params.solver == "MCWF":
+            # For MCWF serial, we still use the pre-computed ctx
+            # ctx is already in local scope from above if block
+            args = [(i, ctx) for i in range(sim_params.num_traj)]
+        else:
+            args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+
+        # Use tqdm if show_progress is True
+        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
+
+        for i, arg in enumerate(iterator):
+            result = _call_backend(backend, arg, n_threads=n_threads)
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = result[obs_index]
@@ -653,14 +893,32 @@ def run(
         initial_state: The initial state of the system as an MPS. Must be B normalized.
         operator: The operator representing the evolution; an MPO for analog simulations
             or a QuantumCircuit for circuit simulations.
-        sim_params: Simulation parameters specifying
-                                                                         the simulation mode and settings.
-        noise_model: The noise model to apply during simulation.
+        sim_params: Simulation parameters specifying the simulation mode and settings.
+        noise_model: The noise model to apply during simulation. If provided, it is sampled once
+            at the beginning of the run to generate a concrete noise realization (static disorder).
+            The sampled noise model is then saved to `sim_params.noise_model`.
         parallel: Whether to run trajectories in parallel. Defaults to True.
+
+    Raises:
+        ValueError: If no output is specified (neither observables nor get_state is set).
 
     """
     # Ensure the state is in B-normalization before any evolution
     initial_state.normalize("B")
+
+    # Sample a concrete noise model once for this run (static disorder)
+    if noise_model is not None:
+        noise_model = noise_model.sample()
+    sim_params.noise_model = noise_model
+
+    # Deferred output validation
+    if (
+        isinstance(sim_params, (StrongSimParams, AnalogSimParams))
+        and not sim_params.get_state
+        and not sim_params.observables
+    ):
+        msg = "No output specified: either observables or get_state must be set."
+        raise ValueError(msg)
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         assert isinstance(operator, QuantumCircuit)

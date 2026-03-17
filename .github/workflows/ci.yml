@@ -14,7 +14,7 @@ concurrency:
 jobs:
   change-detection:
     name: 🔍 Change
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-change-detection.yml@89734354f64f30a80dd16602d4e271df34348987 # v1.17.4
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-change-detection.yml@afe75175d32177a7291bbb7bd11b3276f60fc810 # v1.17.15
 
   python-tests:
     name: 🐍 Test
@@ -23,15 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on:
-          [
-            ubuntu-24.04,
-            ubuntu-24.04-arm,
-            macos-15-intel,
-            macos-14,
-            windows-2022,
-          ]
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@89734354f64f30a80dd16602d4e271df34348987 # v1.17.4
+        runs-on: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@afe75175d32177a7291bbb7bd11b3276f60fc810 # v1.17.15
     with:
       runs-on: ${{ matrix.runs-on }}
 
@@ -39,40 +32,31 @@ jobs:
     name: 🐍 Coverage
     needs: [change-detection, python-tests]
     if: fromJSON(needs.change-detection.outputs.run-python-tests)
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-coverage.yml@89734354f64f30a80dd16602d4e271df34348987 # v1.17.4
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-coverage.yml@afe75175d32177a7291bbb7bd11b3276f60fc810 # v1.17.15
     permissions:
       contents: read
       id-token: write
-
-  python-tests-extensive:
-    name: 🐍 Test (Extensive)
-    needs: change-detection
-    if: fromJSON(needs.change-detection.outputs.run-python-tests) && github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'extensive-python-ci')
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on: [ubuntu-22.04, ubuntu-22.04-arm, macos-15, windows-2025]
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-tests.yml@89734354f64f30a80dd16602d4e271df34348987 # v1.17.4
-    with:
-      runs-on: ${{ matrix.runs-on }}
 
   python-linter:
     name: 🐍 Lint
     needs: change-detection
     if: fromJSON(needs.change-detection.outputs.run-python-tests)
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-linter.yml@89734354f64f30a80dd16602d4e271df34348987 # v1.17.4
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-linter.yml@afe75175d32177a7291bbb7bd11b3276f60fc810 # v1.17.15
+    with:
+      enable-ty: true
+      enable-mypy: false
 
   build-sdist:
     name: 🚀 CD
     needs: change-detection
     if: fromJSON(needs.change-detection.outputs.run-cd)
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-sdist.yml@89734354f64f30a80dd16602d4e271df34348987 # v1.17.4
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-sdist.yml@afe75175d32177a7291bbb7bd11b3276f60fc810 # v1.17.15
 
   build-wheel:
     name: 🚀 CD
     needs: change-detection
     if: fromJSON(needs.change-detection.outputs.run-cd)
-    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-wheel-build.yml@89734354f64f30a80dd16602d4e271df34348987 # v1.17.4
+    uses: munich-quantum-toolkit/workflows/.github/workflows/reusable-python-packaging-wheel-build.yml@afe75175d32177a7291bbb7bd11b3276f60fc810 # v1.17.15
 
   # this job does nothing and is only used for branch protection
   required-checks-pass:
@@ -82,11 +66,10 @@ jobs:
       - change-detection
       - python-tests
       - python-coverage
-      - python-tests-extensive
       - python-linter
       - build-sdist
       - build-wheel
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Decide whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
@@ -95,10 +78,6 @@ jobs:
             ${{
               fromJSON(needs.change-detection.outputs.run-python-tests)
               && '' || 'python-tests,python-coverage,python-linter,'
-            }}
-            ${{
-              fromJSON(needs.change-detection.outputs.run-python-tests) && github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'extensive-python-ci')
-              && '' || 'python-tests-extensive,'
             }}
             ${{
               fromJSON(needs.change-detection.outputs.run-cd)
