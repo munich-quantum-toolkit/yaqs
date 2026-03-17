@@ -442,7 +442,7 @@ def test_simulated_zero_time_conditional_memory_vanishes() -> None:
     params.show_progress = False
     params.get_state = True
 
-    pt = run(
+    comb = run(
         operator=op,
         sim_params=params,
         timesteps=[0.0, 0.0],
@@ -451,5 +451,5 @@ def test_simulated_zero_time_conditional_memory_vanishes() -> None:
     )
 
     # I(first : final | last) should vanish for zero-time steps
-    cmi = pt.to_dense_comb().cmi_conditional(A="first", B="final", C="last", base=2)
+    cmi = comb.cmi_conditional(A="first", B="final", C="last", base=2)
     assert cmi < 1e-2

@@ -85,11 +85,11 @@ def test_basis_reproduction_h0_identity_map() -> None:
     """End-to-end sanity: identity map yields correct prediction for H=0."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1], method="exhaustive")
+    comb = run(op, params, timesteps=[0.1], method="exhaustive", output="dense")
 
     def identity_map(rho: np.ndarray) -> np.ndarray:
         return rho
 
-    rho_pred = pt.to_dense_comb().predict([identity_map])
+    rho_pred = comb.predict([identity_map])
     expected = np.array([[1.0, 0.0], [0.0, 0.0]])
     assert rel_fro_error(rho_pred, expected) < 1e-10

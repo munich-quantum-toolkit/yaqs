@@ -116,8 +116,8 @@ def test_exact_1step_prediction_vs_physics():
     interventions = [prep_map]
     timesteps = [0.001]
 
-    pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.to_dense_comb().predict(interventions)
+    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     assert rel_fro_error(rho_pt, rho_ref) < 1e-5
@@ -141,8 +141,8 @@ def test_exact_2step_prediction_vs_physics():
     interventions = [a0_prep, a1_unitary]
     timesteps = [0.001, 0.001]
 
-    pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.to_dense_comb().predict(interventions)
+    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     assert rel_fro_error(rho_pt, rho_ref) < 1e-5
@@ -160,8 +160,8 @@ def test_exact_instrument_prediction_vs_physics():
     interventions = [proj0_map]
     timesteps = [0.001]
 
-    pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.to_dense_comb().predict(interventions)
+    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     assert abs(np.trace(rho_pt) - np.trace(rho_ref)) < 1e-5
@@ -181,8 +181,8 @@ def test_exact_moderate_step_prediction_vs_physics():
     interventions = [x_gate]
     timesteps = [0.1]
 
-    pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.to_dense_comb().predict(interventions)
+    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     # At dt=0.1, error should be larger but still around 1e-3 or 1e-4
@@ -193,12 +193,12 @@ def test_reconstruction_depolarizing() -> None:
     """Test reconstruction of a depolarizing channel via PT."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1], method="exhaustive")
 
     def depolarize(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return 0.5 * np.trace(rho) * np.eye(2)
 
-    rho_pred = pt.to_dense_comb().predict([depolarize])
+    comb = run(op, params, timesteps=[0.1], method="exhaustive", output="dense")
+    rho_pred = comb.predict([depolarize])
     expected = 0.5 * np.eye(2)
     np.testing.assert_allclose(rho_pred, expected, atol=1e-10)
 
@@ -208,7 +208,7 @@ def test_reconstruction_depolarizing() -> None:
 ################################################################################
 
 def test_exact_representation_parity():
-    """Verify exact MPO and tomography-estimate representations yield identical canonical combs."""
+    """Verify exact MPO and DenseComb representations yield identical canonical combs."""
     rng = np.random.default_rng(201)
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
@@ -224,20 +224,17 @@ def test_exact_representation_parity():
     interventions = [a0_prep, a1_unitary]
     timesteps = [0.1, 0.1]
 
-    pt = run(op, params, timesteps=timesteps, method="exhaustive")
-
-    # Canonical dense comb from tomography estimate
-    U_pt = pt.reconstruct_comb_choi(check=True)
-    U_pt_canon = DenseComb(U_pt, []).canonicalize(
+    # Dense comb from tomography estimate path
+    comb_dense = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    U_pt_canon = comb_dense.canonicalize(
         hermitize=True,
         psd_project=True,
         normalize_trace=False,
     ).to_matrix()
 
     # Canonical dense comb from MPO path
-    U_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
-    U_mpo_dense = U_mpo.to_matrix()
-    U_mpo_canon = DenseComb(U_mpo_dense, []).canonicalize(
+    comb_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+    U_mpo_canon = comb_mpo.to_dense().canonicalize(
         hermitize=True,
         psd_project=True,
         normalize_trace=False,
@@ -253,11 +250,11 @@ def test_exhaustive_dense_and_mpo_comb_match_for_k1() -> None:
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
     timesteps = [0.1]
 
-    pt = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
-    mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+    comb_dense = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    comb_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
 
-    U_pt = pt.reconstruct_comb_choi(check=True)
-    U_mpo = mpo.to_matrix()
+    U_pt = comb_dense.to_matrix()
+    U_mpo = comb_mpo.to_matrix()
 
     assert rel_fro_error(U_pt, U_mpo) < 1e-10
 
