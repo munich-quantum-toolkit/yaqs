@@ -19,72 +19,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.networks import MPO
-
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
-
-
-def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
-    """Convert a CPTP map callable to its Choi matrix J(E).
-
-    J(E) = sum_{i,j} E(|i><j|) ⊗ |i><j| (order matches predict_from_dense_upsilon).
-    """
-    j_choi = np.zeros((4, 4), dtype=complex)
-    for i in range(2):
-        for j in range(2):
-            e_in = np.zeros((2, 2), dtype=complex)
-            e_in[i, j] = 1.0
-            # E(|i><j|) ⊗ |i><j|
-            j_choi += np.kron(emap(e_in), e_in)
-    return j_choi
-
-
-def predict_from_dense_upsilon(
-    U: NDArray[np.complex128],
-    interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
-) -> NDArray[np.complex128]:
-    """Predict final state from a dense Choi operator (Upsilon) by contraction.
-
-    Upsilon index order: output ⊗ past_0 ⊗ past_1 ⊗ ... ⊗ past_{k-1}.
-    """
-    k_steps = len(interventions)
-    past_list = []
-    for emap in interventions:
-        j_choi = _cptp_to_choi(emap)
-        past_list.append(j_choi)
-
-    # Contract
-    # For k=1: rho = Tr_past[ U (I ⊗ J.T) ]
-    # Kronecker order of past: J1 ⊗ J2 ⊗ ... ⊗ Jk
-    past_total = past_list[0]
-    for p in past_list[1:]:
-        past_total = np.kron(past_total, p)
-
-    dim_p = 4**k_steps
-    U4 = U.reshape(2, dim_p, 2, dim_p)
-    ins = past_total.T.reshape(dim_p, dim_p)
-    return np.einsum("s p q r, r p -> s q", U4, ins)
-
-
-def _vec_to_rho(vec4: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Convert a 4-element vector to a 2x2 density matrix.
-
-    Args:
-        vec4: A 4-element vector.
-
-    Returns:
-        A 2x2 density matrix.
-    """
-    assert len(vec4) == 4, "Vector must have 4 elements"
-    rho = vec4.reshape(2, 2)
-    rho = 0.5 * (rho + rho.conj().T)
-    tr = np.trace(rho)
-    if abs(tr) > 1e-13: # Changed from 1e-15 to 1e-13
-        rho /= tr
-    return rho
 
 
 
@@ -323,46 +261,4 @@ class TomographyEstimate:
         if return_convention:
             return best_U, best_name
         return best_U
-
-
-
-def rank1_upsilon_mpo_term(
-    rho_final: NDArray[np.complex128],
-    dual_ops: list[NDArray[np.complex128]],
-    weight: float = 1.0,
-) -> MPO:
-    """Build a rank-1 MPO term representing a single sample's contribution to Upsilon.
-
-    The comb Choi operator lives on sites [F, P1, P2, ..., Pk].
-    Site 0 (F) is the final state density matrix (2x2).
-    Sites 1..k are the dual operators (4x4) corresponding to interventions.
-
-    Args:
-        rho_final: (2x2) density matrix of the final state.
-        dual_ops: list of k (4x4) dual matrices for the time steps.
-        weight: Scalar importance weight for this sample.
-
-    Returns:
-        MPO with bond dimension 1 representing `weight * (rho_final ⊗ D1 ⊗ D2 ⊗ ... ⊗ Dk)`.
-    """
-    k = len(dual_ops)
-    length = k + 1
-    phys_dims = [2] + [4] * k
-
-    # Build local tensors with dummy bond dims of 1
-    # YAQS MPO tensor order: (phys_out, phys_in, chi_left, chi_right)
-    tensors = []
-    t0 = (weight * rho_final).reshape(2, 2, 1, 1)
-    tensors.append(t0)
-
-    for D in dual_ops:
-        tD = D.reshape(4, 4, 1, 1)
-        tensors.append(tD)
-
-    m = MPO()
-    # `custom` sets tensors, length, physical_dimension, checks bounds
-    m.custom(tensors, transpose=False)
-    m.physical_dimension = phys_dims
-
-    return m
 

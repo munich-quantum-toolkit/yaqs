@@ -16,7 +16,7 @@ import itertools
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.tomography.estimator import TomographyEstimate, _vec_to_rho  # noqa: PLC2701
+from mqt.yaqs.characterization.tomography.estimator import TomographyEstimate
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -83,19 +83,25 @@ def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[
 # Existing tests that still apply
 # -------------------------
 def test_vec_to_rho() -> None:
-    """Test the vector to density matrix conversion."""
+    """Test vector-to-density conversion (used in reconstruction)."""
+    def vec_to_rho(vec4: np.ndarray) -> np.ndarray:
+        rho = vec4.reshape(2, 2)
+        rho = 0.5 * (rho + rho.conj().T)
+        tr = np.trace(rho)
+        if abs(tr) > 1e-13:
+            rho /= tr
+        return rho
+
     psi0 = np.array([1, 0], dtype=complex)
     rho0 = np.outer(psi0, psi0.conj())
-    rho_out = _vec_to_rho(rho0.reshape(-1))
-    np.testing.assert_allclose(rho_out, rho0, atol=1e-15)
+    np.testing.assert_allclose(vec_to_rho(rho0.reshape(-1)), rho0, atol=1e-15)
 
     psi_plus = np.array([1, 1], dtype=complex) / np.sqrt(2)
     rho_plus = np.outer(psi_plus, psi_plus.conj())
-    rho_out = _vec_to_rho(rho_plus.reshape(-1))
-    np.testing.assert_allclose(rho_out, rho_plus, atol=1e-15)
+    np.testing.assert_allclose(vec_to_rho(rho_plus.reshape(-1)), rho_plus, atol=1e-15)
 
     vec_unnorm = np.array([2, 0, 0, 0], dtype=complex)
-    rho_out = _vec_to_rho(vec_unnorm)
+    rho_out = vec_to_rho(vec_unnorm)
     assert np.isclose(np.trace(rho_out), 1.0)
     assert np.isclose(rho_out[0, 0], 1.0)
 

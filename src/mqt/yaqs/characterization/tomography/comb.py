@@ -7,17 +7,55 @@ from typing import TYPE_CHECKING
 import numpy as np
 from mqt.yaqs.core.data_structures.networks import MPO
 
-from .estimator import predict_from_dense_upsilon
-from .metrics import (
-    canonicalize_upsilon,
-    comb_cmi_conditional_from_upsilon_dense,
-    comb_cmi_from_upsilon_dense,
-    comb_qmi_from_upsilon_dense,
-)
-
 if TYPE_CHECKING:
     from collections.abc import Callable
     from numpy.typing import NDArray
+
+
+def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
+    """Convert a CPTP map callable to its Choi matrix J(E).
+
+    J(E) = sum_{i,j} E(|i><j|) ⊗ |i><j| (order matches predict contraction).
+    """
+    j_choi = np.zeros((4, 4), dtype=complex)
+    for i in range(2):
+        for j in range(2):
+            e_in = np.zeros((2, 2), dtype=complex)
+            e_in[i, j] = 1.0
+            j_choi += np.kron(emap(e_in), e_in)
+    return j_choi
+
+
+def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[int]) -> NDArray[np.complex128]:
+    """Partial trace of a dense operator keeping subsystems in keep."""
+    keep = sorted(keep)
+    n = len(dims)
+    if any(i < 0 or i >= n for i in keep):
+        raise ValueError("keep indices out of range")
+    reshaped = r.reshape(*(dims + dims))
+    trace_out = [i for i in range(n) if i not in keep]
+    perm = keep + trace_out
+    reshaped = reshaped.transpose(*(perm + [i + n for i in perm]))
+    dim_keep = int(np.prod([dims[i] for i in keep])) if keep else 1
+    dim_out = int(np.prod([dims[i] for i in trace_out])) if trace_out else 1
+    reshaped = reshaped.reshape(dim_keep, dim_out, dim_keep, dim_out)
+    return np.einsum("a b c b -> a c", reshaped)
+
+
+def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
+    """Von Neumann entropy of a dense density matrix."""
+    log_base = np.log(base)
+    rH = 0.5 * (r + r.conj().T)
+    tr = np.trace(rH)
+    if abs(tr) < 1e-15:
+        return 0.0
+    rH = rH / tr
+    evals = np.linalg.eigvalsh(rH).real
+    evals = np.clip(evals, 0.0, 1.0)
+    nz = evals[evals > 1e-15]
+    if nz.size == 0:
+        return 0.0
+    return float(-(nz * (np.log(nz) / log_base)).sum())
 
 
 class DenseComb:
@@ -31,6 +69,11 @@ class DenseComb:
         """Return the underlying dense comb matrix Υ."""
         return self.upsilon
 
+    def _k_steps(self) -> int:
+        """Number of intervention steps from Υ shape (2·4^k, 2·4^k)."""
+        size = self.upsilon.shape[0]
+        return int(np.round(np.log2(size / 2) / 2))
+
     def canonicalize(
         self,
         *,
@@ -38,31 +81,119 @@ class DenseComb:
         psd_project: bool = False,
         normalize_trace: bool = True,
         psd_tol: float = 1e-12,
-    ) -> "DenseComb":
-        """Return a new DenseComb with canonicalized Υ."""
-        ups_c = canonicalize_upsilon(
-            self.upsilon,
-            hermitize=hermitize,
-            psd_project=psd_project,
-            normalize_trace=normalize_trace,
-            psd_tol=psd_tol,
-        )
-        return DenseComb(ups_c, self.timesteps)
+    ) -> DenseComb:
+        """Return a new DenseComb with canonicalized Υ (hermitize, optional PSD, optional normalize)."""
+        U = self.upsilon.copy()
+        if hermitize:
+            U = 0.5 * (U + U.conj().T)
+        if psd_project:
+            w, V = np.linalg.eigh(U)
+            w = np.clip(w, 0.0, None)
+            U = (V * w) @ V.conj().T
+        if normalize_trace:
+            tr = np.trace(U)
+            if abs(tr) > 1e-15:
+                U = U / tr
+        return DenseComb(U, self.timesteps)
+
+    def reduced(self, keep_last_m: int = 1) -> DenseComb:
+        """Return a DenseComb with Υ reduced to the last keep_last_m past legs."""
+        k = self._k_steps()
+        if keep_last_m > k:
+            raise ValueError(f"keep_last_m={keep_last_m} > k={k}")
+        if keep_last_m <= 0:
+            raise ValueError(f"keep_last_m must be >= 1, got {keep_last_m}")
+        dim_m = 2 * (4**keep_last_m)
+        dim_traced = 4 ** (k - keep_last_m)
+        if dim_traced == 1:
+            U_red = self.upsilon.reshape(dim_m, dim_m)
+        else:
+            U6 = self.upsilon.reshape(
+                2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m
+            )
+            U_red = np.einsum("iabjac->ibjc", U6).reshape(dim_m, dim_m)
+        t_red = self.timesteps[-keep_last_m:] if len(self.timesteps) >= keep_last_m else self.timesteps
+        return DenseComb(U_red, t_red)
 
     def predict(
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Predict final state given a list of CPTP interventions."""
-        return predict_from_dense_upsilon(self.upsilon, interventions)
+        """Predict final state given a list of CPTP interventions.
 
-    def qmi(self, **kwargs: object) -> float:
+        Υ index order: output ⊗ past_0 ⊗ past_1 ⊗ ... ⊗ past_{k-1}.
+        """
+        k_steps = len(interventions)
+        past_list = [_cptp_to_choi(emap) for emap in interventions]
+        past_total = past_list[0]
+        for p in past_list[1:]:
+            past_total = np.kron(past_total, p)
+        dim_p = 4**k_steps
+        U4 = self.upsilon.reshape(2, dim_p, 2, dim_p)
+        ins = past_total.T.reshape(dim_p, dim_p)
+        return np.einsum("s p q r, r p -> s q", U4, ins)
+
+    def qmi(
+        self,
+        base: int = 2,
+        past: str = "all",
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
         """Quantum mutual information I(F:P) from this comb."""
-        return comb_qmi_from_upsilon_dense(self.upsilon, **kwargs)
+        if assume_canonical:
+            rho = self.upsilon
+        else:
+            U = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            if check_psd:
+                lam_min = float(np.linalg.eigvalsh(U).min().real)
+                if lam_min < -1e-9:
+                    raise ValueError(f"Υ not PSD (min eigenvalue {lam_min:.3e}).")
+            tr = np.trace(U)
+            rho = U / tr if abs(tr) > 1e-15 else U
 
-    def cmi(self, **kwargs: object) -> float:
+        k_steps = self._k_steps()
+        dims = [2] + [4] * k_steps
+        if past == "all":
+            keep_P = list(range(1, k_steps + 1))
+        elif past == "last":
+            keep_P = [k_steps]
+        elif past == "first":
+            keep_P = [1]
+        else:
+            raise ValueError(f"Unknown past='{past}'.")
+
+        rho_F = _partial_trace_dense(rho, dims, keep=[0])
+        rho_P = _partial_trace_dense(rho, dims, keep=keep_P)
+        return _entropy_dense(rho_P, base) + _entropy_dense(rho_F, base) - _entropy_dense(rho, base)
+
+    def cmi(
+        self,
+        base: int = 2,
+        check_psd: bool = False,
+        assume_canonical: bool = False,
+    ) -> float:
         """Conditional mutual information I(F:P_{<k} | P_k) from this comb."""
-        return comb_cmi_from_upsilon_dense(self.upsilon, **kwargs)
+        if assume_canonical:
+            rho = self.upsilon
+        else:
+            U = 0.5 * (self.upsilon + self.upsilon.conj().T)
+            tr = np.trace(U)
+            rho = U / tr if abs(tr) > 1e-15 else U
+
+        k_steps = self._k_steps()
+        if k_steps < 2:
+            return 0.0
+        dims = [2] + [4] * k_steps
+        rho_FPk = _partial_trace_dense(rho, dims, keep=[0, k_steps])
+        rho_P = _partial_trace_dense(rho, dims, keep=list(range(1, k_steps)) + [k_steps])
+        rho_Pk = _partial_trace_dense(rho, dims, keep=[k_steps])
+        return (
+            _entropy_dense(rho_FPk, base)
+            + _entropy_dense(rho_P, base)
+            - _entropy_dense(rho_Pk, base)
+            - _entropy_dense(rho, base)
+        )
 
     def cmi_conditional(
         self,
@@ -70,11 +201,51 @@ class DenseComb:
         A: str = "first",
         B: str = "final",
         C: str = "last",
-        **kwargs: object,
+        base: int = 2,
+        normalize: bool = True,
+        check_psd: bool = True,
     ) -> float:
-        """I(A:B|C) with configurable subsystems ('final', 'first', 'last')."""
-        return comb_cmi_conditional_from_upsilon_dense(
-            self.upsilon, A=A, B=B, C=C, **kwargs
+        """I(A:B|C) with subsystems 'final', 'first', 'last'."""
+        U = 0.5 * (self.upsilon + self.upsilon.conj().T)
+        if check_psd:
+            w, V = np.linalg.eigh(U)
+            w = np.clip(w, 0.0, None)
+            U = (V * w) @ V.conj().T
+        if normalize:
+            tr = np.trace(U)
+            if abs(tr) < 1e-15:
+                return 0.0
+            rho = U / tr
+        else:
+            rho = U
+
+        k_steps = self._k_steps()
+        if k_steps < 2:
+            return 0.0
+        dims = [2] + [4] * k_steps
+        idx_final, idx_first, idx_last = 0, 1, k_steps
+
+        def _idx(which: str) -> int:
+            if which == "final":
+                return idx_final
+            if which == "first":
+                return idx_first
+            if which == "last":
+                return idx_last
+            raise ValueError(f"Unknown subsystem '{which}'.")
+
+        iA, iB, iC = _idx(A), _idx(B), _idx(C)
+        if len({iA, iB, iC}) != 3:
+            raise ValueError("A, B, C must be three distinct subsystems.")
+
+        rho_AC = _partial_trace_dense(rho, dims, keep=[iA, iC])
+        rho_BC = _partial_trace_dense(rho, dims, keep=[iB, iC])
+        rho_C = _partial_trace_dense(rho, dims, keep=[iC])
+        return (
+            _entropy_dense(rho_AC, base)
+            + _entropy_dense(rho_BC, base)
+            - _entropy_dense(rho_C, base)
+            - _entropy_dense(rho, base)
         )
 
 
@@ -93,6 +264,13 @@ class MPOComb:
         """Convert the MPO comb to a DenseComb."""
         return DenseComb(self.upsilon_mpo.to_matrix(), self.timesteps)
 
+    def predict(
+        self,
+        interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
+    ) -> NDArray[np.complex128]:
+        """Predict final state via dense fallback."""
+        return self.to_dense().predict(interventions)
+
     def qmi(self, **kwargs: object) -> float:
         """Quantum mutual information computed via dense fallback."""
         return self.to_dense().qmi(**kwargs)
@@ -104,4 +282,3 @@ class MPOComb:
     def cmi_conditional(self, **kwargs: object) -> float:
         """I(A:B|C) via dense fallback."""
         return self.to_dense().cmi_conditional(**kwargs)
-

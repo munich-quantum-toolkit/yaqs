@@ -6,14 +6,10 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.characterization.tomography.comb import DenseComb, MPOComb
-from mqt.yaqs.characterization.tomography.estimator import (
-    predict_from_dense_upsilon,
-)
 
 
 def test_densecomb_predict_matches_helper() -> None:
-    """DenseComb.predict must match the low-level helper."""
-    # Simple 1-step identity-like comb on output ⊗ past
+    """DenseComb.predict returns correct contraction for identity intervention."""
     ups = np.eye(2 * 4, dtype=np.complex128)
     timesteps = [0.1]
 
@@ -21,9 +17,9 @@ def test_densecomb_predict_matches_helper() -> None:
         return rho
 
     comb = DenseComb(ups, timesteps)
-    rho1 = comb.predict([id_map])
-    rho2 = predict_from_dense_upsilon(ups, [id_map])
-    np.testing.assert_allclose(rho1, rho2, atol=1e-12)
+    rho = comb.predict([id_map])
+    # Identity map Choi has trace 2; contract U = I with it gives unnormalized rho = 2*I
+    np.testing.assert_allclose(rho, 2.0 * np.eye(2, dtype=np.complex128), atol=1e-12)
 
 
 def test_mpocomb_matrix_matches_dense() -> None:

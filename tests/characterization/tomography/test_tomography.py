@@ -30,8 +30,8 @@ from mqt.yaqs.characterization.tomography.tomography import (
     run,
 )
 
-from mqt.yaqs.characterization.tomography.estimator import rank1_upsilon_mpo_term
-from mqt.yaqs.characterization.tomography.metrics import canonicalize_upsilon
+from mqt.yaqs.characterization.tomography.comb import DenseComb
+from mqt.yaqs.characterization.tomography.tomography import rank1_upsilon_mpo_term
 
 from mqt.yaqs.characterization.tomography.metrics import rel_fro_error
 
@@ -102,35 +102,6 @@ def _dense_physical_reference(
     # Partial trace over site 1 (keep site 0)
     rho4 = rho.reshape(2, 2, 2, 2)
     return np.einsum("akbk->ab", rho4)
-
-
-def predict_from_dense_upsilon(
-    U: NDArray[np.complex128],
-    interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
-) -> NDArray[np.complex128]:
-    """Contraction helper for parity tests. Predicts final state from a canonical dense Upsilon.
-
-    NOTE: This is NOT an independent physical reference, but a tool to check representation consistency.
-    """
-    k_steps = len(interventions)
-    past_list = []
-    for emap in interventions:
-        j_choi = np.zeros((4, 4), dtype=complex)
-        for i in range(2):
-            for j in range(2):
-                e_in = np.zeros((2, 2), dtype=complex)
-                e_in[i, j] = 1.0
-                j_choi += np.kron(emap(e_in), e_in)
-        past_list.append(j_choi)
-    
-    past_total = past_list[0]
-    for p in past_list[1:]:
-        past_total = np.kron(past_total, p)
-        
-    dim_p = 4 ** k_steps
-    U4 = U.reshape(2, dim_p, 2, dim_p)
-    ins = past_total.T.reshape(dim_p, dim_p)
-    return np.einsum("s p q r, r p -> s q", U4, ins)
 
 
 ################################################################################
@@ -334,22 +305,20 @@ def test_exact_representation_parity():
 
     # Canonical dense comb from tomography estimate
     U_pt = pt.reconstruct_comb_choi(check=True)
-    U_pt_canon = canonicalize_upsilon(
-        U_pt,
+    U_pt_canon = DenseComb(U_pt, []).canonicalize(
         hermitize=True,
         psd_project=True,
         normalize_trace=False,
-    )
+    ).to_matrix()
 
     # Canonical dense comb from MPO path
     U_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
     U_mpo_dense = U_mpo.to_matrix()
-    U_mpo_canon = canonicalize_upsilon(
-        U_mpo_dense,
+    U_mpo_canon = DenseComb(U_mpo_dense, []).canonicalize(
         hermitize=True,
         psd_project=True,
         normalize_trace=False,
-    )
+    ).to_matrix()
 
     # Compare canonicalized dense combs directly
     assert rel_fro_error(U_pt_canon, U_mpo_canon) < 1e-10
@@ -519,13 +488,12 @@ def test_predict_convergence_vs_physics(method):
             )
             U_hat = U_hat_mpo.to_matrix()
 
-            U_canon = canonicalize_upsilon(
-                U_hat,
+            U_canon = DenseComb(U_hat, []).canonicalize(
                 hermitize=True,
                 psd_project=False,
                 normalize_trace=False,
-            )
-            rho_pred = predict_from_dense_upsilon(U_canon, interventions)
+            ).to_matrix()
+            rho_pred = DenseComb(U_canon, []).predict(interventions)
             errs[N].append(rel_fro_error(rho_pred, rho_ref))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
