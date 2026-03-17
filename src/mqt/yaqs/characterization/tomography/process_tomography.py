@@ -536,14 +536,18 @@ def run(
         msg = f"Unknown estimation method {method!r}."
         raise ValueError(msg)
 
-    # Single tomography estimate as the central object.
-    estimate = _to_dense(data)
-
+    # Format into desired comb representation.
     if output == "dense":
+        estimate = _to_dense(data)
         return estimate.to_dense_comb()
     if output == "mpo":
-        # Map compression-related kwargs to MPO factorization options.
-        return estimate.to_mpo_comb(max_bond_dim=max_bond_dim, cutoff=tol)
+        return _to_mpo(
+            data,
+            compress_every=compress_every,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+        )
 
     msg = f"Unknown output format {output!r}."
     raise ValueError(msg)

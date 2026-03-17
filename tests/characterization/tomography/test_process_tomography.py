@@ -317,6 +317,36 @@ def test_mc_mpo_parity_discrete():
     assert rel_fro_error(ups_mpo_1.to_matrix(), ups_mpo_2.to_matrix()) < 1e-12
 
 
+def test_mc_dense_and_mpo_comb_parity_k2() -> None:
+    """MC dense and MPO combs should agree (matrix representation) for fixed seed."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
+    timesteps = [0.1, 0.1]
+
+    comb_dense = run(
+        op,
+        params,
+        timesteps=timesteps,
+        method="mc",
+        num_samples=256,
+        seed=123,
+        output="dense",
+    )
+    comb_mpo = run(
+        op,
+        params,
+        timesteps=timesteps,
+        method="mc",
+        num_samples=256,
+        seed=123,
+        output="mpo",
+    )
+
+    U_dense = comb_dense.to_matrix()
+    U_mpo = comb_mpo.to_matrix()
+    assert rel_fro_error(U_dense, U_mpo) < 1e-3
+
+
 ################################################################################
 # ── Section 4: Estimator Convergence (MPO/Dense Equivalence) ─────────────────
 ################################################################################
@@ -361,6 +391,39 @@ def test_sis_converges_metrics() -> None:
                 output="mpo",
             )
             errs[nparticles].append(rel_fro_error(U_hat_mpo.to_matrix(), U_exact))
+
+    assert np.mean(errs[256]) < np.mean(errs[64])
+
+
+def test_mc_dense_converges_to_exhaustive_dense() -> None:
+    """Verify MC dense comb converges towards exhaustive dense comb as samples increase."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
+    timesteps = [0.1, 0.1]
+
+    # Exhaustive reference: use exhaustive estimator in dense-comb form
+    comb_exact = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    U_exact = comb_exact.to_matrix()
+
+    sample_sizes = [64, 256]
+    n_seeds = 3
+    errs: dict[int, list[float]] = {n: [] for n in sample_sizes}
+
+    for N in sample_sizes:
+        for s in range(n_seeds):
+            comb_mc = run(
+                op,
+                params,
+                timesteps=timesteps,
+                method="mc",
+                num_samples=N,
+                num_trajectories=1,
+                seed=300 + s + N,
+                parallel=False,
+                output="dense",
+            )
+            U_mc = comb_mc.to_matrix()
+            errs[N].append(rel_fro_error(U_mc, U_exact))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
 
@@ -417,6 +480,53 @@ def test_predict_convergence_vs_physics(method):
             errs[N].append(rel_fro_error(rho_pred, rho_ref))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
+
+
+def test_mc_prediction_parity_dense_vs_mpo() -> None:
+    """MC predictions from DenseComb and MPOComb should agree for fixed seed."""
+    rng = np.random.default_rng(901)
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
+    timesteps = [0.1, 0.1]
+
+    rho_prep = _get_random_rho(rng)
+    theta = float(rng.uniform(0.1, 0.8))
+    u_mat = expm(-1j * theta * Z().matrix)
+
+    def a0_prep(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        return np.trace(rho) * rho_prep
+
+    def a1_unitary(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        return u_mat @ rho @ u_mat.conj().T
+
+    interventions = [a0_prep, a1_unitary]
+
+    comb_dense = run(
+        op,
+        params,
+        timesteps=timesteps,
+        method="mc",
+        num_samples=256,
+        num_trajectories=1,
+        seed=777,
+        parallel=False,
+        output="dense",
+    )
+    comb_mpo = run(
+        op,
+        params,
+        timesteps=timesteps,
+        method="mc",
+        num_samples=256,
+        num_trajectories=1,
+        seed=777,
+        parallel=False,
+        output="mpo",
+    )
+
+    rho_dense = comb_dense.predict(interventions)
+    rho_mpo = comb_mpo.predict(interventions)
+    assert rel_fro_error(rho_dense, rho_mpo) < 1e-3
 
 
 ################################################################################

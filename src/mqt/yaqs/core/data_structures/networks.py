@@ -1145,6 +1145,21 @@ class MPO:
         d_out, d_in, Dl, Dr = T.shape
         d2 = d_out * d_in
 
+        # Special case: op is a Hilbert-space operator of shape (d, d) with d == d_out == d_in.
+        # Apply it on the left (or right) physical index only. This is used, e.g., for
+        # comb past legs where the site Hilbert dimension is 4 and `op` is a 4x4 Choi-space
+        # operator.
+        if op.ndim == 2 and op.shape == (d_out, d_out) and d_out == d_in:
+            T_view = T.reshape(d_out, d_in, Dl * Dr)
+            if left_action:
+                # T'_{a b, ...} = sum_c op_{a c} T_{c b, ...}
+                T_new = np.einsum("ac,cbk->abk", op, T_view)
+            else:
+                # T'_{a b, ...} = sum_c T_{a c, ...} op_{c b}
+                T_new = np.einsum("abk,cb->ack", T_view, op)
+            self.tensors[site] = T_new.reshape(d_out, d_in, Dl, Dr)
+            return
+
         if op.ndim == 2:
             if op.shape != (d2, d2):
                 msg = f"op shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
@@ -1159,7 +1174,7 @@ class MPO:
             msg = f"Expected op with 2 or 4 dims, got {op.ndim}."
             raise ValueError(msg)
 
-        # Flatten physical legs into a single index.
+        # Generic case: op acts on the vectorized operator space.
         T_phys = T.reshape(d2, Dl * Dr)
         if left_action:
             T_new = op_mat @ T_phys
