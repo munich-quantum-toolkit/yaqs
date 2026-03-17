@@ -413,7 +413,7 @@ def test_simulated_zero_time_upsilon_is_physical() -> None:
     params.show_progress = False
     params.get_state = True
 
-    pt = run(
+    comb = run(
         operator=op,
         sim_params=params,
         timesteps=[0.0, 0.0],
@@ -421,7 +421,7 @@ def test_simulated_zero_time_upsilon_is_physical() -> None:
         noise_model=None,
     )
 
-    U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
+    U = comb.to_matrix()
     U = 0.5 * (U + U.conj().T)
 
     # Hermitian

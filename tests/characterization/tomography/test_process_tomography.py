@@ -427,32 +427,34 @@ def test_tomography_run_basic() -> None:
     """Test standard single-step process tomography."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1], method="exhaustive")
-    assert pt.tensor.shape == (4, 16)
+    comb = run(op, params, timesteps=[0.1], method="exhaustive", output="dense")
+    U = comb.to_matrix()
+    assert U.shape == (8, 8)  # 2 * 4^1
 
 
 def test_tomography_run_defaults() -> None:
     """Test defaults (timesteps=None -> single step)."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, elapsed_time=0.1)
-    pt = run(op, params, method="exhaustive")
-    assert pt.tensor.shape == (4, 16)
+    comb = run(op, params, method="exhaustive", output="dense")
+    U = comb.to_matrix()
+    assert U.shape == (8, 8)
 
 
 def test_tomography_mcwf_multistep() -> None:
     """Test multi-step process tomography with MCWF solver."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", num_traj=10)
-    pt = run(op, params, timesteps=[0.1, 0.1], method="exhaustive")
-    assert pt.tensor.shape == (4, 16, 16)
+    comb = run(op, params, timesteps=[0.1, 0.1], method="exhaustive", output="dense")
+    U = comb.to_matrix()
+    assert U.shape == (32, 32)  # 2 * 4^2
 
 
 def test_predict_linearity() -> None:
     """Ensure comb prediction is linear in the intervention maps."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1], method="exhaustive")
-    comb = pt.to_dense_comb()
+    comb = run(op, params, timesteps=[0.1], method="exhaustive", output="dense")
 
     def map1(rho): return rho
     def map2(_rho): return np.zeros((2, 2), dtype=complex)
@@ -469,15 +471,37 @@ def test_tomography_with_noise() -> None:
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
-    pt = run(op, params, timesteps=[0.1], method="exhaustive", num_trajectories=5, noise_model=noise_model)
-    assert pt.tensor.shape == (4, 16)
+    comb = run(
+        op,
+        params,
+        timesteps=[0.1],
+        method="exhaustive",
+        num_trajectories=5,
+        noise_model=noise_model,
+        output="dense",
+    )
+    U = comb.to_matrix()
+    assert U.shape == (8, 8)
 
 
 def test_unnormalized_branch_semantics_h0() -> None:
     """Verify trace-weight consistency in deterministic H=0 case."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
-    pt = run(op, params, timesteps=[0.1], method="exhaustive")
+    from mqt.yaqs.characterization.tomography.process_tomography import (
+        _run_exhaustive_sequence_data,
+        _to_dense,
+    )
+
+    data = _run_exhaustive_sequence_data(
+        op,
+        params,
+        timesteps=[0.1],
+        parallel=False,
+        num_trajectories=1,
+        noise_model=None,
+    )
+    pt = _to_dense(data)
     for alpha in range(16):
         rho_branch = pt.tensor[:, alpha].reshape(2, 2)
         weight = pt.weights[alpha]
@@ -495,9 +519,17 @@ def test_run_return_types():
     res = run(operator=H, sim_params=sp, timesteps=[0.1], method="mc", num_samples=4, seed=42, output="mpo")
     assert isinstance(res, MPO)
     
-    res_dense = run(operator=H, sim_params=sp, timesteps=[0.1], method="mc", num_samples=4, seed=42, output="dense")
-    from mqt.yaqs.characterization.tomography.estimator_class import TomographyEstimate
-    assert isinstance(res_dense, TomographyEstimate)
+    res_dense = run(
+        operator=H,
+        sim_params=sp,
+        timesteps=[0.1],
+        method="mc",
+        num_samples=4,
+        seed=42,
+        output="dense",
+    )
+    from mqt.yaqs.characterization.tomography.combs import DenseComb
+    assert isinstance(res_dense, DenseComb)
 
 
 def test_sis_tjm_basic() -> None:
@@ -617,11 +649,24 @@ def test_sis_tjm_outputs_dense_and_mpo() -> None:
 ################################################################################
 
 def get_matrix(res):
-    """Robustly extract dense Choi matrix from TomographyEstimate or ndarray."""
-    if hasattr(res, "dense_choi") and res.dense_choi is not None:
+    """Robustly extract dense Choi matrix from various representations.
+
+    Supports:
+    - TomographyEstimate (via ``dense_choi`` or ``reconstruct_comb_choi``)
+    - DenseComb / MPOComb (via ``to_matrix``)
+    - Raw ndarray (returned as-is)
+    """
+    # TomographyEstimate path
+    if hasattr(res, "dense_choi") and getattr(res, "dense_choi") is not None:
         return res.dense_choi
     if hasattr(res, "reconstruct_comb_choi"):
         return res.reconstruct_comb_choi()
+
+    # Comb wrappers (DenseComb / MPOComb) expose a `to_matrix` method
+    if hasattr(res, "to_matrix"):
+        return res.to_matrix()
+
+    # Fallback: assume it's already a dense matrix
     return res
 
 
