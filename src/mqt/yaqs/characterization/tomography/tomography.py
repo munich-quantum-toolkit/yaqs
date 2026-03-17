@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-from .estimator import TomographyEstimate, rank1_upsilon_mpo_term, upsilon_mpo_to_dense
+from .estimator import TomographyEstimate, rank1_upsilon_mpo_term
 
 # ═══ Sampling & Sequence Utilities ═══════════════════════════════════════════
 def _enumerate_sequences(k: int) -> list[tuple[int, ...]]:

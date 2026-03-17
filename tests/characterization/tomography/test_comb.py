@@ -8,7 +8,6 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.characterization.tomography.comb import DenseComb, MPOComb
 from mqt.yaqs.characterization.tomography.estimator import (
     predict_from_dense_upsilon,
-    upsilon_mpo_to_dense,
 )
 
 
@@ -28,14 +27,14 @@ def test_densecomb_predict_matches_helper() -> None:
 
 
 def test_mpocomb_matrix_matches_dense() -> None:
-    """MPOComb.to_matrix should be consistent with upsilon_mpo_to_dense."""
+    """MPOComb.to_matrix should match MPO.to_matrix()."""
     mpo = MPO.ising(length=1, J=1.0, g=0.5)
     timesteps: list[float] = [0.1]
     comb = MPOComb(mpo, timesteps)
 
     np.testing.assert_allclose(
         comb.to_matrix(),
-        upsilon_mpo_to_dense(mpo),
+        mpo.to_matrix(),
         atol=1e-12,
     )
 

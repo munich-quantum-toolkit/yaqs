@@ -169,7 +169,7 @@ def test_reconstruct_comb_choi_self_consistency_k2() -> None:
 
 
 def test_comb_qmi_bounds_and_zero_for_product_like_case() -> None:
-    """comb_qmi_from_upsilon should be >=0 and bounded by 2 bits (since F is a qubit). It should be ~0 for a product Υ."""
+    """DenseComb.qmi should be >=0 and bounded by 2 bits (since F is a qubit). It should be ~0 for a product Υ."""
     choi_basis, choi_indices = _choi_basis_16()
     duals = _dual_from_basis(choi_basis)
     _check_duality(duals, choi_basis)
@@ -185,7 +185,7 @@ def test_comb_qmi_bounds_and_zero_for_product_like_case() -> None:
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
     pt = TomographyEstimate(tensor, weights, [1.0, 1.0], duals, choi_indices, choi_basis=choi_basis)
 
-    qmi = pt.comb_qmi_from_upsilon(base=2, past="all", normalize=True, check_psd=True)
+    qmi = pt.to_dense_comb().qmi(base=2, past="all", check_psd=True)
     assert qmi >= -1e-10  # numeric
     assert qmi <= 2.0 + 1e-10
 
@@ -334,7 +334,7 @@ def test_comb_qmi_zero_for_trivial_product_case_k2() -> None:
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
     pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
 
-    qmi = pt.comb_qmi_from_upsilon(base=2, past="all", normalize=True, check_psd=True)
+    qmi = pt.to_dense_comb().qmi(base=2, past="all", check_psd=True)
     assert qmi >= -1e-10
     assert qmi <= 2.0 + 1e-10
     assert qmi < 1e-6
@@ -444,27 +444,6 @@ def test_simulated_zero_time_conditional_memory_vanishes() -> None:
         noise_model=None,
     )
 
-    U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
-    U = 0.5 * (U + U.conj().T)
-    rho = U / np.trace(U)
-
-    # dims order in reconstruct_comb_choi/comb_qmi_from_upsilon: [F, step1, step2] = [2,4,4]
-    dims = [2, 4, 4]
-
-    # Define subsystems:
-    # A = step1 (index 1), B = F (index 0), C = step2 (index 2)
-    # I(A:B|C) = S(AC) + S(BC) - S(C) - S(ABC)
-    rho_ABC = rho
-    rho_AC = _partial_trace(rho_ABC, dims, keep=[1, 2])
-    rho_BC = _partial_trace(rho_ABC, dims, keep=[0, 2])
-    rho_C  = _partial_trace(rho_ABC, dims, keep=[2])
-
-    cmi = (
-        _vn_entropy(rho_AC, base=2)
-        + _vn_entropy(rho_BC, base=2)
-        - _vn_entropy(rho_C, base=2)
-        - _vn_entropy(rho_ABC, base=2)
-    )
-
-    # Numerical tolerance: inversion + eigens can introduce small noise
+    # I(first : final | last) should vanish for zero-time steps
+    cmi = pt.to_dense_comb().cmi_conditional(A="first", B="final", C="last", base=2)
     assert cmi < 1e-2

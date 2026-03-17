@@ -8,7 +8,12 @@ import numpy as np
 from mqt.yaqs.core.data_structures.networks import MPO
 
 from .estimator import predict_from_dense_upsilon
-from .metrics import canonicalize_upsilon, comb_cmi_from_upsilon_dense, comb_qmi_from_upsilon_dense
+from .metrics import (
+    canonicalize_upsilon,
+    comb_cmi_conditional_from_upsilon_dense,
+    comb_cmi_from_upsilon_dense,
+    comb_qmi_from_upsilon_dense,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -59,6 +64,19 @@ class DenseComb:
         """Conditional mutual information I(F:P_{<k} | P_k) from this comb."""
         return comb_cmi_from_upsilon_dense(self.upsilon, **kwargs)
 
+    def cmi_conditional(
+        self,
+        *,
+        A: str = "first",
+        B: str = "final",
+        C: str = "last",
+        **kwargs: object,
+    ) -> float:
+        """I(A:B|C) with configurable subsystems ('final', 'first', 'last')."""
+        return comb_cmi_conditional_from_upsilon_dense(
+            self.upsilon, A=A, B=B, C=C, **kwargs
+        )
+
 
 class MPOComb:
     """Wrapper around an MPO representation of a comb Choi operator Υ."""
@@ -82,4 +100,8 @@ class MPOComb:
     def cmi(self, **kwargs: object) -> float:
         """Conditional mutual information computed via dense fallback."""
         return self.to_dense().cmi(**kwargs)
+
+    def cmi_conditional(self, **kwargs: object) -> float:
+        """I(A:B|C) via dense fallback."""
+        return self.to_dense().cmi_conditional(**kwargs)
 

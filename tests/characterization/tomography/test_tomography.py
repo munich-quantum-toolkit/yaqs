@@ -30,11 +30,8 @@ from mqt.yaqs.characterization.tomography.tomography import (
     run,
 )
 
-from mqt.yaqs.characterization.tomography.estimator import (
-    canonicalize_upsilon,
-    rank1_upsilon_mpo_term,
-    upsilon_mpo_to_dense,
-)
+from mqt.yaqs.characterization.tomography.estimator import rank1_upsilon_mpo_term
+from mqt.yaqs.characterization.tomography.metrics import canonicalize_upsilon
 
 from mqt.yaqs.characterization.tomography.metrics import rel_fro_error
 
@@ -203,7 +200,7 @@ def test_basis_reproduction() -> None:
     def identity_map(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return rho
 
-    rho_pred = pt.predict_final_state([identity_map])
+    rho_pred = pt.to_dense_comb().predict([identity_map])
     expected = np.array([[1.0, 0.0], [0.0, 0.0]])
     np.testing.assert_allclose(rho_pred, expected, atol=1e-10)
 
@@ -226,7 +223,7 @@ def test_exact_1step_prediction_vs_physics():
     timesteps = [0.001]
 
     pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.predict_final_state(interventions)
+    rho_pt = pt.to_dense_comb().predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     assert rel_fro_error(rho_pt, rho_ref) < 1e-5
@@ -251,7 +248,7 @@ def test_exact_2step_prediction_vs_physics():
     timesteps = [0.001, 0.001]
 
     pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.predict_final_state(interventions)
+    rho_pt = pt.to_dense_comb().predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     assert rel_fro_error(rho_pt, rho_ref) < 1e-5
@@ -270,7 +267,7 @@ def test_exact_instrument_prediction_vs_physics():
     timesteps = [0.001]
 
     pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.predict_final_state(interventions)
+    rho_pt = pt.to_dense_comb().predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     assert abs(np.trace(rho_pt) - np.trace(rho_ref)) < 1e-5
@@ -291,7 +288,7 @@ def test_exact_moderate_step_prediction_vs_physics():
     timesteps = [0.1]
 
     pt = run(op, params, timesteps=timesteps, method="exhaustive")
-    rho_pt = pt.predict_final_state(interventions)
+    rho_pt = pt.to_dense_comb().predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
     # At dt=0.1, error should be larger but still around 1e-3 or 1e-4
@@ -307,7 +304,7 @@ def test_reconstruction_depolarizing() -> None:
     def depolarize(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return 0.5 * np.trace(rho) * np.eye(2)
 
-    rho_pred = pt.predict_final_state([depolarize])
+    rho_pred = pt.to_dense_comb().predict([depolarize])
     expected = 0.5 * np.eye(2)
     np.testing.assert_allclose(rho_pred, expected, atol=1e-10)
 
@@ -346,7 +343,7 @@ def test_exact_representation_parity():
 
     # Canonical dense comb from MPO path
     U_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
-    U_mpo_dense = upsilon_mpo_to_dense(U_mpo)
+    U_mpo_dense = U_mpo.to_matrix()
     U_mpo_canon = canonicalize_upsilon(
         U_mpo_dense,
         hermitize=True,
@@ -368,7 +365,7 @@ def test_exhaustive_dense_and_mpo_comb_match_for_k1() -> None:
     mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
 
     U_pt = pt.reconstruct_comb_choi(check=True)
-    U_mpo = upsilon_mpo_to_dense(mpo)
+    U_mpo = mpo.to_matrix()
 
     assert rel_fro_error(U_pt, U_mpo) < 1e-10
 
@@ -380,11 +377,11 @@ def test_mc_without_replacement_matches_exact_for_k2() -> None:
     timesteps = [0.1, 0.1]
 
     U_exact_mpo = run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), seed=42, output="mpo")
-    U_exact = upsilon_mpo_to_dense(U_exact_mpo)
+    U_exact = U_exact_mpo.to_matrix()
     
     # 256 sequences for k=2 is exhaustive replacement=True/False doesn't matter much if fixed seeds match
     U_mc_mpo = run(op, params, timesteps=timesteps, method="mc", num_samples=256, seed=42, output="mpo")
-    U_mc = upsilon_mpo_to_dense(U_mc_mpo)
+    U_mc = U_mc_mpo.to_matrix()
 
     assert rel_fro_error(U_exact, U_mc) < 1e-10
 
@@ -397,7 +394,7 @@ def test_rank1_mpo_vs_kron(k):
     w = 1.23
 
     mpo = rank1_upsilon_mpo_term(rho, ops, weight=w)
-    dense_mpo = upsilon_mpo_to_dense(mpo)
+    dense_mpo = mpo.to_matrix()
     
     dense_ref = rho
     for op in ops:
@@ -417,8 +414,8 @@ def test_mpo_addition_matches_dense():
     mpo2 = rank1_upsilon_mpo_term(rho2, ops2, weight=0.5)
     
     mpo_added = mpo1 + mpo2
-    dense_added = upsilon_mpo_to_dense(mpo_added)
-    assert rel_fro_error(dense_added, upsilon_mpo_to_dense(mpo1) + upsilon_mpo_to_dense(mpo2)) < 1e-12
+    dense_added = mpo_added.to_matrix()
+    assert rel_fro_error(dense_added, mpo1.to_matrix() + mpo2.to_matrix()) < 1e-12
 
 
 def test_mc_mpo_parity_discrete():
@@ -428,7 +425,7 @@ def test_mc_mpo_parity_discrete():
     
     ups_mpo_1 = run(op, params, timesteps=[0.1], method="mc", num_samples=4, seed=42, output="mpo")
     ups_mpo_2 = run(op, params, timesteps=[0.1], method="mc", num_samples=4, seed=42, output="mpo")
-    assert rel_fro_error(upsilon_mpo_to_dense(ups_mpo_1), upsilon_mpo_to_dense(ups_mpo_2)) < 1e-12
+    assert rel_fro_error(ups_mpo_1.to_matrix(), ups_mpo_2.to_matrix()) < 1e-12
 
 
 ################################################################################
@@ -441,13 +438,13 @@ def test_mc_uniform_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact = upsilon_mpo_to_dense(run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), output="mpo"))
-    
+    U_exact = run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), output="mpo").to_matrix()
+
     errs = {64: [], 256: []}
     for nseq in errs:
         for s in range(3):
             U_hat_mpo = run(op, params, timesteps=timesteps, method="mc", num_samples=nseq, seed=100 + s, output="mpo")
-            errs[nseq].append(rel_fro_error(upsilon_mpo_to_dense(U_hat_mpo), U_exact))
+            errs[nseq].append(rel_fro_error(U_hat_mpo.to_matrix(), U_exact))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
 
@@ -458,8 +455,8 @@ def test_sis_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact = upsilon_mpo_to_dense(run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), output="mpo"))
-    
+    U_exact = run(op, params, timesteps=timesteps, method="mc", num_samples=16**len(timesteps), output="mpo").to_matrix()
+
     errs = {64: [], 256: []}
     for nparticles in errs:
         for s in range(3):
@@ -474,7 +471,7 @@ def test_sis_converges_metrics() -> None:
                 parallel=False,
                 output="mpo",
             )
-            errs[nparticles].append(rel_fro_error(upsilon_mpo_to_dense(U_hat_mpo), U_exact))
+            errs[nparticles].append(rel_fro_error(U_hat_mpo.to_matrix(), U_exact))
 
     assert np.mean(errs[256]) < np.mean(errs[64])
 
@@ -520,7 +517,7 @@ def test_predict_convergence_vs_physics(method):
                 parallel=False,
                 output="mpo",
             )
-            U_hat = upsilon_mpo_to_dense(U_hat_mpo)
+            U_hat = U_hat_mpo.to_matrix()
 
             U_canon = canonicalize_upsilon(
                 U_hat,
@@ -563,18 +560,19 @@ def test_tomography_mcwf_multistep() -> None:
 
 
 def test_predict_linearity() -> None:
-    """Ensure predict_final_state is linear in the intervention maps."""
+    """Ensure comb prediction is linear in the intervention maps."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
     pt = run(op, params, timesteps=[0.1], method="exhaustive")
+    comb = pt.to_dense_comb()
 
     def map1(rho): return rho
     def map2(_rho): return np.zeros((2, 2), dtype=complex)
     def sum_map(rho): return 0.5 * map1(rho) + 0.3 * map2(rho)
 
-    rho1 = pt.predict_final_state([map1])
-    rho2 = pt.predict_final_state([map2])
-    rho_sum = pt.predict_final_state([sum_map])
+    rho1 = comb.predict([map1])
+    rho2 = comb.predict([map2])
+    rho_sum = comb.predict([sum_map])
     np.testing.assert_allclose(rho_sum, 0.5 * rho1 + 0.3 * rho2, atol=1e-10)
 
 
@@ -632,7 +630,7 @@ def test_sis_tjm_basic() -> None:
         output="mpo",
     )
     assert isinstance(res, MPO)
-    dense = upsilon_mpo_to_dense(res)
+    dense = res.to_matrix()
     assert np.linalg.norm(dense) > 1e-10
 
 
@@ -643,7 +641,7 @@ def test_sis_tjm_k1_matches_exact_prediction() -> None:
     timesteps = [0.1]
     
     res_exact = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
-    dense_exact = upsilon_mpo_to_dense(res_exact)
+    dense_exact = res_exact.to_matrix()
     
     res_sis = run(
         op,
@@ -655,7 +653,7 @@ def test_sis_tjm_k1_matches_exact_prediction() -> None:
         seed=42,
         output="mpo",
     )
-    dense_sis = upsilon_mpo_to_dense(res_sis)
+    dense_sis = res_sis.to_matrix()
     
     # k=1 should be reasonably accurate with 100 samples (within O(1) factor)
     assert rel_fro_error(dense_sis, dense_exact) < 0.6
@@ -668,7 +666,7 @@ def test_sis_tjm_k2_convergence() -> None:
     timesteps = [0.1, 0.1]
     
     res_exact = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
-    dense_exact = upsilon_mpo_to_dense(res_exact)
+    dense_exact = res_exact.to_matrix()
     
     errs_50 = []
     errs_150 = []
@@ -684,7 +682,7 @@ def test_sis_tjm_k2_convergence() -> None:
             seed=300 + s,
             output="mpo",
         )
-        errs_50.append(rel_fro_error(upsilon_mpo_to_dense(res_50), dense_exact))
+        errs_50.append(rel_fro_error(res_50.to_matrix(), dense_exact))
         
         res_150 = run(
             op,
@@ -696,7 +694,7 @@ def test_sis_tjm_k2_convergence() -> None:
             seed=400 + s,
             output="mpo",
         )
-        errs_150.append(rel_fro_error(upsilon_mpo_to_dense(res_150), dense_exact))
+        errs_150.append(rel_fro_error(res_150.to_matrix(), dense_exact))
         
     # Mean error should be significantly lower for N=150
     assert np.mean(errs_150) < np.mean(errs_50)
@@ -721,7 +719,7 @@ def test_sis_tjm_outputs_dense_and_mpo() -> None:
     assert isinstance(pt, TomographyEstimate)
     
     # 1. Structural consistency
-    dm = upsilon_mpo_to_dense(mpo)
+    dm = mpo.to_matrix()
     dp = pt.reconstruct_comb_choi()
     assert rel_fro_error(dm, dp) < 1e-10
 

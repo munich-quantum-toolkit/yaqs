@@ -200,3 +200,61 @@ def comb_cmi_from_upsilon_dense(
         - _entropy_dense(rho, base)
     )
 
+
+def comb_cmi_conditional_from_upsilon_dense(
+    Upsilon: NDArray[np.complex128],
+    base: int = 2,
+    A: str = "first",
+    B: str = "final",
+    C: str = "last",
+    normalize: bool = True,
+    check_psd: bool = True,
+) -> float:
+    """Conditional mutual information I(A:B|C) from dense Υ.
+
+    Subsystem names: "final" (F, dim 2), "first" (step 1), "last" (step k).
+    Default I(first : final | last).
+    """
+    U = 0.5 * (Upsilon + Upsilon.conj().T)
+    if check_psd:
+        w, V = np.linalg.eigh(U)
+        w = np.clip(w, 0.0, None)
+        U = (V * w) @ V.conj().T
+    if normalize:
+        tr = np.trace(U)
+        if abs(tr) < 1e-15:
+            return 0.0
+        rho = U / tr
+    else:
+        rho = U
+
+    size = rho.shape[0]
+    k_steps = int(np.round(np.log2(size / 2) / 2))
+    if k_steps < 2:
+        return 0.0
+    dims = [2] + [4] * k_steps
+    idx_final, idx_first, idx_last = 0, 1, k_steps
+
+    def _idx(which: str) -> int:
+        if which == "final":
+            return idx_final
+        if which == "first":
+            return idx_first
+        if which == "last":
+            return idx_last
+        raise ValueError(f"Unknown subsystem '{which}'. Use 'final', 'first', or 'last'.")
+
+    iA, iB, iC = _idx(A), _idx(B), _idx(C)
+    if len({iA, iB, iC}) != 3:
+        raise ValueError("A, B, C must refer to three distinct subsystems.")
+
+    rho_AC = _partial_trace_dense(rho, dims, keep=[iA, iC])
+    rho_BC = _partial_trace_dense(rho, dims, keep=[iB, iC])
+    rho_C = _partial_trace_dense(rho, dims, keep=[iC])
+    return (
+        _entropy_dense(rho_AC, base)
+        + _entropy_dense(rho_BC, base)
+        - _entropy_dense(rho_C, base)
+        - _entropy_dense(rho, base)
+    )
+
