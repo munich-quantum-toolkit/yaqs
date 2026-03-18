@@ -173,6 +173,138 @@ def _run_mc_sampling(
     )
 
 
+def _run_basis_sampling(
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    timesteps: list[float],
+    parallel: bool = True,
+    num_samples: int = 1000,
+    num_trajectories: int = 1,
+    noise_model: NoiseModel | None = None,
+    seed: int | None = None,
+    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "standard",
+    basis_seed: int | None = None,
+) -> SequenceData:
+    """Exhaustive-style evaluation on a uniformly sampled subset of the 16^k sequences.
+
+    Sequences are sampled uniformly **without replacement**. The per-sequence outputs
+    and weights are computed exactly as in the exhaustive estimator; only the set of
+    evaluated sequences is reduced.
+
+    If num_samples >= 16^k, this evaluates all sequences (i.e., becomes exhaustive).
+    """
+    from mqt.yaqs.analog.mcwf import preprocess_mcwf
+
+    local_params = copy.deepcopy(sim_params)
+    local_params.get_state = True
+
+    basis_set = get_basis_states(basis=basis, seed=basis_seed)
+    choi_basis, choi_indices = get_choi_basis(basis=basis, seed=basis_seed)
+    choi_duals = calculate_dual_choi_basis(choi_basis)
+
+    k = len(timesteps)
+    rng = np.random.default_rng(seed)
+    all_seqs = _enumerate_sequences(k)
+    if len(all_seqs) == 0:
+        msg = "No sequences available for k=0."
+        raise ValueError(msg)
+
+    num_seqs = len(all_seqs)
+    n_pick = min(int(num_samples), num_seqs)
+    if n_pick <= 0:
+        msg = "num_samples must be positive."
+        raise ValueError(msg)
+
+    if n_pick == num_seqs:
+        picked_seqs = all_seqs
+    else:
+        pick_idx = rng.choice(num_seqs, size=n_pick, replace=False)
+        picked_seqs = [all_seqs[i] for i in pick_idx]
+
+    samples_psi_pairs = [
+        [(basis_set[choi_indices[a][1]][1], basis_set[choi_indices[a][0]][1]) for a in seq]
+        for seq in picked_seqs
+    ]
+
+    if noise_model is None:
+        noise_model = local_params.noise_model
+    if noise_model is None:
+        num_trajectories = 1
+
+    mcwf_static_ctx = None
+    if local_params.solver == "MCWF":
+        dummy_mps = MPS(length=operator.length, state="zeros")
+        mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, local_params)
+    elif local_params.solver != "TJM":
+        msg = f"Basis sampler does not support solver {local_params.solver!r}."
+        raise ValueError(msg)
+
+    total_jobs = n_pick * num_trajectories
+    payload = {
+        "psi_pairs": samples_psi_pairs,
+        "num_trajectories": num_trajectories,
+        "operator": operator,
+        "sim_params": local_params,
+        "timesteps": timesteps,
+        "noise_model": noise_model,
+        "mcwf_static_ctx": mcwf_static_ctx,
+    }
+
+    aggregated_outputs = [np.zeros((2, 2), dtype=np.complex128) for _ in range(n_pick)]
+    aggregated_weights = np.zeros(n_pick, dtype=np.float64)
+
+    if parallel and total_jobs > 1:
+        max_workers = max(1, available_cpus() - 1)
+        results_iterator = run_backend_parallel(
+            worker_fn=_tomography_sequence_worker,
+            payload=payload,
+            n_jobs=total_jobs,
+            max_workers=max_workers,
+            show_progress=local_params.show_progress,
+            desc=f"Simulating {n_pick} basis sequences (Parallel)",
+        )
+        for _, (s_idx, _traj_idx, rho_final, weight) in results_iterator:
+            aggregated_outputs[s_idx] += rho_final * weight
+            aggregated_weights[s_idx] += weight
+    else:
+        disable_tqdm = not local_params.show_progress
+        for job_idx in tqdm(
+            range(total_jobs),
+            desc=f"Simulating {n_pick} basis sequences (Serial)",
+            disable=disable_tqdm,
+        ):
+            (s_idx, _traj_idx, rho_final, weight) = _call_backend_serial(
+                _tomography_sequence_worker, job_idx, payload
+            )
+            aggregated_outputs[s_idx] += rho_final * weight
+            aggregated_weights[s_idx] += weight
+
+    acc: dict[tuple[int, ...], list[Any]] = {}
+    for i in range(n_pick):
+        acc[picked_seqs[i]] = [aggregated_outputs[i], aggregated_weights[i], num_trajectories]
+
+    final_seqs, final_outputs, final_weights = _finalize_sequence_averages(
+        acc, float(num_trajectories)
+    )
+
+    # Uniform inclusion correction (Horvitz–Thompson style):
+    # pi = n_pick / num_seqs for each selected sequence under uniform sampling without replacement.
+    # Reweight sampled contributions by 1/pi so the expected sum matches the exhaustive estimator.
+    if n_pick < num_seqs:
+        inclusion_correction = float(num_seqs) / float(n_pick)
+        final_weights = [w * inclusion_correction for w in final_weights]
+
+    return SequenceData(
+        sequences=final_seqs,
+        outputs=final_outputs,
+        weights=final_weights,
+        choi_basis=choi_basis,
+        choi_indices=choi_indices,
+        choi_duals=choi_duals,
+        timesteps=timesteps,
+    )
+
+
 def _run_sis_sampling(
     operator: MPO,
     sim_params: AnalogSimParams,
@@ -183,12 +315,18 @@ def _run_sis_sampling(
     seed: int | None = None,
     ess_threshold: float = 0.5,
     proposal: str = "uniform",
+    prep_mixture_eps: float = 0.1,
+    prep_corr_prob: float = 0.0,
+    resample: bool = True,
 ) -> SamplingData:
     """SIS estimator using log-weights and optional local proposal."""
     from mqt.yaqs.analog.mcwf import preprocess_mcwf
 
-    if proposal not in ["uniform", "local"]:
-        msg = f"Proposal {proposal!r} is not currently supported. Use 'uniform' or 'local'."
+    if proposal not in ["uniform", "local", "mixture"]:
+        msg = (
+            f"Proposal {proposal!r} is not currently supported. "
+            "Use 'uniform', 'local', or 'mixture'."
+        )
         raise ValueError(msg)
 
     k = len(timesteps)
@@ -203,6 +341,8 @@ def _run_sis_sampling(
     log_weights = np.zeros(num_samples, dtype=np.float64)
     dead = np.zeros(num_samples, dtype=bool)
     particles_dual_ops: list[list[NDArray[np.complex128]]] = [[] for _ in range(num_samples)]
+    corr_prob_cap = 0.1
+    confidence_threshold = 0.75
 
     static_ctx = None
     if solver == "MCWF":
@@ -226,7 +366,17 @@ def _run_sis_sampling(
                 dead[i] = True
                 continue
 
+            # Choose effective proposal mode (uniform / local) for this step.
             if proposal == "uniform":
+                mode = "uniform"
+            elif proposal == "local":
+                mode = "local"
+            elif proposal == "mixture":
+                mode = "uniform" if rng.random() < prep_mixture_eps else "local"
+            else:  # pragma: no cover - guarded by earlier validation
+                mode = "uniform"
+
+            if mode == "uniform":
                 pm = _sample_haar_pure_state(rng)
                 pp = _sample_haar_pure_state(rng)
                 psi_new, step_prob = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
@@ -235,9 +385,17 @@ def _run_sis_sampling(
                     dead[i] = True
                     continue
                 log_weights[i] += np.log(step_prob)
-            elif proposal == "local":
+            else:  # mode == "local"
                 pm = _sample_local_measurement_exact(rho_0, rng)
                 pp = _sample_haar_pure_state(rng)
+                if proposal == "mixture" and prep_corr_prob > 0.0:
+                    # Confidence proxy for informativeness of the local draw pm:
+                    # q(pm) ∝ <pm|rho_0|pm>. We normalize by tr(rho_0) to get a [0,1] score.
+                    tr_rho_safe = max(float(np.trace(rho_0).real), 1e-300)
+                    conf = float(np.real(np.vdot(pm, rho_0 @ pm)) / tr_rho_safe)
+                    corr_p = min(float(prep_corr_prob), corr_prob_cap)
+                    if conf > confidence_threshold and rng.random() < corr_p:
+                        pp = pm
                 psi_new, _ = _reprepare_backend_state_forced(particles[i], pm, pp, solver)
                 log_weights[i] += np.log(max(tr_rho / 2.0, 1e-300))
 
@@ -295,7 +453,7 @@ def _run_sis_sampling(
         w_norm_alive, log_w_sum = _normalize_log_weights(log_weights[alive_idx])
         ess = 1.0 / float(np.sum(w_norm_alive**2))
 
-        if ess < ess_threshold * num_samples:
+        if resample and ess < ess_threshold * num_samples:
             positions = (rng.random() + np.arange(num_samples)) / num_samples
             cumsum = np.cumsum(w_norm_alive)
             sel_local = np.searchsorted(cumsum, positions)
@@ -310,19 +468,51 @@ def _run_sis_sampling(
             dead[:] = False
 
     final_outputs = []
+    w_list: list[float] = []
+    obs_list: list[float] = []
+    z = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
     for i in range(num_samples):
         if not np.isfinite(log_weights[i]):
             final_outputs.append(np.zeros((2, 2), dtype=np.complex128))
             continue
+        w = float(np.exp(log_weights[i]))
         rho_final = _get_rho_site_zero(particles[i])
-        final_outputs.append(np.exp(log_weights[i]) * rho_final)
+        final_outputs.append(w * rho_final)
+        w_list.append(w)
+        obs_list.append(float(np.real(np.trace(z @ rho_final))))
 
     final_weights = [1.0 / num_samples] * num_samples
+
+    weight_signal_corr = float("nan")
+    if len(w_list) >= 2:
+        w_arr = np.asarray(w_list, dtype=float)
+        o_arr = np.asarray(obs_list, dtype=float)
+        w_std = float(np.std(w_arr))
+        o_std = float(np.std(o_arr))
+        if w_std > 0.0 and o_std > 0.0:
+            weight_signal_corr = float(np.corrcoef(w_arr, o_arr)[0, 1])
+
+    # Diagnostics from final log_weights
+    mask = np.isfinite(log_weights)
+    if np.any(mask):
+        w_norm, _ = _normalize_log_weights(log_weights[mask])
+        ess = float(1.0 / np.sum(w_norm**2))
+        ess_over_N = ess / num_samples
+        log_weight_var = float(np.var(log_weights[mask]))
+        max_weight = float(np.max(w_norm))
+    else:
+        ess = ess_over_N = log_weight_var = max_weight = float("nan")
+
     return SamplingData(
         outputs=final_outputs,
         dual_ops=particles_dual_ops,
         weights=final_weights,
         timesteps=timesteps,
+        ess=ess,
+        ess_over_N=ess_over_N,
+        log_weight_var=log_weight_var,
+        max_weight=max_weight,
+        weight_signal_corr=weight_signal_corr,
     )
 
 
@@ -337,12 +527,24 @@ def _estimate_sis_sequence_data(
     seed: int | None = None,
     ess_threshold: float = 0.5,
     proposal: str = "uniform",
+    prep_mixture_eps: float = 0.1,
+    prep_corr_prob: float = 0.0,
+    resample: bool = True,
 ) -> SamplingData:
     """Internal helper used in tests: run SIS and return SamplingData."""
     return _run_sis_sampling(
-        operator, sim_params, timesteps,
-        parallel=parallel, num_samples=num_samples, noise_model=noise_model,
-        seed=seed, ess_threshold=ess_threshold, proposal=proposal,
+        operator,
+        sim_params,
+        timesteps,
+        parallel=parallel,
+        num_samples=num_samples,
+        noise_model=noise_model,
+        seed=seed,
+        ess_threshold=ess_threshold,
+        proposal=proposal,
+        prep_mixture_eps=prep_mixture_eps,
+        prep_corr_prob=prep_corr_prob,
+        resample=resample,
     )
 
 
@@ -353,6 +555,8 @@ def _run_exhaustive_sequence_data(
     parallel: bool = True,
     num_trajectories: int = 100,
     noise_model: NoiseModel | None = None,
+    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "standard",
+    basis_seed: int | None = None,
 ) -> SequenceData:
     """Runs the core simulation for exhaustive basis-sequence tomography."""
     from mqt.yaqs.analog.mcwf import preprocess_mcwf
@@ -360,8 +564,8 @@ def _run_exhaustive_sequence_data(
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True
 
-    basis_set = get_basis_states()
-    choi_basis, choi_indices = get_choi_basis()
+    basis_set = get_basis_states(basis=basis, seed=basis_seed)
+    choi_basis, choi_indices = get_choi_basis(basis=basis, seed=basis_seed)
     choi_duals = calculate_dual_choi_basis(choi_basis)
 
     k = len(timesteps)
@@ -449,7 +653,7 @@ def run(
     sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     *,
-    method: Literal["exhaustive", "mc", "sis"] = "exhaustive",
+    method: Literal["exhaustive", "mc", "sis", "basis_sample"] = "exhaustive",
     output: Literal["dense", "mpo"] = "dense",
     noise_model: NoiseModel | None = None,
     parallel: bool = True,
@@ -460,8 +664,13 @@ def run(
     tol: float = 1e-12,
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
-    proposal: Literal["uniform", "local"] = "local",
+    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "standard",
+    basis_seed: int | None = None,
+    proposal: Literal["uniform", "local", "mixture"] = "mixture",
     ess_threshold: float = 0.5,
+    prep_mixture_eps: float = 0.1,
+    prep_corr_prob: float = 0.0,
+    resample: bool = True,
 ) -> "DenseComb | MPOComb":
     """Main entry point for Process Tomography.
 
@@ -470,7 +679,7 @@ def run(
         sim_params: Simulation parameters (solver, dt, etc.).
         timesteps: List of durations for each evolution segment.
             If None, [sim_params.elapsed_time] is used.
-        method: "exhaustive", "mc", or "sis".
+        method: "exhaustive", "mc", "sis", or "basis_sample".
         output: "dense" (DenseComb) or "mpo" (MPOComb).
         noise_model: Optional noise model.
         parallel: Whether to use multi-processing.
@@ -496,8 +705,11 @@ def run(
         if num_trajectories > 1:
             msg = "SIS currently only supports num_trajectories=1 (one realization per particle)."
             raise ValueError(msg)
-        if proposal not in ["uniform", "local"]:
-            msg = f"Proposal {proposal!r} is not currently supported for SIS. Use 'uniform' or 'local'."
+        if proposal not in ["uniform", "local", "mixture"]:
+            msg = (
+                f"Proposal {proposal!r} is not currently supported for SIS. "
+                "Use 'uniform', 'local', or 'mixture'."
+            )
             raise ValueError(msg)
 
     if method == "exhaustive":
@@ -508,6 +720,8 @@ def run(
             parallel=parallel,
             num_trajectories=num_trajectories,
             noise_model=noise_model,
+            basis=basis,
+            basis_seed=basis_seed,
         )
     elif method == "mc":
         data = _run_mc_sampling(
@@ -520,6 +734,19 @@ def run(
             noise_model=noise_model,
             seed=seed,
         )
+    elif method == "basis_sample":
+        data = _run_basis_sampling(
+            operator,
+            sim_params,
+            timesteps,
+            parallel=parallel,
+            num_samples=num_samples,
+            num_trajectories=num_trajectories,
+            noise_model=noise_model,
+            seed=seed,
+            basis=basis,
+            basis_seed=basis_seed,
+        )
     elif method == "sis":
         data = _run_sis_sampling(
             operator,
@@ -531,6 +758,9 @@ def run(
             seed=seed,
             ess_threshold=ess_threshold,
             proposal=proposal,
+            prep_mixture_eps=prep_mixture_eps,
+            prep_corr_prob=prep_corr_prob,
+            resample=resample,
         )
     else:
         msg = f"Unknown estimation method {method!r}."

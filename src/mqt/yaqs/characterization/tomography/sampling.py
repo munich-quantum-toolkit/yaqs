@@ -35,6 +35,12 @@ class SamplingData:
     dual_ops: list[list[np.ndarray]]  # [N][k] list of 4x4 dual frame operators
     weights: list[float]
     timesteps: list[float]
+    # Optional diagnostics (primarily populated by SIS)
+    ess: float | None = None
+    ess_over_N: float | None = None
+    log_weight_var: float | None = None
+    max_weight: float | None = None
+    weight_signal_corr: float | None = None
 
 
 def _enumerate_sequences(k: int) -> list[tuple[int, ...]]:
