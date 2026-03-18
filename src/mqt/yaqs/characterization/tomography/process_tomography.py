@@ -516,6 +516,183 @@ def _run_sis_sampling(
     )
 
 
+def _run_sis_basis_sampling(
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    timesteps: list[float],
+    *,
+    parallel: bool = True,
+    num_samples: int = 1000,
+    noise_model: NoiseModel | None = None,
+    seed: int | None = None,
+    ess_threshold: float = 0.5,
+    proposal: str = "uniform",
+    prep_mixture_eps: float = 0.1,
+    resample: bool = True,
+    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "tetrahedral",
+    basis_seed: int | None = None,
+) -> SequenceData:
+    """Discrete SIS over the 16-element Choi-map basis at each step.
+
+    This samples sequences of discrete basis indices alpha_t ∈ {0..15} and returns a sparse
+    `SequenceData` compatible with the standard formatting pipeline.
+    """
+    from mqt.yaqs.analog.mcwf import preprocess_mcwf
+
+    if proposal not in ["uniform", "local", "mixture"]:
+        msg = (
+            f"Proposal {proposal!r} is not currently supported. "
+            "Use 'uniform', 'local', or 'mixture'."
+        )
+        raise ValueError(msg)
+
+    local_params = copy.deepcopy(sim_params)
+    local_params.get_state = True
+
+    basis_set = get_basis_states(basis=basis, seed=basis_seed)
+    choi_basis, choi_indices = get_choi_basis(basis=basis, seed=basis_seed)
+    choi_duals = calculate_dual_choi_basis(choi_basis)
+
+    k = len(timesteps)
+    rng = np.random.default_rng(seed)
+    solver = local_params.solver
+    LOG_ZERO = -np.inf
+
+    if noise_model is None:
+        noise_model = local_params.noise_model
+
+    static_ctx = None
+    if solver == "MCWF":
+        dummy_mps = MPS(length=operator.length, state="zeros")
+        static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, local_params)
+    elif solver != "TJM":
+        msg = f"Discrete SIS does not support solver {solver!r}."
+        raise ValueError(msg)
+
+    if resample:
+        raise ValueError("Discrete SIS does not support resampling (would repeat sequences).")
+
+    num_seqs = 16**k
+    if num_samples >= num_seqs:
+        # Evaluate all sequences exactly (without replacement): identical to exhaustive.
+        return _run_exhaustive_sequence_data(
+            operator,
+            sim_params,
+            timesteps,
+            parallel=parallel,
+            num_trajectories=1,
+            noise_model=noise_model,
+            basis=basis,
+            basis_seed=basis_seed,
+        )
+
+    # Precompute measurement projectors for the 4 basis states.
+    meas_projectors = [basis_set[m][2] for m in range(4)]
+
+    seen: set[tuple[int, ...]] = set()
+    acc: dict[tuple[int, ...], list[Any]] = {}
+
+    max_tries = 10_000
+    for _sample_idx in range(num_samples):
+        tries = 0
+        while True:
+            tries += 1
+            if tries > max_tries:
+                raise RuntimeError("Too many duplicate sequences while sampling without replacement.")
+
+            # Fresh particle
+            state = _initialize_backend_state(operator, solver)
+            log_w = 0.0
+            seq: list[int] = []
+
+            alive = True
+            for step_idx, duration in enumerate(timesteps):
+                rho_0 = _get_rho_site_zero(state)
+                tr_rho = float(np.trace(rho_0).real)
+                if tr_rho < 1e-300:
+                    alive = False
+                    break
+
+                l = np.array(
+                    [float(np.trace(E @ rho_0).real) for E in meas_projectors], dtype=np.float64
+                )
+                l = np.clip(l, 0.0, np.inf)
+                l_sum = float(np.sum(l))
+                q_m = np.full(4, 0.25, dtype=np.float64) if (l_sum <= 0.0 or not np.isfinite(l_sum)) else (l / l_sum)
+
+                if proposal == "uniform":
+                    mode = "uniform"
+                elif proposal == "local":
+                    mode = "local"
+                else:
+                    mode = "uniform" if rng.random() < prep_mixture_eps else "local"
+
+                if mode == "uniform":
+                    alpha = int(rng.integers(0, 16))
+                    p, m = choi_indices[alpha]
+                    q_alpha = 1.0 / 16.0
+                else:
+                    m = int(rng.choice(4, p=q_m))
+                    p = int(rng.integers(0, 4))
+                    alpha = 4 * p + m
+                    q_alpha = float(q_m[m]) * 0.25
+
+                if proposal == "mixture":
+                    q_alpha = float(prep_mixture_eps) * (1.0 / 16.0) + float(1.0 - prep_mixture_eps) * float(q_alpha)
+
+                psi_meas = basis_set[m][1]
+                psi_prep = basis_set[p][1]
+                state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
+                if step_prob < 1e-300 or q_alpha <= 0.0:
+                    alive = False
+                    break
+
+                log_w += float(np.log(step_prob) - np.log(q_alpha))
+                seq.append(alpha)
+
+                sp = copy.deepcopy(local_params)
+                sp.elapsed_time = duration
+                sp.num_traj = 1
+                sp.get_state = True
+                sp.show_progress = False
+                n_steps = max(1, int(np.round(duration / sp.dt)))
+                sp.times = np.linspace(0, n_steps * sp.dt, n_steps + 1)
+                state = _evolve_backend_state(
+                    state,
+                    operator,
+                    noise_model,
+                    sp,
+                    solver,
+                    traj_idx=0,
+                    static_ctx=static_ctx,
+                )
+
+            if not alive:
+                continue
+
+            seq_t = tuple(seq)
+            if seq_t in seen:
+                continue
+            seen.add(seq_t)
+
+            w = float(np.exp(log_w))
+            rho_final = _get_rho_site_zero(state)
+            acc[seq_t] = [w * rho_final, w, 1]
+            break
+
+    final_seqs, final_outputs, final_weights = _finalize_sequence_averages(acc, float(num_samples))
+
+    return SequenceData(
+        sequences=final_seqs,
+        outputs=final_outputs,
+        weights=final_weights,
+        choi_basis=choi_basis,
+        choi_indices=choi_indices,
+        choi_duals=choi_duals,
+        timesteps=timesteps,
+    )
+
+
 def _estimate_sis_sequence_data(
     operator: MPO,
     sim_params: AnalogSimParams,
@@ -529,10 +706,12 @@ def _estimate_sis_sequence_data(
     proposal: str = "uniform",
     prep_mixture_eps: float = 0.1,
     prep_corr_prob: float = 0.0,
-    resample: bool = True,
-) -> SamplingData:
-    """Internal helper used in tests: run SIS and return SamplingData."""
-    return _run_sis_sampling(
+    resample: bool = False,
+    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "tetrahedral",
+    basis_seed: int | None = None,
+) -> SequenceData:
+    """Internal helper used in tests: run discrete SIS and return SequenceData."""
+    return _run_sis_basis_sampling(
         operator,
         sim_params,
         timesteps,
@@ -543,8 +722,9 @@ def _estimate_sis_sequence_data(
         ess_threshold=ess_threshold,
         proposal=proposal,
         prep_mixture_eps=prep_mixture_eps,
-        prep_corr_prob=prep_corr_prob,
         resample=resample,
+        basis=basis,
+        basis_seed=basis_seed,
     )
 
 
@@ -664,13 +844,13 @@ def run(
     tol: float = 1e-12,
     max_bond_dim: int | None = None,
     n_sweeps: int = 2,
-    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "standard",
+    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "tetrahedral",
     basis_seed: int | None = None,
     proposal: Literal["uniform", "local", "mixture"] = "mixture",
     ess_threshold: float = 0.5,
     prep_mixture_eps: float = 0.1,
     prep_corr_prob: float = 0.0,
-    resample: bool = True,
+    resample: bool = False,
 ) -> "DenseComb | MPOComb":
     """Main entry point for Process Tomography.
 
@@ -724,7 +904,9 @@ def run(
             basis_seed=basis_seed,
         )
     elif method == "mc":
-        data = _run_mc_sampling(
+        # Discrete MC baseline: uniformly sample basis sequences (without replacement)
+        # and apply inclusion correction. This replaces the continuous Haar-based MC sampler.
+        data = _run_basis_sampling(
             operator,
             sim_params,
             timesteps,
@@ -733,6 +915,8 @@ def run(
             num_trajectories=num_trajectories,
             noise_model=noise_model,
             seed=seed,
+            basis=basis,
+            basis_seed=basis_seed,
         )
     elif method == "basis_sample":
         data = _run_basis_sampling(
@@ -748,7 +932,7 @@ def run(
             basis_seed=basis_seed,
         )
     elif method == "sis":
-        data = _run_sis_sampling(
+        data = _run_sis_basis_sampling(
             operator,
             sim_params,
             timesteps,
@@ -759,8 +943,9 @@ def run(
             ess_threshold=ess_threshold,
             proposal=proposal,
             prep_mixture_eps=prep_mixture_eps,
-            prep_corr_prob=prep_corr_prob,
             resample=resample,
+            basis=basis,
+            basis_seed=basis_seed,
         )
     else:
         msg = f"Unknown estimation method {method!r}."

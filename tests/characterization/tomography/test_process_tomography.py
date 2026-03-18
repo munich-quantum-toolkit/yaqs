@@ -395,6 +395,32 @@ def test_sis_converges_metrics() -> None:
     assert np.mean(errs[256]) < np.mean(errs[64])
 
 
+def test_sis_without_replacement_matches_exhaustive_for_k2() -> None:
+    """Discrete SIS with N=16^k should be exact (no replacement => exhaustive)."""
+    op = MPO.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
+    timesteps = [0.1, 0.1]
+    k = len(timesteps)
+
+    comb_ex = run(op, params, timesteps=timesteps, method="exhaustive", output="dense", parallel=False, num_trajectories=1)
+    comb_sis = run(
+        op,
+        params,
+        timesteps=timesteps,
+        method="sis",
+        proposal="mixture",
+        prep_mixture_eps=0.1,
+        num_samples=16**k,
+        num_trajectories=1,
+        seed=123,
+        parallel=False,
+        output="dense",
+        basis="tetrahedral",
+    )
+
+    assert rel_fro_error(comb_sis.to_matrix(), comb_ex.to_matrix()) < 1e-10
+
+
 def test_mc_dense_converges_to_exhaustive_dense() -> None:
     """Verify MC dense comb converges towards exhaustive dense comb as samples increase."""
     op = MPO.ising(length=2, J=1.0, g=0.5)

@@ -23,7 +23,7 @@ def _haar_unitary_2x2(rng: np.random.Generator) -> NDArray[np.complex128]:
 
 def get_basis_states(
     *,
-    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "standard",
+    basis: Literal["standard", "random_low_overlap", "tetrahedral", "random_unitary"] = "tetrahedral",
     seed: int | None = None,
 ) -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
     """Return the 4 single-qubit basis states used to build the 16 CP-map basis.
