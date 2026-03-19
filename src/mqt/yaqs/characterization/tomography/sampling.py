@@ -93,23 +93,6 @@ def _get_haar_rho_dual(psi: NDArray[np.complex128]) -> NDArray[np.complex128]:
     return 2.0 * (3.0 * rho - np.eye(2, dtype=np.complex128))
 
 
-def _sample_random_intervention_sequence(
-    k: int, rng: np.random.Generator
-) -> tuple[list[tuple[NDArray[np.complex128], NDArray[np.complex128]]], list[NDArray[np.complex128]]]:
-    """Sample k pairs of (psi_meas, psi_prep) and their 4x4 dual operators."""
-    psi_pairs = []
-    dual_ops = []
-    for _ in range(k):
-        pm = _sample_haar_pure_state(rng)
-        pp = _sample_haar_pure_state(rng)
-        psi_pairs.append((pm, pp))
-        d_q = _get_haar_rho_dual(pp)
-        p_mat = np.outer(pm, pm.conj())
-        d_pt = 2.0 * (3.0 * p_mat.T - np.eye(2, dtype=np.complex128))
-        dual_ops.append(np.kron(d_q, d_pt).T)
-    return psi_pairs, dual_ops
-
-
 def _continuous_dual_step(
     psi_meas: NDArray[np.complex128], psi_prep: NDArray[np.complex128],
 ) -> NDArray[np.complex128]:

@@ -133,20 +133,13 @@ class DenseComb:
     def predict(
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
-        *,
-        physicalize: bool = True,
     ) -> NDArray[np.complex128]:
         """Predict final output state given a list of CPTP interventions.
 
-        If ``physicalize`` is True (default), the raw contraction is projected back to a
-        physical density matrix (Hermitian, PSD, trace-1) via:
-          1. Hermitization: ρ ← (ρ + ρ†)/2
-          2. Trace normalization: ρ ← ρ / Tr(ρ) (if |Tr(ρ)| > 1e-12)
-          3. Optional PSD projection: clip negative eigenvalues, renormalize.
+        The raw contraction is projected to a physical density matrix (Hermitian, PSD,
+        trace-1) via Hermitization, trace normalization, and PSD projection.
         """
         rho = self._predict_raw(interventions)
-        if not physicalize:
-            return rho
 
         # Hermitize
         rho = 0.5 * (rho + rho.conj().T)
@@ -304,8 +297,6 @@ class MPOComb(MPO):
     def predict(
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
-        *,
-        physicalize: bool = True,
     ) -> NDArray[np.complex128]:
         """Predict final state given a list of CPTP interventions.
 
@@ -344,10 +335,8 @@ class MPOComb(MPO):
 
         # The remaining MPO encodes a single 2x2 matrix on the final leg.
         rho = reduced.to_matrix()
-        if not physicalize:
-            return rho
 
-        # Match DenseComb.predict physicalization: Hermitian, PSD, trace-1.
+        # Match DenseComb.predict: Hermitian, PSD, trace-1.
         rho = 0.5 * (rho + rho.conj().T)
         tr = np.trace(rho)
         if abs(tr) > 1e-12:

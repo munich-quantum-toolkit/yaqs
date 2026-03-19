@@ -9,7 +9,7 @@ from mqt.yaqs.characterization.tomography.combs import DenseComb, MPOComb
 
 
 def test_densecomb_predict_matches_helper() -> None:
-    """DenseComb.predict returns correct contraction for identity intervention."""
+    """DenseComb._predict_raw matches the Choi contraction; predict physicalizes."""
     ups = np.eye(2 * 4, dtype=np.complex128)
     timesteps = [0.1]
 
@@ -17,9 +17,12 @@ def test_densecomb_predict_matches_helper() -> None:
         return rho
 
     comb = DenseComb(ups, timesteps)
-    rho = comb.predict([id_map])
     # Identity map Choi has trace 2; contract U = I with it gives unnormalized rho = 2*I
-    np.testing.assert_allclose(rho, 2.0 * np.eye(2, dtype=np.complex128), atol=1e-12)
+    rho_raw = comb._predict_raw([id_map])
+    np.testing.assert_allclose(rho_raw, 2.0 * np.eye(2, dtype=np.complex128), atol=1e-12)
+    rho = comb.predict([id_map])
+    np.testing.assert_allclose(np.trace(rho), 1.0, atol=1e-12)
+    np.testing.assert_allclose(rho, rho_raw / np.trace(rho_raw), atol=1e-12)
 
 
 def test_mpocomb_matrix_matches_dense() -> None:

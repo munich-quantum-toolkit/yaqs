@@ -43,8 +43,9 @@ def test_reconstruction_identity_random_choi() -> None:
 
 def test_dual_extracts_one_hot_for_basis_maps() -> None:
     """Verify duals extract one-hot coefficients for basis maps under the Choi convention."""
-    basis = get_basis_states()
-    choi_basis, choi_indices = get_choi_basis()
+    # Use the same basis label for states and Choi matrices (defaults differ per helper).
+    basis = get_basis_states(basis="standard")
+    choi_basis, choi_indices = get_choi_basis(basis="standard")
     duals = calculate_dual_choi_basis(choi_basis)
 
     for alpha in range(16):

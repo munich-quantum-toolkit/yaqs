@@ -203,26 +203,3 @@ def _tomography_sequence_worker(
 
     rho_final = _get_rho_site_zero(current_state)
     return (s_idx, traj_idx, rho_final, weight)
-
-
-def _sis_evolve_worker(job_idx: int) -> MPS | NDArray[np.complex128]:
-    """Worker function for parallel SIS particle evolution."""
-    from mqt.yaqs.simulator import WORKER_CTX as SIS_CTX
-
-    state = SIS_CTX["prep_states"][job_idx]
-    duration = SIS_CTX["duration"]
-    static_ctx = SIS_CTX["static_ctx"]
-    sim_params = SIS_CTX["sim_params"]
-    operator = SIS_CTX["operator"]
-    noise_model = SIS_CTX["noise_model"]
-    solver = sim_params.solver
-    sp = copy.deepcopy(sim_params)
-    sp.elapsed_time = duration
-    sp.num_traj = 1
-    sp.get_state = True
-    sp.show_progress = False
-    n_steps = max(1, int(np.round(duration / sp.dt)))
-    sp.times = np.linspace(0, n_steps * sp.dt, n_steps + 1)
-    return _evolve_backend_state(
-        state, operator, noise_model, sp, solver, traj_idx=0, static_ctx=static_ctx
-    )

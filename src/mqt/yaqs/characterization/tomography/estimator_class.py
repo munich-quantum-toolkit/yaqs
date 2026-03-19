@@ -243,12 +243,18 @@ class TomographyEstimate:
 
             if check:
                 err = 0.0
+                n_used = 0
                 for alphas in test_seqs:
-                    w = self.weights[alphas]
+                    w = float(self.weights[alphas])
+                    # Subset / importance-weighted estimates leave most sequence weights at 0; do not
+                    # score those cells (target would be 0 but the map prediction is generally not).
+                    if w <= 1e-30:
+                        continue
                     rho_true = w * self.tensor[(slice(None), *alphas)].reshape(2, 2)
                     rho_pred = predict_from_upsilon(U, alphas)
                     err += np.linalg.norm(rho_true - rho_pred)
-                err /= max(1, len(test_seqs))
+                    n_used += 1
+                err /= max(1, n_used)
             else:
                 err = 0.0
 
