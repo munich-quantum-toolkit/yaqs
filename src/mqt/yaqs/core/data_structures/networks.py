@@ -1874,6 +1874,33 @@ class MPO:
             stage=f"MPO._full_schmidt_values_for_bond sites={sites}",
         )
 
+    def _full_schmidt_values_for_cut(
+        self,
+        cut: str | int = "center",
+        decomposition: str = "QR",
+    ) -> NDArray[np.float64]:
+        """Return the complete operator Schmidt values across a spatial cut.
+
+        Args:
+            cut: Requested cut, either ``"center"`` or an explicit integer.
+            decomposition: Matrix decomposition used by
+                ``MPS.set_canonical_form`` during canonicalization.
+
+        Returns:
+            NDArray[np.float64]: Operator Schmidt singular values across the
+            selected cut. Trivial cuts return the operator Frobenius norm.
+        """
+        cut_index = self._resolve_cut_index(cut=cut, length=len(self.tensors))
+        if cut_index in {0, len(self.tensors)}:
+            fro_norm = float(np.linalg.norm(np.asarray(self.to_matrix(), dtype=np.complex128), ord="fro"))
+            return np.array([fro_norm], dtype=np.float64)
+
+        singular_values = self._full_schmidt_values_for_bond(
+            [cut_index - 1, cut_index],
+            decomposition=decomposition,
+        )
+        return np.asarray(singular_values, dtype=np.float64)
+
     def get_entropy(self, sites: list[int], decomposition: str = "QR") -> np.float64:
         """Return the operator entanglement entropy across a nearest-neighbor MPO bond.
 
@@ -1934,7 +1961,19 @@ class MPO:
 
     @staticmethod
     def _resolve_cut_index(cut: str | int, length: int) -> int:
-        """Resolve a cut specifier to a valid integer cut index."""
+        """Resolve a cut specifier to a valid integer cut index.
+
+        Args:
+            cut: Bond cut specifier, either ``"center"`` or an explicit index.
+            length: Number of sites in the network.
+
+        Returns:
+            Integer cut index in the inclusive range ``[0, length]``.
+
+        Raises:
+            ValueError: If ``cut`` is neither ``"center"`` nor an integer index,
+                or if the resolved cut lies outside ``[0, length]``.
+        """
         if cut == "center":
             cut_index = length // 2
         elif isinstance(cut, int) and not isinstance(cut, bool):
@@ -1968,7 +2007,21 @@ class MPO:
         expected_shape: tuple[int, ...] | None = None,
         dtype: type[np.complex128 | np.float64] = np.complex128,
     ) -> NDArray[np.complex128] | NDArray[np.float64]:
-        """Validate numerical arrays before dense reshapes or decompositions."""
+        """Validate numerical arrays before dense reshapes or decompositions.
+
+        Args:
+            array: Array-like object to validate.
+            stage: Human-readable label used in validation error messages.
+            ndim: Required number of dimensions, if any.
+            expected_shape: Required exact shape, if any.
+            dtype: Target NumPy dtype for the validated array.
+
+        Returns:
+            Validated NumPy array cast to ``dtype``.
+
+        Raises:
+            ValueError: If the array shape, dimensionality, finiteness, or norm is invalid.
+        """
         arr = np.asarray(array, dtype=dtype)
         if ndim is not None and arr.ndim != int(ndim):
             msg = f"Expected {stage} to have ndim={int(ndim)}, got shape={arr.shape}, dtype={arr.dtype}"
@@ -2016,7 +2069,18 @@ class MPO:
         *,
         stage: str,
     ) -> NDArray[np.float64]:
-        """Compute singular values with a safer SciPy fallback on convergence failure."""
+        """Compute singular values with a safer SciPy fallback on convergence failure.
+
+        Args:
+            matrix: Dense matrix whose singular values should be computed.
+            stage: Human-readable label used in validation and fallback errors.
+
+        Returns:
+            One-dimensional array of singular values.
+
+        Raises:
+            RuntimeError: If both NumPy and SciPy SVD backends fail to converge.
+        """
         validated = np.asarray(
             cls._validate_numeric_array(matrix, stage=stage, ndim=2, dtype=np.complex128),
             dtype=np.complex128,
@@ -2047,7 +2111,18 @@ class MPO:
         *,
         stage: str,
     ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
-        """Compute a full SVD with SciPy fallback for dense->MPO diagnostics."""
+        """Compute a full SVD with SciPy fallback for dense-to-MPO diagnostics.
+
+        Args:
+            matrix: Dense matrix whose singular value decomposition should be computed.
+            stage: Human-readable label used in validation and fallback errors.
+
+        Returns:
+            Tuple ``(U, S, Vh)`` containing validated SVD factors.
+
+        Raises:
+            RuntimeError: If both NumPy and SciPy SVD backends fail to converge.
+        """
         validated = np.asarray(
             cls._validate_numeric_array(matrix, stage=stage, ndim=2, dtype=np.complex128),
             dtype=np.complex128,
@@ -2082,7 +2157,20 @@ class MPO:
 
     @staticmethod
     def entropy_from_probabilities(probabilities: NDArray[np.float64], *, base: float = math.e) -> float:
-        """Compute entropy from a normalized probability vector."""
+        """Compute entropy from a normalized probability vector.
+
+        Args:
+            probabilities: Probability vector or unnormalized non-negative weights.
+            base: Logarithm base used for the entropy.
+
+        Returns:
+            Shannon entropy of the normalized probability vector.
+
+        Raises:
+            ValueError: If ``base`` is invalid or the probabilities contain negative
+                or non-finite entries.
+            RuntimeError: If the probability normalization or resulting entropy is invalid.
+        """
         base_float = float(base)
         if not np.isfinite(base_float) or base_float <= 0.0 or math.isclose(base_float, 1.0):
             msg = f"Entropy base must be finite, >0, and !=1; got {base!r}"
@@ -2119,7 +2207,15 @@ class MPO:
         *,
         base: float = math.e,
     ) -> float:
-        """Compute entropy directly from Schmidt values using the experiment convention."""
+        """Compute entropy directly from Schmidt values using the experiment convention.
+
+        Args:
+            schmidt_values: Schmidt singular values for a bipartition.
+            base: Logarithm base used for the entropy.
+
+        Returns:
+            Entropy computed from the normalized Schmidt probabilities.
+        """
         probabilities = cls.normalized_schmidt_probabilities(schmidt_values)
         return cls.entropy_from_probabilities(probabilities, base=base)
 
@@ -2127,9 +2223,19 @@ class MPO:
         """Build the exact dense Schmidt matrix across a spatial cut.
 
         The MPO is interpreted as an MPS whose local physical dimension is the
-        fused site leg ``(phys_out ⊗ phys_in)``. The resulting dense operator is
+        fused site leg ``(phys_out x phys_in)``. The resulting dense operator is
         reshaped across the requested spatial bipartition without using any
         local-tensor proxy decomposition.
+
+        Args:
+            cut: Bond cut specifier, either ``"center"`` or an explicit index.
+
+        Returns:
+            Dense Schmidt matrix across the requested fused-site cut.
+
+        Raises:
+            RuntimeError: If the dense matrix shape is inconsistent with the local legs.
+            ValueError: If the MPO has no tensors or ``cut`` is invalid.
         """
         tensors_raw = [np.asarray(tensor, dtype=np.complex128) for tensor in self.tensors]
         if not tensors_raw:
@@ -2166,6 +2272,15 @@ class MPO:
         The Schmidt values are first scaled by their maximum magnitude, squared,
         and then normalized to sum to one. Degenerate empty or all-zero inputs map
         to ``[1.0]``.
+
+        Args:
+            schmidt_values: Schmidt singular values to normalize.
+
+        Returns:
+            Normalized probability vector derived from ``schmidt_values``.
+
+        Raises:
+            ValueError: If the Schmidt values or derived probabilities contain non-finite entries.
         """
         svals = np.asarray(schmidt_values, dtype=np.float64).reshape(-1)
         if svals.size == 0:
@@ -2195,6 +2310,16 @@ class MPO:
         """Return the normalized weighted L1 Schmidt-spectrum distance.
 
         The weights follow the experiment convention ``w_k = 1 / (k + 1)``.
+
+        Args:
+            probabilities: Candidate Schmidt-probability vector.
+            reference: Reference Schmidt-probability vector.
+
+        Returns:
+            Weighted L1 distance between the padded probability vectors.
+
+        Raises:
+            ValueError: If either input contains non-finite entries.
         """
         lhs = np.asarray(probabilities, dtype=np.float64).reshape(-1)
         rhs = np.asarray(reference, dtype=np.float64).reshape(-1)
@@ -2225,6 +2350,15 @@ class MPO:
 
         The local legs are interleaved as ``(phys_out, phys_in)`` at each site,
         matching the reference experiment implementation.
+
+        Args:
+            channel_dense: Dense channel matrix to decompose.
+            n_sites: Number of lattice sites in the channel.
+            local_dim: Local fused-site dimension.
+            svd_cutoff: Singular-value truncation threshold.
+
+        Returns:
+            List of MPO tensors in YAQS storage order.
         """
         channel = cls._validated_dense_channel_matrix(
             channel_dense,
@@ -2288,7 +2422,17 @@ class MPO:
         local_dim: int = 4,
         svd_cutoff: float = 1e-12,
     ) -> MPO:
-        """Construct an MPO from a dense channel matrix."""
+        """Construct an MPO from a dense channel matrix.
+
+        Args:
+            channel_dense: Dense channel matrix to decompose.
+            n_sites: Number of lattice sites in the channel.
+            local_dim: Local fused-site dimension.
+            svd_cutoff: Singular-value truncation threshold.
+
+        Returns:
+            MPO whose dense matrix reconstructs ``channel_dense``.
+        """
         tensors = cls.dense_channel_to_tensors(
             channel_dense,
             n_sites=n_sites,
@@ -2296,7 +2440,7 @@ class MPO:
             svd_cutoff=svd_cutoff,
         )
         mpo = cls()
-        mpo.init_custom([np.asarray(tensor, dtype=np.complex128).copy() for tensor in tensors], transpose=False)
+        mpo.custom([np.asarray(tensor, dtype=np.complex128).copy() for tensor in tensors], transpose=False)
         return mpo
 
     @classmethod
@@ -2308,7 +2452,17 @@ class MPO:
         cut: str | int = "center",
         local_dim: int = 4,
     ) -> NDArray[np.float64]:
-        """Compute dense fused-site Schmidt values directly from a channel matrix."""
+        """Compute dense fused-site Schmidt values directly from a channel matrix.
+
+        Args:
+            channel_dense: Dense channel matrix to analyze.
+            n_sites: Number of lattice sites in the channel.
+            cut: Bond cut specifier, either ``"center"`` or an explicit index.
+            local_dim: Local fused-site dimension.
+
+        Returns:
+            Schmidt singular values across the requested fused-site cut.
+        """
         cut_index = cls._resolve_cut_index(cut=cut, length=int(n_sites))
         if cut_index in {0, int(n_sites)}:
             return np.array([1.0], dtype=np.float64)
@@ -2319,6 +2473,10 @@ class MPO:
             local_dim=local_dim,
             stage="dense_center_cut_schmidt_values input",
         )
+        if cut_index in {0, int(n_sites)}:
+            fro_norm = float(np.linalg.norm(channel, ord="fro"))
+            return np.array([fro_norm], dtype=np.float64)
+
         tensor = channel.reshape([int(local_dim)] * (2 * int(n_sites)))
         interleaved_axes: list[int] = []
         for site_index in range(int(n_sites)):
@@ -2344,7 +2502,7 @@ class MPO:
         target_probabilities: NDArray[np.float64] | None = None,
         target_entropy: float | None = None,
         dense_cross_check: bool = False,
-    ) -> dict[str, float | int | NDArray[np.float64]]:
+    ) -> dict[str, float | int | NDArray[np.float64] | None]:
         """Return canonical operator-entanglement diagnostics for a dense channel.
 
         This helper matches the reference experiment workflow: dense channel to MPO,
@@ -2444,12 +2602,7 @@ class MPO:
         Returns:
             NDArray[np.float64]: Schmidt singular values at the selected cut.
         """
-        cut_index = self._resolve_cut_index(cut=cut, length=len(self.tensors))
-        if cut_index in {0, len(self.tensors)}:
-            return np.array([1.0], dtype=np.float64)
-        schmidt_matrix = self._dense_fused_site_schmidt_matrix(cut=cut_index)
-        svals = self._svd_values_with_fallback(schmidt_matrix, stage=f"schmidt_values cut={cut_index}")
-        return np.asarray(svals, dtype=np.float64)
+        return self._full_schmidt_values_for_cut(cut=cut)
 
     def operator_entanglement_entropy(self, cut: str | int = "center", base: float = math.e) -> float:
         """Compute operator entanglement entropy for an MPO cut.

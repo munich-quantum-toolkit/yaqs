@@ -249,7 +249,11 @@ def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) ->
 
 
 def dense_operator_schmidt_values(mpo: MPO, cut: int) -> NDArray[np.float64]:
-    """Compute Schmidt values from dense contraction for a given MPO cut."""
+    """Compute Schmidt values from dense contraction for a given MPO cut.
+
+    Returns:
+        Dense Schmidt singular values for the requested cut.
+    """
     mps = mpo.to_mps()
 
     state = mps.tensors[0][:, 0, :]
@@ -262,6 +266,12 @@ def dense_operator_schmidt_values(mpo: MPO, cut: int) -> NDArray[np.float64]:
     matrix = np.reshape(state, (left_dim, right_dim))
     singular_values = np.linalg.svd(matrix, compute_uv=False, full_matrices=False)
     return np.asarray(singular_values, dtype=np.float64)
+
+
+def significant_schmidt_values(values: NDArray[np.float64], tol: float = 1e-12) -> NDArray[np.float64]:
+    """Return the numerically significant part of a Schmidt spectrum."""
+    spectrum = np.asarray(values, dtype=np.float64)
+    return spectrum[spectrum > tol]
 
 
 rng = np.random.default_rng()
@@ -455,6 +465,15 @@ def test_from_matrix() -> None:
         MPO.from_matrix(mat, d=100)
 
 
+def test_from_dense_channel_roundtrip() -> None:
+    """Test dense channel factory reconstructs the original dense channel."""
+    channel = np.eye(16, dtype=np.complex128)
+
+    mpo = MPO.from_dense_channel(channel, n_sites=2, local_dim=4)
+
+    np.testing.assert_allclose(mpo.to_matrix(), channel, atol=1e-12)
+
+
 def test_to_mps() -> None:
     """Test converting an MPO to an MPS.
 
@@ -536,20 +555,19 @@ def test_check_if_identity() -> None:
 def test_operator_entanglement_entropy_identity_is_zero() -> None:
     """Test that identity MPO has vanishing operator entanglement entropy."""
     mpo = MPO()
-    mpo.init_identity(length=4, physical_dimension=2)
+    mpo.identity(length=4, physical_dimension=2)
 
     entropy = mpo.operator_entanglement_entropy(cut=2)
     schmidt = mpo.schmidt_values(cut=2)
-    probabilities = np.square(schmidt) / np.sum(np.square(schmidt))
+    probabilities = MPO.normalized_schmidt_probabilities(schmidt)
 
     assert entropy == pytest.approx(0.0, abs=1e-12)
-    np.testing.assert_allclose(probabilities, np.array([1.0]))
+    np.testing.assert_allclose(significant_schmidt_values(probabilities), np.array([1.0]))
 
 
 def test_operator_entanglement_entropy_is_finite_and_non_negative() -> None:
     """Test entropy value is finite and non-negative for a deterministic MPO."""
-    mpo = MPO()
-    mpo.init_ising(length=4, J=1.0, g=0.7)
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
 
     entropy = mpo.operator_entanglement_entropy(cut=2)
 
@@ -559,8 +577,7 @@ def test_operator_entanglement_entropy_is_finite_and_non_negative() -> None:
 
 def test_operator_entanglement_center_cut_matches_integer_cut() -> None:
     """Test center cut shorthand matches the corresponding integer cut."""
-    mpo = MPO()
-    mpo.init_heisenberg(length=6, Jx=1.0, Jy=0.8, Jz=0.6, h=0.3)
+    mpo = MPO.heisenberg(length=6, Jx=1.0, Jy=0.8, Jz=0.6, h=0.3)
 
     center_cut = mpo.length // 2
     schmidt_center = mpo.schmidt_values(cut="center")
@@ -574,15 +591,14 @@ def test_operator_entanglement_center_cut_matches_integer_cut() -> None:
 
 def test_mpo_schmidt_values_and_entropy_match_dense_reference() -> None:
     """Test MPO Schmidt values and entropy against dense reference contraction."""
-    mpo = MPO()
-    mpo.init_ising(length=4, J=1.0, g=0.7)
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
 
     cut = 2
     schmidt = mpo.schmidt_values(cut=cut)
     dense_schmidt = dense_operator_schmidt_values(mpo, cut)
     dense_schmidt = dense_schmidt[dense_schmidt > 1e-12]
 
-    np.testing.assert_allclose(schmidt, dense_schmidt, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(significant_schmidt_values(schmidt), dense_schmidt, rtol=1e-10, atol=1e-12)
 
     probabilities = np.square(dense_schmidt)
     probabilities /= np.sum(probabilities)
@@ -592,11 +608,78 @@ def test_mpo_schmidt_values_and_entropy_match_dense_reference() -> None:
     assert entropy == pytest.approx(reference_entropy, abs=1e-12)
 
 
+def test_mpo_schmidt_values_non_trivial_cut_uses_cut_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that non-trivial cuts use the cut/bond Schmidt path."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+    sentinel = np.array([3.0, 2.0], dtype=np.float64)
+    observed_cut: list[str | int] = []
+
+    def fake_cut_path(cut: str | int = "center") -> NDArray[np.float64]:
+        observed_cut.append(cut)
+        return sentinel
+
+    def fail_dense_helper(cut: str | int = "center") -> NDArray[np.complex128]:
+        msg = f"dense helper should not be used for schmidt_values(cut={cut!r})"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(mpo, "_full_schmidt_values_for_cut", fake_cut_path)
+    monkeypatch.setattr(mpo, "_dense_fused_site_schmidt_matrix", fail_dense_helper)
+
+    np.testing.assert_allclose(mpo.schmidt_values(cut=2), sentinel)
+    assert observed_cut == [2]
+
+
+def test_operator_entanglement_entropy_uses_schmidt_value_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test entropy delegates through schmidt_values and entropy_from_schmidt_values."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+    sentinel = np.array([5.0, 1.0], dtype=np.float64)
+    observed_cut: list[str | int] = []
+    observed_schmidt_values: list[NDArray[np.float64]] = []
+    observed_base: list[float] = []
+
+    def fake_schmidt_values(cut: str | int = "center") -> NDArray[np.float64]:
+        observed_cut.append(cut)
+        return sentinel
+
+    def fake_entropy_from_schmidt_values(
+        _cls: type[MPO],
+        schmidt_values: NDArray[np.float64],
+        *,
+        base: float = np.e,
+    ) -> float:
+        observed_schmidt_values.append(np.asarray(schmidt_values, dtype=np.float64))
+        observed_base.append(float(base))
+        return 1.2345
+
+    monkeypatch.setattr(mpo, "schmidt_values", fake_schmidt_values)
+    monkeypatch.setattr(MPO, "entropy_from_schmidt_values", classmethod(fake_entropy_from_schmidt_values))
+
+    entropy = mpo.operator_entanglement_entropy(cut=2, base=2.0)
+
+    assert entropy == pytest.approx(1.2345)
+    assert observed_cut == [2]
+    assert len(observed_schmidt_values) == 1
+    np.testing.assert_allclose(observed_schmidt_values[0], sentinel)
+    assert observed_base == pytest.approx([2.0])
+
+
+def test_mpo_schmidt_values_trivial_cut_returns_frobenius_norm() -> None:
+    """Test that trivial cuts return the operator Frobenius norm."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+
+    fro_norm = float(np.linalg.norm(np.asarray(mpo.to_matrix(), dtype=np.complex128), ord="fro"))
+
+    np.testing.assert_allclose(mpo.schmidt_values(cut=0), np.array([fro_norm]))
+    np.testing.assert_allclose(mpo.schmidt_values(cut=mpo.length), np.array([fro_norm]))
+    assert mpo.operator_entanglement_entropy(cut=0) == pytest.approx(0.0, abs=1e-12)
+    assert mpo.operator_entanglement_entropy(cut=mpo.length) == pytest.approx(0.0, abs=1e-12)
+
+
 @pytest.mark.parametrize("invalid_cut", [True, -1, 5, "left"])
-def test_mpo_schmidt_values_reject_invalid_cut(invalid_cut: bool | int | str) -> None:
+def test_mpo_schmidt_values_reject_invalid_cut(invalid_cut: int | str) -> None:
     """Test that invalid cut specifiers raise ValueError."""
     mpo = MPO()
-    mpo.init_identity(length=4, physical_dimension=2)
+    mpo.identity(length=4, physical_dimension=2)
 
     with pytest.raises(ValueError, match="cut"):
         _ = mpo.schmidt_values(cut=invalid_cut)
@@ -605,8 +688,7 @@ def test_mpo_schmidt_values_reject_invalid_cut(invalid_cut: bool | int | str) ->
 @pytest.mark.parametrize("invalid_base", [0.0, -2.0, 1.0, np.inf, np.nan])
 def test_mpo_operator_entanglement_entropy_rejects_invalid_base(invalid_base: float) -> None:
     """Test that invalid logarithm bases are rejected."""
-    mpo = MPO()
-    mpo.init_ising(length=4, J=1.0, g=0.5)
+    mpo = MPO.ising(length=4, J=1.0, g=0.5)
 
     with pytest.raises(ValueError, match="base"):
         _ = mpo.operator_entanglement_entropy(cut=2, base=invalid_base)
