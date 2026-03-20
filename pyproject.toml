@@ -54,6 +54,9 @@ dependencies = [
     "numba>=0.63.0; python_version >= '3.14'",
 ]
 
+[project.optional-dependencies]
+torch = ["torch>=2.0"]
+
 [project.urls]
 Homepage = "https://github.com/munich-quantum-toolkit/yaqs"
 Documentation = "https://mqt.readthedocs.io/projects/yaqs"
@@ -166,6 +169,7 @@ known-first-party = ["mqt.yaqs"]
 "tests" = ["T20", "INP001"]
 "docs/**" = ["T20", "INP001"]
 "scripts" = ["T20", "INP001"]
+"experiments/**" = ["T20", "INP001"]
 "noxfile.py" = ["T20", "TID251"]
 
 [tool.ruff.lint.pydocstyle]
