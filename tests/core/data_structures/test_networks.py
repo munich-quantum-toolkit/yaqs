@@ -19,6 +19,8 @@ These tests ensure that the MPS class functions as expected in various simulatio
 from __future__ import annotations
 
 import copy
+from operator import attrgetter
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -27,6 +29,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
+import mqt.yaqs.core.data_structures.networks as networks_module
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
@@ -802,6 +805,122 @@ def test_mpo_dense_cut_and_legacy_schmidt_helpers_edge_paths(monkeypatch: pytest
     np.testing.assert_allclose(MPO.normalized_schmidt_probabilities(np.zeros(2, dtype=np.float64)), np.array([1.0]))
     with pytest.raises(ValueError, match="Non-finite Schmidt values"):
         _ = MPO.normalized_schmidt_probabilities(np.array([1.0, np.nan], dtype=np.float64))
+
+
+def test_mpo_svd_fallback_helpers_cover_scipy_success_and_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test both SVD fallback helpers use SciPy after NumPy failure and wrap double failures."""
+    matrix = np.array([[3.0, 0.0], [0.0, 1.0]], dtype=np.complex128)
+    original_scipy_svd = networks_module.scipy_linalg.svd
+    svd_values_with_fallback = attrgetter("_svd_values_with_fallback")(MPO)
+    svd_with_fallback = attrgetter("_svd_with_fallback")(MPO)
+
+    def fake_numpy_svd(*_args: object, **_kwargs: object) -> NDArray[np.float64]:
+        msg = "forced numpy SVD failure"
+        raise np.linalg.LinAlgError(msg)
+
+    monkeypatch.setattr(networks_module.np.linalg, "svd", fake_numpy_svd)
+
+    scipy_calls: list[bool] = []
+
+    def fake_scipy_svd(
+        *args: object, **kwargs: object
+    ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
+        scipy_calls.append(bool(kwargs.get("compute_uv", True)))
+        return original_scipy_svd(*args, **kwargs)
+
+    monkeypatch.setattr(networks_module.scipy_linalg, "svd", fake_scipy_svd)
+
+    np.testing.assert_allclose(svd_values_with_fallback(matrix, stage="values"), np.array([3.0, 1.0]))
+    u_mat, s_vals, vh_mat = svd_with_fallback(matrix, stage="full")
+    np.testing.assert_allclose(s_vals, np.array([3.0, 1.0]))
+    np.testing.assert_allclose(u_mat @ np.diag(s_vals) @ vh_mat, matrix, atol=1e-12)
+    assert scipy_calls == [False, True]
+
+    def fake_scipy_failure(*_args: object, **_kwargs: object) -> NDArray[np.float64]:
+        msg = "forced scipy SVD failure"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(networks_module.scipy_linalg, "svd", fake_scipy_failure)
+
+    with pytest.raises(RuntimeError, match="SVD failed at values_failure"):
+        _ = svd_values_with_fallback(matrix, stage="values_failure")
+    with pytest.raises(RuntimeError, match="SVD failed at full_failure"):
+        _ = svd_with_fallback(matrix, stage="full_failure")
+
+
+def test_mpo_entropy_from_probabilities_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test entropy helper handles defensive empty, invalid, and non-finite result paths."""
+    assert MPO.entropy_from_probabilities(np.array([], dtype=np.float64)) == pytest.approx(0.0, abs=1e-12)
+
+    with pytest.raises(ValueError, match="Non-finite probabilities"):
+        _ = MPO.entropy_from_probabilities(np.array([1.0, np.nan], dtype=np.float64))
+    with pytest.raises(ValueError, match="Negative probabilities"):
+        _ = MPO.entropy_from_probabilities(np.array([0.5, -0.1, 0.6], dtype=np.float64))
+    with pytest.raises(RuntimeError, match="Invalid probability normalization"):
+        _ = MPO.entropy_from_probabilities(np.zeros(3, dtype=np.float64))
+
+    original_log = networks_module.np.log
+
+    def fake_log(values: NDArray[np.float64]) -> NDArray[np.float64]:
+        logged = np.asarray(original_log(values), dtype=np.float64)
+        return np.full_like(logged, np.inf, dtype=np.float64)
+
+    monkeypatch.setattr(networks_module.np, "log", fake_log)
+
+    with pytest.raises(RuntimeError, match="Invalid entropy computed"):
+        _ = MPO.entropy_from_probabilities(np.array([0.5, 0.5], dtype=np.float64))
+
+
+def test_mpo_dense_fused_site_schmidt_matrix_edge_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test dense fused-site Schmidt matrix rejects bad inputs and matches manual fusion."""
+    empty_mpo = MPO()
+    empty_mpo.tensors = []
+    empty_dense_matrix = attrgetter("_dense_fused_site_schmidt_matrix")(empty_mpo)
+
+    with pytest.raises(ValueError, match="no tensors"):
+        _ = empty_dense_matrix(cut="center")
+
+    invalid_shape_mpo = MPO()
+    invalid_shape_mpo.identity(length=2, physical_dimension=2)
+    monkeypatch.setattr(invalid_shape_mpo, "to_matrix", lambda: np.eye(3, dtype=np.complex128))
+    invalid_dense_matrix = attrgetter("_dense_fused_site_schmidt_matrix")(invalid_shape_mpo)
+
+    with pytest.raises(RuntimeError, match="shape does not match"):
+        _ = invalid_dense_matrix(cut=1)
+
+    channel = np.arange(1.0, 17.0, dtype=np.float64).reshape(4, 4).astype(np.complex128)
+    mpo = MPO.from_dense_channel(channel, n_sites=2, local_dim=2)
+    expected = channel.reshape(2, 2, 2, 2).transpose(0, 2, 1, 3).reshape(4, 4)
+    dense_matrix = attrgetter("_dense_fused_site_schmidt_matrix")(mpo)
+
+    np.testing.assert_allclose(dense_matrix(cut=1), expected, atol=1e-12)
+
+
+def test_mpo_low_level_diagnostic_edge_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test low-level diagnostic helpers on empty bond, scalar norm, and non-finite spectrum data."""
+
+    def fake_set_canonical_form(orthogonality_center: int, decomposition: str = "QR") -> None:
+        assert orthogonality_center == 1
+        assert decomposition == "QR"
+
+    mpo = MPO()
+    mpo.identity(length=2, physical_dimension=2)
+    fake_mps = SimpleNamespace(
+        tensors=[
+            np.zeros((1, 0, 0), dtype=np.complex128),
+            np.zeros((1, 0, 1), dtype=np.complex128),
+        ],
+        set_canonical_form=fake_set_canonical_form,
+    )
+    monkeypatch.setattr(mpo, "to_mps", lambda: fake_mps)
+    full_schmidt_values_for_bond = attrgetter("_full_schmidt_values_for_bond")(mpo)
+    array_norm = attrgetter("_array_norm")(MPO)
+
+    np.testing.assert_allclose(full_schmidt_values_for_bond([0, 1]), np.array([], dtype=np.float64))
+    assert array_norm(np.array(3.0 + 4.0j)) == pytest.approx(5.0, abs=1e-12)
+
+    with pytest.raises(ValueError, match="finite probabilities"):
+        _ = MPO.weighted_spectrum_distance(np.array([np.nan], dtype=np.float64), np.array([1.0], dtype=np.float64))
 
 
 ##############################################################################
