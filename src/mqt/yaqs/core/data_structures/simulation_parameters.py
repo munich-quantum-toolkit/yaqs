@@ -380,7 +380,7 @@ class WeakSimParams:
             If True, a progress bar is printed as trajectories finish.
         """
         self.noise_model: NoiseModel | None = None
-        self.measurements: list[dict[int, int] | None] = [None] * shots  # ty: ignore[invalid-assignment]
+        self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.min_bond_dim = min_bond_dim
