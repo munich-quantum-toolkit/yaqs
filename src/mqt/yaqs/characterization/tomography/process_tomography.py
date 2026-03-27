@@ -10,7 +10,8 @@
 Provides functions for process tomography on a quantum system modeled by MPO
 evolution. The primary entry point is :func:`run`.
 
-**Public API** (stable): :func:`run` plus re-exports ``TomographyBasis``,
+**Public API** (stable): :func:`run`, :func:`simulate_backend_labels`,
+:func:`simulate_backend_trajectory_batch`, plus re-exports ``TomographyBasis``,
 ``get_basis_states``, ``get_choi_basis``, ``calculate_dual_choi_basis``, and
 ``rank1_upsilon_mpo_term``.
 
@@ -23,12 +24,12 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 from tqdm import tqdm
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.simulator import available_cpus, run_backend_parallel
 
 if TYPE_CHECKING:
@@ -45,6 +46,8 @@ from .basis import (
 )
 from .estimator_class import TomographyEstimate
 from .formatters import _to_dense, _to_mpo, rank1_upsilon_mpo_term
+from .ml_dataset import TrajectoryCombSample
+from .predictor_encoding import normalize_rho_from_backend_output, pack_rho8
 from .sampling import (
     SequenceData,
     _enumerate_sequences,
@@ -55,6 +58,9 @@ from .tomography_utils import (
     _initialize_backend_state,
     _reprepare_backend_state_forced,
     _tomography_sequence_worker,
+    make_mcwf_static_context,
+    worker_initial_psi,
+    worker_initial_psi_trajectory,
 )
 
 # Aliases used by tests
@@ -64,6 +70,8 @@ _sequence_data_to_dense = _to_dense
 # Stable surface for `from module import *` and documentation.
 __all__ = [
     "run",
+    "simulate_backend_labels",
+    "simulate_backend_trajectory_batch",
     "TomographyBasis",
     "get_basis_states",
     "get_choi_basis",
@@ -101,8 +109,6 @@ def _estimate(
     weights correct for partial sampling. If ``num_samples`` equals ``16^k``, all sequences
     are evaluated (deterministic subset; ``seed`` unused for picking).
     """
-    from mqt.yaqs.analog.mcwf import preprocess_mcwf
-
     local_params = copy.deepcopy(sim_params)
     local_params.get_state = True
 
@@ -141,8 +147,7 @@ def _estimate(
 
     mcwf_static_ctx = None
     if local_params.solver == "MCWF":
-        dummy_mps = MPS(length=operator.length, state="zeros")
-        mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, local_params)
+        mcwf_static_ctx = make_mcwf_static_context(operator, local_params, noise_model=noise_model)
     elif local_params.solver != "TJM":
         msg = f"Basis sampler does not support solver {local_params.solver!r}."
         raise ValueError(msg)
@@ -234,8 +239,6 @@ def _estimate_sis(
     This samples sequences of discrete basis indices alpha_t ∈ {0..15} and returns a sparse
     `SequenceData` compatible with the standard formatting pipeline.
     """
-    from mqt.yaqs.analog.mcwf import preprocess_mcwf
-
     if proposal not in ["uniform", "local", "mixture"]:
         msg = (
             f"Proposal {proposal!r} is not currently supported. "
@@ -259,8 +262,7 @@ def _estimate_sis(
 
     static_ctx = None
     if solver == "MCWF":
-        dummy_mps = MPS(length=operator.length, state="zeros")
-        static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, local_params)
+        static_ctx = make_mcwf_static_context(operator, local_params, noise_model=noise_model)
     elif solver != "TJM":
         msg = f"Discrete SIS does not support solver {solver!r}."
         raise ValueError(msg)
@@ -476,6 +478,138 @@ def _build_tomography_data(
         )
     msg = f"Unknown estimation method {method!r}."
     raise ValueError(msg)
+
+
+def simulate_backend_labels(
+    *,
+    operator: MPO,
+    sim_params: "AnalogSimParams",
+    timesteps: list[float],
+    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]],
+    initial_psis: list[np.ndarray],
+    parallel: bool,
+    static_ctx: Any,
+) -> np.ndarray:
+    """Simulate final reduced-state labels for channel-predictor training (packed 8-float rho rows)."""
+    n = len(initial_psis)
+    payload: dict[str, Any] = {
+        "psi_pairs": psi_pairs_list,
+        "initial_psi": initial_psis,
+        "num_trajectories": 1,
+        "operator": operator,
+        "sim_params": sim_params,
+        "timesteps": timesteps,
+        "noise_model": None,
+        "mcwf_static_ctx": static_ctx,
+    }
+
+    if parallel and n > 1:
+        max_workers = max(1, available_cpus() - 1)
+        it = run_backend_parallel(
+            worker_fn=worker_initial_psi,
+            payload=payload,
+            n_jobs=n,
+            max_workers=max_workers,
+            show_progress=False,
+            desc="Channel predictor backend sim",
+        )
+        tmp: list[np.ndarray | None] = [None] * n
+        for _job, out in it:
+            s_idx, _tr, rho_final, _w = out
+            rho_norm = normalize_rho_from_backend_output(rho_final)
+            tmp[s_idx] = pack_rho8(rho_norm)
+        if any(t is None for t in tmp):
+            raise RuntimeError("Parallel backend simulation incomplete.")
+        rows = [cast(np.ndarray, t) for t in tmp]
+        return np.stack(rows, axis=0).astype(np.float32)
+
+    rows: list[np.ndarray] = []
+    for j in range(n):
+        _s, _tr, rho_final, _w = _call_backend_serial(worker_initial_psi, j, payload)
+        rho_norm = normalize_rho_from_backend_output(rho_final)
+        rows.append(pack_rho8(rho_norm))
+    return np.stack(rows, axis=0).astype(np.float32)
+
+
+def simulate_backend_trajectory_batch(
+    *,
+    operator: MPO,
+    sim_params: "AnalogSimParams",
+    timesteps: list[float],
+    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]],
+    alphas_rows: list[np.ndarray],
+    initial_psis: list[np.ndarray],
+    choi_feat_table: np.ndarray,
+    e_features_rows: list[np.ndarray] | None = None,
+    parallel: bool,
+    static_ctx: Any,
+    timesteps_rows: list[list[float]] | None = None,
+    operators_list: list[list[MPO]] | None = None,
+    static_ctx_list: list[list[Any]] | None = None,
+    context_vec: np.ndarray | None = None,
+) -> list[TrajectoryCombSample]:
+    """Simulate trajectories with intermediate reduced states for sequential predictors."""
+    n = len(initial_psis)
+    if len(psi_pairs_list) != n or len(alphas_rows) != n:
+        msg = "psi_pairs_list, alphas_rows, and initial_psis must have equal length."
+        raise ValueError(msg)
+
+    payload: dict[str, Any] = {
+        "psi_pairs": psi_pairs_list,
+        "alphas": np.stack(alphas_rows, axis=0),
+        "choi_feat_table": np.asarray(choi_feat_table, dtype=np.float32),
+        "e_features_rows": e_features_rows,
+        "initial_psi": initial_psis,
+        "num_trajectories": 1,
+        "operator": operator,
+        "sim_params": sim_params,
+        "timesteps": timesteps,
+        "timesteps_rows": timesteps_rows,
+        "operators_list": operators_list,
+        "noise_model": None,
+        "mcwf_static_ctx": static_ctx,
+        "mcwf_static_ctx_list": static_ctx_list,
+    }
+
+    ctx_np = None if context_vec is None else np.asarray(context_vec, dtype=np.float32).reshape(-1)
+
+    def _one(j: int) -> TrajectoryCombSample:
+        _s, _tr, r0, alphas, e_rows, r_seq, w = _call_backend_serial(worker_initial_psi_trajectory, j, payload)
+        return TrajectoryCombSample(
+            rho_0=r0,
+            alphas=alphas,
+            E_features=e_rows,
+            rho_seq=r_seq,
+            context=None if ctx_np is None else ctx_np.copy(),
+            weight=float(w),
+        )
+
+    if parallel and n > 1:
+        max_workers = max(1, available_cpus() - 1)
+        it = run_backend_parallel(
+            worker_fn=worker_initial_psi_trajectory,
+            payload=payload,
+            n_jobs=n,
+            max_workers=max_workers,
+            show_progress=False,
+            desc="Trajectory backend sim",
+        )
+        tmp: list[TrajectoryCombSample | None] = [None] * n
+        for _job, out in it:
+            s_idx, _tr, r0, alphas, e_rows, r_seq, w = out
+            tmp[s_idx] = TrajectoryCombSample(
+                rho_0=r0,
+                alphas=alphas,
+                E_features=e_rows,
+                rho_seq=r_seq,
+                context=None if ctx_np is None else ctx_np.copy(),
+                weight=float(w),
+            )
+        if any(t is None for t in tmp):
+            raise RuntimeError("Parallel trajectory simulation incomplete.")
+        return [cast(TrajectoryCombSample, t) for t in tmp]
+
+    return [_one(j) for j in range(n)]
 
 
 def run(

@@ -13,15 +13,15 @@ import numpy as np
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.simulator import WORKER_CTX
 
+from .predictor_encoding import normalize_rho_from_backend_output, pack_rho8
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
 def _reprepare_site_zero_forced(
@@ -114,6 +114,17 @@ def _reprepare_backend_state_forced(
     return new_mps, prob
 
 
+def make_mcwf_static_context(
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    *,
+    noise_model: NoiseModel | None = None,
+) -> Any:
+    """Shared ``preprocess_mcwf`` context for batch tomography / predictor workers (dummy reference MPS)."""
+    dummy_mps = MPS(length=operator.length, state="zeros")
+    return preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
+
+
 def _evolve_backend_state(
     state: MPS | NDArray[np.complex128],
     operator: MPO,
@@ -129,8 +140,7 @@ def _evolve_backend_state(
             msg = f"MCWF solver requires dense NDArray state, got {type(state)}."
             raise TypeError(msg)
         if static_ctx is None:
-            dummy_mps = MPS(length=operator.length, state="zeros")
-            static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, step_params)
+            static_ctx = make_mcwf_static_context(operator, step_params, noise_model=noise_model)
         dynamic_ctx = copy.copy(static_ctx)
         dynamic_ctx.psi_initial = state
         dynamic_ctx.sim_params = step_params
@@ -203,3 +213,251 @@ def _tomography_sequence_worker(
 
     rho_final = _get_rho_site_zero(current_state)
     return (s_idx, traj_idx, rho_final, weight)
+
+
+def worker_initial_psi(
+    job_idx: int,
+    payload: dict[str, Any] | None = None,
+) -> tuple[int, int, NDArray[np.complex128], float]:
+    """Backend worker: starts from ``initial_psi[s_idx]`` and applies psi-pairs (channel-predictor path)."""
+    # Parallel :func:`~mqt.yaqs.simulator.run_backend_parallel` passes only ``job_idx``; shared
+    # objects live in :data:`~mqt.yaqs.simulator.WORKER_CTX` (see ``worker_init``).
+    ctx = payload if payload is not None else WORKER_CTX
+    num_trajectories: int = int(ctx["num_trajectories"])
+    s_idx = job_idx // num_trajectories
+    traj_idx = job_idx % num_trajectories
+
+    psi_pairs = ctx["psi_pairs"][s_idx]
+    operator = ctx["operator"]
+    sim_params = ctx["sim_params"]
+    timesteps: list[float] = ctx["timesteps"]
+    noise_model = ctx["noise_model"]
+    initial_list: list[np.ndarray] = ctx["initial_psi"]
+
+    if noise_model is None:
+        assert num_trajectories == 1, "num_trajectories must be 1 when noise_model is None."
+
+    solver = sim_params.solver
+    current_state = np.asarray(initial_list[s_idx], dtype=np.complex128).copy()
+    weight = 1.0
+
+    for step_i, (psi_meas, psi_prep) in enumerate(psi_pairs):
+        current_state, step_prob = _reprepare_backend_state_forced(
+            current_state, psi_meas, psi_prep, solver
+        )
+        weight *= step_prob
+        if weight < 1e-15:
+            break
+
+        duration = timesteps[step_i]
+        step_params = copy.deepcopy(sim_params)
+        step_params.elapsed_time = duration
+        step_params.num_traj = 1
+        step_params.show_progress = False
+        step_params.get_state = True
+
+        n_steps = max(1, int(np.round(duration / step_params.dt)))
+        step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
+
+        static_ctx = ctx.get("mcwf_static_ctx")
+        current_state = _evolve_backend_state(
+            current_state,
+            operator,
+            noise_model,
+            step_params,
+            solver,
+            traj_idx=traj_idx,
+            static_ctx=static_ctx,
+        )
+
+    rho_final = _get_rho_site_zero(current_state)
+    return (s_idx, traj_idx, rho_final, weight)
+
+
+def worker_initial_psi_trajectory(
+    job_idx: int,
+    payload: dict[str, Any] | None = None,
+) -> tuple[int, int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    """Like :func:`worker_initial_psi` but records reduced state on site 0 after each segment.
+
+    Returns:
+        ``(s_idx, traj_idx, rho_0_packed, alphas, E_rows, rho_seq_packed, weight)``
+    """
+    ctx = payload if payload is not None else WORKER_CTX
+    num_trajectories: int = int(ctx["num_trajectories"])
+    s_idx = job_idx // num_trajectories
+    traj_idx = job_idx % num_trajectories
+
+    psi_pairs = ctx["psi_pairs"][s_idx]
+    alphas_row: np.ndarray = ctx["alphas"][s_idx]
+    choi_feat_table: np.ndarray = ctx["choi_feat_table"]
+    e_features_rows = ctx.get("e_features_rows")
+    operator = ctx["operator"]
+    sim_params = ctx["sim_params"]
+    timesteps: list[float] = ctx["timesteps"]
+    timesteps_rows = ctx.get("timesteps_rows")
+    operators_list = ctx.get("operators_list")
+    static_ctx_list = ctx.get("mcwf_static_ctx_list")
+    noise_model = ctx["noise_model"]
+    initial_list: list[np.ndarray] = ctx["initial_psi"]
+
+    if noise_model is None:
+        assert num_trajectories == 1, "num_trajectories must be 1 when noise_model is None."
+
+    k = len(psi_pairs)
+    if int(alphas_row.shape[0]) != k:
+        msg = "alphas length must match number of intervention steps."
+        raise ValueError(msg)
+
+    solver = sim_params.solver
+    current_state = np.asarray(initial_list[s_idx], dtype=np.complex128).copy()
+    weight = 1.0
+
+    rho0_raw = _get_rho_site_zero(current_state)
+    rho_0_packed = pack_rho8(normalize_rho_from_backend_output(rho0_raw)).astype(np.float32)
+
+    if e_features_rows is not None:
+        E_rows = np.asarray(e_features_rows[s_idx], dtype=np.float32).reshape(k, -1)
+    else:
+        E_rows = np.stack([choi_feat_table[int(a)].astype(np.float32) for a in alphas_row], axis=0)
+    rho_steps: list[np.ndarray] = []
+    last_packed = rho_0_packed
+
+    for step_i, (psi_meas, psi_prep) in enumerate(psi_pairs):
+        current_state, step_prob = _reprepare_backend_state_forced(
+            current_state, psi_meas, psi_prep, solver
+        )
+        weight *= step_prob
+        if weight < 1e-15:
+            while len(rho_steps) < k:
+                rho_steps.append(last_packed.copy())
+            break
+
+        if timesteps_rows is not None:
+            duration = float(timesteps_rows[s_idx][step_i])
+        else:
+            duration = timesteps[step_i]
+        step_params = copy.deepcopy(sim_params)
+        step_params.elapsed_time = duration
+        step_params.num_traj = 1
+        step_params.show_progress = False
+        step_params.get_state = True
+
+        n_steps = max(1, int(np.round(duration / step_params.dt)))
+        step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
+
+        if operators_list is not None:
+            op_step = operators_list[s_idx][step_i]
+        else:
+            op_step = operator
+        if static_ctx_list is not None:
+            static_ctx = static_ctx_list[s_idx][step_i]
+        else:
+            static_ctx = ctx.get("mcwf_static_ctx")
+        current_state = _evolve_backend_state(
+            current_state,
+            op_step,
+            noise_model,
+            step_params,
+            solver,
+            traj_idx=traj_idx,
+            static_ctx=static_ctx,
+        )
+
+        rho_step = _get_rho_site_zero(current_state)
+        rho_norm = normalize_rho_from_backend_output(rho_step)
+        last_packed = pack_rho8(rho_norm).astype(np.float32)
+        rho_steps.append(last_packed)
+
+    while len(rho_steps) < k:
+        rho_steps.append(last_packed.copy())
+
+    rho_seq = np.stack(rho_steps, axis=0).astype(np.float32)
+    return (s_idx, traj_idx, rho_0_packed, alphas_row.astype(np.int64), E_rows, rho_seq, float(weight))
+
+
+def build_initial_psi(
+    rho_in: np.ndarray,
+    *,
+    length: int,
+    rng: np.random.Generator,
+    init_mode: str,
+    return_eig_sample: bool = False,
+) -> Any:
+    """Pure MCWF state vector on ``length`` qubits whose site-0 reduced state follows ``rho_in``."""
+    return _initial_mcwf_state_from_rho0(
+        rho_in,
+        length,
+        rng=rng,
+        init_mode=init_mode,
+        return_eig_sample=return_eig_sample,
+    )
+
+
+def _initial_mcwf_state_from_rho0(
+    rho: np.ndarray,
+    length: int,
+    *,
+    rng: np.random.Generator | None = None,
+    init_mode: str = "eigenstate",
+    return_eig_sample: bool = False,
+) -> Any:
+    if rho.size != 4:
+        msg = "rho must be a 2x2 reduced density matrix."
+        raise ValueError(msg)
+    rho = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
+    rho = 0.5 * (rho + rho.conj().T)
+    w, v = np.linalg.eigh(rho)
+    w = np.maximum(w.real, 0.0)
+    s = float(w.sum())
+    if s > 1e-15:
+        w = w / s
+    else:
+        w = np.array([1.0, 0.0], dtype=np.float64)
+
+    if init_mode not in {"eigenstate", "purified"}:
+        raise ValueError(f"init_mode must be 'eigenstate' or 'purified', got {init_mode!r}")
+
+    if init_mode == "eigenstate":
+        if rng is None:
+            rng = np.random.default_rng()
+        idx = int(rng.choice(2, p=w))
+        p = float(w[idx])
+        v_idx = v[:, idx].astype(np.complex128)
+        if length <= 1:
+            psi = v_idx
+        else:
+            env0 = np.array([1.0, 0.0], dtype=np.complex128)
+            env_state = env0
+            for _ in range(length - 2):
+                env_state = np.kron(env_state, env0)
+            psi = np.kron(v_idx, env_state)
+        if return_eig_sample:
+            return psi, idx, p
+        return psi
+
+    if length <= 1:
+        psi = np.zeros(2, dtype=np.complex128)
+        for i in range(2):
+            if w[i] > 1e-15:
+                psi += np.sqrt(w[i]) * v[:, i].astype(np.complex128)
+        nrm = float(np.linalg.norm(psi))
+        psi = psi / max(nrm, 1e-15)
+        return (psi, 0, float(w[0])) if return_eig_sample else psi
+
+    psi_2 = np.zeros(4, dtype=np.complex128)
+    for i in range(2):
+        if w[i] < 1e-15:
+            continue
+        anc = np.zeros(2, dtype=np.complex128)
+        anc[i] = 1.0
+        psi_2 += np.sqrt(w[i]) * np.kron(v[:, i].astype(np.complex128), anc)
+    nrm = float(np.linalg.norm(psi_2))
+    if nrm < 1e-15:
+        psi_2 = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
+    else:
+        psi_2 /= nrm
+    psi = psi_2
+    for _ in range(length - 2):
+        psi = np.kron(psi, np.array([1.0, 0.0], dtype=np.complex128))
+    return (psi, 0, float(w[0])) if return_eig_sample else psi

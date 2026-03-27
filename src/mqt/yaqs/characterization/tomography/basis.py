@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+from .predictor_encoding import build_choi_feature_table
 
 TomographyBasis = Literal["standard", "tetrahedral", "random"]
 
@@ -89,6 +91,43 @@ def get_choi_basis(
             choi_matrices.append(np.kron(rho_p, e_m.T))
             indices.append((p, m))
     return choi_matrices, indices
+
+
+def intervention_from_alpha(
+    alpha: int,
+    basis_set: list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]],
+    choi_pm_pairs: list[tuple[int, int]],
+) -> Any:
+    """Discrete basis map ``E_alpha(rho) = Tr(E_m rho) * rho_p`` for comb prediction / surrogates."""
+    p, m = choi_pm_pairs[int(alpha)]
+    rho_p = np.asarray(basis_set[p][2], dtype=np.complex128)
+    e_m = np.asarray(basis_set[m][2], dtype=np.complex128)
+
+    def emap(rho: np.ndarray) -> np.ndarray:
+        r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
+        coeff = np.trace(e_m @ r)
+        return coeff * rho_p
+
+    return emap
+
+
+def build_basis_for_fixed_alphabet(
+    *,
+    basis: TomographyBasis | str,
+    basis_seed: int | None = None,
+) -> tuple[
+    list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]],
+    list[NDArray[np.complex128]],
+    list[tuple[int, int]],
+    np.ndarray,
+]:
+    """Bundle used by NN predictors: basis states, Choi list, index pairs, flat Choi rows (16, 32)."""
+    basis_t = cast(TomographyBasis, basis)
+    seed_for_basis = int(basis_seed) if basis_seed is not None else None
+    basis_set = get_basis_states(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
+    choi_matrices, choi_pm_pairs = get_choi_basis(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
+    choi_feat_table = build_choi_feature_table(choi_matrices)
+    return basis_set, choi_matrices, choi_pm_pairs, choi_feat_table
 
 
 def dual_norm_metrics(dual_basis: list[NDArray[np.complex128]]) -> dict[str, float]:
