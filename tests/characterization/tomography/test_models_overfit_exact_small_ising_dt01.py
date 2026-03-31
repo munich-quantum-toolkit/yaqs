@@ -168,10 +168,10 @@ def test_models_overfit_exact_small_ising_dt01() -> None:
     model.eval()
     with torch.no_grad():
         pred_teacher = model(E_t, prev_t).cpu().numpy()
-        pred_roll = model.forward_rollout(E_t, rho0_t).cpu().numpy()
+        pred_rho0 = model(E_t, rho0_t).cpu().numpy()
 
     teacher_final = mean_frobenius_mse_rho8(pred_teacher[:, -1, :], rho_tgt_np[:, -1, :])
-    rollout_final = mean_frobenius_mse_rho8(pred_roll[:, -1, :], rho_tgt_np[:, -1, :])
+    rho0_final = mean_frobenius_mse_rho8(pred_rho0[:, -1, :], rho_tgt_np[:, -1, :])
     assert teacher_final < 5e-4
-    assert rollout_final < 2e-3
+    assert rho0_final < 2e-3
 

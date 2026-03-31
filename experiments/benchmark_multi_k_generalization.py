@@ -221,7 +221,7 @@ def _train_transformer(
             opt.step()
         model.eval()
         with torch.no_grad():
-            pred_va = model.forward_rollout(E_va, rho0_va)
+            pred_va = model(E_va, rho0_va)
             val = float(loss_fn(pred_va, tgt_va).detach().cpu().item())
         if val < best:
             best = val
@@ -414,8 +414,8 @@ def main() -> None:
                 with torch.no_grad():
                     E_te_t = torch.as_tensor(E_te, dtype=torch.float32, device=device)
                     r0_te_t = torch.as_tensor(r0_te, dtype=torch.float32, device=device)
-                    pred_roll = tfm.forward_rollout(E_te_t, r0_te_t).cpu().numpy().astype(np.float32)
-                    pred_final = pred_roll[:, -1, :]
+                    pred_seq = tfm(E_te_t, r0_te_t).cpu().numpy().astype(np.float32)
+                    pred_final = pred_seq[:, -1, :]
                 fr = mean_frobenius_mse_rho8(pred_final, tgt_final)
                 ox = _mean_abs_obs_err(pred_final, tgt_final, obs=obs_x)
                 oz = _mean_abs_obs_err(pred_final, tgt_final, obs=obs_z)

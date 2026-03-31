@@ -106,16 +106,6 @@ class StateSequenceTransformer(nn.Module):
         h = self.encoder(h, mask=mask)
         return self.head(h)
 
-    def forward_rollout(self, E: torch.Tensor, rho_0: torch.Tensor) -> torch.Tensor:
-        b, k, _ = E.shape
-        dr = rho_0.shape[-1]
-        preds = torch.empty(b, k, dr, device=E.device, dtype=E.dtype)
-        for ell in range(k):
-            L = ell + 1
-            sub = self.forward(E[:, :L, :], rho_0)
-            preds[:, ell, :] = sub[:, ell, :]
-        return preds
-
 
 class StateSequenceGRU(nn.Module):
     """GRU over per-step concatenations ``(E_t, rho_0)`` (rho0 mode only)."""
@@ -157,15 +147,6 @@ class StateSequenceGRU(nn.Module):
         if rho0.shape != (b, self.d_rho):
             raise ValueError(f"rho0 mode expects rho0 (B,d_rho), got {rho0.shape}.")
         side = self._state_side_batch(rho0, t)
-        x = torch.cat([E, side], dim=-1)
-        h = self.in_proj(x)
-        out, _ = self.rnn(h)
-        return self.head(out)
-
-    def forward_rollout(self, E: torch.Tensor, rho_0: torch.Tensor) -> torch.Tensor:
-        b, k, _ = E.shape
-        dr = rho_0.shape[-1]
-        side = self._state_side_batch(rho_0, k)
         x = torch.cat([E, side], dim=-1)
         h = self.in_proj(x)
         out, _ = self.rnn(h)
