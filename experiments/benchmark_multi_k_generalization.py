@@ -33,7 +33,7 @@ from mqt.yaqs.characterization.tomography.predictor_encoding import (
     unpack_rho8,
 )
 from mqt.yaqs.characterization.tomography.process_tomography import simulate_backend_trajectory_batch
-from mqt.yaqs.characterization.tomography.sequence_models import TransformerComb
+from mqt.yaqs.characterization.tomography.surrogates import TransformerComb
 from mqt.yaqs.characterization.tomography.tomography_utils import build_initial_psi, make_mcwf_static_context
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams

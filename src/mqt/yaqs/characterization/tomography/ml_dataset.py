@@ -17,6 +17,12 @@ import numpy as np
 
 from .estimator_class import TomographyEstimate
 from .predictor_encoding import unpack_rho8
+from .surrogates import (
+    TrajectoryCombSample,
+    mean_frobenius_mse_rho8,
+    mean_trace_distance_rho8,
+    trajectory_batch_to_tensors,
+)
 
 # Pauli matrices (same convention as standard qubit Bloch sphere)
 _SIGMAX = np.array([[0, 1], [1, 0]], dtype=np.complex128)
@@ -50,29 +56,6 @@ def trace_distance(rho: np.ndarray, sigma: np.ndarray) -> float:
     d = np.asarray(rho, dtype=np.complex128) - np.asarray(sigma, dtype=np.complex128)
     d = 0.5 * (d + d.conj().T)
     return 0.5 * float(np.sum(np.abs(np.linalg.eigvalsh(d))))
-
-
-def mean_trace_distance_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> float:
-    """Mean trace distance over batches of 8-float single-qubit encodings (see :func:`predictor_encoding.unpack_rho8`)."""
-    assert pred_rho8.shape == tgt_rho8.shape
-    tds: list[float] = []
-    for i in range(pred_rho8.shape[0]):
-        rp = unpack_rho8(pred_rho8[i])
-        rt = unpack_rho8(tgt_rho8[i])
-        tds.append(trace_distance(rp, rt))
-    return float(np.mean(tds))
-
-
-def mean_frobenius_mse_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> float:
-    """Mean squared Frobenius error for 8-float encodings (same Hilbert-Schmidt square as Frobenius)."""
-    assert pred_rho8.shape == tgt_rho8.shape
-    diffs: list[float] = []
-    for i in range(pred_rho8.shape[0]):
-        rp = unpack_rho8(pred_rho8[i])
-        rt = unpack_rho8(tgt_rho8[i])
-        d = rp - rt
-        diffs.append(float(np.real(np.vdot(d, d))))
-    return float(np.mean(diffs))
 
 
 def clip_bloch_to_unit_ball(bloch: np.ndarray) -> np.ndarray:
@@ -182,45 +165,6 @@ def tomography_estimate_to_ml_dataset(
         k=k,
         weighted_rho8=wr8_arr,
     )
-
-
-@dataclass(frozen=True)
-class TrajectoryCombSample:
-    """One simulated trajectory for sequential reduced-state learning.
-
-    ``rho_seq[t]`` is the reduced state on site 0 **after** intervention ``t`` and the
-    subsequent evolution segment (aligned with ``timesteps[t]``).
-
-    ``alphas[t]`` indexes the Choi / intervention label at step ``t`` (same convention
-    as the flat NN-comb predictor benchmarks). ``E_features`` rows are length 32 (Choi flat).
-    """
-
-    rho_0: np.ndarray  # shape (8,), float32 — packed 2x2 rho before first intervention
-    alphas: np.ndarray  # shape (K,), int64
-    E_features: np.ndarray  # shape (K, 32), float32
-    rho_seq: np.ndarray  # shape (K, 8), float32
-    context: np.ndarray | None  # optional static features (e.g. dt, J, g), shape (d_ctx,)
-    weight: float
-
-
-def trajectory_batch_to_tensors(
-    samples: list[TrajectoryCombSample],
-    *,
-    append_context_to_E: bool = False,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
-    """Stack samples into ``rho_0``, ``E``, ``rho_seq``, optional ``context`` arrays."""
-    rho_0 = np.stack([s.rho_0 for s in samples], axis=0).astype(np.float32)
-    E = np.stack([s.E_features for s in samples], axis=0).astype(np.float32)
-    rho_seq = np.stack([s.rho_seq for s in samples], axis=0).astype(np.float32)
-    ctx = None
-    if samples[0].context is not None:
-        ctx = np.stack([cast(np.ndarray, s.context) for s in samples], axis=0).astype(np.float32)
-    if append_context_to_E and ctx is not None:
-        k = E.shape[1]
-        ctx_b = np.broadcast_to(ctx[:, None, :], (E.shape[0], k, ctx.shape[1])).astype(np.float32)
-        E = np.concatenate([E, ctx_b], axis=-1)
-        ctx = None
-    return rho_0, E, rho_seq, ctx
 
 
 def build_rho_prev_rho_target(

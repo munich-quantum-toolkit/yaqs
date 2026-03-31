@@ -8,8 +8,8 @@ via ``simulate_backend_trajectory_batch`` with ``e_features_rows`` = flattened C
 ``k × 32``). There is no discrete 16-letter alphabet in the features seen by the network.
 
 **Training:** ``N_train`` trajectories of length ``k_train``; optional train/val split from that
-pool; MSE on packed ``rho_seq`` targets vs. :class:`~.sequence_models.TransformerComb` in
-``input_mode="rho0"`` (initial reduced state broadcast to every step).
+pool; MSE on packed ``rho_seq`` targets vs. :class:`mqt.yaqs.characterization.tomography.TransformerComb`
+with initial reduced state broadcast to every step.
 
 **Evaluation:** for each ``k_test``, a **fresh** batch of ``N_test`` trajectories of length
 ``k_test`` (independent RNG). Ground-truth final state is ``rho_seq[:, -1, :]`` from the backend.
@@ -44,7 +44,7 @@ from mqt.yaqs.characterization.tomography.predictor_encoding import (
     unpack_rho8,
 )
 from mqt.yaqs.characterization.tomography.process_tomography import simulate_backend_trajectory_batch
-from mqt.yaqs.characterization.tomography.sequence_models import TransformerComb
+from mqt.yaqs.characterization.tomography.surrogates import TransformerComb
 from mqt.yaqs.characterization.tomography.tomography_utils import build_initial_psi, make_mcwf_static_context
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
