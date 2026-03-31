@@ -2,14 +2,11 @@
 # SPDX-License-Identifier: MIT
 """Sequence models: (intervention features, rho0) -> rho_t.
 
-We keep only a single input convention:
+Single input convention:
 
-* ``input_mode="rho0"``: concatenate ``(E_t, rho_0)`` at every step so the network is not fed
-  its own previous predictions; the transformer still builds long-range dependence on
-  ``E_1..E_t`` via attention (process-tensor-style).
-
-Optional ``memory_window`` restricts causal self-attention to the last ``m`` positions
-(including the current step), for memory-stress experiments.
+* Concatenate ``(E_t, rho_0)`` at every step so the network is not fed its own previous
+  predictions; the transformer still builds long-range dependence on ``E_1..E_t`` via
+  causal attention.
 """
 
 from __future__ import annotations
@@ -36,14 +33,12 @@ def _sinusoidal_positional_encoding(seq_len: int, d_model: int, *, device: torch
     return pe.unsqueeze(0)
 
 
-def _causal_window_mask(seq_len: int, memory_window: int | None, device: torch.device) -> torch.Tensor:
+def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
     """Bool mask with True = **blocked** for :class:`nn.TransformerEncoder` (PyTorch convention)."""
     m = torch.zeros(seq_len, seq_len, dtype=torch.bool, device=device)
     for i in range(seq_len):
         for j in range(seq_len):
             if j > i:
-                m[i, j] = True
-            elif memory_window is not None and memory_window > 0 and j < i - memory_window + 1:
                 m[i, j] = True
     return m
 
@@ -66,7 +61,6 @@ class StateSequenceTransformer(nn.Module):
         max_len: int | None = None,
         dropout: float = 0.0,
         layernorm_in: bool = False,
-        memory_window: int | None = None,
     ) -> None:
         super().__init__()
         if d_model % nhead != 0:
@@ -74,7 +68,6 @@ class StateSequenceTransformer(nn.Module):
             raise ValueError(msg)
         self.d_model = int(d_model)
         self.d_rho = int(d_rho)
-        self.memory_window = memory_window
         self._d_side = d_rho
         self.layernorm_in = bool(layernorm_in)
         self.in_proj = nn.Sequential(
@@ -102,7 +95,7 @@ class StateSequenceTransformer(nn.Module):
         x = torch.cat([E, side], dim=-1)
         pe = _sinusoidal_positional_encoding(t, self.d_model, device=x.device, dtype=x.dtype)
         h = self.in_ln(self.in_proj(x)) + pe
-        mask = _causal_window_mask(t, self.memory_window, h.device)
+        mask = _causal_mask(t, h.device)
         h = self.encoder(h, mask=mask)
         return self.head(h)
 

@@ -353,7 +353,6 @@ def main() -> None:
             dim_ff=int(args.dim_ff),
             dropout=float(args.dropout),
             layernorm_in=bool(args.layernorm_in),
-            memory_window=None,
         ).to(device)
         tfm = _train_transformer(
             model=tfm,
