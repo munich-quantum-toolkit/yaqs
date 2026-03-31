@@ -43,11 +43,8 @@ def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
     return m
 
 
-class StateSequenceTransformer(nn.Module):
-    """Causal transformer over per-step features (intervention encoding + state side).
-
-    Alias: :data:`TransformerComb`.
-    """
+class TransformerComb(nn.Module):
+    """Causal transformer over per-step features ``(E_t, rho_0)``."""
 
     def __init__(
         self,
@@ -98,52 +95,3 @@ class StateSequenceTransformer(nn.Module):
         mask = _causal_mask(t, h.device)
         h = self.encoder(h, mask=mask)
         return self.head(h)
-
-
-class StateSequenceGRU(nn.Module):
-    """GRU over per-step concatenations ``(E_t, rho_0)`` (rho0 mode only)."""
-
-    def __init__(
-        self,
-        d_e: int,
-        d_rho: int,
-        *,
-        d_model: int = 128,
-        num_layers: int = 1,
-        summary_dim: int | None = None,
-    ) -> None:
-        super().__init__()
-        self.d_model = int(d_model)
-        self.num_layers = int(num_layers)
-        self.d_rho = int(d_rho)
-        if summary_dim is not None and int(summary_dim) > 0:
-            self._d_side = int(summary_dim)
-            self.rho_compress = nn.Linear(d_rho, self._d_side)
-        else:
-            self._d_side = d_rho
-            self.rho_compress = nn.Identity()
-        self.in_proj = nn.Sequential(
-            nn.Linear(d_e + self._d_side, d_model),
-            nn.ReLU(),
-            nn.Linear(d_model, d_model),
-        )
-        self.rnn = nn.GRU(d_model, d_model, num_layers=num_layers, batch_first=True)
-        self.head = nn.Linear(d_model, d_rho)
-
-    def _state_side_batch(self, rho_0: torch.Tensor, t: int) -> torch.Tensor:
-        b = rho_0.shape[0]
-        s = self.rho_compress(rho_0)
-        return s[:, None, :].expand(b, t, s.shape[-1])
-
-    def forward(self, E: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
-        b, t, _ = E.shape
-        if rho0.shape != (b, self.d_rho):
-            raise ValueError(f"rho0 mode expects rho0 (B,d_rho), got {rho0.shape}.")
-        side = self._state_side_batch(rho0, t)
-        x = torch.cat([E, side], dim=-1)
-        h = self.in_proj(x)
-        out, _ = self.rnn(h)
-        return self.head(out)
-
-
-TransformerComb = StateSequenceTransformer
