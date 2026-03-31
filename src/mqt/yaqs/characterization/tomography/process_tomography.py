@@ -46,7 +46,7 @@ from .basis import (
 )
 from .estimator_class import TomographyEstimate
 from .formatters import _to_dense, _to_mpo, rank1_upsilon_mpo_term
-from .surrogates import TrajectoryCombSample
+from .ml_dataset import TrajectoryCombSample
 from .predictor_encoding import normalize_rho_from_backend_output, pack_rho8
 from .sampling import (
     SequenceData,
