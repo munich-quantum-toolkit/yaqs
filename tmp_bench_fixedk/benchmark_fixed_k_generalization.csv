@@ -1,0 +1,2 @@
+k_train,k_test,N_train,N_test,seed,final_frob,obs_x_mae,obs_z_mae
+2,2,16,8,0,1.6416661203094687,0.6741289012134075,0.7743543456308544

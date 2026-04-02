@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.characterization.tomography.combs import DenseComb, MPOComb
+from mqt.yaqs.characterization.tomography.exact.combs import DenseComb, MPOComb
 
 
 def test_densecomb_predict_matches_helper() -> None:

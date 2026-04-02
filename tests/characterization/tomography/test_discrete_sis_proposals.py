@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.basis import get_basis_states
+from mqt.yaqs.characterization.tomography.estimate.basis import get_basis_states
 
 
 def _q_alpha_local(rho_0: np.ndarray, basis_set) -> np.ndarray:

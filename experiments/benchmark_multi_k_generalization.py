@@ -21,20 +21,16 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.ml_dataset import (
-    build_rho_prev_rho_target,
-    mean_frobenius_mse_rho8,
-    trajectory_batch_to_tensors,
-)
-from mqt.yaqs.characterization.tomography.predictor_encoding import (
-    build_choi_feature_table,
+from mqt.yaqs.characterization.tomography.core.metrics import mean_frobenius_mse_rho8
+from mqt.yaqs.characterization.tomography.core.predictor_encoding import (
     random_density_matrix,
     sample_random_intervention_sequence,
     unpack_rho8,
 )
-from mqt.yaqs.characterization.tomography.process_tomography import simulate_backend_trajectory_batch
-from mqt.yaqs.characterization.tomography.surrogates import TransformerComb
-from mqt.yaqs.characterization.tomography.tomography_utils import build_initial_psi, make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.core.tomography_utils import build_initial_psi, make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.surrogate.data import stack_rollouts
+from mqt.yaqs.characterization.tomography.surrogate.model import TransformerComb
+from mqt.yaqs.characterization.tomography.surrogate.workflow import simulate_sequences
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -114,11 +110,6 @@ def _state_from_rank1_projector(P: np.ndarray) -> np.ndarray:
     return (psi / nrm).astype(np.complex128)
 
 
-def _backend_placeholder_choi_table() -> np.ndarray:
-    z = np.zeros((4, 4), dtype=np.complex128)
-    return build_choi_feature_table([z] * 16)
-
-
 def _make_continuous_dataset(
     *,
     k: int,
@@ -128,10 +119,8 @@ def _make_continuous_dataset(
     op: MPO,
     params: AnalogSimParams,
     static_ctx: Any,
-    choi_feat_table: np.ndarray,
     parallel: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    alphas_rows: list[np.ndarray] = []
     psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]] = []
     initial_psis: list[np.ndarray] = []
     e_features_rows: list[np.ndarray] = []
@@ -145,90 +134,25 @@ def _make_continuous_dataset(
             psi_meas = _state_from_rank1_projector(E)
             psi_prep = _state_from_rank1_projector(rho_prep)
             pairs.append((psi_meas, psi_prep))
-        alphas_rows.append(np.zeros(int(k), dtype=np.int64))
         psi_pairs_list.append(pairs)
         e_features_rows.append(rows_feat.astype(np.float32))
         initial_psis.append(build_initial_psi(rho_in, length=int(L), rng=rng, init_mode="eigenstate"))
     timesteps = [float(params.dt)] * int(k)
-    samples = simulate_backend_trajectory_batch(
+    samples = simulate_sequences(
         operator=op,
         sim_params=params,
         timesteps=timesteps,
         psi_pairs_list=psi_pairs_list,
-        alphas_rows=alphas_rows,
         initial_psis=initial_psis,
-        choi_feat_table=choi_feat_table,
         e_features_rows=e_features_rows,
         parallel=bool(parallel),
+        show_progress=False,
+        record_step_states=True,
         static_ctx=static_ctx,
         context_vec=None,
     )
-    rho0_np, E_np, rho_seq_np, _ctx = trajectory_batch_to_tensors(samples)
+    rho0_np, E_np, rho_seq_np, _ctx = stack_rollouts(samples)
     return rho0_np, E_np, rho_seq_np
-
-
-def _train_transformer(
-    *,
-    model: Any,
-    E_tr: Any,
-    rho0_tr: Any,
-    tgt_tr: Any,
-    E_va: Any,
-    rho0_va: Any,
-    tgt_va: Any,
-    epochs: int,
-    lr: float,
-    batch_size: int,
-    grad_clip: float,
-    prefix_loss: str,
-) -> Any:
-    import torch
-    import torch.nn as nn
-    from torch.utils.data import DataLoader, TensorDataset
-
-    opt = torch.optim.Adam(model.parameters(), lr=float(lr))
-    loss_fn = nn.MSELoss()
-    loader = DataLoader(
-        TensorDataset(E_tr, rho0_tr, tgt_tr),
-        batch_size=min(int(batch_size), max(1, int(E_tr.shape[0]))),
-        shuffle=True,
-    )
-    k_max = int(tgt_tr.shape[1])
-    best = float("inf")
-    best_state = None
-    for _ep in range(int(epochs)):
-        model.train()
-        for E_b, rho0_b, tgt_b in loader:
-            opt.zero_grad(set_to_none=True)
-            if prefix_loss == "full" or k_max <= 1:
-                pred = model(E_b, rho0_b)
-                loss = loss_fn(pred, tgt_b)
-            elif prefix_loss == "random":
-                Ls = int(torch.randint(low=1, high=k_max + 1, size=(1,), device=E_b.device).item())
-                pred = model(E_b[:, :Ls, :], rho0_b)
-                loss = loss_fn(pred, tgt_b[:, :Ls, :])
-            elif prefix_loss == "all":
-                losses = []
-                for Ls in range(1, k_max + 1):
-                    pred_L = model(E_b[:, :Ls, :], rho0_b)
-                    losses.append(loss_fn(pred_L, tgt_b[:, :Ls, :]))
-                loss = torch.stack(losses, dim=0).mean()
-            else:
-                raise ValueError(prefix_loss)
-            loss.backward()
-            if grad_clip and float(grad_clip) > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), float(grad_clip))
-            opt.step()
-        model.eval()
-        with torch.no_grad():
-            pred_va = model(E_va, rho0_va)
-            val = float(loss_fn(pred_va, tgt_va).detach().cpu().item())
-        if val < best:
-            best = val
-            best_state = {k: v.detach().cpu().clone() for (k, v) in model.state_dict().items()}
-    if best_state is not None:
-        model.load_state_dict(best_state)
-    return model
 
 
 def _mean_abs_obs_err(pred_rho8: np.ndarray, tgt_rho8: np.ndarray, *, obs: np.ndarray) -> float:
@@ -331,9 +255,9 @@ def main() -> None:
     print(f"k_test grid ({len(k_tests)}): {k_tests}")
 
     import torch
+    from torch.utils.data import TensorDataset
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    choi_feat_table = _backend_placeholder_choi_table()
     op = MPO.ising(length=int(args.L), J=J, g=g)
     params = AnalogSimParams(dt=float(dt), solver="MCWF", show_progress=False, max_bond_dim=args.max_bond_dim)
     static_ctx = make_mcwf_static_context(op, params, noise_model=None)
@@ -353,21 +277,22 @@ def main() -> None:
                 op=op,
                 params=params,
                 static_ctx=static_ctx,
-                choi_feat_table=choi_feat_table,
                 parallel=bool(args.parallel_channel_sim),
             )
-            _, rho_tgt = build_rho_prev_rho_target(rho0_tr, rho_seq_tr)
+            rho_tgt = rho_seq_tr
             idx = np.arange(int(args.N_train), dtype=np.int64)
             rng.shuffle(idx)
             n_val = max(1, min(int(round(float(args.val_frac_of_train) * len(idx))), len(idx) - 1))
             va_idx, tr_idx = idx[:n_val], idx[n_val:]
 
-            E_tr_t = torch.as_tensor(E_tr[tr_idx], dtype=torch.float32, device=device)
-            r0_tr_t = torch.as_tensor(rho0_tr[tr_idx], dtype=torch.float32, device=device)
-            tg_tr_t = torch.as_tensor(rho_tgt[tr_idx], dtype=torch.float32, device=device)
-            E_va_t = torch.as_tensor(E_tr[va_idx], dtype=torch.float32, device=device)
-            r0_va_t = torch.as_tensor(rho0_tr[va_idx], dtype=torch.float32, device=device)
-            tg_va_t = torch.as_tensor(rho_tgt[va_idx], dtype=torch.float32, device=device)
+            E_tr_t = torch.as_tensor(E_tr[tr_idx], dtype=torch.float32)
+            r0_tr_t = torch.as_tensor(rho0_tr[tr_idx], dtype=torch.float32)
+            tg_tr_t = torch.as_tensor(rho_tgt[tr_idx], dtype=torch.float32)
+            E_va_t = torch.as_tensor(E_tr[va_idx], dtype=torch.float32)
+            r0_va_t = torch.as_tensor(rho0_tr[va_idx], dtype=torch.float32)
+            tg_va_t = torch.as_tensor(rho_tgt[va_idx], dtype=torch.float32)
+            train_ds = TensorDataset(E_tr_t, r0_tr_t, tg_tr_t)
+            val_ds = TensorDataset(E_va_t, r0_va_t, tg_va_t)
 
             tfm = TransformerComb(
                 d_e=int(E_tr.shape[-1]),
@@ -380,19 +305,15 @@ def main() -> None:
                 layernorm_in=bool(args.layernorm_in),
             ).to(device)
 
-            tfm = _train_transformer(
-                model=tfm,
-                E_tr=E_tr_t,
-                rho0_tr=r0_tr_t,
-                tgt_tr=tg_tr_t,
-                E_va=E_va_t,
-                rho0_va=r0_va_t,
-                tgt_va=tg_va_t,
+            tfm.fit(
+                train_ds,
+                val_dataset=val_ds,
                 epochs=int(args.epochs),
                 lr=float(args.lr),
                 batch_size=int(args.batch_size),
                 grad_clip=float(args.grad_clip),
                 prefix_loss=str(args.prefix_loss),
+                device=device,
             )
             tfm.eval()
 
@@ -406,7 +327,6 @@ def main() -> None:
                     op=op,
                     params=params,
                     static_ctx=static_ctx,
-                    choi_feat_table=choi_feat_table,
                     parallel=bool(args.parallel_channel_sim),
                 )
                 tgt_final = rho_seq_te[:, -1, :].astype(np.float32)

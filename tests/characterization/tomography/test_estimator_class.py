@@ -16,7 +16,7 @@ import itertools
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.tomography.estimator_class import TomographyEstimate
+from mqt.yaqs.characterization.tomography.estimate.estimator import TomographyEstimate
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.formatters import (
+from mqt.yaqs.characterization.tomography.exact.formatters import (
     _to_dense,
     _to_mpo,
     rank1_upsilon_mpo_term,
 )
-from mqt.yaqs.characterization.tomography.sampling import SamplingData, SequenceData
+from mqt.yaqs.characterization.tomography.estimate.sampling import SamplingData, SequenceData
 
 
 def test_rank1_upsilon_mpo_term_shapes() -> None:

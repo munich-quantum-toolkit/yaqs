@@ -1,0 +1,2 @@
+k_train,k_test,gap,mean_frob,std_frob,mean_dX,std_dX,mean_dZ,std_dZ,n
+2,2,0,1.082722447160245,0,0.879974827170372,0,0.6727540036663413,0,1

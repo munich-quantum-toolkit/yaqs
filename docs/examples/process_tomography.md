@@ -50,34 +50,19 @@ Run tomography for a single evolution segment of length `t = 0.1`.
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.characterization.tomography.tomography import run
+from mqt.yaqs.tomography import run_exhaustive
 
-pt_single = run(
+comb_single = run_exhaustive(
     operator,
     sim_params,
     timesteps=[0.1],
     num_trajectories=100,
 )
 
-print(f"Process tensor shape: {pt_single.tensor.shape}")  # (4, 6)
+print(f"Comb Choi matrix shape: {comb_single.to_matrix().shape}")
 ```
 
-The tensor has shape `(4, N)` where `4` encodes the vectorised output density matrix
-and `N = 6` is the number of Pauli frame states used as input probes.
-
-## 3. Quantum Mutual Information
-
-The **Quantum Mutual Information** quantifies how much information is preserved by the channel between the input state ensemble and the final output:
-
-```{code-cell} ipython3
-qmi = pt_single.quantum_mutual_information(base=2)
-print(f"Quantum Mutual Information (single step): {qmi:.4f} bits")
-```
-
-For unitary channels, this value approaches the entropy of the average input state (~0.907 bits for the standard 4-state Pauli frame).
-A value near 0 indicates a fully depolarising channel that destroys all quantum and classical information.
-
-## 4. Multi-step tomography
+## 3. Multi-step tomography
 
 For two successive evolution segments, we can reconstruct the temporal correlation map across an intermediate time step:
 
@@ -85,19 +70,19 @@ For two successive evolution segments, we can reconstruct the temporal correlati
 ---
 tags: [remove-output]
 ---
-pt_two = run(
+comb_two = run_exhaustive(
     operator,
     sim_params,
     timesteps=[0.1, 0.1],       # two segments of dt each
     num_trajectories=100,
 )
 
-print(f"Process tensor shape: {pt_two.tensor.shape}")  # (4, 16, 16)
+print(f"Comb Choi matrix shape: {comb_two.to_matrix().shape}")
 ```
 
 ````
 
-## 5. Predicting held-out states
+## 4. Predicting held-out states
 
 Once the process tensor is available, you can predict the output for _any_ initial density matrix
 and any _arbitrary local interventions_ applied between time steps without additional simulation runs.
@@ -129,9 +114,7 @@ def x_gate_intervention(rho: np.ndarray) -> np.ndarray:
     return x_mat @ rho @ x_mat.conj().T
 
 # Predict final state — no simulator call needed!
-rho_pred = pt_two.predict_final_state(
-    interventions=[initial_prep, x_gate_intervention]
-)
+rho_pred = comb_two.predict([initial_prep, x_gate_intervention])
 print("Predicted output density matrix:")
 print(np.round(rho_pred, 4))
 ````

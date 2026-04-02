@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.sampling import (
-    _continuous_dual_step,
-    _enumerate_sequences,
-    _normalize_log_weights,
-    _sample_haar_pure_state,
-)
+from mqt.yaqs.characterization.tomography.estimate.sampling import _enumerate_sequences, _normalize_log_weights, _sample_haar_pure_state, _continuous_dual_step
 
 
 def test_enumerate_sequences_length() -> None:

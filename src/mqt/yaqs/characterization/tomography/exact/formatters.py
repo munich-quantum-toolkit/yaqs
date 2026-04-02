@@ -12,9 +12,9 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
 
+from ..estimate.estimator import TomographyEstimate
+from ..estimate.sampling import SamplingData, SequenceData
 from .combs import MPOComb
-from .estimator_class import TomographyEstimate
-from .sampling import SamplingData, SequenceData
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

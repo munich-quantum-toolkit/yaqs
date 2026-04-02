@@ -23,12 +23,11 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
-from mqt.yaqs.characterization.tomography.process_tomography import run
+from mqt.yaqs.tomography import run_estimate, run_exhaustive
 
-from mqt.yaqs.characterization.tomography.combs import DenseComb
-from mqt.yaqs.characterization.tomography.process_tomography import rank1_upsilon_mpo_term
-
-from mqt.yaqs.characterization.tomography.metrics import rel_fro_error
+from mqt.yaqs.characterization.tomography.core.metrics import rel_fro_error
+from mqt.yaqs.characterization.tomography.exact.formatters import rank1_upsilon_mpo_term
+from mqt.yaqs.characterization.tomography.exact.combs import DenseComb
 
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
@@ -116,7 +115,7 @@ def test_exact_1step_prediction_vs_physics():
     interventions = [prep_map]
     timesteps = [0.001]
 
-    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=timesteps, output="dense")
     rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -141,7 +140,7 @@ def test_exact_2step_prediction_vs_physics():
     interventions = [a0_prep, a1_unitary]
     timesteps = [0.001, 0.001]
 
-    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=timesteps, output="dense")
     rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -160,7 +159,7 @@ def test_exact_instrument_prediction_vs_physics():
     interventions = [proj0_map]
     timesteps = [0.001]
 
-    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=timesteps, output="dense")
     rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -181,7 +180,7 @@ def test_exact_moderate_step_prediction_vs_physics():
     interventions = [x_gate]
     timesteps = [0.1]
 
-    comb = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=timesteps, output="dense")
     rho_pt = comb.predict(interventions)
     rho_ref = _dense_physical_reference(op, timesteps, interventions)
 
@@ -197,7 +196,7 @@ def test_reconstruction_depolarizing() -> None:
     def depolarize(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return 0.5 * np.trace(rho) * np.eye(2)
 
-    comb = run(op, params, timesteps=[0.1], method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=[0.1], output="dense")
     rho_pred = comb.predict([depolarize])
     expected = 0.5 * np.eye(2)
     np.testing.assert_allclose(rho_pred, expected, atol=1e-10)
@@ -225,7 +224,7 @@ def test_exact_representation_parity():
     timesteps = [0.1, 0.1]
 
     # Dense comb from tomography estimate path
-    comb_dense = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
+    comb_dense = run_exhaustive(op, params, timesteps=timesteps, output="dense")
     U_pt_canon = comb_dense.canonicalize(
         hermitize=True,
         psd_project=True,
@@ -233,7 +232,7 @@ def test_exact_representation_parity():
     ).to_matrix()
 
     # Canonical dense comb from MPO path
-    comb_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+    comb_mpo = run_exhaustive(op, params, timesteps=timesteps, output="mpo")
     U_mpo_canon = comb_mpo.to_dense().canonicalize(
         hermitize=True,
         psd_project=True,
@@ -250,8 +249,8 @@ def test_exhaustive_dense_and_mpo_comb_match_for_k1() -> None:
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
     timesteps = [0.1]
 
-    comb_dense = run(op, params, timesteps=timesteps, method="exhaustive", output="dense")
-    comb_mpo = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+    comb_dense = run_exhaustive(op, params, timesteps=timesteps, output="dense")
+    comb_mpo = run_exhaustive(op, params, timesteps=timesteps, output="mpo")
 
     U_pt = comb_dense.to_matrix()
     U_mpo = comb_mpo.to_matrix()
@@ -265,30 +264,32 @@ def test_mc_without_replacement_matches_exact_for_k2() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact_mpo = run(
+    U_exact_mpo = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="estimate",
+        mode="estimate",
         num_samples=16**len(timesteps),
         seed=42,
         basis="random",
         basis_seed=42,
         output="mpo",
+        num_trajectories=1,
     )
     U_exact = U_exact_mpo.to_matrix()
 
     # 256 sequences for k=2 is exhaustive replacement=True/False doesn't matter much if fixed seeds match
-    U_mc_mpo = run(
+    U_mc_mpo = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="estimate",
+        mode="estimate",
         num_samples=256,
         seed=42,
         basis="random",
         basis_seed=42,
         output="mpo",
+        num_trajectories=1,
     )
     U_mc = U_mc_mpo.to_matrix()
 
@@ -332,27 +333,29 @@ def test_mc_mpo_parity_discrete():
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     
-    ups_mpo_1 = run(
+    ups_mpo_1 = run_estimate(
         op,
         params,
         timesteps=[0.1],
-        method="estimate",
+        mode="estimate",
         num_samples=4,
         seed=42,
         basis="random",
         basis_seed=42,
         output="mpo",
+        num_trajectories=1,
     )
-    ups_mpo_2 = run(
+    ups_mpo_2 = run_estimate(
         op,
         params,
         timesteps=[0.1],
-        method="estimate",
+        mode="estimate",
         num_samples=4,
         seed=42,
         basis="random",
         basis_seed=42,
         output="mpo",
+        num_trajectories=1,
     )
     assert rel_fro_error(ups_mpo_1.to_matrix(), ups_mpo_2.to_matrix()) < 1e-12
 
@@ -363,27 +366,29 @@ def test_mc_dense_and_mpo_comb_parity_k2() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    comb_dense = run(
+    comb_dense = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="estimate",
+        mode="estimate",
         num_samples=256,
         seed=123,
         basis="random",
         basis_seed=123,
         output="dense",
+        num_trajectories=1,
     )
-    comb_mpo = run(
+    comb_mpo = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="estimate",
+        mode="estimate",
         num_samples=256,
         seed=123,
         basis="random",
         basis_seed=123,
         output="mpo",
+        num_trajectories=1,
     )
 
     U_dense = comb_dense.to_matrix()
@@ -401,11 +406,10 @@ def test_mc_uniform_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact = run(
+    U_exact = run_exhaustive(
         op,
         params,
         timesteps=timesteps,
-        method="exhaustive",
         basis="random",
         basis_seed=42,
         output="mpo",
@@ -414,16 +418,17 @@ def test_mc_uniform_converges_metrics() -> None:
     errs = {64: [], 256: []}
     for nseq in errs:
         for s in range(3):
-            U_hat_mpo = run(
+            U_hat_mpo = run_estimate(
                 op,
                 params,
                 timesteps=timesteps,
-                method="estimate",
+                mode="estimate",
                 num_samples=nseq,
                 seed=100 + s,
                 basis="random",
                 basis_seed=42,
                 output="mpo",
+                num_trajectories=1,
             )
             errs[nseq].append(rel_fro_error(U_hat_mpo.to_matrix(), U_exact))
 
@@ -436,11 +441,10 @@ def test_sis_converges_metrics() -> None:
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)
     timesteps = [0.1, 0.1]
 
-    U_exact = run(
+    U_exact = run_exhaustive(
         op,
         params,
         timesteps=timesteps,
-        method="exhaustive",
         basis="random",
         basis_seed=42,
         output="mpo",
@@ -449,11 +453,11 @@ def test_sis_converges_metrics() -> None:
     errs = {64: [], 256: []}
     for nparticles in errs:
         for s in range(3):
-            U_hat_mpo = run(
+            U_hat_mpo = run_estimate(
                 op,
                 params,
                 timesteps=timesteps,
-                method="sis",
+                mode="sis",
                 num_samples=nparticles,
                 num_trajectories=1,
                 seed=200 + s,
@@ -474,12 +478,12 @@ def test_sis_without_replacement_matches_exhaustive_for_k2() -> None:
     timesteps = [0.1, 0.1]
     k = len(timesteps)
 
-    comb_ex = run(op, params, timesteps=timesteps, method="exhaustive", output="dense", parallel=False, num_trajectories=1)
-    comb_sis = run(
+    comb_ex = run_exhaustive(op, params, timesteps=timesteps, output="dense", parallel=False, num_trajectories=1)
+    comb_sis = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="sis",
+        mode="sis",
         proposal="mixture",
         prep_mixture_eps=0.1,
         num_samples=16**k,
@@ -500,11 +504,10 @@ def test_mc_dense_converges_to_exhaustive_dense() -> None:
     timesteps = [0.1, 0.1]
 
     # Exhaustive reference with the same random Choi basis as MC
-    comb_exact = run(
+    comb_exact = run_exhaustive(
         op,
         params,
         timesteps=timesteps,
-        method="exhaustive",
         output="dense",
         basis="random",
         basis_seed=999,
@@ -518,11 +521,11 @@ def test_mc_dense_converges_to_exhaustive_dense() -> None:
 
     for N in sample_sizes:
         for s in range(n_seeds):
-            comb_mc = run(
+            comb_mc = run_estimate(
                 op,
                 params,
                 timesteps=timesteps,
-                method="estimate",
+                mode="estimate",
                 num_samples=N,
                 num_trajectories=1,
                 seed=300 + s + N,
@@ -567,11 +570,11 @@ def test_predict_convergence_vs_physics(method):
 
     for N in sample_sizes:
         for s in range(n_seeds):
-            U_hat_mpo = run(
+            U_hat_mpo = run_estimate(
                 op,
                 params,
                 timesteps=timesteps,
-                method=method,
+                mode=method,
                 num_samples=N,
                 num_trajectories=1,
                 seed=700 + s + N,
@@ -612,11 +615,11 @@ def test_mc_prediction_parity_dense_vs_mpo() -> None:
 
     interventions = [a0_prep, a1_unitary]
 
-    comb_dense = run(
+    comb_dense = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="estimate",
+        mode="estimate",
         num_samples=256,
         num_trajectories=1,
         seed=777,
@@ -625,11 +628,11 @@ def test_mc_prediction_parity_dense_vs_mpo() -> None:
         parallel=False,
         output="dense",
     )
-    comb_mpo = run(
+    comb_mpo = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="estimate",
+        mode="estimate",
         num_samples=256,
         num_trajectories=1,
         seed=777,
@@ -652,7 +655,7 @@ def test_tomography_run_basic() -> None:
     """Test standard single-step process tomography."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    comb = run(op, params, timesteps=[0.1], method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=[0.1], output="dense")
     U = comb.to_matrix()
     assert U.shape == (8, 8)  # 2 * 4^1
 
@@ -661,7 +664,7 @@ def test_tomography_run_defaults() -> None:
     """Test defaults (timesteps=None -> single step)."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, elapsed_time=0.1)
-    comb = run(op, params, method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=[params.elapsed_time], output="dense")
     U = comb.to_matrix()
     assert U.shape == (8, 8)
 
@@ -670,7 +673,7 @@ def test_tomography_mcwf_multistep() -> None:
     """Test multi-step process tomography with MCWF solver."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="MCWF", num_traj=10)
-    comb = run(op, params, timesteps=[0.1, 0.1], method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=[0.1, 0.1], output="dense")
     U = comb.to_matrix()
     assert U.shape == (32, 32)  # 2 * 4^2
 
@@ -679,7 +682,7 @@ def test_predict_linearity() -> None:
     """Raw comb contraction is linear in the intervention maps (predict() physicalizes)."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    comb = run(op, params, timesteps=[0.1], method="exhaustive", output="dense")
+    comb = run_exhaustive(op, params, timesteps=[0.1], output="dense")
 
     def map1(rho): return rho
     def map2(_rho): return np.zeros((2, 2), dtype=complex)
@@ -696,11 +699,10 @@ def test_tomography_with_noise() -> None:
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
-    comb = run(
+    comb = run_exhaustive(
         op,
         params,
         timesteps=[0.1],
-        method="exhaustive",
         num_trajectories=5,
         noise_model=noise_model,
         output="dense",
@@ -713,12 +715,10 @@ def test_unnormalized_branch_semantics_h0() -> None:
     """Verify trace-weight consistency in deterministic H=0 case."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
-    from mqt.yaqs.characterization.tomography.process_tomography import (
-        _estimate,
-        _to_dense,
-    )
+    from mqt.yaqs.characterization.tomography.estimate.estimate import _estimate_uniform_subset
+    from mqt.yaqs.characterization.tomography.exact.formatters import _to_dense
 
-    data = _estimate(
+    data = _estimate_uniform_subset(
         op,
         params,
         timesteps=[0.1],
@@ -728,6 +728,7 @@ def test_unnormalized_branch_semantics_h0() -> None:
         noise_model=None,
         seed=0,
         basis="tetrahedral",
+        basis_seed=None,
     )
     pt = _to_dense(data)
     for alpha in range(16):
@@ -743,31 +744,33 @@ def test_run_return_types():
     """Verify API return types."""
     sp = AnalogSimParams(elapsed_time=0.1, dt=0.01, show_progress=False)
     H = MPO.ising(length=1, J=1.0, g=0.5)
-    res = run(
+    res = run_estimate(
         operator=H,
         sim_params=sp,
         timesteps=[0.1],
-        method="estimate",
+        mode="estimate",
         num_samples=4,
         seed=42,
         basis="random",
         basis_seed=42,
         output="mpo",
+        num_trajectories=1,
     )
     assert isinstance(res, MPO)
     
-    res_dense = run(
+    res_dense = run_estimate(
         operator=H,
         sim_params=sp,
         timesteps=[0.1],
-        method="estimate",
+        mode="estimate",
         num_samples=4,
         seed=42,
         basis="random",
         basis_seed=42,
         output="dense",
+        num_trajectories=1,
     )
-    from mqt.yaqs.characterization.tomography.combs import DenseComb
+    from mqt.yaqs.characterization.tomography.exact.combs import DenseComb
     assert isinstance(res_dense, DenseComb)
 
 
@@ -778,11 +781,11 @@ def test_sis_tjm_basic() -> None:
     timesteps = [0.1]
     
     # Generic path check - explicitly ask for mpo
-    res = run(
+    res = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="sis",
+        mode="sis",
         num_samples=10,
         num_trajectories=1,
         seed=42,
@@ -799,14 +802,14 @@ def test_sis_tjm_k1_matches_exact_prediction() -> None:
     params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
     timesteps = [0.1]
     
-    res_exact = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+    res_exact = run_exhaustive(op, params, timesteps=timesteps, output="mpo")
     dense_exact = res_exact.to_matrix()
     
-    res_sis = run(
+    res_sis = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="sis",
+        mode="sis",
         num_samples=100,
         num_trajectories=1,
         seed=42,
@@ -824,18 +827,18 @@ def test_sis_tjm_k2_convergence() -> None:
     params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
     timesteps = [0.1, 0.1]
     
-    res_exact = run(op, params, timesteps=timesteps, method="exhaustive", output="mpo")
+    res_exact = run_exhaustive(op, params, timesteps=timesteps, output="mpo")
     dense_exact = res_exact.to_matrix()
     
     errs_50 = []
     errs_150 = []
     # Use multiple seeds to check mean convergence
     for s in range(3):
-        res_50 = run(
+        res_50 = run_estimate(
             op,
             params,
             timesteps=timesteps,
-            method="sis",
+            mode="sis",
             num_samples=50,
             num_trajectories=1,
             seed=300 + s,
@@ -843,11 +846,11 @@ def test_sis_tjm_k2_convergence() -> None:
         )
         errs_50.append(rel_fro_error(res_50.to_matrix(), dense_exact))
         
-        res_150 = run(
+        res_150 = run_estimate(
             op,
             params,
             timesteps=timesteps,
-            method="sis",
+            mode="sis",
             num_samples=150,
             num_trajectories=1,
             seed=400 + s,
@@ -861,20 +864,30 @@ def test_sis_tjm_k2_convergence() -> None:
 
 def test_sis_tjm_outputs_dense_and_mpo() -> None:
     """Verify both formatters yield consistent predictions for TJM SIS."""
-    from mqt.yaqs.characterization.tomography.estimator_class import TomographyEstimate
+    from mqt.yaqs.characterization.tomography.estimate.estimator import TomographyEstimate
     
     op = MPO.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, solver="TJM", max_bond_dim=4, show_progress=False)
     timesteps = [0.1]
     
-    from mqt.yaqs.characterization.tomography.process_tomography import (
-        _estimate_sis,
-        _sequence_data_to_mpo,
-        _sequence_data_to_dense,
+    from mqt.yaqs.characterization.tomography.estimate.estimate import _estimate_sis
+    from mqt.yaqs.characterization.tomography.exact.formatters import _to_dense, _to_mpo
+
+    data = _estimate_sis(
+        op,
+        params,
+        timesteps,
+        parallel=False,
+        num_samples=100,
+        noise_model=None,
+        seed=42,
+        proposal="mixture",
+        prep_mixture_eps=0.1,
+        basis="tetrahedral",
+        basis_seed=None,
     )
-    data = _estimate_sis(op, params, timesteps, num_samples=100, seed=42)
-    mpo = _sequence_data_to_mpo(data)
-    pt = _sequence_data_to_dense(data)
+    mpo = _to_mpo(data, compress_every=100, tol=1e-12, max_bond_dim=None, n_sweeps=2)
+    pt = _to_dense(data)
     assert isinstance(pt, TomographyEstimate)
     
     # 1. Structural consistency
@@ -916,12 +929,11 @@ def test_sis_uniform_baseline_consistency():
     timesteps = [0.1]
 
     # Reference
-    res_ex = run(op, params, timesteps, method="exhaustive", output="dense")
+    res_ex = run_exhaustive(op, params, timesteps, output="dense")
     ex_mat = get_matrix(res_ex)
 
     # SIS Uniform
-    res_sis = run(op, params, timesteps, method="sis", proposal="uniform",
-                  output="dense", num_samples=512, seed=42, num_trajectories=1)
+    res_sis = run_estimate(op, params, timesteps, mode="sis", proposal="uniform", output="dense", num_samples=512, seed=42, num_trajectories=1)
     sis_mat = get_matrix(res_sis)
 
     err_sis = np.linalg.norm(sis_mat - ex_mat)
@@ -935,12 +947,11 @@ def test_sis_local_baseline_consistency():
     timesteps = [0.1]
 
     # Reference
-    res_ex = run(op, params, timesteps, method="exhaustive", output="dense")
+    res_ex = run_exhaustive(op, params, timesteps, output="dense")
     ex_mat = get_matrix(res_ex)
 
     # SIS Local (Default)
-    res_sis = run(op, params, timesteps, method="sis", proposal="local",
-                  output="dense", num_samples=512, seed=42, num_trajectories=1)
+    res_sis = run_estimate(op, params, timesteps, mode="sis", proposal="local", output="dense", num_samples=512, seed=42, num_trajectories=1)
     sis_mat = get_matrix(res_sis)
 
     err_sis = np.linalg.norm(sis_mat - ex_mat)
@@ -953,56 +964,13 @@ def test_sis_estimate_matching_accuracy():
     params = AnalogSimParams(dt=0.1, solver="MCWF")
     timesteps = [0.2]
 
-    res_ex = run(
-        op,
-        params,
-        timesteps,
-        method="exhaustive",
-        output="dense",
-        basis="random",
-        basis_seed=42,
-    )
+    res_ex = run_exhaustive(op, params, timesteps, output="dense", basis="random", basis_seed=42)
     ex_mat = get_matrix(res_ex)
 
     n_samples = 1000
-    res_mc = run(
-        op,
-        params,
-        timesteps,
-        method="estimate",
-        num_samples=n_samples,
-        seed=42,
-        basis="random",
-        basis_seed=42,
-        output="dense",
-        num_trajectories=1,
-    )
-    res_sis_u = run(
-        op,
-        params,
-        timesteps,
-        method="sis",
-        proposal="uniform",
-        num_samples=n_samples,
-        seed=42,
-        basis="random",
-        basis_seed=42,
-        output="dense",
-        num_trajectories=1,
-    )
-    res_sis_l = run(
-        op,
-        params,
-        timesteps,
-        method="sis",
-        proposal="local",
-        num_samples=n_samples,
-        seed=42,
-        basis="random",
-        basis_seed=42,
-        output="dense",
-        num_trajectories=1,
-    )
+    res_mc = run_estimate(op, params, timesteps, mode="estimate", num_samples=n_samples, seed=42, basis="random", basis_seed=42, output="dense", num_trajectories=1)
+    res_sis_u = run_estimate(op, params, timesteps, mode="sis", proposal="uniform", num_samples=n_samples, seed=42, basis="random", basis_seed=42, output="dense", num_trajectories=1)
+    res_sis_l = run_estimate(op, params, timesteps, mode="sis", proposal="local", num_samples=n_samples, seed=42, basis="random", basis_seed=42, output="dense", num_trajectories=1)
 
     err_mc = np.linalg.norm(get_matrix(res_mc) - ex_mat)
     err_sis_u = np.linalg.norm(get_matrix(res_sis_u) - ex_mat)
@@ -1020,8 +988,8 @@ def test_sis_local_dense_mpo_consistency_integrated():
     params = AnalogSimParams(dt=0.1, solver="TJM", get_state=True)
     timesteps = [0.1]
 
-    res_dense = run(op, params, timesteps, method="sis", proposal="local", output="dense", num_samples=50, seed=1, num_trajectories=1)
-    res_mpo = run(op, params, timesteps, method="sis", proposal="local", output="mpo", num_samples=50, seed=1, num_trajectories=1)
+    res_dense = run_estimate(op, params, timesteps, mode="sis", proposal="local", output="dense", num_samples=50, seed=1, num_trajectories=1)
+    res_mpo = run_estimate(op, params, timesteps, mode="sis", proposal="local", output="mpo", num_samples=50, seed=1, num_trajectories=1)
 
     mpo_mat = res_mpo.to_matrix()
     dense_mat = get_matrix(res_dense)
@@ -1035,7 +1003,7 @@ def test_sis_variance_reduction_integrated():
     params = AnalogSimParams(dt=0.05, solver="MCWF")
     timesteps = [0.1, 0.1, 0.1]
 
-    res_ex = run(op, params, timesteps, method="exhaustive", output="dense")
+    res_ex = run_exhaustive(op, params, timesteps, output="dense")
     ex_mat = get_matrix(res_ex)
 
     n_samples = 256
@@ -1043,8 +1011,8 @@ def test_sis_variance_reduction_integrated():
     errs_u = []
     errs_l = []
     for s in [42, 43, 44]:
-        res_u = run(op, params, timesteps, method="sis", proposal="uniform", num_samples=n_samples, seed=s, output="dense", num_trajectories=1)
-        res_l = run(op, params, timesteps, method="sis", proposal="local", num_samples=n_samples, seed=s, output="dense", num_trajectories=1)
+        res_u = run_estimate(op, params, timesteps, mode="sis", proposal="uniform", num_samples=n_samples, seed=s, output="dense", num_trajectories=1)
+        res_l = run_estimate(op, params, timesteps, mode="sis", proposal="local", num_samples=n_samples, seed=s, output="dense", num_trajectories=1)
         errs_u.append(np.linalg.norm(get_matrix(res_u) - ex_mat))
         errs_l.append(np.linalg.norm(get_matrix(res_l) - ex_mat))
 
@@ -1057,7 +1025,7 @@ def test_sis_invalid_proposal_integrated():
     op = MPO.hamiltonian(length=1, one_body=[(1.0, "X")])
     params = AnalogSimParams(dt=0.1, solver="MCWF")
     with pytest.raises(ValueError, match="not currently supported"):
-        run(op, params, method="sis", proposal="invalid_heuristic", num_trajectories=1) # type: ignore
+        run_estimate(op, params, mode="sis", proposal="invalid_heuristic", num_trajectories=1) # type: ignore
 
 
 def test_sis_log_stability_integrated():
@@ -1068,5 +1036,5 @@ def test_sis_log_stability_integrated():
     params = AnalogSimParams(dt=0.1, solver="MCWF")
 
     # This should just run without errors
-    res = run(op, params, [0.1]*k, method="sis", proposal="local", num_samples=100, num_trajectories=1)
+    res = run_estimate(op, params, [0.1]*k, mode="sis", proposal="local", num_samples=100, num_trajectories=1)
     assert res is not None

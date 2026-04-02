@@ -1,7 +1,11 @@
 # Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # SPDX-License-Identifier: MIT
 
-"""Tomography backend state evolution and sequence workers (distinct from simulator.py)."""
+"""Tomography backend state evolution (distinct from :mod:`mqt.yaqs.simulator`).
+
+See :mod:`mqt.yaqs.characterization.tomography.estimate.sampling` for **sequence** vs **trajectory**
+(noise-model realization) terminology.
+"""
 
 from __future__ import annotations
 
@@ -16,8 +20,6 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
-from mqt.yaqs.simulator import WORKER_CTX
-
 from .predictor_encoding import normalize_rho_from_backend_output, pack_rho8
 
 if TYPE_CHECKING:
@@ -163,165 +165,45 @@ def _evolve_backend_state(
     return cast("MPS", out)
 
 
-def _tomography_sequence_worker(
-    job_idx: int,
-    payload: dict[str, Any] | None = None,
-) -> tuple[int, int, NDArray[np.complex128], float]:
-    """Execute one tomography trajectory given pre-specified (psi_meas, psi_prep) pairs."""
-    ctx = payload if payload is not None else WORKER_CTX
-    num_trajectories: int = ctx["num_trajectories"]
-    s_idx: int = job_idx // num_trajectories
-    traj_idx: int = job_idx % num_trajectories
-    psi_pairs = ctx["psi_pairs"][s_idx]
-    operator = ctx["operator"]
-    sim_params = ctx["sim_params"]
-    timesteps: list[float] = ctx["timesteps"]
-    noise_model = ctx["noise_model"]
+def _rollout_intervention_steps(
+    current_state: MPS | NDArray[np.complex128],
+    *,
+    psi_pairs: list[tuple[np.ndarray, np.ndarray]],
+    step_durations: list[float],
+    operator: MPO,
+    operators_per_step: list[MPO] | None,
+    sim_params: AnalogSimParams,
+    noise_model: NoiseModel | None,
+    solver: str,
+    traj_idx: int,
+    default_static_ctx: Any,
+    static_ctx_per_step: list[Any] | None,
+    record_step_states: bool,
+) -> tuple[MPS | NDArray[np.complex128], float, list[np.ndarray] | None]:
+    """Shared prep → evolve loop along one **sequence** of interventions.
 
-    if noise_model is None:
-        assert num_trajectories == 1, "num_trajectories must be 1 when noise_model is None."
-
-    solver = sim_params.solver
-    current_state = _initialize_backend_state(operator, solver)
-    weight = 1.0
-
-    for step_i, (psi_meas, psi_prep) in enumerate(psi_pairs):
-        current_state, step_prob = _reprepare_backend_state_forced(
-            current_state, psi_meas, psi_prep, solver
-        )
-        weight *= step_prob
-        if weight < 1e-15:
-            break
-        duration = timesteps[step_i]
-        step_params = copy.deepcopy(sim_params)
-        step_params.elapsed_time = duration
-        step_params.num_traj = 1
-        step_params.show_progress = False
-        step_params.get_state = True
-        n_steps = max(1, int(np.round(duration / step_params.dt)))
-        step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
-        static_ctx = ctx.get("mcwf_static_ctx")
-        current_state = _evolve_backend_state(
-            current_state,
-            operator,
-            noise_model,
-            step_params,
-            solver,
-            traj_idx=traj_idx,
-            static_ctx=static_ctx,
-        )
-
-    rho_final = _get_rho_site_zero(current_state)
-    return (s_idx, traj_idx, rho_final, weight)
-
-
-def worker_initial_psi(
-    job_idx: int,
-    payload: dict[str, Any] | None = None,
-) -> tuple[int, int, NDArray[np.complex128], float]:
-    """Backend worker: starts from ``initial_psi[s_idx]`` and applies psi-pairs (channel-predictor path)."""
-    # Parallel :func:`~mqt.yaqs.simulator.run_backend_parallel` passes only ``job_idx``; shared
-    # objects live in :data:`~mqt.yaqs.simulator.WORKER_CTX` (see ``worker_init``).
-    ctx = payload if payload is not None else WORKER_CTX
-    num_trajectories: int = int(ctx["num_trajectories"])
-    s_idx = job_idx // num_trajectories
-    traj_idx = job_idx % num_trajectories
-
-    psi_pairs = ctx["psi_pairs"][s_idx]
-    operator = ctx["operator"]
-    sim_params = ctx["sim_params"]
-    timesteps: list[float] = ctx["timesteps"]
-    noise_model = ctx["noise_model"]
-    initial_list: list[np.ndarray] = ctx["initial_psi"]
-
-    if noise_model is None:
-        assert num_trajectories == 1, "num_trajectories must be 1 when noise_model is None."
-
-    solver = sim_params.solver
-    current_state = np.asarray(initial_list[s_idx], dtype=np.complex128).copy()
-    weight = 1.0
-
-    for step_i, (psi_meas, psi_prep) in enumerate(psi_pairs):
-        current_state, step_prob = _reprepare_backend_state_forced(
-            current_state, psi_meas, psi_prep, solver
-        )
-        weight *= step_prob
-        if weight < 1e-15:
-            break
-
-        duration = timesteps[step_i]
-        step_params = copy.deepcopy(sim_params)
-        step_params.elapsed_time = duration
-        step_params.num_traj = 1
-        step_params.show_progress = False
-        step_params.get_state = True
-
-        n_steps = max(1, int(np.round(duration / step_params.dt)))
-        step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
-
-        static_ctx = ctx.get("mcwf_static_ctx")
-        current_state = _evolve_backend_state(
-            current_state,
-            operator,
-            noise_model,
-            step_params,
-            solver,
-            traj_idx=traj_idx,
-            static_ctx=static_ctx,
-        )
-
-    rho_final = _get_rho_site_zero(current_state)
-    return (s_idx, traj_idx, rho_final, weight)
-
-
-def worker_initial_psi_trajectory(
-    job_idx: int,
-    payload: dict[str, Any] | None = None,
-) -> tuple[int, int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
-    """Like :func:`worker_initial_psi` but records reduced state on site 0 after each segment.
-
-    Returns:
-        ``(s_idx, traj_idx, rho_0_packed, alphas, E_rows, rho_seq_packed, weight)``
+    When ``record_step_states`` is False (exact-comb pipeline), only the final state matters.
+    When True (surrogate **sequence rollout**), returns packed site-0 densities after each segment
+    (length ``k``, padded if the weight collapses early). This is not the same word as **trajectory**
+    in :mod:`~mqt.yaqs.characterization.tomography.estimate.sampling` (stochastic MCWF/TJM runs).
     """
-    ctx = payload if payload is not None else WORKER_CTX
-    num_trajectories: int = int(ctx["num_trajectories"])
-    s_idx = job_idx // num_trajectories
-    traj_idx = job_idx % num_trajectories
-
-    psi_pairs = ctx["psi_pairs"][s_idx]
-    alphas_row: np.ndarray = ctx["alphas"][s_idx]
-    choi_feat_table: np.ndarray = ctx["choi_feat_table"]
-    e_features_rows = ctx.get("e_features_rows")
-    operator = ctx["operator"]
-    sim_params = ctx["sim_params"]
-    timesteps: list[float] = ctx["timesteps"]
-    timesteps_rows = ctx.get("timesteps_rows")
-    operators_list = ctx.get("operators_list")
-    static_ctx_list = ctx.get("mcwf_static_ctx_list")
-    noise_model = ctx["noise_model"]
-    initial_list: list[np.ndarray] = ctx["initial_psi"]
-
-    if noise_model is None:
-        assert num_trajectories == 1, "num_trajectories must be 1 when noise_model is None."
-
     k = len(psi_pairs)
-    if int(alphas_row.shape[0]) != k:
-        msg = "alphas length must match number of intervention steps."
+    if len(step_durations) != k:
+        msg = f"step_durations length {len(step_durations)} != number of psi_pairs {k}."
+        raise ValueError(msg)
+    if operators_per_step is not None and len(operators_per_step) != k:
+        msg = f"operators_per_step length must match psi_pairs ({k})."
+        raise ValueError(msg)
+    if static_ctx_per_step is not None and len(static_ctx_per_step) != k:
+        msg = f"static_ctx_per_step length must match psi_pairs ({k})."
         raise ValueError(msg)
 
-    solver = sim_params.solver
-    current_state = np.asarray(initial_list[s_idx], dtype=np.complex128).copy()
     weight = 1.0
-
-    rho0_raw = _get_rho_site_zero(current_state)
-    rho_0_packed = pack_rho8(normalize_rho_from_backend_output(rho0_raw)).astype(np.float32)
-
-    if e_features_rows is not None:
-        E_rows = np.asarray(e_features_rows[s_idx], dtype=np.float32).reshape(k, -1)
-    else:
-        E_rows = np.stack([choi_feat_table[int(a)].astype(np.float32) for a in alphas_row], axis=0)
     rho_steps: list[np.ndarray] = []
-    last_packed = rho_0_packed
+    last_packed: np.ndarray | None = None
+    if record_step_states:
+        rho0_raw = _get_rho_site_zero(current_state)
+        last_packed = pack_rho8(normalize_rho_from_backend_output(rho0_raw)).astype(np.float32)
 
     for step_i, (psi_meas, psi_prep) in enumerate(psi_pairs):
         current_state, step_prob = _reprepare_backend_state_forced(
@@ -329,31 +211,23 @@ def worker_initial_psi_trajectory(
         )
         weight *= step_prob
         if weight < 1e-15:
-            while len(rho_steps) < k:
-                rho_steps.append(last_packed.copy())
+            if record_step_states:
+                while len(rho_steps) < k and last_packed is not None:
+                    rho_steps.append(last_packed.copy())
             break
 
-        if timesteps_rows is not None:
-            duration = float(timesteps_rows[s_idx][step_i])
-        else:
-            duration = timesteps[step_i]
+        duration = step_durations[step_i]
+        op_step = operator if operators_per_step is None else operators_per_step[step_i]
+        static_ctx = default_static_ctx if static_ctx_per_step is None else static_ctx_per_step[step_i]
+
         step_params = copy.deepcopy(sim_params)
         step_params.elapsed_time = duration
         step_params.num_traj = 1
         step_params.show_progress = False
         step_params.get_state = True
-
         n_steps = max(1, int(np.round(duration / step_params.dt)))
         step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
 
-        if operators_list is not None:
-            op_step = operators_list[s_idx][step_i]
-        else:
-            op_step = operator
-        if static_ctx_list is not None:
-            static_ctx = static_ctx_list[s_idx][step_i]
-        else:
-            static_ctx = ctx.get("mcwf_static_ctx")
         current_state = _evolve_backend_state(
             current_state,
             op_step,
@@ -364,16 +238,17 @@ def worker_initial_psi_trajectory(
             static_ctx=static_ctx,
         )
 
-        rho_step = _get_rho_site_zero(current_state)
-        rho_norm = normalize_rho_from_backend_output(rho_step)
-        last_packed = pack_rho8(rho_norm).astype(np.float32)
-        rho_steps.append(last_packed)
+        if record_step_states:
+            rho_step = _get_rho_site_zero(current_state)
+            rho_norm = normalize_rho_from_backend_output(rho_step)
+            last_packed = pack_rho8(rho_norm).astype(np.float32)
+            rho_steps.append(last_packed)
 
-    while len(rho_steps) < k:
-        rho_steps.append(last_packed.copy())
-
-    rho_seq = np.stack(rho_steps, axis=0).astype(np.float32)
-    return (s_idx, traj_idx, rho_0_packed, alphas_row.astype(np.int64), E_rows, rho_seq, float(weight))
+    if record_step_states:
+        while len(rho_steps) < k and last_packed is not None:
+            rho_steps.append(last_packed.copy())
+        return current_state, weight, rho_steps
+    return current_state, weight, None
 
 
 def build_initial_psi(

@@ -21,12 +21,12 @@ from typing import Any, cast
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.basis import TomographyBasis, build_basis_for_fixed_alphabet
-from mqt.yaqs.characterization.tomography.ml_dataset import build_rho_prev_rho_target, trajectory_batch_to_tensors
-from mqt.yaqs.characterization.tomography.predictor_encoding import random_density_matrix, sample_random_intervention_sequence
-from mqt.yaqs.characterization.tomography.process_tomography import simulate_backend_trajectory_batch
-from mqt.yaqs.characterization.tomography.surrogates import TransformerComb
-from mqt.yaqs.characterization.tomography.tomography_utils import build_initial_psi, make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.estimate.basis import TomographyBasis, build_basis_for_fixed_alphabet
+from mqt.yaqs.characterization.tomography.core.predictor_encoding import random_density_matrix, sample_random_intervention_sequence
+from mqt.yaqs.characterization.tomography.core.tomography_utils import build_initial_psi, make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.surrogate.data import stack_rollouts
+from mqt.yaqs.characterization.tomography.surrogate.model import TransformerComb
+from mqt.yaqs.characterization.tomography.surrogate.workflow import simulate_sequences
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Training convergence vs basis/intervention regime at fixed k.")
     p.add_argument("--out_dir", type=str, default="benchmark_results")
     p.add_argument("--L", type=int, default=2)
-    p.add_argument("--k", type=int, required=True, help="Fixed trajectory length for training.")
+    p.add_argument("--k", type=int, required=True, help="Fixed intervention sequence length for training.")
     p.add_argument("--N_train", type=int, default=256)
     p.add_argument("--seeds", type=int, nargs="+", default=[0])
     p.add_argument(
@@ -78,12 +78,9 @@ def _make_backend_dataset(
     choi_feat_table: np.ndarray,
     parallel: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    alphas_rows: list[np.ndarray] = []
     psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]] = []
     initial_psis: list[np.ndarray] = []
-    e_features_rows: list[np.ndarray] | None = None
-    if intervention_mode == "continuous":
-        e_features_rows = []
+    e_features_rows: list[np.ndarray] = []
 
     def _state_from_rank1_projector(P: np.ndarray) -> np.ndarray:
         w, v = np.linalg.eigh(np.asarray(P, dtype=np.complex128).reshape(2, 2))
@@ -100,7 +97,7 @@ def _make_backend_dataset(
             alphas = rng.integers(0, 16, size=int(k), dtype=np.int64)
             pm = [choi_pm_pairs[int(a)] for a in alphas]
             pairs = [(basis_set[m][1], basis_set[p][1]) for (p, m) in pm]
-            alphas_rows.append(alphas)
+            e_features_rows.append(np.asarray(choi_feat_table[alphas], dtype=np.float32))
             psi_pairs_list.append(pairs)
         else:
             maps, rows_feat = sample_random_intervention_sequence(int(k), rng)
@@ -111,27 +108,25 @@ def _make_backend_dataset(
                 psi_meas = _state_from_rank1_projector(E)
                 psi_prep = _state_from_rank1_projector(rho_prep)
                 pairs.append((psi_meas, psi_prep))
-            alphas_rows.append(np.zeros(int(k), dtype=np.int64))
             psi_pairs_list.append(pairs)
-            assert e_features_rows is not None
             e_features_rows.append(rows_feat.astype(np.float32))
         initial_psis.append(build_initial_psi(rho_in, length=int(L), rng=rng, init_mode="eigenstate"))
 
     timesteps = [float(params.dt)] * int(k)
-    samples = simulate_backend_trajectory_batch(
+    samples = simulate_sequences(
         operator=op,
         sim_params=params,
         timesteps=timesteps,
         psi_pairs_list=psi_pairs_list,
-        alphas_rows=alphas_rows,
         initial_psis=initial_psis,
-        choi_feat_table=choi_feat_table,
         e_features_rows=e_features_rows,
         parallel=bool(parallel),
+        show_progress=False,
+        record_step_states=True,
         static_ctx=static_ctx,
         context_vec=None,
     )
-    rho0_np, E_np, rho_seq_np, _ctx = trajectory_batch_to_tensors(samples)
+    rho0_np, E_np, rho_seq_np, _ctx = stack_rollouts(samples)
     return rho0_np, E_np, rho_seq_np
 
 
@@ -156,6 +151,7 @@ def _train_with_history(
 
     opt = torch.optim.Adam(model.parameters(), lr=float(lr))
     loss_fn = nn.MSELoss()
+    # Tensor order (E, rho0, target) matches :meth:`TransformerComb.fit` / :func:`generate_data`.
     loader = DataLoader(
         TensorDataset(E_tr, rho0_tr, tgt_tr),
         batch_size=min(int(batch_size), max(1, int(E_tr.shape[0]))),
@@ -267,7 +263,7 @@ def main() -> None:
             choi_feat_table=choi_feat_v,
             parallel=bool(args.parallel_channel_sim),
         )
-        _rp_va, rho_tgt_va_np = build_rho_prev_rho_target(rho0_va_np, rho_seq_va_np)
+        rho_tgt_va_np = rho_seq_va_np
         E_va = torch.as_tensor(E_va_np, dtype=torch.float32, device=device)
         rho0_va = torch.as_tensor(rho0_va_np, dtype=torch.float32, device=device)
         tgt_va = torch.as_tensor(rho_tgt_va_np, dtype=torch.float32, device=device)
@@ -293,7 +289,7 @@ def main() -> None:
                 choi_feat_table=choi_feat_table,
                 parallel=bool(args.parallel_channel_sim),
             )
-            _rp, rho_tgt_np = build_rho_prev_rho_target(rho0_tr_np, rho_seq_tr_np)
+            rho_tgt_np = rho_seq_tr_np
             if int(E_tr_np.shape[-1]) != int(E_va_np.shape[-1]):
                 msg = f"Train E dim {E_tr_np.shape[-1]} != val E dim {E_va_np.shape[-1]}."
                 raise ValueError(msg)

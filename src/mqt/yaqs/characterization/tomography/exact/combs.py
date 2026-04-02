@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from numpy.typing import NDArray
 
-    from .estimator_class import TomographyEstimate
+    from ..estimate.estimator import TomographyEstimate
 
 
 def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
@@ -98,7 +98,7 @@ class DenseComb:
         Extra keyword arguments (e.g. legacy ``minimize_options``) are ignored.
         """
         _ = kwargs  # reserved for API compatibility with benchmarks / older call sites
-        from .estimator_class import TomographyEstimate
+        from ..estimate.estimator import TomographyEstimate
 
         if not isinstance(estimate, TomographyEstimate):
             msg = f"estimate must be a TomographyEstimate, got {type(estimate)!r}."
@@ -509,132 +509,3 @@ class MPOComb(MPO):
         )
 
 
-class NNComb:
-    """Neural-network comb wrapper for feature->output regression.
-
-    This is intentionally minimal: it provides a trainable MLP over a flat feature vector
-    (e.g., concatenated ``vec(rho_in)`` and flattened Choi features), plus ``fit_features``
-    and ``predict_features`` helpers.
-    """
-
-    def __init__(self, *, in_dim: int, hidden: int, out_dim: int = 8) -> None:
-        self.in_dim = int(in_dim)
-        self.hidden = int(hidden)
-        self.out_dim = int(out_dim)
-
-        # Lazy torch import to keep library import lightweight.
-        try:
-            import torch
-            import torch.nn as nn
-        except ImportError as e:  # pragma: no cover
-            raise ImportError("NNComb requires PyTorch. Install with: pip install torch") from e
-
-        self._torch = torch
-        self._nn = nn
-
-        self.model = nn.Sequential(
-            nn.Linear(self.in_dim, self.hidden),
-            nn.ReLU(),
-            nn.Linear(self.hidden, self.hidden),
-            nn.ReLU(),
-            nn.Linear(self.hidden, self.out_dim),
-        )
-
-    def fit_features(
-        self,
-        x_train: np.ndarray,
-        y_train: np.ndarray,
-        *,
-        epochs: int,
-        lr: float,
-        batch_size: int,
-        device: Any,
-        w_train: np.ndarray | None = None,
-        return_history: bool = False,
-        verbose: bool = False,
-        log_every: int | None = None,
-    ) -> list[float] | None:
-        """Fit the network on flat features.
-
-        Args:
-            x_train: shape ``(N, in_dim)`` (float).
-            y_train: shape ``(N, out_dim)`` (float).
-            w_train: optional shape ``(N,)`` nonnegative sample weights.
-        """
-        torch = self._torch
-        DataLoader = __import__("torch.utils.data", fromlist=["DataLoader"]).DataLoader
-        TensorDataset = __import__(
-            "torch.utils.data", fromlist=["TensorDataset"]
-        ).TensorDataset
-
-        x = np.asarray(x_train, dtype=np.float32).reshape(-1, self.in_dim)
-        y = np.asarray(y_train, dtype=np.float32).reshape(-1, self.out_dim)
-        n = x.shape[0]
-        if w_train is None:
-            w = np.ones(n, dtype=np.float32)
-        else:
-            w = np.asarray(w_train, dtype=np.float32).reshape(n)
-
-        x_t = torch.as_tensor(x, dtype=torch.float32)
-        y_t = torch.as_tensor(y, dtype=torch.float32)
-        w_t = torch.as_tensor(w, dtype=torch.float32)
-
-        loader = DataLoader(
-            TensorDataset(x_t, y_t, w_t),
-            batch_size=min(int(batch_size), max(1, n)),
-            shuffle=True,
-        )
-
-        self.model.to(device)
-        self.model.train()
-
-        opt = torch.optim.Adam(self.model.parameters(), lr=float(lr))
-
-        def _weighted_mse(pred: Any, tgt: Any, w_b: Any) -> Any:
-            err = ((pred - tgt) ** 2).sum(dim=-1)
-            return (err * w_b).sum() / w_b.sum().clamp_min(1e-12)
-
-        history: list[float] = []
-        log_every_eff = int(log_every) if log_every is not None else None
-        for epoch_i in range(int(epochs)):
-            # Approximate epoch loss via batch-size weighted mean of batch losses.
-            epoch_loss_sum = 0.0
-            epoch_n = 0
-            for xb, yb, wb in loader:
-                xb = xb.to(device)
-                yb = yb.to(device)
-                wb = wb.to(device)
-                opt.zero_grad()
-                pred = self.model(xb)
-                loss = _weighted_mse(pred, yb, wb)
-                loss.backward()
-                opt.step()
-
-                bs = int(xb.shape[0])
-                epoch_loss_sum += float(loss.detach().cpu().item()) * bs
-                epoch_n += bs
-
-            epoch_loss = epoch_loss_sum / max(epoch_n, 1)
-            history.append(epoch_loss)
-
-            if verbose and (
-                log_every_eff is None
-                or log_every_eff <= 0
-                or ((epoch_i + 1) % log_every_eff == 0)
-                or (epoch_i + 1 == int(epochs))
-            ):
-                print(f"[NNComb.fit_features] epoch={epoch_i + 1}/{int(epochs)} loss={epoch_loss:.6e}")
-
-        if return_history:
-            return history
-        return None
-
-    def predict_features(self, x: np.ndarray, *, device: Any) -> np.ndarray:
-        """Predict outputs from flat features."""
-        torch = self._torch
-        self.model.to(device)
-        self.model.eval()
-        x_np = np.asarray(x, dtype=np.float32).reshape(-1, self.in_dim)
-        with torch.no_grad():
-            pred = self.model(torch.as_tensor(x_np, dtype=torch.float32, device=device)).cpu().numpy()
-        return pred

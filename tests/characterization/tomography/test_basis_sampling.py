@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.basis import (
+from mqt.yaqs.characterization.tomography.estimate.basis import (
     calculate_dual_choi_basis,
     dual_norm_metrics,
     get_basis_states,
     get_choi_basis,
 )
-from mqt.yaqs.characterization.tomography.process_tomography import run
+from mqt.yaqs.tomography import run_estimate, run_exhaustive
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -20,16 +20,17 @@ def test_estimate_exact_when_all_sequences_selected_k2() -> None:
     k = len(timesteps)
     n_all = 16**k
 
-    comb_ex = run(op, params, timesteps=timesteps, method="exhaustive", output="dense", parallel=False)
-    comb_bs = run(
+    comb_ex = run_exhaustive(op, params, timesteps=timesteps, output="dense", parallel=False)
+    comb_bs = run_estimate(
         op,
         params,
         timesteps=timesteps,
-        method="estimate",
+        mode="estimate",
         output="dense",
         parallel=False,
         num_samples=n_all,
         seed=123,
+        num_trajectories=1,
     )
 
     np.testing.assert_allclose(comb_bs.to_matrix(), comb_ex.to_matrix(), atol=1e-12)
@@ -43,7 +44,7 @@ def test_estimate_inclusion_corrected_is_unbiased_in_expectation_k1() -> None:
     k = len(timesteps)
     n_all = 16**k
 
-    comb_ex = run(op, params, timesteps=timesteps, method="exhaustive", output="dense", parallel=False)
+    comb_ex = run_exhaustive(op, params, timesteps=timesteps, output="dense", parallel=False)
     U_ex = comb_ex.to_matrix()
 
     n_pick = 8  # < 16
@@ -52,15 +53,16 @@ def test_estimate_inclusion_corrected_is_unbiased_in_expectation_k1() -> None:
     n_seeds = 120
     Us = []
     for s in range(n_seeds):
-        comb_bs = run(
+        comb_bs = run_estimate(
             op,
             params,
             timesteps=timesteps,
-            method="estimate",
+            mode="estimate",
             output="dense",
             parallel=False,
             num_samples=n_pick,
             seed=1000 + s,
+            num_trajectories=1,
         )
         Us.append(comb_bs.to_matrix())
 

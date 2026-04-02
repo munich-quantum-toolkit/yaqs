@@ -3,9 +3,9 @@
 """Real-vector features for neural predictors on single-qubit states and Choi maps.
 
 Maps 2x2 density matrices to 8 real floats (row-major Re/Im per entry) and 4x4 Choi
-matrices to 32 reals, plus normalization consistent with :class:`~.combs.DenseComb`.
-Batch metrics that compare such vectors live in :mod:`ml_dataset` next to
-:func:`trace_distance`.
+matrices to 32 reals, plus normalization consistent with
+:class:`~mqt.yaqs.characterization.tomography.exact.combs.DenseComb`.
+Related batch metrics use :func:`mqt.yaqs.characterization.tomography.core.metrics.trace_distance`.
 """
 
 from __future__ import annotations
