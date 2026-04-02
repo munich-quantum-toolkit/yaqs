@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: MIT
 """Neural surrogate module: :class:`TransformerComb` only.
 
-Training data containers (:class:`~mqt.yaqs.characterization.tomography.surrogate.data.SequenceRolloutSample`,
-:func:`~mqt.yaqs.characterization.tomography.surrogate.data.stack_rollouts`) live in
-:mod:`mqt.yaqs.characterization.tomography.surrogate.data`.
+Training data containers (:class:`~mqt.yaqs.characterization.process_tensors.surrogates.data.SequenceRolloutSample`,
+:func:`~mqt.yaqs.characterization.process_tensors.surrogates.data.stack_rollouts`) live in
+:mod:`mqt.yaqs.characterization.process_tensors.surrogates.data`.
 
-Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.tomography.surrogate.metrics`.
+Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.process_tensors.surrogates.metrics`.
 
 **Naming** — A **sequence** is the chosen interventions (Choi / features) at each step. A **trajectory**
-(in the noise sense) is one MCWF/TJM stochastic realization; see :mod:`mqt.yaqs.characterization.tomography.process_tensor.data`.
+(in the noise sense) is one MCWF/TJM stochastic realization; see :mod:`mqt.yaqs.characterization.process_tensors.tomography.data`.
 """
 
 from __future__ import annotations
@@ -153,7 +153,8 @@ class TransformerComb(nn.Module):
         """Fit with MSE on packed ``rho`` targets (same layout as :meth:`forward`).
 
         ``train_dataset`` / ``val_dataset`` must be :class:`~torch.utils.data.TensorDataset` with tensors
-        ``(E, rho0, target)`` in that order — same layout as :func:`~mqt.yaqs.characterization.tomography.surrogate.workflow.generate_data`.
+        ``(E, rho0, target)`` in that order — same layout as
+        :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data`.
 
         ``prefix_loss``: ``"full"`` = loss on full sequence; ``"random"`` / ``"all"`` vary the
         training horizon (see experiment scripts). If ``val_dataset`` is given, restores the best

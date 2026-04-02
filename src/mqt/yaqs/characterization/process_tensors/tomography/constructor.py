@@ -3,23 +3,24 @@
 
 """Process-tensor tomography workflow: exhaustive discrete-basis simulation.
 
-**Public** (see ``__all__`` in :mod:`mqt.yaqs.characterization.tomography.process_tensor`):
-:func:`construct` (this module, :mod:`mqt.yaqs.characterization.tomography.process_tensor.constructor`).
+**Public** (see ``__all__`` in :mod:`mqt.yaqs.characterization.process_tensors.tomography`):
+:func:`construct` (this module, :mod:`mqt.yaqs.characterization.process_tensors.tomography.constructor`).
 
-:func:`construct` validates arguments and returns
-:class:`~mqt.yaqs.characterization.tomography.process_tensor.data.SequenceData` covering all ``16^k``
-Choi index sequences for ``k`` steps. Combs are obtained via
-:meth:`~mqt.yaqs.characterization.tomography.process_tensor.data.SequenceData.to_dense_comb` or
-:meth:`~mqt.yaqs.characterization.tomography.process_tensor.data.SequenceData.to_mpo_comb`.
+:func:`construct` is the high-level user entry point returning a comb directly
+(:class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.DenseComb` or
+:class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.MPOComb`).
+The lower-level :func:`run_all_sequences` returns
+:class:`~mqt.yaqs.characterization.process_tensors.tomography.data.SequenceData` covering all ``16^k``
+Choi index sequences for ``k`` steps.
 
 **Execution model** — Same pattern as :mod:`mqt.yaqs.simulator` and
-:mod:`mqt.yaqs.characterization.tomography.surrogate.workflow`: build a picklable payload, optionally
+:mod:`mqt.yaqs.characterization.process_tensors.surrogates.workflow`: build a picklable payload, optionally
 install it as :data:`~mqt.yaqs.simulator.WORKER_CTX`, then dispatch with
 :func:`~mqt.yaqs.simulator.run_backend_parallel` or run workers serially (optionally via
 ``threadpoolctl`` for BLAS restraint).
 
 **Internals** — :func:`run_all_sequences` performs payload construction, aggregation, and
-:func:`mqt.yaqs.characterization.tomography.process_tensor.basis._finalize_sequence_averages`.
+:func:`mqt.yaqs.characterization.process_tensors.tomography.basis._finalize_sequence_averages`.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 import copy
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 # ---------------------------------------------------------------------------
 # 2) THIRD PARTY
@@ -44,7 +45,7 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 
 # ---------------------------------------------------------------------------
-# 4) LOCAL — process_tensor stack
+# 4) LOCAL — tomography stack
 # ---------------------------------------------------------------------------
 from .basis import (
     TomographyBasis,
@@ -53,6 +54,7 @@ from .basis import (
     get_basis_states,
     get_choi_basis,
 )
+from .combs import DenseComb, MPOComb
 from ..core.utils import (
     _evolve_backend_state,
     _get_rho_site_zero,
@@ -268,8 +270,7 @@ def run_all_sequences(
 # 8) PUBLIC ENTRY — high-level façade (cf. surrogate ``workflow`` / ``simulator.run``)
 # ---------------------------------------------------------------------------
 
-
-def construct(
+def _construct_data(
     operator: MPO,
     sim_params: "AnalogSimParams",
     timesteps: list[float] | None = None,
@@ -280,10 +281,7 @@ def construct(
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
 ) -> SequenceData:
-    """Exhaustive process-tensor data: simulate **every** ``16^k`` discrete basis sequence.
-
-    Returns :class:`~mqt.yaqs.characterization.tomography.process_tensor.data.SequenceData`.
-    """
+    """Validated data-construction path returning :class:`SequenceData`."""
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]
 
@@ -301,3 +299,53 @@ def construct(
         basis=basis,
         basis_seed=basis_seed,
     )
+
+
+def construct(
+    operator: MPO,
+    sim_params: "AnalogSimParams",
+    timesteps: list[float] | None = None,
+    *,
+    noise_model: "NoiseModel | None" = None,
+    parallel: bool = True,
+    num_trajectories: int = 100,
+    basis: TomographyBasis = "tetrahedral",
+    basis_seed: int | None = None,
+    return_type: Literal["dense", "mpo"] = "dense",
+    # Dense reconstruction
+    check: bool = True,
+    atol: float = 1e-8,
+    # MPO reconstruction
+    compress_every: int = 100,
+    tol: float = 1e-12,
+    max_bond_dim: int | None = None,
+    n_sweeps: int = 2,
+) -> DenseComb | MPOComb:
+    """Construct a process tensor via exhaustive discrete-basis tomography.
+
+    This simulates **every** ``16^k`` discrete basis sequence and returns a comb directly:
+
+    - ``return_type="dense"``: reconstruct and return a :class:`DenseComb`.
+    - ``return_type="mpo"``: build and return an :class:`MPOComb`.
+    """
+    data = _construct_data(
+        operator,
+        sim_params,
+        timesteps,
+        noise_model=noise_model,
+        parallel=parallel,
+        num_trajectories=num_trajectories,
+        basis=basis,
+        basis_seed=basis_seed,
+    )
+
+    if return_type == "dense":
+        return data.to_dense_comb(check=check, atol=atol)
+    if return_type == "mpo":
+        return data.to_mpo_comb(
+            compress_every=compress_every,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+        )
+    raise ValueError(f"Unknown return_type {return_type!r} (expected 'dense' or 'mpo').")

@@ -3,7 +3,8 @@
 
 """Surrogate training data: one sequence rollout and batch stacking.
 
-Used by :mod:`mqt.yaqs.characterization.tomography.surrogate.workflow` and benchmarks that roll out sequences.
+Used by :mod:`mqt.yaqs.characterization.process_tensors.surrogates.workflow` and benchmarks that roll
+out sequences.
 """
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ class SequenceRolloutSample:
     ``E_features`` rows have length ``d_e`` (32 for the default single-qubit Choi flattening). This is
     not the same as a single stochastic
     **trajectory** when ``num_trajectories > 1`` under a noise model (see
-    :func:`~mqt.yaqs.tomography.construct`), returning :class:`~mqt.yaqs.characterization.tomography.process_tensor.data.SequenceData`.
+    :func:`~mqt.yaqs.characterizer.construct`), returning
+    :class:`~mqt.yaqs.characterization.process_tensors.tomography.data.SequenceData`.
     """
 
     rho_0: np.ndarray  # shape (8,), float32 — packed 2x2 rho before first intervention

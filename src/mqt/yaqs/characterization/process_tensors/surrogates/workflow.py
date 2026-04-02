@@ -5,13 +5,14 @@
 
 **Public** (see ``__all__``): :func:`generate_data`, :func:`create_surrogate`.
 
-:func:`generate_data` returns a :class:`~torch.utils.data.TensorDataset` for :meth:`~mqt.yaqs.characterization.tomography.surrogate.model.TransformerComb.fit`.
+:func:`generate_data` returns a :class:`~torch.utils.data.TensorDataset` for
+:meth:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb.fit`.
 
 **Internals** — Same execution pattern as :mod:`mqt.yaqs.simulator`: :func:`_simulate_sequences` builds a
 process-pool payload (or uses :data:`~mqt.yaqs.simulator.WORKER_CTX`), then dispatches to
 :func:`~mqt.yaqs.simulator.run_backend_parallel` or runs workers serially. Rollout types live in
-:mod:`mqt.yaqs.characterization.tomography.surrogate.data`; the model is
-:class:`~mqt.yaqs.characterization.tomography.surrogate.model.TransformerComb`.
+:mod:`mqt.yaqs.characterization.process_tensors.surrogates.data`; the model is
+:class:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb`.
 """
 
 from __future__ import annotations
@@ -297,7 +298,7 @@ def _simulate_sequences(
 
     When recording rollouts, pass ``e_features_rows``: one ``(k, d_e)`` float32 array per sequence
     (fixed-basis indices map to rows of a precomputed table; continuous sampling uses
-    :func:`~mqt.yaqs.characterization.tomography.surrogate.utils._sample_random_intervention_sequence` features).
+    :func:`~mqt.yaqs.characterization.process_tensors.surrogates.utils._sample_random_intervention_sequence` features).
 
     **Parallelism**
 
@@ -531,7 +532,7 @@ def create_surrogate(
     model_kwargs: dict[str, Any] | None = None,
     train_kwargs: dict[str, Any] | None = None,
 ) -> TransformerComb:
-    """End-to-end: :func:`generate_data` → :class:`~mqt.yaqs.characterization.tomography.surrogate.model.TransformerComb` → :meth:`~mqt.yaqs.characterization.tomography.surrogate.model.TransformerComb.fit`."""
+    """End-to-end: :func:`generate_data` → :class:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb` → :meth:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb.fit`."""
     import torch  # noqa: PLC0415
 
     rng = np.random.default_rng(0 if seed is None else int(seed))
