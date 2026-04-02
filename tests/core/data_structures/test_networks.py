@@ -1678,7 +1678,7 @@ def test_partial_trace_site_matches_dense_trace() -> None:
     mpo.partial_trace_site(0)
     dense_after = mpo.to_matrix()
 
-    assert dense_before.shape == (4, 4)
+    assert dense_before.shape == (2, 2)
     # dense_after is 1x1
     assert dense_after.shape == (1, 1)
     np.testing.assert_allclose(dense_after[0, 0], np.trace(A), atol=1e-12)

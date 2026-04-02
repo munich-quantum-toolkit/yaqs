@@ -4,14 +4,13 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.characterization.tomography.process_tensor.basis import (
+from mqt.yaqs.characterization.process_tensors.tomography.basis import (
     calculate_dual_choi_basis,
     get_basis_states,
     get_choi_basis,
     _finalize_sequence_averages,
 )
-from mqt.yaqs.characterization.tomography.process_tensor.metrics import rel_fro_error
-from mqt.yaqs.tomography import construct
+from mqt.yaqs import construct_process_tensor
 
 
 def test_choi_duality_biorthogonality() -> None:
@@ -86,11 +85,12 @@ def test_basis_reproduction_h0_identity_map() -> None:
     """End-to-end sanity: identity map yields correct prediction for H=0."""
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    comb = construct(op, params, timesteps=[0.1]).to_dense_comb()
+    comb = construct_process_tensor(op, params, timesteps=[0.1], parallel=False, return_type="dense")
 
     def identity_map(rho: np.ndarray) -> np.ndarray:
         return rho
 
     rho_pred = comb.predict([identity_map])
     expected = np.array([[1.0, 0.0], [0.0, 0.0]])
-    assert rel_fro_error(rho_pred, expected) < 1e-10
+    err = np.linalg.norm(rho_pred - expected, "fro") / max(np.linalg.norm(expected, "fro"), 1e-15)
+    assert float(err) < 1e-10

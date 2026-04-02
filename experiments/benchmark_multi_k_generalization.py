@@ -21,17 +21,13 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.process_tensor.metrics import mean_frobenius_mse_rho8
-from mqt.yaqs.characterization.tomography.process_tensor.predictor_encoding import (
-    random_density_matrix,
-    sample_random_intervention_sequence,
-    unpack_rho8,
-)
-from mqt.yaqs.characterization.tomography.core.utils import make_mcwf_static_context
-from mqt.yaqs.characterization.tomography.surrogate.utils import build_initial_psi
-from mqt.yaqs.characterization.tomography.surrogate.data import stack_rollouts
-from mqt.yaqs.characterization.tomography.surrogate.model import TransformerComb
-from mqt.yaqs.characterization.tomography.surrogate.workflow import simulate_sequences
+from mqt.yaqs.characterization.process_tensors.core.utils import make_mcwf_static_context
+from mqt.yaqs.characterization.process_tensors.surrogates.data import stack_rollouts
+from mqt.yaqs.characterization.process_tensors.surrogates.encoding import unpack_rho8
+from mqt.yaqs.characterization.process_tensors.surrogates.metrics import _mean_frobenius_mse_rho8 as mean_frobenius_mse_rho8
+from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
+from mqt.yaqs.characterization.process_tensors.surrogates.utils import build_initial_psi, _random_density_matrix as random_density_matrix, _sample_random_intervention_sequence as sample_random_intervention_sequence
+from mqt.yaqs.characterization.process_tensors.surrogates.workflow import _simulate_sequences as simulate_sequences
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

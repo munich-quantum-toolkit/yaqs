@@ -1233,11 +1233,10 @@ class MPO:
     def from_local_ops(cls, local_ops: list[np.ndarray]) -> "MPO":
         """Build an MPO that is the tensor product of given local operators.
 
-        Each ``local_ops[i]`` is assumed to act on a single site's physical
-        Hilbert space and is interpreted as a matrix on the vectorized
-        (out,in) indices. The resulting MPO has trivial virtual bonds (Dl=Dr=1)
-        at every site; its site tensors are simply reshaped versions of the
-        provided operators.
+        Each ``local_ops[i]`` is assumed to be a square operator acting on a
+        single site's Hilbert space (shape ``(d, d)``). The resulting MPO is
+        the tensor product of those operators with trivial virtual bonds
+        (Dl=Dr=1) at every site.
         """
         if not local_ops:
             msg = "local_ops must contain at least one operator."
@@ -1249,19 +1248,15 @@ class MPO:
             if op.ndim != 2 or op.shape[0] != op.shape[1]:
                 msg = f"Each local op must be a square matrix; got shape {op.shape}."
                 raise ValueError(msg)
-            d2 = op.shape[0]
-            local_d = int(np.sqrt(d2))
-            if local_d * local_d != d2:
-                msg = f"Operator dimension {d2} is not a perfect square."
-                raise ValueError(msg)
+            local_d = int(op.shape[0])
             if d is None:
                 d = local_d
             elif d != local_d:
                 msg = f"Inconsistent local dimensions in local_ops: {d} vs {local_d}."
                 raise ValueError(msg)
 
-            T = op.reshape(local_d, local_d, local_d, local_d).reshape(local_d, local_d, 1, 1)
-            tensors.append(T.astype(np.complex128))
+            T = op.reshape(local_d, local_d, 1, 1).astype(np.complex128)
+            tensors.append(T)
 
         mpo = cls()
         mpo.tensors = tensors

@@ -50,14 +50,15 @@ Run tomography for a single evolution segment of length `t = 0.1`.
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.tomography import construct
+from mqt.yaqs import construct_process_tensor
 
-comb_single = construct(
+comb_single = construct_process_tensor(
     operator,
     sim_params,
     timesteps=[0.1],
     num_trajectories=100,
-).to_dense_comb()
+    return_type="dense",
+)
 
 print(f"Comb Choi matrix shape: {comb_single.to_matrix().shape}")
 ```

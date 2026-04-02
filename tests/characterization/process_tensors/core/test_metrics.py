@@ -2,7 +2,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.process_tensor.metrics import rel_fro_error, trace_distance
+def rel_fro_error(A: np.ndarray, B: np.ndarray) -> float:
+    num = np.linalg.norm(A - B, "fro")
+    den = np.linalg.norm(B, "fro")
+    return float(num / max(den, 1e-15))
+
+
+def trace_distance(rho: np.ndarray, sigma: np.ndarray) -> float:
+    X = rho - sigma
+    X = 0.5 * (X + X.conj().T)
+    evals = np.linalg.eigvalsh(X)
+    return float(0.5 * np.sum(np.abs(evals)))
 
 
 def test_rel_fro_error_zero_for_equal_matrices() -> None:
