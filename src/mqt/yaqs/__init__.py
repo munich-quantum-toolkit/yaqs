@@ -14,7 +14,7 @@ of noise in quantum systems.
 Public entry points:
     - ``simulate``: high-level simulation interface (from ``simulator.run``)
     - ``generate_data``, ``create_surrogate``, ``TransformerComb``: surrogate tools (from ``mqt.yaqs.characterizer``)
-    - ``construct``: exhaustive process-tensor tomography (from ``mqt.yaqs.characterizer``)
+    - ``construct_process_tensor``: exhaustive process-tensor tomography (from ``mqt.yaqs.characterizer``)
 
 Module-level namespaces:
     - ``simulator``
@@ -28,11 +28,8 @@ from ._version import version as __version__
 from ._version import version_tuple as version_info
 from .simulator import run as simulate
 from .characterizer import (
-    DenseComb,
-    MPOComb,
-    SequenceData,
     TransformerComb,
-    construct,
+    construct_process_tensor,
     create_surrogate,
     generate_data,
 )
@@ -46,8 +43,5 @@ __all__ = [
     "generate_data",
     "create_surrogate",
     "TransformerComb",
-    "construct",
-    "SequenceData",
-    "DenseComb",
-    "MPOComb",
+    "construct_process_tensor",
 ]

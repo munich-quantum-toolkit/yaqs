@@ -3,7 +3,7 @@
 
 """Exhaustive discrete-basis process-tensor data + reconstruction helpers.
 
-The main product of :func:`~mqt.yaqs.characterization.process_tensors.tomography.constructor.construct`
+The main product of :func:`~mqt.yaqs.characterization.process_tensors.tomography.constructor.construct_process_tensor`
 is :class:`SequenceData`. It can be converted to dense or MPO comb representations via
 :meth:`SequenceData.to_dense_comb` and :meth:`SequenceData.to_mpo_comb`.
 """

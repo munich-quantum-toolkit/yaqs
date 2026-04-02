@@ -70,7 +70,8 @@ class DenseComb:
         return self.upsilon
 
     # NOTE: previously there was a `DenseComb.fit(...)` entry point here.
-    # The library now exposes only the exhaustive `construct(...) -> SequenceData -> to_*_comb()` path.
+    # The library now exposes only the exhaustive
+    # `construct_process_tensor(...) -> SequenceData -> to_*_comb()` path.
 
     def _k_steps(self) -> int:
         """Number of intervention steps from Υ shape (2·4^k, 2·4^k)."""

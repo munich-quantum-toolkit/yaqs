@@ -8,28 +8,29 @@
 - :func:`generate_data` — simulate rollouts; returns a :class:`~torch.utils.data.TensorDataset`.
 - :func:`create_surrogate` — end-to-end training from sampled data.
 - :class:`TransformerComb` — neural module; :meth:`~TransformerComb.fit` takes training (and optional validation) :class:`~torch.utils.data.TensorDataset` instances.
+- :func:`construct_process_tensor` — exhaustive process-tensor tomography returning a comb.
 
-Process-tensor tomography (:func:`construct`, :class:`SequenceData`, comb types, etc.) and surrogate
-training tools are available directly from this module.
+Surrogate and exact tomography entry points are available directly from this module.
 """
 
 from __future__ import annotations
 
-from mqt.yaqs.characterization.process_tensors.tomography import (
-    DenseComb,
-    MPOComb,
-    SequenceData,
-    construct,
-)
+from typing import TYPE_CHECKING
+
+from mqt.yaqs.characterization.process_tensors.tomography import DenseComb, MPOComb, construct_process_tensor
 from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
 from mqt.yaqs.characterization.process_tensors.surrogates.workflow import create_surrogate, generate_data
 
+if TYPE_CHECKING:
+    from typing import TypeAlias
+
+
+Comb: "TypeAlias" = DenseComb | MPOComb | TransformerComb
+
+
 __all__ = [
     # Exact process-tensor tomography
-    "construct",
-    "SequenceData",
-    "DenseComb",
-    "MPOComb",
+    "construct_process_tensor",
     # Surrogate tooling
     "TransformerComb",
     "generate_data",

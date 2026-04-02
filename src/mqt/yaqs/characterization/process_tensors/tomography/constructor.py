@@ -4,9 +4,10 @@
 """Process-tensor tomography workflow: exhaustive discrete-basis simulation.
 
 **Public** (see ``__all__`` in :mod:`mqt.yaqs.characterization.process_tensors.tomography`):
-:func:`construct` (this module, :mod:`mqt.yaqs.characterization.process_tensors.tomography.constructor`).
+:func:`construct_process_tensor` (this module,
+:mod:`mqt.yaqs.characterization.process_tensors.tomography.constructor`).
 
-:func:`construct` is the high-level user entry point returning a comb directly
+:func:`construct_process_tensor` is the high-level user entry point returning a comb directly
 (:class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.DenseComb` or
 :class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.MPOComb`).
 The lower-level :func:`run_all_sequences` returns
@@ -172,7 +173,8 @@ def run_all_sequences(
 ) -> SequenceData:
     """Run the backend for every one of the ``16^k`` discrete Choi index sequences.
 
-    Prefer :func:`construct` for the validated user entry; this routine assumes ``timesteps`` and
+    Prefer :func:`construct_process_tensor` for the validated user entry; this routine assumes
+    ``timesteps`` and
     solver compatibility are already correct.
     """
     local_params = copy.deepcopy(sim_params)
@@ -301,7 +303,7 @@ def _construct_data(
     )
 
 
-def construct(
+def construct_process_tensor(
     operator: MPO,
     sim_params: "AnalogSimParams",
     timesteps: list[float] | None = None,
