@@ -2,73 +2,25 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.estimate.basis import (
+from mqt.yaqs.characterization.tomography.process_tensor.basis import (
     calculate_dual_choi_basis,
-    dual_norm_metrics,
     get_basis_states,
     get_choi_basis,
 )
-from mqt.yaqs.tomography import run_estimate, run_exhaustive
+from mqt.yaqs.tomography import construct
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
-def test_estimate_exact_when_all_sequences_selected_k2() -> None:
+def test_construct_exhaustive_self_consistent_k2() -> None:
     op = MPO.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, solver="TJM", show_progress=False, max_bond_dim=16)
     timesteps = [0.1, 0.1]
-    k = len(timesteps)
-    n_all = 16**k
 
-    comb_ex = run_exhaustive(op, params, timesteps=timesteps, output="dense", parallel=False)
-    comb_bs = run_estimate(
-        op,
-        params,
-        timesteps=timesteps,
-        mode="estimate",
-        output="dense",
-        parallel=False,
-        num_samples=n_all,
-        seed=123,
-        num_trajectories=1,
-    )
+    comb_a = construct(op, params, timesteps=timesteps, parallel=False).to_dense_comb()
+    comb_b = construct(op, params, timesteps=timesteps, parallel=False).to_dense_comb()
 
-    np.testing.assert_allclose(comb_bs.to_matrix(), comb_ex.to_matrix(), atol=1e-12)
-
-
-def test_estimate_inclusion_corrected_is_unbiased_in_expectation_k1() -> None:
-    # Deterministic backend (TJM) so only sampling randomness remains.
-    op = MPO.ising(length=2, J=0.0, g=0.0)
-    params = AnalogSimParams(dt=0.1, solver="TJM", show_progress=False, max_bond_dim=16)
-    timesteps = [0.1]
-    k = len(timesteps)
-    n_all = 16**k
-
-    comb_ex = run_exhaustive(op, params, timesteps=timesteps, output="dense", parallel=False)
-    U_ex = comb_ex.to_matrix()
-
-    n_pick = 8  # < 16
-    # Horvitz–Thompson reweighting is unbiased but high-variance in the operator norm;
-    # need enough subsamples so the empirical mean is close to exhaustive.
-    n_seeds = 120
-    Us = []
-    for s in range(n_seeds):
-        comb_bs = run_estimate(
-            op,
-            params,
-            timesteps=timesteps,
-            mode="estimate",
-            output="dense",
-            parallel=False,
-            num_samples=n_pick,
-            seed=1000 + s,
-            num_trajectories=1,
-        )
-        Us.append(comb_bs.to_matrix())
-
-    U_mean = np.mean(np.stack(Us, axis=0), axis=0)
-    # Monte Carlo on subsets: tolerance scales ~1/sqrt(n_seeds) for entrywise error.
-    np.testing.assert_allclose(U_mean, U_ex, atol=8e-2, rtol=8e-2)
+    np.testing.assert_allclose(comb_a.to_matrix(), comb_b.to_matrix(), atol=1e-12)
 
 
 def test_dual_norm_metrics_finite_for_all_bases() -> None:
@@ -79,10 +31,12 @@ def test_dual_norm_metrics_finite_for_all_bases() -> None:
     ]:
         choi_basis, _ = get_choi_basis(basis=basis_name, seed=seed)
         duals = calculate_dual_choi_basis(choi_basis)
-        dn = dual_norm_metrics(duals)
+        norms = [float(np.linalg.norm(d, "fro")) for d in duals]
+        mean_dual_norm = float(np.mean(norms))
+        max_dual_norm = float(np.max(norms))
 
-        assert np.isfinite(dn["mean_dual_norm"])
-        assert np.isfinite(dn["max_dual_norm"])
+        assert np.isfinite(mean_dual_norm)
+        assert np.isfinite(max_dual_norm)
 
 
 def test_tetrahedral_basis_states_are_physical_and_frame_is_full_rank() -> None:

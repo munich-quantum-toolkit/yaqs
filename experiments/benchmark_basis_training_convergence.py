@@ -21,9 +21,10 @@ from typing import Any, cast
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.estimate.basis import TomographyBasis, build_basis_for_fixed_alphabet
-from mqt.yaqs.characterization.tomography.core.predictor_encoding import random_density_matrix, sample_random_intervention_sequence
-from mqt.yaqs.characterization.tomography.core.tomography_utils import build_initial_psi, make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.process_tensor.basis import TomographyBasis, build_basis_for_fixed_alphabet
+from mqt.yaqs.characterization.tomography.process_tensor.predictor_encoding import random_density_matrix, sample_random_intervention_sequence
+from mqt.yaqs.characterization.tomography.core.utils import make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.surrogate.utils import build_initial_psi
 from mqt.yaqs.characterization.tomography.surrogate.data import stack_rollouts
 from mqt.yaqs.characterization.tomography.surrogate.model import TransformerComb
 from mqt.yaqs.characterization.tomography.surrogate.workflow import simulate_sequences

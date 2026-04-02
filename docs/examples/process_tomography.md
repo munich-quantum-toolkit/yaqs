@@ -50,14 +50,14 @@ Run tomography for a single evolution segment of length `t = 0.1`.
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.tomography import run_exhaustive
+from mqt.yaqs.tomography import construct
 
-comb_single = run_exhaustive(
+comb_single = construct(
     operator,
     sim_params,
     timesteps=[0.1],
     num_trajectories=100,
-)
+).to_dense_comb()
 
 print(f"Comb Choi matrix shape: {comb_single.to_matrix().shape}")
 ```
@@ -70,12 +70,12 @@ For two successive evolution segments, we can reconstruct the temporal correlati
 ---
 tags: [remove-output]
 ---
-comb_two = run_exhaustive(
+comb_two = construct(
     operator,
     sim_params,
     timesteps=[0.1, 0.1],       # two segments of dt each
     num_trajectories=100,
-)
+).to_dense_comb()
 
 print(f"Comb Choi matrix shape: {comb_two.to_matrix().shape}")
 ```

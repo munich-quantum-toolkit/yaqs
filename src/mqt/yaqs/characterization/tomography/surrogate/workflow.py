@@ -7,7 +7,7 @@
 
 :func:`generate_data` returns a :class:`~torch.utils.data.TensorDataset` for :meth:`~mqt.yaqs.characterization.tomography.surrogate.model.TransformerComb.fit`.
 
-**Internals** — Same execution pattern as :mod:`mqt.yaqs.simulator`: :func:`simulate_sequences` builds a
+**Internals** — Same execution pattern as :mod:`mqt.yaqs.simulator`: :func:`_simulate_sequences` builds a
 process-pool payload (or uses :data:`~mqt.yaqs.simulator.WORKER_CTX`), then dispatches to
 :func:`~mqt.yaqs.simulator.run_backend_parallel` or runs workers serially. Rollout types live in
 :mod:`mqt.yaqs.characterization.tomography.surrogate.data`; the model is
@@ -41,26 +41,21 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # 4) LOCAL — tomography surrogate stack
 # ---------------------------------------------------------------------------
-from ..core.predictor_encoding import (
-    normalize_rho_from_backend_output,
-    pack_rho8,
-    random_density_matrix,
-    sample_random_intervention_sequence,
-)
-from ..core.tomography_utils import (
+from .encoding import normalize_rho_from_backend_output, pack_rho8
+from ..core.utils import (
     _evolve_backend_state,
     _get_rho_site_zero,
     _reprepare_backend_state_forced,
-    build_initial_psi,
 )
 from .data import SequenceRolloutSample, stack_rollouts
+from .utils import build_initial_psi, _random_density_matrix, _sample_random_intervention_sequence
 from .model import TransformerComb
 
 
 # ---------------------------------------------------------------------------
 # 5) PARALLEL JOB PAYLOAD
 # ---------------------------------------------------------------------------
-# ``simulate_sequences`` passes the following dict to ``run_backend_parallel`` (initializer →
+# ``_simulate_sequences`` passes the following dict to ``run_backend_parallel`` (initializer →
 # ``WORKER_CTX``) or directly to workers in the serial path. Keys must stay stable for pickling.
 #
 #   psi_pairs               list[list[(meas, prep)]] per sequence — Kraus-style intervention steps
@@ -270,9 +265,9 @@ def _call_worker_serial(worker_fn: Callable[..., Any], *args: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# 8) simulate_sequences — internal primitive (feeds :func:`generate_data`)
+# 8) _simulate_sequences — internal primitive (feeds :func:`generate_data`)
 # ---------------------------------------------------------------------------
-def simulate_sequences(
+def _simulate_sequences(
     *,
     operator: MPO,
     sim_params: "AnalogSimParams",
@@ -302,7 +297,7 @@ def simulate_sequences(
 
     When recording rollouts, pass ``e_features_rows``: one ``(k, d_e)`` float32 array per sequence
     (fixed-basis indices map to rows of a precomputed table; continuous sampling uses
-    :func:`~..core.predictor_encoding.sample_random_intervention_sequence` features).
+    :func:`~mqt.yaqs.characterization.tomography.surrogate.utils._sample_random_intervention_sequence` features).
 
     **Parallelism**
 
@@ -484,8 +479,8 @@ def generate_data(
     choi_feature_rows_per_sequence: list[np.ndarray] = []
 
     for _ in range(int(n)):
-        rho_in = random_density_matrix(rng)
-        intervention_maps, choi_rows = sample_random_intervention_sequence(int(k), rng)
+        rho_in = _random_density_matrix(rng)
+        intervention_maps, choi_rows = _sample_random_intervention_sequence(int(k), rng)
         step_pairs: list[tuple[np.ndarray, np.ndarray]] = []
         for emap in intervention_maps:
             rho_prep = np.asarray(getattr(emap, "rho_prep"), dtype=np.complex128)
@@ -499,7 +494,7 @@ def generate_data(
             build_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
         )
 
-    samples = simulate_sequences(
+    samples = _simulate_sequences(
         operator=operator,
         sim_params=sim_params,
         timesteps=timesteps,

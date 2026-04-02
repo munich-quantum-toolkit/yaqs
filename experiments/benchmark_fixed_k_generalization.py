@@ -33,13 +33,14 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.core.metrics import mean_frobenius_mse_rho8
-from mqt.yaqs.characterization.tomography.core.predictor_encoding import (
+from mqt.yaqs.characterization.tomography.process_tensor.metrics import mean_frobenius_mse_rho8
+from mqt.yaqs.characterization.tomography.process_tensor.predictor_encoding import (
     random_density_matrix,
     sample_random_intervention_sequence,
     unpack_rho8,
 )
-from mqt.yaqs.characterization.tomography.core.tomography_utils import build_initial_psi, make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.core.utils import make_mcwf_static_context
+from mqt.yaqs.characterization.tomography.surrogate.utils import build_initial_psi
 from mqt.yaqs.characterization.tomography.surrogate.data import stack_rollouts
 from mqt.yaqs.characterization.tomography.surrogate.model import TransformerComb
 from mqt.yaqs.characterization.tomography.surrogate.workflow import simulate_sequences

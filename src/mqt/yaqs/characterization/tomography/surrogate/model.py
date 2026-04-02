@@ -6,10 +6,10 @@ Training data containers (:class:`~mqt.yaqs.characterization.tomography.surrogat
 :func:`~mqt.yaqs.characterization.tomography.surrogate.data.stack_rollouts`) live in
 :mod:`mqt.yaqs.characterization.tomography.surrogate.data`.
 
-Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.tomography.core.metrics`.
+Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.tomography.surrogate.metrics`.
 
 **Naming** — A **sequence** is the chosen interventions (Choi / features) at each step. A **trajectory**
-(in the noise sense) is one MCWF/TJM stochastic realization; see :mod:`mqt.yaqs.characterization.tomography.estimate.sampling`.
+(in the noise sense) is one MCWF/TJM stochastic realization; see :mod:`mqt.yaqs.characterization.tomography.process_tensor.data`.
 """
 
 from __future__ import annotations

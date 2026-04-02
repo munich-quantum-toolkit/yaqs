@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.characterization.tomography.core.metrics import rel_fro_error, trace_distance
+from mqt.yaqs.characterization.tomography.process_tensor.metrics import rel_fro_error, trace_distance
 
 
 def test_rel_fro_error_zero_for_equal_matrices() -> None:

@@ -12,9 +12,30 @@ import numpy as np
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-from ..core.predictor_encoding import build_choi_feature_table
+from ..core.encoding import build_choi_feature_table
 
 TomographyBasis = Literal["standard", "tetrahedral", "random"]
+
+
+def _finalize_sequence_averages(
+    acc: dict[tuple[int, ...], list[Any]],
+    weight_scale: float,
+) -> tuple[list[tuple[int, ...]], list[NDArray[np.complex128]], list[float]]:
+    """Consolidated logic for result collection, normalization, and weight assignment."""
+    final_seqs = []
+    final_outputs = []
+    final_weights = []
+
+    for seq, (rho_weighted_sum, weight_sum, count) in acc.items():
+        if weight_sum > 1e-30:
+            rho_avg = (rho_weighted_sum / count) / (weight_sum / count)
+        else:
+            rho_avg = np.zeros((2, 2), dtype=np.complex128)
+        final_seqs.append(seq)
+        final_outputs.append(rho_avg)
+        final_weights.append(weight_sum / weight_scale)
+
+    return final_seqs, final_outputs, final_weights
 
 
 def get_basis_states(
@@ -100,35 +121,6 @@ def build_basis_for_fixed_alphabet(
     choi_matrices, choi_pm_pairs = get_choi_basis(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
     choi_feat_table = build_choi_feature_table(choi_matrices)
     return basis_set, choi_matrices, choi_pm_pairs, choi_feat_table
-
-
-def dual_norm_metrics(dual_basis: list[NDArray[np.complex128]]) -> dict[str, float]:
-    norms = [float(np.linalg.norm(d, "fro")) for d in dual_basis]
-    return {
-        "mean_dual_norm": float(np.mean(norms)),
-        "max_dual_norm": float(np.max(norms)),
-    }
-
-
-def _finalize_sequence_averages(
-    acc: dict[tuple[int, ...], list[Any]],
-    weight_scale: float,
-) -> tuple[list[tuple[int, ...]], list[NDArray[np.complex128]], list[float]]:
-    """Consolidated logic for result collection, normalization, and weight assignment."""
-    final_seqs = []
-    final_outputs = []
-    final_weights = []
-
-    for seq, (rho_weighted_sum, weight_sum, count) in acc.items():
-        if weight_sum > 1e-30:
-            rho_avg = (rho_weighted_sum / count) / (weight_sum / count)
-        else:
-            rho_avg = np.zeros((2, 2), dtype=np.complex128)
-        final_seqs.append(seq)
-        final_outputs.append(rho_avg)
-        final_weights.append(weight_sum / weight_scale)
-
-    return final_seqs, final_outputs, final_weights
 
 
 def calculate_dual_choi_basis(

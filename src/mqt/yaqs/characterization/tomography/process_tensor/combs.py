@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from mqt.yaqs.core.data_structures.networks import MPO
@@ -10,8 +10,6 @@ from mqt.yaqs.core.data_structures.networks import MPO
 if TYPE_CHECKING:
     from collections.abc import Callable
     from numpy.typing import NDArray
-
-    from ..estimate.estimator import TomographyEstimate
 
 
 def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
@@ -71,105 +69,8 @@ class DenseComb:
         """Return the underlying dense comb matrix Υ."""
         return self.upsilon
 
-    @classmethod
-    def fit(
-        cls,
-        estimate: "TomographyEstimate",
-        *,
-        weight_tol: float = 1e-30,
-        lam: float = 1e-8,
-        **kwargs: object,
-    ) -> "DenseComb":
-        """Constraint-based dense comb fit from observed sequences (least squares).
-
-        Extracts only positive-weight sequence cells from ``estimate``, then fits a
-        dense Υ by minimizing
-
-            sum_α || ρ_pred(α; Υ) − w_α ρ_out(α) ||_F² + λ ||Υ||_F²
-
-        where ``ρ_pred`` uses the same contraction as
-        :meth:`TomographyEstimate.reconstruct_comb_choi` (``predict_from_upsilon`` with
-        primal ``choi_basis``). This is **not** the same as coefficient-based dual
-        reconstruction; it is a simple linear least-squares surrogate when fewer than
-        ``16^k`` sequences are observed.
-
-        Does not enforce CPTP or causal structure; does not modify reconstruction code.
-
-        Extra keyword arguments (e.g. legacy ``minimize_options``) are ignored.
-        """
-        _ = kwargs  # reserved for API compatibility with benchmarks / older call sites
-        from ..estimate.estimator import TomographyEstimate
-
-        if not isinstance(estimate, TomographyEstimate):
-            msg = f"estimate must be a TomographyEstimate, got {type(estimate)!r}."
-            raise TypeError(msg)
-        if estimate.tensor is None or estimate.weights is None:
-            msg = "DenseComb.fit requires tensor and weights."
-            raise ValueError(msg)
-        if estimate.choi_basis is None or len(estimate.choi_basis) != 16:
-            msg = "DenseComb.fit requires choi_basis of length 16."
-            raise ValueError(msg)
-
-        tensor = estimate.tensor
-        weights = estimate.weights
-        choi_basis = estimate.choi_basis
-        k = int(tensor.ndim - 1)
-        dim = int(2 * (4**k))
-        dim_p = int(4**k)
-        n_u = dim * dim
-
-        observed: list[tuple[tuple[int, ...], np.ndarray, float]] = []
-        import itertools as _it
-
-        for alphas in _it.product(range(16), repeat=k):
-            w = float(weights[alphas])
-            if w <= weight_tol:
-                continue
-            rho_out = np.asarray(
-                tensor[(slice(None), *alphas)].reshape(2, 2),
-                dtype=np.complex128,
-            )
-            observed.append((alphas, rho_out, w))
-
-        if not observed:
-            msg = "No observed sequences with weight > weight_tol."
-            raise ValueError(msg)
-
-        n_obs = len(observed)
-        n_eq = 4 * n_obs
-        A = np.zeros((n_eq, n_u), dtype=np.complex128)
-        b = np.zeros(n_eq, dtype=np.complex128)
-
-        shape_u4 = (2, dim_p, 2, dim_p)
-
-        for idx_obs, (alphas, rho_out, w) in enumerate(observed):
-            past = choi_basis[alphas[0]]
-            for a in alphas[1:]:
-                past = np.kron(past, choi_basis[a])
-            ins = past.T.reshape(dim_p, dim_p)
-            target = w * rho_out
-
-            for s in range(2):
-                for q in range(2):
-                    row = 4 * idx_obs + 2 * s + q
-                    b[row] = target[s, q]
-                    for p in range(dim_p):
-                        for r in range(dim_p):
-                            coef = ins[r, p]
-                            if abs(coef) < 1e-30:
-                                continue
-                            flat = int(
-                                np.ravel_multi_index((s, p, q, r), shape_u4)
-                            )
-                            A[row, flat] = coef
-
-        ah_a = A.conj().T @ A
-        ah_b = A.conj().T @ b
-        system = ah_a + lam * np.eye(n_u, dtype=np.complex128)
-        vec_u = np.linalg.solve(system, ah_b)
-        upsilon = vec_u.reshape(dim, dim, order="C")
-
-        return cls(upsilon, list(estimate.timesteps))
+    # NOTE: previously there was a `DenseComb.fit(...)` entry point here.
+    # The library now exposes only the exhaustive `construct(...) -> SequenceData -> to_*_comb()` path.
 
     def _k_steps(self) -> int:
         """Number of intervention steps from Υ shape (2·4^k, 2·4^k)."""

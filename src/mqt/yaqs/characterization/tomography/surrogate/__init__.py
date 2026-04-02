@@ -10,6 +10,6 @@ Public workflow API: :func:`~mqt.yaqs.characterization.tomography.surrogate.work
 :meth:`~mqt.yaqs.characterization.tomography.surrogate.model.TransformerComb.fit` training loop.
 Rollout samples: :mod:`mqt.yaqs.characterization.tomography.surrogate.data`.
 
-**Terminology** — See :mod:`mqt.yaqs.characterization.tomography.estimate.sampling` (**sequence** vs
+**Terminology** — See :mod:`mqt.yaqs.characterization.tomography.process_tensor.data` (**sequence** vs
 stochastic **trajectory** under a noise model).
 """

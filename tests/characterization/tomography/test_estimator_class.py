@@ -16,8 +16,6 @@ import itertools
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.tomography.estimate.estimator import TomographyEstimate
-
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -63,6 +61,28 @@ def _check_duality(duals: list[NDArray[np.complex128]], basis: list[NDArray[np.c
             inner = np.trace(duals[i].conj().T @ basis[j])
             expected = 1.0 if i == j else 0.0
             assert np.isclose(inner, expected, atol=atol), f"<D{i}|B{j}>={inner} expected {expected}"
+
+
+def _reconstruct_upsilon_from_tensor(
+    tensor: "NDArray[np.complex128]",
+    weights: "NDArray[np.float64]",
+    choi_basis: list["NDArray[np.complex128]"],
+    duals: list["NDArray[np.complex128]"],
+    *,
+    check: bool = True,
+    atol: float = 1e-8,
+) -> "NDArray[np.complex128]":
+    """Mirror the production reconstruction (incl. dual-convention selection)."""
+    from mqt.yaqs.characterization.tomography.process_tensor.build import _reconstruct_upsilon_from_packed
+
+    return _reconstruct_upsilon_from_packed(
+        tensor=tensor,
+        weights=weights,
+        choi_duals=duals,
+        choi_basis=choi_basis,
+        check=check,
+        atol=atol,
+    )
 
 
 def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[int]) -> NDArray[np.complex128]:
@@ -122,9 +142,7 @@ def test_reconstruct_comb_choi_shape_and_psd_k1() -> None:
         tensor[:, a] = rho_out.reshape(-1)
 
     weights = np.ones((16,), dtype=np.float64) / 16.0
-    pt = TomographyEstimate(tensor, weights, [1.0], duals, choi_indices, choi_basis=choi_basis)
-
-    U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
+    U = _reconstruct_upsilon_from_tensor(tensor, weights, choi_basis, duals, check=True, atol=1e-8)
     assert U.shape == (8, 8)
 
     # Hermitian
@@ -151,9 +169,7 @@ def test_reconstruct_comb_choi_self_consistency_k2() -> None:
         tensor[:, a1, a2] = (rho0 if (a1 % 2 == 0) else rho1).reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = TomographyEstimate(tensor, weights, [1.0, 1.0], duals, choi_indices, choi_basis=choi_basis)
-
-    U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
+    U = _reconstruct_upsilon_from_tensor(tensor, weights, choi_basis, duals, check=True, atol=1e-8)
     assert U.shape == (32, 32)
 
     # Reproduce stored outputs using the SAME contraction rule as reconstruct_comb_choi uses internally:
@@ -168,7 +184,7 @@ def test_reconstruct_comb_choi_self_consistency_k2() -> None:
 
     # Test a handful
     for a1, a2 in [(0, 0), (1, 7), (2, 3), (15, 15)]:
-        w = pt.weights[a1, a2]
+        w = weights[a1, a2]
         r_true = (w * tensor[:, a1, a2].reshape(2, 2))
         r_hat = rho_pred(a1, a2)
         np.testing.assert_allclose(r_hat, r_true, atol=1e-6)
@@ -189,9 +205,10 @@ def test_comb_qmi_bounds_and_zero_for_product_like_case() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = TomographyEstimate(tensor, weights, [1.0, 1.0], duals, choi_indices, choi_basis=choi_basis)
+    U = _reconstruct_upsilon_from_tensor(tensor, weights, choi_basis, duals, check=True, atol=1e-8)
+    from mqt.yaqs.characterization.tomography.process_tensor.combs import DenseComb
 
-    qmi = pt.to_dense_comb().qmi(base=2, past="all", check_psd=True)
+    qmi = DenseComb(U, [1.0, 1.0]).qmi(base=2, past="all", check_psd=True)
     assert qmi >= -1e-10  # numeric
     assert qmi <= 2.0 + 1e-10
 
@@ -279,9 +296,7 @@ def test_reconstruct_upsilon_is_hermitian_and_psd_k2() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
-
-    U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
+    U = _reconstruct_upsilon_from_tensor(tensor, weights, choi_basis, duals, check=True, atol=1e-8)
     assert U.shape == (32, 32)
 
     np.testing.assert_allclose(U, U.conj().T, atol=1e-10)
@@ -304,9 +319,7 @@ def test_reconstruct_upsilon_self_consistency_k2() -> None:
         tensor[:, a1, a2] = (rho0 if (a1 % 2 == 0) else rho1).reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
-
-    U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
+    U = _reconstruct_upsilon_from_tensor(tensor, weights, choi_basis, duals, check=True, atol=1e-8)
 
     # Forward contraction consistent with your reconstruct_comb_choi() doc:
     # rho = Tr_past[ Υ (I ⊗ past^T) ], where past = B_{a1} ⊗ B_{a2}
@@ -338,9 +351,10 @@ def test_comb_qmi_zero_for_trivial_product_case_k2() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
+    U = _reconstruct_upsilon_from_tensor(tensor, weights, choi_basis, duals, check=True, atol=1e-8)
+    from mqt.yaqs.characterization.tomography.process_tensor.combs import DenseComb
 
-    qmi = pt.to_dense_comb().qmi(base=2, past="all", check_psd=True)
+    qmi = DenseComb(U, [0.0, 0.0]).qmi(base=2, past="all", check_psd=True)
     assert qmi >= -1e-10
     assert qmi <= 2.0 + 1e-10
     assert qmi < 1e-6
@@ -358,9 +372,7 @@ def test_factorization_error_small_for_trivial_case_k2() -> None:
         tensor[:, a1, a2] = rho_out.reshape(-1)
 
     weights = np.ones((16, 16), dtype=np.float64) / (16.0 * 16.0)
-    pt = TomographyEstimate(tensor, weights, [0.0, 0.0], duals, choi_indices, choi_basis=choi_basis)
-
-    U = pt.reconstruct_comb_choi(check=True, atol=1e-8)
+    U = _reconstruct_upsilon_from_tensor(tensor, weights, choi_basis, duals, check=True, atol=1e-8)
     rho = _normalize_density(U)
 
     # dims: [F, step1, step2] = [2, 4, 4]

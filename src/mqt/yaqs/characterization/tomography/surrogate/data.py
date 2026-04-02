@@ -24,7 +24,7 @@ class SequenceRolloutSample:
     ``E_features`` rows have length ``d_e`` (32 for the default single-qubit Choi flattening). This is
     not the same as a single stochastic
     **trajectory** when ``num_trajectories > 1`` under a noise model (see
-    :func:`~mqt.yaqs.tomography.run_exhaustive` / :func:`~mqt.yaqs.tomography.run_estimate`).
+    :func:`~mqt.yaqs.tomography.construct`), returning :class:`~mqt.yaqs.characterization.tomography.process_tensor.data.SequenceData`.
     """
 
     rho_0: np.ndarray  # shape (8,), float32 — packed 2x2 rho before first intervention
