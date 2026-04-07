@@ -26,4 +26,3 @@ def test_construct_process_tensor_returns_dense_and_mpo_smoke() -> None:
     mat = mpo.to_matrix()
     assert mat.shape == (8, 8)
     np.testing.assert_allclose(mat, dense.to_matrix(), atol=1e-8)
-

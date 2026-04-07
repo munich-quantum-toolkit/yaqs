@@ -67,10 +67,7 @@ def _reconstruct_state(expectations: dict[str, float]) -> "NDArray[np.complex128
     """Reconstruct single-qubit density matrix from Pauli expectations."""
     eye = np.eye(2, dtype=complex)
     return 0.5 * (
-        eye
-        + expectations["x"] * X().matrix
-        + expectations["y"] * Y().matrix
-        + expectations["z"] * Z().matrix
+        eye + expectations["x"] * X().matrix + expectations["y"] * Y().matrix + expectations["z"] * Z().matrix
     )
 
 
@@ -89,9 +86,7 @@ def _get_rho_site_zero(state: MPS | "NDArray[np.complex128]") -> "NDArray[np.com
     return trace * _reconstruct_state({"x": rx / trace, "y": ry / trace, "z": rz / trace})
 
 
-def _initialize_backend_state(
-    operator: MPO, solver: str
-) -> MPS | "NDArray[np.complex128]":
+def _initialize_backend_state(operator: MPO, solver: str) -> MPS | "NDArray[np.complex128]":
     """Initialise |0...0> state for the given solver."""
     if solver == "MCWF":
         psi = np.zeros(2**operator.length, dtype=np.complex128)

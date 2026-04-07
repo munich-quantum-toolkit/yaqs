@@ -69,4 +69,3 @@ def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:
     ds = TensorDataset(E_t, rho0_t, tgt_t)
     with pytest.raises(ValueError):
         model.fit(ds, epochs=1, prefix_loss="nope")  # type: ignore[arg-type]
-

@@ -208,5 +208,3 @@ class SequenceData:
             n_sweeps=n_sweeps,
         )
         return MPOComb(mpo, self.timesteps)
-
-

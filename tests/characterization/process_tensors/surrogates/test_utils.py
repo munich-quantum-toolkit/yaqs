@@ -72,4 +72,3 @@ def test_initial_mcwf_state_from_rho0_branches_length_gt_1() -> None:
     psi_pur = _initial_mcwf_state_from_rho0(rho, length=3, init_mode="purified")
     assert psi_pur.shape == (2**3,)
     np.testing.assert_allclose(np.linalg.norm(psi_pur), 1.0, atol=1e-12)
-

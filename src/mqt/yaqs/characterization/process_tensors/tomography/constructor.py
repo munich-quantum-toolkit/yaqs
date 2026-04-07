@@ -114,9 +114,7 @@ def _sequence_worker(
 
     weight = 1.0
     for step_i, (psi_meas, psi_prep) in enumerate(psi_pairs):
-        current_state, step_prob = _reprepare_backend_state_forced(
-            current_state, psi_meas, psi_prep, solver
-        )
+        current_state, step_prob = _reprepare_backend_state_forced(current_state, psi_meas, psi_prep, solver)
         weight *= float(step_prob)
         if weight < 1e-15:
             break
@@ -185,6 +183,7 @@ def run_all_sequences(
     choi_duals = calculate_dual_choi_basis(choi_basis)
 
     k = len(timesteps)
+
     def _enumerate_sequences(k_in: int) -> list[tuple[int, ...]]:
         import itertools  # noqa: PLC0415
 
@@ -196,8 +195,7 @@ def run_all_sequences(
 
     n_seq = len(all_seqs)
     samples_psi_pairs = [
-        [(basis_set[choi_indices[a][1]][1], basis_set[choi_indices[a][0]][1]) for a in seq]
-        for seq in all_seqs
+        [(basis_set[choi_indices[a][1]][1], basis_set[choi_indices[a][0]][1]) for a in seq] for seq in all_seqs
     ]
 
     if noise_model is None:
@@ -245,9 +243,7 @@ def run_all_sequences(
             desc=f"Simulating {n_seq} basis sequences (serial)",
             disable=disable_tqdm,
         ):
-            (s_idx, _traj_idx, rho_final, weight) = _call_backend_serial(
-                _sequence_worker, job_idx, payload
-            )
+            (s_idx, _traj_idx, rho_final, weight) = _call_backend_serial(_sequence_worker, job_idx, payload)
             aggregated_outputs[s_idx] += rho_final * weight
             aggregated_weights[s_idx] += weight
 
@@ -271,6 +267,7 @@ def run_all_sequences(
 # ---------------------------------------------------------------------------
 # 8) PUBLIC ENTRY — high-level façade (cf. surrogate ``workflow`` / ``simulator.run``)
 # ---------------------------------------------------------------------------
+
 
 def _construct_data(
     operator: MPO,

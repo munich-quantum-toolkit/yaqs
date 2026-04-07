@@ -1967,6 +1967,7 @@ class MPO:
         """
         import copy
         import numpy as np
+
         if self.length != other.length:
             msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
             raise ValueError(msg)
@@ -1979,7 +1980,7 @@ class MPO:
 
         L = self.length
         for i in range(L):
-            A = self.tensors[i]   # (d_out, d_in, L_a, R_a)
+            A = self.tensors[i]  # (d_out, d_in, L_a, R_a)
             B = other.tensors[i]  # (d_out, d_in, L_b, R_b)
 
             p_out, p_in, La, Ra = A.shape
@@ -2021,6 +2022,7 @@ class MPO:
             A new MPO directly representing the sum.
         """
         import copy
+
         if not mpos:
             raise ValueError("mpo_sum requires at least one MPO.")
 

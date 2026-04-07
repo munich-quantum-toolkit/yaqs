@@ -112,9 +112,7 @@ class DenseComb:
         if dim_traced == 1:
             U_red = self.upsilon.reshape(dim_m, dim_m)
         else:
-            U6 = self.upsilon.reshape(
-                2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m
-            )
+            U6 = self.upsilon.reshape(2, dim_traced, 4**keep_last_m, 2, dim_traced, 4**keep_last_m)
             U_red = np.einsum("iabjac->ibjc", U6).reshape(dim_m, dim_m)
         t_red = self.timesteps[-keep_last_m:] if len(self.timesteps) >= keep_last_m else self.timesteps
         return DenseComb(U_red, t_red)
@@ -409,5 +407,3 @@ class MPOComb(MPO):
             normalize=normalize,
             check_psd=check_psd,
         )
-
-

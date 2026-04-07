@@ -44,4 +44,3 @@ def test_normalize_rho_from_backend_output_returns_physical_dm() -> None:
     np.testing.assert_allclose(np.trace(rho).real, 1.0, atol=1e-12)
     evals = np.linalg.eigvalsh(rho).real
     assert float(evals.min()) >= -1e-12
-

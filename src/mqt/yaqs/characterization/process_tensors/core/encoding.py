@@ -98,6 +98,3 @@ def normalize_rho_from_backend_output(rho_final: Any) -> np.ndarray:
         return rho_h
 
     return _normalize_density_like_densecomb(rho_h)
-
-
-

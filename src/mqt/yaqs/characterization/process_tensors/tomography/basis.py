@@ -131,4 +131,3 @@ def calculate_dual_choi_basis(
     dual_frame = np.linalg.pinv(frame_matrix).conj().T
     dim = basis_matrices[0].shape[0]
     return [dual_frame[:, k].reshape(dim, dim) for k in range(dual_frame.shape[1])]
-

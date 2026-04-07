@@ -25,4 +25,3 @@ __all__ = [
     "create_surrogate",
     "generate_data",
 ]
-

@@ -49,6 +49,3 @@ def _mean_frobenius_mse_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> flo
         d = rp - rt
         diffs.append(float(np.real(np.vdot(d, d))))
     return float(np.mean(diffs))
-
-
-

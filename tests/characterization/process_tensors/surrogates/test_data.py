@@ -57,4 +57,3 @@ def test_stack_rollouts_appends_context_to_E() -> None:
     assert E.shape == (1, 2, 32 + 5)
     assert rho_seq.shape == (1, 2, 8)
     assert ctx is None
-

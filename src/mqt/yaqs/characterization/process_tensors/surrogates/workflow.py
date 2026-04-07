@@ -267,7 +267,14 @@ def _surrogate_rollout_worker(
     if choi_features_matrix.shape[0] != num_steps:
         msg = "Choi feature rows must have length num_steps matching intervention steps."
         raise ValueError(msg)
-    return (sequence_idx, trajectory_idx, rho0_packed, choi_features_matrix, rho_sequence_packed, float(cumulative_weight))
+    return (
+        sequence_idx,
+        trajectory_idx,
+        rho0_packed,
+        choi_features_matrix,
+        rho_sequence_packed,
+        float(cumulative_weight),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -391,9 +398,7 @@ def _simulate_sequences(
             final_packed_serial.append(pack_rho8(rho_norm))
         return np.stack(final_packed_serial, axis=0).astype(np.float32)
 
-    optional_context_vec = (
-        None if context_vec is None else np.asarray(context_vec, dtype=np.float32).reshape(-1)
-    )
+    optional_context_vec = None if context_vec is None else np.asarray(context_vec, dtype=np.float32).reshape(-1)
 
     def rollout_one_sequence(sequence_idx: int) -> SequenceRolloutSample:
         _s, _t, rho0, choi_mat, rho_seq, weight = _call_worker_serial(
@@ -520,9 +525,7 @@ def generate_data(
             step_pairs.append((psi_meas, psi_prep))
         psi_pairs_list.append(step_pairs)
         choi_feature_rows_per_sequence.append(choi_rows.astype(np.float32))
-        initial_psis.append(
-            build_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode)
-        )
+        initial_psis.append(build_initial_psi(rho_in, length=int(chain_length), rng=rng, init_mode=init_mode))
 
     samples = _simulate_sequences(
         operator=operator,

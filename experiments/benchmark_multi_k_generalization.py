@@ -276,7 +276,7 @@ def main() -> None:
                     )
                 )
                 print(
-                    f"seed={seed} k_train={k_train} k_test={k_test} gap={int(k_test)-int(k_train)} "
+                    f"seed={seed} k_train={k_train} k_test={k_test} gap={int(k_test) - int(k_train)} "
                     f"frob={fr:.3e} |dX|={ox:.3e} |dZ|={oz:.3e}"
                 )
 
@@ -300,10 +300,12 @@ def main() -> None:
         x = [v[1] for v in vals]
         z = [v[2] for v in vals]
         agg_lines.append(
-            f"{kt},{ks},{ks-kt},{mean(f)},{stdev(f) if len(f) > 1 else 0},"
+            f"{kt},{ks},{ks - kt},{mean(f)},{stdev(f) if len(f) > 1 else 0},"
             f"{mean(x)},{stdev(x) if len(x) > 1 else 0},{mean(z)},{stdev(z) if len(z) > 1 else 0},{len(vals)}"
         )
-    (out_dir / "benchmark_multi_k_generalization_aggregate.csv").write_text("\n".join(agg_lines) + "\n", encoding="utf-8")
+    (out_dir / "benchmark_multi_k_generalization_aggregate.csv").write_text(
+        "\n".join(agg_lines) + "\n", encoding="utf-8"
+    )
 
     if rows and not args.no_plots:
         _plot_vs_k_test(
@@ -346,4 +348,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

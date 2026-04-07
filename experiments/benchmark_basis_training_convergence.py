@@ -329,7 +329,13 @@ def main() -> None:
             )
             for ep, tr_m, va_m in history:
                 all_rows.append(
-                    HistoryRow(regime=str(regime_label), seed=int(seed), epoch=int(ep), train_mse=float(tr_m), val_mse=float(va_m))
+                    HistoryRow(
+                        regime=str(regime_label),
+                        seed=int(seed),
+                        epoch=int(ep),
+                        train_mse=float(tr_m),
+                        val_mse=float(va_m),
+                    )
                 )
 
     csv_path = out_dir / "benchmark_basis_training_convergence.csv"

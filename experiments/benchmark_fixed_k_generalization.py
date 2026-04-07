@@ -247,7 +247,10 @@ def main() -> None:
     per_csv = out_dir / "benchmark_fixed_k_generalization.csv"
     if rows:
         cols = list(asdict(rows[0]).keys())
-        per_csv.write_text("\n".join([",".join(cols), *[",".join(str(asdict(r)[c]) for c in cols) for r in rows]]) + "\n", encoding="utf-8")
+        per_csv.write_text(
+            "\n".join([",".join(cols), *[",".join(str(asdict(r)[c]) for c in cols) for r in rows]]) + "\n",
+            encoding="utf-8",
+        )
         print(f"\nWrote {len(rows)} rows to {per_csv}")
 
     agg: dict[tuple[int, int], list[tuple[float, float, float]]] = defaultdict(list)
@@ -263,7 +266,9 @@ def main() -> None:
         agg_lines.append(
             f"{kt},{ks},{mean(f)},{stdev(f) if len(f) > 1 else 0},{mean(x)},{stdev(x) if len(x) > 1 else 0},{mean(z)},{stdev(z) if len(z) > 1 else 0},{len(vals)}"
         )
-    (out_dir / "benchmark_fixed_k_generalization_aggregate.csv").write_text("\n".join(agg_lines) + "\n", encoding="utf-8")
+    (out_dir / "benchmark_fixed_k_generalization_aggregate.csv").write_text(
+        "\n".join(agg_lines) + "\n", encoding="utf-8"
+    )
 
     if rows and not args.no_plots:
         kt = int(args.k_train)

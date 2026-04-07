@@ -238,4 +238,3 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
     rho_pred = unpack_rho8(pred[0, -1, :])
     rho_true = unpack_rho8(test_tgt.numpy()[0, -1, :])
     assert _trace_distance(rho_pred, rho_true) < 0.5
-
