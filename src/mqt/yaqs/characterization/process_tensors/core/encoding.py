@@ -81,6 +81,22 @@ def normalize_rho_from_backend_output(rho_final: Any) -> np.ndarray:
     """Normalize a raw backend 2x2 output into a physical density matrix."""
     rho_h = np.asarray(rho_final, dtype=np.complex128).reshape(2, 2)
     rho_h = 0.5 * (rho_h + rho_h.conj().T)
+    tr = np.trace(rho_h)
+    if abs(tr) > 1e-12:
+        rho_h = rho_h / tr
+    else:
+        return np.zeros((2, 2), dtype=np.complex128)
+
+    # Fast path: for near-physical outputs, avoid full PSD projection (eigh) and only do a cheap check.
+    # This is conservative: any small negativity falls back to the projection path.
+    eps = 1e-12
+    w = np.linalg.eigvalsh(rho_h).real
+    if float(w.min()) >= -eps:
+        tr2 = np.trace(rho_h)
+        if abs(tr2) > 1e-15:
+            rho_h = rho_h / tr2
+        return rho_h
+
     return _normalize_density_like_densecomb(rho_h)
 
 

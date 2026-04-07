@@ -54,6 +54,20 @@ from .model import TransformerComb
 
 
 # ---------------------------------------------------------------------------
+# 4b) Performance helpers (hot path)
+# ---------------------------------------------------------------------------
+def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: float, duration: float) -> np.ndarray:
+    """Cached `times` grid matching existing rounding convention."""
+    n_steps = max(1, int(np.round(float(duration) / float(dt))))
+    key = (float(dt), int(n_steps))
+    out = times_cache.get(key)
+    if out is None:
+        out = np.linspace(0.0, float(n_steps) * float(dt), int(n_steps) + 1)
+        times_cache[key] = out
+    return out
+
+
+# ---------------------------------------------------------------------------
 # 5) PARALLEL JOB PAYLOAD
 # ---------------------------------------------------------------------------
 # ``_simulate_sequences`` passes the following dict to ``run_backend_parallel`` (initializer →
@@ -107,6 +121,11 @@ def _surrogate_final_state_worker(
 
     solver = sim_params.solver
     state = np.asarray(initial_states[sequence_idx], dtype=np.complex128).copy()
+    times_cache: dict[tuple[float, int], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
+    step_params = copy.copy(sim_params)
+    step_params.num_traj = 1
+    step_params.show_progress = False
+    step_params.get_state = True
 
     cumulative_weight = 1.0
     for step_idx, (psi_meas, psi_prep) in enumerate(psi_pairs):
@@ -116,13 +135,11 @@ def _surrogate_final_state_worker(
             break
 
         duration = float(timesteps[step_idx])
-        step_params = copy.deepcopy(sim_params)
         step_params.elapsed_time = duration
-        step_params.num_traj = 1
-        step_params.show_progress = False
-        step_params.get_state = True
-        n_integration_steps = max(1, int(np.round(duration / step_params.dt)))
-        step_params.times = np.linspace(0, n_integration_steps * step_params.dt, n_integration_steps + 1)
+        step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)
+        # TJM backend writes output_state into params; reset defensively.
+        if solver != "MCWF":
+            step_params.output_state = None
 
         state = _evolve_backend_state(
             state,
@@ -177,6 +194,11 @@ def _surrogate_rollout_worker(
     num_steps = len(psi_pairs)
     solver = sim_params.solver
     state = np.asarray(initial_states[sequence_idx], dtype=np.complex128).copy()
+    times_cache: dict[tuple[float, int], np.ndarray] = worker_ctx.setdefault("_times_cache", {})
+    step_params = copy.copy(sim_params)
+    step_params.num_traj = 1
+    step_params.show_progress = False
+    step_params.get_state = True
 
     rho0_raw = _get_rho_site_zero(state)
     rho0_packed = pack_rho8(normalize_rho_from_backend_output(rho0_raw)).astype(np.float32)
@@ -202,28 +224,27 @@ def _surrogate_rollout_worker(
         mcwf_ctx_for_step = None
 
     cumulative_weight = 1.0
-    rho_packed_after_step: list[np.ndarray] = []
     last_rho_packed = rho0_packed.copy()
+    rho_sequence_packed = np.empty((num_steps, 8), dtype=np.float32)
+    out_i = 0
 
     for step_idx, (psi_meas, psi_prep) in enumerate(psi_pairs):
         state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
         cumulative_weight *= float(step_prob)
         if cumulative_weight < 1e-15:
-            while len(rho_packed_after_step) < num_steps:
-                rho_packed_after_step.append(last_rho_packed.copy())
+            if out_i < num_steps:
+                rho_sequence_packed[out_i:, :] = last_rho_packed[None, :]
+            out_i = num_steps
             break
 
         duration = float(step_durations[step_idx])
         op = hamiltonian if hamiltonian_this_step is None else hamiltonian_this_step[step_idx]
         step_mcwf_ctx = worker_ctx.get("mcwf_static_ctx") if mcwf_ctx_for_step is None else mcwf_ctx_for_step[step_idx]
 
-        step_params = copy.deepcopy(sim_params)
         step_params.elapsed_time = duration
-        step_params.num_traj = 1
-        step_params.show_progress = False
-        step_params.get_state = True
-        n_integration_steps = max(1, int(np.round(duration / step_params.dt)))
-        step_params.times = np.linspace(0, n_integration_steps * step_params.dt, n_integration_steps + 1)
+        step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)
+        if solver != "MCWF":
+            step_params.output_state = None
 
         state = _evolve_backend_state(
             state,
@@ -238,12 +259,11 @@ def _surrogate_rollout_worker(
         rho_step = _get_rho_site_zero(state)
         rho_normalized = normalize_rho_from_backend_output(rho_step)
         last_rho_packed = pack_rho8(rho_normalized).astype(np.float32)
-        rho_packed_after_step.append(last_rho_packed)
+        rho_sequence_packed[out_i, :] = last_rho_packed
+        out_i += 1
 
-    while len(rho_packed_after_step) < num_steps:
-        rho_packed_after_step.append(last_rho_packed.copy())
-
-    rho_sequence_packed = np.stack(rho_packed_after_step, axis=0).astype(np.float32)
+    if out_i < num_steps:
+        rho_sequence_packed[out_i:, :] = last_rho_packed[None, :]
     if choi_features_matrix.shape[0] != num_steps:
         msg = "Choi feature rows must have length num_steps matching intervention steps."
         raise ValueError(msg)
@@ -333,6 +353,7 @@ def _simulate_sequences(
         "noise_model": None,
         "mcwf_static_ctx": static_ctx,
         "mcwf_static_ctx_list": static_ctx_list,
+        "_times_cache": {},
     }
     if record_step_states:
         job_payload["e_features_rows"] = e_features_rows
