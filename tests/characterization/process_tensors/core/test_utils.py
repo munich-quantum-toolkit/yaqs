@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.characterization.process_tensors.core.utils import (
     _get_rho_site_zero,
     _initialize_backend_state,
     _reconstruct_state,
 )
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
 
 
 def test_initialize_backend_state_mcwf_and_tjm() -> None:

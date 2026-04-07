@@ -28,13 +28,11 @@ def _initial_mcwf_state_from_rho0(
     w, v = np.linalg.eigh(rho)
     w = np.maximum(w.real, 0.0)
     s = float(w.sum())
-    if s > 1e-15:
-        w = w / s
-    else:
-        w = np.array([1.0, 0.0], dtype=np.float64)
+    w = w / s if s > 1e-15 else np.array([1.0, 0.0], dtype=np.float64)
 
     if init_mode not in {"eigenstate", "purified"}:
-        raise ValueError(f"init_mode must be 'eigenstate' or 'purified', got {init_mode!r}")
+        msg = f"init_mode must be 'eigenstate' or 'purified', got {init_mode!r}"
+        raise ValueError(msg)
 
     if init_mode == "eigenstate":
         if rng is None:
@@ -60,7 +58,7 @@ def _initial_mcwf_state_from_rho0(
             if w[i] > 1e-15:
                 psi += np.sqrt(w[i]) * v[:, i].astype(np.complex128)
         nrm = float(np.linalg.norm(psi))
-        psi = psi / max(nrm, 1e-15)
+        psi /= max(nrm, 1e-15)
         return (psi, 0, float(w[0])) if return_eig_sample else psi
 
     psi_2 = np.zeros(4, dtype=np.complex128)
@@ -104,7 +102,7 @@ def _random_density_matrix(rng: np.random.Generator) -> np.ndarray:
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     rho = a @ a.conj().T
     tr = float(np.trace(rho).real)
-    rho = rho / max(tr, 1e-15)
+    rho /= max(tr, 1e-15)
     return 0.5 * (rho + rho.conj().T)
 
 
@@ -140,8 +138,8 @@ def _sample_random_intervention(
         r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
         return np.trace(E @ r) * rho_prep
 
-    setattr(emap, "rho_prep", rho_prep)
-    setattr(emap, "effect", E)
+    emap.rho_prep = rho_prep
+    emap.effect = E
 
     J = np.kron(rho_prep, E.T).astype(np.complex128)
     return emap, rho_prep, E, J

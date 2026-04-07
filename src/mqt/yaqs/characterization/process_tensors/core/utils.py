@@ -17,19 +17,22 @@ import numpy as np
 
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from mqt.yaqs.core.data_structures.networks import MPO
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+    from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
 
 def _reprepare_site_zero_forced(
     mps: MPS,
-    proj_state: "NDArray[np.complex128]",
-    new_state: "NDArray[np.complex128]",
+    proj_state: NDArray[np.complex128],
+    new_state: NDArray[np.complex128],
 ) -> float:
     """Project site 0 onto proj_state and reprepare new_state (in-place). Returns prob."""
     mps.set_canonical_form(orthogonality_center=0)
@@ -50,10 +53,10 @@ def _reprepare_site_zero_forced(
 
 
 def _reprepare_site_zero_vector_forced(
-    state_vec: "NDArray[np.complex128]",
-    proj_state: "NDArray[np.complex128]",
-    new_state: "NDArray[np.complex128]",
-) -> tuple["NDArray[np.complex128]", float]:
+    state_vec: NDArray[np.complex128],
+    proj_state: NDArray[np.complex128],
+    new_state: NDArray[np.complex128],
+) -> tuple[NDArray[np.complex128], float]:
     """Reprepare site 0 for a dense vector state. Returns (new_state_vec, prob)."""
     psi_reshaped = state_vec.reshape(2, state_vec.shape[0] // 2)
     env_vec = proj_state.conj() @ psi_reshaped
@@ -63,7 +66,7 @@ def _reprepare_site_zero_vector_forced(
     return np.outer(new_state, env_vec).flatten(), prob
 
 
-def _reconstruct_state(expectations: dict[str, float]) -> "NDArray[np.complex128]":
+def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]:
     """Reconstruct single-qubit density matrix from Pauli expectations."""
     eye = np.eye(2, dtype=complex)
     return 0.5 * (
@@ -71,7 +74,7 @@ def _reconstruct_state(expectations: dict[str, float]) -> "NDArray[np.complex128
     )
 
 
-def _get_rho_site_zero(state: MPS | "NDArray[np.complex128]") -> "NDArray[np.complex128]":
+def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Extract single-qubit (site 0) density matrix from MPS or dense vector."""
     if isinstance(state, np.ndarray):
         rho = np.reshape(state, (2, -1))
@@ -86,7 +89,7 @@ def _get_rho_site_zero(state: MPS | "NDArray[np.complex128]") -> "NDArray[np.com
     return trace * _reconstruct_state({"x": rx / trace, "y": ry / trace, "z": rz / trace})
 
 
-def _initialize_backend_state(operator: MPO, solver: str) -> MPS | "NDArray[np.complex128]":
+def _initialize_backend_state(operator: MPO, solver: str) -> MPS | NDArray[np.complex128]:
     """Initialise |0...0> state for the given solver."""
     if solver == "MCWF":
         psi = np.zeros(2**operator.length, dtype=np.complex128)
@@ -96,11 +99,11 @@ def _initialize_backend_state(operator: MPO, solver: str) -> MPS | "NDArray[np.c
 
 
 def _reprepare_backend_state_forced(
-    state: MPS | "NDArray[np.complex128]",
-    proj_state: "NDArray[np.complex128]",
-    new_state: "NDArray[np.complex128]",
+    state: MPS | NDArray[np.complex128],
+    proj_state: NDArray[np.complex128],
+    new_state: NDArray[np.complex128],
     solver: str,
-) -> tuple[MPS | "NDArray[np.complex128]", float]:
+) -> tuple[MPS | NDArray[np.complex128], float]:
     """Reprepare site 0 for the given solver. Returns (new_state, prob)."""
     if solver == "MCWF":
         assert isinstance(state, np.ndarray)
@@ -112,14 +115,14 @@ def _reprepare_backend_state_forced(
 
 
 def _evolve_backend_state(
-    state: MPS | "NDArray[np.complex128]",
+    state: MPS | NDArray[np.complex128],
     operator: MPO,
     noise_model: NoiseModel | None,
     step_params: AnalogSimParams,
     solver: str,
     traj_idx: int = 0,
     static_ctx: Any = None,
-) -> MPS | "NDArray[np.complex128]":
+) -> MPS | NDArray[np.complex128]:
     """Evolve state for one step using the given solver."""
     if solver == "MCWF":
         if not isinstance(state, np.ndarray):
@@ -134,7 +137,8 @@ def _evolve_backend_state(
         mcwf((traj_idx, dynamic_ctx))
         out = dynamic_ctx.output_state
         if out is None:
-            raise RuntimeError("MCWF backend returned None state.")
+            msg = "MCWF backend returned None state."
+            raise RuntimeError(msg)
         return cast("NDArray[np.complex128]", out)
 
     if not isinstance(state, MPS):
@@ -145,7 +149,8 @@ def _evolve_backend_state(
     backend((traj_idx, state, noise_model, step_params, operator))
     out = step_params.output_state
     if out is None:
-        raise RuntimeError("TJM backend returned None state.")
+        msg = "TJM backend returned None state."
+        raise RuntimeError(msg)
     return cast("MPS", out)
 
 

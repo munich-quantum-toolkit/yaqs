@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+
 from mqt.yaqs.core.data_structures.networks import MPO
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from numpy.typing import NDArray
 
 
@@ -31,7 +33,8 @@ def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[
     keep = sorted(keep)
     n = len(dims)
     if any(i < 0 or i >= n for i in keep):
-        raise ValueError("keep indices out of range")
+        msg = "keep indices out of range"
+        raise ValueError(msg)
     reshaped = r.reshape(*(dims + dims))
     trace_out = [i for i in range(n) if i not in keep]
     perm = keep + trace_out
@@ -49,7 +52,7 @@ def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
     tr = np.trace(rH)
     if abs(tr) < 1e-15:
         return 0.0
-    rH = rH / tr
+    rH /= tr
     evals = np.linalg.eigvalsh(rH).real
     evals = np.clip(evals, 0.0, 1.0)
     nz = evals[evals > 1e-15]
@@ -97,16 +100,18 @@ class DenseComb:
         if normalize_trace:
             tr = np.trace(U)
             if abs(tr) > 1e-15:
-                U = U / tr
+                U /= tr
         return DenseComb(U, self.timesteps)
 
     def reduced(self, keep_last_m: int = 1) -> DenseComb:
         """Return a DenseComb with Υ reduced to the last keep_last_m past legs."""
         k = self._k_steps()
         if keep_last_m > k:
-            raise ValueError(f"keep_last_m={keep_last_m} > k={k}")
+            msg = f"keep_last_m={keep_last_m} > k={k}"
+            raise ValueError(msg)
         if keep_last_m <= 0:
-            raise ValueError(f"keep_last_m must be >= 1, got {keep_last_m}")
+            msg = f"keep_last_m must be >= 1, got {keep_last_m}"
+            raise ValueError(msg)
         dim_m = 2 * (4**keep_last_m)
         dim_traced = 4 ** (k - keep_last_m)
         if dim_traced == 1:
@@ -149,7 +154,7 @@ class DenseComb:
         # Normalize trace (if non-negligible)
         tr = np.trace(rho)
         if abs(tr) > 1e-12:
-            rho = rho / tr
+            rho /= tr
 
         # PSD projection
         w, V = np.linalg.eigh(rho)
@@ -157,7 +162,7 @@ class DenseComb:
         rho = (V * w) @ V.conj().T
         tr2 = np.trace(rho)
         if abs(tr2) > 1e-15:
-            rho = rho / tr2
+            rho /= tr2
         return rho
 
     def qmi(
@@ -175,7 +180,8 @@ class DenseComb:
             if check_psd:
                 lam_min = float(np.linalg.eigvalsh(U).min().real)
                 if lam_min < -1e-9:
-                    raise ValueError(f"Υ not PSD (min eigenvalue {lam_min:.3e}).")
+                    msg = f"Υ not PSD (min eigenvalue {lam_min:.3e})."
+                    raise ValueError(msg)
             tr = np.trace(U)
             rho = U / tr if abs(tr) > 1e-15 else U
 
@@ -188,7 +194,8 @@ class DenseComb:
         elif past == "first":
             keep_P = [1]
         else:
-            raise ValueError(f"Unknown past='{past}'.")
+            msg = f"Unknown past='{past}'."
+            raise ValueError(msg)
 
         rho_F = _partial_trace_dense(rho, dims, keep=[0])
         rho_P = _partial_trace_dense(rho, dims, keep=keep_P)
@@ -213,7 +220,7 @@ class DenseComb:
             return 0.0
         dims = [2] + [4] * k_steps
         rho_FPk = _partial_trace_dense(rho, dims, keep=[0, k_steps])
-        rho_P = _partial_trace_dense(rho, dims, keep=list(range(1, k_steps)) + [k_steps])
+        rho_P = _partial_trace_dense(rho, dims, keep=[*list(range(1, k_steps)), k_steps])
         rho_Pk = _partial_trace_dense(rho, dims, keep=[k_steps])
         return (
             _entropy_dense(rho_FPk, base)
@@ -259,11 +266,13 @@ class DenseComb:
                 return idx_first
             if which == "last":
                 return idx_last
-            raise ValueError(f"Unknown subsystem '{which}'.")
+            msg = f"Unknown subsystem '{which}'."
+            raise ValueError(msg)
 
         iA, iB, iC = _idx(A), _idx(B), _idx(C)
         if len({iA, iB, iC}) != 3:
-            raise ValueError("A, B, C must be three distinct subsystems.")
+            msg = "A, B, C must be three distinct subsystems."
+            raise ValueError(msg)
 
         rho_AC = _partial_trace_dense(rho, dims, keep=[iA, iC])
         rho_BC = _partial_trace_dense(rho, dims, keep=[iB, iC])
@@ -342,13 +351,13 @@ class MPOComb(MPO):
         rho = 0.5 * (rho + rho.conj().T)
         tr = np.trace(rho)
         if abs(tr) > 1e-12:
-            rho = rho / tr
+            rho /= tr
         w, V = np.linalg.eigh(rho)
         w = np.clip(w, 0.0, None)
         rho = (V * w) @ V.conj().T
         tr2 = np.trace(rho)
         if abs(tr2) > 1e-15:
-            rho = rho / tr2
+            rho /= tr2
         return rho
 
     def qmi(

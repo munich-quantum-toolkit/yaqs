@@ -1202,7 +1202,7 @@ class MPO:
             traced[0, 0] += T[s, s]
         self.tensors[site] = traced
 
-    def partial_trace_sites(self, keep_sites: list[int]) -> "MPO":
+    def partial_trace_sites(self, keep_sites: list[int]) -> MPO:
         """Return a new MPO with all sites not in ``keep_sites`` traced out.
 
         Sites in ``keep_sites`` retain their physical dimensions; other sites have
@@ -1230,7 +1230,7 @@ class MPO:
         return new
 
     @classmethod
-    def from_local_ops(cls, local_ops: list[np.ndarray]) -> "MPO":
+    def from_local_ops(cls, local_ops: list[np.ndarray]) -> MPO:
         """Build an MPO that is the tensor product of given local operators.
 
         Each ``local_ops[i]`` is assumed to be a square operator acting on a
@@ -1952,7 +1952,7 @@ class MPO:
             self.tensors[k] = left
             self.tensors[k + 1] = right
 
-    def __add__(self, other: "MPO") -> "MPO":
+    def __add__(self, other: MPO) -> MPO:
         """Add two MPOs via direct bond stacking.
 
         This builds a new MPO where the tensors are concatenated along their
@@ -1966,6 +1966,7 @@ class MPO:
             A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
         """
         import copy
+
         import numpy as np
 
         if self.length != other.length:
@@ -2012,7 +2013,7 @@ class MPO:
         return new_mpo
 
     @classmethod
-    def mpo_sum(cls, mpos: list["MPO"]) -> "MPO":
+    def mpo_sum(cls, mpos: list[MPO]) -> MPO:
         """Efficient sequential addition of a batch of MPOs.
 
         Args:
@@ -2024,7 +2025,8 @@ class MPO:
         import copy
 
         if not mpos:
-            raise ValueError("mpo_sum requires at least one MPO.")
+            msg = "mpo_sum requires at least one MPO."
+            raise ValueError(msg)
 
         if len(mpos) == 1:
             m = cls()
@@ -2035,7 +2037,7 @@ class MPO:
 
         res = mpos[0]
         for other in mpos[1:]:
-            res = res + other
+            res += other
         return res
 
     def rotate(self, *, conjugate: bool = False) -> None:

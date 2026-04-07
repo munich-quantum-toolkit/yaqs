@@ -31,9 +31,9 @@ def test_stack_rollouts_shapes() -> None:
 
 
 def test_stack_rollouts_raises_on_empty() -> None:
-    from mqt.yaqs.characterization.process_tensors.surrogates.data import stack_rollouts
-
     import pytest
+
+    from mqt.yaqs.characterization.process_tensors.surrogates.data import stack_rollouts
 
     with pytest.raises(ValueError):
         stack_rollouts([])

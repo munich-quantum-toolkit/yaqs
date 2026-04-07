@@ -29,7 +29,7 @@ def test_pack_unpack_roundtrip_hermitianized() -> None:
     rng = np.random.default_rng(0)
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     rho = a @ a.conj().T
-    rho = rho / np.trace(rho)
+    rho /= np.trace(rho)
     y = pack_rho8(rho)
     assert y.shape == (8,)
     rho2 = unpack_rho8(y)

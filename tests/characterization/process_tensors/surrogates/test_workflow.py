@@ -3,13 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.process_tensors.core.utils import make_mcwf_static_context
 from mqt.yaqs.characterization.process_tensors.core.encoding import unpack_rho8
 from mqt.yaqs.characterization.process_tensors.core.metrics import (
     _mean_frobenius_mse_rho8,
     _mean_trace_distance_rho8,
+    _trace_distance,
 )
-from mqt.yaqs.characterization.process_tensors.core.metrics import _trace_distance
+from mqt.yaqs.characterization.process_tensors.core.utils import make_mcwf_static_context
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -68,7 +68,9 @@ def test_simulate_sequences_input_validation_errors() -> None:
 def test_rollout_arrays_to_tensor_dataset_shapes() -> None:
     torch = pytest.importorskip("torch")
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import _rollout_arrays_to_tensor_dataset  # noqa: PLC0415
+    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import (
+        _rollout_arrays_to_tensor_dataset,
+    )
 
     rho0 = np.zeros((2, 8), dtype=np.float32)
     E = np.zeros((2, 3, 32), dtype=np.float32)
@@ -130,7 +132,10 @@ def test_simulate_sequences_mcwf_final_states_and_rollouts_smoke() -> None:
 def test_generate_data_and_create_surrogate_tiny_smoke() -> None:
     torch = pytest.importorskip("torch")
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import create_surrogate, generate_data  # noqa: PLC0415
+    from mqt.yaqs.characterization.process_tensors.surrogates.workflow import (  # noqa: PLC0415
+        create_surrogate,
+        generate_data,
+    )
 
     op = MPO.ising(length=1, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, solver="MCWF", show_progress=False)

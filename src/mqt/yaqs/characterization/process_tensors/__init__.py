@@ -18,10 +18,10 @@ from .surrogates.workflow import create_surrogate, generate_data
 from .tomography.constructor import construct_process_tensor
 
 __all__ = [
-    # Exact PT reconstruction (returns DenseComb or MPOComb)
-    "construct_process_tensor",
     # Surrogate PT learning
     "TransformerComb",
+    # Exact PT reconstruction (returns DenseComb or MPOComb)
+    "construct_process_tensor",
     "create_surrogate",
     "generate_data",
 ]

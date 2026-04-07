@@ -50,7 +50,7 @@ def stack_rollouts(
     rho_seq = np.stack([s.rho_seq for s in samples], axis=0).astype(np.float32)
     ctx = None
     if samples[0].context is not None:
-        ctx = np.stack([cast(np.ndarray, s.context) for s in samples], axis=0).astype(np.float32)
+        ctx = np.stack([cast("np.ndarray", s.context) for s in samples], axis=0).astype(np.float32)
     if append_context_to_E and ctx is not None:
         k = E.shape[1]
         ctx_b = np.broadcast_to(ctx[:, None, :], (E.shape[0], k, ctx.shape[1])).astype(np.float32)

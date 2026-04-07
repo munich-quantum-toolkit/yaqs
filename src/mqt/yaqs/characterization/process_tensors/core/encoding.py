@@ -34,7 +34,7 @@ def _normalize_density_like_densecomb(rho: np.ndarray) -> np.ndarray:
     rho = 0.5 * (rho + rho.conj().T)
     tr = np.trace(rho)
     if abs(tr) > 1e-12:
-        rho = rho / tr
+        rho /= tr
 
     w, V = np.linalg.eigh(rho)
     w = np.clip(w, 0.0, None)
@@ -42,7 +42,7 @@ def _normalize_density_like_densecomb(rho: np.ndarray) -> np.ndarray:
 
     tr2 = np.trace(rho)
     if abs(tr2) > 1e-15:
-        rho = rho / tr2
+        rho /= tr2
     return rho
 
 
@@ -83,7 +83,7 @@ def normalize_rho_from_backend_output(rho_final: Any) -> np.ndarray:
     rho_h = 0.5 * (rho_h + rho_h.conj().T)
     tr = np.trace(rho_h)
     if abs(tr) > 1e-12:
-        rho_h = rho_h / tr
+        rho_h /= tr
     else:
         return np.zeros((2, 2), dtype=np.complex128)
 
@@ -94,7 +94,7 @@ def normalize_rho_from_backend_output(rho_final: Any) -> np.ndarray:
     if float(w.min()) >= -eps:
         tr2 = np.trace(rho_h)
         if abs(tr2) > 1e-15:
-            rho_h = rho_h / tr2
+            rho_h /= tr2
         return rho_h
 
     return _normalize_density_like_densecomb(rho_h)

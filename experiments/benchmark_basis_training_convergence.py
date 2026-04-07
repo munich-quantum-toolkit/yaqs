@@ -17,7 +17,7 @@ import argparse
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -25,14 +25,21 @@ from mqt.yaqs.characterization.process_tensors.core.utils import make_mcwf_stati
 from mqt.yaqs.characterization.process_tensors.surrogates.data import stack_rollouts
 from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
 from mqt.yaqs.characterization.process_tensors.surrogates.utils import (
-    build_initial_psi,
     _random_density_matrix as random_density_matrix,
+)
+from mqt.yaqs.characterization.process_tensors.surrogates.utils import (
     _sample_random_intervention_sequence as sample_random_intervention_sequence,
 )
+from mqt.yaqs.characterization.process_tensors.surrogates.utils import (
+    build_initial_psi,
+)
 from mqt.yaqs.characterization.process_tensors.surrogates.workflow import _simulate_sequences as simulate_sequences
-from mqt.yaqs.characterization.process_tensors.tomography.basis import TomographyBasis, build_basis_for_fixed_alphabet
+from mqt.yaqs.characterization.process_tensors.tomography.basis import build_basis_for_fixed_alphabet
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+if TYPE_CHECKING:
+    from mqt.yaqs.characterization.process_tensors.tomography.basis import TomographyBasis
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,8 +114,8 @@ def _make_backend_dataset(
             maps, rows_feat = sample_random_intervention_sequence(int(k), rng)
             pairs = []
             for emap in maps:
-                rho_prep = np.asarray(getattr(emap, "rho_prep"), dtype=np.complex128)
-                E = np.asarray(getattr(emap, "effect"), dtype=np.complex128)
+                rho_prep = np.asarray(emap.rho_prep, dtype=np.complex128)
+                E = np.asarray(emap.effect, dtype=np.complex128)
                 psi_meas = _state_from_rank1_projector(E)
                 psi_prep = _state_from_rank1_projector(rho_prep)
                 pairs.append((psi_meas, psi_prep))
@@ -150,7 +157,7 @@ def _train_with_history(
     prefix_loss: str,
 ) -> tuple[Any, list[tuple[int, float, float]]]:
     import torch
-    import torch.nn as nn
+    from torch import nn
     from torch.utils.data import DataLoader, TensorDataset
 
     opt = torch.optim.Adam(model.parameters(), lr=float(lr))
@@ -186,7 +193,8 @@ def _train_with_history(
                     losses.append(loss_fn(pred_L, tgt_b[:, :L, :]))
                 loss = torch.stack(losses, dim=0).mean()
             else:
-                raise ValueError(f"Unknown prefix_loss={prefix_loss!r}")
+                msg = f"Unknown prefix_loss={prefix_loss!r}"
+                raise ValueError(msg)
             loss.backward()
             if grad_clip and float(grad_clip) > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), float(grad_clip))
@@ -229,7 +237,8 @@ def main() -> None:
     try:
         import torch
     except ImportError as e:  # pragma: no cover
-        raise ImportError("Requires PyTorch.") from e
+        msg = "Requires PyTorch."
+        raise ImportError(msg) from e
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     op = MPO.ising(length=L, J=J, g=g)
@@ -250,7 +259,7 @@ def main() -> None:
     all_rows: list[HistoryRow] = []
 
     for seed in args.seeds:
-        n_val = int(round(float(args.val_frac_of_train) * float(args.N_train)))
+        n_val = round(float(args.val_frac_of_train) * float(args.N_train))
         n_val = max(1, n_val)
         rng_val = np.random.default_rng(int(seed) + 99_003 * k_fixed + 7)
         rho0_va_np, E_va_np, rho_seq_va_np = _make_backend_dataset(
@@ -273,7 +282,7 @@ def main() -> None:
         tgt_va = torch.as_tensor(rho_tgt_va_np, dtype=torch.float32, device=device)
 
         for regime_label, imode, basis_build in run_configs:
-            basis_t = cast(TomographyBasis, basis_build)
+            basis_t = cast("TomographyBasis", basis_build)
             basis_set, _c, choi_pm_pairs, choi_feat_table = build_basis_for_fixed_alphabet(
                 basis=basis_t, basis_seed=int(args.basis_seed)
             )
@@ -349,7 +358,8 @@ def main() -> None:
         try:
             import matplotlib.pyplot as plt
         except ImportError as e:  # pragma: no cover
-            raise ImportError("matplotlib required for plots.") from e
+            msg = "matplotlib required for plots."
+            raise ImportError(msg) from e
 
         by_regime: dict[str, list[tuple[int, float, float]]] = defaultdict(list)
         for r in all_rows:

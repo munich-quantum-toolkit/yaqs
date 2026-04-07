@@ -49,7 +49,7 @@ def test_initial_mcwf_state_from_rho0_eigenstate_return_eig_sample() -> None:
         return_eig_sample=True,
     )
     assert psi.shape == (2,)
-    assert idx in (0, 1)
+    assert idx in {0, 1}
     assert 0.0 <= p <= 1.0
     np.testing.assert_allclose(np.linalg.norm(psi), 1.0, atol=1e-12)
 

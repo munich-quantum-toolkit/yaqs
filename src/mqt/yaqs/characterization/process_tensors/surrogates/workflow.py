@@ -21,7 +21,6 @@ from __future__ import annotations
 # 1) STANDARD LIBRARY
 # ---------------------------------------------------------------------------
 import copy
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
 # ---------------------------------------------------------------------------
@@ -33,10 +32,12 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL — core / simulator
 # ---------------------------------------------------------------------------
-from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from mqt.yaqs.core.data_structures.networks import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 # ---------------------------------------------------------------------------
@@ -49,8 +50,8 @@ from ..core.utils import (
     _reprepare_backend_state_forced,
 )
 from .data import SequenceRolloutSample, stack_rollouts
-from .utils import build_initial_psi, _random_density_matrix, _sample_random_intervention_sequence
 from .model import TransformerComb
+from .utils import _random_density_matrix, _sample_random_intervention_sequence, build_initial_psi
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +299,7 @@ def _call_worker_serial(worker_fn: Callable[..., Any], *args: Any) -> Any:
 def _simulate_sequences(
     *,
     operator: MPO,
-    sim_params: "AnalogSimParams",
+    sim_params: AnalogSimParams,
     timesteps: list[float],
     psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]],
     initial_psis: list[np.ndarray],
@@ -382,8 +383,9 @@ def _simulate_sequences(
                 rho_norm = normalize_rho_from_backend_output(rho_final)
                 final_packed_by_index[sequence_idx] = pack_rho8(rho_norm)
             if any(x is None for x in final_packed_by_index):
-                raise RuntimeError("Parallel sequence simulation incomplete.")
-            stacked_final = [cast(np.ndarray, x) for x in final_packed_by_index]
+                msg = "Parallel sequence simulation incomplete."
+                raise RuntimeError(msg)
+            stacked_final = [cast("np.ndarray", x) for x in final_packed_by_index]
             return np.stack(stacked_final, axis=0).astype(np.float32)
 
         final_packed_serial: list[np.ndarray] = []
@@ -433,8 +435,9 @@ def _simulate_sequences(
                 weight=float(weight),
             )
         if any(s is None for s in samples_by_index):
-            raise RuntimeError("Parallel sequence rollout simulation incomplete.")
-        return [cast(SequenceRolloutSample, s) for s in samples_by_index]
+            msg = "Parallel sequence rollout simulation incomplete."
+            raise RuntimeError(msg)
+        return [cast("SequenceRolloutSample", s) for s in samples_by_index]
 
     return [rollout_one_sequence(j) for j in range(num_sequences)]
 
@@ -462,7 +465,6 @@ def _rollout_arrays_to_tensor_dataset(
     rho_seq: np.ndarray,
 ):
     """Stack NumPy rollout batches into a :class:`~torch.utils.data.TensorDataset` (internal; used by :func:`generate_data`)."""
-
     import torch  # noqa: PLC0415
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
@@ -475,7 +477,7 @@ def _rollout_arrays_to_tensor_dataset(
 
 def generate_data(
     operator: MPO,
-    sim_params: "AnalogSimParams",
+    sim_params: AnalogSimParams,
     *,
     k: int,
     n: int,
@@ -518,8 +520,8 @@ def generate_data(
         intervention_maps, choi_rows = _sample_random_intervention_sequence(int(k), rng)
         step_pairs: list[tuple[np.ndarray, np.ndarray]] = []
         for emap in intervention_maps:
-            rho_prep = np.asarray(getattr(emap, "rho_prep"), dtype=np.complex128)
-            effect_dm = np.asarray(getattr(emap, "effect"), dtype=np.complex128)
+            rho_prep = np.asarray(emap.rho_prep, dtype=np.complex128)
+            effect_dm = np.asarray(emap.effect, dtype=np.complex128)
             psi_meas = _psi_from_rank1_projector(effect_dm)
             psi_prep = _psi_from_rank1_projector(rho_prep)
             step_pairs.append((psi_meas, psi_prep))
@@ -550,7 +552,7 @@ def generate_data(
 # ---------------------------------------------------------------------------
 def create_surrogate(
     operator: MPO,
-    sim_params: "AnalogSimParams",
+    sim_params: AnalogSimParams,
     *,
     k: int,
     n: int,

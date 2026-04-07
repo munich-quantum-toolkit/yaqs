@@ -11,7 +11,6 @@ is :class:`SequenceData`. It can be converted to dense or MPO comb representatio
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -21,12 +20,14 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from .combs import DenseComb, MPOComb
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from numpy.typing import NDArray
 
 
 def _rank1_mpo_term(
-    rho_final: "NDArray[np.complex128]",
-    dual_ops: list["NDArray[np.complex128]"],
+    rho_final: NDArray[np.complex128],
+    dual_ops: list[NDArray[np.complex128]],
     weight: float = 1.0,
 ) -> MPO:
     """One rank-1 MPO term contributing to Υ."""
@@ -75,7 +76,7 @@ def _accumulate_rank1(
     return running
 
 
-def _pack_outputs(data: "SequenceData") -> tuple["NDArray[np.complex128]", "NDArray[np.float64]"]:
+def _pack_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], NDArray[np.float64]]:
     """Pack list-of-sequences data into dense tensors indexed by alpha tuples."""
     num_steps = len(data.timesteps)
     out_vecs = np.zeros([4] + [16] * num_steps, dtype=np.complex128)
@@ -86,7 +87,7 @@ def _pack_outputs(data: "SequenceData") -> tuple["NDArray[np.complex128]", "NDAr
     return out_vecs, seq_weights
 
 
-def _iter_rank1_terms(data: "SequenceData") -> Iterable[MPO]:
+def _iter_rank1_terms(data: SequenceData) -> Iterable[MPO]:
     """Yield rank-1 MPO terms for Υ accumulation."""
     for i, alpha in enumerate(data.sequences):
         rho_out = data.outputs[i]
@@ -97,24 +98,27 @@ def _iter_rank1_terms(data: "SequenceData") -> Iterable[MPO]:
 
 def _reconstruct_upsilon(
     *,
-    out_vecs: "NDArray[np.complex128]",
-    seq_weights: "NDArray[np.float64]",
-    dual_ops: list["NDArray[np.complex128]"],
-    basis_ops: list["NDArray[np.complex128]"],
+    out_vecs: NDArray[np.complex128],
+    seq_weights: NDArray[np.float64],
+    dual_ops: list[NDArray[np.complex128]],
+    basis_ops: list[NDArray[np.complex128]],
     check: bool,
     atol: float,
-) -> "NDArray[np.complex128]":
+) -> NDArray[np.complex128]:
     """Reconstruct dense Υ from packed tensor/weights (fixed dual convention).
 
     Convention matches the MPO build path: each dual frame operator is transposed
     (``dual_ops[a].T``) before Kronecker accumulation.
     """
     if len(basis_ops) != 16:
-        raise ValueError("Need choi_basis of length 16 to reconstruct Υ.")
+        msg = "Need choi_basis of length 16 to reconstruct Υ."
+        raise ValueError(msg)
     if len(dual_ops) != 16:
-        raise ValueError("Need choi_duals of length 16 to reconstruct Υ.")
+        msg = "Need choi_duals of length 16 to reconstruct Υ."
+        raise ValueError(msg)
     if out_vecs.shape[0] != 4:
-        raise ValueError(f"Expected out_vecs[0] dim 4 (vec of 2x2 output), got {out_vecs.shape[0]}.")
+        msg = f"Expected out_vecs[0] dim 4 (vec of 2x2 output), got {out_vecs.shape[0]}."
+        raise ValueError(msg)
 
     num_steps = out_vecs.ndim - 1
     if num_steps == 0:
@@ -158,7 +162,8 @@ def _reconstruct_upsilon(
 
     mean_err = err_sum / max(1, n_used)
     if mean_err > atol:
-        raise ValueError(f"Υ reconstruction self-check failed (mean_err={mean_err:.3e} > atol={atol}).")
+        msg = f"Υ reconstruction self-check failed (mean_err={mean_err:.3e} > atol={atol})."
+        raise ValueError(msg)
 
     return upsilon
 

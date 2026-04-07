@@ -30,7 +30,6 @@ from __future__ import annotations
 # 1) STANDARD LIBRARY
 # ---------------------------------------------------------------------------
 import copy
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
 # ---------------------------------------------------------------------------
@@ -42,20 +41,8 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL — core / simulator
 # ---------------------------------------------------------------------------
-from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 
-# ---------------------------------------------------------------------------
-# 4) LOCAL — tomography stack
-# ---------------------------------------------------------------------------
-from .basis import (
-    TomographyBasis,
-    _finalize_sequence_averages,
-    calculate_dual_choi_basis,
-    get_basis_states,
-    get_choi_basis,
-)
-from .combs import DenseComb, MPOComb
 from ..core.utils import (
     _evolve_backend_state,
     _get_rho_site_zero,
@@ -63,11 +50,29 @@ from ..core.utils import (
     _reprepare_backend_state_forced,
     make_mcwf_static_context,
 )
+
+# ---------------------------------------------------------------------------
+# 4) LOCAL — tomography stack
+# ---------------------------------------------------------------------------
+from .basis import (
+    _finalize_sequence_averages,
+    calculate_dual_choi_basis,
+    get_basis_states,
+    get_choi_basis,
+)
 from .data import SequenceData
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from mqt.yaqs.core.data_structures.networks import MPO
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+
+    from .basis import (
+        TomographyBasis,
+    )
+    from .combs import DenseComb, MPOComb
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +98,7 @@ if TYPE_CHECKING:
 def _sequence_worker(
     job_idx: int,
     payload: dict[str, Any] | None = None,
-) -> tuple[int, int, "np.ndarray", float]:
+) -> tuple[int, int, np.ndarray, float]:
     """Single trajectory for one discrete-basis sequence: prep → evolve → site-0 density."""
     ctx = payload if payload is not None else WORKER_CTX
     num_trajectories: int = int(ctx["num_trajectories"])
@@ -160,12 +165,12 @@ def _call_backend_serial(backend: Callable[..., Any], *args: Any) -> Any:
 
 def run_all_sequences(
     operator: MPO,
-    sim_params: "AnalogSimParams",
+    sim_params: AnalogSimParams,
     timesteps: list[float],
     *,
     parallel: bool = True,
     num_trajectories: int = 100,
-    noise_model: "NoiseModel | None" = None,
+    noise_model: NoiseModel | None = None,
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
 ) -> SequenceData:
@@ -191,7 +196,8 @@ def run_all_sequences(
 
     all_seqs = _enumerate_sequences(k)
     if len(all_seqs) == 0:
-        raise ValueError("No sequences for k=0.")
+        msg = "No sequences for k=0."
+        raise ValueError(msg)
 
     n_seq = len(all_seqs)
     samples_psi_pairs = [
@@ -207,7 +213,8 @@ def run_all_sequences(
     if local_params.solver == "MCWF":
         mcwf_static_ctx = make_mcwf_static_context(operator, local_params, noise_model=noise_model)
     elif local_params.solver != "TJM":
-        raise ValueError(f"Tomography does not support solver {local_params.solver!r} (use MCWF or TJM).")
+        msg = f"Tomography does not support solver {local_params.solver!r} (use MCWF or TJM)."
+        raise ValueError(msg)
 
     total_jobs = n_seq * num_trajectories
     payload = {
@@ -271,10 +278,10 @@ def run_all_sequences(
 
 def _construct_data(
     operator: MPO,
-    sim_params: "AnalogSimParams",
+    sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     *,
-    noise_model: "NoiseModel | None" = None,
+    noise_model: NoiseModel | None = None,
     parallel: bool = True,
     num_trajectories: int = 100,
     basis: TomographyBasis = "tetrahedral",
@@ -286,7 +293,8 @@ def _construct_data(
 
     valid_solvers = {"MCWF", "TJM"}
     if sim_params.solver not in valid_solvers:
-        raise ValueError(f"Tomography requires solvers {valid_solvers}, got {sim_params.solver!r}.")
+        msg = f"Tomography requires solvers {valid_solvers}, got {sim_params.solver!r}."
+        raise ValueError(msg)
 
     return run_all_sequences(
         operator,
@@ -302,10 +310,10 @@ def _construct_data(
 
 def construct_process_tensor(
     operator: MPO,
-    sim_params: "AnalogSimParams",
+    sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     *,
-    noise_model: "NoiseModel | None" = None,
+    noise_model: NoiseModel | None = None,
     parallel: bool = True,
     num_trajectories: int = 100,
     basis: TomographyBasis = "tetrahedral",
@@ -347,4 +355,5 @@ def construct_process_tensor(
             max_bond_dim=max_bond_dim,
             n_sweeps=n_sweeps,
         )
-    raise ValueError(f"Unknown return_type {return_type!r} (expected 'dense' or 'mpo').")
+    msg = f"Unknown return_type {return_type!r} (expected 'dense' or 'mpo')."
+    raise ValueError(msg)

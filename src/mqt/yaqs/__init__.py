@@ -26,22 +26,22 @@ from __future__ import annotations
 from . import characterizer, simulator
 from ._version import version as __version__
 from ._version import version_tuple as version_info
-from .simulator import run as simulate
 from .characterizer import (
     TransformerComb,
     construct_process_tensor,
     create_surrogate,
     generate_data,
 )
+from .simulator import run as simulate
 
 __all__ = [
-    "__version__",
-    "version_info",
-    "simulator",
-    "characterizer",
-    "simulate",
-    "generate_data",
-    "create_surrogate",
     "TransformerComb",
+    "__version__",
+    "characterizer",
     "construct_process_tensor",
+    "create_surrogate",
+    "generate_data",
+    "simulate",
+    "simulator",
+    "version_info",
 ]

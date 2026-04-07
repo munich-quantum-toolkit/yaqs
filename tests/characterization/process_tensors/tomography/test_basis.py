@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.networks import MPO
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+from mqt.yaqs import construct_process_tensor
 from mqt.yaqs.characterization.process_tensors.tomography.basis import (
-    calculate_dual_choi_basis,
+    _finalize_sequence_averages,
     build_basis_for_fixed_alphabet,
+    calculate_dual_choi_basis,
     get_basis_states,
     get_choi_basis,
-    _finalize_sequence_averages,
 )
-from mqt.yaqs import construct_process_tensor
+from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 
 def test_choi_duality_biorthogonality() -> None:

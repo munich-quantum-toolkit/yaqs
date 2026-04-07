@@ -17,7 +17,7 @@ def test_transformercomb_forward_shape_cpu() -> None:
 
 
 def test_transformercomb_predict_numpy_roundtrip() -> None:
-    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch")
 
     from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 

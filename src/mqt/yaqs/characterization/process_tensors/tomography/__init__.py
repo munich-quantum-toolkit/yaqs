@@ -9,7 +9,12 @@ This subpackage constructs a process tensor from exhaustive discrete interventio
 :class:`~mqt.yaqs.characterization.process_tensors.tomography.combs.MPOComb`.
 """
 
-from .basis import TomographyBasis, build_basis_for_fixed_alphabet, get_basis_states, get_choi_basis
-from .combs import DenseComb, MPOComb
-from .constructor import construct_process_tensor, run_all_sequences
-from .data import SequenceData
+from .basis import TomographyBasis as TomographyBasis
+from .basis import build_basis_for_fixed_alphabet as build_basis_for_fixed_alphabet
+from .basis import get_basis_states as get_basis_states
+from .basis import get_choi_basis as get_choi_basis
+from .combs import DenseComb as DenseComb
+from .combs import MPOComb as MPOComb
+from .constructor import construct_process_tensor as construct_process_tensor
+from .constructor import run_all_sequences as run_all_sequences
+from .data import SequenceData as SequenceData

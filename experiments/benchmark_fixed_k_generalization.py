@@ -29,11 +29,12 @@ import argparse
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
 import numpy as np
 
+from mqt.yaqs.characterization.process_tensors import TransformerComb, generate_data
 from mqt.yaqs.characterization.process_tensors.core.encoding import unpack_rho8
 from mqt.yaqs.characterization.process_tensors.core.metrics import _mean_frobenius_mse_rho8 as mean_frobenius_mse_rho8
-from mqt.yaqs.characterization.process_tensors import TransformerComb, generate_data
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -95,7 +96,7 @@ def parse_args() -> argparse.Namespace:
     k_tests = sorted({int(k) for k in k_list if int(k) > 0})
     if not k_tests:
         p.error("Set at least one positive k_test via --k_tests and/or --k_test_sweep.")
-    setattr(ns, "_k_tests_resolved", k_tests)
+    ns._k_tests_resolved = k_tests
     return ns
 
 
@@ -157,7 +158,7 @@ def main() -> None:
     g = 1.0
     dt = 0.1
     args = parse_args()
-    k_tests_plan = list(getattr(args, "_k_tests_resolved"))
+    k_tests_plan = list(args._k_tests_resolved)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"k_test grid ({len(k_tests_plan)} points): {k_tests_plan}")
@@ -187,7 +188,7 @@ def main() -> None:
         E_all, r0_all, tgt_all = ds.tensors
         idx = np.arange(int(E_all.shape[0]), dtype=np.int64)
         np.random.default_rng(int(seed) + 54321).shuffle(idx)
-        n_val = max(1, min(int(round(float(args.val_frac_of_train) * len(idx))), len(idx) - 1))
+        n_val = max(1, min(round(float(args.val_frac_of_train) * len(idx)), len(idx) - 1))
         va_idx, tr_idx = idx[:n_val], idx[n_val:]
         train_ds = TensorDataset(E_all[tr_idx], r0_all[tr_idx], tgt_all[tr_idx])
         val_ds = TensorDataset(E_all[va_idx], r0_all[va_idx], tgt_all[va_idx])
@@ -255,7 +256,7 @@ def main() -> None:
 
     agg: dict[tuple[int, int], list[tuple[float, float, float]]] = defaultdict(list)
     for r in rows:
-        agg[(r.k_train, r.k_test)].append((r.final_frob, r.obs_x_mae, r.obs_z_mae))
+        agg[r.k_train, r.k_test].append((r.final_frob, r.obs_x_mae, r.obs_z_mae))
     agg_lines = ["k_train,k_test,mean_frob,std_frob,mean_dX,std_dX,mean_dZ,std_dZ,n"]
     from statistics import mean, stdev
 

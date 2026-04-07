@@ -18,7 +18,7 @@ from typing import Any, cast
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 
@@ -31,7 +31,8 @@ def _sinusoidal_positional_encoding(
 ) -> torch.Tensor:
     """(1, T, d_model) sinusoidal encoding (Vaswani et al.)."""
     if d_model <= 0:
-        raise ValueError("d_model must be positive.")
+        msg = "d_model must be positive."
+        raise ValueError(msg)
     pos = torch.arange(seq_len, device=device, dtype=dtype).unsqueeze(1)  # (T,1)
     half = d_model // 2
     div = torch.exp(
@@ -173,9 +174,9 @@ class TransformerComb(nn.Module):
         has_val = val_dataset is not None
         if has_val:
             E_val, rho0_val, target_val = val_dataset.tensors
-            E_val = cast(torch.Tensor, E_val).to(device)
-            rho0_val = cast(torch.Tensor, rho0_val).to(device)
-            target_val = cast(torch.Tensor, target_val).to(device)
+            E_val = cast("torch.Tensor", E_val).to(device)
+            rho0_val = cast("torch.Tensor", rho0_val).to(device)
+            target_val = cast("torch.Tensor", target_val).to(device)
 
         opt = torch.optim.Adam(self.parameters(), lr=float(lr))
         loss_fn = nn.MSELoss()
@@ -213,8 +214,8 @@ class TransformerComb(nn.Module):
             if has_val:
                 self.eval()
                 with torch.no_grad():
-                    pred_va = self(cast(torch.Tensor, E_val), cast(torch.Tensor, rho0_val))
-                    val = float(loss_fn(pred_va, cast(torch.Tensor, target_val)).detach().cpu().item())
+                    pred_va = self(cast("torch.Tensor", E_val), cast("torch.Tensor", rho0_val))
+                    val = float(loss_fn(pred_va, cast("torch.Tensor", target_val)).detach().cpu().item())
                 if val < best:
                     best = val
                     best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}

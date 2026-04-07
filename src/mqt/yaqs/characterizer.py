@@ -17,22 +17,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from mqt.yaqs.characterization.process_tensors.tomography import DenseComb, MPOComb, construct_process_tensor
 from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
 from mqt.yaqs.characterization.process_tensors.surrogates.workflow import create_surrogate, generate_data
+from mqt.yaqs.characterization.process_tensors.tomography import DenseComb, MPOComb, construct_process_tensor
 
 if TYPE_CHECKING:
     from typing import TypeAlias
 
 
-Comb: "TypeAlias" = DenseComb | MPOComb | TransformerComb
+Comb: TypeAlias = DenseComb | MPOComb | TransformerComb
 
 
 __all__ = [
-    # Exact process-tensor tomography
-    "construct_process_tensor",
     # Surrogate tooling
     "TransformerComb",
-    "generate_data",
+    # Exact process-tensor tomography
+    "construct_process_tensor",
     "create_surrogate",
+    "generate_data",
 ]

@@ -82,11 +82,12 @@ def get_basis_states(
             rho = 0.5 * (I + r[0] * sx + r[1] * sy + r[2] * sz)
             evals, evecs = np.linalg.eigh(rho)
             psi = evecs[:, int(np.argmax(evals.real))].astype(np.complex128)
-            psi = psi / np.linalg.norm(psi)
+            psi /= np.linalg.norm(psi)
             states.append((f"tet{i}", psi))
         return [(name, psi, np.outer(psi, psi.conj())) for name, psi in states]
 
-    raise TypeError(f"Unknown basis {basis!r}")
+    msg = f"Unknown basis {basis!r}"
+    raise TypeError(msg)
 
 
 def get_choi_basis(
@@ -115,7 +116,7 @@ def build_basis_for_fixed_alphabet(
     np.ndarray,
 ]:
     """Bundle: basis states, Choi list, index pairs, flat Choi rows (16, 32)."""
-    basis_t = cast(TomographyBasis, basis)
+    basis_t = cast("TomographyBasis", basis)
     seed_for_basis = int(basis_seed) if basis_seed is not None else None
     basis_set = get_basis_states(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
     choi_matrices, choi_pm_pairs = get_choi_basis(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
