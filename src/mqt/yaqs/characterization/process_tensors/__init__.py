@@ -12,25 +12,14 @@ This package contains:
 The submodule :mod:`mqt.yaqs.characterization.process_tensors.core` contains shared internal helpers.
 """
 
-from .tomography import (
-    DenseComb,
-    MPOComb,
-    SequenceData,
-    TomographyBasis,
-    construct_process_tensor,
-    run_all_sequences,
-)
+# Public entry points only.
 from .surrogates.model import TransformerComb
 from .surrogates.workflow import create_surrogate, generate_data
+from .tomography.constructor import construct_process_tensor
 
 __all__ = [
-    # Exact PT reconstruction
-    "DenseComb",
-    "MPOComb",
-    "SequenceData",
-    "TomographyBasis",
+    # Exact PT reconstruction (returns DenseComb or MPOComb)
     "construct_process_tensor",
-    "run_all_sequences",
     # Surrogate PT learning
     "TransformerComb",
     "create_surrogate",

@@ -7,7 +7,7 @@ import pytest
 def test_transformercomb_forward_shape_cpu() -> None:
     torch = pytest.importorskip("torch")
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = torch.zeros((2, 3, 32), dtype=torch.float32)
@@ -19,7 +19,7 @@ def test_transformercomb_forward_shape_cpu() -> None:
 def test_transformercomb_predict_numpy_roundtrip() -> None:
     torch = pytest.importorskip("torch")
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E = np.zeros((1, 2, 32), dtype=np.float32)
@@ -34,7 +34,7 @@ def test_transformercomb_predict_tensor_return_and_restores_mode() -> None:
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     model.train()
@@ -60,7 +60,7 @@ def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:
 
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
-    from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb  # noqa: PLC0415
+    from mqt.yaqs.characterization.process_tensors import TransformerComb  # noqa: PLC0415
 
     model = TransformerComb(d_e=32, d_rho=8, d_model=32, nhead=4, num_layers=1, dim_ff=64, dropout=0.0)
     E_t = torch.zeros((2, 2, 32), dtype=torch.float32)
