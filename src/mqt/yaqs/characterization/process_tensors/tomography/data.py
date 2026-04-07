@@ -30,7 +30,16 @@ def _rank1_mpo_term(
     dual_ops: list[NDArray[np.complex128]],
     weight: float = 1.0,
 ) -> MPO:
-    """One rank-1 MPO term contributing to Υ."""
+    """Build one rank-1 MPO term contributing to the process tensor.
+
+    Args:
+        rho_final: Output reduced density matrix (2x2).
+        dual_ops: List of dual-frame Choi operators, one per time step.
+        weight: Scalar weight for this term.
+
+    Returns:
+        MPO representing the rank-1 contribution.
+    """
     num_steps = len(dual_ops)
     phys_dims = [2] + [4] * num_steps
     tensors: list[np.ndarray] = [(weight * rho_final).reshape(2, 2, 1, 1)]
@@ -51,7 +60,20 @@ def _accumulate_rank1(
     max_bond_dim: int | None = None,
     n_sweeps: int = 4,
 ) -> MPO:
-    """Accumulate rank-1 MPO terms with periodic SVD compression."""
+    """Accumulate rank-1 MPO terms with periodic compression.
+
+    Args:
+        terms: Iterable of MPO terms.
+        num_steps: Number of time steps in the comb.
+        dims: Output density matrix dimensions (default (2,2)).
+        compress_every: Compress after accumulating this many terms.
+        tol: Compression tolerance.
+        max_bond_dim: Optional maximum bond dimension.
+        n_sweeps: Number of compression sweeps.
+
+    Returns:
+        Compressed MPO representing the sum of terms.
+    """
     pending: list[MPO] = []
     running: MPO | None = None
 
@@ -77,7 +99,15 @@ def _accumulate_rank1(
 
 
 def _pack_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], NDArray[np.float64]]:
-    """Pack list-of-sequences data into dense tensors indexed by alpha tuples."""
+    """Pack per-sequence outputs/weights into dense tensors.
+
+    Args:
+        data: SequenceData instance.
+
+    Returns:
+        Tuple ``(out_vecs, seq_weights)`` where ``out_vecs`` has shape ``(4, 16, ..., 16)`` and
+        ``seq_weights`` has shape ``(16, ..., 16)`` for ``k`` steps.
+    """
     num_steps = len(data.timesteps)
     out_vecs = np.zeros([4] + [16] * num_steps, dtype=np.complex128)
     seq_weights = np.zeros([16] * num_steps, dtype=np.float64)
@@ -88,7 +118,14 @@ def _pack_outputs(data: SequenceData) -> tuple[NDArray[np.complex128], NDArray[n
 
 
 def _iter_rank1_terms(data: SequenceData) -> Iterable[MPO]:
-    """Yield rank-1 MPO terms for Υ accumulation."""
+    """Yield rank-1 MPO terms for MPO comb construction.
+
+    Args:
+        data: SequenceData instance.
+
+    Yields:
+        MPO rank-1 terms.
+    """
     for i, alpha in enumerate(data.sequences):
         rho_out = data.outputs[i]
         w = float(data.weights[i])
@@ -105,10 +142,21 @@ def _reconstruct_upsilon(
     check: bool,
     atol: float,
 ) -> NDArray[np.complex128]:
-    """Reconstruct dense Υ from packed tensor/weights (fixed dual convention).
+    """Reconstruct a dense comb matrix from packed outputs and weights.
 
-    Convention matches the MPO build path: each dual frame operator is transposed
-    (``dual_ops[a].T``) before Kronecker accumulation.
+    Args:
+        out_vecs: Packed output vectors of shape ``(4, 16, ..., 16)``.
+        seq_weights: Sequence weights of shape ``(16, ..., 16)``.
+        dual_ops: List of 16 dual-frame operators.
+        basis_ops: List of 16 basis operators.
+        check: Whether to run a lightweight self-consistency check.
+        atol: Absolute tolerance for the self-check.
+
+    Returns:
+        Dense comb matrix ``Upsilon`` of shape ``(2*4**k, 2*4**k)``.
+
+    Raises:
+        ValueError: If shapes are inconsistent or the self-check fails.
     """
     if len(basis_ops) != 16:
         msg = "Need choi_basis of length 16 to reconstruct Υ."
@@ -181,7 +229,15 @@ class SequenceData:
     timesteps: list[float]
 
     def to_dense_comb(self, *, check: bool = True, atol: float = 1e-8) -> DenseComb:
-        """Reconstruct dense comb Υ."""
+        """Reconstruct a dense comb from the discrete sequence dataset.
+
+        Args:
+            check: Whether to run a lightweight self-consistency check.
+            atol: Absolute tolerance for the self-check.
+
+        Returns:
+            Dense comb representation.
+        """
         out_vecs, seq_weights = _pack_outputs(self)
         upsilon = _reconstruct_upsilon(
             out_vecs=out_vecs,
@@ -201,7 +257,17 @@ class SequenceData:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> MPOComb:
-        """Build an MPO comb Υ via rank-1 accumulation."""
+        """Build an MPO comb via rank-1 accumulation.
+
+        Args:
+            compress_every: Compress after this many terms.
+            tol: Compression tolerance.
+            max_bond_dim: Optional maximum bond dimension.
+            n_sweeps: Number of compression sweeps.
+
+        Returns:
+            MPO comb representation.
+        """
         num_steps = len(self.timesteps)
         mpo = _accumulate_rank1(
             _iter_rank1_terms(self),

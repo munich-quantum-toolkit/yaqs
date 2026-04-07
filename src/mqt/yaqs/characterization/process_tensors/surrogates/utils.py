@@ -20,6 +20,27 @@ def _initial_mcwf_state_from_rho0(
     init_mode: str = "eigenstate",
     return_eig_sample: bool = False,
 ) -> Any:
+    """Construct a pure MCWF state consistent with a given reduced density matrix.
+
+    This helper returns a state vector on ``length`` qubits such that the reduced state on
+    site 0 follows ``rho`` under the selected initialization strategy.
+
+    Args:
+        rho: Reduced 2x2 density matrix for site 0.
+        length: Total number of qubits in the state vector.
+        rng: Random number generator used for sampling eigenstates when ``init_mode="eigenstate"``.
+        init_mode: Initialization strategy. ``"eigenstate"`` samples an eigenvector of ``rho``;
+            ``"purified"`` returns a simple purification-based state.
+        return_eig_sample: If ``True``, also return the sampled eigen-index and probability.
+
+    Returns:
+        If ``return_eig_sample=False``: complex state vector of shape ``(2**length,)`` (or ``(2,)`` when
+        ``length<=1``). If ``return_eig_sample=True``: ``(psi, idx, p)`` where ``idx`` is the chosen
+        eigen-index and ``p`` its probability.
+
+    Raises:
+        ValueError: If ``rho`` is not 2x2 or if ``init_mode`` is invalid.
+    """
     if rho.size != 4:
         msg = "rho must be a 2x2 reduced density matrix."
         raise ValueError(msg)
@@ -87,7 +108,18 @@ def build_initial_psi(
     init_mode: str,
     return_eig_sample: bool = False,
 ) -> Any:
-    """Pure MCWF state vector on ``length`` qubits whose site-0 reduced state follows ``rho_in``."""
+    """Build an initial MCWF pure state for simulation.
+
+    Args:
+        rho_in: Reduced 2x2 density matrix on site 0.
+        length: Total number of qubits in the simulated chain.
+        rng: Random number generator used for sampling.
+        init_mode: Initialization mode (see :func:`_initial_mcwf_state_from_rho0`).
+        return_eig_sample: Whether to return extra eigen-sampling info.
+
+    Returns:
+        State vector (and optionally eigen-sampling info), see :func:`_initial_mcwf_state_from_rho0`.
+    """
     return _initial_mcwf_state_from_rho0(
         rho_in,
         length,
@@ -98,7 +130,14 @@ def build_initial_psi(
 
 
 def _random_density_matrix(rng: np.random.Generator) -> np.ndarray:
-    """Sample a Haar-inspired random physical 2x2 density matrix (Ginibre / normalize)."""
+    """Sample a random physical 2x2 density matrix.
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        A Hermitian, trace-1 2x2 density matrix sampled via a Ginibre construction.
+    """
     a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
     rho = a @ a.conj().T
     tr = float(np.trace(rho).real)
@@ -107,7 +146,14 @@ def _random_density_matrix(rng: np.random.Generator) -> np.ndarray:
 
 
 def _random_pure_state(rng: np.random.Generator) -> np.ndarray:
-    """Sample a Haar-random single-qubit pure state vector |psi> (shape (2,), complex128)."""
+    """Sample a random single-qubit pure state.
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        A normalized state vector of shape ``(2,)`` with dtype complex128.
+    """
     v = rng.standard_normal(2) + 1j * rng.standard_normal(2)
     n = float(np.linalg.norm(v))
     if n < 1e-15:
@@ -116,6 +162,14 @@ def _random_pure_state(rng: np.random.Generator) -> np.ndarray:
 
 
 def _random_rank1_projector(rng: np.random.Generator) -> np.ndarray:
+    """Sample a random rank-1 projector (pure-state density matrix).
+
+    Args:
+        rng: Random number generator.
+
+    Returns:
+        A 2x2 rank-1 density matrix for a random pure state.
+    """
     psi = _random_pure_state(rng)
     return np.outer(psi, psi.conj()).astype(np.complex128)
 
@@ -124,6 +178,9 @@ def _sample_random_intervention(
     rng: np.random.Generator,
 ) -> tuple[Any, np.ndarray, np.ndarray, np.ndarray]:
     """Sample one continuous CP intervention map and its Choi matrix.
+
+    Args:
+        rng: Random number generator.
 
     Returns:
         emap: callable map ``emap(rho) = Tr(E @ rho) * rho_prep``
@@ -150,6 +207,10 @@ def _sample_random_intervention_sequence(
     rng: np.random.Generator,
 ) -> tuple[list[Any], np.ndarray]:
     """Sample k fresh interventions and return maps + per-step Choi features.
+
+    Args:
+        k: Number of intervention steps.
+        rng: Random number generator.
 
     Returns:
         maps: length-k list of callables ``rho -> Tr(E_t rho) * rho_prep_t``

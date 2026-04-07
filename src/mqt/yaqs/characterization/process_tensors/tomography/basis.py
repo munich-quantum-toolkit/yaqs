@@ -21,7 +21,15 @@ def _finalize_sequence_averages(
     acc: dict[tuple[int, ...], list[Any]],
     weight_scale: float,
 ) -> tuple[list[tuple[int, ...]], list[NDArray[np.complex128]], list[float]]:
-    """Consolidated logic for result collection, normalization, and weight assignment."""
+    """Finalize per-sequence weighted averages.
+
+    Args:
+        acc: Mapping from sequences to accumulator tuples ``[rho_weighted_sum, weight_sum, count]``.
+        weight_scale: Scale factor applied to weights (e.g., number of trajectories).
+
+    Returns:
+        Tuple ``(sequences, outputs, weights)`` where outputs are averaged 2x2 density matrices.
+    """
     final_seqs = []
     final_outputs = []
     final_weights = []
@@ -43,7 +51,18 @@ def get_basis_states(
     basis: TomographyBasis = "tetrahedral",
     seed: int | None = None,
 ) -> list[tuple[str, NDArray[np.complex128], NDArray[np.complex128]]]:
-    """Return the 4 single-qubit basis states used to build the 16 CP-map basis."""
+    """Return the 4 single-qubit basis states used for the 16-map CP basis.
+
+    Args:
+        basis: Basis choice.
+        seed: Optional seed used when ``basis="random"``.
+
+    Returns:
+        List of 4 tuples ``(name, psi, rho)`` where ``psi`` is a ket and ``rho = |psi><psi|``.
+
+    Raises:
+        TypeError: If ``basis`` is not recognized.
+    """
     if basis == "random":
         rng = np.random.default_rng(seed)
         states: list[tuple[str, NDArray[np.complex128]]] = []
@@ -95,7 +114,17 @@ def get_choi_basis(
     basis: TomographyBasis = "standard",
     seed: int | None = None,
 ) -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]]]:
-    r"""Generate the 16 basis CP-map Choi matrices from the 4 basis states."""
+    """Generate the 16 CP-map Choi basis matrices.
+
+    Args:
+        basis: Basis choice for the underlying 4 states.
+        seed: Optional seed used when ``basis="random"``.
+
+    Returns:
+        Tuple ``(choi_matrices, indices)`` where:
+        - ``choi_matrices`` is a list of 16 complex 4x4 Choi matrices.
+        - ``indices`` gives the corresponding ``(prep_index, meas_index)`` pairs.
+    """
     basis_set = get_basis_states(basis=basis, seed=seed)
     choi_matrices, indices = [], []
     for p, (_, _, rho_p) in enumerate(basis_set):
@@ -115,7 +144,16 @@ def build_basis_for_fixed_alphabet(
     list[tuple[int, int]],
     np.ndarray,
 ]:
-    """Bundle: basis states, Choi list, index pairs, flat Choi rows (16, 32)."""
+    """Build the discrete basis bundle for tomography and surrogate feature encoding.
+
+    Args:
+        basis: Basis name (``"standard"``, ``"tetrahedral"``, ``"random"``).
+        basis_seed: Optional seed used when ``basis="random"``.
+
+    Returns:
+        Tuple ``(basis_set, choi_mats, choi_idx, choi_features)`` where ``choi_features`` has shape
+        ``(16, 32)``.
+    """
     basis_t = cast("TomographyBasis", basis)
     seed_for_basis = int(basis_seed) if basis_seed is not None else None
     basis_set = get_basis_states(basis=basis_t, seed=seed_for_basis if basis == "random" else None)
@@ -127,7 +165,14 @@ def build_basis_for_fixed_alphabet(
 def calculate_dual_choi_basis(
     basis_matrices: list[NDArray[np.complex128]],
 ) -> list[NDArray[np.complex128]]:
-    """Calculate the dual frame for the given Choi basis matrices."""
+    """Compute the dual frame for a Choi basis.
+
+    Args:
+        basis_matrices: List of basis Choi matrices.
+
+    Returns:
+        List of dual-frame matrices with the same shapes as ``basis_matrices``.
+    """
     frame_matrix = np.column_stack([m.reshape(-1) for m in basis_matrices])
     dual_frame = np.linalg.pinv(frame_matrix).conj().T
     dim = basis_matrices[0].shape[0]

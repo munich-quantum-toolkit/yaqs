@@ -14,14 +14,30 @@ if TYPE_CHECKING:
 
 
 def _rel_fro_error(A: NDArray[np.complex128], B: NDArray[np.complex128]) -> float:
-    """Relative Frobenius error between two matrices."""
+    """Compute relative Frobenius error.
+
+    Args:
+        A: Predicted matrix.
+        B: Reference matrix.
+
+    Returns:
+        Relative Frobenius error: ||A-B||_F / max(||B||_F, eps).
+    """
     num = np.linalg.norm(A - B, "fro")
     den = np.linalg.norm(B, "fro")
     return float(num / max(den, 1e-15))
 
 
 def _trace_distance(rho: NDArray[np.complex128], sigma: NDArray[np.complex128]) -> float:
-    """Trace distance between two density matrices."""
+    """Compute trace distance between two density matrices.
+
+    Args:
+        rho: Density matrix.
+        sigma: Density matrix.
+
+    Returns:
+        Trace distance: 0.5 * ||rho - sigma||_1.
+    """
     X = rho - sigma
     X = 0.5 * (X + X.conj().T)
     evals = np.linalg.eigvalsh(X)
@@ -29,7 +45,15 @@ def _trace_distance(rho: NDArray[np.complex128], sigma: NDArray[np.complex128]) 
 
 
 def _mean_trace_distance_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> float:
-    """Mean trace distance over batches of 8-float packed encodings."""
+    """Compute mean trace distance over batches of rho8 encodings.
+
+    Args:
+        pred_rho8: Array of packed density matrices with shape (N, 8).
+        tgt_rho8: Array of packed density matrices with shape (N, 8).
+
+    Returns:
+        Mean trace distance over the batch.
+    """
     from .encoding import unpack_rho8
 
     assert pred_rho8.shape == tgt_rho8.shape
@@ -42,7 +66,15 @@ def _mean_trace_distance_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> fl
 
 
 def _mean_frobenius_mse_rho8(pred_rho8: np.ndarray, tgt_rho8: np.ndarray) -> float:
-    """Mean squared Frobenius error for 8-float encodings (Hilbert–Schmidt squared norm)."""
+    """Compute mean squared Frobenius error over batches of rho8 encodings.
+
+    Args:
+        pred_rho8: Array of packed density matrices with shape (N, 8).
+        tgt_rho8: Array of packed density matrices with shape (N, 8).
+
+    Returns:
+        Mean squared Frobenius error (Hilbert–Schmidt squared norm) over the batch.
+    """
     from .encoding import unpack_rho8
 
     assert pred_rho8.shape == tgt_rho8.shape

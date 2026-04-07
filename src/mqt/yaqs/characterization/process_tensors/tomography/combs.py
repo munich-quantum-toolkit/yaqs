@@ -15,9 +15,13 @@ if TYPE_CHECKING:
 
 
 def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128]]) -> NDArray[np.complex128]:
-    """Convert a CPTP map callable to its Choi matrix J(E).
+    """Convert a CPTP map callable into its Choi matrix.
 
-    J(E) = sum_{i,j} E(|i><j|) ⊗ |i><j| (order matches predict contraction).
+    Args:
+        emap: Callable implementing a single-qubit map ``rho -> emap(rho)``.
+
+    Returns:
+        4x4 Choi matrix for ``emap`` using the convention that matches the `predict` contraction.
     """
     j_choi = np.zeros((4, 4), dtype=complex)
     for i in range(2):
@@ -29,7 +33,19 @@ def _cptp_to_choi(emap: Callable[[NDArray[np.complex128]], NDArray[np.complex128
 
 
 def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[int]) -> NDArray[np.complex128]:
-    """Partial trace of a dense operator keeping subsystems in keep."""
+    """Compute a partial trace of a dense operator.
+
+    Args:
+        r: Dense operator on the tensor product space.
+        dims: Dimensions of each subsystem.
+        keep: Indices of subsystems to keep.
+
+    Returns:
+        Reduced operator after tracing out subsystems not in ``keep``.
+
+    Raises:
+        ValueError: If ``keep`` contains out-of-range indices.
+    """
     keep = sorted(keep)
     n = len(dims)
     if any(i < 0 or i >= n for i in keep):
@@ -46,7 +62,15 @@ def _partial_trace_dense(r: NDArray[np.complex128], dims: list[int], keep: list[
 
 
 def _entropy_dense(r: NDArray[np.complex128], base: int = 2) -> float:
-    """Von Neumann entropy of a dense density matrix."""
+    """Compute von Neumann entropy of a (possibly unnormalized) density matrix.
+
+    Args:
+        r: Density matrix.
+        base: Logarithm base.
+
+    Returns:
+        Von Neumann entropy in the given base.
+    """
     log_base = np.log(base)
     rH = 0.5 * (r + r.conj().T)
     tr = np.trace(rH)
@@ -65,11 +89,21 @@ class DenseComb:
     """Wrapper around a dense comb Choi operator Υ."""
 
     def __init__(self, upsilon: NDArray[np.complex128], timesteps: list[float]) -> None:
+        """Create a dense comb wrapper.
+
+        Args:
+            upsilon: Dense comb matrix.
+            timesteps: Per-step evolution durations.
+        """
         self.upsilon = upsilon
         self.timesteps = timesteps
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """Return the underlying dense comb matrix Υ."""
+        """Return the underlying dense comb matrix.
+
+        Returns:
+            Dense comb matrix.
+        """
         return self.upsilon
 
     # NOTE: previously there was a `DenseComb.fit(...)` entry point here.
@@ -77,7 +111,11 @@ class DenseComb:
     # `construct_process_tensor(...) -> SequenceData -> to_*_comb()` path.
 
     def _k_steps(self) -> int:
-        """Number of intervention steps from Υ shape (2·4^k, 2·4^k)."""
+        """Infer number of intervention steps from the comb matrix shape.
+
+        Returns:
+            Number of steps ``k`` such that the shape is ``(2*4**k, 2*4**k)``.
+        """
         size = self.upsilon.shape[0]
         return int(np.round(np.log2(size / 2) / 2))
 
@@ -89,7 +127,17 @@ class DenseComb:
         normalize_trace: bool = True,
         psd_tol: float = 1e-12,
     ) -> DenseComb:
-        """Return a new DenseComb with canonicalized Υ (hermitize, optional PSD, optional normalize)."""
+        """Return a canonicalized comb matrix.
+
+        Args:
+            hermitize: If ``True``, symmetrize to enforce Hermiticity.
+            psd_project: If ``True``, project eigenvalues onto the PSD cone.
+            normalize_trace: If ``True``, normalize by the trace when nonzero.
+            psd_tol: PSD tolerance (currently unused; kept for compatibility).
+
+        Returns:
+            New `DenseComb` with canonicalized matrix.
+        """
         U = self.upsilon.copy()
         if hermitize:
             U = 0.5 * (U + U.conj().T)
@@ -104,7 +152,17 @@ class DenseComb:
         return DenseComb(U, self.timesteps)
 
     def reduced(self, keep_last_m: int = 1) -> DenseComb:
-        """Return a DenseComb with Υ reduced to the last keep_last_m past legs."""
+        """Reduce the comb by tracing out early past legs.
+
+        Args:
+            keep_last_m: Number of most-recent past legs to keep.
+
+        Returns:
+            Reduced comb as a new `DenseComb`.
+
+        Raises:
+            ValueError: If ``keep_last_m`` is out of range.
+        """
         k = self._k_steps()
         if keep_last_m > k:
             msg = f"keep_last_m={keep_last_m} > k={k}"
@@ -126,7 +184,14 @@ class DenseComb:
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Raw contraction to a 2x2 matrix (not guaranteed physical)."""
+        """Contract the comb with interventions without physicalization.
+
+        Args:
+            interventions: List of CPTP maps, one per step.
+
+        Returns:
+            Raw 2x2 complex matrix from the comb contraction (not guaranteed physical).
+        """
         k_steps = len(interventions)
         past_list = [_cptp_to_choi(emap) for emap in interventions]
         past_total = past_list[0]
@@ -141,10 +206,13 @@ class DenseComb:
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Predict final output state given a list of CPTP interventions.
+        """Predict the final reduced state for a sequence of interventions.
 
-        The raw contraction is projected to a physical density matrix (Hermitian, PSD,
-        trace-1) via Hermitization, trace normalization, and PSD projection.
+        Args:
+            interventions: List of CPTP maps, one per step.
+
+        Returns:
+            Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
         """
         rho = self._predict_raw(interventions)
 
@@ -172,7 +240,20 @@ class DenseComb:
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
-        """Quantum mutual information I(F:P) from this comb."""
+        """Compute quantum mutual information between final and past subsystems.
+
+        Args:
+            base: Log base for entropy.
+            past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
+            check_psd: If ``True``, validate PSD before normalizing.
+            assume_canonical: If ``True``, treat ``upsilon`` as already canonicalized.
+
+        Returns:
+            Quantum mutual information.
+
+        Raises:
+            ValueError: If ``past`` is invalid or PSD check fails.
+        """
         if assume_canonical:
             rho = self.upsilon
         else:
@@ -207,7 +288,16 @@ class DenseComb:
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
-        """Conditional mutual information I(F:P_{<k} | P_k) from this comb."""
+        """Compute conditional mutual information I(F:P_{<k} | P_k).
+
+        Args:
+            base: Log base for entropy.
+            check_psd: If ``True``, validate PSD before normalizing (currently ignored).
+            assume_canonical: If ``True``, treat ``upsilon`` as already canonicalized.
+
+        Returns:
+            Conditional mutual information. Returns 0.0 for ``k<2``.
+        """
         if assume_canonical:
             rho = self.upsilon
         else:
@@ -239,7 +329,22 @@ class DenseComb:
         normalize: bool = True,
         check_psd: bool = True,
     ) -> float:
-        """I(A:B|C) with subsystems 'final', 'first', 'last'."""
+        """Compute I(A:B|C) for selected subsystem labels.
+
+        Args:
+            A: Label for subsystem A: ``"first"``, ``"last"``, or ``"final"``.
+            B: Label for subsystem B: ``"first"``, ``"last"``, or ``"final"``.
+            C: Label for subsystem C: ``"first"``, ``"last"``, or ``"final"``.
+            base: Log base for entropy.
+            normalize: Whether to normalize the comb matrix by trace.
+            check_psd: Whether to project onto PSD before computing entropies.
+
+        Returns:
+            Conditional mutual information.
+
+        Raises:
+            ValueError: If a subsystem label is invalid.
+        """
         U = 0.5 * (self.upsilon + self.upsilon.conj().T)
         if check_psd:
             w, V = np.linalg.eigh(U)
@@ -289,7 +394,12 @@ class MPOComb(MPO):
     """Wrapper around an MPO representation of a comb Choi operator Υ."""
 
     def __init__(self, upsilon_mpo: MPO, timesteps: list[float]) -> None:
-        """Initialize MPOComb from an existing MPO and associated timesteps."""
+        """Create an MPO comb wrapper.
+
+        Args:
+            upsilon_mpo: MPO representation of the comb matrix.
+            timesteps: Per-step evolution durations.
+        """
         # Copy underlying MPO tensors/state into this subclass
         super().__init__()
         self.tensors = [t.copy() for t in upsilon_mpo.tensors]
@@ -298,25 +408,35 @@ class MPOComb(MPO):
         self.timesteps = timesteps
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """Return the dense matrix representation of Υ."""
+        """Return the dense matrix representation.
+
+        Returns:
+            Dense comb matrix.
+        """
         return super().to_matrix()
 
     def to_dense(self) -> DenseComb:
-        """Convert the MPO comb to a DenseComb."""
+        """Convert this MPO comb to a dense comb.
+
+        Returns:
+            Dense comb wrapper.
+        """
         return DenseComb(self.to_matrix(), self.timesteps)
 
     def predict(
         self,
         interventions: list[Callable[[NDArray[np.complex128]], NDArray[np.complex128]]],
     ) -> NDArray[np.complex128]:
-        """Predict final state given a list of CPTP interventions.
+        """Predict the final reduced state for a sequence of interventions.
 
-        This uses only MPO-local operations:
+        Args:
+            interventions: List of CPTP maps, one per past leg.
 
-        1. Build local Choi operators J(E_t) for each intervention.
-        2. Apply J(E_t)^T on the corresponding past sites of the comb MPO.
-        3. Trace out all past sites on the physical level.
-        4. Read out the remaining 2x2 final state from the single-site MPO.
+        Returns:
+            Physicalized 2x2 density matrix (Hermitian, PSD, trace-1).
+
+        Raises:
+            ValueError: If the interventions list is empty or length mismatches the comb.
         """
         if not interventions:
             msg = "interventions list must be non-empty."
@@ -367,9 +487,16 @@ class MPOComb(MPO):
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
-        """Quantum mutual information I(F:P) from this MPO comb.
+        """Compute quantum mutual information between final and past subsystems.
 
-        This delegates to the dense implementation via ``DenseComb``.
+        Args:
+            base: Log base for entropy.
+            past: Which past legs to include: ``"all"``, ``"first"``, or ``"last"``.
+            check_psd: Passed through to the dense implementation.
+            assume_canonical: Passed through to the dense implementation.
+
+        Returns:
+            Quantum mutual information.
         """
         return self.to_dense().qmi(
             base=base,
@@ -384,9 +511,15 @@ class MPOComb(MPO):
         check_psd: bool = False,
         assume_canonical: bool = False,
     ) -> float:
-        """Conditional mutual information I(F:P_{<k} | P_k) from this MPO comb.
+        """Compute conditional mutual information I(F:P_{<k} | P_k).
 
-        This delegates to the dense implementation via ``DenseComb``.
+        Args:
+            base: Log base for entropy.
+            check_psd: Passed through to the dense implementation.
+            assume_canonical: Passed through to the dense implementation.
+
+        Returns:
+            Conditional mutual information.
         """
         return self.to_dense().cmi(
             base=base,
@@ -404,9 +537,18 @@ class MPOComb(MPO):
         normalize: bool = True,
         check_psd: bool = True,
     ) -> float:
-        """I(A:B|C) with subsystems 'final', 'first', 'last' for this MPO comb.
+        """Compute I(A:B|C) for selected subsystem labels.
 
-        This delegates to the dense implementation via ``DenseComb``.
+        Args:
+            A: Label for subsystem A: ``"first"``, ``"last"``, or ``"final"``.
+            B: Label for subsystem B: ``"first"``, ``"last"``, or ``"final"``.
+            C: Label for subsystem C: ``"first"``, ``"last"``, or ``"final"``.
+            base: Log base for entropy.
+            normalize: Passed through to the dense implementation.
+            check_psd: Passed through to the dense implementation.
+
+        Returns:
+            Conditional mutual information.
         """
         return self.to_dense().cmi_conditional(
             A=A,

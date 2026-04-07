@@ -29,7 +29,20 @@ def _sinusoidal_positional_encoding(
     device: torch.device,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-    """(1, T, d_model) sinusoidal encoding (Vaswani et al.)."""
+    """Build sinusoidal positional encodings.
+
+    Args:
+        seq_len: Sequence length ``T``.
+        d_model: Model dimension.
+        device: Target device for the returned tensor.
+        dtype: Target dtype for the returned tensor.
+
+    Returns:
+        Positional encoding tensor of shape ``(1, T, d_model)``.
+
+    Raises:
+        ValueError: If ``d_model`` is not positive.
+    """
     if d_model <= 0:
         msg = "d_model must be positive."
         raise ValueError(msg)
@@ -49,7 +62,15 @@ def _sinusoidal_positional_encoding(
 
 
 def _causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
-    """Bool mask with True = **blocked** for :class:`nn.TransformerEncoder` (PyTorch convention)."""
+    """Create a causal attention mask for a transformer encoder.
+
+    Args:
+        seq_len: Sequence length.
+        device: Target device for the returned tensor.
+
+    Returns:
+        Boolean mask of shape ``(seq_len, seq_len)`` where ``True`` indicates blocked attention.
+    """
     m = torch.zeros(seq_len, seq_len, dtype=torch.bool, device=device)
     for i in range(seq_len):
         for j in range(seq_len):
@@ -73,6 +94,21 @@ class TransformerComb(nn.Module):
         dropout: float = 0.0,
         layernorm_in: bool = False,
     ) -> None:
+        """Initialize the transformer surrogate.
+
+        Args:
+            d_e: Per-step feature dimension.
+            d_rho: Output dimension per step (rho8 uses 8).
+            d_model: Transformer model width.
+            nhead: Number of attention heads.
+            num_layers: Number of encoder layers.
+            dim_ff: Feed-forward dimension inside encoder layers.
+            dropout: Dropout rate.
+            layernorm_in: Whether to apply a LayerNorm after the input projection.
+
+        Raises:
+            ValueError: If ``d_model`` is not divisible by ``nhead``.
+        """
         super().__init__()
         if d_model % nhead != 0:
             msg = f"d_model={d_model} must be divisible by nhead={nhead}."
@@ -98,6 +134,18 @@ class TransformerComb(nn.Module):
         self.head = nn.Linear(d_model, d_rho)
 
     def forward(self, E: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
+        """Run a forward pass.
+
+        Args:
+            E: Per-step features of shape ``(B, T, d_e)``.
+            rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
+
+        Returns:
+            Predicted packed reduced states of shape ``(B, T, d_rho)``.
+
+        Raises:
+            ValueError: If input shapes are inconsistent.
+        """
         b, t, _de = E.shape
         if rho0.shape != (b, self.d_rho):
             msg = f"rho0 mode expects rho0 (B,d_rho), got {rho0.shape}."
@@ -118,10 +166,16 @@ class TransformerComb(nn.Module):
         device: torch.device | str | None = None,
         return_numpy: bool = True,
     ) -> torch.Tensor | np.ndarray:
-        """Run inference (eval mode, no gradients). Matches :meth:`forward` tensor shapes.
+        """Run inference (eval mode, no gradients).
 
-        ``E``: ``(B, T, d_e)``, ``rho0``: ``(B, d_rho)``. Returns predictions ``(B, T, d_rho)`` as NumPy
-        float32 by default (set ``return_numpy=False`` for PyTorch tensors on ``device``).
+        Args:
+            E: Per-step features of shape ``(B, T, d_e)``.
+            rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
+            device: Device for inference. Defaults to the model's current device.
+            return_numpy: If ``True``, return a NumPy array on CPU; otherwise return a tensor on ``device``.
+
+        Returns:
+            Predictions of shape ``(B, T, d_rho)``.
         """
         if device is None:
             dev = next(self.parameters()).device
@@ -151,15 +205,23 @@ class TransformerComb(nn.Module):
         prefix_loss: str = "full",
         device: torch.device | None = None,
     ) -> TransformerComb:
-        """Fit with MSE on packed ``rho`` targets (same layout as :meth:`forward`).
+        """Fit the model on rollout data using MSE loss.
 
-        ``train_dataset`` / ``val_dataset`` must be :class:`~torch.utils.data.TensorDataset` with tensors
-        ``(E, rho0, target)`` in that order — same layout as
-        :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data`.
+        Args:
+            train_dataset: TensorDataset containing tensors ``(E, rho0, target)``.
+            val_dataset: Optional validation dataset with the same tensor layout.
+            epochs: Number of epochs.
+            lr: Learning rate.
+            batch_size: Batch size.
+            grad_clip: Gradient clipping norm (0 disables clipping).
+            prefix_loss: Loss horizon mode: ``"full"``, ``"random"``, or ``"all"``.
+            device: Training device. Defaults to the model's current device.
 
-        ``prefix_loss``: ``"full"`` = loss on full sequence; ``"random"`` / ``"all"`` vary the
-        training horizon (see experiment scripts). If ``val_dataset`` is given, restores the best
-        validation checkpoint (full-sequence MSE).
+        Returns:
+            Self (for chaining).
+
+        Raises:
+            ValueError: If ``prefix_loss`` is invalid.
         """
         if device is None:
             device = next(self.parameters()).device

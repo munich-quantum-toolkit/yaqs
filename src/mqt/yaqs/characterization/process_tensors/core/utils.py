@@ -34,7 +34,16 @@ def _reprepare_site_zero_forced(
     proj_state: NDArray[np.complex128],
     new_state: NDArray[np.complex128],
 ) -> float:
-    """Project site 0 onto proj_state and reprepare new_state (in-place). Returns prob."""
+    """Project site 0 and reprepare it to a new state (MPS backend).
+
+    Args:
+        mps: State in MPS form (modified in-place).
+        proj_state: Single-qubit ket to project onto (shape (2,)).
+        new_state: Single-qubit ket to reprepare to (shape (2,)).
+
+    Returns:
+        The projection probability.
+    """
     mps.set_canonical_form(orthogonality_center=0)
     t_mps = mps.tensors[0]
     env_vec = np.einsum("s c, s -> c", t_mps[:, 0, :], proj_state.conj())
@@ -57,7 +66,17 @@ def _reprepare_site_zero_vector_forced(
     proj_state: NDArray[np.complex128],
     new_state: NDArray[np.complex128],
 ) -> tuple[NDArray[np.complex128], float]:
-    """Reprepare site 0 for a dense vector state. Returns (new_state_vec, prob)."""
+    """Project+reprepare site 0 for a dense state vector backend.
+
+    Args:
+        state_vec: Full state vector of shape ``(2**L,)``.
+        proj_state: Single-qubit ket to project onto (shape (2,)).
+        new_state: Single-qubit ket to reprepare to (shape (2,)).
+
+    Returns:
+        Tuple ``(new_state_vec, prob)`` where ``new_state_vec`` is the updated full state vector and
+        ``prob`` is the projection probability.
+    """
     psi_reshaped = state_vec.reshape(2, state_vec.shape[0] // 2)
     env_vec = proj_state.conj() @ psi_reshaped
     prob = float(np.linalg.norm(env_vec) ** 2)
@@ -67,7 +86,14 @@ def _reprepare_site_zero_vector_forced(
 
 
 def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]:
-    """Reconstruct single-qubit density matrix from Pauli expectations."""
+    """Reconstruct a single-qubit density matrix from Pauli expectations.
+
+    Args:
+        expectations: Mapping with keys ``"x"``, ``"y"``, ``"z"`` for Pauli expectations.
+
+    Returns:
+        2x2 complex density matrix.
+    """
     eye = np.eye(2, dtype=complex)
     return 0.5 * (
         eye + expectations["x"] * X().matrix + expectations["y"] * Y().matrix + expectations["z"] * Z().matrix
@@ -75,7 +101,14 @@ def _reconstruct_state(expectations: dict[str, float]) -> NDArray[np.complex128]
 
 
 def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Extract single-qubit (site 0) density matrix from MPS or dense vector."""
+    """Extract the site-0 reduced density matrix.
+
+    Args:
+        state: Either an MPS state or a dense state vector.
+
+    Returns:
+        2x2 complex reduced density matrix on site 0.
+    """
     if isinstance(state, np.ndarray):
         rho = np.reshape(state, (2, -1))
         return rho @ rho.conj().T
@@ -90,7 +123,15 @@ def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.comple
 
 
 def _initialize_backend_state(operator: MPO, solver: str) -> MPS | NDArray[np.complex128]:
-    """Initialise |0...0> state for the given solver."""
+    """Initialize the all-zeros state for a given backend solver.
+
+    Args:
+        operator: Hamiltonian MPO (used for chain length).
+        solver: Backend solver name (e.g. ``"MCWF"`` or ``"TJM"``).
+
+    Returns:
+        Dense state vector for MCWF or an MPS for TJM.
+    """
     if solver == "MCWF":
         psi = np.zeros(2**operator.length, dtype=np.complex128)
         psi[0] = 1.0
@@ -104,7 +145,18 @@ def _reprepare_backend_state_forced(
     new_state: NDArray[np.complex128],
     solver: str,
 ) -> tuple[MPS | NDArray[np.complex128], float]:
-    """Reprepare site 0 for the given solver. Returns (new_state, prob)."""
+    """Project+reprepare site 0 using the given solver backend.
+
+    Args:
+        state: Current backend state.
+        proj_state: Single-qubit ket to project onto (shape (2,)).
+        new_state: Single-qubit ket to reprepare to (shape (2,)).
+        solver: Backend solver name.
+
+    Returns:
+        Tuple ``(state_out, prob)`` where ``state_out`` is the updated backend state and ``prob`` is
+        the projection probability.
+    """
     if solver == "MCWF":
         assert isinstance(state, np.ndarray)
         return _reprepare_site_zero_vector_forced(state, proj_state, new_state)
@@ -123,7 +175,24 @@ def _evolve_backend_state(
     traj_idx: int = 0,
     static_ctx: Any = None,
 ) -> MPS | NDArray[np.complex128]:
-    """Evolve state for one step using the given solver."""
+    """Evolve a backend state forward in time by one segment.
+
+    Args:
+        state: Current backend state (dense vector for MCWF, MPS for TJM).
+        operator: Hamiltonian MPO.
+        noise_model: Optional noise model; ``None`` for deterministic evolution.
+        step_params: Simulation parameters for this step (duration and time grid are read here).
+        solver: Backend solver name.
+        traj_idx: MCWF trajectory index (used for deterministic seeding in the backend).
+        static_ctx: Optional preprocessed MCWF context.
+
+    Returns:
+        Updated backend state after evolution.
+
+    Raises:
+        TypeError: If ``state`` is incompatible with ``solver``.
+        RuntimeError: If the backend fails to produce an output state.
+    """
     if solver == "MCWF":
         if not isinstance(state, np.ndarray):
             msg = f"MCWF solver requires dense NDArray state, got {type(state)}."
@@ -160,6 +229,15 @@ def make_mcwf_static_context(
     *,
     noise_model: NoiseModel | None = None,
 ) -> Any:
-    """Shared ``preprocess_mcwf`` context for batch tomography / predictor workers (dummy reference MPS)."""
+    """Build a reusable MCWF preprocessing context.
+
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Simulation parameters.
+        noise_model: Optional noise model.
+
+    Returns:
+        A backend-specific preprocessing context suitable for reuse across many worker calls.
+    """
     dummy_mps = MPS(length=operator.length, state="zeros")
     return preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)

@@ -41,7 +41,23 @@ def stack_rollouts(
     *,
     append_context_to_E: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
-    """Stack a batch of :class:`SequenceRolloutSample` into ``rho_0``, ``E``, ``rho_seq``, optional ``context``."""
+    """Stack rollout samples into dense batch arrays.
+
+    Args:
+        samples: List of rollout samples.
+        append_context_to_E: If ``True`` and context is present, append it to every step feature row
+            in ``E_features`` and return ``context=None``.
+
+    Returns:
+        Tuple ``(rho0, E, rho_seq, context)`` where:
+        - ``rho0`` has shape ``(N, 8)``
+        - ``E`` has shape ``(N, K, d_e)`` (or ``(N, K, d_e + d_ctx)`` if context is appended)
+        - ``rho_seq`` has shape ``(N, K, 8)``
+        - ``context`` has shape ``(N, d_ctx)`` or ``None``
+
+    Raises:
+        ValueError: If ``samples`` is empty.
+    """
     if not samples:
         msg = "stack_rollouts requires at least one SequenceRolloutSample."
         raise ValueError(msg)

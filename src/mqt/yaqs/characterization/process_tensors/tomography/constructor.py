@@ -99,7 +99,16 @@ def _sequence_worker(
     job_idx: int,
     payload: dict[str, Any] | None = None,
 ) -> tuple[int, int, np.ndarray, float]:
-    """Single trajectory for one discrete-basis sequence: prep → evolve → site-0 density."""
+    """Simulate one trajectory for one discrete-basis sequence.
+
+    Args:
+        job_idx: Flat index ``sequence_index * num_trajectories + trajectory_index``.
+        payload: Optional worker payload (defaults to :data:`~mqt.yaqs.simulator.WORKER_CTX`).
+
+    Returns:
+        Tuple ``(sequence_index, trajectory_index, rho_final, weight)`` where ``rho_final`` is the
+        site-0 reduced density matrix and ``weight`` is the cumulative projection probability.
+    """
     ctx = payload if payload is not None else WORKER_CTX
     num_trajectories: int = int(ctx["num_trajectories"])
     s_idx: int = int(job_idx // num_trajectories)
@@ -148,6 +157,15 @@ def _sequence_worker(
 
 
 def _call_backend_serial(backend: Callable[..., Any], *args: Any) -> Any:
+    """Call a backend under BLAS thread limits if available.
+
+    Args:
+        backend: Callable to execute.
+        *args: Positional arguments forwarded to ``backend``.
+
+    Returns:
+        The return value of ``backend(*args)``.
+    """
     import contextlib  # noqa: PLC0415
 
     try:
@@ -287,7 +305,24 @@ def _construct_data(
     basis: TomographyBasis = "tetrahedral",
     basis_seed: int | None = None,
 ) -> SequenceData:
-    """Validated data-construction path returning :class:`SequenceData`."""
+    """Validate inputs and construct `SequenceData` via exhaustive simulation.
+
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        timesteps: Optional per-step durations (defaults to ``[sim_params.elapsed_time]``).
+        noise_model: Optional noise model.
+        parallel: Whether to parallelize over sequences.
+        num_trajectories: Number of MCWF trajectories per sequence (forced to 1 if noiseless).
+        basis: Tomography basis name.
+        basis_seed: Optional seed used when ``basis="random"``.
+
+    Returns:
+        Exhaustive `SequenceData` containing all simulated sequences.
+
+    Raises:
+        ValueError: If `sim_params.solver` is not supported for tomography.
+    """
     if timesteps is None:
         timesteps = [sim_params.elapsed_time]
 

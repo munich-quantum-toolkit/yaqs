@@ -58,7 +58,16 @@ from .utils import _random_density_matrix, _sample_random_intervention_sequence,
 # 4b) Performance helpers (hot path)
 # ---------------------------------------------------------------------------
 def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: float, duration: float) -> np.ndarray:
-    """Cached `times` grid matching existing rounding convention."""
+    """Return a cached time grid for a step.
+
+    Args:
+        times_cache: Cache mapping ``(dt, n_steps)`` to time grids.
+        dt: Integration step size.
+        duration: Desired evolution duration.
+
+    Returns:
+        A 1D float array suitable for ``AnalogSimParams.times``.
+    """
     n_steps = max(1, int(np.round(float(duration) / float(dt))))
     key = (float(dt), int(n_steps))
     out = times_cache.get(key)
@@ -94,7 +103,7 @@ def _surrogate_final_state_worker(
     job_idx: int,
     job_payload: dict[str, Any] | None = None,
 ) -> tuple[int, int, np.ndarray, float]:
-    """Run one intervention sequence and return the **final** reduced state on site 0 plus importance weight.
+    """Simulate one intervention sequence and return the final reduced state.
 
     Does not record per-step states (cheaper than :func:`_surrogate_rollout_worker`).
 
@@ -160,7 +169,7 @@ def _surrogate_rollout_worker(
     job_idx: int,
     job_payload: dict[str, Any] | None = None,
 ) -> tuple[int, int, np.ndarray, np.ndarray, np.ndarray, float]:
-    """Run one sequence and record **packed** site-0 states after each step (for supervised training).
+    """Simulate one sequence and record per-step reduced states (packed).
 
     Choi feature rows (``e_features_rows``) are passed through unchanged into the sample; the worker
     only ensures shape ``(num_steps, d_e)`` matches the simulation.
@@ -282,7 +291,15 @@ def _surrogate_rollout_worker(
 # 7) SERIAL BACKEND WRAPPER — same thread cap pattern as :func:`mqt.yaqs.simulator._call_backend`
 # ---------------------------------------------------------------------------
 def _call_worker_serial(worker_fn: Callable[..., Any], *args: Any) -> Any:
-    """Run a single worker call under ``threadpoolctl`` limits (if installed); else direct call."""
+    """Run one worker call under BLAS thread limits if available.
+
+    Args:
+        worker_fn: Worker function to call.
+        *args: Positional arguments forwarded to ``worker_fn``.
+
+    Returns:
+        The return value of ``worker_fn(*args)``.
+    """
     import contextlib  # noqa: PLC0415
 
     try:
@@ -313,25 +330,31 @@ def _simulate_sequences(
     static_ctx_list: list[list[Any]] | None = None,
     context_vec: np.ndarray | None = None,
 ) -> list[SequenceRolloutSample] | np.ndarray:
-    """Simulate many intervention **sequences** and return rollouts or final states.
+    """Simulate many intervention sequences.
 
-    **Modes**
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        timesteps: Per-step evolution durations of length ``k``.
+        psi_pairs_list: One list of (measurement_ket, preparation_ket) pairs per sequence.
+        initial_psis: One initial state vector per sequence.
+        static_ctx: Optional static backend context (used for MCWF preprocessing).
+        parallel: Whether to use process-based parallelism over sequences.
+        show_progress: Whether to show a progress bar.
+        record_step_states: If ``True``, record and return per-step packed reduced states.
+        e_features_rows: Per-sequence Choi feature rows (required when ``record_step_states=True``).
+        timesteps_rows: Optional per-sequence per-step durations.
+        operators_list: Optional per-sequence per-step MPOs.
+        static_ctx_list: Optional per-sequence per-step backend context.
+        context_vec: Optional static context vector to attach to each sample.
 
-    - ``record_step_states=True`` (default): returns ``list[SequenceRolloutSample]`` with per-step
-      packed reduced states and Choi features (``d_e``-dim rows) aligned with ``psi_pairs_list``.
-    - ``record_step_states=False``: returns a single ``(N, 8)`` float32 tensor of **final** packed
-      states only (no Choi tensor needed).
+    Returns:
+        If ``record_step_states=True``: list of :class:`~mqt.yaqs.characterization.process_tensors.surrogates.data.SequenceRolloutSample`.
+        Otherwise: float32 array of shape ``(N, 8)`` with final packed reduced states.
 
-    **Choi features**
-
-    When recording rollouts, pass ``e_features_rows``: one ``(k, d_e)`` float32 array per sequence
-    (fixed-basis indices map to rows of a precomputed table; continuous sampling uses
-    :func:`~mqt.yaqs.characterization.process_tensors.surrogates.utils._sample_random_intervention_sequence` features).
-
-    **Parallelism**
-
-    Uses :func:`~mqt.yaqs.simulator.run_backend_parallel` when ``parallel`` and ``N > 1``; otherwise
-    calls :func:`_call_worker_serial` per sequence index.
+    Raises:
+        ValueError: If input lengths are inconsistent or if required feature rows are missing.
+        RuntimeError: If parallel execution returns incomplete results.
     """
     num_sequences = len(initial_psis)
     if len(psi_pairs_list) != num_sequences:
@@ -446,7 +469,14 @@ def _simulate_sequences(
 # 9) Helpers — used only by :func:`generate_data`
 # ---------------------------------------------------------------------------
 def _psi_from_rank1_projector(projector: np.ndarray) -> np.ndarray:
-    """Unit ket from a 2×2 rank-1 projector (measurement / prep direction)."""
+    """Extract a unit ket from a 2x2 rank-1 projector.
+
+    Args:
+        projector: 2x2 Hermitian projector/density matrix.
+
+    Returns:
+        Normalized eigenvector corresponding to the largest eigenvalue.
+    """
     eigvals, eigvecs = np.linalg.eigh(np.asarray(projector, dtype=np.complex128).reshape(2, 2))
     idx = int(np.argmax(eigvals.real))
     psi = eigvecs[:, idx]
@@ -464,7 +494,16 @@ def _rollout_arrays_to_tensor_dataset(
     E_features: np.ndarray,
     rho_seq: np.ndarray,
 ):
-    """Stack NumPy rollout batches into a :class:`~torch.utils.data.TensorDataset` (internal; used by :func:`generate_data`)."""
+    """Convert rollout arrays into a PyTorch TensorDataset.
+
+    Args:
+        rho0: Array of shape ``(N, 8)``.
+        E_features: Array of shape ``(N, K, d_e)``.
+        rho_seq: Array of shape ``(N, K, 8)``.
+
+    Returns:
+        TensorDataset with tensors ``(E_features, rho0, rho_seq)`` in that order.
+    """
     import torch  # noqa: PLC0415
     from torch.utils.data import TensorDataset  # noqa: PLC0415
 
@@ -488,10 +527,25 @@ def generate_data(
     timesteps: list[float] | None = None,
     init_mode: str = "eigenstate",
 ):
-    """Sample **continuous** random rank-1 interventions, simulate, return a :class:`~torch.utils.data.TensorDataset`.
+    """Generate surrogate training data by sampling interventions and simulating rollouts.
 
-    Requires PyTorch. Underlying simulation uses NumPy; the returned dataset packs
-    ``(E_features, rho0, rho_seq)`` with shapes ``(n, k, d_e)``, ``(n, 8)``, ``(n, k, 8)`` (see :func:`stack_rollouts`).
+    Args:
+        operator: Hamiltonian MPO. The chain length is inferred from ``operator.length``.
+        sim_params: Analog simulation parameters.
+        k: Number of intervention steps.
+        n: Number of sampled sequences.
+        rng: Optional RNG (overrides ``seed`` if provided).
+        seed: Optional seed used to create a default RNG.
+        parallel: Whether to parallelize over sequences.
+        show_progress: Whether to show progress bars.
+        timesteps: Optional per-step durations (defaults to ``[sim_params.dt] * k``).
+        init_mode: Initial-state sampling mode (see :func:`build_initial_psi`).
+
+    Returns:
+        A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
+
+    Raises:
+        ValueError: If ``timesteps`` has the wrong length.
     """
     chain_length = int(operator.length)
 
@@ -564,7 +618,24 @@ def create_surrogate(
     model_kwargs: dict[str, Any] | None = None,
     train_kwargs: dict[str, Any] | None = None,
 ) -> TransformerComb:
-    """End-to-end: :func:`generate_data` → :class:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb` → :meth:`~mqt.yaqs.characterization.process_tensors.surrogates.model.TransformerComb.fit`."""
+    """Train a surrogate model end-to-end on sampled rollout data.
+
+    Args:
+        operator: Hamiltonian MPO.
+        sim_params: Analog simulation parameters.
+        k: Number of intervention steps.
+        n: Number of sampled sequences.
+        seed: Seed used for data generation RNG.
+        parallel: Whether to parallelize data generation.
+        show_progress: Whether to show progress bars.
+        timesteps: Optional per-step durations passed to :func:`generate_data`.
+        init_mode: Initial-state sampling mode passed to :func:`generate_data`.
+        model_kwargs: Optional keyword arguments forwarded to :class:`TransformerComb`.
+        train_kwargs: Optional keyword arguments forwarded to :meth:`TransformerComb.fit`.
+
+    Returns:
+        Trained :class:`TransformerComb`.
+    """
     import torch  # noqa: PLC0415
 
     rng = np.random.default_rng(0 if seed is None else int(seed))
