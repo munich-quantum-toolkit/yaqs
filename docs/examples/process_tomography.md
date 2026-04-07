@@ -18,8 +18,7 @@ Process Tensor Tomography (PTT) characterises multi-time correlations in an open
 by reconstructing a _process tensor_, a generalisation of the quantum channel concept to several
 time steps.
 Given an MPO Hamiltonian and a set of state preparations and measurement projections, YAQS runs the simulation in parallel,
-applies these interventions at each time point, and assembles the result into a {class}`ProcessTensor`
-object that can be used to:
+applies these interventions at each time point, and reconstructs a **process tensor comb** that can be used to:
 
 - compute the **Quantum Mutual Information** of the process (how much information the environment retains),
 - **predict the final state** for arbitrary held-out input and intervention sequences without re-running the simulator.
@@ -71,17 +70,18 @@ For two successive evolution segments, we can reconstruct the temporal correlati
 ---
 tags: [remove-output]
 ---
-comb_two = construct(
+from mqt.yaqs import construct_process_tensor
+
+comb_two = construct_process_tensor(
     operator,
     sim_params,
     timesteps=[0.1, 0.1],       # two segments of dt each
     num_trajectories=100,
-).to_dense_comb()
+    return_type="dense",
+)
 
 print(f"Comb Choi matrix shape: {comb_two.to_matrix().shape}")
 ```
-
-````
 
 ## 4. Predicting held-out states
 
@@ -118,7 +118,7 @@ def x_gate_intervention(rho: np.ndarray) -> np.ndarray:
 rho_pred = comb_two.predict([initial_prep, x_gate_intervention])
 print("Predicted output density matrix:")
 print(np.round(rho_pred, 4))
-````
+```
 
 The result `rho_pred` is a `(2, 2)` density matrix giving the expected output state at the final
 time step given the initial state and the local unitary intervention applied to the system between the two segments.
