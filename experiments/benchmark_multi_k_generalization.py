@@ -17,17 +17,11 @@ import argparse
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
-
 import numpy as np
 
-from mqt.yaqs.characterization.process_tensors.core.utils import make_mcwf_static_context
 from mqt.yaqs.characterization.process_tensors.core.encoding import unpack_rho8
 from mqt.yaqs.characterization.process_tensors.core.metrics import _mean_frobenius_mse_rho8 as mean_frobenius_mse_rho8
-from mqt.yaqs.characterization.process_tensors.surrogates.data import stack_rollouts
-from mqt.yaqs.characterization.process_tensors.surrogates.model import TransformerComb
-from mqt.yaqs.characterization.process_tensors.surrogates.utils import build_initial_psi, _random_density_matrix as random_density_matrix, _sample_random_intervention_sequence as sample_random_intervention_sequence
-from mqt.yaqs.characterization.process_tensors.surrogates.workflow import _simulate_sequences as simulate_sequences
+from mqt.yaqs.characterization.process_tensors import TransformerComb, generate_data
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -95,61 +89,6 @@ def parse_args() -> argparse.Namespace:
     setattr(ns, "_k_tests_resolved", k_tests)
     setattr(ns, "_k_trains_resolved", k_trains)
     return ns
-
-
-def _state_from_rank1_projector(P: np.ndarray) -> np.ndarray:
-    w, v = np.linalg.eigh(np.asarray(P, dtype=np.complex128).reshape(2, 2))
-    idx = int(np.argmax(w.real))
-    psi = v[:, idx]
-    nrm = float(np.linalg.norm(psi))
-    if nrm < 1e-15:
-        return np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    return (psi / nrm).astype(np.complex128)
-
-
-def _make_continuous_dataset(
-    *,
-    k: int,
-    n: int,
-    rng: np.random.Generator,
-    L: int,
-    op: MPO,
-    params: AnalogSimParams,
-    static_ctx: Any,
-    parallel: bool,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]] = []
-    initial_psis: list[np.ndarray] = []
-    e_features_rows: list[np.ndarray] = []
-    for _ in range(int(n)):
-        rho_in = random_density_matrix(rng)
-        maps, rows_feat = sample_random_intervention_sequence(int(k), rng)
-        pairs = []
-        for emap in maps:
-            rho_prep = np.asarray(getattr(emap, "rho_prep"), dtype=np.complex128)
-            E = np.asarray(getattr(emap, "effect"), dtype=np.complex128)
-            psi_meas = _state_from_rank1_projector(E)
-            psi_prep = _state_from_rank1_projector(rho_prep)
-            pairs.append((psi_meas, psi_prep))
-        psi_pairs_list.append(pairs)
-        e_features_rows.append(rows_feat.astype(np.float32))
-        initial_psis.append(build_initial_psi(rho_in, length=int(L), rng=rng, init_mode="eigenstate"))
-    timesteps = [float(params.dt)] * int(k)
-    samples = simulate_sequences(
-        operator=op,
-        sim_params=params,
-        timesteps=timesteps,
-        psi_pairs_list=psi_pairs_list,
-        initial_psis=initial_psis,
-        e_features_rows=e_features_rows,
-        parallel=bool(parallel),
-        show_progress=False,
-        record_step_states=True,
-        static_ctx=static_ctx,
-        context_vec=None,
-    )
-    rho0_np, E_np, rho_seq_np, _ctx = stack_rollouts(samples)
-    return rho0_np, E_np, rho_seq_np
 
 
 def _mean_abs_obs_err(pred_rho8: np.ndarray, tgt_rho8: np.ndarray, *, obs: np.ndarray) -> float:
@@ -257,7 +196,6 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     op = MPO.ising(length=int(args.L), J=J, g=g)
     params = AnalogSimParams(dt=float(dt), solver="MCWF", show_progress=False, max_bond_dim=args.max_bond_dim)
-    static_ctx = make_mcwf_static_context(op, params, noise_model=None)
     obs_x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
     obs_z = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
 
@@ -265,34 +203,26 @@ def main() -> None:
 
     for k_train in k_trains:
         for seed in args.seeds:
-            rng = np.random.default_rng(int(seed) + 12345 * int(k_train))
-            rho0_tr, E_tr, rho_seq_tr = _make_continuous_dataset(
+            ds = generate_data(
+                op,
+                params,
                 k=int(k_train),
                 n=int(args.N_train),
-                rng=rng,
-                L=int(args.L),
-                op=op,
-                params=params,
-                static_ctx=static_ctx,
+                seed=int(seed) + 12345 * int(k_train),
                 parallel=bool(args.parallel_channel_sim),
+                show_progress=False,
             )
-            rho_tgt = rho_seq_tr
-            idx = np.arange(int(args.N_train), dtype=np.int64)
-            rng.shuffle(idx)
+            E_all, r0_all, tgt_all = ds.tensors
+            idx = np.arange(int(E_all.shape[0]), dtype=np.int64)
+            np.random.default_rng(int(seed) + 54321).shuffle(idx)
             n_val = max(1, min(int(round(float(args.val_frac_of_train) * len(idx))), len(idx) - 1))
             va_idx, tr_idx = idx[:n_val], idx[n_val:]
 
-            E_tr_t = torch.as_tensor(E_tr[tr_idx], dtype=torch.float32)
-            r0_tr_t = torch.as_tensor(rho0_tr[tr_idx], dtype=torch.float32)
-            tg_tr_t = torch.as_tensor(rho_tgt[tr_idx], dtype=torch.float32)
-            E_va_t = torch.as_tensor(E_tr[va_idx], dtype=torch.float32)
-            r0_va_t = torch.as_tensor(rho0_tr[va_idx], dtype=torch.float32)
-            tg_va_t = torch.as_tensor(rho_tgt[va_idx], dtype=torch.float32)
-            train_ds = TensorDataset(E_tr_t, r0_tr_t, tg_tr_t)
-            val_ds = TensorDataset(E_va_t, r0_va_t, tg_va_t)
+            train_ds = TensorDataset(E_all[tr_idx], r0_all[tr_idx], tgt_all[tr_idx])
+            val_ds = TensorDataset(E_all[va_idx], r0_all[va_idx], tgt_all[va_idx])
 
             tfm = TransformerComb(
-                d_e=int(E_tr.shape[-1]),
+                d_e=int(E_all.shape[-1]),
                 d_rho=8,
                 d_model=int(args.d_model),
                 nhead=int(args.nhead),
@@ -315,23 +245,20 @@ def main() -> None:
             tfm.eval()
 
             for k_test in k_tests:
-                rng_te = np.random.default_rng(int(seed) + 999_983 * int(k_test) + 77_777 * int(k_train))
-                r0_te, E_te, rho_seq_te = _make_continuous_dataset(
+                ds_te = generate_data(
+                    op,
+                    params,
                     k=int(k_test),
                     n=int(args.N_test),
-                    rng=rng_te,
-                    L=int(args.L),
-                    op=op,
-                    params=params,
-                    static_ctx=static_ctx,
+                    seed=int(seed) + 999_983 * int(k_test) + 77_777 * int(k_train),
                     parallel=bool(args.parallel_channel_sim),
+                    show_progress=False,
                 )
-                tgt_final = rho_seq_te[:, -1, :].astype(np.float32)
+                E_te, r0_te, tgt_te = ds_te.tensors
                 with torch.no_grad():
-                    E_te_t = torch.as_tensor(E_te, dtype=torch.float32, device=device)
-                    r0_te_t = torch.as_tensor(r0_te, dtype=torch.float32, device=device)
-                    pred_seq = tfm(E_te_t, r0_te_t).cpu().numpy().astype(np.float32)
-                    pred_final = pred_seq[:, -1, :]
+                    pred_seq = tfm(E_te.to(device), r0_te.to(device)).cpu().numpy().astype(np.float32)
+                pred_final = pred_seq[:, -1, :]
+                tgt_final = tgt_te.numpy()[:, -1, :].astype(np.float32)
                 fr = mean_frobenius_mse_rho8(pred_final, tgt_final)
                 ox = _mean_abs_obs_err(pred_final, tgt_final, obs=obs_x)
                 oz = _mean_abs_obs_err(pred_final, tgt_final, obs=obs_z)

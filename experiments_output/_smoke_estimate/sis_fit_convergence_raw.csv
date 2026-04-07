@@ -1,2 +1,0 @@
-variant,k,N,seed,n_sequences,n_observed_cells,fit_lam,fit_weight_tol,mean_sq_residual_constraints,err_fit_U_vs_exhaustive,err_fit_pred_state_frob,err_fit_pred_state_trace,prefactor_fit_pred,err_trunc_r4_pred_state_frob,err_trunc_r4_pred_state_trace
-estimate_fit_ls,1,16,13505,16,12,1e-08,1e-30,6.66666612185495e-17,3.5124867815256036e-08,3.0271494926829214e-08,2.1405179334616206e-08,1.2108597970731685e-07,2.403906595528315e-08,1.699818655191941e-08

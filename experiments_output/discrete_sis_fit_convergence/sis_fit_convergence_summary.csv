@@ -1,8 +1,0 @@
-variant,k,N,mean_err_fit_U_vs_exhaustive,std_err_fit_U_vs_exhaustive,mean_err_fit_pred_state_frob,std_err_fit_pred_state_frob,mean_err_fit_pred_state_trace,std_err_fit_pred_state_trace,mean_prefactor_fit_pred,std_prefactor_fit_pred,mean_err_laststep_pred_state_frob,std_err_laststep_pred_state_frob,mean_err_laststep_pred_state_trace,std_err_laststep_pred_state_trace,mean_train_seq_loss,std_train_seq_loss,mean_val_seq_loss,std_val_seq_loss,mean_n_sequences,std_n_sequences
-sis_local_fit,2,4,1.585793305802796,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,4.0,0.0
-sis_local_fit,2,8,1.5855403887780217,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,8.0,0.0
-sis_local_fit,2,16,1.5870420040515913,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,16.0,0.0
-sis_local_fit,2,32,1.5844153293147543,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,32.0,0.0
-sis_local_fit,2,64,1.5827442477700677,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,64.0,0.0
-sis_local_fit,2,128,1.5824166779341111,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,128.0,0.0
-sis_local_fit,2,256,1.5896261564513046,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,256.0,0.0
