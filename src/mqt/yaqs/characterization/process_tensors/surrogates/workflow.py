@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # 4) LOCAL — tomography surrogate stack
 # ---------------------------------------------------------------------------
-from .encoding import normalize_rho_from_backend_output, pack_rho8
+from ..core.encoding import normalize_rho_from_backend_output, pack_rho8
 from ..core.utils import (
     _evolve_backend_state,
     _get_rho_site_zero,

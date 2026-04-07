@@ -6,6 +6,7 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.characterization.process_tensors.tomography.basis import (
     calculate_dual_choi_basis,
+    build_basis_for_fixed_alphabet,
     get_basis_states,
     get_choi_basis,
     _finalize_sequence_averages,
@@ -94,3 +95,21 @@ def test_basis_reproduction_h0_identity_map() -> None:
     expected = np.array([[1.0, 0.0], [0.0, 0.0]])
     err = np.linalg.norm(rho_pred - expected, "fro") / max(np.linalg.norm(expected, "fro"), 1e-15)
     assert float(err) < 1e-10
+
+
+def test_get_basis_states_random_is_normalized_and_seeded() -> None:
+    a = get_basis_states(basis="random", seed=123)
+    b = get_basis_states(basis="random", seed=123)
+    assert len(a) == 4
+    for (na, psia, rhoa), (nb, psib, rhob) in zip(a, b, strict=False):
+        assert na == nb
+        np.testing.assert_allclose(psia, psib, atol=1e-12)
+        np.testing.assert_allclose(rhoa, rhob, atol=1e-12)
+
+
+def test_build_basis_for_fixed_alphabet_shapes() -> None:
+    basis_set, choi_mats, choi_idx, feat = build_basis_for_fixed_alphabet(basis="standard")
+    assert len(basis_set) == 4
+    assert len(choi_mats) == 16
+    assert len(choi_idx) == 16
+    assert feat.shape == (16, 32)

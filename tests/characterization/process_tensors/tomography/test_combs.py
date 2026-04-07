@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.characterization.process_tensors.tomography.combs import DenseComb, MPOComb
+from mqt.yaqs.characterization.process_tensors.tomography.data import SequenceData
 
 
 def test_densecomb_predict_matches_helper() -> None:
@@ -47,3 +49,59 @@ def test_mpocomb_qmi_fallback_to_dense() -> None:
     q1 = comb.qmi()
     q2 = comb.to_dense().qmi()
     assert abs(q1 - q2) < 1e-12
+
+
+def test_mpocomb_predict_smoke_identity_map() -> None:
+    rho = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
+    data = SequenceData(
+        sequences=[(0,)],
+        outputs=[rho],
+        weights=[1.0],
+        choi_basis=[np.eye(4, dtype=np.complex128)] * 16,
+        choi_indices=[(0, 0)] * 16,
+        choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
+        timesteps=[0.1],
+    )
+    comb = data.to_mpo_comb(compress_every=1)
+
+    def id_map(x: np.ndarray) -> np.ndarray:
+        return x
+
+    rho_out = comb.predict([id_map])
+    assert rho_out.shape == (2, 2)
+    np.testing.assert_allclose(rho_out, rho_out.conj().T, atol=1e-12)
+    np.testing.assert_allclose(np.trace(rho_out).real, 1.0, atol=1e-12)
+
+
+def test_mpocomb_predict_raises_on_empty_interventions() -> None:
+    data = SequenceData(
+        sequences=[(0,)],
+        outputs=[np.eye(2, dtype=np.complex128)],
+        weights=[1.0],
+        choi_basis=[np.eye(4, dtype=np.complex128)] * 16,
+        choi_indices=[(0, 0)] * 16,
+        choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
+        timesteps=[0.1],
+    )
+    comb = data.to_mpo_comb(compress_every=1)
+    with pytest.raises(ValueError):
+        comb.predict([])
+
+
+def test_mpocomb_predict_raises_on_length_mismatch() -> None:
+    data = SequenceData(
+        sequences=[(0,)],
+        outputs=[np.eye(2, dtype=np.complex128)],
+        weights=[1.0],
+        choi_basis=[np.eye(4, dtype=np.complex128)] * 16,
+        choi_indices=[(0, 0)] * 16,
+        choi_duals=[np.eye(4, dtype=np.complex128)] * 16,
+        timesteps=[0.1],
+    )
+    comb = data.to_mpo_comb(compress_every=1)
+
+    def id_map(x: np.ndarray) -> np.ndarray:
+        return x
+
+    with pytest.raises(ValueError):
+        comb.predict([id_map, id_map])

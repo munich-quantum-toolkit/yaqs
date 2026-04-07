@@ -6,7 +6,7 @@ Training data containers (:class:`~mqt.yaqs.characterization.process_tensors.sur
 :func:`~mqt.yaqs.characterization.process_tensors.surrogates.data.stack_rollouts`) live in
 :mod:`mqt.yaqs.characterization.process_tensors.surrogates.data`.
 
-Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.process_tensors.surrogates.metrics`.
+Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.process_tensors.core.metrics`.
 
 **Naming** — A **sequence** is the chosen interventions (Choi / features) at each step. A **trajectory**
 (in the noise sense) is one MCWF/TJM stochastic realization; see :mod:`mqt.yaqs.characterization.process_tensors.tomography.data`.
