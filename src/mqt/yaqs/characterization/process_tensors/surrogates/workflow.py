@@ -450,11 +450,9 @@ def _rollout_arrays_to_tensor_dataset(
 def generate_data(
     operator: MPO,
     sim_params: "AnalogSimParams",
-    static_ctx: Any,
     *,
     k: int,
     n: int,
-    chain_length: int,
     rng: np.random.Generator | None = None,
     seed: int | None = None,
     parallel: bool = True,
@@ -467,6 +465,16 @@ def generate_data(
     Requires PyTorch. Underlying simulation uses NumPy; the returned dataset packs
     ``(E_features, rho0, rho_seq)`` with shapes ``(n, k, d_e)``, ``(n, 8)``, ``(n, k, 8)`` (see :func:`stack_rollouts`).
     """
+    chain_length = int(operator.length)
+
+    static_ctx: Any | None = None
+    if getattr(sim_params, "solver", None) == "MCWF":
+        # Convenience for users: MCWF backend benefits from preprocessing.
+        # When no noise model is provided, default to noiseless.
+        from ..core.utils import make_mcwf_static_context  # noqa: PLC0415
+
+        static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
+
     if rng is None:
         rng = np.random.default_rng(0 if seed is None else int(seed))
     if timesteps is None:
@@ -519,11 +527,9 @@ def generate_data(
 def create_surrogate(
     operator: MPO,
     sim_params: "AnalogSimParams",
-    static_ctx: Any,
     *,
     k: int,
     n: int,
-    chain_length: int,
     seed: int | None = None,
     parallel: bool = True,
     show_progress: bool = True,
@@ -539,10 +545,8 @@ def create_surrogate(
     train_data = generate_data(
         operator,
         sim_params,
-        static_ctx,
         k=int(k),
         n=int(n),
-        chain_length=int(chain_length),
         rng=rng,
         parallel=bool(parallel),
         show_progress=bool(show_progress),
