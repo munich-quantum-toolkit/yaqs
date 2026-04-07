@@ -84,10 +84,4 @@ def normalize_rho_from_backend_output(rho_final: Any) -> np.ndarray:
     return _normalize_density_like_densecomb(rho_h)
 
 
-__all__ = [
-    "build_choi_feature_table",
-    "normalize_rho_from_backend_output",
-    "pack_rho8",
-    "unpack_rho8",
-]
 

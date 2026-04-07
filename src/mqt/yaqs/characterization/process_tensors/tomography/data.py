@@ -210,5 +210,3 @@ class SequenceData:
         return MPOComb(mpo, self.timesteps)
 
 
-__all__ = ["SequenceData"]
-
