@@ -41,13 +41,13 @@ except ImportError as e:
     TORCH_AVAILABLE = False
     TORCH_IMPORT_ERROR = str(e)
     # Create dummy imports to avoid NameError
-    torch = None  # type: ignore[assignment]
-    LogExpectedImprovement = None  # type: ignore[assignment]
-    ProbabilityOfImprovement = None  # type: ignore[assignment]
-    UpperConfidenceBound = None  # type: ignore[assignment]
-    SingleTaskGP = None  # type: ignore[assignment]
-    bayesian_opt = None  # type: ignore[assignment]
-    get_acquisition_function = None  # type: ignore[assignment]
+    torch = None  # ty: ignore[invalid-assignment]
+    LogExpectedImprovement = None  # ty: ignore[invalid-assignment]
+    ProbabilityOfImprovement = None  # ty: ignore[invalid-assignment]
+    UpperConfidenceBound = None  # ty: ignore[invalid-assignment]
+    SingleTaskGP = None  # ty: ignore[invalid-assignment]
+    bayesian_opt = None  # ty: ignore[invalid-assignment]
+    get_acquisition_function = None  # ty: ignore[invalid-assignment]
 
 # Skip all tests if torch is not available
 pytestmark = [
@@ -229,7 +229,7 @@ def test_bayesian_opt_convergence() -> None:
             loss.converged = True
         return result
 
-    loss.__call__ = call_with_convergence  # type: ignore[method-assign]
+    loss.__call__ = call_with_convergence  # ty: ignore[invalid-assignment]
 
     # Run with max_iter=10, but should stop early due to convergence
     best_x, best_y, _x_train, _y_train = bayesian_opt(
