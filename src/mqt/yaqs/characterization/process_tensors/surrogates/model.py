@@ -22,7 +22,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8
-from .utils import _sample_random_intervention_sequence
+from .utils import _choi_features_from_parts, _sample_random_intervention_parts, _sample_random_intervention_sequence
 
 # Computational-basis |0⟩⟨0| (same convention as :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data` rollouts).
 _RHO0_PROJECTOR = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
@@ -170,37 +170,53 @@ class TransformerComb(nn.Module):
             raise ValueError(msg)
         return rho.to(dtype=torch.float64)
 
-    def _sample_past_future_sequences(
+    def _sample_temporal_cut_probes(
         self,
-        cut_time: int,
-        n_past: int,
-        n_future: int,
         *,
+        timestep: int,
+        past_samples: int,
+        future_samples: int,
         rng: np.random.Generator,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Draw random Choi feature rows for past and future segments (same distribution as training data)."""
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Sample probe sets for an inside-timestep cut at time ``timestep``.
+
+        Returns:
+            past_prefix: (N_p, t, d_e) fused Choi features for steps 0..t-1
+            meas_effects: (N_p, 2, 2) complex measurement effects for step t
+            prep_states: (N_f, 2, 2) complex preparation states for step t
+            future_suffix: (N_f, k-(t+1), d_e) fused Choi features for steps t+1..k-1
+        """
         if self.sequence_length is None:
             msg = "sequence_length must be set."
             raise ValueError(msg)
         k_total = int(self.sequence_length)
-        t = int(cut_time)
-        k_fut = k_total - t
+        t = int(timestep)
+        n_p = int(past_samples)
+        n_f = int(future_samples)
         d_e = self.d_e
-        if t > 0:
-            past = np.empty((n_past, t, d_e), dtype=np.float32)
-            for a in range(n_past):
-                _, rows = _sample_random_intervention_sequence(t, rng)
-                past[a] = rows
+
+        past_prefix = np.empty((n_p, t, d_e), dtype=np.float32)
+        meas_effects = np.empty((n_p, 2, 2), dtype=np.complex128)
+        for a in range(n_p):
+            _maps, rows = _sample_random_intervention_sequence(t, rng)
+            past_prefix[a] = rows
+            _rho_prep, eff, _feat = _sample_random_intervention_parts(rng)
+            meas_effects[a] = eff
+
+        prep_states = np.empty((n_f, 2, 2), dtype=np.complex128)
+        suffix_len = k_total - (t + 1)
+        if suffix_len > 0:
+            future_suffix = np.empty((n_f, suffix_len, d_e), dtype=np.float32)
         else:
-            past = np.zeros((n_past, 0, d_e), dtype=np.float32)
-        if k_fut > 0:
-            fut = np.empty((n_future, k_fut, d_e), dtype=np.float32)
-            for b in range(n_future):
-                _, rows = _sample_random_intervention_sequence(k_fut, rng)
-                fut[b] = rows
-        else:
-            fut = np.zeros((n_future, 0, d_e), dtype=np.float32)
-        return past, fut
+            future_suffix = np.zeros((n_f, 0, d_e), dtype=np.float32)
+        for b in range(n_f):
+            rho_prep, _eff, _feat = _sample_random_intervention_parts(rng)
+            prep_states[b] = rho_prep
+            if suffix_len > 0:
+                _maps, rows = _sample_random_intervention_sequence(suffix_len, rng)
+                future_suffix[b] = rows
+
+        return past_prefix, meas_effects, prep_states, future_suffix
 
     def predict_final_state_batch(
         self,
@@ -253,13 +269,18 @@ class TransformerComb(nn.Module):
         the cut, take its singular values, form weights ``s_i^2 / \\sum_j s_j^2``, and return the Shannon
         entropy ``-\\sum_i w_i \\log w_i`` in **nats**.
 
-        Uses a fixed **interior** cut only: past length ``t`` and future length ``k - t`` must both be
-        positive, i.e. ``1 <= t < k`` where ``k`` is :attr:`sequence_length`. Cuts at ``t = 0`` (no
-        past) or ``t = k`` (no future) are rejected.
+        Uses a fixed **interior** timestep index ``t`` (``1 <= t < k`` where ``k`` is
+        :attr:`sequence_length`), but the cut is made **inside** timestep ``t``:
 
-        For such ``t``, draws ``past_samples`` independent past prefixes of length ``t`` and
-        ``future_samples`` independent future suffixes of length ``k - t`` (same random-intervention
-        distribution as :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data`).
+        - past index: (history steps ``0..t-1``) + (measurement effect at step ``t``)
+        - future index: (preparation state at step ``t``) + (future steps ``t+1..k-1``)
+
+        This mimics a temporal-MPO bond cut between the measurement and preparation legs of the
+        intervention at time ``t``. It is only valid because the current per-step encoding is the
+        flattened Choi matrix ``J_t = kron(rho_prep_t, effect_t.T)``.
+
+        For such ``t``, draws random probe sets using the same intervention distribution as
+        :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data`.
         Inference starts from the packed :math:`|0\\rangle\\langle 0|` state. The matrix is column-centered
         before SVD.
 
@@ -297,23 +318,40 @@ class TransformerComb(nn.Module):
             raise ValueError(msg)
 
         rng = np.random.default_rng()
-        past_np, fut_np = self._sample_past_future_sequences(t, n_p, n_f, rng=rng)
+        past_prefix_np, meas_effects_np, prep_states_np, future_suffix_np = self._sample_temporal_cut_probes(
+            timestep=t,
+            past_samples=n_p,
+            future_samples=n_f,
+            rng=rng,
+        )
 
         dev = next(self.parameters()).device
-        past = torch.from_numpy(past_np).to(device=dev, dtype=torch.float32)
-        fut = torch.from_numpy(fut_np).to(device=dev, dtype=torch.float32)
+        past_prefix = torch.from_numpy(past_prefix_np).to(device=dev, dtype=torch.float32)
+        future_suffix = torch.from_numpy(future_suffix_np).to(device=dev, dtype=torch.float32)
 
         d_y = self.d_rho
         v = torch.empty((n_p, n_f * d_y), device=dev, dtype=torch.float64)
         rho0 = self._default_rho0(device=dev, dtype=torch.float32)
 
+        suffix_len = int(future_suffix.shape[1])
         was_training = self.training
         self.eval()
         try:
             for a in range(n_p):
-                past_row = past[a]
-                past_batch = past_row.unsqueeze(0).expand(n_f, -1, -1)
-                full_seq_batch = torch.cat([past_batch, fut], dim=1)
+                # Fixed past history up to t-1.
+                past_row = past_prefix[a]  # (t, d_e)
+                past_batch = past_row.unsqueeze(0).expand(n_f, -1, -1)  # (N_f, t, d_e)
+
+                # Cut inside timestep t: fix measurement effect, vary preparation state.
+                eff = meas_effects_np[a]
+                cut_rows = np.stack([_choi_features_from_parts(prep_states_np[b], eff) for b in range(n_f)], axis=0)
+                cut_step = torch.from_numpy(cut_rows).to(device=dev, dtype=torch.float32).unsqueeze(1)  # (N_f, 1, d_e)
+
+                if suffix_len > 0:
+                    full_seq_batch = torch.cat([past_batch, cut_step, future_suffix], dim=1)
+                else:
+                    full_seq_batch = torch.cat([past_batch, cut_step], dim=1)
+
                 rho_pred_batch = self.predict_final_state_batch(rho0, full_seq_batch, restore_training=False)
                 feat_batch = self._rho_to_features(rho_pred_batch)
                 v[a] = feat_batch.reshape(-1)
@@ -468,6 +506,7 @@ class TransformerComb(nn.Module):
                 else:
                     msg = f"Unknown prefix_loss: {prefix_loss!r}"
                     raise ValueError(msg)
+
                 loss.backward()
                 if grad_clip and float(grad_clip) > 0:
                     torch.nn.utils.clip_grad_norm_(self.parameters(), float(grad_clip))

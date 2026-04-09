@@ -188,8 +188,7 @@ def _sample_random_intervention(
         E: 2x2 rank-1 measurement effect
         J: 4x4 Choi matrix ``kron(rho_prep, E.T)``
     """
-    rho_prep = _random_rank1_projector(rng)
-    E = _random_rank1_projector(rng)
+    rho_prep, E, _feat = _sample_random_intervention_parts(rng)
 
     def emap(rho: np.ndarray, rho_prep: np.ndarray = rho_prep, E: np.ndarray = E) -> np.ndarray:
         r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
@@ -198,8 +197,38 @@ def _sample_random_intervention(
     emap.rho_prep = rho_prep
     emap.effect = E
 
-    J = np.kron(rho_prep, E.T).astype(np.complex128)
+    J = _choi_from_parts(rho_prep, E)
     return emap, rho_prep, E, J
+
+
+def _choi_from_parts(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
+    """Build the 4x4 Choi matrix for one rank-1 intervention.
+
+    For the continuous surrogate encoding, one timestep intervention is represented by the Choi matrix
+    ``J = kron(rho_prep, effect.T)``.
+    """
+    rp = np.asarray(rho_prep, dtype=np.complex128).reshape(2, 2)
+    ef = np.asarray(effect, dtype=np.complex128).reshape(2, 2)
+    return np.kron(rp, ef.T).astype(np.complex128)
+
+
+def _choi_features_from_parts(rho_prep: np.ndarray, effect: np.ndarray) -> np.ndarray:
+    """Encode an intervention's Choi matrix into the standard 32-float feature row."""
+    return _flatten_choi4_to_real32(_choi_from_parts(rho_prep, effect)).astype(np.float32)
+
+
+def _sample_random_intervention_parts(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Sample one continuous intervention as (prep, effect) plus its fused Choi features.
+
+    Returns:
+        rho_prep: 2x2 rank-1 preparation density matrix.
+        effect: 2x2 rank-1 measurement effect (projector).
+        choi_features: float32 feature row of shape (32,) for ``kron(rho_prep, effect.T)``.
+    """
+    rho_prep = _random_rank1_projector(rng)
+    effect = _random_rank1_projector(rng)
+    feat = _choi_features_from_parts(rho_prep, effect)
+    return rho_prep, effect, feat
 
 
 def _sample_random_intervention_sequence(

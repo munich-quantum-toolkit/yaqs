@@ -54,7 +54,14 @@ def test_transformercomb_predict_tensor_return_and_restores_mode() -> None:
     tgt_t = torch.zeros((4, 2, 8), dtype=torch.float32)
     train_ds = TensorDataset(E_t, rho0_t, tgt_t)
     val_ds = TensorDataset(E_t[:2], rho0_t[:2], tgt_t[:2])
-    model.fit(train_ds, val_dataset=val_ds, epochs=1, batch_size=2, prefix_loss="random", device=torch.device("cpu"))
+    model.fit(
+        train_ds,
+        val_dataset=val_ds,
+        epochs=1,
+        batch_size=2,
+        prefix_loss="random",
+        device=torch.device("cpu"),
+    )
 
 
 def test_transformercomb_fit_invalid_prefix_loss_raises() -> None:
@@ -142,6 +149,27 @@ def test_transformercomb_default_rho0_is_ground_state_rho8() -> None:
     rho_ground = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
     expected = pack_rho8(normalize_rho_from_backend_output(rho_ground)).astype(np.float32)
     np.testing.assert_array_almost_equal(rho0.cpu().numpy(), expected)
+
+
+def test_intervention_parts_reassemble_to_same_choi_features() -> None:
+    """Measurement/preparation parts must reassemble into the standard fused Choi feature row."""
+    rng = np.random.default_rng(0)
+
+    from mqt.yaqs.characterization.process_tensors.surrogates.utils import (  # noqa: PLC0415
+        _choi_features_from_parts,
+        _sample_random_intervention,
+        _sample_random_intervention_parts,
+    )
+
+    _emap, rho_prep, effect, J = _sample_random_intervention(rng)
+    feat_from_J = _choi_features_from_parts(rho_prep, effect)
+    # Also cover the direct parts sampler path.
+    rho2, eff2, feat2 = _sample_random_intervention_parts(rng)
+    feat_from_parts = _choi_features_from_parts(rho2, eff2)
+
+    assert feat_from_J.shape == (32,)
+    assert feat_from_parts.shape == (32,)
+    np.testing.assert_allclose(feat_from_parts, feat2, atol=0.0)
 
 
 def test_transformercomb_entropy_rejects_non_interior_timestep() -> None:
