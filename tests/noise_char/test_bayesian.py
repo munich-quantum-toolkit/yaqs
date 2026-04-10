@@ -37,7 +37,7 @@ try:
 
     TORCH_AVAILABLE = True
     TORCH_IMPORT_ERROR = ""
-except ImportError as e:
+except Exception as e:
     TORCH_AVAILABLE = False
     TORCH_IMPORT_ERROR = str(e)
     # Create dummy imports to avoid NameError
