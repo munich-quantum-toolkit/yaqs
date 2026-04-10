@@ -37,7 +37,7 @@ try:
 
     TORCH_AVAILABLE = True
     TORCH_IMPORT_ERROR = ""
-except Exception as e:
+except (ImportError, DeprecationWarning) as e:
     TORCH_AVAILABLE = False
     TORCH_IMPORT_ERROR = str(e)
     # Create dummy imports to avoid NameError

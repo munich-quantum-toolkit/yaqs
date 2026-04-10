@@ -93,7 +93,10 @@ addopts = [
   "--numprocesses=auto", # Automatically use all available CPU cores for parallel testing
 ]
 log_level = "INFO"
-filterwarnings = ["error"]
+filterwarnings = [
+  "error",
+  "ignore:Could not import matplotlib.*:UserWarning",
+]
 
 [tool.coverage]
 run.source = ["mqt.yaqs"]

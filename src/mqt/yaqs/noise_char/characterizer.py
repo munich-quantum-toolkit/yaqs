@@ -13,7 +13,6 @@ import copy
 from typing import TYPE_CHECKING
 
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_based.adam import adam_opt
-from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import bayesian_opt
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.cma import cma_opt
 from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.mcmc import mcmc_opt
 
@@ -282,6 +281,8 @@ class Characterizer:
         - After optimization, the final noise model is constructed by calling
           `self.loss.x_to_noise_model` with the best parameters found.
         """
+        from mqt.yaqs.noise_char.optimization_algorithms.gradient_free.bayesian import bayesian_opt  # noqa: PLC0415
+
         x_best, _loss_best, _, _ = bayesian_opt(
             self.loss,
             x_low=x_low,
