@@ -123,7 +123,7 @@ def _make_backend_dataset(
             e_features_rows.append(rows_feat.astype(np.float32))
         initial_psis.append(build_initial_psi(rho_in, length=int(L), rng=rng, init_mode="eigenstate"))
 
-    timesteps = [float(params.dt)] * int(k)
+    timesteps = [float(params.dt)] * (int(k) + 1)
     samples = simulate_sequences(
         operator=op,
         sim_params=params,
