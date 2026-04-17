@@ -42,7 +42,7 @@ def test_simulate_sequences_input_validation_errors() -> None:
         _simulate_sequences(
             operator=op,
             sim_params=params,
-            timesteps=[0.1],
+            timesteps=[0.1, 0.1],
             psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
             initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
             static_ctx=None,
@@ -55,7 +55,7 @@ def test_simulate_sequences_input_validation_errors() -> None:
         _simulate_sequences(
             operator=op,
             sim_params=params,
-            timesteps=[0.1],
+            timesteps=[0.1, 0.1],
             psi_pairs_list=[[(np.array([1.0, 0.0]), np.array([1.0, 0.0]))]],
             initial_psis=[np.array([1.0, 0.0], dtype=np.complex128)],
             static_ctx=None,
@@ -93,7 +93,7 @@ def test_simulate_sequences_mcwf_final_states_and_rollouts_smoke() -> None:
     psi0 = np.array([1.0, 0.0], dtype=np.complex128)
     psi_pairs_list = [[(psi0, psi0)]]
     initial_psis = [psi0.copy()]
-    timesteps = [0.0]
+    timesteps = [0.0, 0.0]
 
     finals = _simulate_sequences(
         operator=op,
@@ -148,7 +148,7 @@ def test_generate_data_and_create_surrogate_tiny_smoke() -> None:
         seed=0,
         parallel=False,
         show_progress=False,
-        timesteps=[0.0],
+        timesteps=[0.0, 0.0],
     )
     assert len(ds.tensors) == 3
 
@@ -160,7 +160,7 @@ def test_generate_data_and_create_surrogate_tiny_smoke() -> None:
         seed=0,
         parallel=False,
         show_progress=False,
-        timesteps=[0.0],
+        timesteps=[0.0, 0.0],
         model_kwargs={"d_model": 32, "nhead": 4, "num_layers": 1, "dim_ff": 64, "dropout": 0.0},
         train_kwargs={"epochs": 1, "batch_size": 2, "lr": 1e-3},
     )
@@ -207,7 +207,7 @@ def test_surrogate_end_to_end_accuracy_regression_tiny() -> None:
         seed=123,
         parallel=False,
         show_progress=False,
-        timesteps=[0.0, 0.0],
+        timesteps=[0.0, 0.0, 0.0],
     )
     E, rho0, tgt = ds.tensors
 

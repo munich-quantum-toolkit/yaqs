@@ -32,12 +32,12 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL — core / simulator
 # ---------------------------------------------------------------------------
+from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from mqt.yaqs.core.data_structures.networks import MPO
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 # ---------------------------------------------------------------------------
@@ -87,13 +87,101 @@ def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: f
 #   initial_psi             list of MPS initial states (one per sequence)
 #   num_trajectories        MCWF trajectory index split (1 when noise_model is None)
 #   operator, sim_params    Hamiltonian MPO and analog parameters
-#   timesteps               default duration per step (length k) unless timesteps_rows is set
-#   timesteps_rows          optional per-sequence per-step durations
-#   operators_list          optional per-sequence per-step MPO (piecewise Hamiltonian)
+#   timesteps               comb: ``k+1`` evolution segments per sequence (``U_1`` … ``U_{k+1}``)
+#   timesteps_rows          optional per-sequence durations, each of length ``k+1``
+#   operators_list          optional per-sequence MPOs, length ``k+1`` (one per evolution slot)
 #   noise_model             None here (deterministic surrogate rollouts)
 #   mcwf_static_ctx         static context forwarded to the backend for the whole sequence
-#   mcwf_static_ctx_list    optional per-step static context overrides
+#   mcwf_static_ctx_list    optional per-evolution-slot static context (length ``k+1``)
 #   e_features_rows         list of (k, d_e) float32 Choi feature rows (rollout path only)
+
+
+# ---------------------------------------------------------------------------
+# 5b) Comb schedule — ``k`` instruments, ``k+1`` free evolutions (``U_1 … U_{k+1}``)
+# ---------------------------------------------------------------------------
+def _validate_comb_sequence_inputs(
+    *,
+    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]],
+    timesteps: list[float],
+    timesteps_rows: list[list[float]] | None,
+    operators_list: list[list[MPO]] | None,
+    static_ctx_list: list[list[Any]] | None,
+) -> None:
+    """Require compatible lengths for the process-tensor / comb convention."""
+    num_sequences = len(psi_pairs_list)
+    if timesteps_rows is None:
+        ks = [len(p) for p in psi_pairs_list]
+        if len(set(ks)) != 1:
+            msg = "All sequences must share the same k when `timesteps_rows` is omitted."
+            raise ValueError(msg)
+        k0 = ks[0]
+        if len(timesteps) != k0 + 1:
+            msg = (
+                "Comb schedule: `timesteps` must have length k+1 "
+                f"({k0 + 1} for k={k0} intervention steps), got {len(timesteps)}."
+            )
+            raise ValueError(msg)
+    else:
+        if len(timesteps_rows) != num_sequences:
+            msg = "`timesteps_rows` length must match number of sequences."
+            raise ValueError(msg)
+        for i, pairs in enumerate(psi_pairs_list):
+            k = len(pairs)
+            if len(timesteps_rows[i]) != k + 1:
+                msg = (
+                    f"Sequence {i}: `timesteps_rows[{i}]` must have length k+1={k + 1}, "
+                    f"got {len(timesteps_rows[i])}."
+                )
+                raise ValueError(msg)
+    if operators_list is not None:
+        if len(operators_list) != num_sequences:
+            msg = "`operators_list` length must match number of sequences."
+            raise ValueError(msg)
+        for i, pairs in enumerate(psi_pairs_list):
+            k = len(pairs)
+            if len(operators_list[i]) != k + 1:
+                msg = (
+                    f"Sequence {i}: `operators_list[{i}]` must have length k+1={k + 1}, "
+                    f"got {len(operators_list[i])}."
+                )
+                raise ValueError(msg)
+    if static_ctx_list is not None:
+        if len(static_ctx_list) != num_sequences:
+            msg = "`static_ctx_list` length must match number of sequences."
+            raise ValueError(msg)
+        for i, pairs in enumerate(psi_pairs_list):
+            k = len(pairs)
+            if len(static_ctx_list[i]) != k + 1:
+                msg = (
+                    f"Sequence {i}: `static_ctx_list[{i}]` must have length k+1={k + 1}, "
+                    f"got {len(static_ctx_list[i])}."
+                )
+                raise ValueError(msg)
+
+
+def _comb_durations_ops_ctx(
+    *,
+    sequence_idx: int,
+    k: int,
+    timesteps: list[float],
+    timesteps_rows: list[list[float]] | None,
+    hamiltonian: MPO,
+    operators_list: list[list[MPO]] | None,
+    mcwf_static_ctx: Any,
+    mcwf_static_ctx_list: list[list[Any]] | None,
+) -> tuple[list[float], list[MPO], list[Any]]:
+    if timesteps_rows is not None:
+        durs = [float(timesteps_rows[sequence_idx][i]) for i in range(k + 1)]
+    else:
+        durs = [float(timesteps[i]) for i in range(k + 1)]
+    ops: list[MPO] = []
+    ctxs: list[Any] = []
+    for i in range(k + 1):
+        op = hamiltonian if operators_list is None else operators_list[sequence_idx][i]
+        ctx = mcwf_static_ctx if mcwf_static_ctx_list is None else mcwf_static_ctx_list[sequence_idx][i]
+        ops.append(op)
+        ctxs.append(ctx)
+    return durs, ops, ctxs
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +200,9 @@ def _surrogate_final_state_worker(
         job_payload: Per-pool shared context; defaults to :data:`~mqt.yaqs.simulator.WORKER_CTX`.
 
     Returns:
-        ``(sequence_index, trajectory_index, rho_final_site0, cumulative_weight)``.
+        ``(sequence_index, trajectory_index, rho_final_site0, cumulative_weight)`` where
+        ``rho_final_site0`` is the reduced state on site 0 after the last evolution segment ``U_{k+1}``
+        (comb schedule: ``k`` instruments, ``k+1`` evolutions).
     """
     worker_ctx = job_payload if job_payload is not None else WORKER_CTX
     num_trajectories: int = int(worker_ctx["num_trajectories"])
@@ -123,6 +213,9 @@ def _surrogate_final_state_worker(
     hamiltonian = worker_ctx["operator"]
     sim_params = worker_ctx["sim_params"]
     timesteps: list[float] = worker_ctx["timesteps"]
+    timesteps_rows: list[list[float]] | None = worker_ctx.get("timesteps_rows")
+    operators_list: list[list[MPO]] | None = worker_ctx.get("operators_list")
+    mcwf_ctx_list: list[list[Any]] | None = worker_ctx.get("mcwf_static_ctx_list")
     noise_model = worker_ctx["noise_model"]
     initial_states: list[np.ndarray] = worker_ctx["initial_psi"]
 
@@ -137,28 +230,55 @@ def _surrogate_final_state_worker(
     step_params.show_progress = False
     step_params.get_state = True
 
+    k = len(psi_pairs)
+    durs, ops, mcwf_ctxs = _comb_durations_ops_ctx(
+        sequence_idx=sequence_idx,
+        k=k,
+        timesteps=timesteps,
+        timesteps_rows=timesteps_rows,
+        hamiltonian=hamiltonian,
+        operators_list=operators_list,
+        mcwf_static_ctx=worker_ctx.get("mcwf_static_ctx"),
+        mcwf_static_ctx_list=mcwf_ctx_list,
+    )
+
     cumulative_weight = 1.0
+    # U_1 before the first instrument.
+    duration = float(durs[0])
+    step_params.elapsed_time = duration
+    step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)
+    if solver != "MCWF":
+        step_params.output_state = None
+    state = _evolve_backend_state(
+        state,
+        ops[0],
+        noise_model,
+        step_params,
+        solver,
+        traj_idx=trajectory_idx,
+        static_ctx=mcwf_ctxs[0],
+    )
+
     for step_idx, (psi_meas, psi_prep) in enumerate(psi_pairs):
         state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
         cumulative_weight *= float(step_prob)
         if cumulative_weight < 1e-15:
             break
 
-        duration = float(timesteps[step_idx])
+        duration = float(durs[step_idx + 1])
         step_params.elapsed_time = duration
         step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)
-        # TJM backend writes output_state into params; reset defensively.
         if solver != "MCWF":
             step_params.output_state = None
 
         state = _evolve_backend_state(
             state,
-            hamiltonian,
+            ops[step_idx + 1],
             noise_model,
             step_params,
             solver,
             traj_idx=trajectory_idx,
-            static_ctx=worker_ctx.get("mcwf_static_ctx"),
+            static_ctx=mcwf_ctxs[step_idx + 1],
         )
 
     rho_final = _get_rho_site_zero(state)
@@ -181,6 +301,8 @@ def _surrogate_rollout_worker(
     Returns:
         ``(sequence_index, trajectory_index, rho0_packed, choi_features_matrix, rho_seq_packed, weight)`` where
         ``choi_features_matrix`` is ``(num_steps, d_e)`` and ``rho_seq_packed`` is ``(num_steps, 8)``.
+        Here ``rho0_packed`` is the reduced state on site 0 **after** the first free evolution ``U_1`` and
+        **before** the first instrument (comb boundary), matching the process-tensor slicing convention.
     """
     worker_ctx = job_payload if job_payload is not None else WORKER_CTX
     num_trajectories: int = int(worker_ctx["num_trajectories"])
@@ -210,28 +332,40 @@ def _surrogate_rollout_worker(
     step_params.show_progress = False
     step_params.get_state = True
 
-    rho0_raw = _get_rho_site_zero(state)
-    rho0_packed = pack_rho8(normalize_rho_from_backend_output(rho0_raw)).astype(np.float32)
-
     if per_sequence_choi_rows is None:
         msg = "Rollout worker requires `e_features_rows`: per-sequence Choi feature rows."
         raise ValueError(msg)
     choi_features_matrix = np.asarray(per_sequence_choi_rows[sequence_idx], dtype=np.float32).reshape(num_steps, -1)
 
-    if timesteps_per_sequence is not None:
-        step_durations = [float(timesteps_per_sequence[sequence_idx][i]) for i in range(num_steps)]
-    else:
-        step_durations = [float(timesteps[i]) for i in range(num_steps)]
+    durs, ops, mcwf_ctxs = _comb_durations_ops_ctx(
+        sequence_idx=sequence_idx,
+        k=num_steps,
+        timesteps=timesteps,
+        timesteps_rows=timesteps_per_sequence,
+        hamiltonian=hamiltonian,
+        operators_list=hamiltonians_per_step,
+        mcwf_static_ctx=worker_ctx.get("mcwf_static_ctx"),
+        mcwf_static_ctx_list=mcwf_ctx_per_step,
+    )
 
-    if hamiltonians_per_step is not None:
-        hamiltonian_this_step = [hamiltonians_per_step[sequence_idx][i] for i in range(num_steps)]
-    else:
-        hamiltonian_this_step = None
+    # U_1: reduced state immediately before the first instrument (comb boundary).
+    duration = float(durs[0])
+    step_params.elapsed_time = duration
+    step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)
+    if solver != "MCWF":
+        step_params.output_state = None
+    state = _evolve_backend_state(
+        state,
+        ops[0],
+        noise_model,
+        step_params,
+        solver,
+        traj_idx=trajectory_idx,
+        static_ctx=mcwf_ctxs[0],
+    )
 
-    if mcwf_ctx_per_step is not None:
-        mcwf_ctx_for_step = [mcwf_ctx_per_step[sequence_idx][i] for i in range(num_steps)]
-    else:
-        mcwf_ctx_for_step = None
+    rho0_raw = _get_rho_site_zero(state)
+    rho0_packed = pack_rho8(normalize_rho_from_backend_output(rho0_raw)).astype(np.float32)
 
     cumulative_weight = 1.0
     last_rho_packed = rho0_packed.copy()
@@ -247,10 +381,7 @@ def _surrogate_rollout_worker(
             out_i = num_steps
             break
 
-        duration = float(step_durations[step_idx])
-        op = hamiltonian if hamiltonian_this_step is None else hamiltonian_this_step[step_idx]
-        step_mcwf_ctx = worker_ctx.get("mcwf_static_ctx") if mcwf_ctx_for_step is None else mcwf_ctx_for_step[step_idx]
-
+        duration = float(durs[step_idx + 1])
         step_params.elapsed_time = duration
         step_params.times = _get_times_cached(times_cache, dt=float(step_params.dt), duration=duration)
         if solver != "MCWF":
@@ -258,12 +389,12 @@ def _surrogate_rollout_worker(
 
         state = _evolve_backend_state(
             state,
-            op,
+            ops[step_idx + 1],
             noise_model,
             step_params,
             solver,
             traj_idx=trajectory_idx,
-            static_ctx=step_mcwf_ctx,
+            static_ctx=mcwf_ctxs[step_idx + 1],
         )
 
         rho_step = _get_rho_site_zero(state)
@@ -335,17 +466,18 @@ def _simulate_sequences(
     Args:
         operator: Hamiltonian MPO.
         sim_params: Analog simulation parameters.
-        timesteps: Per-step evolution durations of length ``k``.
-        psi_pairs_list: One list of (measurement_ket, preparation_ket) pairs per sequence.
+        timesteps: Comb schedule: ``k+1`` evolution durations per sequence (``U_1`` … ``U_{k+1}``)
+            when ``timesteps_rows`` is omitted (shared across sequences; all must have the same ``k``).
+        psi_pairs_list: One list of ``k`` (measurement_ket, preparation_ket) pairs per sequence.
         initial_psis: One initial state vector per sequence.
         static_ctx: Optional static backend context (used for MCWF preprocessing).
         parallel: Whether to use process-based parallelism over sequences.
         show_progress: Whether to show a progress bar.
         record_step_states: If ``True``, record and return per-step packed reduced states.
         e_features_rows: Per-sequence Choi feature rows (required when ``record_step_states=True``).
-        timesteps_rows: Optional per-sequence per-step durations.
-        operators_list: Optional per-sequence per-step MPOs.
-        static_ctx_list: Optional per-sequence per-step backend context.
+        timesteps_rows: Optional per-sequence durations, each of length ``k+1``.
+        operators_list: Optional per-sequence Hamiltonians, length ``k+1`` per sequence.
+        static_ctx_list: Optional per-sequence MCWF contexts, length ``k+1`` per sequence.
         context_vec: Optional static context vector to attach to each sample.
 
     Returns:
@@ -371,6 +503,14 @@ def _simulate_sequences(
     elif e_features_rows is not None:
         msg = "e_features_rows is only used when record_step_states=True."
         raise ValueError(msg)
+
+    _validate_comb_sequence_inputs(
+        psi_pairs_list=psi_pairs_list,
+        timesteps=timesteps,
+        timesteps_rows=timesteps_rows,
+        operators_list=operators_list,
+        static_ctx_list=static_ctx_list,
+    )
 
     job_payload: dict[str, Any] = {
         "psi_pairs": psi_pairs_list,
@@ -538,14 +678,14 @@ def generate_data(
         seed: Optional seed used to create a default RNG.
         parallel: Whether to parallelize over sequences.
         show_progress: Whether to show progress bars.
-        timesteps: Optional per-step durations (defaults to ``[sim_params.dt] * k``).
+        timesteps: Optional comb evolution durations (defaults to ``[sim_params.dt] * (k+1)``).
         init_mode: Initial-state sampling mode (see :func:`build_initial_psi`).
 
     Returns:
         A :class:`~torch.utils.data.TensorDataset` with tensors ``(E_features, rho0, rho_seq)``.
 
     Raises:
-        ValueError: If ``timesteps`` has the wrong length.
+        ValueError: If ``timesteps`` has the wrong length (must be ``k+1``).
     """
     chain_length = int(operator.length)
 
@@ -560,9 +700,9 @@ def generate_data(
     if rng is None:
         rng = np.random.default_rng(0 if seed is None else int(seed))
     if timesteps is None:
-        timesteps = [float(sim_params.dt)] * int(k)
-    if len(timesteps) != int(k):
-        msg = f"timesteps length {len(timesteps)} must equal k={k}."
+        timesteps = [float(sim_params.dt)] * (int(k) + 1)
+    if len(timesteps) != int(k) + 1:
+        msg = f"Comb schedule: timesteps length must be k+1={int(k) + 1}, got {len(timesteps)}."
         raise ValueError(msg)
 
     psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]] = []
