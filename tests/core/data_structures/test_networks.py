@@ -19,6 +19,8 @@ These tests ensure that the MPS class functions as expected in various simulatio
 from __future__ import annotations
 
 import copy
+from operator import attrgetter
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -27,6 +29,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
+import mqt.yaqs.core.data_structures.networks as networks_module
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
@@ -248,6 +251,32 @@ def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) ->
     return mps
 
 
+def dense_operator_schmidt_values(mpo: MPO, cut: int) -> NDArray[np.float64]:
+    """Compute Schmidt values from dense contraction for a given MPO cut.
+
+    Returns:
+        Dense Schmidt singular values for the requested cut.
+    """
+    mps = mpo.to_mps()
+
+    state = mps.tensors[0][:, 0, :]
+    for tensor in mps.tensors[1:]:
+        state = np.tensordot(state, tensor, axes=([-1], [1]))
+
+    state = np.squeeze(state, axis=-1)
+    left_dim = int(np.prod(state.shape[:cut], dtype=np.int64))
+    right_dim = int(np.prod(state.shape[cut:], dtype=np.int64))
+    matrix = np.reshape(state, (left_dim, right_dim))
+    singular_values = np.linalg.svd(matrix, compute_uv=False, full_matrices=False)
+    return np.asarray(singular_values, dtype=np.float64)
+
+
+def significant_schmidt_values(values: NDArray[np.float64], tol: float = 1e-12) -> NDArray[np.float64]:
+    """Return the numerically significant part of a Schmidt spectrum."""
+    spectrum = np.asarray(values, dtype=np.float64)
+    return spectrum[spectrum > tol]
+
+
 rng = np.random.default_rng()
 
 ##############################################################################
@@ -439,6 +468,81 @@ def test_from_matrix() -> None:
         MPO.from_matrix(mat, d=100)
 
 
+def test_from_dense_channel_roundtrip() -> None:
+    """Test dense channel factory reconstructs the original dense channel."""
+    channel = np.eye(16, dtype=np.complex128)
+
+    mpo = MPO.from_dense_channel(channel, n_sites=2, local_dim=4)
+
+    np.testing.assert_allclose(mpo.to_matrix(), channel, atol=1e-12)
+
+
+def test_dense_channel_diagnostics_minimal_path() -> None:
+    """Test dense-channel diagnostics without optional targets or dense cross-checks."""
+    channel = np.diag(np.arange(1.0, 17.0, dtype=np.float64)).astype(np.complex128)
+    cut = 1
+
+    diagnostics = MPO.dense_channel_diagnostics(channel, n_sites=2, cut=cut, local_dim=4)
+    mpo = MPO.from_dense_channel(channel, n_sites=2, local_dim=4)
+    schmidt_values = mpo.schmidt_values(cut=cut)
+    probabilities = MPO.normalized_schmidt_probabilities(schmidt_values)
+    diagnostic_schmidt_values = np.asarray(diagnostics["schmidt_values"], dtype=np.float64)
+    diagnostic_probabilities = np.asarray(diagnostics["probabilities"], dtype=np.float64)
+    dense_entropy_diff = diagnostics["dense_entropy_diff"]
+    dense_spec_diff = diagnostics["dense_spec_diff"]
+
+    np.testing.assert_allclose(diagnostic_schmidt_values, schmidt_values, atol=1e-12)
+    np.testing.assert_allclose(diagnostic_probabilities, probabilities, atol=1e-12)
+    assert diagnostics["entropy"] == pytest.approx(MPO.entropy_from_probabilities(probabilities), abs=1e-12)
+    assert diagnostics["rank_tol"] == np.count_nonzero(probabilities > 1e-12)
+    assert diagnostics["p1"] == pytest.approx(float(probabilities[0]), abs=1e-12)
+    assert diagnostics["largest_sv"] == pytest.approx(float(schmidt_values[0]), abs=1e-12)
+    assert diagnostics["mpo_rel_reconstruction_error"] == pytest.approx(0.0, abs=1e-12)
+    assert diagnostics["entropy_error"] is None
+    assert diagnostics["weighted_spectrum_distance"] is None
+    assert diagnostics["hs_to_target"] is None
+    assert isinstance(dense_entropy_diff, float)
+    assert isinstance(dense_spec_diff, float)
+    assert np.isnan(dense_entropy_diff)
+    assert np.isnan(dense_spec_diff)
+
+
+def test_dense_channel_diagnostics_with_targets_and_cross_check() -> None:
+    """Test dense-channel diagnostics with all optional targets and dense cross-checks enabled."""
+    channel = np.diag(np.arange(1.0, 17.0, dtype=np.float64)).astype(np.complex128)
+    target_dense = channel + 0.25 * np.eye(16, dtype=np.complex128)
+    target_probabilities = np.array([0.7, 0.2, 0.1], dtype=np.float64)
+    cut = 1
+
+    diagnostics = MPO.dense_channel_diagnostics(
+        channel,
+        n_sites=2,
+        cut=cut,
+        local_dim=4,
+        target_dense=target_dense,
+        target_probabilities=target_probabilities,
+        target_entropy=0.0,
+        dense_cross_check=True,
+    )
+    dense_schmidt_values = MPO.dense_center_cut_schmidt_values(channel, n_sites=2, cut=cut, local_dim=4)
+    dense_probabilities = MPO.normalized_schmidt_probabilities(dense_schmidt_values)
+    diagnostic_schmidt_values = np.asarray(diagnostics["schmidt_values"], dtype=np.float64)
+    diagnostic_probabilities = np.asarray(diagnostics["probabilities"], dtype=np.float64)
+    diagnostic_entropy = diagnostics["entropy"]
+
+    np.testing.assert_allclose(diagnostic_schmidt_values, dense_schmidt_values, atol=1e-12)
+    np.testing.assert_allclose(diagnostic_probabilities, dense_probabilities, atol=1e-12)
+    assert isinstance(diagnostic_entropy, float)
+    assert diagnostics["entropy_error"] == pytest.approx(diagnostic_entropy, abs=1e-12)
+    assert diagnostics["weighted_spectrum_distance"] == pytest.approx(
+        MPO.weighted_spectrum_distance(dense_probabilities, target_probabilities),
+        abs=1e-12,
+    )
+    assert diagnostics["hs_to_target"] == pytest.approx(np.linalg.norm(channel - target_dense, ord="fro"), abs=1e-12)
+    assert diagnostics["dense_entropy_diff"] == pytest.approx(0.0, abs=1e-12)
+    assert diagnostics["dense_spec_diff"] == pytest.approx(0.0, abs=1e-12)
+
+
 def test_to_mps() -> None:
     """Test converting an MPO to an MPS.
 
@@ -515,6 +619,308 @@ def test_check_if_identity() -> None:
     mpo.identity(length, pdim)
     fidelity_threshold = 0.9
     assert mpo.check_if_identity(fidelity_threshold) is True
+
+
+def test_operator_entanglement_entropy_identity_is_zero() -> None:
+    """Test that identity MPO has vanishing operator entanglement entropy."""
+    mpo = MPO()
+    mpo.identity(length=4, physical_dimension=2)
+
+    entropy = mpo.operator_entanglement_entropy(cut=2)
+    schmidt = mpo.schmidt_values(cut=2)
+    probabilities = MPO.normalized_schmidt_probabilities(schmidt)
+
+    assert entropy == pytest.approx(0.0, abs=1e-12)
+    np.testing.assert_allclose(significant_schmidt_values(probabilities), np.array([1.0]))
+
+
+def test_operator_entanglement_entropy_is_finite_and_non_negative() -> None:
+    """Test entropy value is finite and non-negative for a deterministic MPO."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+
+    entropy = mpo.operator_entanglement_entropy(cut=2)
+
+    assert np.isfinite(entropy)
+    assert entropy >= -1e-12
+
+
+def test_operator_entanglement_center_cut_matches_integer_cut() -> None:
+    """Test center cut shorthand matches the corresponding integer cut."""
+    mpo = MPO.heisenberg(length=6, Jx=1.0, Jy=0.8, Jz=0.6, h=0.3)
+
+    center_cut = mpo.length // 2
+    schmidt_center = mpo.schmidt_values(cut="center")
+    schmidt_integer = mpo.schmidt_values(cut=center_cut)
+    entropy_center = mpo.operator_entanglement_entropy(cut="center")
+    entropy_integer = mpo.operator_entanglement_entropy(cut=center_cut)
+
+    np.testing.assert_allclose(schmidt_center, schmidt_integer, atol=1e-12)
+    assert entropy_center == pytest.approx(entropy_integer, abs=1e-12)
+
+
+def test_mpo_schmidt_values_and_entropy_match_dense_reference() -> None:
+    """Test MPO Schmidt values and entropy against dense reference contraction."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+
+    cut = 2
+    schmidt = mpo.schmidt_values(cut=cut)
+    dense_schmidt = dense_operator_schmidt_values(mpo, cut)
+    dense_schmidt = dense_schmidt[dense_schmidt > 1e-12]
+
+    np.testing.assert_allclose(significant_schmidt_values(schmidt), dense_schmidt, rtol=1e-10, atol=1e-12)
+
+    probabilities = np.square(dense_schmidt)
+    probabilities /= np.sum(probabilities)
+    reference_entropy = -np.sum(probabilities * np.log(probabilities))
+
+    entropy = mpo.operator_entanglement_entropy(cut=cut)
+    assert entropy == pytest.approx(reference_entropy, abs=1e-12)
+
+
+def test_mpo_schmidt_values_non_trivial_cut_uses_cut_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that non-trivial cuts use the cut/bond Schmidt path."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+    sentinel = np.array([3.0, 2.0], dtype=np.float64)
+    observed_cut: list[str | int] = []
+
+    def fake_cut_path(cut: str | int = "center") -> NDArray[np.float64]:
+        observed_cut.append(cut)
+        return sentinel
+
+    def fail_dense_helper(cut: str | int = "center") -> NDArray[np.complex128]:
+        msg = f"dense helper should not be used for schmidt_values(cut={cut!r})"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(mpo, "_full_schmidt_values_for_cut", fake_cut_path)
+    monkeypatch.setattr(mpo, "_dense_fused_site_schmidt_matrix", fail_dense_helper)
+
+    np.testing.assert_allclose(mpo.schmidt_values(cut=2), sentinel)
+    assert observed_cut == [2]
+
+
+def test_operator_entanglement_entropy_uses_schmidt_value_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test entropy delegates through schmidt_values and entropy_from_schmidt_values."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+    sentinel = np.array([5.0, 1.0], dtype=np.float64)
+    observed_cut: list[str | int] = []
+    observed_schmidt_values: list[NDArray[np.float64]] = []
+    observed_base: list[float] = []
+
+    def fake_schmidt_values(cut: str | int = "center") -> NDArray[np.float64]:
+        observed_cut.append(cut)
+        return sentinel
+
+    def fake_entropy_from_schmidt_values(
+        _cls: type[MPO],
+        schmidt_values: NDArray[np.float64],
+        *,
+        base: float = np.e,
+    ) -> float:
+        observed_schmidt_values.append(np.asarray(schmidt_values, dtype=np.float64))
+        observed_base.append(float(base))
+        return 1.2345
+
+    monkeypatch.setattr(mpo, "schmidt_values", fake_schmidt_values)
+    monkeypatch.setattr(MPO, "entropy_from_schmidt_values", classmethod(fake_entropy_from_schmidt_values))
+
+    entropy = mpo.operator_entanglement_entropy(cut=2, base=2.0)
+
+    assert entropy == pytest.approx(1.2345)
+    assert observed_cut == [2]
+    assert len(observed_schmidt_values) == 1
+    np.testing.assert_allclose(observed_schmidt_values[0], sentinel)
+    assert observed_base == pytest.approx([2.0])
+
+
+def test_mpo_schmidt_values_trivial_cut_returns_frobenius_norm() -> None:
+    """Test that trivial cuts return the operator Frobenius norm."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+
+    fro_norm = float(np.linalg.norm(np.asarray(mpo.to_matrix(), dtype=np.complex128), ord="fro"))
+
+    np.testing.assert_allclose(mpo.schmidt_values(cut=0), np.array([fro_norm]))
+    np.testing.assert_allclose(mpo.schmidt_values(cut=mpo.length), np.array([fro_norm]))
+    assert mpo.operator_entanglement_entropy(cut=0) == pytest.approx(0.0, abs=1e-12)
+    assert mpo.operator_entanglement_entropy(cut=mpo.length) == pytest.approx(0.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("invalid_cut", [True, -1, 5, "left"])
+def test_mpo_schmidt_values_reject_invalid_cut(invalid_cut: int | str) -> None:
+    """Test that invalid cut specifiers raise ValueError."""
+    mpo = MPO()
+    mpo.identity(length=4, physical_dimension=2)
+
+    with pytest.raises(ValueError, match="cut"):
+        _ = mpo.schmidt_values(cut=invalid_cut)
+
+
+@pytest.mark.parametrize("invalid_base", [0.0, -2.0, 1.0, np.inf, np.nan])
+def test_mpo_operator_entanglement_entropy_rejects_invalid_base(invalid_base: float) -> None:
+    """Test that invalid logarithm bases are rejected."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.5)
+
+    with pytest.raises(ValueError, match="base"):
+        _ = mpo.operator_entanglement_entropy(cut=2, base=invalid_base)
+
+
+def test_mpo_dense_cut_and_legacy_schmidt_helpers_edge_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test dense-cut boundaries and legacy MPO Schmidt helper edge paths."""
+    channel = np.diag(np.arange(1.0, 17.0, dtype=np.float64)).astype(np.complex128)
+    mpo = MPO.from_dense_channel(channel, n_sites=2, local_dim=4)
+    dense_schmidt_values = MPO.dense_center_cut_schmidt_values(channel, n_sites=2, cut=1, local_dim=4)
+
+    np.testing.assert_allclose(
+        MPO.dense_center_cut_schmidt_values(channel, n_sites=2, cut=0, local_dim=4),
+        np.array([1.0]),
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        mpo.get_schmidt_spectrum([0, 1])[: dense_schmidt_values.size], dense_schmidt_values, atol=1e-12
+    )
+    assert np.all(np.isnan(mpo.get_schmidt_spectrum([0, 1])[dense_schmidt_values.size :]))
+    assert mpo.get_entropy([0, 1]) == pytest.approx(mpo.operator_entanglement_entropy(cut=1), abs=1e-12)
+
+    with pytest.raises(AssertionError):
+        _ = mpo.get_entropy([0])
+    with pytest.raises(AssertionError):
+        _ = mpo.get_entropy([0, 2])
+    with pytest.raises(AssertionError):
+        _ = mpo.get_schmidt_spectrum([0])
+    with pytest.raises(AssertionError):
+        _ = mpo.get_schmidt_spectrum([0, 2])
+
+    def fake_empty_schmidt_values(_sites: list[int], decomposition: str = "QR") -> NDArray[np.float64]:
+        _ = decomposition
+        return np.array([], dtype=np.float64)
+
+    monkeypatch.setattr(
+        mpo,
+        "_full_schmidt_values_for_bond",
+        fake_empty_schmidt_values,
+    )
+
+    assert mpo.get_entropy([0, 1]) == np.float64(0.0)
+    assert np.all(np.isnan(mpo.get_schmidt_spectrum([0, 1])))
+    np.testing.assert_allclose(MPO.normalized_schmidt_probabilities(np.array([], dtype=np.float64)), np.array([1.0]))
+    np.testing.assert_allclose(MPO.normalized_schmidt_probabilities(np.zeros(2, dtype=np.float64)), np.array([1.0]))
+    with pytest.raises(ValueError, match="Non-finite Schmidt values"):
+        _ = MPO.normalized_schmidt_probabilities(np.array([1.0, np.nan], dtype=np.float64))
+
+
+def test_mpo_svd_fallback_helpers_cover_scipy_success_and_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test both SVD fallback helpers use SciPy after NumPy failure and wrap double failures."""
+    matrix = np.array([[3.0, 0.0], [0.0, 1.0]], dtype=np.complex128)
+    original_scipy_svd = networks_module.scipy_linalg.svd
+    svd_values_with_fallback = attrgetter("_svd_values_with_fallback")(MPO)
+    svd_with_fallback = attrgetter("_svd_with_fallback")(MPO)
+
+    def fake_numpy_svd(*_args: object, **_kwargs: object) -> NDArray[np.float64]:
+        msg = "forced numpy SVD failure"
+        raise np.linalg.LinAlgError(msg)
+
+    monkeypatch.setattr(networks_module.np.linalg, "svd", fake_numpy_svd)
+
+    scipy_calls: list[bool] = []
+
+    def fake_scipy_svd(
+        *args: object, **kwargs: object
+    ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
+        scipy_calls.append(bool(kwargs.get("compute_uv", True)))
+        return original_scipy_svd(*args, **kwargs)
+
+    monkeypatch.setattr(networks_module.scipy_linalg, "svd", fake_scipy_svd)
+
+    np.testing.assert_allclose(svd_values_with_fallback(matrix, stage="values"), np.array([3.0, 1.0]))
+    u_mat, s_vals, vh_mat = svd_with_fallback(matrix, stage="full")
+    np.testing.assert_allclose(s_vals, np.array([3.0, 1.0]))
+    np.testing.assert_allclose(u_mat @ np.diag(s_vals) @ vh_mat, matrix, atol=1e-12)
+    assert scipy_calls == [False, True]
+
+    def fake_scipy_failure(*_args: object, **_kwargs: object) -> NDArray[np.float64]:
+        msg = "forced scipy SVD failure"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(networks_module.scipy_linalg, "svd", fake_scipy_failure)
+
+    with pytest.raises(RuntimeError, match="SVD failed at values_failure"):
+        _ = svd_values_with_fallback(matrix, stage="values_failure")
+    with pytest.raises(RuntimeError, match="SVD failed at full_failure"):
+        _ = svd_with_fallback(matrix, stage="full_failure")
+
+
+def test_mpo_entropy_from_probabilities_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test entropy helper handles defensive empty, invalid, and non-finite result paths."""
+    assert MPO.entropy_from_probabilities(np.array([], dtype=np.float64)) == pytest.approx(0.0, abs=1e-12)
+
+    with pytest.raises(ValueError, match="Non-finite probabilities"):
+        _ = MPO.entropy_from_probabilities(np.array([1.0, np.nan], dtype=np.float64))
+    with pytest.raises(ValueError, match="Negative probabilities"):
+        _ = MPO.entropy_from_probabilities(np.array([0.5, -0.1, 0.6], dtype=np.float64))
+    with pytest.raises(RuntimeError, match="Invalid probability normalization"):
+        _ = MPO.entropy_from_probabilities(np.zeros(3, dtype=np.float64))
+
+    original_log = networks_module.np.log
+
+    def fake_log(values: NDArray[np.float64]) -> NDArray[np.float64]:
+        logged = np.asarray(original_log(values), dtype=np.float64)
+        return np.full_like(logged, np.inf, dtype=np.float64)
+
+    monkeypatch.setattr(networks_module.np, "log", fake_log)
+
+    with pytest.raises(RuntimeError, match="Invalid entropy computed"):
+        _ = MPO.entropy_from_probabilities(np.array([0.5, 0.5], dtype=np.float64))
+
+
+def test_mpo_dense_fused_site_schmidt_matrix_edge_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test dense fused-site Schmidt matrix rejects bad inputs and matches manual fusion."""
+    empty_mpo = MPO()
+    empty_mpo.tensors = []
+    empty_dense_matrix = attrgetter("_dense_fused_site_schmidt_matrix")(empty_mpo)
+
+    with pytest.raises(ValueError, match="no tensors"):
+        _ = empty_dense_matrix(cut="center")
+
+    invalid_shape_mpo = MPO()
+    invalid_shape_mpo.identity(length=2, physical_dimension=2)
+    monkeypatch.setattr(invalid_shape_mpo, "to_matrix", lambda: np.eye(3, dtype=np.complex128))
+    invalid_dense_matrix = attrgetter("_dense_fused_site_schmidt_matrix")(invalid_shape_mpo)
+
+    with pytest.raises(RuntimeError, match="shape does not match"):
+        _ = invalid_dense_matrix(cut=1)
+
+    channel = np.arange(1.0, 17.0, dtype=np.float64).reshape(4, 4).astype(np.complex128)
+    mpo = MPO.from_dense_channel(channel, n_sites=2, local_dim=2)
+    expected = channel.reshape(2, 2, 2, 2).transpose(0, 2, 1, 3).reshape(4, 4)
+    dense_matrix = attrgetter("_dense_fused_site_schmidt_matrix")(mpo)
+
+    np.testing.assert_allclose(dense_matrix(cut=1), expected, atol=1e-12)
+
+
+def test_mpo_low_level_diagnostic_edge_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test low-level diagnostic helpers on empty bond, scalar norm, and non-finite spectrum data."""
+
+    def fake_set_canonical_form(orthogonality_center: int, decomposition: str = "QR") -> None:
+        assert orthogonality_center == 1
+        assert decomposition == "QR"
+
+    mpo = MPO()
+    mpo.identity(length=2, physical_dimension=2)
+    fake_mps = SimpleNamespace(
+        tensors=[
+            np.zeros((1, 0, 0), dtype=np.complex128),
+            np.zeros((1, 0, 1), dtype=np.complex128),
+        ],
+        set_canonical_form=fake_set_canonical_form,
+    )
+    monkeypatch.setattr(mpo, "to_mps", lambda: fake_mps)
+    full_schmidt_values_for_bond = attrgetter("_full_schmidt_values_for_bond")(mpo)
+    array_norm = attrgetter("_array_norm")(MPO)
+
+    np.testing.assert_allclose(full_schmidt_values_for_bond([0, 1]), np.array([], dtype=np.float64))
+    assert array_norm(np.array(3.0 + 4.0j)) == pytest.approx(5.0, abs=1e-12)
+
+    with pytest.raises(ValueError, match="finite probabilities"):
+        _ = MPO.weighted_spectrum_distance(np.array([np.nan], dtype=np.float64), np.array([1.0], dtype=np.float64))
 
 
 ##############################################################################
