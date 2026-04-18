@@ -97,25 +97,18 @@ repos:
     rev: v3.8.2
     hooks:
       - id: prettier
-        types_or: [yaml, markdown, html, css, scss, javascript, json]
+        types_or: [yaml, markdown, html, css, scss, javascript, json, json5]
 
   ## Python linting using ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.10
     hooks:
       - id: ruff-format
+        types_or: [python, pyi, jupyter, markdown]
       - id: ruff-check
         require_serial: true
 
   # Priority 2+: Final checks and fixers
-
-  ## Also run Black on examples in the documentation (needs to run after ruff format)
-  - repo: https://github.com/adamchainz/blacken-docs
-    rev: 1.20.0
-    hooks:
-      - id: blacken-docs
-        language: python
-        additional_dependencies: [black==26.*]
 
   ## Static type checking using ty (needs to run after lockfile update/ruff format, and ruff lint)
   - repo: local
