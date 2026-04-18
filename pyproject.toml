@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "mqt-yaqs"
 description = "A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware"
 license = "MIT"
-license-files = ["LICENSE.md"]
+license-files = ["LICENSE"]
 authors = [
   { name="Aaron Sander", email = "aaron.sander@tum.de" },
 ]
