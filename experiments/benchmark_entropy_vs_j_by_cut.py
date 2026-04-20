@@ -56,11 +56,11 @@ J_SWEEP_DEFAULT = [0.5 * i for i in range(11)]  # 0.0 ... 2.0
 BRANCH_WEIGHT_BETA = 1.0
 
 # Fixed log color limits for the cut×J heatmap (values clip to ends of the scale).
-HEATMAP_COLOR_VMIN = 1e-5
+HEATMAP_COLOR_VMIN = 1e-3
 HEATMAP_COLOR_VMAX = 1.0
 
 # Panel 2: $S_V$ vs $J$ at these fixed cuts $c$.
-PANEL2_FIXED_CUTS: tuple[int, ...] = (1, 5, 10, 15, 20)
+PANEL2_FIXED_CUTS: tuple[int, ...] = (1, 5, 10)
 
 # Panel 3: $S_V$ vs $c$ at these representative $J$ targets (nearest $J$ in the summary sweep).
 PANEL3_TARGET_JS: tuple[float, ...] = (0.4, 1.0, 1.4, 2.0)
@@ -68,8 +68,8 @@ PANEL3_TARGET_JS: tuple[float, ...] = (0.4, 1.0, 1.4, 2.0)
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-pasts", type=int, default=32)
-    p.add_argument("--n-futures", type=int, default=32)
+    p.add_argument("--n-pasts", type=int, default=8)
+    p.add_argument("--n-futures", type=int, default=8)
     p.add_argument(
         "--cuts",
         type=str,
@@ -426,6 +426,7 @@ def plot_entropy_heatmap_cut_vs_j(
         )
     ax1.set_xlabel(r"Coupling $J$")
     ax1.set_ylabel(r"$S_V$")
+    ax1.set_ylim(1e-3, 1)
     ax1.tick_params(which="both", direction="in", top=True, right=True, length=2.5, width=0.35)
     ax1.xaxis.set_major_locator(MaxNLocator(nbins=5, prune=None))
     ax1.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
@@ -472,6 +473,7 @@ def plot_entropy_heatmap_cut_vs_j(
         color_i += 1
     ax2.set_xlabel(r"Causal cut $c$")
     ax2.set_ylabel(r"$S_V$")
+    ax2.set_ylim(1e-3, 1)
     ax2.tick_params(which="both", direction="in", top=True, right=True, length=2.5, width=0.35)
     if len(cuts) <= 25:
         ax2.set_xticks(cuts)

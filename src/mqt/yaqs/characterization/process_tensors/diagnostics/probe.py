@@ -164,36 +164,55 @@ def analyze_v_matrix(
     fro_v_sq = float(np.linalg.norm(v, ord="fro") ** 2)
     fro_c_sq = float(np.linalg.norm(v_centered, ord="fro") ** 2)
     delta_norm = float(fro_c_sq / fro_v_sq) if fro_v_sq > 0.0 else 0.0
+
     s_full = np.linalg.svd(v_centered, compute_uv=False).astype(np.float64)
-    s = s_full
+    s = s_full.copy()
+
+    total_weight = float(np.sum(s_full**2))
     discarded_weight = 0.0
-    discarded_weight_threshold = 1e-12
-    if s.size:
+    discarded_fraction = 0.0
+
+    discarded_weight_threshold = 1e-16
+    if s.size and discarded_weight_threshold is not None and total_weight > 0.0:
         thr = max(float(discarded_weight_threshold), 0.0)
-        keep = int(s.size)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
-        discard = 0.0
-        for idx, sval in enumerate(reversed(s)):
-            next_discard = discard + float(sval * sval)
-            if next_discard > thr:
-                keep = max(int(s.size) - idx, min_keep_eff)
+
+        tail_cumsum = np.cumsum((s_full[::-1] ** 2))
+        keep = s_full.size
+
+        for idx, tail_weight in enumerate(tail_cumsum, start=1):
+            tail_fraction = float(tail_weight / total_weight)
+            candidate_keep = s_full.size - idx
+            if tail_fraction > thr:
+                keep = max(candidate_keep + 1, min_keep_eff)
                 break
-            discard = next_discard
         else:
             keep = min_keep_eff
-        discarded_weight = float(np.sum(np.square(s[keep:])))
-        s = s[:keep]
-    p = s * s
-    p_sum = float(np.sum(p))
-    if p_sum <= 0.0:
+
+        s = s_full[:keep]
+        discarded_weight = float(np.sum(s_full[keep:] ** 2))
+        discarded_fraction = (
+            discarded_weight / total_weight if total_weight > 0.0 else 0.0
+        )
+
+    kept_weight = float(np.sum(s**2))
+    if kept_weight <= 0.0:
         entropy = 0.0
+        p = np.array([], dtype=np.float64)
     else:
-        q = np.clip(p / p_sum, 1e-30, 1.0)
+        p = (s**2) / kept_weight
+        q = np.clip(p, 1e-30, 1.0)
         entropy = float(-np.sum(q * np.log(q)))
-    tol = 1e-10 * max(1.0, float(s[0]) if s.size > 0 else 1.0)
-    rank = int(np.sum(s > tol))
+
+    tol_full = 1e-10 * max(1.0, float(s_full[0]) if s_full.size else 1.0)
+    rank_full = int(np.sum(s_full > tol_full))
+
+    tol_kept = 1e-10 * max(1.0, float(s[0]) if s.size else 1.0)
+    rank_kept = int(np.sum(s > tol_kept))
+
     dmat = pairwise_row_distances(v)
     tri = dmat[np.triu_indices(dmat.shape[0], k=1)]
+
     return {
         "delta": fro_c_sq,
         "delta_norm": delta_norm,
@@ -201,16 +220,19 @@ def analyze_v_matrix(
         "singular_values_full": s_full,
         "sv_truncated_count": int(s.size),
         "sv_discarded_count": int(max(0, s_full.size - s.size)),
-        "sv_discarded_weight": float(discarded_weight),
-        "sv_discarded_weight_threshold": None if discarded_weight_threshold is None else float(discarded_weight_threshold),
+        "sv_discarded_weight": discarded_weight,
+        "sv_discarded_fraction": discarded_fraction,
+        "sv_discarded_weight_threshold": (
+            None if discarded_weight_threshold is None else float(discarded_weight_threshold)
+        ),
         "entropy": entropy,
-        "rank": rank,
+        "rank": rank_kept,
+        "rank_full": rank_full,
         "row_distances": dmat,
         "max_row_distance": float(np.max(tri)) if tri.size else 0.0,
         "mean_row_distance": float(np.mean(tri)) if tri.size else 0.0,
         "median_row_distance": float(np.median(tri)) if tri.size else 0.0,
     }
-
 
 def probe_process(
     *,
