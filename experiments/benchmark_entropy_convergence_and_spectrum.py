@@ -431,7 +431,16 @@ def plot_from_saved(
     from matplotlib.ticker import LogLocator, NullLocator
 
     _configure_matplotlib_prl_figure()
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "mathtext.fontset": "cm",
+        }
+    )
+    plt.rcParams["lines.solid_joinstyle"] = "round"
+    plt.rcParams["lines.solid_capstyle"] = "round"
     fig, axes = plt.subplots(1, 2, figsize=(6.2, 2.35), constrained_layout=True, gridspec_kw={"width_ratios": [1.2, 1.0], "wspace": 0.07})
+    plt.subplots_adjust(left=0.14, right=0.96, bottom=0.14, top=0.96)
     ax0, ax1 = axes
     conv_colors = {1.0: "#1f77b4", 2.0: "#d55e00"}
     conv_js = [j for j in sorted({float(r["J"]) for r in summary_rows}) if abs(j - 1.0) < 1e-12 or abs(j - 2.0) < 1e-12]
@@ -470,24 +479,43 @@ def plot_from_saved(
     for t in leg0.get_texts():
         t.set_fontsize(6.1)
 
-    spec_colors = {"0.4": "#8c564b", "1": "#1f77b4", "2": "#d55e00"}
+    # Colorblind-safe, high-contrast palette.
+    spec_colors = {"0.4": "#0072B2", "1": "#D55E00", "2": "#009E73"}
+    main_mode_max = 30
     for j_label in sorted(spectrum_probs.keys(), key=lambda s: float(s)):
         p_mean = np.asarray(spectrum_probs[j_label]["p_mean"], dtype=np.float64)
         if p_mean.size == 0:
             continue
         n_keep = min(int(leading_modes), int(p_mean.size))
-        idx = np.arange(1, n_keep + 1, dtype=np.float64)
-        ax1.semilogy(idx, np.clip(p_mean[:n_keep], 1e-30, None), ls="None", marker="o", ms=2.9, color=spec_colors.get(j_label, "#4c4c4c"), label=rf"$J={float(j_label):g}$")
+        idx_head = np.arange(1, n_keep + 1, dtype=np.float64)
+        ax1.semilogy(
+            idx_head,
+            np.clip(p_mean[:n_keep], 1e-30, None),
+            ls="-",
+            lw=1.6,
+            marker="o",
+            ms=2.2,
+            alpha=0.95,
+            markeredgewidth=0.0,
+            color=spec_colors.get(j_label, "#4c4c4c"),
+            label=rf"$J={float(j_label):g}$",
+        )
     ax1.set_xlabel(r"Mode index $n$")
     ax1.set_ylabel(r"$p_n$")
+    ax1.set_xlim(1, 20)
+    ax1.tick_params(direction="in", which="both", top=True, right=True)
     ax1.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
     ax1.yaxis.set_minor_locator(NullLocator())
-    ax1.grid(True, which="major", axis="y", alpha=0.1, linewidth=0.3)
-    leg1 = ax1.legend(title=r"$J$", loc="upper right", frameon=True, fancybox=False, edgecolor="0.55", framealpha=0.85, borderpad=0.22)
-    leg1.get_title().set_fontsize(5.8)
-    leg1.get_frame().set_linewidth(0.35)
-    for t in leg1.get_texts():
-        t.set_fontsize(6.1)
+    ax1.set_ylim(1e-17, 1)
+    ax1.grid(False)
+    leg1 = ax1.legend(
+        loc="upper right",
+        frameon=False,
+        fontsize=11,
+        handlelength=2.5,
+    )
+    for s in ax1.spines.values():
+        s.set_linewidth(0.9)
     for ax, tag in zip(axes, ("(a)", "(b)"), strict=True):
         ax.text(0.04, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=7.3, fontweight="semibold")
         for s in ax.spines.values():
@@ -532,15 +560,34 @@ def plot_from_saved(
             if p_mean.size == 0:
                 continue
             idx = np.arange(1, p_mean.size + 1, dtype=np.float64)
-            ax_s.semilogy(idx, np.clip(p_mean, 1e-30, None), ls="None", marker=".", ms=1.8, color=spec_colors.get(j_label, "#4c4c4c"), label=rf"$J={float(j_label):g}$")
+            ax_s.semilogy(
+                idx[:main_mode_max],
+                np.clip(p_mean[:main_mode_max], 1e-30, None),
+                ls="-",
+                lw=1.6,
+                marker="o",
+                ms=2.2,
+                alpha=0.95,
+                markeredgewidth=0.0,
+                color=spec_colors.get(j_label, "#4c4c4c"),
+                label=rf"$J={float(j_label):g}$",
+            )
         ax_s.set_xlabel(r"Mode index $n$")
         ax_s.set_ylabel(r"$p_n$")
+        ax_s.set_xlim(1, 20)
+        ax_s.tick_params(direction="in", which="both", top=True, right=True)
         ax_s.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
         ax_s.yaxis.set_minor_locator(NullLocator())
-        ax_s.grid(True, which="major", axis="y", alpha=0.08, linewidth=0.3)
-        ax_s.legend(frameon=True, fancybox=False, edgecolor="0.55", framealpha=0.85, borderpad=0.22)
+        ax_s.set_ylim(1e-17, 1)
+        ax_s.grid(False)
+        ax_s.legend(
+            loc="upper right",
+            frameon=False,
+            fontsize=11,
+            handlelength=2.5,
+        )
         for s in ax_s.spines.values():
-            s.set_linewidth(0.45)
+            s.set_linewidth(0.9)
         supp_stem = out_stem.with_name("fig_spectrum_full_tail_supp")
         fig_s.savefig(supp_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
         fig_s.savefig(supp_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)

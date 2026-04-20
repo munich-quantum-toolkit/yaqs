@@ -109,25 +109,63 @@ def _svd_spectrum_entropy_rank(
     mat: np.ndarray,
     *,
     tol_ratio: float = 1e-10,
-) -> tuple[np.ndarray, float, int, float]:
-    s = np.linalg.svd(mat, compute_uv=False).astype(np.float64)
+    discarded_weight_threshold: float | None = 1e-12,
+    min_keep: int = 1,
+) -> tuple[np.ndarray, float, int, float, float]:
+    """SVD diagnostics with optional TDVP-style discarded-weight truncation.
+
+    If ``discarded_weight_threshold`` is not ``None``, the returned singular spectrum is
+    truncated by accumulating the squared singular values from smallest to largest and
+    stopping before the cumulative discarded weight exceeds the threshold.
+    """
+    s_full = np.linalg.svd(mat, compute_uv=False).astype(np.float64)
+    s = s_full
+    discarded_weight = 0.0
+    if s.size and discarded_weight_threshold is not None:
+        thr = max(float(discarded_weight_threshold), 0.0)
+        keep = int(s.size)
+        min_keep_eff = max(1, min(int(min_keep), int(s.size)))
+        discard = 0.0
+        for idx, sval in enumerate(reversed(s)):
+            next_discard = discard + float(sval * sval)
+            if next_discard > thr:
+                keep = max(int(s.size) - idx, min_keep_eff)
+                break
+            discard = next_discard
+        else:
+            # Threshold allows discarding everything; keep a tiny but non-zero core.
+            keep = min_keep_eff
+        discarded_weight = float(np.sum(np.square(s[keep:])))
+        s = s[:keep]
     p = s * s
     p_sum = float(np.sum(p))
     if p_sum <= 0.0:
-        return s, 0.0, 0, 0.0
+        return s, 0.0, 0, 0.0, 0.0
     q = np.clip(p / p_sum, 1e-30, 1.0)
     entropy = float(-np.sum(q * np.log(q)))
     pr = float(np.sum(q * q))
     tol = tol_ratio * max(1.0, float(s[0]) if s.size > 0 else 1.0)
     rank = int(np.sum(s > tol))
-    return s, entropy, rank, pr
+    if discarded_weight_threshold is None:
+        discarded_weight = 0.0
+    return s, entropy, rank, pr, discarded_weight
 
 
-def matrix_diagnostic_metrics(mat: np.ndarray, name: str = "V") -> dict[str, Any]:
+def matrix_diagnostic_metrics(
+    mat: np.ndarray,
+    name: str = "V",
+    *,
+    discarded_weight_threshold: float | None = 1e-12,
+    min_keep: int = 1,
+) -> dict[str, Any]:
     """Frobenius norms, SVD spectrum stats, row/column norm statistics."""
     fro = float(np.linalg.norm(mat, ord="fro"))
     fro_sq = float(fro**2)
-    s, ent, rank, pr = _svd_spectrum_entropy_rank(mat)
+    s, ent, rank, pr, discarded_weight = _svd_spectrum_entropy_rank(
+        mat,
+        discarded_weight_threshold=discarded_weight_threshold,
+        min_keep=min_keep,
+    )
     row_norms = np.linalg.norm(mat, axis=1)
     col_norms = np.linalg.norm(mat, axis=0)
     return {
@@ -138,6 +176,9 @@ def matrix_diagnostic_metrics(mat: np.ndarray, name: str = "V") -> dict[str, Any
         "entropy_sv": ent,
         "rank_tol": rank,
         "participation_ratio": pr,
+        "sv_truncated_count": int(s.size),
+        "sv_discarded_weight": float(discarded_weight),
+        "sv_discarded_weight_threshold": None if discarded_weight_threshold is None else float(discarded_weight_threshold),
         "mean_row_norm": float(np.mean(row_norms)) if row_norms.size else 0.0,
         "std_row_norm": float(np.std(row_norms, ddof=1)) if row_norms.size > 1 else 0.0,
         "mean_col_norm": float(np.mean(col_norms)) if col_norms.size else 0.0,
