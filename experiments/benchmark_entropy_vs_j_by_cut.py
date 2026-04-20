@@ -50,7 +50,7 @@ L_FIXED = 6
 K_FIXED = 20
 DT_FIXED = 0.1
 G_FIXED = 1.0
-J_SWEEP_DEFAULT = [0.2 * i for i in range(11)]  # 0.0 ... 2.0
+J_SWEEP_DEFAULT = [0.5 * i for i in range(11)]  # 0.0 ... 2.0
 
 # Fixed linear weighting (β=1); matches branch-weight β=1 in the exact V-matrix benchmark.
 BRANCH_WEIGHT_BETA = 1.0

@@ -109,7 +109,7 @@ def _svd_spectrum_entropy_rank(
     mat: np.ndarray,
     *,
     tol_ratio: float = 1e-10,
-    discarded_weight_threshold: float | None = 1e-12,
+    discarded_weight_threshold: float | None = 1e-3,
     min_keep: int = 1,
 ) -> tuple[np.ndarray, float, int, float, float]:
     """SVD diagnostics with optional TDVP-style discarded-weight truncation.
@@ -121,7 +121,7 @@ def _svd_spectrum_entropy_rank(
     s_full = np.linalg.svd(mat, compute_uv=False).astype(np.float64)
     s = s_full
     discarded_weight = 0.0
-    if s.size and discarded_weight_threshold is not None:
+    if s.size:
         thr = max(float(discarded_weight_threshold), 0.0)
         keep = int(s.size)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
@@ -137,6 +137,7 @@ def _svd_spectrum_entropy_rank(
             keep = min_keep_eff
         discarded_weight = float(np.sum(np.square(s[keep:])))
         s = s[:keep]
+
     p = s * s
     p_sum = float(np.sum(p))
     if p_sum <= 0.0:
@@ -161,6 +162,7 @@ def matrix_diagnostic_metrics(
     """Frobenius norms, SVD spectrum stats, row/column norm statistics."""
     fro = float(np.linalg.norm(mat, ord="fro"))
     fro_sq = float(fro**2)
+    discarded_weight_threshold = 1e-3
     s, ent, rank, pr, discarded_weight = _svd_spectrum_entropy_rank(
         mat,
         discarded_weight_threshold=discarded_weight_threshold,

@@ -167,7 +167,8 @@ def analyze_v_matrix(
     s_full = np.linalg.svd(v_centered, compute_uv=False).astype(np.float64)
     s = s_full
     discarded_weight = 0.0
-    if s.size and discarded_weight_threshold is not None:
+    discarded_weight_threshold = 1e-12
+    if s.size:
         thr = max(float(discarded_weight_threshold), 0.0)
         keep = int(s.size)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
