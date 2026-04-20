@@ -1,0 +1,8 @@
+{
+  "weight_data_invalid": false,
+  "nan_count": 0,
+  "posinf_count": 0,
+  "neginf_count": 0,
+  "negative_count": 0,
+  "warnings": []
+}

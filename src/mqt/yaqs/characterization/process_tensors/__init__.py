@@ -16,6 +16,7 @@ The submodule :mod:`mqt.yaqs.characterization.process_tensors.core` contains sha
 from .surrogates.model import TransformerComb
 from .surrogates.workflow import create_surrogate, generate_data
 from .tomography.constructor import construct_process_tensor
+from .diagnostics.probe import probe_process
 
 __all__ = [
     # Surrogate PT learning
@@ -24,4 +25,5 @@ __all__ = [
     "construct_process_tensor",
     "create_surrogate",
     "generate_data",
+    "probe_process",
 ]

@@ -1,0 +1,28 @@
+{
+  "case_name": "sweep",
+  "L": 2,
+  "k": 20,
+  "dt": 0.1,
+  "cut": 15,
+  "J": 1.2,
+  "g": 1.0,
+  "n_pasts": 32,
+  "n_futures": 32,
+  "n_seeds": 1,
+  "branch_weight_beta": 1.0,
+  "delta": 3.33226839816233e-10,
+  "delta_norm": 0.8780267515089558,
+  "entropy": 0.013160795907340777,
+  "rank": 4,
+  "max_row_distance": 1.4072913560787798e-05,
+  "mean_row_distance": 2.131553964471388e-06,
+  "median_row_distance": 2.1325810455493887e-07,
+  "weight_preparation": {
+    "weight_data_invalid": false,
+    "nan_count": 0,
+    "posinf_count": 0,
+    "neginf_count": 0,
+    "negative_count": 0,
+    "warnings": []
+  }
+}

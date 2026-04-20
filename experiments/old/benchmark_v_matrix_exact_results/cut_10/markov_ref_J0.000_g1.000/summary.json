@@ -1,0 +1,28 @@
+{
+  "case_name": "markov_ref",
+  "L": 2,
+  "k": 20,
+  "dt": 0.1,
+  "cut": 10,
+  "J": 0.0,
+  "g": 1.0,
+  "n_pasts": 32,
+  "n_futures": 32,
+  "n_seeds": 1,
+  "branch_weight_beta": 1.0,
+  "delta": 6.843529777759288e-07,
+  "delta_norm": 0.9620733861662769,
+  "entropy": 2.49240795907781e-24,
+  "rank": 1,
+  "max_row_distance": 0.0008424934571346151,
+  "mean_row_distance": 5.6957580527276766e-05,
+  "median_row_distance": 1.3730532590724997e-06,
+  "weight_preparation": {
+    "weight_data_invalid": false,
+    "nan_count": 0,
+    "posinf_count": 0,
+    "neginf_count": 0,
+    "negative_count": 0,
+    "warnings": []
+  }
+}

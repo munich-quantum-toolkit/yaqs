@@ -1,0 +1,19 @@
+{
+  "case_name": "sweep",
+  "L": 2,
+  "k": 20,
+  "dt": 0.1,
+  "cut": 10,
+  "J": 1.2,
+  "g": 1.0,
+  "n_pasts": 32,
+  "n_futures": 32,
+  "n_seeds": 1,
+  "delta": 3.106894574732927,
+  "delta_norm": 0.0030677923353186034,
+  "entropy": 1.1153817646628355,
+  "rank": 31,
+  "max_row_distance": 1.042044344948957,
+  "mean_row_distance": 0.4080424806084513,
+  "median_row_distance": 0.3937870562936202
+}

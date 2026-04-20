@@ -1,0 +1,19 @@
+{
+  "case_name": "markov_ref",
+  "L": 2,
+  "k": 20,
+  "dt": 0.1,
+  "cut": 10,
+  "J": 0.0,
+  "g": 1.0,
+  "n_pasts": 32,
+  "n_futures": 32,
+  "n_seeds": 1,
+  "delta": 0.04862113545644823,
+  "delta_norm": 4.748157747324452e-05,
+  "entropy": 2.141404136484463e-27,
+  "rank": 1,
+  "max_row_distance": 0.22403026398424342,
+  "mean_row_distance": 0.014001891499015214,
+  "median_row_distance": 0.0
+}

@@ -1,0 +1,165 @@
+{
+  "case_name": "trivial",
+  "cut": 15,
+  "cut_comparison_mode": "cut_comparison_shared_probe_source",
+  "J": 0.0,
+  "g": 0.0,
+  "L": 2,
+  "k": 20,
+  "dt": 0.1,
+  "n_pasts": 64,
+  "n_futures": 16,
+  "weight_preparation": {
+    "weight_data_invalid": false,
+    "nan_count": 0,
+    "posinf_count": 0,
+    "neginf_count": 0,
+    "negative_count": 0,
+    "warnings": []
+  },
+  "variants": {
+    "unweighted": {
+      "metrics_raw": {
+        "frobenius": 32.000000022925285,
+        "frobenius_sq": 1024.0000014672182,
+        "entropy_sv": 0.018085264465233362,
+        "rank_tol": 2,
+        "participation_ratio": 0.9948092348125877,
+        "mean_row_norm": 4.000000002865663,
+        "std_row_norm": 2.6947188924714735e-10,
+        "mean_col_norm": 1.9898919310958894,
+        "std_col_norm": 2.017955335721576
+      },
+      "metrics_centered_past": {
+        "frobenius": 1.6674466032201207,
+        "frobenius_sq": 2.780378174590319,
+        "entropy_sv": 4.351885825758746e-27,
+        "rank_tol": 1,
+        "participation_ratio": 1.0,
+        "mean_row_norm": 0.05169901214765428,
+        "std_row_norm": 0.20351357162886127,
+        "mean_col_norm": 0.047132207682508365,
+        "std_col_norm": 0.14019202844048825
+      },
+      "delta_norm": 0.0027152130572329187,
+      "row_distance_raw": {
+        "max_row_distance": 1.6806282044189835,
+        "mean_row_distance": 0.052519631388093235,
+        "median_row_distance": 0.0
+      },
+      "row_distance_centered_past": {
+        "max_row_distance": 1.6806282044189835,
+        "mean_row_distance": 0.052519631388093235,
+        "median_row_distance": 0.0
+      },
+      "control_heuristic": {
+        "low_entropy_control": true,
+        "very_low_entropy": true
+      }
+    },
+    "weighted_sqrt": {
+      "metrics_raw": {
+        "frobenius": 0.034859371098929885,
+        "frobenius_sq": 0.0012151757534129082,
+        "entropy_sv": 1.696437497378185e-11,
+        "rank_tol": 2,
+        "participation_ratio": 0.9999999999988369,
+        "mean_row_norm": 0.002303842595726378,
+        "std_row_norm": 0.003727809579058501,
+        "mean_col_norm": 0.0015987407869115754,
+        "std_col_norm": 0.0026442797035616896
+      },
+      "metrics_centered_past": {
+        "frobenius": 0.029588571357771102,
+        "frobenius_sq": 0.0008754835549939124,
+        "entropy_sv": 2.2794341972653314e-11,
+        "rank_tol": 2,
+        "participation_ratio": 0.9999999999984208,
+        "mean_row_norm": 0.002335115552319481,
+        "std_row_norm": 0.0028908905033870236,
+        "mean_col_norm": 0.0013570083040242353,
+        "std_col_norm": 0.0022444598428331356
+      },
+      "delta_norm": 0.7204583802261146,
+      "row_distance_raw": {
+        "max_row_distance": 0.02045887936846954,
+        "mean_row_distance": 0.0031090124930626905,
+        "median_row_distance": 0.0017152729553046872
+      },
+      "row_distance_centered_past": {
+        "max_row_distance": 0.02045887936846954,
+        "mean_row_distance": 0.003109012493062691,
+        "median_row_distance": 0.0017152729553046872
+      },
+      "control_heuristic": {
+        "low_entropy_control": true,
+        "very_low_entropy": true
+      }
+    },
+    "weighted_linear": {
+      "metrics_raw": {
+        "frobenius": 0.00032131311397243933,
+        "frobenius_sq": 1.0324211721066578e-07,
+        "entropy_sv": 1.1844508930729234e-22,
+        "rank_tol": 1,
+        "participation_ratio": 1.0,
+        "mean_row_norm": 1.1258153585980566e-05,
+        "std_row_norm": 3.885879439022088e-05,
+        "mean_col_norm": 8.774827945778012e-06,
+        "std_col_norm": 2.7116898254424217e-05
+      },
+      "metrics_centered_past": {
+        "frobenius": 0.0003084321186129488,
+        "frobenius_sq": 9.513037179207213e-08,
+        "entropy_sv": 1.2621469795195962e-22,
+        "rank_tol": 1,
+        "participation_ratio": 1.0,
+        "mean_row_norm": 1.663495480074682e-05,
+        "std_row_norm": 3.5055552655252686e-05,
+        "mean_col_norm": 8.423057311045758e-06,
+        "std_col_norm": 2.6029819559562787e-05
+      },
+      "delta_norm": 0.921429881159434,
+      "row_distance_raw": {
+        "max_row_distance": 0.0002481886562257781,
+        "mean_row_distance": 2.011249834566772e-05,
+        "median_row_distance": 2.716793599451146e-06
+      },
+      "row_distance_centered_past": {
+        "max_row_distance": 0.000248188656225778,
+        "mean_row_distance": 2.011249834566772e-05,
+        "median_row_distance": 2.716793599451146e-06
+      },
+      "control_heuristic": {
+        "low_entropy_control": true,
+        "very_low_entropy": true
+      }
+    }
+  },
+  "candidate_main": {
+    "definition": "entropy_sv of centered_past( w_ij^0.5 * rho_flat ) \u2014 same as weighted_sqrt centered_past",
+    "metrics_centered_past": {
+      "frobenius": 0.029588571357771102,
+      "frobenius_sq": 0.0008754835549939124,
+      "entropy_sv": 2.2794341972653314e-11,
+      "rank_tol": 2,
+      "participation_ratio": 0.9999999999984208,
+      "mean_row_norm": 0.002335115552319481,
+      "std_row_norm": 0.0028908905033870236,
+      "mean_col_norm": 0.0013570083040242353,
+      "std_col_norm": 0.0022444598428331356
+    },
+    "metrics_raw": {
+      "frobenius": 0.034859371098929885,
+      "frobenius_sq": 0.0012151757534129082,
+      "entropy_sv": 1.696437497378185e-11,
+      "rank_tol": 2,
+      "participation_ratio": 0.9999999999988369,
+      "mean_row_norm": 0.002303842595726378,
+      "std_row_norm": 0.003727809579058501,
+      "mean_col_norm": 0.0015987407869115754,
+      "std_col_norm": 0.0026442797035616896
+    },
+    "delta_norm": 0.7204583802261146
+  }
+}

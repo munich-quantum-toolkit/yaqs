@@ -21,8 +21,9 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from ..diagnostics.probe import ProbeSet, probe_process
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8
-from .utils import _choi_features_from_parts, _sample_random_intervention_parts, _sample_random_intervention_sequence
+from .utils import _choi_features_from_parts
 
 # Computational-basis |0⟩⟨0| (same convention as :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data` rollouts).
 _RHO0_PROJECTOR = np.array([[1.0, 0.0], [0.0, 0.0]], dtype=np.complex128)
@@ -170,54 +171,6 @@ class TransformerComb(nn.Module):
             raise ValueError(msg)
         return rho.to(dtype=torch.float64)
 
-    def _sample_temporal_cut_probes(
-        self,
-        *,
-        timestep: int,
-        past_samples: int,
-        future_samples: int,
-        rng: np.random.Generator,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Sample probe sets for an inside-timestep cut at time ``timestep``.
-
-        Returns:
-            past_prefix: (N_p, t, d_e) fused Choi features for steps 0..t-1
-            meas_effects: (N_p, 2, 2) complex measurement effects for step t
-            prep_states: (N_f, 2, 2) complex preparation states for step t
-            future_suffix: (N_f, k-(t+1), d_e) fused Choi features for steps t+1..k-1
-        """
-        if self.sequence_length is None:
-            msg = "sequence_length must be set."
-            raise ValueError(msg)
-        k_total = int(self.sequence_length)
-        t = int(timestep)
-        n_p = int(past_samples)
-        n_f = int(future_samples)
-        d_e = self.d_e
-
-        past_prefix = np.empty((n_p, t, d_e), dtype=np.float32)
-        meas_effects = np.empty((n_p, 2, 2), dtype=np.complex128)
-        for a in range(n_p):
-            _maps, rows = _sample_random_intervention_sequence(t, rng)
-            past_prefix[a] = rows
-            _rho_prep, eff, _feat = _sample_random_intervention_parts(rng)
-            meas_effects[a] = eff
-
-        prep_states = np.empty((n_f, 2, 2), dtype=np.complex128)
-        suffix_len = k_total - (t + 1)
-        if suffix_len > 0:
-            future_suffix = np.empty((n_f, suffix_len, d_e), dtype=np.float32)
-        else:
-            future_suffix = np.zeros((n_f, 0, d_e), dtype=np.float32)
-        for b in range(n_f):
-            rho_prep, _eff, _feat = _sample_random_intervention_parts(rng)
-            prep_states[b] = rho_prep
-            if suffix_len > 0:
-                _maps, rows = _sample_random_intervention_sequence(suffix_len, rng)
-                future_suffix[b] = rows
-
-        return past_prefix, meas_effects, prep_states, future_suffix
-
     def predict_final_state_batch(
         self,
         rho0: torch.Tensor,
@@ -261,19 +214,16 @@ class TransformerComb(nn.Module):
             self.train()
         return out[:, -1, :]
 
-    def entropy(self, timestep: int, past_samples: int, future_samples: int) -> float:
-        """Cut-entropy diagnostic from random past/future Choi sequences.
+    def entropy(self, cut: int) -> float:
+        """Cut-entropy diagnostic via split-cut process probing.
 
         Analogous to the entropy of the normalized squared singular values of an MPS/MPO bond matrix
         (spectrum of the reduced density operator across the cut): build a future-response matrix at
         the cut, take its singular values, form weights ``s_i^2 / \\sum_j s_j^2``, and return the Shannon
         entropy ``-\\sum_i w_i \\log w_i`` in **nats**.
 
-        Uses a fixed **interior** timestep index ``t`` (``1 <= t < k`` where ``k`` is
-        :attr:`sequence_length`), but the cut is made **inside** timestep ``t``:
-
-        - past index: (history steps ``0..t-1``) + (measurement effect at step ``t``)
-        - future index: (preparation state at step ``t``) + (future steps ``t+1..k-1``)
+        Uses split-cut probes at slot ``cut`` (1-based, inclusive): the past side contributes
+        measurement at ``cut`` and the future side contributes preparation at ``cut``.
 
         This mimics a temporal-MPO bond cut between the measurement and preparation legs of the
         intervention at time ``t``. It is only valid because the current per-step encoding is the
@@ -285,90 +235,70 @@ class TransformerComb(nn.Module):
         before SVD.
 
         Args:
-            timestep: Interior cut index ``t`` (past length). Must satisfy ``1 <= t < k`` where ``k`` is
-                :attr:`sequence_length`.
-            past_samples: Number ``N_p`` of random past prefixes.
-            future_samples: Number ``N_f`` of random future suffixes.
+            cut: Split-cut slot index ``c`` with ``1 <= c <= k`` where ``k`` is :attr:`sequence_length`.
 
         Returns:
             Entropy as a Python ``float`` (CPU scalar).
 
         Raises:
-            ValueError: If :attr:`sequence_length` is unset or ``< 2``, counts are invalid, or ``timestep``
-                is not an interior cut.
+            ValueError: If :attr:`sequence_length` is unset or ``cut`` is out of range.
         """
         if self.sequence_length is None:
             msg = "sequence_length is unset: call fit() or pass sequence_length=... to __init__."
             raise ValueError(msg)
         k_total = int(self.sequence_length)
-        t = int(timestep)
-        n_p = int(past_samples)
-        n_f = int(future_samples)
-        if n_p <= 0 or n_f <= 0:
-            msg = f"past_samples and future_samples must be positive, got {n_p} and {n_f}."
-            raise ValueError(msg)
-        if k_total < 2:
-            msg = f"entropy requires sequence_length >= 2 for an interior past/future cut; got {k_total}."
-            raise ValueError(msg)
-        if not (1 <= t < k_total):
-            msg = (
-                f"timestep must be an interior cut with 1 <= timestep < sequence_length ({k_total}); "
-                f"got {t}. Use 1 <= t <= k-1 (not t=0 or t=k)."
-            )
+        c = int(cut)
+        if not (1 <= c <= k_total):
+            msg = f"cut must satisfy 1 <= cut <= sequence_length ({k_total}), got {c}."
             raise ValueError(msg)
 
-        rng = np.random.default_rng()
-        past_prefix_np, meas_effects_np, prep_states_np, future_suffix_np = self._sample_temporal_cut_probes(
-            timestep=t,
-            past_samples=n_p,
-            future_samples=n_f,
-            rng=rng,
+        out = probe_process(
+            process=self,
+            cut=c,
+            k=k_total,
         )
+        return float(out["entropy"])
 
+    def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate split-cut probe responses for :func:`probe_process`."""
+        n_p = len(probe_set.past_pairs)
+        n_f = len(probe_set.future_pairs)
+        past_len = int(probe_set.cut) - 1
+        suffix_len = int(probe_set.k) - int(probe_set.cut)
+        v_rows = np.empty((n_p, n_f, self.d_rho), dtype=np.float32)
         dev = next(self.parameters()).device
-        past_prefix = torch.from_numpy(past_prefix_np).to(device=dev, dtype=torch.float32)
-        future_suffix = torch.from_numpy(future_suffix_np).to(device=dev, dtype=torch.float32)
-
-        d_y = self.d_rho
-        v = torch.empty((n_p, n_f * d_y), device=dev, dtype=torch.float64)
         rho0 = self._default_rho0(device=dev, dtype=torch.float32)
-
-        suffix_len = int(future_suffix.shape[1])
         was_training = self.training
         self.eval()
         try:
-            for a in range(n_p):
-                # Fixed past history up to t-1.
-                past_row = past_prefix[a]  # (t, d_e)
-                past_batch = past_row.unsqueeze(0).expand(n_f, -1, -1)  # (N_f, t, d_e)
-
-                # Cut inside timestep t: fix measurement effect, vary preparation state.
-                eff = meas_effects_np[a]
-                cut_rows = np.stack([_choi_features_from_parts(prep_states_np[b], eff) for b in range(n_f)], axis=0)
-                cut_step = torch.from_numpy(cut_rows).to(device=dev, dtype=torch.float32).unsqueeze(1)  # (N_f, 1, d_e)
-
-                if suffix_len > 0:
-                    full_seq_batch = torch.cat([past_batch, cut_step, future_suffix], dim=1)
-                else:
-                    full_seq_batch = torch.cat([past_batch, cut_step], dim=1)
-
-                rho_pred_batch = self.predict_final_state_batch(rho0, full_seq_batch, restore_training=False)
-                feat_batch = self._rho_to_features(rho_pred_batch)
-                v[a] = feat_batch.reshape(-1)
+            for i in range(n_p):
+                past_prefix = (
+                    probe_set.past_features[i, :past_len, :]
+                    if past_len > 0
+                    else np.zeros((0, self.d_e), dtype=np.float32)
+                )
+                past_batch = np.broadcast_to(past_prefix[None, :, :], (n_f, past_len, self.d_e)).copy()
+                eff_ket = np.asarray(probe_set.past_cut_meas[i], dtype=np.complex128)
+                eff_dm = np.outer(eff_ket, eff_ket.conj())
+                cut_rows = []
+                for j in range(n_f):
+                    prep_ket = np.asarray(probe_set.future_prep_cut[j], dtype=np.complex128)
+                    prep_dm = np.outer(prep_ket, prep_ket.conj())
+                    cut_rows.append(_choi_features_from_parts(prep_dm, eff_dm))
+                cut_step = np.asarray(cut_rows, dtype=np.float32).reshape(n_f, 1, self.d_e)
+                future_suffix = (
+                    probe_set.future_features[:, 1:, :]
+                    if suffix_len > 0
+                    else np.zeros((n_f, 0, self.d_e), dtype=np.float32)
+                )
+                seq = np.concatenate([past_batch, cut_step, future_suffix], axis=1)
+                seq_t = torch.from_numpy(seq).to(device=dev, dtype=torch.float32)
+                rho_pred_batch = self.predict_final_state_batch(rho0, seq_t, restore_training=False)
+                v_rows[i] = rho_pred_batch.detach().cpu().numpy().astype(np.float32)
         finally:
             if was_training:
                 self.train()
-
-        v = v - v.mean(dim=0, keepdim=True)
-
-        s = torch.linalg.svdvals(v)
-        sq = s * s
-        denom = sq.sum()
-        if denom.item() <= 0.0:
-            return 0.0
-        weights = sq / denom
-        ent = -(weights * torch.log(weights.clamp(min=1e-30))).sum()
-        return float(ent.detach().cpu().item())
+        return v_rows
 
     def forward(self, E: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
         """Run a forward pass.

@@ -1,0 +1,28 @@
+{
+  "case_name": "trivial",
+  "L": 2,
+  "k": 20,
+  "dt": 0.1,
+  "cut": 15,
+  "J": 0.0,
+  "g": 0.0,
+  "n_pasts": 4,
+  "n_futures": 4,
+  "n_seeds": 1,
+  "branch_weight_beta": 1.0,
+  "delta": 8.039123358871042e-14,
+  "delta_norm": 0.749912570288171,
+  "entropy": 2.0723265836946412e-28,
+  "rank": 1,
+  "max_row_distance": 3.274122666310932e-07,
+  "mean_row_distance": 1.637126999445146e-07,
+  "median_row_distance": 1.637061333155466e-07,
+  "weight_preparation": {
+    "weight_data_invalid": false,
+    "nan_count": 0,
+    "posinf_count": 0,
+    "neginf_count": 0,
+    "negative_count": 0,
+    "warnings": []
+  }
+}

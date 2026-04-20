@@ -1,0 +1,26 @@
+{
+  "unweighted": {
+    "mean_entropy_trivial": 8.404435589428266e-28,
+    "mean_entropy_markov_ref": 0.021362181766411508,
+    "max_entropy_control": 0.3781104769338717,
+    "mean_entropy_control": 0.010681090883205754,
+    "mean_entropy_nm_mid": 0.7431885353745655,
+    "max_entropy_nm_mid": 1.0818877604711425
+  },
+  "weighted_sqrt": {
+    "mean_entropy_trivial": 1.2366843254037813e-11,
+    "mean_entropy_markov_ref": 4.5975150192147895e-11,
+    "max_entropy_control": 6.893636071618738e-10,
+    "mean_entropy_control": 2.917099672309285e-11,
+    "mean_entropy_nm_mid": 0.018670557826380916,
+    "max_entropy_nm_mid": 0.07188129821226169
+  },
+  "weighted_linear": {
+    "mean_entropy_trivial": 4.771248986770825e-22,
+    "mean_entropy_markov_ref": 6.5222378853069845e-21,
+    "max_entropy_control": 1.1149518342168706e-19,
+    "mean_entropy_control": 3.4996813919920356e-21,
+    "mean_entropy_nm_mid": 0.011435073515767433,
+    "max_entropy_nm_mid": 0.09650489063217603
+  }
+}
