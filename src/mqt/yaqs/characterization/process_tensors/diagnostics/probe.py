@@ -154,11 +154,34 @@ def pairwise_row_distances(v: np.ndarray) -> np.ndarray:
     return d
 
 
-def analyze_v_matrix(v: np.ndarray, v_centered: np.ndarray) -> dict[str, Any]:
+def analyze_v_matrix(
+    v: np.ndarray,
+    v_centered: np.ndarray,
+    *,
+    discarded_weight_threshold: float | None = 1e-12,
+    min_keep: int = 1,
+) -> dict[str, Any]:
     fro_v_sq = float(np.linalg.norm(v, ord="fro") ** 2)
     fro_c_sq = float(np.linalg.norm(v_centered, ord="fro") ** 2)
     delta_norm = float(fro_c_sq / fro_v_sq) if fro_v_sq > 0.0 else 0.0
-    s = np.linalg.svd(v_centered, compute_uv=False).astype(np.float64)
+    s_full = np.linalg.svd(v_centered, compute_uv=False).astype(np.float64)
+    s = s_full
+    discarded_weight = 0.0
+    if s.size and discarded_weight_threshold is not None:
+        thr = max(float(discarded_weight_threshold), 0.0)
+        keep = int(s.size)
+        min_keep_eff = max(1, min(int(min_keep), int(s.size)))
+        discard = 0.0
+        for idx, sval in enumerate(reversed(s)):
+            next_discard = discard + float(sval * sval)
+            if next_discard > thr:
+                keep = max(int(s.size) - idx, min_keep_eff)
+                break
+            discard = next_discard
+        else:
+            keep = min_keep_eff
+        discarded_weight = float(np.sum(np.square(s[keep:])))
+        s = s[:keep]
     p = s * s
     p_sum = float(np.sum(p))
     if p_sum <= 0.0:
@@ -174,6 +197,11 @@ def analyze_v_matrix(v: np.ndarray, v_centered: np.ndarray) -> dict[str, Any]:
         "delta": fro_c_sq,
         "delta_norm": delta_norm,
         "singular_values": s,
+        "singular_values_full": s_full,
+        "sv_truncated_count": int(s.size),
+        "sv_discarded_count": int(max(0, s_full.size - s.size)),
+        "sv_discarded_weight": float(discarded_weight),
+        "sv_discarded_weight_threshold": None if discarded_weight_threshold is None else float(discarded_weight_threshold),
         "entropy": entropy,
         "rank": rank,
         "row_distances": dmat,
