@@ -33,7 +33,7 @@ from mqt.yaqs.characterization.process_tensors.diagnostics.v_matrix_diag import 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-M_GRID_DEFAULT = (2, 3, 4, 5, 6, 7, 8, 10, 12, 16)
+M_GRID_DEFAULT = (4, 8, 16, 32, 64, 128) # (2, 3, 4, 5, 6, 7, 8, 10, 12, 16)
 CONVERGENCE_JS_DEFAULT = (0.0, 1.0, 2.0)
 SPECTRUM_JS_DEFAULT = (0.4, 1.0, 2.0)
 
