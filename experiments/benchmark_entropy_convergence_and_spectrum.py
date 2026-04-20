@@ -33,9 +33,9 @@ from mqt.yaqs.characterization.process_tensors.diagnostics.v_matrix_diag import 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-M_GRID_DEFAULT = (4, 8, 16, 32, 64, 128) # (2, 3, 4, 5, 6, 7, 8, 10, 12, 16)
-CONVERGENCE_JS_DEFAULT = (0.0, 1.0, 2.0)
-SPECTRUM_JS_DEFAULT = (0.4, 1.0, 2.0)
+M_GRID_DEFAULT = (4, 8, 16, 32, 64) # (2, 3, 4, 5, 6, 7, 8, 10, 12, 16)
+CONVERGENCE_JS_DEFAULT = (1.0, 2.0, 3.0)
+SPECTRUM_JS_DEFAULT = (1.0, 2.0, 3.0)
 
 
 def _parse_int_list(spec: str) -> list[int]:
@@ -442,8 +442,8 @@ def plot_from_saved(
     fig, axes = plt.subplots(1, 2, figsize=(6.2, 2.35), constrained_layout=True, gridspec_kw={"width_ratios": [1.2, 1.0], "wspace": 0.07})
     plt.subplots_adjust(left=0.14, right=0.96, bottom=0.14, top=0.96)
     ax0, ax1 = axes
-    conv_colors = {1.0: "#1f77b4", 2.0: "#d55e00"}
-    conv_js = [j for j in sorted({float(r["J"]) for r in summary_rows}) if abs(j - 1.0) < 1e-12 or abs(j - 2.0) < 1e-12]
+    conv_colors = {1.0: "#1f77b4", 2.0: "#009E73", 3.0: "#d55e00"}
+    conv_js = [j for j in sorted({float(r["J"]) for r in summary_rows}) if abs(j - 1.0) < 1e-12 or abs(j - 2.0) < 1e-12 or abs(j - 3.0) < 1e-12]
     m_vals = sorted({int(float(r["m"])) for r in summary_rows})
     interacting_vals: list[float] = []
     for jv in conv_js:
@@ -480,7 +480,7 @@ def plot_from_saved(
         t.set_fontsize(6.1)
 
     # Colorblind-safe, high-contrast palette.
-    spec_colors = {"0.4": "#0072B2", "1": "#D55E00", "2": "#009E73"}
+    spec_colors = {"1": "#1f77b4", "2": "#009E73", "3": "#d55e00", }
     main_mode_max = 30
     for j_label in sorted(spectrum_probs.keys(), key=lambda s: float(s)):
         p_mean = np.asarray(spectrum_probs[j_label]["p_mean"], dtype=np.float64)
