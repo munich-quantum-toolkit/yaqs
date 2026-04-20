@@ -50,20 +50,20 @@ L_FIXED = 6
 K_FIXED = 20
 DT_FIXED = 0.1
 G_FIXED = 1.0
-J_SWEEP_DEFAULT = [0.5 * i for i in range(11)]  # 0.0 ... 2.0
+J_SWEEP_DEFAULT = [0.2 * i for i in range(11)]  # 0.0 ... 2.0
 
 # Fixed linear weighting (β=1); matches branch-weight β=1 in the exact V-matrix benchmark.
 BRANCH_WEIGHT_BETA = 1.0
 
 # Fixed log color limits for the cut×J heatmap (values clip to ends of the scale).
-HEATMAP_COLOR_VMIN = 1e-3
+HEATMAP_COLOR_VMIN = 1e-4
 HEATMAP_COLOR_VMAX = 1.0
 
 # Panel 2: $S_V$ vs $J$ at these fixed cuts $c$.
-PANEL2_FIXED_CUTS: tuple[int, ...] = (1, 5, 10)
+PANEL2_FIXED_CUTS: tuple[int, ...] = (5, 10, 15)
 
 # Panel 3: $S_V$ vs $c$ at these representative $J$ targets (nearest $J$ in the summary sweep).
-PANEL3_TARGET_JS: tuple[float, ...] = (0.4, 1.0, 1.4, 2.0)
+PANEL3_TARGET_JS: tuple[float, ...] = (0.4, 1.0, 2.0)
 
 
 def _parse_args() -> argparse.Namespace:
