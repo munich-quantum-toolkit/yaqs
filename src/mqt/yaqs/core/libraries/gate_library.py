@@ -152,7 +152,12 @@ class BaseGate:
             msg = "Matrix must be square"
             raise ValueError(msg)
 
-        log = np.log2(mat.shape[0])
+        n = mat.shape[0]
+        if n == 0 or (n & (n - 1)) != 0:
+            msg = f"Matrix size must be a power of 2, got {n}"
+            raise ValueError(msg)
+
+        log = np.log2(n)
 
         self.matrix = mat
         self.tensor = mat
@@ -343,6 +348,19 @@ class BaseGate:
         return Create(d)
 
     @classmethod
+    def crosstalk(cls, gate1: BaseGate, gate2: BaseGate) -> Crosstalk:
+        """Returns the Kronecker product of two single-site gates.
+
+        Args:
+            gate1: Left operand gate.
+            gate2: Right operand gate.
+
+        Returns:
+            An instance of the Crosstalk gate.
+        """
+        return Crosstalk(gate1, gate2)
+
+    @classmethod
     def id(cls) -> Id:
         """Returns the Id gate.
 
@@ -350,6 +368,15 @@ class BaseGate:
             An instance of the Id gate.
         """
         return Id()
+
+    @classmethod
+    def zero(cls) -> Zero:
+        """Returns the Zero gate.
+
+        Returns:
+            Zero: An instance of the Zero gate.
+        """
+        return Zero()
 
     @classmethod
     def sx(cls) -> SX:
@@ -726,6 +753,7 @@ class Destroy(BaseGate):
         Args:
             d: Physical dimension.
         """
+        assert d > 0 and (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
 
         super().__init__(mat)
@@ -753,6 +781,7 @@ class Create(BaseGate):
         Args:
             d: Physical dimension.
         """
+        assert d > 0 and (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
 
         super().__init__(mat)
@@ -777,6 +806,28 @@ class Id(BaseGate):
     def __init__(self) -> None:
         """Initializes the identity gate."""
         mat = np.array([[1, 0], [0, 1]])
+        super().__init__(mat)
+
+
+class Zero(BaseGate):
+    """Class representing the Zero gate.
+
+    Attributes:
+        name: The name of the gate ("zero").
+        matrix: The 2x2 zero matrix.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "zero"
+
+    def __init__(self) -> None:
+        """Initializes the Zero gate."""
+        mat = np.array([[0, 0], [0, 0]])
         super().__init__(mat)
 
 
@@ -1478,6 +1529,86 @@ class ZZ(BaseGate):
         super().__init__(mat)
 
 
+class Crosstalk(BaseGate):
+    """Class representing the Kronecker product of two single-site gates."""
+
+    name = "crosstalk"
+
+    def __init__(self, gate1: BaseGate, gate2: BaseGate) -> None:
+        """Initializes the Kronecker product gate.
+
+        Args:
+            gate1: Left operand gate.
+            gate2: Right operand gate.
+        """
+        self.name = f"crosstalk_{gate1.name}_{gate2.name}"
+        mat = np.kron(gate1.matrix, gate2.matrix).astype(np.complex128)
+        super().__init__(mat)
+
+
+class CrosstalkXX(Crosstalk):
+    """Crosstalk X ⊗ X."""
+
+    def __init__(self) -> None:
+        super().__init__(X(), X())
+
+
+class CrosstalkYY(Crosstalk):
+    """Crosstalk Y ⊗ Y."""
+
+    def __init__(self) -> None:
+        super().__init__(Y(), Y())
+
+
+class CrosstalkZZ(Crosstalk):
+    """Crosstalk Z ⊗ Z."""
+
+    def __init__(self) -> None:
+        super().__init__(Z(), Z())
+
+
+class CrosstalkXY(Crosstalk):
+    """Crosstalk X ⊗ Y."""
+
+    def __init__(self) -> None:
+        super().__init__(X(), Y())
+
+
+class CrosstalkYX(Crosstalk):
+    """Crosstalk Y ⊗ X."""
+
+    def __init__(self) -> None:
+        super().__init__(Y(), X())
+
+
+class CrosstalkXZ(Crosstalk):
+    """Crosstalk X ⊗ Z."""
+
+    def __init__(self) -> None:
+        super().__init__(X(), Z())
+
+
+class CrosstalkZX(Crosstalk):
+    """Crosstalk Z ⊗ X."""
+
+    def __init__(self) -> None:
+        super().__init__(Z(), X())
+
+
+class CrosstalkYZ(Crosstalk):
+    """Crosstalk Y ⊗ Z."""
+
+    def __init__(self) -> None:
+        super().__init__(Y(), Z())
+
+
+class CrosstalkZY(Crosstalk):
+    """Crosstalk Z ⊗ Y."""
+
+    def __init__(self) -> None:
+        super().__init__(Z(), Y())
+
+
 class P0(BaseGate):
     """Class representing the projector onto |0⟩⟨0|.
 
@@ -1727,6 +1858,16 @@ class GateLibrary:
     xx = XX
     yy = YY
     zz = ZZ
+    crosstalk = Crosstalk
+    crosstalk_xx = CrosstalkXX
+    crosstalk_yy = CrosstalkYY
+    crosstalk_zz = CrosstalkZZ
+    crosstalk_xy = CrosstalkXY
+    crosstalk_yx = CrosstalkYX
+    crosstalk_xz = CrosstalkXZ
+    crosstalk_zx = CrosstalkZX
+    crosstalk_yz = CrosstalkYZ
+    crosstalk_zy = CrosstalkZY
 
     p0 = P0
     p1 = P1
@@ -1739,3 +1880,12 @@ class GateLibrary:
     schmidt_spectrum = SchmidtSpectrum
 
     custom = BaseGate
+    zero = Zero
+
+    # Added aliases to be compatible with naming conventions in noise models
+    raising = Create
+    lowering = Destroy
+    pauli_z = Z
+    pauli_x = X
+    pauli_y = Y
+
