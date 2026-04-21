@@ -1,4 +1,4 @@
-"""Smoke test: 3-panel finite-size figure builds from synthetic CSV rows."""
+"""Smoke test: finite-size summary 2x2 figure and peak-cut plot from synthetic CSV rows."""
 
 from __future__ import annotations
 
@@ -16,26 +16,50 @@ def _load_module():
     return module
 
 
-def test_plot_finite_size_scaling_writes_outputs(tmp_path):
+def test_plot_finite_size_summary_and_peak_cut(tmp_path):
     mod = _load_module()
-    # Two L, two J, two cuts — consistent peak metadata on every row.
-    rows: list[dict[str, str]] = []
+    # Summary: two L, two J — metrics self-consistent for peak_cut=2 on synthetic profile.
+    summary: list[dict[str, str]] = []
+    detail: list[dict[str, str]] = []
     for L in (2, 4):
         for J in (0.5, 1.0):
-            peak_e = 0.2 * L + 0.1 * J
-            for c in (1, 2):
-                rows.append(
+            ent_by_c = {1: 0.1 * L, 2: 0.5 * L + 0.2 * J, 3: 0.15 * L}
+            peak_c = 2
+            peak_e = ent_by_c[peak_c]
+            int_e = sum(ent_by_c.values())
+            mean_e = int_e / 3.0
+            summary.append(
+                {
+                    "L": str(L),
+                    "J": str(J),
+                    "peak_entropy": str(peak_e),
+                    "integrated_entropy": str(int_e),
+                    "mean_entropy": str(mean_e),
+                    "peak_cut": str(peak_c),
+                }
+            )
+            for c, e in ent_by_c.items():
+                detail.append(
                     {
                         "L": str(L),
                         "J": str(J),
                         "c": str(c),
-                        "entropy": str(0.05 * c),
-                        "peak_entropy": str(peak_e),
-                        "peak_cut": "2",
-                        "n_0_99": str(3 + L),
+                        "entropy": str(e),
                     }
                 )
-    stem = tmp_path / "fig_finite_size_scaling"
-    mod.plot_finite_size_figure(rows, out_stem=stem, profile_j=1.0, profile_ls=(2, 4))
-    assert (tmp_path / "fig_finite_size_scaling.pdf").is_file()
-    assert (tmp_path / "fig_finite_size_scaling.png").is_file()
+
+    stem = tmp_path / "fig_finite_size_scaling_summary"
+    mod.plot_finite_size_summary_figure(
+        summary,
+        detail,
+        out_stem=stem,
+        profile_j=1.0,
+        profile_ls=(2, 4),
+    )
+    assert (tmp_path / "fig_finite_size_scaling_summary.pdf").is_file()
+    assert (tmp_path / "fig_finite_size_scaling_summary.png").is_file()
+
+    stem2 = tmp_path / "fig_peak_cut_vs_L"
+    mod.plot_peak_cut_vs_l(summary, out_stem=stem2, profile_j=1.0)
+    assert (tmp_path / "fig_peak_cut_vs_L.pdf").is_file()
+    assert (tmp_path / "fig_peak_cut_vs_L.png").is_file()
