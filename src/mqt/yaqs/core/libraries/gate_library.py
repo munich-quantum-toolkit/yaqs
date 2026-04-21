@@ -1888,4 +1888,3 @@ class GateLibrary:
     pauli_z = Z
     pauli_x = X
     pauli_y = Y
-
