@@ -125,7 +125,7 @@ def _linear_weighted_metrics(
     parallel: bool,
 ) -> dict[str, float | int]:
     """Past-centered S_V entropy, delta_norm, rank with V = w^β ρ, β = BRANCH_WEIGHT_BETA."""
-    rho8_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
+    pauli_xyz_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
@@ -133,7 +133,7 @@ def _linear_weighted_metrics(
         parallel=parallel,
     )
     w_clean, _ = prepare_branch_weights(weights_ij, log_warnings=False)
-    v_w = build_weighted_v_matrix(rho8_ij, w_clean, BRANCH_WEIGHT_BETA)
+    v_w = build_weighted_v_matrix(pauli_xyz_ij, w_clean, BRANCH_WEIGHT_BETA)
     v_c = center_past_rows(v_w)
     ana = analyze_v_matrix(v_w, v_c)
     return {
@@ -155,7 +155,9 @@ def _list_initial_states_sys_env0(*, n_seeds: int, rng: np.random.Generator) -> 
     z = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     for _ in range(n_seeds):
         psi_sys = _random_pure_state(rng).astype(np.complex128)
-        psi = np.kron(psi_sys, z)
+        psi = psi_sys
+        for _ in range(L_FIXED - 1):
+            psi = np.kron(psi, z)
         nrm = float(np.linalg.norm(psi))
         out.append(psi / max(nrm, 1e-15))
     return out
