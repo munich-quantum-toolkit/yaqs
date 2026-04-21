@@ -166,6 +166,24 @@ def _reprepare_backend_state_forced(
     return new_mps, prob
 
 
+def _apply_backend_unitary_site_zero(
+    state: MPS | NDArray[np.complex128],
+    unitary: NDArray[np.complex128],
+    solver: str,
+) -> MPS | NDArray[np.complex128]:
+    """Apply a single-qubit unitary on site 0 without introducing measurement weight."""
+    u = np.asarray(unitary, dtype=np.complex128).reshape(2, 2)
+    if solver == "MCWF":
+        assert isinstance(state, np.ndarray)
+        psi = np.asarray(state, dtype=np.complex128).reshape(2, -1)
+        return (u @ psi).reshape(-1)
+    assert isinstance(state, MPS)
+    new_mps = copy.deepcopy(state)
+    t0 = np.asarray(new_mps.tensors[0], dtype=np.complex128)
+    new_mps.tensors[0] = np.einsum("ab,bcd->acd", u, t0)
+    return new_mps
+
+
 def _evolve_backend_state(
     state: MPS | NDArray[np.complex128],
     operator: MPO,

@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 from ..core.encoding import normalize_rho_from_backend_output, pack_rho8
 from ..core.utils import (
+    _apply_backend_unitary_site_zero,
     _evolve_backend_state,
     _get_rho_site_zero,
     _reprepare_backend_state_forced,
@@ -83,7 +84,8 @@ def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: f
 # ``_simulate_sequences`` passes the following dict to ``run_backend_parallel`` (initializer →
 # ``WORKER_CTX``) or directly to workers in the serial path. Keys must stay stable for pickling.
 #
-#   psi_pairs               list[list[(meas, prep)]] per sequence — Kraus-style intervention steps
+#   psi_pairs               list[list[step]] per sequence where step is either
+#                           (meas, prep) or {"type": "unitary", "U": (2x2)}
 #   initial_psi             list of MPS initial states (one per sequence)
 #   num_trajectories        MCWF trajectory index split (1 when noise_model is None)
 #   operator, sim_params    Hamiltonian MPO and analog parameters
@@ -101,7 +103,7 @@ def _get_times_cached(times_cache: dict[tuple[float, int], np.ndarray], *, dt: f
 # ---------------------------------------------------------------------------
 def _validate_comb_sequence_inputs(
     *,
-    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]],
+    psi_pairs_list: list[list[Any]],
     timesteps: list[float],
     timesteps_rows: list[list[float]] | None,
     operators_list: list[list[MPO]] | None,
@@ -250,9 +252,15 @@ def _final_state_rollout_core(
     break_step: int | None = None
     num_evolutions_in_loop = 0
 
-    for step_idx, (psi_meas, psi_prep) in enumerate(psi_pairs):
-        state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
-        sp = float(step_prob)
+    for step_idx, step in enumerate(psi_pairs):
+        if isinstance(step, dict) and str(step.get("type", "")).lower() == "unitary":
+            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
+            state = _apply_backend_unitary_site_zero(state, u, solver)
+            sp = 1.0
+        else:
+            psi_meas, psi_prep = step
+            state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
+            sp = float(step_prob)
         step_probs.append(sp)
         prob_skipped_renormalize.append(sp <= 1e-15)
         cumulative_weight *= sp
@@ -444,8 +452,14 @@ def _surrogate_rollout_worker(
     rho_sequence_packed = np.empty((num_steps, 8), dtype=np.float32)
     out_i = 0
 
-    for step_idx, (psi_meas, psi_prep) in enumerate(psi_pairs):
-        state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
+    for step_idx, step in enumerate(psi_pairs):
+        if isinstance(step, dict) and str(step.get("type", "")).lower() == "unitary":
+            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
+            state = _apply_backend_unitary_site_zero(state, u, solver)
+            step_prob = 1.0
+        else:
+            psi_meas, psi_prep = step
+            state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
         cumulative_weight *= float(step_prob)
         if cumulative_weight < 1e-15:
             if out_i < num_steps:
@@ -521,7 +535,7 @@ def _simulate_sequences(
     operator: MPO,
     sim_params: AnalogSimParams,
     timesteps: list[float],
-    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]],
+    psi_pairs_list: list[list[Any]],
     initial_psis: list[np.ndarray],
     static_ctx: Any,
     parallel: bool = True,
@@ -540,7 +554,7 @@ def _simulate_sequences(
         sim_params: Analog simulation parameters.
         timesteps: Comb schedule: ``k+1`` evolution durations per sequence (``U_1`` … ``U_{k+1}``)
             when ``timesteps_rows`` is omitted (shared across sequences; all must have the same ``k``).
-        psi_pairs_list: One list of ``k`` (measurement_ket, preparation_ket) pairs per sequence.
+        psi_pairs_list: One list of ``k`` intervention steps per sequence (MP tuples or unitary-step dicts).
         initial_psis: One initial state vector per sequence.
         static_ctx: Optional static backend context (used for MCWF preprocessing).
         parallel: Whether to use process-based parallelism over sequences.
@@ -682,7 +696,7 @@ def simulate_final_states_with_diagnostics(
     operator: MPO,
     sim_params: AnalogSimParams,
     timesteps: list[float],
-    psi_pairs_list: list[list[tuple[np.ndarray, np.ndarray]]],
+    psi_pairs_list: list[list[Any]],
     initial_psis: list[np.ndarray],
     static_ctx: Any,
     parallel: bool = True,

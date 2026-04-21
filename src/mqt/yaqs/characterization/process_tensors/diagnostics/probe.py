@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from ..core.encoding import _flatten_choi4_to_real32
 from ..surrogates.utils import _sample_random_intervention_parts
 
 
@@ -28,10 +29,10 @@ class ProbeSet:
     k: int
     past_features: np.ndarray
     future_features: np.ndarray
-    past_pairs: list[list[tuple[np.ndarray, np.ndarray]]]
+    past_pairs: list[list[Any]]
     past_cut_meas: list[np.ndarray]
     future_prep_cut: list[np.ndarray]
-    future_pairs: list[list[tuple[np.ndarray, np.ndarray]]]
+    future_pairs: list[list[Any]]
 
 
 class ProbeProcess(Protocol):
@@ -46,6 +47,26 @@ def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray
     psi_meas = _psi_from_rank1_projector(effect)
     psi_prep = _psi_from_rank1_projector(rho_prep)
     return feat.astype(np.float32), (psi_meas, psi_prep)
+
+
+def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
+    """Sample a Haar-like random single-qubit unitary via complex QR."""
+    a = rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2))
+    q, r = np.linalg.qr(a)
+    d = np.diag(r)
+    phases = np.ones_like(d, dtype=np.complex128)
+    nz = np.abs(d) > 1e-15
+    phases[nz] = d[nz] / np.abs(d[nz])
+    u = q @ np.diag(phases.conj())
+    return np.asarray(u, dtype=np.complex128)
+
+
+def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
+    """Encode unitary channel Choi matrix as the standard 32-float row."""
+    uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
+    vec_u = uu.reshape(4, order="F")
+    choi = np.outer(vec_u, vec_u.conj()).astype(np.complex128)
+    return _flatten_choi4_to_real32(choi).astype(np.float32)
 
 
 def _sample_cut_measurement_only(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
@@ -67,8 +88,14 @@ def sample_split_cut_probes(
     n_pasts: int,
     n_futures: int,
     rng: np.random.Generator,
+    intervention_mode: str = "unitary_break_mp",
 ) -> ProbeSet:
-    """Sample split-cut probe sets (past-measurement and future-preparation at cut)."""
+    """Sample split-cut probes.
+
+    Modes:
+    - ``unitary_break_mp`` (default): random unitary at non-break steps, MP at break.
+    - ``measure_prepare``: legacy all-random MP at all steps.
+    """
     c = int(cut)
     kk = int(k)
     if not (1 <= c <= kk):
@@ -77,15 +104,25 @@ def sample_split_cut_probes(
     past_full = c - 1
     future_full = kk - c
 
+    mode = str(intervention_mode).strip().lower()
+    if mode not in {"unitary_break_mp", "measure_prepare"}:
+        msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
+        raise ValueError(msg)
+
     past_features = np.empty((n_pasts, past_full + 1, 32), dtype=np.float32)
-    past_pairs: list[list[tuple[np.ndarray, np.ndarray]]] = []
+    past_pairs: list[list[Any]] = []
     past_cut_meas: list[np.ndarray] = []
     for i in range(n_pasts):
-        pairs_i: list[tuple[np.ndarray, np.ndarray]] = []
+        pairs_i: list[Any] = []
         for t in range(past_full):
-            feat, pair = _sample_step(rng)
-            past_features[i, t] = feat
-            pairs_i.append(pair)
+            if mode == "measure_prepare":
+                feat, pair = _sample_step(rng)
+                past_features[i, t] = feat
+                pairs_i.append(pair)
+            else:
+                u = _sample_random_unitary(rng)
+                past_features[i, t] = _unitary_to_choi_features(u)
+                pairs_i.append({"type": "unitary", "U": u})
         feat_m, psi_m = _sample_cut_measurement_only(rng)
         past_features[i, past_full] = feat_m
         past_cut_meas.append(psi_m)
@@ -93,16 +130,21 @@ def sample_split_cut_probes(
 
     future_features = np.empty((n_futures, 1 + future_full, 32), dtype=np.float32)
     future_prep_cut: list[np.ndarray] = []
-    future_pairs: list[list[tuple[np.ndarray, np.ndarray]]] = []
+    future_pairs: list[list[Any]] = []
     for j in range(n_futures):
         feat_p, psi_p = _sample_cut_preparation_only(rng)
         future_features[j, 0] = feat_p
         future_prep_cut.append(psi_p)
-        pairs_j: list[tuple[np.ndarray, np.ndarray]] = []
+        pairs_j: list[Any] = []
         for t in range(future_full):
-            feat, pair = _sample_step(rng)
-            future_features[j, 1 + t] = feat
-            pairs_j.append(pair)
+            if mode == "measure_prepare":
+                feat, pair = _sample_step(rng)
+                future_features[j, 1 + t] = feat
+                pairs_j.append(pair)
+            else:
+                u = _sample_random_unitary(rng)
+                future_features[j, 1 + t] = _unitary_to_choi_features(u)
+                pairs_j.append({"type": "unitary", "U": u})
         future_pairs.append(pairs_j)
 
     return ProbeSet(
@@ -117,16 +159,16 @@ def sample_split_cut_probes(
     )
 
 
-def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[tuple[np.ndarray, np.ndarray]]], int, int]:
+def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]:
     """Construct full sequence pair grid from split-cut probes."""
     c = int(probe_set.cut)
     kk = int(probe_set.k)
     n_p = len(probe_set.past_pairs)
     n_f = len(probe_set.future_pairs)
-    all_pairs: list[list[tuple[np.ndarray, np.ndarray]]] = []
+    all_pairs: list[list[Any]] = []
     for i in range(n_p):
         for j in range(n_f):
-            full: list[tuple[np.ndarray, np.ndarray]] = []
+            full: list[Any] = []
             for t in range(c - 1):
                 full.append(probe_set.past_pairs[i][t])
             full.append((probe_set.past_cut_meas[i], probe_set.future_prep_cut[j]))
