@@ -127,6 +127,10 @@ class LossClass:
 
         self.num_traj = num_traj
 
+        self.n_obs, self.n_t = np.shape(self.ref_traj_array)
+
+        self.loss_scale_factor = 1/(self.n_obs*self.n_t)
+
     def compute_avg(self) -> None:
         """Computes the average of the parameter history and appends it to the average history.
 
@@ -386,7 +390,7 @@ class LossClass:
 
         diff = self.obs_array - self.ref_traj_array
 
-        loss: float = np.sum(diff**2)
+        loss: float = np.sum(diff**2)*self.loss_scale_factor
 
         sim_time = end_time - start_time  # Simulation time
 
@@ -403,7 +407,7 @@ class LossClass:
                 obs_array_plus = copy.deepcopy(self.propagator.obs_array)
 
                 diff_plus = obs_array_plus - self.ref_traj_array
-                loss_plus = np.sum(diff_plus**2)
+                loss_plus = np.sum(diff_plus**2)*self.loss_scale_factor
 
                 grad[i] = (loss_plus - loss) / self.epsilon
 
