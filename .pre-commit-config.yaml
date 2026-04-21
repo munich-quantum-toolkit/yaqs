@@ -121,3 +121,14 @@ repos:
         types_or: [python, pyi, jupyter]
         exclude: ^(docs/)
         pass_filenames: false
+
+  ## Run test suite (manual stage: run with `pre-commit run --hook-stage manual tests`)
+  - repo: local
+    hooks:
+      - id: tests
+        name: tests
+        entry: uvx nox -s tests --verbose -- --cov --cov-report=xml:coverage-local.xml --cov-append
+        language: system
+        require_serial: true
+        pass_filenames: false
+        stages: [manual]
