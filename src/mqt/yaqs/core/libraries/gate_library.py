@@ -735,6 +735,7 @@ class Destroy(BaseGate):
         Args:
             d: Physical dimension.
         """
+        assert d > 0 and (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
 
         super().__init__(mat)
@@ -762,6 +763,7 @@ class Create(BaseGate):
         Args:
             d: Physical dimension.
         """
+        assert d > 0 and (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
 
         super().__init__(mat)
