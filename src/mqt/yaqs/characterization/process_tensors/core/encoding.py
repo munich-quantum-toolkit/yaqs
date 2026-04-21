@@ -5,7 +5,8 @@
 
 This includes:
 - fixed-basis Choi feature encodings (used by tomography basis code and surrogate utilities)
-- single-qubit density matrix encodings (rho8) and normalization helpers
+- single-qubit density matrix encodings (rho8) and Pauli ``(x,y,z)`` features for probing
+- normalization helpers
 """
 
 from __future__ import annotations
@@ -13,6 +14,11 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+
+# Pauli matrices for single-qubit Bloch expectations Tr(rho P).
+PAULI_X = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+PAULI_Y = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+PAULI_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
 
 
 def _flatten_choi4_to_real32(j: np.ndarray) -> np.ndarray:
@@ -110,6 +116,58 @@ def unpack_rho8(y: np.ndarray) -> np.ndarray:
         dtype=np.complex128,
     )
     return 0.5 * (rho + rho.conj().T)
+
+
+def rho_to_xyz(rho: np.ndarray) -> np.ndarray:
+    """Pauli expectation values :math:`(x,y,z)` with :math:`x=\\mathrm{Tr}(\\rho X)` etc.
+
+    Uses the same :math:`X,Y,Z` as the split-cut probing pipeline (no identity component).
+    """
+    r = np.asarray(rho, dtype=np.complex128).reshape(2, 2)
+    return np.array(
+        [
+            np.trace(r @ PAULI_X).real,
+            np.trace(r @ PAULI_Y).real,
+            np.trace(r @ PAULI_Z).real,
+        ],
+        dtype=np.float64,
+    )
+
+
+def pauli_xyz_to_rho(xyz: np.ndarray) -> np.ndarray:
+    """Reconstruct a :math:`2\\times 2` Hermitian matrix from Bloch coordinates, :math:`\\rho=\\frac12(I+xX+yY+zZ)`."""
+    t = np.asarray(xyz, dtype=np.float64).reshape(3)
+    x, y, z = float(t[0]), float(t[1]), float(t[2])
+    return 0.5 * (
+        np.eye(2, dtype=np.complex128)
+        + x * PAULI_X
+        + y * PAULI_Y
+        + z * PAULI_Z
+    )
+
+
+def packed_rho8_to_pauli_xyz_batch(packed: np.ndarray, *, normalize: bool = True) -> np.ndarray:
+    """Map backend ``rho8`` rows ``(..., 8)`` to Pauli ``(..., 3)`` features for :math:`V`.
+
+    Args:
+        packed: Last dimension 8 (``pack_rho8`` layout).
+        normalize: If ``True``, project each unpacked matrix to a physical density matrix
+            before taking expectations (same as rollout normalization path).
+
+    Returns:
+        Float64 array with shape ``packed.shape[:-1] + (3,)``.
+    """
+    p = np.asarray(packed, dtype=np.float32)
+    if p.shape[-1] != 8:
+        msg = f"packed_rho8_to_pauli_xyz_batch: expected last dim 8, got shape {p.shape}."
+        raise ValueError(msg)
+    flat = p.reshape(-1, 8)
+    out = np.empty((flat.shape[0], 3), dtype=np.float64)
+    for i in range(flat.shape[0]):
+        rho_u = unpack_rho8(flat[i])
+        rho = normalize_rho_from_backend_output(rho_u) if normalize else rho_u
+        out[i] = rho_to_xyz(rho)
+    return out.reshape(*p.shape[:-1], 3)
 
 
 def normalize_rho_from_backend_output(rho_final: Any) -> np.ndarray:

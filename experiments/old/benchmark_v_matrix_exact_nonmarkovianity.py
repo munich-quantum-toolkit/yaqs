@@ -53,7 +53,7 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.process_tensors.core.encoding import unpack_rho8
+from mqt.yaqs.characterization.process_tensors.core.encoding import pauli_xyz_to_rho, unpack_rho8
 from mqt.yaqs.characterization.process_tensors.diagnostics.exact import (
     ExactProbeProcess,
     evaluate_exact_probe_set_with_diagnostics,
@@ -221,12 +221,21 @@ def _average_analysis_dicts(analyses: list[dict[str, Any]]) -> dict[str, Any]:
     out["rank"] = int(round(float(np.mean([float(a["rank"]) for a in analyses]))))
     return out
 
-def _rho8_to_rho(rho8_ij: np.ndarray) -> np.ndarray:
-    n_p, n_f, _ = rho8_ij.shape
+def _probe_features_to_rho_ij(feat_ij: np.ndarray) -> np.ndarray:
+    """Map per-entry probe features to :math:`2\\times 2` matrices (``rho8`` or ``pauli_xyz``)."""
+    n_p, n_f, d = feat_ij.shape
     out = np.empty((n_p, n_f, 2, 2), dtype=np.complex128)
-    for i in range(n_p):
-        for j in range(n_f):
-            out[i, j] = unpack_rho8(rho8_ij[i, j])
+    if d == 8:
+        for i in range(n_p):
+            for j in range(n_f):
+                out[i, j] = unpack_rho8(feat_ij[i, j])
+    elif d == 3:
+        for i in range(n_p):
+            for j in range(n_f):
+                out[i, j] = pauli_xyz_to_rho(feat_ij[i, j])
+    else:
+        msg = f"Expected last dim 8 (rho8) or 3 (pauli_xyz), got {d}."
+        raise ValueError(msg)
     return out
 
 
@@ -271,7 +280,7 @@ def run_single_parameter_point(
     beta = float(getattr(args, "branch_weight_beta", 0.0))
 
     def _weighted_v_from_rollout(psi0: np.ndarray) -> dict[str, Any]:
-        rho8_ij, weights_ij, _traces = evaluate_exact_probe_set_with_diagnostics(
+        pauli_xyz_ij, weights_ij, _traces = evaluate_exact_probe_set_with_diagnostics(
             probe_set=probe_set,
             operator=op,
             sim_params=sim_params,
@@ -279,11 +288,11 @@ def run_single_parameter_point(
             parallel=bool(args.parallel),
         )
         w_clean, wmeta = prepare_branch_weights(weights_ij, log_warnings=True)
-        v_w = build_weighted_v_matrix(rho8_ij, w_clean, beta)
+        v_w = build_weighted_v_matrix(pauli_xyz_ij, w_clean, beta)
         v_c = center_past_rows(v_w)
         ana_w = analyze_v_matrix(v_w, v_c)
         return {
-            "rho8_ij": rho8_ij,
+            "pauli_xyz_ij": pauli_xyz_ij,
             "V": v_w,
             "V_centered": v_c,
             **ana_w,
@@ -309,13 +318,13 @@ def run_single_parameter_point(
                 probe_set=probe_set,
                 return_v=True,
             )
-            rho8_ij = out["rho8_ij"]
+            pauli_xyz_ij = out["pauli_xyz_ij"]
             v = out["V"]
             v_centered = out["V_centered"]
-            ana = {k: out[k] for k in out if k not in ("probe_set", "rho8_ij")}
+            ana = {k: out[k] for k in out if k not in ("probe_set", "pauli_xyz_ij")}
         else:
             out_w = _weighted_v_from_rollout(shared_initial_states[0])
-            rho8_ij = out_w["rho8_ij"]
+            pauli_xyz_ij = out_w["pauli_xyz_ij"]
             v = out_w["V"]
             v_centered = out_w["V_centered"]
             weights_ij = out_w["weights_ij"]
@@ -323,11 +332,11 @@ def run_single_parameter_point(
             ana = {
                 k: out_w[k]
                 for k in out_w
-                if k not in ("rho8_ij", "V", "V_centered", "weights_ij", "weight_preparation")
+                if k not in ("pauli_xyz_ij", "V", "V_centered", "weights_ij", "weight_preparation")
             }
     else:
         ana_list: list[dict[str, Any]] = []
-        rho8_first: np.ndarray | None = None
+        pauli_xyz_first: np.ndarray | None = None
         for idx, psi0 in enumerate(shared_initial_states):
             if abs(beta) <= 1e-15:
                 exact_process = ExactProbeProcess(
@@ -345,16 +354,16 @@ def run_single_parameter_point(
                 )
             else:
                 out_s = _weighted_v_from_rollout(psi0)
-            rho8_ij_s = out_s["rho8_ij"]
+            pauli_xyz_ij_s = out_s["pauli_xyz_ij"]
             if idx == 0:
-                rho8_first = rho8_ij_s
+                pauli_xyz_first = pauli_xyz_ij_s
                 if abs(beta) > 1e-15:
                     weights_ij = out_s["weights_ij"]
                     weight_preparation = out_s["weight_preparation"]
             ana_list.append(out_s)
-        if rho8_first is None:
-            raise RuntimeError("internal: no rho8 for n_seeds>1")
-        rho8_ij = rho8_first
+        if pauli_xyz_first is None:
+            raise RuntimeError("internal: no pauli_xyz_ij for n_seeds>1")
+        pauli_xyz_ij = pauli_xyz_first
         ana0 = ana_list[0]
         v = ana0["V"]
         v_centered = ana0["V_centered"]
@@ -390,7 +399,7 @@ def run_single_parameter_point(
     if weight_preparation is not None:
         point_summary["weight_preparation"] = weight_preparation
     if save_outputs:
-        rhos = _rho8_to_rho(rho8_ij)
+        rhos = _probe_features_to_rho_ij(pauli_xyz_ij)
         point_dir = out_dir / f"{case_name}_J{J:.3f}_g{g:.3f}"
         _save_point(
             out_point=point_dir,

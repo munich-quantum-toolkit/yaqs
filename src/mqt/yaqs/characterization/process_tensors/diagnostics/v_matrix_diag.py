@@ -50,24 +50,25 @@ def prepare_branch_weights(
 
 
 def build_weighted_v_matrix(
-    rho8_ij: np.ndarray,
+    pauli_xyz_ij: np.ndarray,
     weights_ij: np.ndarray,
     beta: float,
 ) -> np.ndarray:
-    """Construct :math:`V^{(\\beta)}_{i,(j,\\alpha)} = w_{ij}^{\\beta} [\\rho_{ij}]_\\alpha` (flattened).
+    """Construct :math:`V^{(\\beta)}_{i,(j,\\alpha)} = w_{ij}^{\\beta} f_{ij,\\alpha}` (flattened).
 
-    ``rho8_ij`` is ``(n_pasts, n_futures, 8)``; ``weights_ij`` is ``(n_pasts, n_futures)``.
+    ``pauli_xyz_ij`` is ``(n_pasts, n_futures, 3)`` with :math:`f=(x,y,z)` Pauli expectations;
+    ``weights_ij`` is ``(n_pasts, n_futures)``.
     """
-    n_p, n_f, d_out = rho8_ij.shape
+    n_p, n_f, d_out = pauli_xyz_ij.shape
     w = np.asarray(weights_ij, dtype=np.float64).reshape(n_p, n_f)
-    rho = np.asarray(rho8_ij, dtype=np.float64).reshape(n_p, n_f, d_out)
+    rho = np.asarray(pauli_xyz_ij, dtype=np.float64).reshape(n_p, n_f, d_out)
     scale = np.power(w, float(beta))
     scale_exp = np.repeat(scale[:, :, np.newaxis], d_out, axis=2)
     return (rho * scale_exp).reshape(n_p, n_f * d_out)
 
 
 def build_weighted_v_candidate_triple(
-    rho8_ij: np.ndarray,
+    pauli_xyz_ij: np.ndarray,
     weights_ij: np.ndarray,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, Any]]:
     """Build unweighted (β=0), ``weighted_sqrt`` (β=0.5), ``weighted_linear`` (β=1) raw and past-centered matrices.
@@ -78,18 +79,18 @@ def build_weighted_v_candidate_triple(
     """
     w_clean, wmeta = prepare_branch_weights(weights_ij)
     raw: dict[str, np.ndarray] = {
-        "unweighted": build_weighted_v_matrix(rho8_ij, w_clean, 0.0),
-        "weighted_sqrt": build_weighted_v_matrix(rho8_ij, w_clean, 0.5),
-        "weighted_linear": build_weighted_v_matrix(rho8_ij, w_clean, 1.0),
+        "unweighted": build_weighted_v_matrix(pauli_xyz_ij, w_clean, 0.0),
+        "weighted_sqrt": build_weighted_v_matrix(pauli_xyz_ij, w_clean, 0.5),
+        "weighted_linear": build_weighted_v_matrix(pauli_xyz_ij, w_clean, 1.0),
     }
     centered: dict[str, np.ndarray] = {k: center_past_rows(v) for k, v in raw.items()}
     return raw, centered, wmeta
 
 
-def build_v_variants(rho8_ij: np.ndarray) -> dict[str, np.ndarray]:
-    """Build raw and several centered variants of V from ``rho8_ij`` (n_p, n_f, 8)."""
-    n_p, n_f, d_out = rho8_ij.shape
-    v_raw = rho8_ij.reshape(n_p, n_f * d_out).astype(np.float64)
+def build_v_variants(pauli_xyz_ij: np.ndarray) -> dict[str, np.ndarray]:
+    """Build raw and several centered variants of V from ``pauli_xyz_ij`` (n_p, n_f, 3)."""
+    n_p, n_f, d_out = pauli_xyz_ij.shape
+    v_raw = pauli_xyz_ij.reshape(n_p, n_f * d_out).astype(np.float64)
     col_mean = v_raw.mean(axis=0, keepdims=True)
     v_centered_past = v_raw - col_mean
     global_mean = float(np.mean(v_raw))
@@ -238,7 +239,7 @@ def delta_norm_of_centered(v_raw: np.ndarray, v_c: np.ndarray) -> float:
     return float(fro_c_sq / fro_v_sq) if fro_v_sq > 0.0 else 0.0
 
 
-def entry_centered_block_norms(v_centered_past: np.ndarray, n_f: int, d: int = 8) -> np.ndarray:
+def entry_centered_block_norms(v_centered_past: np.ndarray, n_f: int, d: int = 3) -> np.ndarray:
     """Per-(i,j) Frobenius norm of the centered block (length d) for each future column."""
     n_p = v_centered_past.shape[0]
     out = np.zeros((n_p, n_f), dtype=np.float64)

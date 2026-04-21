@@ -75,7 +75,7 @@ def _weighted_centered_probabilities(
     psi0: np.ndarray,
     parallel: bool,
 ) -> np.ndarray:
-    rho8_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
+    pauli_xyz_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
@@ -83,7 +83,7 @@ def _weighted_centered_probabilities(
         parallel=parallel,
     )
     w_clean, _ = prepare_branch_weights(weights_ij, log_warnings=False)
-    v_w = build_weighted_v_matrix(rho8_ij, w_clean, BRANCH_WEIGHT_BETA)
+    v_w = build_weighted_v_matrix(pauli_xyz_ij, w_clean, BRANCH_WEIGHT_BETA)
     v_c = center_past_rows(v_w)
     ana = analyze_v_matrix(v_w, v_c)
     s = np.asarray(ana["singular_values"], dtype=np.float64)

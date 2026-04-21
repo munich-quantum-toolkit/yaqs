@@ -163,7 +163,7 @@ def run_weighted_point(
     op = MPO.ising(length=int(L), J=float(J), g=float(g))
     sim_params = AnalogSimParams(dt=float(dt), solver="MCWF", show_progress=False)
 
-    rho8, weights_ij, _traces = evaluate_exact_probe_set_with_diagnostics(
+    pauli_xyz, weights_ij, _traces = evaluate_exact_probe_set_with_diagnostics(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
@@ -171,10 +171,10 @@ def run_weighted_point(
         parallel=parallel,
     )
 
-    np.save(out_point / "rho8_ij.npy", rho8)
+    np.save(out_point / "pauli_xyz_ij.npy", pauli_xyz)
     np.save(out_point / "weights_ij.npy", weights_ij)
 
-    raw_by_name, centered_by_name, wmeta = build_weighted_v_candidate_triple(rho8, weights_ij)
+    raw_by_name, centered_by_name, wmeta = build_weighted_v_candidate_triple(pauli_xyz, weights_ij)
     if wmeta.get("weight_data_invalid"):
         warnings.warn(
             f"Weight sanity: invalid entries nan={wmeta['nan_count']} "

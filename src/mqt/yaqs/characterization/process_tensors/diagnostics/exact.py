@@ -8,6 +8,7 @@ import numpy as np
 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+from ..core.encoding import packed_rho8_to_pauli_xyz_batch
 from ..core.utils import make_mcwf_static_context
 from ..surrogates.workflow import _simulate_sequences, simulate_final_states_with_diagnostics
 from .probe import ProbeSet, build_all_pairs_grid
@@ -31,7 +32,12 @@ class ExactProbeProcess:
         self._static_ctx = make_mcwf_static_context(operator, sim_params, noise_model=None)
 
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
-        """Run exact backend for all (past, future) probe combinations."""
+        """Run exact backend for all (past, future) probe combinations.
+
+        Returns:
+            Array of shape ``(n_pasts, n_futures, 3)`` — Pauli :math:`(x,y,z)` expectations
+            from the final single-qubit reduced state (see :mod:`~mqt.yaqs.characterization.process_tensors.core.encoding`).
+        """
         all_pairs, n_p, n_f = build_all_pairs_grid(probe_set)
         n_tot = n_p * n_f
         initial_psis = [self.initial_psi.copy() for _ in range(n_tot)]
@@ -51,7 +57,8 @@ class ExactProbeProcess:
         if final_packed.shape[0] != n_tot:
             msg = f"Expected {n_tot} final states from exact simulation, got {final_packed.shape[0]}."
             raise RuntimeError(msg)
-        return final_packed.reshape(n_p, n_f, 8).astype(np.float32)
+        xyz = packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3)
+        return xyz.astype(np.float32)
 
 
 def evaluate_exact_probe_set_with_diagnostics(
@@ -65,8 +72,10 @@ def evaluate_exact_probe_set_with_diagnostics(
     """Exact rollout with per-sequence diagnostics (branch weights, early termination).
 
     Returns:
-        ``(rho8_ij, weights_ij, traces_flat)`` where ``weights_ij[i,j] = cumulative_weight_final``
-        and ``traces_flat[i * n_f + j]`` matches the sequence order of :func:`build_all_pairs_grid`.
+        ``(pauli_xyz_ij, weights_ij, traces_flat)`` where ``pauli_xyz_ij`` has shape
+        ``(n_pasts, n_futures, 3)`` (Pauli expectations :math:`x,y,z` from the final reduced state),
+        ``weights_ij[i,j] = cumulative_weight_final``, and ``traces_flat[i * n_f + j]`` matches the
+        sequence order of :func:`build_all_pairs_grid`.
     """
     all_pairs, n_p, n_f = build_all_pairs_grid(probe_set)
     n_tot = n_p * n_f
@@ -83,11 +92,11 @@ def evaluate_exact_probe_set_with_diagnostics(
     )
     if not isinstance(final_packed, np.ndarray):
         raise RuntimeError("Expected ndarray output from exact simulation.")
-    rho8 = final_packed.reshape(n_p, n_f, 8).astype(np.float32)
+    pauli_xyz = packed_rho8_to_pauli_xyz_batch(final_packed.reshape(n_p * n_f, 8)).reshape(n_p, n_f, 3).astype(np.float32)
     w = np.zeros((n_p, n_f), dtype=np.float64)
     for ii in range(n_p):
         for jj in range(n_f):
             idx = ii * n_f + jj
             w[ii, jj] = float(traces[idx]["cumulative_weight_final"])
-    return rho8, w, traces
+    return pauli_xyz, w, traces
 

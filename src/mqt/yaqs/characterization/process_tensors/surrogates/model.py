@@ -22,7 +22,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from ..diagnostics.probe import ProbeSet, probe_process
-from ..core.encoding import normalize_rho_from_backend_output, pack_rho8
+from ..core.encoding import normalize_rho_from_backend_output, pack_rho8, packed_rho8_to_pauli_xyz_batch
 from .utils import _choi_features_from_parts
 
 # Computational-basis |0⟩⟨0| (same convention as :func:`~mqt.yaqs.characterization.process_tensors.surrogates.workflow.generate_data` rollouts).
@@ -265,7 +265,7 @@ class TransformerComb(nn.Module):
         n_f = len(probe_set.future_pairs)
         past_len = int(probe_set.cut) - 1
         suffix_len = int(probe_set.k) - int(probe_set.cut)
-        v_rows = np.empty((n_p, n_f, self.d_rho), dtype=np.float32)
+        v_rows = np.empty((n_p, n_f, 3), dtype=np.float32)
         dev = next(self.parameters()).device
         rho0 = self._default_rho0(device=dev, dtype=torch.float32)
         was_training = self.training
@@ -294,7 +294,8 @@ class TransformerComb(nn.Module):
                 seq = np.concatenate([past_batch, cut_step, future_suffix], axis=1)
                 seq_t = torch.from_numpy(seq).to(device=dev, dtype=torch.float32)
                 rho_pred_batch = self.predict_final_state_batch(rho0, seq_t, restore_training=False)
-                v_rows[i] = rho_pred_batch.detach().cpu().numpy().astype(np.float32)
+                packed_np = rho_pred_batch.detach().cpu().numpy().astype(np.float32)
+                v_rows[i] = packed_rho8_to_pauli_xyz_batch(packed_np).astype(np.float32)
         finally:
             if was_training:
                 self.train()

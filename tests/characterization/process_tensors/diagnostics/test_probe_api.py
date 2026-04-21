@@ -27,10 +27,10 @@ def test_probe_process_uses_object_backend() -> None:
         def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
             n_p = len(probe_set.past_pairs)
             n_f = len(probe_set.future_pairs)
-            return np.zeros((n_p, n_f, 8), dtype=np.float32)
+            return np.zeros((n_p, n_f, 3), dtype=np.float32)
 
     out = probe_process(process=DummyProcess(), cut=1, k=1, n_pasts=2, n_futures=3, rng=np.random.default_rng(7))
-    assert out["rho8_ij"].shape == (2, 3, 8)
+    assert out["pauli_xyz_ij"].shape == (2, 3, 3)
     assert "entropy" in out
 
 
@@ -67,6 +67,6 @@ def test_exact_probe_process_builds_static_ctx_internally(monkeypatch) -> None: 
     probe_set = _make_minimal_probe_set(cut=1, k=1, n_p=2, n_f=3)
     out = process.evaluate_probe_set(probe_set)
 
-    assert out.shape == (2, 3, 8)
+    assert out.shape == (2, 3, 3)
     assert calls["ctx_args"] == (op, sim, None)
     assert calls["simulate_kwargs"]["static_ctx"] == "CTX"

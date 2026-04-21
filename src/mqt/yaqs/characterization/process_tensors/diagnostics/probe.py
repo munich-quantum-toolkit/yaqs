@@ -38,7 +38,7 @@ class ProbeProcess(Protocol):
     """Minimal backend contract for object-first process probing."""
 
     def evaluate_probe_set(self, probe_set: ProbeSet) -> np.ndarray:
-        """Return packed outputs shaped ``(n_pasts, n_futures, d_out)``."""
+        """Return probe responses shaped ``(n_pasts, n_futures, 3)`` (Pauli :math:`x,y,z`)."""
 
 
 def _sample_step(rng: np.random.Generator) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
@@ -138,9 +138,10 @@ def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[tuple[np.ndarra
     return all_pairs, n_p, n_f
 
 
-def build_v_matrix(rho8_ij: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    n_p, n_f, d_out = rho8_ij.shape
-    v = rho8_ij.reshape(n_p, n_f * d_out).astype(np.float64)
+def build_v_matrix(pauli_xyz_ij: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Flatten Pauli features ``(n_p, n_f, 3)`` into rows of :math:`V` (order preserved)."""
+    n_p, n_f, d_out = pauli_xyz_ij.shape
+    v = pauli_xyz_ij.reshape(n_p, n_f * d_out).astype(np.float64)
     v_centered = v - v.mean(axis=0, keepdims=True)
     return v, v_centered
 
@@ -250,11 +251,11 @@ def probe_process(
         if rng is None:
             rng = np.random.default_rng()
         probe_set = sample_split_cut_probes(cut=cut, k=k, n_pasts=n_pasts, n_futures=n_futures, rng=rng)
-    rho8_ij = process.evaluate_probe_set(probe_set).astype(np.float32)
-    v, v_centered = build_v_matrix(rho8_ij)
+    pauli_xyz_ij = process.evaluate_probe_set(probe_set).astype(np.float32)
+    v, v_centered = build_v_matrix(pauli_xyz_ij)
     ana = analyze_v_matrix(v, v_centered)
     out: dict[str, Any] = {
-        "rho8_ij": rho8_ij,
+        "pauli_xyz_ij": pauli_xyz_ij,
         **ana,
         "probe_set": probe_set,
     }

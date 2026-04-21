@@ -178,7 +178,7 @@ def run_diagnostic_point(
     op = MPO.ising(length=int(L), J=float(J), g=float(g))
     sim_params = AnalogSimParams(dt=float(dt), solver="MCWF", show_progress=False)
 
-    rho8, weights_ij, traces = evaluate_exact_probe_set_with_diagnostics(
+    pauli_xyz, weights_ij, traces = evaluate_exact_probe_set_with_diagnostics(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
@@ -188,7 +188,7 @@ def run_diagnostic_point(
     n_p, n_f = int(n_pasts), int(n_futures)
     fields = traces_flat_to_ij_arrays(traces, n_p=n_p, n_f=n_f)
 
-    np.save(out_point / "rho8_ij.npy", rho8)
+    np.save(out_point / "pauli_xyz_ij.npy", pauli_xyz)
     np.save(out_point / "weights.npy", weights_ij)
     np.save(out_point / "terminated_early.npy", fields["terminated_early"])
     np.save(out_point / "break_step.npy", fields["break_step"])
@@ -203,7 +203,7 @@ def run_diagnostic_point(
     mean_w = float(np.mean(wflat))
     med_w = float(np.median(wflat))
 
-    variants = build_v_variants(rho8)
+    variants = build_v_variants(pauli_xyz)
     v_raw = variants["V_raw"]
     v_cp = variants["V_centered_past"]
     v_cg = variants["V_centered_global"]
@@ -229,8 +229,8 @@ def run_diagnostic_point(
     sum_raw = row_distance_summary(v_raw)
     sum_cp = row_distance_summary(v_cp)
 
-    entry_rho_norm = np.linalg.norm(rho8, axis=2)
-    centered_blk = entry_centered_block_norms(v_cp, n_f, d=8)
+    entry_rho_norm = np.linalg.norm(pauli_xyz, axis=2)
+    centered_blk = entry_centered_block_norms(v_cp, n_f, d=3)
 
     corr_w = correlation_weight_vs_entry_norm(weights_ij, centered_blk)
     corr_te = correlation_terminated_vs_entry_norm(fields["terminated_early"], centered_blk)
@@ -587,12 +587,12 @@ def main() -> None:
                         mode_rows.append(summary)
 
                         if not args.skip_plots:
-                            rho8 = np.load(out_point / "rho8_ij.npy")
+                            pauli_xyz = np.load(out_point / "pauli_xyz_ij.npy")
                             w = np.load(out_point / "weights.npy")
                             term = np.load(out_point / "terminated_early.npy")
                             s_raw = np.load(out_point / "singular_values_raw.npy")
                             s_c = np.load(out_point / "singular_values_centered.npy")
-                            en = np.linalg.norm(rho8, axis=2)
+                            en = np.linalg.norm(pauli_xyz, axis=2)
                             plot_point_heatmaps(
                                 out_plot=out_point / "fig_diagnostics",
                                 weights=w,
