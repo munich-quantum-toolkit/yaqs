@@ -46,8 +46,8 @@ from mqt.yaqs.characterization.process_tensors.surrogates.utils import _random_p
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-L_FIXED = 2
-K_FIXED = 10
+L_FIXED = 6
+K_FIXED = 20
 DT_FIXED = 0.1
 G_FIXED = 1.0
 J_SWEEP_DEFAULT = [0.2 * i for i in range(11)]  # 0.0 ... 2.0
@@ -60,7 +60,7 @@ HEATMAP_COLOR_VMIN = 1e-4
 HEATMAP_COLOR_VMAX = 1.0
 
 # Panel 2: $S_V$ vs $J$ at these fixed cuts $c$.
-PANEL2_FIXED_CUTS: tuple[int, ...] = (5, 10, 15)
+PANEL2_FIXED_CUTS: tuple[int, ...] = (10, 15, 19)
 
 # Panel 3: $S_V$ vs $c$ at these representative $J$ targets (nearest $J$ in the summary sweep).
 PANEL3_TARGET_JS: tuple[float, ...] = (0.4, 1.0, 2.0)
@@ -73,7 +73,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--cuts",
         type=str,
-        default="1,2,3,4,5,6,7,8,9,10",
+        default="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",
         help='Comma-separated cuts c to run (1..20), e.g. "1,4,7,10,13,16,20".',
     )
     p.add_argument("--seed", type=int, default=0)
@@ -125,7 +125,7 @@ def _linear_weighted_metrics(
     parallel: bool,
 ) -> dict[str, float | int]:
     """Past-centered S_V entropy, delta_norm, rank with V = w^β ρ, β = BRANCH_WEIGHT_BETA."""
-    pauli_xyz_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
+    rho8_ij, weights_ij, _ = evaluate_exact_probe_set_with_diagnostics(
         probe_set=probe_set,
         operator=op,
         sim_params=sim_params,
@@ -133,7 +133,7 @@ def _linear_weighted_metrics(
         parallel=parallel,
     )
     w_clean, _ = prepare_branch_weights(weights_ij, log_warnings=False)
-    v_w = build_weighted_v_matrix(pauli_xyz_ij, w_clean, BRANCH_WEIGHT_BETA)
+    v_w = build_weighted_v_matrix(rho8_ij, w_clean, BRANCH_WEIGHT_BETA)
     v_c = center_past_rows(v_w)
     ana = analyze_v_matrix(v_w, v_c)
     return {
