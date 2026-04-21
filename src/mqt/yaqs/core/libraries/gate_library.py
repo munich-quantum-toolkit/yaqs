@@ -1542,6 +1542,8 @@ class Crosstalk(BaseGate):
             gate2: Right operand gate.
         """
         self.name = f"crosstalk_{gate1.name}_{gate2.name}"
+        self.matrix1 = gate1.matrix
+        self.matrix2 = gate2.matrix
         mat = np.kron(gate1.matrix, gate2.matrix).astype(np.complex128)
         super().__init__(mat)
 
