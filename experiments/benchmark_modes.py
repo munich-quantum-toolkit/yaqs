@@ -103,6 +103,7 @@ def run_benchmark(args: argparse.Namespace) -> tuple[list[dict[str, float | int]
     rank_rows: list[dict[str, float | int]] = []
 
     for cut in cuts:
+        print("Cut", cut)
         for jv in spec_js:
             op = MPO.ising(length=L_FIXED, J=float(jv), g=G_FIXED)
             per_draw_vectors: list[np.ndarray] = []

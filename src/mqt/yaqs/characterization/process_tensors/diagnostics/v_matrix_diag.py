@@ -110,7 +110,7 @@ def _svd_spectrum_entropy_rank(
     mat: np.ndarray,
     *,
     tol_ratio: float = 1e-10,
-    discarded_weight_threshold: float | None = 1e-3,
+    discarded_weight_threshold: float | None = 1e-16,
     min_keep: int = 1,
 ) -> tuple[np.ndarray, float, int, float, float]:
     """SVD diagnostics with optional TDVP-style discarded-weight truncation.

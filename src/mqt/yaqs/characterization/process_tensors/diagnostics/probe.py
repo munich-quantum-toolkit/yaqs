@@ -215,7 +215,7 @@ def analyze_v_matrix(
     discarded_weight = 0.0
     discarded_fraction = 0.0
 
-    discarded_weight_threshold = 1e-16
+    discarded_weight_threshold = 0
     if s.size and discarded_weight_threshold is not None and total_weight > 0.0:
         thr = max(float(discarded_weight_threshold), 0.0)
         min_keep_eff = max(1, min(int(min_keep), int(s.size)))
