@@ -1624,6 +1624,38 @@ class CrosstalkZY(Crosstalk):
         super().__init__(Z(), Y())
 
 
+class CrosstalkDestroyDestroy(Crosstalk):
+    """Crosstalk Destroy ⊗ Destroy."""
+
+    def __init__(self) -> None:
+        """Initializes Destroy ⊗ Destroy crosstalk."""
+        super().__init__(Destroy(), Destroy())
+
+
+class CrosstalkCreateCreate(Crosstalk):
+    """Crosstalk Create ⊗ Create."""
+
+    def __init__(self) -> None:
+        """Initializes Create ⊗ Create crosstalk."""
+        super().__init__(Create(), Create())
+
+
+class CrosstalkDestroyCreate(Crosstalk):
+    """Crosstalk Destroy ⊗ Create."""
+
+    def __init__(self) -> None:
+        """Initializes Destroy ⊗ Create crosstalk."""
+        super().__init__(Destroy(), Create())
+
+
+class CrosstalkCreateDestroy(Crosstalk):
+    """Crosstalk Create ⊗ Destroy."""
+
+    def __init__(self) -> None:
+        """Initializes Create ⊗ Destroy crosstalk."""
+        super().__init__(Create(), Destroy())
+
+
 class P0(BaseGate):
     """Class representing the projector onto |0⟩⟨0|.
 
@@ -1873,7 +1905,9 @@ class GateLibrary:
     xx = XX
     yy = YY
     zz = ZZ
+
     crosstalk = Crosstalk
+
     crosstalk_xx = CrosstalkXX
     crosstalk_yy = CrosstalkYY
     crosstalk_zz = CrosstalkZZ
@@ -1883,6 +1917,7 @@ class GateLibrary:
     crosstalk_zx = CrosstalkZX
     crosstalk_yz = CrosstalkYZ
     crosstalk_zy = CrosstalkZY
+
     longrange_crosstalk_xx = CrosstalkXX
     longrange_crosstalk_yy = CrosstalkYY
     longrange_crosstalk_zz = CrosstalkZZ
@@ -1892,6 +1927,18 @@ class GateLibrary:
     longrange_crosstalk_zx = CrosstalkZX
     longrange_crosstalk_yz = CrosstalkYZ
     longrange_crosstalk_zy = CrosstalkZY
+
+    crosstalk_destroy_destroy = CrosstalkDestroyDestroy
+    crosstalk_create_create = CrosstalkCreateCreate
+    crosstalk_destroy_create = CrosstalkDestroyCreate
+    crosstalk_create_destroy = CrosstalkCreateDestroy
+    longrange_crosstalk_destroy_destroy = CrosstalkDestroyDestroy
+    longrange_crosstalk_create_create = CrosstalkCreateCreate
+    longrange_crosstalk_destroy_create = CrosstalkDestroyCreate
+    longrange_crosstalk_create_destroy = CrosstalkCreateDestroy
+
+    raising_two = CrosstalkCreateCreate
+    lowering_two = CrosstalkDestroyDestroy
 
     p0 = P0
     p1 = P1
@@ -1912,3 +1959,4 @@ class GateLibrary:
     pauli_z = Z
     pauli_x = X
     pauli_y = Y
+    dephasing = Z

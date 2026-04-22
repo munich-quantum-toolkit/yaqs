@@ -138,8 +138,8 @@ def test_lindblad_dephasing_both_qubits() -> None:
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
     gamma = 0.5
     noise_processes = [
-        {"name": "dephasing_0", "sites": [0], "strength": gamma, "matrix": sigma_z},
-        {"name": "dephasing_1", "sites": [1], "strength": gamma, "matrix": sigma_z},
+        {"name": "dephasing", "sites": [0], "strength": gamma, "matrix": sigma_z},
+        {"name": "dephasing", "sites": [1], "strength": gamma, "matrix": sigma_z},
     ]
 
     noise_model = NoiseModel(processes=noise_processes)
