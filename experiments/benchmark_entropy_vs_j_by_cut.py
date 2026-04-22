@@ -68,8 +68,8 @@ PANEL3_TARGET_JS: tuple[float, ...] = (0.4, 1.0, 2.0)
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-pasts", type=int, default=8)
-    p.add_argument("--n-futures", type=int, default=8)
+    p.add_argument("--n-pasts", type=int, default=32)
+    p.add_argument("--n-futures", type=int, default=32)
     p.add_argument(
         "--cuts",
         type=str,
