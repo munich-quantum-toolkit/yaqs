@@ -138,30 +138,32 @@ class BaseGate:
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
     sites: list[int]
 
-    def __init__(self, mat: NDArray[np.complex128]) -> None:
+    def __init__(self, mat: NDArray[np.complex128], local_dim: int = 2) -> None:
         """Initializes a BaseGate instance with the given matrix.
 
         Args:
             mat: The matrix representation of the gate.
+            local_dim: Local Hilbert space dimension per site (e.g. 2 for qubits, 3 for qutrits).
 
         Raises:
             ValueError: If the matrix is not square.
-            ValueError: If the matrix size is not a power of 2.
+            ValueError: If the matrix size is not a power of local_dim.
         """
         if mat.shape[0] != mat.shape[1]:
             msg = "Matrix must be square"
             raise ValueError(msg)
 
         n = mat.shape[0]
-        if n == 0 or (n & (n - 1)) != 0:
-            msg = f"Matrix size must be a power of 2, got {n}"
+
+        interaction = np.log(n) / np.log(local_dim)
+        if not np.isclose(interaction, round(interaction)):
+            msg = f"Matrix size {n} is not a power of {local_dim}"
             raise ValueError(msg)
 
-        log = np.log2(n)
-
+        self.local_dim = local_dim
         self.matrix = mat
         self.tensor = mat
-        self.interaction = int(log)
+        self.interaction = round(interaction)
 
     def set_sites(self, *sites: int | list[int]) -> None:
         """Sets the sites for the gate.
@@ -754,7 +756,6 @@ class Destroy(BaseGate):
             d: Physical dimension.
         """
         assert d > 0, f"d must be positive, got {d}"
-        assert (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
 
         super().__init__(mat)
@@ -783,7 +784,6 @@ class Create(BaseGate):
             d: Physical dimension.
         """
         assert d > 0, f"d must be positive, got {d}"
-        assert (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
 
         super().__init__(mat)
@@ -1542,14 +1542,21 @@ class Crosstalk(BaseGate):
         Args:
             gate1: Left operand gate.
             gate2: Right operand gate.
+
+        Raises:
+            ValueError: If the gates have different local dimensions.
         """
+        if gate1.local_dim != gate2.local_dim:
+            msg = f"Crosstalk gates must have the same local dimension, got {gate1.local_dim} and {gate2.local_dim}"
+            raise ValueError(msg)
+
         self.name = f"crosstalk_{gate1.name}_{gate2.name}"
         self.matrix1 = gate1.matrix
         self.matrix2 = gate2.matrix
         self.swapped_matrix = np.kron(gate2.matrix, gate1.matrix).astype(np.complex128)
 
         mat = np.kron(gate1.matrix, gate2.matrix).astype(np.complex128)
-        super().__init__(mat)
+        super().__init__(mat, local_dim=gate1.local_dim)
 
 
 class CrosstalkXX(Crosstalk):
