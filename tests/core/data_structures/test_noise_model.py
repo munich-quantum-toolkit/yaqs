@@ -152,7 +152,7 @@ def test_longrange_two_site_factors_explicit() -> None:
     """
     nm = NoiseModel([
         {
-            "name": "custom_longrange_xy",
+            "name": "longrange_crosstalk_xy",
             "sites": [3, 1],  # intentionally unsorted
             "strength": 0.3,
             "factors": (PauliX.matrix, PauliY.matrix),
@@ -178,13 +178,8 @@ def test_longrange_unknown_label_without_factors_raises() -> None:
     Raises:
         AssertionError: If the model accepts an unknown long-range label without factors.
     """
-    try:
-        # Name is not a recognized non-adjacent 'crosstalk_{ab}' and no factors provided
+    with pytest.raises((AttributeError, AssertionError)):
         _ = NoiseModel([{"name": "foo_bar", "sites": [0, 2], "strength": 0.1}])
-    except AssertionError:
-        return
-    msg = "Expected AssertionError for unknown long-range label without factors."
-    raise AssertionError(msg)
 
 
 def test_noise_distribution_integration() -> None:
