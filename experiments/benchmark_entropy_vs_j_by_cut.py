@@ -50,7 +50,7 @@ L_FIXED = 6
 K_FIXED = 20
 DT_FIXED = 0.1
 G_FIXED = 1.0
-J_SWEEP_DEFAULT = [0.2 * i for i in range(11)]  # 0.0 ... 2.0
+J_SWEEP_DEFAULT = [0.05 * i for i in range(41)]  # 0.0 ... 2.0 (fine sweep)
 
 # Fixed linear weighting (β=1); matches branch-weight β=1 in the exact V-matrix benchmark.
 BRANCH_WEIGHT_BETA = 1.0
@@ -322,9 +322,10 @@ def plot_entropy_heatmap_cut_vs_j(
     rows: list[dict[str, str | float | int]],
     out_stem: Path,
 ) -> None:
-    """PRL-oriented three-panel figure with dominant heatmap and compact supporting slices."""
+    """Hierarchy layout: dominant heatmap with two supporting cross-sections."""
     import matplotlib.pyplot as plt
-    from matplotlib.colors import LogNorm
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import LogNorm, Normalize
     from matplotlib.ticker import LogLocator, MaxNLocator, NullLocator
 
     if not rows:
@@ -360,23 +361,24 @@ def plot_entropy_heatmap_cut_vs_j(
         return float(j_arr[int(np.argmin(np.abs(j_arr - float(target))))])
 
     _configure_matplotlib_prl_figure()
-    # Two-column PRL width with panel (a) visually dominant.
-    fig_w_in = 7.2
-    fig_h_in = 2.25
-    fig, axes = plt.subplots(
-        1,
-        3,
-        figsize=(fig_w_in, fig_h_in),
-        constrained_layout=True,
-        gridspec_kw={"width_ratios": [1.35, 1.0, 1.0], "wspace": 0.06},
-    )
-    ax0, ax1, ax2 = axes
+    fig = plt.figure(figsize=(7.0, 3.8), constrained_layout=True)
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.9, 1.0], height_ratios=[1.0, 1.0], wspace=0.06, hspace=0.08)
+    ax0 = fig.add_subplot(gs[:, 0])  # dominant heatmap
+    ax1 = fig.add_subplot(gs[0, 1])  # S vs J
+    ax2 = fig.add_subplot(gs[1, 1])  # S vs c
 
-    z_plot = np.ma.masked_where(~np.isfinite(z) | (z <= 0), z)
-    z_mesh = np.ma.transpose(z_plot)
+    # Show exact zeros explicitly in black via colormap "under" color.
+    # Positive values remain on the log color scale [HEATMAP_COLOR_VMIN, HEATMAP_COLOR_VMAX].
+    z_plot = np.where(
+        np.isfinite(z),
+        np.where(z <= 0.0, HEATMAP_COLOR_VMIN * 0.1, np.maximum(z, HEATMAP_COLOR_VMIN)),
+        np.nan,
+    )
+    z_mesh = np.ma.masked_invalid(np.transpose(z_plot))
 
     norm = LogNorm(vmin=HEATMAP_COLOR_VMIN, vmax=HEATMAP_COLOR_VMAX)
     cmap = plt.get_cmap("cividis").copy()
+    cmap.set_under(color="black")
     cmap.set_bad(color=(1.0, 1.0, 1.0, 0.0))
 
     im = ax0.pcolormesh(
@@ -410,25 +412,45 @@ def plot_entropy_heatmap_cut_vs_j(
     for spine in ax0.spines.values():
         spine.set_linewidth(0.5)
 
-    panel2_colors = ("#1f4e79", "#3b7ea1", "#4c956c", "#9aa44f", "#6b7280")
-    for ic, c_sel in enumerate(PANEL2_FIXED_CUTS):
-        if c_sel not in cuts:
-            continue
+    # Representative slices.
+    panel2_targets = (3, 8, 11, 19)
+    panel2_cuts = [c for c in panel2_targets if c in cuts]
+    panel3_targets = (0.4, 0.8, 1.2, 1.6, 2.0)
+    panel3_js: list[float] = []
+    for jt in panel3_targets:
+        ju = nearest_j(jt)
+        if ju not in panel3_js and ju > 0.0:
+            panel3_js.append(ju)
+
+    # Heatmap slice guides.
+    for c_sel in panel2_cuts:
+        ax0.axvline(float(c_sel), color="white", lw=0.45, ls="--", alpha=0.08, zorder=3)
+    guide_cmap = plt.get_cmap("viridis")
+    guide_norm = Normalize(vmin=min(j_vals), vmax=max(j_vals)) if j_vals else Normalize(vmin=0, vmax=1)
+    for j_sel in panel3_js:
+        ax0.axhline(float(j_sel), color=guide_cmap(guide_norm(j_sel)), lw=0.45, ls="--", alpha=0.10, zorder=3)
+
+    # Panel (b): S_V vs J at a few representative fixed cuts (raw points + straight lines).
+    panel2_cmap = plt.get_cmap("plasma")
+    panel2_norm = Normalize(vmin=min(panel2_cuts), vmax=max(panel2_cuts)) if panel2_cuts else Normalize(vmin=0, vmax=1)
+    for c_sel in panel2_cuts:
         sub = sorted((r for r in rows if int(float(r["cut"])) == c_sel), key=lambda r: float(r["J"]))
         if not sub:
             continue
         xs = [float(r["J"]) for r in sub]
-        ys = [max(float(r["entropy"]), 1e-30) for r in sub]
+        ys = [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in sub]
         ax1.semilogy(
             xs,
             ys,
-            color=panel2_colors[ic % len(panel2_colors)],
-            lw=1.1,
+            color=panel2_cmap(panel2_norm(c_sel)),
+            lw=1.05,
+            marker="o",
+            ms=2.1,
+            alpha=0.95,
             label=rf"$c={c_sel}$",
         )
     ax1.set_xlabel(r"Coupling $J$")
     ax1.set_ylabel(r"$S_V$")
-    ax1.set_ylim(1e-3, 1)
     ax1.tick_params(which="both", direction="in", top=True, right=True, length=2.5, width=0.35)
     ax1.xaxis.set_major_locator(MaxNLocator(nbins=5, prune=None))
     ax1.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
@@ -436,46 +458,39 @@ def plot_entropy_heatmap_cut_vs_j(
     ax1.grid(True, which="major", axis="y", alpha=0.1, linewidth=0.3)
     for s in ax1.spines.values():
         s.set_linewidth(0.45)
-    leg1 = ax1.legend(
+    ax1.legend(
         title="Cuts",
         loc="lower right",
         frameon=True,
         fancybox=False,
-        edgecolor="0.55",
-        framealpha=0.85,
-        borderpad=0.22,
+        edgecolor="0.70",
+        framealpha=0.78,
         handlelength=1.4,
         handletextpad=0.35,
         borderaxespad=0.18,
     )
-    leg1.get_title().set_fontsize(5.8)
-    leg1.get_frame().set_linewidth(0.35)
-    for t in leg1.get_texts():
-        t.set_fontsize(6.1)
 
+    # Panel (c): S_V vs c at representative couplings (raw discrete points + straight segments).
     xs_c = list(cuts)
-    panel3_colors = ("#8c564b", "#1f77b4", "#2a9d8f", "#4c4c4c")
-    seen_j: set[float] = set()
-    color_i = 0
-    for j_tgt in PANEL3_TARGET_JS:
-        j_use = nearest_j(j_tgt)
-        if j_use in seen_j:
-            continue
-        seen_j.add(j_use)
+    panel3_cmap = plt.get_cmap("viridis")
+    panel3_norm = Normalize(vmin=min(j_vals), vmax=max(j_vals)) if j_vals else Normalize(vmin=0, vmax=1)
+    for j_use in panel3_js:
         ji = j_vals.index(j_use)
-        ys_s = [max(float(z[ci, ji]), 1e-30) for ci in range(len(cuts))]
-        lbl = f"$J={j_use:g}$"
+        ys_s = np.asarray([max(float(z[ci, ji]), HEATMAP_COLOR_VMIN) for ci in range(len(cuts))], dtype=np.float64)
+        col = panel3_cmap(panel3_norm(j_use))
         ax2.semilogy(
             xs_c,
             ys_s,
-            color=panel3_colors[color_i % len(panel3_colors)],
-            lw=1.25,
-            label=lbl,
+            ls="-",
+            lw=0.9,
+            marker="o",
+            ms=2.7,
+            alpha=0.9,
+            color=col,
+            label=rf"$J={j_use:g}$",
         )
-        color_i += 1
     ax2.set_xlabel(r"Causal cut $c$")
     ax2.set_ylabel(r"$S_V$")
-    ax2.set_ylim(1e-3, 1)
     ax2.tick_params(which="both", direction="in", top=True, right=True, length=2.5, width=0.35)
     if len(cuts) <= 25:
         ax2.set_xticks(cuts)
@@ -485,34 +500,37 @@ def plot_entropy_heatmap_cut_vs_j(
     ax2.grid(True, which="major", axis="y", alpha=0.1, linewidth=0.3)
     for s in ax2.spines.values():
         s.set_linewidth(0.45)
-    leg2 = ax2.legend(
+    ax2.legend(
         title="Couplings",
-        loc="lower right",
+        loc="upper left",
         frameon=True,
         fancybox=False,
-        edgecolor="0.55",
-        framealpha=0.85,
-        borderpad=0.22,
+        edgecolor="0.70",
+        framealpha=0.78,
         handlelength=1.4,
         handletextpad=0.35,
         borderaxespad=0.18,
     )
-    leg2.get_title().set_fontsize(5.8)
-    leg2.get_frame().set_linewidth(0.35)
-    for t in leg2.get_texts():
-        t.set_fontsize(6.1)
 
-    for ax, tag in zip(axes, ("(a)", "(b)", "(c)"), strict=True):
-        ax.text(
-            0.035,
-            0.955,
-            tag,
-            transform=ax.transAxes,
-            va="top",
-            ha="left",
-            fontsize=7.3,
-            fontweight="semibold",
-        )
+    # Match y-limits across side panels for fair comparison.
+    y_floor = 1e-3
+    y_vals_side: list[float] = []
+    for c_sel in panel2_cuts:
+        for r in rows:
+            if int(float(r["cut"])) == c_sel:
+                y_vals_side.append(max(float(r["entropy"]), HEATMAP_COLOR_VMIN))
+    for j_use in panel3_js:
+        ji = j_vals.index(j_use)
+        y_vals_side.extend([max(float(z[ci, ji]), HEATMAP_COLOR_VMIN) for ci in range(len(cuts))])
+    if y_vals_side:
+        y_hi = min(1.0, max(y_floor * 1.2, float(np.nanmax(y_vals_side)) * 1.25))
+    else:
+        y_hi = 1.0
+    ax1.set_ylim(y_floor, y_hi)
+    ax2.set_ylim(y_floor, y_hi)
+
+    for ax, tag in ((ax0, "(a)"), (ax1, "(b)"), (ax2, "(c)")):
+        ax.text(0.035, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=7.3, fontweight="semibold")
 
     fig.savefig(out_stem.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.02, dpi=600)
     fig.savefig(out_stem.with_suffix(".png"), bbox_inches="tight", pad_inches=0.02, dpi=600)
@@ -544,7 +562,7 @@ def main() -> None:
     initial_list = _list_initial_states_sys_env0(n_seeds=n_seeds, rng=init_rng)
     np.save(out_dir / "initial_states.npy", np.stack(initial_list, axis=0))
 
-    print("=== Benchmark: S_V vs J by cut (linear branch weights, β=1) ===", flush=True)
+    print("=== Benchmark: S_V vs J by cut (linear branch weights, beta=1) ===", flush=True)
     print(
         f"L={L_FIXED}, k={K_FIXED}, dt={DT_FIXED}, g={G_FIXED}, "
         f"N_p={args.n_pasts}, N_f={args.n_futures}, n_seeds={n_seeds}, cuts={cuts}, "
