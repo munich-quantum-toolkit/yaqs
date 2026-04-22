@@ -1872,6 +1872,15 @@ class GateLibrary:
     crosstalk_zx = CrosstalkZX
     crosstalk_yz = CrosstalkYZ
     crosstalk_zy = CrosstalkZY
+    longrange_crosstalk_xx = CrosstalkXX
+    longrange_crosstalk_yy = CrosstalkYY
+    longrange_crosstalk_zz = CrosstalkZZ
+    longrange_crosstalk_xy = CrosstalkXY
+    longrange_crosstalk_yx = CrosstalkYX
+    longrange_crosstalk_xz = CrosstalkXZ
+    longrange_crosstalk_zx = CrosstalkZX
+    longrange_crosstalk_yz = CrosstalkYZ
+    longrange_crosstalk_zy = CrosstalkZY
 
     p0 = P0
     p1 = P1

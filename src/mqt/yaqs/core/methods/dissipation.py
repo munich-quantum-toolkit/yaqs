@@ -56,6 +56,10 @@ _PAULI_STRINGS = {
     "crosstalk_xy", "crosstalk_yx",
     "crosstalk_zy", "crosstalk_zx",
     "crosstalk_yz", "crosstalk_xz",
+    "longrange_crosstalk_xx", "longrange_crosstalk_yy", "longrange_crosstalk_zz",
+    "longrange_crosstalk_xy", "longrange_crosstalk_yx",
+    "longrange_crosstalk_zy", "longrange_crosstalk_zx",
+    "longrange_crosstalk_yz", "longrange_crosstalk_xz",
 }
 _PAULI_CLASSES = (X, Y, Z, CrosstalkXX, CrosstalkYY, CrosstalkZZ, CrosstalkXY, CrosstalkYX, CrosstalkZY, CrosstalkZX, CrosstalkYZ, CrosstalkXZ)
 
