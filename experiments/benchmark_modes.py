@@ -176,6 +176,7 @@ def plot_from_saved(
     spectrum_probs: dict[str, dict[str, np.ndarray]],
     out_stem: Path,
     rank_tol: float,
+    plot_cuts: list[int] | None = None,
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import Normalize
@@ -183,7 +184,8 @@ def plot_from_saved(
     _configure_matplotlib_prl_figure()
     fig, ax = plt.subplots(1, 1, figsize=(4.1, 2.8), constrained_layout=True)
 
-    cuts = sorted({int(float(r["cut"])) for r in rank_rows})
+    cuts_all = sorted({int(float(r["cut"])) for r in rank_rows})
+    cuts = [c for c in cuts_all if (plot_cuts is None or c in plot_cuts)]
     js = sorted({float(r["J"]) for r in rank_rows})
 
     # Primary panel: all requested cuts.
@@ -305,6 +307,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--spectrum-draws", type=int, default=1)
     p.add_argument("--spectrum-js", type=str, default=",".join(str(v) for v in DENSE_JS_DEFAULT))
     p.add_argument("--rank-tol", type=float, default=RANK_TOL)
+    p.add_argument("--plot-cuts", type=str, default="")
     p.add_argument("--plot-only", action="store_true")
     p.add_argument("--benchmark-only", action="store_true")
     p.add_argument("--spectrum-rank-csv", type=Path, default=None)
@@ -316,6 +319,8 @@ def main() -> None:
     args = _parse_args()
     out_dir = args.out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    plot_cuts = _parse_int_list(args.plot_cuts) if str(args.plot_cuts).strip() else None
 
     if bool(args.plot_only):
         spectrum_rank_csv = args.spectrum_rank_csv if args.spectrum_rank_csv is not None else out_dir / "spectrum_rank_summary.csv"
@@ -354,7 +359,13 @@ def main() -> None:
                 "s_mean": np.asarray(loaded[f"{ctag}_smean"], dtype=np.float64) if has_s_mean else np.sqrt(np.clip(p_mean, 0.0, None)),
                 "s_std": np.asarray(loaded[f"{ctag}_sstd"], dtype=np.float64) if has_s_std else np.zeros_like(p_mean, dtype=np.float64),
             }
-        plot_from_saved(rank_rows=rank_rows, spectrum_probs=probs, out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl", rank_tol=float(args.rank_tol))
+        plot_from_saved(
+            rank_rows=rank_rows,
+            spectrum_probs=probs,
+            out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl",
+            rank_tol=float(args.rank_tol),
+            plot_cuts=plot_cuts,
+        )
         print(f"Wrote figure: {(out_dir / 'fig_spectrum_and_rank_vs_j_prl').with_suffix('.pdf')}", flush=True)
         return
 
@@ -365,6 +376,7 @@ def main() -> None:
             spectrum_probs=spectrum_probs,
             out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl",
             rank_tol=float(args.rank_tol),
+            plot_cuts=plot_cuts,
         )
         print(f"Wrote figure: {(out_dir / 'fig_spectrum_and_rank_vs_j_prl').with_suffix('.pdf')}", flush=True)
     print(f"Wrote tables to: {out_dir}", flush=True)
