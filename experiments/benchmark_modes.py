@@ -167,43 +167,53 @@ def plot_from_saved(
     rank_tol: float,
 ) -> None:
     import matplotlib.pyplot as plt
-    from matplotlib import cm
     from matplotlib.colors import Normalize
 
     _configure_matplotlib_prl_figure()
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(6.2, 2.45), constrained_layout=True, gridspec_kw={"width_ratios": [1.15, 1.0], "wspace": 0.08})
+    fig, ax = plt.subplots(1, 1, figsize=(4.1, 2.8), constrained_layout=True)
 
     js = sorted(float(k) for k in spectrum_probs)
-    norm = Normalize(vmin=min(js) if js else 0.0, vmax=max(js) if js else 1.0)
-    cmap = plt.get_cmap("viridis")
+    xs = np.asarray(js, dtype=np.float64)
+    mu_vals: list[float] = []
     for jv in js:
-        spec = spectrum_probs[f"{jv:g}"]
-        p = np.asarray(spec["p_mean"], dtype=np.float64)
+        p = np.asarray(spectrum_probs[f"{jv:g}"]["p_mean"], dtype=np.float64)
+        ps = float(np.sum(p))
+        if ps <= 0.0:
+            mu_vals.append(1.0)
+            continue
+        q = np.clip(p / ps, 1e-30, 1.0)
+        sv = float(-np.sum(q * np.log(q)))
+        mu_vals.append(float(np.exp(sv)))
+    mu = np.asarray(mu_vals, dtype=np.float64)
+
+    # Primary panel: actual data points with connecting lines (no fit).
+    ax.plot(xs, mu, color="#1f77b4", lw=1.15, marker="o", ms=3.0, alpha=0.95)
+    ax.set_xlabel(r"$J$")
+    ax.set_ylabel(r"$R=\exp(S_V)$")
+    ax.set_xlim(0.0, float(xs.max()) if xs.size else 2.0)
+    y_hi = float(np.max(mu)) if mu.size else 2.0
+    ax.set_ylim(0.98, max(1.05, y_hi * 1.04))
+    ax.grid(True, axis="y", alpha=0.1, linewidth=0.3)
+
+    # Inset: selected spectra only.
+    inset = ax.inset_axes((0.12, 0.56, 0.36, 0.34))
+    j_inset = [0.5, 1.0, 1.5, 2.0]
+    available = [jv for jv in j_inset if any(abs(jv - jx) < 1e-12 for jx in js)]
+    norm = Normalize(vmin=min(available) if available else 0.0, vmax=max(available) if available else 1.0)
+    cmap = plt.get_cmap("viridis")
+    for jv in available:
+        p = np.asarray(spectrum_probs[f"{jv:g}"]["p_mean"], dtype=np.float64)
         if p.size == 0:
             continue
         n = np.arange(1, p.size + 1, dtype=np.float64)
-        ax0.plot(n, np.clip(p, 1e-30, None), color=cmap(norm(jv)), lw=1.1, alpha=0.95)
-
-    ax0.set_xlabel(r"Mode index $n$")
-    ax0.set_ylabel(r"$p_n$")
-    ax0.set_yscale("log")
-    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
-    sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax0, pad=0.02, shrink=0.9)
-    cbar.ax.set_title(r"$J$", pad=2)
-
-    xs = np.asarray(js, dtype=np.float64)
-    mu = np.asarray(
-        [float(np.sum(np.asarray(spectrum_probs[f"{jv:g}"]["s_mean"], dtype=np.float64) > float(rank_tol))) for jv in js],
-        dtype=np.float64,
-    )
-    ax1.plot(xs, mu, color="#1f77b4", lw=1.4, marker="o", ms=2.6)
-    ax1.set_xlabel(r"$J$")
-    ax1.set_ylabel(rf"$R=\#\{{s_n>{rank_tol:.0e}\}}$")
-    ax1.grid(True, axis="y", alpha=0.1, linewidth=0.3)
-
-    for ax, tag in ((ax0, "(a)"), (ax1, "(b)")):
-        ax.text(0.04, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=7.3, fontweight="semibold")
+        inset.plot(n, np.clip(p, 1e-30, None), color=cmap(norm(jv)), lw=1.0, alpha=0.95, label=rf"$J={jv:g}$")
+    inset.set_yscale("log")
+    inset.set_ylim(1e-16, 1.0)
+    inset.set_xlim(1, 30)
+    inset.set_xlabel(r"$n$", labelpad=1)
+    inset.set_ylabel(r"$p_n$", labelpad=1)
+    inset.tick_params(axis="both", which="major", labelsize=6)
+    inset.legend(loc="upper right", frameon=False, fontsize=6.2, handlelength=2.0, borderaxespad=0.2)
 
     fig.savefig(out_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
     fig.savefig(out_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
