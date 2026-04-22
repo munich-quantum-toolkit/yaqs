@@ -481,13 +481,14 @@ def plot_from_saved(
 
     # Colorblind-safe, high-contrast palette.
     spec_colors = {"1": "#1f77b4", "2": "#009E73", "3": "#d55e00", }
-    main_mode_max = 30
+    full_mode_max = 0
     for j_label in sorted(spectrum_probs.keys(), key=lambda s: float(s)):
         p_mean = np.asarray(spectrum_probs[j_label]["p_mean"], dtype=np.float64)
         if p_mean.size == 0:
             continue
-        n_keep = min(int(leading_modes), int(p_mean.size))
+        n_keep = int(p_mean.size)
         idx_head = np.arange(1, n_keep + 1, dtype=np.float64)
+        full_mode_max = max(full_mode_max, n_keep)
         ax1.semilogy(
             idx_head,
             np.clip(p_mean[:n_keep], 1e-30, None),
@@ -502,7 +503,7 @@ def plot_from_saved(
         )
     ax1.set_xlabel(r"Mode index $n$")
     ax1.set_ylabel(r"$p_n$")
-    ax1.set_xlim(1, 20)
+    ax1.set_xlim(1, max(1, 30))
     ax1.tick_params(direction="in", which="both", top=True, right=True)
     ax1.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
     ax1.yaxis.set_minor_locator(NullLocator())
@@ -561,8 +562,8 @@ def plot_from_saved(
                 continue
             idx = np.arange(1, p_mean.size + 1, dtype=np.float64)
             ax_s.semilogy(
-                idx[:main_mode_max],
-                np.clip(p_mean[:main_mode_max], 1e-30, None),
+                idx,
+                np.clip(p_mean, 1e-30, None),
                 ls="-",
                 lw=1.6,
                 marker="o",
@@ -574,7 +575,7 @@ def plot_from_saved(
             )
         ax_s.set_xlabel(r"Mode index $n$")
         ax_s.set_ylabel(r"$p_n$")
-        ax_s.set_xlim(1, 20)
+        ax_s.set_xlim(1, max(1, 30))
         ax_s.tick_params(direction="in", which="both", top=True, right=True)
         ax_s.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
         ax_s.yaxis.set_minor_locator(NullLocator())
