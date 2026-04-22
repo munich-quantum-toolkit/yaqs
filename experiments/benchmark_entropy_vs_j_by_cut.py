@@ -56,7 +56,7 @@ J_SWEEP_DEFAULT = [0.05 * i for i in range(41)]  # 0.0 ... 2.0 (fine sweep)
 BRANCH_WEIGHT_BETA = 1.0
 
 # Fixed log color limits for the cut×J heatmap (values clip to ends of the scale).
-HEATMAP_COLOR_VMIN = 1e-4
+HEATMAP_COLOR_VMIN = 1e-3
 HEATMAP_COLOR_VMAX = 1.0
 
 # Panel 2: $S_V$ vs $J$ at these fixed cuts $c$.
@@ -362,7 +362,7 @@ def plot_entropy_heatmap_cut_vs_j(
 
     _configure_matplotlib_prl_figure()
     fig = plt.figure(figsize=(7.0, 3.8), constrained_layout=True)
-    gs = fig.add_gridspec(2, 2, width_ratios=[1.9, 1.0], height_ratios=[1.0, 1.0], wspace=0.06, hspace=0.08)
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.95, 1.0], height_ratios=[1.0, 1.0], wspace=0.02, hspace=0.08)
     ax0 = fig.add_subplot(gs[:, 0])  # dominant heatmap
     ax1 = fig.add_subplot(gs[0, 1])  # S vs J
     ax2 = fig.add_subplot(gs[1, 1])  # S vs c
@@ -394,13 +394,13 @@ def plot_entropy_heatmap_cut_vs_j(
     ax0.set_xlabel(r"Causal cut $c$")
     ax0.set_ylabel(r"Coupling $J$")
 
-    cbar = fig.colorbar(im, ax=ax0, shrink=0.9, pad=0.015, aspect=24)
-    cbar.ax.set_ylabel(r"$S_V$", rotation=90, labelpad=6)
+    cbar = fig.colorbar(im, ax=ax0, shrink=0.9, pad=0.01, aspect=24)
+    cbar.ax.set_title(r"$S_V$", pad=2)
     cbar.ax.tick_params(length=2.5, width=0.4)
     cbar.outline.set_linewidth(0.4)
 
-    ax0.set_xlim(c_edges[0], c_edges[-1])
-    ax0.set_ylim(j_edges[0], j_edges[-1])
+    ax0.set_xlim(c_edges[0], 1)
+    ax0.set_ylim(j_edges[0], 1)
 
     if len(cuts) <= 25:
         ax0.set_xticks(cuts)
@@ -413,14 +413,9 @@ def plot_entropy_heatmap_cut_vs_j(
         spine.set_linewidth(0.5)
 
     # Representative slices.
-    panel2_targets = (3, 8, 11, 19)
-    panel2_cuts = [c for c in panel2_targets if c in cuts]
-    panel3_targets = (0.4, 0.8, 1.2, 1.6, 2.0)
-    panel3_js: list[float] = []
-    for jt in panel3_targets:
-        ju = nearest_j(jt)
-        if ju not in panel3_js and ju > 0.0:
-            panel3_js.append(ju)
+    panel2_cuts = [int(c) for c in cuts if 1 <= int(c) <= 10]
+    # Panel (c): include all couplings (omit J=0 on log panel).
+    panel3_js: list[float] = [float(jv) for jv in j_vals if float(jv) > 0.0]
 
     # Heatmap slice guides.
     for c_sel in panel2_cuts:
@@ -430,7 +425,7 @@ def plot_entropy_heatmap_cut_vs_j(
     for j_sel in panel3_js:
         ax0.axhline(float(j_sel), color=guide_cmap(guide_norm(j_sel)), lw=0.45, ls="--", alpha=0.10, zorder=3)
 
-    # Panel (b): S_V vs J at a few representative fixed cuts (raw points + straight lines).
+    # Panel (b): S_V vs J for all cuts (continuous colormap).
     panel2_cmap = plt.get_cmap("plasma")
     panel2_norm = Normalize(vmin=min(panel2_cuts), vmax=max(panel2_cuts)) if panel2_cuts else Normalize(vmin=0, vmax=1)
     for c_sel in panel2_cuts:
@@ -458,19 +453,14 @@ def plot_entropy_heatmap_cut_vs_j(
     ax1.grid(True, which="major", axis="y", alpha=0.1, linewidth=0.3)
     for s in ax1.spines.values():
         s.set_linewidth(0.45)
-    ax1.legend(
-        title="Cuts",
-        loc="lower right",
-        frameon=True,
-        fancybox=False,
-        edgecolor="0.70",
-        framealpha=0.78,
-        handlelength=1.4,
-        handletextpad=0.35,
-        borderaxespad=0.18,
-    )
+    sm1 = ScalarMappable(norm=panel2_norm, cmap=panel2_cmap)
+    sm1.set_array([])
+    cbar1 = fig.colorbar(sm1, ax=ax1, pad=0.015, shrink=0.9, aspect=18)
+    cbar1.ax.set_title(r"$c$", pad=2)
+    cbar1.ax.tick_params(length=2, width=0.3)
+    cbar1.outline.set_linewidth(0.35)
 
-    # Panel (c): S_V vs c at representative couplings (raw discrete points + straight segments).
+    # Panel (c): S_V vs c for all couplings (raw discrete points only).
     xs_c = list(cuts)
     panel3_cmap = plt.get_cmap("viridis")
     panel3_norm = Normalize(vmin=min(j_vals), vmax=max(j_vals)) if j_vals else Normalize(vmin=0, vmax=1)
@@ -481,13 +471,11 @@ def plot_entropy_heatmap_cut_vs_j(
         ax2.semilogy(
             xs_c,
             ys_s,
-            ls="-",
-            lw=0.9,
+            ls="None",
             marker="o",
-            ms=2.7,
+            ms=2.3,
             alpha=0.9,
             color=col,
-            label=rf"$J={j_use:g}$",
         )
     ax2.set_xlabel(r"Causal cut $c$")
     ax2.set_ylabel(r"$S_V$")
@@ -500,17 +488,12 @@ def plot_entropy_heatmap_cut_vs_j(
     ax2.grid(True, which="major", axis="y", alpha=0.1, linewidth=0.3)
     for s in ax2.spines.values():
         s.set_linewidth(0.45)
-    ax2.legend(
-        title="Couplings",
-        loc="upper left",
-        frameon=True,
-        fancybox=False,
-        edgecolor="0.70",
-        framealpha=0.78,
-        handlelength=1.4,
-        handletextpad=0.35,
-        borderaxespad=0.18,
-    )
+    sm2 = ScalarMappable(norm=panel3_norm, cmap=panel3_cmap)
+    sm2.set_array([])
+    cbar2 = fig.colorbar(sm2, ax=ax2, pad=0.015, shrink=0.9, aspect=18)
+    cbar2.ax.set_title(r"$J$", pad=2)
+    cbar2.ax.tick_params(length=2, width=0.3)
+    cbar2.outline.set_linewidth(0.35)
 
     # Match y-limits across side panels for fair comparison.
     y_floor = 1e-3
@@ -526,8 +509,8 @@ def plot_entropy_heatmap_cut_vs_j(
         y_hi = min(1.0, max(y_floor * 1.2, float(np.nanmax(y_vals_side)) * 1.25))
     else:
         y_hi = 1.0
-    ax1.set_ylim(y_floor, y_hi)
-    ax2.set_ylim(y_floor, y_hi)
+    ax1.set_ylim(y_floor, 1)
+    ax2.set_ylim(y_floor, 1)
 
     for ax, tag in ((ax0, "(a)"), (ax1, "(b)"), (ax2, "(c)")):
         ax.text(0.035, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=7.3, fontweight="semibold")
