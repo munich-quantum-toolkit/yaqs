@@ -172,11 +172,8 @@ def test_longrange_two_site_factors_explicit() -> None:
 def test_longrange_unknown_label_without_factors_raises() -> None:
     """Test that unknown long-range labels without 'factors' raise.
 
-    If the name is not 'longrange_crosstalk_{ab}' and no factors are provided,
+    If the name is not a recognized GateLibrary alias and no factors are provided,
     initialization must fail to avoid guessing operators.
-
-    Raises:
-        AssertionError: If the model accepts an unknown long-range label without factors.
     """
     with pytest.raises((AttributeError, AssertionError)):
         _ = NoiseModel([{"name": "foo_bar", "sites": [0, 2], "strength": 0.1}])

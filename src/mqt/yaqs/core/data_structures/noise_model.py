@@ -18,17 +18,12 @@ from __future__ import annotations
 import copy
 import logging
 import math
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 from scipy.stats import truncnorm
 
 from ..libraries.gate_library import BaseGate, Crosstalk, GateLibrary
-
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +75,7 @@ class NoiseModel:
                 assert "name" in jump, "Each scheduled jump must have a 'name' key"
                 assert len(jump["sites"]) <= 2, "Each scheduled jump must have at most 2 sites"
                 jump_dict = dict(jump)  # Copy to avoid mutating caller's dict
-                jump_op=NoiseModel.get_operator(jump_dict["name"])
+                jump_op = NoiseModel.get_operator(jump_dict["name"])
                 if "matrix" not in jump_dict:
                     jump_dict["matrix"] = jump_op.matrix
                 self.scheduled_jumps.append(jump_dict)
@@ -99,7 +94,7 @@ class NoiseModel:
             name = proc["name"]
             sites = proc["sites"]
 
-            name_op=NoiseModel.get_operator(name)
+            name_op = NoiseModel.get_operator(name)
 
             if len(sites) == 1:
                 proc["matrix"] = name_op.matrix
@@ -113,19 +108,18 @@ class NoiseModel:
 
                 if abs(j - i) == 1:  # Adjacent: store full matrix
                     if isinstance(name_op, Crosstalk):
-                        proc["matrix"] = (
-                            name_op.swapped_matrix if swapped else name_op.matrix
-                        )
+                        proc["matrix"] = name_op.swapped_matrix if swapped else name_op.matrix
                     else:
                         proc["matrix"] = name_op.matrix
 
-                else:  # Non-adjacent: store per-site factors
-                    if isinstance(name_op, Crosstalk):
-                        proc["factors"] = (name_op.matrix2, name_op.matrix1) if swapped else (name_op.matrix1, name_op.matrix2)
-                    else:
-                        assert "factors" in proc, (
-                            "Non-adjacent 2-site processes must specify 'factors' unless a Crosstalk gate is provided."
-                        )
+                elif isinstance(name_op, Crosstalk):
+                    proc["factors"] = (
+                        (name_op.matrix2, name_op.matrix1) if swapped else (name_op.matrix1, name_op.matrix2)
+                    )
+                else:
+                    assert "factors" in proc, (
+                        "Non-adjacent 2-site processes must specify 'factors' unless a Crosstalk gate is provided."
+                    )
 
             filled_processes.append(proc)
 
@@ -215,7 +209,6 @@ class NoiseModel:
         Returns:
             BaseGate: The matrix representation of the operator.
         """
-        
         if isinstance(name, BaseGate):
             return name
 

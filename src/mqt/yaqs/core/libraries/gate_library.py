@@ -753,7 +753,8 @@ class Destroy(BaseGate):
         Args:
             d: Physical dimension.
         """
-        assert d > 0 and (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
+        assert d > 0, f"d must be positive, got {d}"
+        assert (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
 
         super().__init__(mat)
@@ -781,7 +782,8 @@ class Create(BaseGate):
         Args:
             d: Physical dimension.
         """
-        assert d > 0 and (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
+        assert d > 0, f"d must be positive, got {d}"
+        assert (d & (d - 1)) == 0, f"d must be a power of 2, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
 
         super().__init__(mat)
@@ -1545,7 +1547,7 @@ class Crosstalk(BaseGate):
         self.matrix1 = gate1.matrix
         self.matrix2 = gate2.matrix
         self.swapped_matrix = np.kron(gate2.matrix, gate1.matrix).astype(np.complex128)
-        
+
         mat = np.kron(gate1.matrix, gate2.matrix).astype(np.complex128)
         super().__init__(mat)
 
@@ -1554,6 +1556,7 @@ class CrosstalkXX(Crosstalk):
     """Crosstalk X ⊗ X."""
 
     def __init__(self) -> None:
+        """Initializes X ⊗ X crosstalk."""
         super().__init__(X(), X())
 
 
@@ -1561,6 +1564,7 @@ class CrosstalkYY(Crosstalk):
     """Crosstalk Y ⊗ Y."""
 
     def __init__(self) -> None:
+        """Initializes Y ⊗ Y crosstalk."""
         super().__init__(Y(), Y())
 
 
@@ -1568,6 +1572,7 @@ class CrosstalkZZ(Crosstalk):
     """Crosstalk Z ⊗ Z."""
 
     def __init__(self) -> None:
+        """Initializes Z ⊗ Z crosstalk."""
         super().__init__(Z(), Z())
 
 
@@ -1575,6 +1580,7 @@ class CrosstalkXY(Crosstalk):
     """Crosstalk X ⊗ Y."""
 
     def __init__(self) -> None:
+        """Initializes X ⊗ Y crosstalk."""
         super().__init__(X(), Y())
 
 
@@ -1582,6 +1588,7 @@ class CrosstalkYX(Crosstalk):
     """Crosstalk Y ⊗ X."""
 
     def __init__(self) -> None:
+        """Initializes Y ⊗ X crosstalk."""
         super().__init__(Y(), X())
 
 
@@ -1589,6 +1596,7 @@ class CrosstalkXZ(Crosstalk):
     """Crosstalk X ⊗ Z."""
 
     def __init__(self) -> None:
+        """Initializes X ⊗ Z crosstalk."""
         super().__init__(X(), Z())
 
 
@@ -1596,6 +1604,7 @@ class CrosstalkZX(Crosstalk):
     """Crosstalk Z ⊗ X."""
 
     def __init__(self) -> None:
+        """Initializes Z ⊗ X crosstalk."""
         super().__init__(Z(), X())
 
 
@@ -1603,6 +1612,7 @@ class CrosstalkYZ(Crosstalk):
     """Crosstalk Y ⊗ Z."""
 
     def __init__(self) -> None:
+        """Initializes Y ⊗ Z crosstalk."""
         super().__init__(Y(), Z())
 
 
@@ -1610,6 +1620,7 @@ class CrosstalkZY(Crosstalk):
     """Crosstalk Z ⊗ Y."""
 
     def __init__(self) -> None:
+        """Initializes Z ⊗ Y crosstalk."""
         super().__init__(Z(), Y())
 
 
@@ -1901,4 +1912,3 @@ class GateLibrary:
     pauli_z = Z
     pauli_x = X
     pauli_y = Y
-
