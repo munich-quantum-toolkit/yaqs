@@ -204,7 +204,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot add gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix + other.matrix)
+        return BaseGate(self.matrix + other.matrix, local_dim=self.local_dim)
 
     def __sub__(self, other: BaseGate) -> BaseGate:
         """Subtracts one gate from another.
@@ -221,7 +221,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot subtract gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix - other.matrix)
+        return BaseGate(self.matrix - other.matrix, local_dim=self.local_dim)
 
     def __mul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies two gates or scales a gate by a scalar.
@@ -239,9 +239,9 @@ class BaseGate:
             if self.interaction != other.interaction:
                 msg = "Cannot multiply gates with different interaction"
                 raise ValueError(msg)
-            return BaseGate(self.matrix @ other.matrix)
+            return BaseGate(self.matrix @ other.matrix, local_dim=self.local_dim)
 
-        return BaseGate(self.matrix * other)
+        return BaseGate(self.matrix * other, local_dim=self.local_dim)
 
     def __rmul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies a scalar or another gate with this gate (right multiplication).
@@ -263,7 +263,7 @@ class BaseGate:
         Returns:
             A new BaseGate resulting from matrix multiplication.
         """
-        return BaseGate(self.matrix @ other.matrix)
+        return BaseGate(self.matrix @ other.matrix, local_dim=self.local_dim)
 
     def dag(self) -> BaseGate:
         """Returns the conjugate transpose (dagger) of the gate.
@@ -271,7 +271,7 @@ class BaseGate:
         Returns:
             A new gate representing the conjugate transpose of this gate.
         """
-        return BaseGate(np.conj(self.matrix).T)
+        return BaseGate(np.conj(self.matrix).T, local_dim=self.local_dim)
 
     def conj(self) -> BaseGate:
         """Returns the complex conjugate of the gate.
@@ -279,7 +279,7 @@ class BaseGate:
         Returns:
             A new gate representing the complex conjugate of this gate.
         """
-        return BaseGate(np.conj(self.matrix))
+        return BaseGate(np.conj(self.matrix), local_dim=self.local_dim)
 
     def trans(self) -> BaseGate:
         """Returns the transpose of the gate.
@@ -287,7 +287,7 @@ class BaseGate:
         Returns:
             A new gate representing the transpose of this gate.
         """
-        return BaseGate(self.matrix.T)
+        return BaseGate(self.matrix.T, local_dim=self.local_dim)
 
     @classmethod
     def x(cls) -> X:
@@ -758,7 +758,7 @@ class Destroy(BaseGate):
         assert d > 0, f"d must be positive, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
 
-        super().__init__(mat)
+        super().__init__(mat, local_dim=d)
 
 
 class Create(BaseGate):
@@ -786,7 +786,7 @@ class Create(BaseGate):
         assert d > 0, f"d must be positive, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
 
-        super().__init__(mat)
+        super().__init__(mat, local_dim=d)
 
 
 class Id(BaseGate):
