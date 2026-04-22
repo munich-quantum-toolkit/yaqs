@@ -32,7 +32,7 @@ from mqt.yaqs.characterization.process_tensors.diagnostics.v_matrix_diag import 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-DENSE_JS_DEFAULT = tuple(round(0.05 * i, 10) for i in range(41))
+DENSE_JS_DEFAULT = tuple[float, ...](round(0.05 * i, 10) for i in range(41))
 RANK_TOL = 1e-16
 
 
@@ -178,14 +178,14 @@ def plot_from_saved(
     cmap = plt.get_cmap("viridis")
     for jv in js:
         spec = spectrum_probs[f"{jv:g}"]
-        s = np.asarray(spec["s_mean"], dtype=np.float64)
-        if s.size == 0:
+        p = np.asarray(spec["p_mean"], dtype=np.float64)
+        if p.size == 0:
             continue
-        n = np.arange(1, s.size + 1, dtype=np.float64)
-        ax0.plot(n, np.clip(s, 1e-30, None), color=cmap(norm(jv)), lw=1.1, alpha=0.95)
+        n = np.arange(1, p.size + 1, dtype=np.float64)
+        ax0.plot(n, np.clip(p, 1e-30, None), color=cmap(norm(jv)), lw=1.1, alpha=0.95)
 
     ax0.set_xlabel(r"Mode index $n$")
-    ax0.set_ylabel(r"$s_n$")
+    ax0.set_ylabel(r"$p_n$")
     ax0.set_yscale("log")
     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
