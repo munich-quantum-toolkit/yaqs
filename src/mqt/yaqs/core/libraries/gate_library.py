@@ -1544,6 +1544,8 @@ class Crosstalk(BaseGate):
         self.name = f"crosstalk_{gate1.name}_{gate2.name}"
         self.matrix1 = gate1.matrix
         self.matrix2 = gate2.matrix
+        self.swapped_matrix = np.kron(gate2.matrix, gate1.matrix).astype(np.complex128)
+        
         mat = np.kron(gate1.matrix, gate2.matrix).astype(np.complex128)
         super().__init__(mat)
 

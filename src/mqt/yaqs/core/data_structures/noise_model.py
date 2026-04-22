@@ -23,13 +23,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from scipy.stats import truncnorm
 
-from ..libraries.gate_library import Crosstalk, GateLibrary
+from ..libraries.gate_library import BaseGate, Crosstalk, GateLibrary
 
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-    from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
 logger = logging.getLogger(__name__)
@@ -82,8 +80,9 @@ class NoiseModel:
                 assert "name" in jump, "Each scheduled jump must have a 'name' key"
                 assert len(jump["sites"]) <= 2, "Each scheduled jump must have at most 2 sites"
                 jump_dict = dict(jump)  # Copy to avoid mutating caller's dict
+                jump_op=NoiseModel.get_operator(jump_dict["name"])
                 if "matrix" not in jump_dict:
-                    jump_dict["matrix"] = NoiseModel.get_operator(jump_dict["name"])
+                    jump_dict["matrix"] = jump_op.matrix
                 self.scheduled_jumps.append(jump_dict)
 
         if processes is None:
@@ -100,43 +99,34 @@ class NoiseModel:
             name = proc["name"]
             sites = proc["sites"]
 
-            # Normalize two-site ordering
-            if isinstance(sites, list) and len(sites) == 2:
+            name_op=NoiseModel.get_operator(name)
+
+            if len(sites) == 1:
+                proc["matrix"] = name_op.matrix
+
+            else:  # Two-site: normalize site ordering
                 sorted_sites = sorted(sites)
                 swapped = sorted_sites != sites
                 if swapped:
                     proc["sites"] = sorted_sites
                 i, j = proc["sites"]
-                is_adjacent = abs(j - i) == 1
 
-                if isinstance(name, Crosstalk):
-                    if is_adjacent:
-                        if "matrix" not in proc:
-                            proc["matrix"] = (
-                                np.kron(name.matrix2, name.matrix1).astype(np.complex128) if swapped else name.matrix
-                            )
-                    elif "factors" not in proc:
-                        proc["factors"] = (name.matrix2, name.matrix1) if swapped else (name.matrix1, name.matrix2)
-                    filled_processes.append(proc)
-                    continue
+                if abs(j - i) == 1:  # Adjacent: store full matrix
+                    if isinstance(name_op, Crosstalk):
+                        proc["matrix"] = (
+                            name_op.swapped_matrix if swapped else name_op.matrix
+                        )
+                    else:
+                        proc["matrix"] = name_op.matrix
 
-                # Adjacent two-site: use full matrix
-                if is_adjacent:
-                    if "matrix" not in proc:
-                        proc["matrix"] = NoiseModel.get_operator(name)
-                    filled_processes.append(proc)
-                    continue
+                else:  # Non-adjacent: store per-site factors
+                    if isinstance(name_op, Crosstalk):
+                        proc["factors"] = (name_op.matrix2, name_op.matrix1) if swapped else (name_op.matrix1, name_op.matrix2)
+                    else:
+                        assert "factors" in proc, (
+                            "Non-adjacent 2-site processes must specify 'factors' unless a Crosstalk gate is provided."
+                        )
 
-                # Non-adjacent two-site: require explicit factors
-                assert "factors" in proc, (
-                    "Non-adjacent 2-site processes must specify 'factors' unless a Crosstalk gate is provided."
-                )
-                filled_processes.append(proc)
-                continue
-
-            # One-site: ensure matrix
-            if "matrix" not in proc:
-                proc["matrix"] = NoiseModel.get_operator(name)
             filled_processes.append(proc)
 
         self.processes = filled_processes
@@ -216,16 +206,19 @@ class NoiseModel:
         return new_model
 
     @staticmethod
-    def get_operator(name: str) -> NDArray[np.complex128]:
+    def get_operator(name: str | BaseGate) -> BaseGate:
         """Retrieve the operator from GateLibrary, possibly as a tensor product if needed.
 
         Args:
             name: Name of the noise process (e.g., 'xx', 'zz').
 
         Returns:
-            np.ndarray: The matrix representation of the operator.
+            BaseGate: The matrix representation of the operator.
         """
+        
+        if isinstance(name, BaseGate):
+            return name
+
         operator_class = getattr(GateLibrary, name)
 
-        operator: BaseGate = operator_class()
-        return operator.matrix
+        return operator_class()
