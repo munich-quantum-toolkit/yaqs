@@ -36,6 +36,13 @@ DENSE_JS_DEFAULT = tuple[float, ...](round(0.05 * i, 10) for i in range(41))
 RANK_TOL = 1e-16
 
 
+def _parse_int_list(spec: str) -> list[int]:
+    vals = [int(tok.strip()) for tok in spec.split(",") if tok.strip()]
+    if not vals:
+        raise ValueError("expected at least one integer")
+    return vals
+
+
 def _parse_float_list(spec: str) -> list[float]:
     vals = [float(tok.strip()) for tok in spec.split(",") if tok.strip()]
     if not vals:
@@ -86,6 +93,7 @@ def run_benchmark(args: argparse.Namespace) -> tuple[list[dict[str, float | int]
     out_dir = args.out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_js = _parse_float_list(args.spectrum_js)
+    cuts = _parse_int_list(args.cuts)
 
     init_rng = np.random.default_rng(int(args.seed) + 77_777)
     initial_list = _list_initial_states_sys_env0(n_seeds=int(args.n_seeds), rng=init_rng)
@@ -94,68 +102,70 @@ def run_benchmark(args: argparse.Namespace) -> tuple[list[dict[str, float | int]
     spectrum_probs: dict[str, dict[str, np.ndarray]] = {}
     rank_rows: list[dict[str, float | int]] = []
 
-    for jv in spec_js:
-        op = MPO.ising(length=L_FIXED, J=float(jv), g=G_FIXED)
-        per_draw_vectors: list[np.ndarray] = []
-        per_draw_rank: list[float] = []
-        per_draw_singulars: list[np.ndarray] = []
-        for draw in range(int(args.spectrum_draws)):
-            probe_seed = int(args.seed) + 900_000 + 100_000 * int(args.cut) + 100 * int(round(100 * jv)) + draw
-            probe_set = sample_split_cut_probes(
-                cut=int(args.cut),
-                k=K_FIXED,
-                n_pasts=int(args.m_spectrum),
-                n_futures=int(args.m_spectrum),
-                rng=np.random.default_rng(probe_seed),
-            )
-            seed_vectors: list[np.ndarray] = []
-            seed_ranks: list[float] = []
-            seed_singulars: list[np.ndarray] = []
-            for psi0 in initial_list:
-                s = _weighted_centered_singular_values(
-                    probe_set=probe_set,
-                    op=op,
-                    sim_params=sim_params,
-                    psi0=psi0,
-                    parallel=bool(args.parallel),
+    for cut in cuts:
+        for jv in spec_js:
+            op = MPO.ising(length=L_FIXED, J=float(jv), g=G_FIXED)
+            per_draw_vectors: list[np.ndarray] = []
+            per_draw_rank: list[float] = []
+            per_draw_singulars: list[np.ndarray] = []
+            for draw in range(int(args.spectrum_draws)):
+                probe_seed = int(args.seed) + 900_000 + 100_000 * int(cut) + 100 * int(round(100 * jv)) + draw
+                probe_set = sample_split_cut_probes(
+                    cut=int(cut),
+                    k=K_FIXED,
+                    n_pasts=int(args.m_spectrum),
+                    n_futures=int(args.m_spectrum),
+                    rng=np.random.default_rng(probe_seed),
                 )
-                p = s * s
-                ps = float(np.sum(p))
-                if ps <= 0.0:
-                    seed_vectors.append(np.zeros(0, dtype=np.float64))
-                else:
-                    seed_vectors.append(p / ps)
-                seed_ranks.append(float(np.sum(s > float(args.rank_tol))))
-                seed_singulars.append(np.asarray(s, dtype=np.float64))
-            mean_seed, _ = _aggregate_variable_length(seed_vectors)
-            per_draw_vectors.append(mean_seed)
-            per_draw_rank.append(float(np.mean(seed_ranks)))
-            mean_singular_seed, _ = _aggregate_variable_length(seed_singulars)
-            per_draw_singulars.append(mean_singular_seed)
+                seed_vectors: list[np.ndarray] = []
+                seed_ranks: list[float] = []
+                seed_singulars: list[np.ndarray] = []
+                for psi0 in initial_list:
+                    s = _weighted_centered_singular_values(
+                        probe_set=probe_set,
+                        op=op,
+                        sim_params=sim_params,
+                        psi0=psi0,
+                        parallel=bool(args.parallel),
+                    )
+                    p = s * s
+                    ps = float(np.sum(p))
+                    if ps <= 0.0:
+                        seed_vectors.append(np.zeros(0, dtype=np.float64))
+                    else:
+                        seed_vectors.append(p / ps)
+                    seed_ranks.append(float(np.sum(s > float(args.rank_tol))))
+                    seed_singulars.append(np.asarray(s, dtype=np.float64))
+                mean_seed, _ = _aggregate_variable_length(seed_vectors)
+                per_draw_vectors.append(mean_seed)
+                per_draw_rank.append(float(np.mean(seed_ranks)))
+                mean_singular_seed, _ = _aggregate_variable_length(seed_singulars)
+                per_draw_singulars.append(mean_singular_seed)
 
-        p_mean, p_std = _aggregate_variable_length(per_draw_vectors)
-        s_mean, s_std = _aggregate_variable_length(per_draw_singulars)
-        r_effective = int(np.sum(np.asarray(s_mean, dtype=np.float64) > float(args.rank_tol)))
-        spectrum_probs[f"{jv:g}"] = {"p_mean": p_mean, "p_std": p_std, "s_mean": s_mean, "s_std": s_std}
-        rank_rows.append(
-            {
-                "J": float(jv),
-                "R_mean": float(r_effective),
-                "R_std": float(np.std(per_draw_rank, ddof=1)) if len(per_draw_rank) > 1 else 0.0,
-                "rank_tol": float(args.rank_tol),
-                "cut": int(args.cut),
-                "m_spectrum": int(args.m_spectrum),
-            }
-        )
+            p_mean, p_std = _aggregate_variable_length(per_draw_vectors)
+            s_mean, s_std = _aggregate_variable_length(per_draw_singulars)
+            r_effective = int(np.sum(np.asarray(s_mean, dtype=np.float64) > float(args.rank_tol)))
+            key = f"c{int(cut)}_J{jv:g}"
+            spectrum_probs[key] = {"p_mean": p_mean, "p_std": p_std, "s_mean": s_mean, "s_std": s_std}
+            rank_rows.append(
+                {
+                    "J": float(jv),
+                    "R_mean": float(r_effective),
+                    "R_std": float(np.std(per_draw_rank, ddof=1)) if len(per_draw_rank) > 1 else 0.0,
+                    "rank_tol": float(args.rank_tol),
+                    "cut": int(cut),
+                    "m_spectrum": int(args.m_spectrum),
+                }
+            )
 
     _write_csv(out_dir / "spectrum_rank_summary.csv", rank_rows)
-    np.savez_compressed(
-        out_dir / "spectrum_probs.npz",
-        **{f"J{j:g}_mean": v["p_mean"] for j, v in {float(k): val for k, val in spectrum_probs.items()}.items()},
-        **{f"J{j:g}_std": v["p_std"] for j, v in {float(k): val for k, val in spectrum_probs.items()}.items()},
-        **{f"J{j:g}_smean": v["s_mean"] for j, v in {float(k): val for k, val in spectrum_probs.items()}.items()},
-        **{f"J{j:g}_sstd": v["s_std"] for j, v in {float(k): val for k, val in spectrum_probs.items()}.items()},
-    )
+    payload: dict[str, np.ndarray] = {}
+    for key, val in spectrum_probs.items():
+        payload[f"{key}_mean"] = val["p_mean"]
+        payload[f"{key}_std"] = val["p_std"]
+        payload[f"{key}_smean"] = val["s_mean"]
+        payload[f"{key}_sstd"] = val["s_std"]
+    np.savez_compressed(out_dir / "spectrum_probs.npz", **payload)
     return rank_rows, spectrum_probs
 
 
@@ -172,48 +182,109 @@ def plot_from_saved(
     _configure_matplotlib_prl_figure()
     fig, ax = plt.subplots(1, 1, figsize=(4.1, 2.8), constrained_layout=True)
 
-    js = sorted(float(k) for k in spectrum_probs)
-    xs = np.asarray(js, dtype=np.float64)
-    mu_vals: list[float] = []
-    for jv in js:
-        p = np.asarray(spectrum_probs[f"{jv:g}"]["p_mean"], dtype=np.float64)
-        ps = float(np.sum(p))
-        if ps <= 0.0:
-            mu_vals.append(1.0)
-            continue
-        q = np.clip(p / ps, 1e-30, 1.0)
-        sv = float(-np.sum(q * np.log(q)))
-        mu_vals.append(float(np.exp(sv)))
-    mu = np.asarray(mu_vals, dtype=np.float64)
+    cuts = sorted({int(float(r["cut"])) for r in rank_rows})
+    js = sorted({float(r["J"]) for r in rank_rows})
 
-    # Primary panel: actual data points with connecting lines (no fit).
-    ax.plot(xs, mu, color="#1f77b4", lw=1.15, marker="o", ms=3.0, alpha=0.95)
+    # Primary panel: all requested cuts.
+    cut_cmap = plt.get_cmap("tab10")
+    cut_color: dict[int, tuple[float, float, float, float]] = {c: cut_cmap(i % 10) for i, c in enumerate(cuts)}
+    for cut in cuts:
+        mu_vals: list[float] = []
+        x_vals: list[float] = []
+        for jv in js:
+            key = f"c{cut}_J{jv:g}"
+            if key not in spectrum_probs:
+                continue
+            p = np.asarray(spectrum_probs[key]["p_mean"], dtype=np.float64)
+            ps = float(np.sum(p))
+            if ps <= 0.0:
+                mu_vals.append(1.0)
+            else:
+                q = np.clip(p / ps, 1e-30, 1.0)
+                sv = float(-np.sum(q * np.log(q)))
+                mu_vals.append(float(np.exp(sv)))
+            x_vals.append(float(jv))
+        if not x_vals:
+            continue
+        ax.plot(
+            np.asarray(x_vals, dtype=np.float64),
+            np.asarray(mu_vals, dtype=np.float64),
+            color=cut_color[cut],
+            lw=1.1,
+            marker="o",
+            ms=2.5,
+            alpha=0.92,
+            label=rf"$c={cut}$",
+        )
     ax.set_xlabel(r"$J$")
     ax.set_ylabel(r"$R=\exp(S_V)$")
-    ax.set_xlim(0.0, float(xs.max()) if xs.size else 2.0)
-    y_hi = float(np.max(mu)) if mu.size else 2.0
+    ax.set_xlim(0.0, float(max(js)) if js else 2.0)
+    y_all: list[float] = []
+    for cut in cuts:
+        for jv in js:
+            key = f"c{cut}_J{jv:g}"
+            if key not in spectrum_probs:
+                continue
+            p = np.asarray(spectrum_probs[key]["p_mean"], dtype=np.float64)
+            ps = float(np.sum(p))
+            if ps <= 0.0:
+                y_all.append(1.0)
+            else:
+                q = np.clip(p / ps, 1e-30, 1.0)
+                y_all.append(float(np.exp(-np.sum(q * np.log(q)))))
+    y_hi = float(max(y_all)) if y_all else 2.0
     ax.set_ylim(0.98, max(1.05, y_hi * 1.04))
     ax.grid(True, axis="y", alpha=0.1, linewidth=0.3)
+    ax.legend(loc="upper right", frameon=False, fontsize=7.4, handlelength=2.2)
 
-    # Inset: selected spectra only.
+    # Inset: selected spectra for c=10 only.
     inset = ax.inset_axes((0.12, 0.56, 0.36, 0.34))
+    inset_cut = 10
     j_inset = [0.5, 1.0, 1.5, 2.0]
-    available = [jv for jv in j_inset if any(abs(jv - jx) < 1e-12 for jx in js)]
+    available = [jv for jv in j_inset if f"c{inset_cut}_J{jv:g}" in spectrum_probs]
     norm = Normalize(vmin=min(available) if available else 0.0, vmax=max(available) if available else 1.0)
     cmap = plt.get_cmap("viridis")
+    inset_colors: dict[float, tuple[float, float, float, float]] = {}
     for jv in available:
-        p = np.asarray(spectrum_probs[f"{jv:g}"]["p_mean"], dtype=np.float64)
+        p = np.asarray(spectrum_probs[f"c{inset_cut}_J{jv:g}"]["p_mean"], dtype=np.float64)
         if p.size == 0:
             continue
         n = np.arange(1, p.size + 1, dtype=np.float64)
-        inset.plot(n, np.clip(p, 1e-30, None), color=cmap(norm(jv)), lw=1.0, alpha=0.95, label=rf"$J={jv:g}$")
+        col = cmap(norm(jv))
+        inset_colors[jv] = col
+        inset.plot(n, np.clip(p, 1e-30, None), color=col, lw=1.0, alpha=0.95, label=rf"$J={jv:g}$")
     inset.set_yscale("log")
     inset.set_ylim(1e-16, 1.0)
     inset.set_xlim(1, 30)
+    inset.set_title(r"$c=10$", fontsize=6.6, pad=1.5)
     inset.set_xlabel(r"$n$", labelpad=1)
     inset.set_ylabel(r"$p_n$", labelpad=1)
     inset.tick_params(axis="both", which="major", labelsize=6)
     inset.legend(loc="upper right", frameon=False, fontsize=6.2, handlelength=2.0, borderaxespad=0.2)
+
+    # Highlight c=10 values used by inset directly on the main curve.
+    for jv in available:
+        key = f"c{inset_cut}_J{jv:g}"
+        if key not in spectrum_probs:
+            continue
+        p = np.asarray(spectrum_probs[key]["p_mean"], dtype=np.float64)
+        ps = float(np.sum(p))
+        if ps <= 0.0:
+            rv = 1.0
+        else:
+            q = np.clip(p / ps, 1e-30, 1.0)
+            rv = float(np.exp(-np.sum(q * np.log(q))))
+        ax.plot(
+            [float(jv)],
+            [rv],
+            ls="None",
+            marker="o",
+            ms=4.6,
+            color=inset_colors.get(jv, "black"),
+            markeredgecolor="black",
+            markeredgewidth=0.35,
+            zorder=6,
+        )
 
     fig.savefig(out_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
     fig.savefig(out_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
@@ -227,9 +298,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--parallel", action="store_true", default=True)
     p.add_argument("--no-parallel", dest="parallel", action="store_false")
     p.add_argument("--n-seeds", type=int, default=1)
-    p.add_argument("--cut", type=int, default=15)
+    p.add_argument("--cut", type=int, default=10)
+    p.add_argument("--cuts", type=str, default="1,5,10,15,20")
     p.add_argument("--m-spectrum", type=int, default=64)
-    p.add_argument("--spectrum-draws", type=int, default=3)
+    p.add_argument("--spectrum-draws", type=int, default=1)
     p.add_argument("--spectrum-js", type=str, default=",".join(str(v) for v in DENSE_JS_DEFAULT))
     p.add_argument("--rank-tol", type=float, default=RANK_TOL)
     p.add_argument("--plot-only", action="store_true")
@@ -251,17 +323,35 @@ def main() -> None:
         loaded = np.load(spectrum_npz)
         probs: dict[str, dict[str, np.ndarray]] = {}
         for key in loaded.files:
-            if not key.startswith("J") or not key.endswith("_mean"):
+            if not key.endswith("_mean"):
                 continue
-            jlabel = key[1:-5]
+            root = key[:-5]
+            if key.endswith("_smean"):
+                continue
+            if root.endswith("_s"):
+                continue
+            if root.startswith("J"):
+                # Backward compatibility: old single-cut format.
+                jlabel = root[1:]
+                probs[f"c{int(args.cut)}_J{jlabel}"] = {
+                    "p_mean": np.asarray(loaded[key], dtype=np.float64),
+                    "p_std": np.asarray(loaded[f"J{jlabel}_std"], dtype=np.float64),
+                    "s_mean": np.asarray(loaded[f"J{jlabel}_smean"], dtype=np.float64) if f"J{jlabel}_smean" in loaded.files else np.sqrt(np.clip(np.asarray(loaded[key], dtype=np.float64), 0.0, None)),
+                    "s_std": np.asarray(loaded[f"J{jlabel}_sstd"], dtype=np.float64) if f"J{jlabel}_sstd" in loaded.files else np.zeros_like(np.asarray(loaded[key], dtype=np.float64), dtype=np.float64),
+                }
+                continue
+            # New multi-cut format: c<cut>_J<j>
+            ctag = root
+            if f"{ctag}_std" not in loaded.files:
+                continue
             p_mean = np.asarray(loaded[key], dtype=np.float64)
-            has_s_mean = f"J{jlabel}_smean" in loaded.files
-            has_s_std = f"J{jlabel}_sstd" in loaded.files
-            probs[jlabel] = {
+            has_s_mean = f"{ctag}_smean" in loaded.files
+            has_s_std = f"{ctag}_sstd" in loaded.files
+            probs[ctag] = {
                 "p_mean": p_mean,
-                "p_std": np.asarray(loaded[f"J{jlabel}_std"], dtype=np.float64),
-                "s_mean": np.asarray(loaded[f"J{jlabel}_smean"], dtype=np.float64) if has_s_mean else np.sqrt(np.clip(p_mean, 0.0, None)),
-                "s_std": np.asarray(loaded[f"J{jlabel}_sstd"], dtype=np.float64) if has_s_std else np.zeros_like(p_mean, dtype=np.float64),
+                "p_std": np.asarray(loaded[f"{ctag}_std"], dtype=np.float64),
+                "s_mean": np.asarray(loaded[f"{ctag}_smean"], dtype=np.float64) if has_s_mean else np.sqrt(np.clip(p_mean, 0.0, None)),
+                "s_std": np.asarray(loaded[f"{ctag}_sstd"], dtype=np.float64) if has_s_std else np.zeros_like(p_mean, dtype=np.float64),
             }
         plot_from_saved(rank_rows=rank_rows, spectrum_probs=probs, out_stem=out_dir / "fig_spectrum_and_rank_vs_j_prl", rank_tol=float(args.rank_tol))
         print(f"Wrote figure: {(out_dir / 'fig_spectrum_and_rank_vs_j_prl').with_suffix('.pdf')}", flush=True)
