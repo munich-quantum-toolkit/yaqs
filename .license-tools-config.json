@@ -29,6 +29,7 @@
     ".*\\.yaml",
     "uv\\.lock",
     "py\\.typed",
-    ".*build.*"
+    ".*build.*",
+    "LICENSE"
   ]
 }

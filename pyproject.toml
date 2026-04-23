@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "mqt-yaqs"
 description = "A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware"
 license = "MIT"
-license-files = ["LICENSE.md"]
+license-files = ["LICENSE"]
 authors = [
   { name="Aaron Sander", email = "aaron.sander@tum.de" },
 ]
@@ -135,14 +135,13 @@ aer = "aer"
 ket   = "ket"
 
 
-[tool.repo-review]
-ignore = [
-  "GH200", # We use Renovate instead of Dependabot
-  "MY100", # We use ty instead of mypy
-  "PC140", # We use ty instead of mypy
-  "PC160", # We use a mirror of crate-ci/typos
-  "PC170", # We do not use rST files anymore
-]
+[tool.repo-review.ignore]
+GH200 = "We use Renovate instead of Dependabot"
+MY100 = "We use ty instead of mypy"
+PC111 = "We use ruff instead of blacken-docs"
+PC140 = "We use ty instead of mypy"
+PC160 = "We use a mirror of crate-ci/typos"
+PC170 = "We do not use rST files anymore"
 
 
 [tool.ruff]
@@ -154,6 +153,7 @@ unsafe-fixes = true
 show-fixes = true
 
 [tool.ruff.format]
+preview = true
 docstring-code-format = true
 
 [tool.ruff.lint]
@@ -217,5 +217,5 @@ docs = [
 dev = [
     {include-group = "test"},
     "nox>=2025.11.12",
-    "ty==0.0.26",
+    "ty==0.0.29",
 ]

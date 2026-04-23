@@ -2,6 +2,8 @@
 sandbox/
 experiments_hidden/
 *.code-workspace
+.claude/
+CLAUDE.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
