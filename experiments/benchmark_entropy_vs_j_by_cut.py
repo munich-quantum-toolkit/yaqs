@@ -513,7 +513,7 @@ def plot_entropy_heatmap_cut_vs_j(
     ax2.set_ylim(y_floor, 1)
 
     for ax, tag in ((ax0, "(a)"), (ax1, "(b)"), (ax2, "(c)")):
-        ax.text(0.035, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=7.3, fontweight="semibold")
+        ax.text(0.04, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=7.3, fontweight="semibold")
 
     fig.savefig(out_stem.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.02, dpi=600)
     fig.savefig(out_stem.with_suffix(".png"), bbox_inches="tight", pad_inches=0.02, dpi=600)
