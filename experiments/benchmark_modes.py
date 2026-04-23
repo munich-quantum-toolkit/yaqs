@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python3
-"""Modes benchmark: singular-value spectrum and effective rank R(J).
+"""Modes benchmark: singular-value spectrum and entropy-based effective modes R(J).
 
-R(J) is defined as the number of singular values above 1e-16.
+R(J) is plotted as :math:`\\exp(S_V)`, where :math:`S_V` is singular-value entropy.
 Pipeline: exact probes -> weighted V (beta=1) -> past-row centering -> SVD.
 """
 
@@ -179,18 +179,26 @@ def plot_from_saved(
     plot_cuts: list[int] | None = None,
 ) -> None:
     import matplotlib.pyplot as plt
-    from matplotlib.colors import Normalize
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+    def _truncate_cmap(name: str, lo: float, hi: float, n: int = 256) -> LinearSegmentedColormap:
+        base = plt.get_cmap(name)
+        return LinearSegmentedColormap.from_list(f"{name}_trunc_{lo:.2f}_{hi:.2f}", base(np.linspace(lo, hi, n)))
 
     _configure_matplotlib_prl_figure()
-    fig, ax = plt.subplots(1, 1, figsize=(4.1, 2.8), constrained_layout=True)
+    fig, ax = plt.subplots(1, 1, figsize=(3.5, 2.7), constrained_layout=True)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
 
     cuts_all = sorted({int(float(r["cut"])) for r in rank_rows})
-    cuts = [c for c in cuts_all if (plot_cuts is None or c in plot_cuts)]
+    requested_cuts = [1, 5, 10] if plot_cuts is None else plot_cuts
+    cuts = [c for c in cuts_all if c in requested_cuts]
     js = sorted({float(r["J"]) for r in rank_rows})
 
     # Primary panel: all requested cuts.
-    cut_cmap = plt.get_cmap("tab10")
-    cut_color: dict[int, tuple[float, float, float, float]] = {c: cut_cmap(i % 10) for i, c in enumerate(cuts)}
+    cut_cmap = _truncate_cmap("Blues", 0.35, 0.95)
+    cut_norm = Normalize(vmin=1.0, vmax=20.0)
+    cut_color: dict[int, tuple[float, float, float, float]] = {c: cut_cmap(cut_norm(float(c))) for c in cuts}
     for cut in cuts:
         mu_vals: list[float] = []
         x_vals: list[float] = []
@@ -213,10 +221,10 @@ def plot_from_saved(
             np.asarray(x_vals, dtype=np.float64),
             np.asarray(mu_vals, dtype=np.float64),
             color=cut_color[cut],
-            lw=1.1,
+            lw=1.7,
             marker="o",
-            ms=2.5,
-            alpha=0.92,
+            ms=4.0,
+            alpha=0.95,
             label=rf"$c={cut}$",
         )
     ax.set_xlabel(r"$J$")
@@ -237,25 +245,37 @@ def plot_from_saved(
                 y_all.append(float(np.exp(-np.sum(q * np.log(q)))))
     y_hi = float(max(y_all)) if y_all else 2.0
     ax.set_ylim(0.98, max(1.05, y_hi * 1.04))
-    ax.grid(True, axis="y", alpha=0.1, linewidth=0.3)
-    ax.legend(loc="upper right", frameon=False, fontsize=7.4, handlelength=2.2)
+    ax.grid(True, axis="y", alpha=0.06, linewidth=0.3)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.9)
+    ax.tick_params(direction="in", which="both", top=True, right=True, length=3.2, width=0.7)
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(0.90, 0.995),
+        frameon=False,
+        fontsize=6.6,
+        handlelength=1.5,
+        borderaxespad=0.2,
+        labelspacing=0.2,
+    )
 
     # Inset: selected spectra for c=10 only.
-    inset = ax.inset_axes((0.12, 0.56, 0.36, 0.34))
+    inset = ax.inset_axes((0.16, 0.56, 0.36, 0.34))
+    inset.set_facecolor("white")
     inset_cut = 10
     j_inset = [0.5, 1.0, 1.5, 2.0]
     available = [jv for jv in j_inset if f"c{inset_cut}_J{jv:g}" in spectrum_probs]
-    norm = Normalize(vmin=min(available) if available else 0.0, vmax=max(available) if available else 1.0)
-    cmap = plt.get_cmap("viridis")
+    j_norm = Normalize(vmin=0.0, vmax=2.0)
+    j_cmap = _truncate_cmap("Reds", 0.30, 0.95)
     inset_colors: dict[float, tuple[float, float, float, float]] = {}
     for jv in available:
         p = np.asarray(spectrum_probs[f"c{inset_cut}_J{jv:g}"]["p_mean"], dtype=np.float64)
         if p.size == 0:
             continue
         n = np.arange(1, p.size + 1, dtype=np.float64)
-        col = cmap(norm(jv))
+        col = j_cmap(j_norm(jv))
         inset_colors[jv] = col
-        inset.plot(n, np.clip(p, 1e-30, None), color=col, lw=1.0, alpha=0.95, label=rf"$J={jv:g}$")
+        inset.plot(n, np.clip(p, 1e-30, None), color=col, lw=0.9, alpha=0.95, label=rf"$J={jv:g}$")
     inset.set_yscale("log")
     inset.set_ylim(1e-16, 1.0)
     inset.set_xlim(1, 30)
@@ -263,7 +283,8 @@ def plot_from_saved(
     inset.set_xlabel(r"$n$", labelpad=1)
     inset.set_ylabel(r"$p_n$", labelpad=1)
     inset.tick_params(axis="both", which="major", labelsize=6)
-    inset.legend(loc="upper right", frameon=False, fontsize=6.2, handlelength=2.0, borderaxespad=0.2)
+    inset.grid(False)
+    inset.legend(loc="upper right", frameon=False, fontsize=5.7, handlelength=1.5, borderaxespad=0.2, labelspacing=0.2)
 
     # Highlight c=10 values used by inset directly on the main curve.
     for jv in available:
@@ -285,7 +306,7 @@ def plot_from_saved(
             ms=4.6,
             color=inset_colors.get(jv, "black"),
             markeredgecolor="black",
-            markeredgewidth=0.35,
+            markeredgewidth=0.2,
             zorder=6,
         )
 
