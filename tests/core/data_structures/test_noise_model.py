@@ -24,7 +24,7 @@ import pytest
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import X, Y, Z, XX
 from mqt.yaqs.simulator import run
 
 
@@ -444,6 +444,39 @@ def test_truncated_normal_negative_mean_zero_std() -> None:
     rng = np.random.default_rng(42)
     sampled_nm = nm.sample(rng=rng)
     assert sampled_nm.processes[0]["strength"] == pytest.approx(0.0, abs=1e-8)
+
+
+def test_adjacent_two_site_non_crosstalk_uses_matrix() -> None:
+    """Adjacent two-site non-Crosstalk operator stores its full matrix (line 113).
+
+    XX is a BaseGate, not a Crosstalk, so the else-branch that copies
+    name_op.matrix directly must be exercised.
+    """
+    nm = NoiseModel([{"name": "xx", "sites": [0, 1], "strength": 0.1}])
+    p = nm.processes[0]
+    assert "matrix" in p
+    assert p["matrix"].shape == (4, 4)
+    np.testing.assert_allclose(p["matrix"], XX().matrix)
+
+
+def test_longrange_non_crosstalk_with_explicit_factors() -> None:
+    """Non-adjacent, non-Crosstalk process with pre-supplied factors passes the assert (line 120).
+
+    Passing 'xx' (not a Crosstalk) for non-adjacent sites [0, 2] with explicit
+    factors already in the dict exercises the assert branch that guards against
+    missing factors.
+    """
+    factors = (X().matrix, X().matrix)
+    nm = NoiseModel([{"name": "xx", "sites": [0, 2], "strength": 0.1, "factors": factors}])
+    p = nm.processes[0]
+    assert "factors" in p
+
+
+def test_get_operator_with_basegate_instance() -> None:
+    """get_operator returns a BaseGate instance unchanged when one is passed directly (line 213)."""
+    gate = X()
+    result = NoiseModel.get_operator(gate)
+    assert result is gate
 
 
 def test_missing_distribution_key() -> None:
