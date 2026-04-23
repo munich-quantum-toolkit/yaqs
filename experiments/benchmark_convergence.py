@@ -31,7 +31,7 @@ from mqt.yaqs.characterization.process_tensors.diagnostics.v_matrix_diag import 
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-M_GRID_DEFAULT = (4, 8, 16, 32, 64)
+M_GRID_DEFAULT = (2,3,4,5,6,8,10,12,16,24,32,48,64)
 DENSE_JS_DEFAULT = tuple(round(0.05 * i, 10) for i in range(41))
 
 
@@ -285,8 +285,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--parallel", action="store_true", default=True)
     p.add_argument("--no-parallel", dest="parallel", action="store_false")
     p.add_argument("--n-seeds", type=int, default=1)
-    p.add_argument("--cut", type=int, default=15)
-    p.add_argument("--probe-draws", type=int, default=8)
+    p.add_argument("--cut", type=int, default=10)
+    p.add_argument("--probe-draws", type=int, default=5)
     p.add_argument("--m-values", type=str, default=",".join(str(v) for v in M_GRID_DEFAULT))
     p.add_argument("--convergence-js", type=str, default=",".join(str(v) for v in DENSE_JS_DEFAULT))
     p.add_argument("--plot-only", action="store_true")
