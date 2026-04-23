@@ -738,7 +738,7 @@ class Destroy(BaseGate):
 
     Attributes:
         name: The name of the gate ("destroy").
-        matrix: The d×d matrix representation of the gate.
+        matrix: The dxd matrix representation of the gate.
         interaction: The interaction level (1 for single-site gates).
         tensor: The tensor representation of the gate (same as the matrix).
 
@@ -766,7 +766,7 @@ class Create(BaseGate):
 
     Attributes:
         name: The name of the gate ("create").
-        matrix: The d×d matrix representation of the gate.
+        matrix: The dxd matrix representation of the gate.
         interaction: The interaction level (1 for single-site gates).
         tensor: The tensor representation of the gate (same as the matrix).
 
@@ -1548,7 +1548,7 @@ class Crosstalk(BaseGate):
 
     Attributes:
         name: Dynamically set to ``"crosstalk_<gate1.name>_<gate2.name>"``.
-        matrix: The combined d²×d² matrix (gate1.matrix ⊗ gate2.matrix).
+        matrix: The combined (d^2)x(d^2) matrix (gate1.matrix ⊗ gate2.matrix).
         swapped_matrix: The reversed product (gate2.matrix ⊗ gate1.matrix), used when
             the operator is applied with sites in reverse order.
         matrix1: The matrix of the first (left) gate.
