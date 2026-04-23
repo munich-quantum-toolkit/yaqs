@@ -549,6 +549,51 @@ def test_get_operator_with_basegate_instance() -> None:
     assert result is gate
 
 
+def test_compact_two_site_adjacent_expansion() -> None:
+    """CompactNoiseModel expands a 2-site gate over a list of site-pairs."""
+    processes: list[dict[str, Any]] = [
+        {"name": "crosstalk_xz", "sites": [[0, 1], [2, 3]], "strength": 0.2},
+    ]
+    model = CompactNoiseModel(processes)
+
+    assert len(model.expanded_processes) == 2
+    assert model.expanded_processes[0]["sites"] == [0, 1]
+    assert model.expanded_processes[1]["sites"] == [2, 3]
+    assert model.expanded_processes[0]["strength"] == pytest.approx(0.2)
+    assert model.expanded_processes[1]["strength"] == pytest.approx(0.2)
+    assert "matrix" in model.expanded_noise_model.processes[0]
+    assert model.expanded_noise_model.processes[0]["matrix"].shape == (4, 4)
+
+
+def test_compact_two_site_index_list() -> None:
+    """index_list maps each expanded 2-site pair back to the correct compact process index."""
+    processes: list[dict[str, Any]] = [
+        {"name": "crosstalk_xx", "sites": [[0, 1], [2, 3], [4, 5]], "strength": 0.1},
+    ]
+    model = CompactNoiseModel(processes)
+
+    assert len(model.expanded_processes) == 3
+    assert model.index_list == [0, 0, 0]
+
+
+def test_compact_mixed_one_and_two_site() -> None:
+    """CompactNoiseModel handles a mix of 1-site and 2-site processes correctly."""
+    processes: list[dict[str, Any]] = [
+        {"name": "lowering", "sites": [0, 1, 2], "strength": 0.1},
+        {"name": "crosstalk_xz", "sites": [[0, 1], [2, 3]], "strength": 0.2},
+    ]
+    model = CompactNoiseModel(processes)
+
+    assert len(model.expanded_processes) == 5
+    assert model.index_list == [0, 0, 0, 1, 1]
+    # First three entries are 1-site
+    for ep in model.expanded_processes[:3]:
+        assert len(ep["sites"]) == 1
+    # Last two entries are 2-site
+    for ep in model.expanded_processes[3:]:
+        assert len(ep["sites"]) == 2
+
+
 def test_missing_distribution_key() -> None:
     """Test that missing 'distribution' key raises ValueError."""
     processes = [
