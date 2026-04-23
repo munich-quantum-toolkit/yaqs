@@ -270,6 +270,46 @@ def plot_peak_cut_vs_l(
     plt.close(fig)
 
 
+def plot_integrated_entropy_vs_l(
+    summary_rows: list[dict[str, str | float | int]],
+    *,
+    out_stem: Path,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    _configure_matplotlib()
+    js = sorted({float(r["J"]) for r in summary_rows})
+    ls_all = sorted({int(float(r["L"])) for r in summary_rows})
+
+    fig, ax = plt.subplots(1, 1, figsize=(3.4, 2.6), constrained_layout=True)
+    for jv in js:
+        xs: list[int] = []
+        ys: list[float] = []
+        for L in ls_all:
+            sub = [r for r in summary_rows if int(float(r["L"])) == L and abs(float(r["J"]) - jv) < 1e-9]
+            if not sub:
+                continue
+            xs.append(L)
+            ys.append(float(sub[0]["integrated_entropy"]))
+        if xs:
+            pts = sorted(zip(xs, ys), key=lambda p: p[0])
+            ax.plot(
+                [p[0] for p in pts],
+                [p[1] for p in pts],
+                marker="o",
+                lw=1.2,
+                color=_col_j(jv),
+                label=rf"$J={jv:g}$",
+            )
+    ax.set_xlabel(r"$L$")
+    ax.set_ylabel(r"$\sum_c S_V(c)$")
+    ax.legend(frameon=False, loc="best", fontsize=7)
+    ax.grid(True, alpha=0.12, linewidth=0.4)
+    fig.savefig(out_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(out_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+
+
 def run_benchmark(args: argparse.Namespace) -> tuple[Path, Path]:
     out_dir: Path = args.out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -385,6 +425,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--profile-l", type=str, default=",".join(str(x) for x in PROFILE_L_DEFAULT))
     p.add_argument("--plot-only", action="store_true", help="Only build figures from CSVs.")
     p.add_argument(
+        "--plot-integrated-only",
+        action="store_true",
+        help="Only render integrated entropy vs L from existing summary CSV.",
+    )
+    p.add_argument(
         "--detail-csv",
         type=Path,
         default=None,
@@ -409,12 +454,16 @@ def main() -> None:
     if args.plot_only:
         detail_path = args.detail_csv if args.detail_csv is not None else out_dir / "finite_size_detail.csv"
         summary_path = args.summary_csv if args.summary_csv is not None else out_dir / "finite_size_summary.csv"
-        if not detail_path.is_file():
-            raise FileNotFoundError(f"Detail CSV not found: {detail_path}")
         if not summary_path.is_file():
             raise FileNotFoundError(f"Summary CSV not found: {summary_path}")
-        detail_raw = _load_csv(detail_path)
         summary_raw = _load_csv(summary_path)
+        if args.plot_integrated_only:
+            plot_integrated_entropy_vs_l(summary_raw, out_stem=out_dir / "fig_integrated_entropy_vs_L")
+            print(f"Wrote {out_dir / 'fig_integrated_entropy_vs_L.pdf'}", flush=True)
+            return
+        if not detail_path.is_file():
+            raise FileNotFoundError(f"Detail CSV not found: {detail_path}")
+        detail_raw = _load_csv(detail_path)
         plot_finite_size_summary_figure(
             summary_raw,
             detail_raw,
