@@ -738,8 +738,8 @@ class Destroy(BaseGate):
 
     Attributes:
         name: The name of the gate ("destroy").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
+        matrix: The d×d matrix representation of the gate.
+        interaction: The interaction level (1 for single-site gates).
         tensor: The tensor representation of the gate (same as the matrix).
 
     Methods:
@@ -766,8 +766,8 @@ class Create(BaseGate):
 
     Attributes:
         name: The name of the gate ("create").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
+        matrix: The d×d matrix representation of the gate.
+        interaction: The interaction level (1 for single-site gates).
         tensor: The tensor representation of the gate (same as the matrix).
 
     Methods:
@@ -1060,14 +1060,14 @@ class CX(BaseGate):
         name: The name of the gate ("cx").
         matrix: The 4x4 matrix representation of the gate.
         interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        mpo: An MPO representation generated from the gate tensor.
+        tensor: The tensor representation reshaped to (2, 2, 2, 2), set by set_sites().
+        generator: The two-factor generator for the gate, set by set_sites().
+        mpo_tensors: MPO representation built from the gate tensor, set by set_sites().
         sites: The control and target sites.
 
     Methods:
         set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
+            Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
     """
 
     name = "cx"
@@ -1078,10 +1078,10 @@ class CX(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
 
         Args:
-            *sites: Variable-length argument list specifying site indices.
+            *sites: Variable-length argument list specifying site indices (control, target).
 
         Raises:
             ValueError: If the number of sites does not match the interaction level of the gate.
@@ -1116,13 +1116,14 @@ class CZ(BaseGate):
         name: The name of the gate ("cz").
         matrix: The 4x4 matrix representation of the gate.
         interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
+        tensor: The tensor representation reshaped to (2, 2, 2, 2), set by set_sites().
+        generator: The two-factor generator for the gate, set by set_sites().
+        mpo_tensors: MPO representation built from the gate tensor, set by set_sites().
         sites: The control and target sites.
 
     Methods:
         set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
+            Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
     """
 
     name = "cz"
@@ -1133,10 +1134,10 @@ class CZ(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
 
         Args:
-            *sites: Variable-length argument list specifying site indices.
+            *sites: Variable-length argument list specifying site indices (control, target).
 
         Raises:
             ValueError: If the number of sites does not match the interaction level of the gate.
@@ -1154,7 +1155,7 @@ class CZ(BaseGate):
 
         self.sites = sites_list
         self.tensor: NDArray[np.complex128] = np.reshape(self.matrix, (2, 2, 2, 2))
-        # Generator: π/4 * ((I - Z) ⊗ (I - X))
+        # Generator: π/4 * ((I - Z) ⊗ (I - Z))
         self.generator = [
             (np.pi / 4) * np.array([[0, 0], [0, 2]], dtype=np.complex128),
             np.array([[1, -1], [-1, 1]], dtype=np.complex128),
@@ -1171,14 +1172,15 @@ class CPhase(BaseGate):
         name: The name of the gate ("cp").
         matrix: The 4x4 matrix representation of the gate.
         interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
+        tensor: The tensor representation reshaped to (2, 2, 2, 2), set by set_sites().
+        generator: The two-factor generator for the gate, set by set_sites().
+        mpo_tensors: MPO representation built from the gate tensor, set by set_sites().
         sites: The control and target sites.
         theta: The angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
+            Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
     """
 
     name = "cp"
@@ -1195,10 +1197,10 @@ class CPhase(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
 
         Args:
-            *sites: Variable-length argument list specifying site indices.
+            *sites: Variable-length argument list specifying site indices (control, target).
 
         Raises:
             ValueError: If the number of sites does not match the interaction level of the gate.
@@ -1227,12 +1229,13 @@ class SWAP(BaseGate):
         name: The name of the gate ("swap").
         matrix: The 4x4 matrix representation of the gate.
         interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
+        tensor: The tensor representation reshaped to (2, 2, 2, 2), set by set_sites().
+        mpo_tensors: MPO representation built from the gate tensor, set by set_sites().
         sites: The sites involved in the swap.
 
     Methods:
         set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
+            Sets the sites, reshapes the tensor, and builds the MPO.
     """
 
     name = "swap"
@@ -1243,7 +1246,7 @@ class SWAP(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites, reshapes the tensor, and builds the MPO.
 
         Args:
             *sites: Variable-length argument list specifying site indices.
@@ -1274,14 +1277,15 @@ class Rxx(BaseGate):
         name: The name of the gate ("rxx").
         matrix: The 4x4 matrix representation of the gate.
         interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-        theta: The angle parameter.
+        tensor: The tensor representation reshaped to (2, 2, 2, 2), set by set_sites().
+        generator: The two-factor generator for the gate, set by set_sites().
+        mpo_tensors: MPO representation built from the gate tensor, set by set_sites().
+        sites: The two sites the operator acts on.
+        theta: The rotation angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
+            Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
     """
 
     name = "rxx"
@@ -1304,7 +1308,7 @@ class Rxx(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
 
         Args:
             *sites: Variable-length argument list specifying site indices.
@@ -1336,14 +1340,15 @@ class Ryy(BaseGate):
         name: The name of the gate ("ryy").
         matrix: The 4x4 matrix representation of the gate.
         interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-        theta: The angle parameter.
+        tensor: The tensor representation reshaped to (2, 2, 2, 2), set by set_sites().
+        generator: The two-factor generator for the gate, set by set_sites().
+        mpo_tensors: MPO representation built from the gate tensor, set by set_sites().
+        sites: The two sites the operator acts on.
+        theta: The rotation angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
+            Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
     """
 
     name = "ryy"
@@ -1366,7 +1371,7 @@ class Ryy(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
 
         Args:
             *sites: Variable-length argument list specifying site indices.
@@ -1398,14 +1403,15 @@ class Rzz(BaseGate):
         name: The name of the gate ("rzz").
         matrix: The 4x4 matrix representation of the gate.
         interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-        theta: The angle parameter.
+        tensor: The tensor representation reshaped to (2, 2, 2, 2), set by set_sites().
+        generator: The two-factor generator for the gate, set by set_sites().
+        mpo_tensors: MPO representation built from the gate tensor, set by set_sites().
+        sites: The two sites the operator acts on.
+        theta: The rotation angle parameter.
 
     Methods:
         set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
+            Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
     """
 
     name = "rzz"
@@ -1428,7 +1434,7 @@ class Rzz(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Sets the sites, reshapes the tensor, computes the generator, and builds the MPO.
 
         Args:
             *sites: Variable-length argument list specifying site indices.
@@ -1458,11 +1464,13 @@ class XX(BaseGate):
 
     Attributes:
         name: The name of the gate ("xx").
-        matrix: The 4x4 matrix representation of the gate.
+        matrix: The 4x4 matrix representation of the gate (X ⊗ X).
         interaction: The interaction level (2 for two-qubit gates).
         tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        mpo: An MPO representation generated from the gate tensor.
-        sites: The control and target sites.
+        sites: The two sites the operator acts on.
+
+    Note:
+        MPO tensors are not set automatically; call set_sites() to build them.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -1484,11 +1492,13 @@ class YY(BaseGate):
 
     Attributes:
         name: The name of the gate ("yy").
-        matrix: The 4x4 matrix representation of the gate.
+        matrix: The 4x4 matrix representation of the gate (Y ⊗ Y).
         interaction: The interaction level (2 for two-qubit gates).
         tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        mpo: An MPO representation generated from the gate tensor.
-        sites: The control and target sites.
+        sites: The two sites the operator acts on.
+
+    Note:
+        MPO tensors are not set automatically; call set_sites() to build them.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -1510,11 +1520,13 @@ class ZZ(BaseGate):
 
     Attributes:
         name: The name of the gate ("zz").
-        matrix: The 4x4 matrix representation of the gate.
+        matrix: The 4x4 matrix representation of the gate (Z ⊗ Z).
         interaction: The interaction level (2 for two-qubit gates).
         tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        mpo: An MPO representation generated from the gate tensor.
-        sites: The control and target sites.
+        sites: The two sites the operator acts on.
+
+    Note:
+        MPO tensors are not set automatically; call set_sites() to build them.
 
     Methods:
         set_sites(*sites: int) -> None:
@@ -1532,7 +1544,18 @@ class ZZ(BaseGate):
 
 
 class Crosstalk(BaseGate):
-    """Class representing the Kronecker product of two single-site gates."""
+    """Class representing the Kronecker product of two single-site gates (gate1 ⊗ gate2).
+
+    Attributes:
+        name: Dynamically set to ``"crosstalk_<gate1.name>_<gate2.name>"``.
+        matrix: The combined d²×d² matrix (gate1.matrix ⊗ gate2.matrix).
+        swapped_matrix: The reversed product (gate2.matrix ⊗ gate1.matrix), used when
+            the operator is applied with sites in reverse order.
+        matrix1: The matrix of the first (left) gate.
+        matrix2: The matrix of the second (right) gate.
+        interaction: The interaction level (2 for two-site operators).
+        local_dim: Local Hilbert space dimension, inherited from gate1.
+    """
 
     name = "crosstalk"
 
@@ -1880,6 +1903,16 @@ class GateLibrary:
         schmidt_spectrum: Class representing a request for the Schmidt spectrum across a cut.
 
         custom: Base class hook for defining custom gates (falls back to `BaseGate`).
+        zero: Class for the all-zero operator.
+
+        raising:  Alias for Create (noise-model naming convention).
+        lowering: Alias for Destroy (noise-model naming convention).
+        raising_two: Alias for CrosstalkCreateCreate (two-site raising operator).
+        lowering_two: Alias for CrosstalkDestroyDestroy (two-site lowering operator).
+        pauli_x: Alias for X (noise-model naming convention).
+        pauli_y: Alias for Y (noise-model naming convention).
+        pauli_z: Alias for Z (noise-model naming convention).
+        dephasing: Alias for Z (noise-model naming convention).
     """
 
     x = X
