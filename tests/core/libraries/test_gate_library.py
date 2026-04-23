@@ -915,7 +915,10 @@ def test_crosstalk_named_subclasses() -> None:
         (GateLibrary.cp, {"params": [np.pi / 4]}),
     ],
 )
-def test_two_qubit_set_sites_list_input(gate_factory, kwargs) -> None:  # type: ignore[no-untyped-def]
+def test_two_qubit_set_sites_list_input(
+    gate_factory: Callable[..., BaseGate],
+    kwargs: dict[str, list[float]],
+) -> None:
     """All two-qubit gates accept a list argument in set_sites."""
     params = kwargs.get("params")
     gate = gate_factory(params) if params is not None else gate_factory()
@@ -935,7 +938,10 @@ def test_two_qubit_set_sites_list_input(gate_factory, kwargs) -> None:  # type: 
         (GateLibrary.cp, {"params": [np.pi / 4]}),
     ],
 )
-def test_two_qubit_set_sites_wrong_count_raises(gate_factory, kwargs) -> None:  # type: ignore[no-untyped-def]
+def test_two_qubit_set_sites_wrong_count_raises(
+    gate_factory: Callable[..., BaseGate],
+    kwargs: dict[str, list[float]],
+) -> None:
     """All two-qubit gates raise ValueError when given the wrong number of sites."""
     params = kwargs.get("params")
     gate = gate_factory(params) if params is not None else gate_factory()
