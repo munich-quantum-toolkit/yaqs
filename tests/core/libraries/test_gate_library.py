@@ -32,6 +32,12 @@ from numpy.testing import assert_allclose, assert_array_equal
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import (
+    P0,
+    P1,
+    PVM,
+    XX,
+    YY,
+    ZZ,
     BaseGate,
     Crosstalk,
     CrosstalkCreateCreate,
@@ -49,21 +55,17 @@ from mqt.yaqs.core.libraries.gate_library import (
     CrosstalkZZ,
     Destroy,
     GateLibrary,
-    P0,
-    P1,
-    PVM,
     X,
-    XX,
     Y,
-    YY,
     Z,
-    ZZ,
     Zero,
     extend_gate,
     split_tensor,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
 
@@ -901,16 +903,22 @@ def test_crosstalk_named_subclasses() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("gate_factory,kwargs", [
-    (GateLibrary.cx, {}),
-    (GateLibrary.cz, {}),
-    (GateLibrary.swap, {}),
-    (GateLibrary.rxx, {"params": [np.pi / 4]}),
-    (GateLibrary.ryy, {"params": [np.pi / 4]}),
-    (GateLibrary.rzz, {"params": [np.pi / 4]}),
-    (GateLibrary.cp, {"params": [np.pi / 4]}),
-])
-def test_two_qubit_set_sites_list_input(gate_factory, kwargs) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(
+    ("gate_factory", "kwargs"),
+    [
+        (GateLibrary.cx, {}),
+        (GateLibrary.cz, {}),
+        (GateLibrary.swap, {}),
+        (GateLibrary.rxx, {"params": [np.pi / 4]}),
+        (GateLibrary.ryy, {"params": [np.pi / 4]}),
+        (GateLibrary.rzz, {"params": [np.pi / 4]}),
+        (GateLibrary.cp, {"params": [np.pi / 4]}),
+    ],
+)
+def test_two_qubit_set_sites_list_input(
+    gate_factory: Callable[..., BaseGate],
+    kwargs: dict[str, list[float]],
+) -> None:
     """All two-qubit gates accept a list argument in set_sites."""
     params = kwargs.get("params")
     gate = gate_factory(params) if params is not None else gate_factory()
@@ -918,16 +926,22 @@ def test_two_qubit_set_sites_list_input(gate_factory, kwargs) -> None:  # type: 
     assert gate.sites == [0, 1]
 
 
-@pytest.mark.parametrize("gate_factory,kwargs", [
-    (GateLibrary.cx, {}),
-    (GateLibrary.cz, {}),
-    (GateLibrary.swap, {}),
-    (GateLibrary.rxx, {"params": [np.pi / 4]}),
-    (GateLibrary.ryy, {"params": [np.pi / 4]}),
-    (GateLibrary.rzz, {"params": [np.pi / 4]}),
-    (GateLibrary.cp, {"params": [np.pi / 4]}),
-])
-def test_two_qubit_set_sites_wrong_count_raises(gate_factory, kwargs) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(
+    ("gate_factory", "kwargs"),
+    [
+        (GateLibrary.cx, {}),
+        (GateLibrary.cz, {}),
+        (GateLibrary.swap, {}),
+        (GateLibrary.rxx, {"params": [np.pi / 4]}),
+        (GateLibrary.ryy, {"params": [np.pi / 4]}),
+        (GateLibrary.rzz, {"params": [np.pi / 4]}),
+        (GateLibrary.cp, {"params": [np.pi / 4]}),
+    ],
+)
+def test_two_qubit_set_sites_wrong_count_raises(
+    gate_factory: Callable[..., BaseGate],
+    kwargs: dict[str, list[float]],
+) -> None:
     """All two-qubit gates raise ValueError when given the wrong number of sites."""
     params = kwargs.get("params")
     gate = gate_factory(params) if params is not None else gate_factory()
