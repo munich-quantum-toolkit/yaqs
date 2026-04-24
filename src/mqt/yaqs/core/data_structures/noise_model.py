@@ -299,22 +299,10 @@ class CompactNoiseModel:
             assert "sites" in proc, "Each process must have a 'sites' key"
             assert "strength" in proc, "Each process must have a 'strength' key"
 
-            if interaction == 1:
-                for site in proc["sites"]:
-                    self.expanded_processes.append({
-                        "name": proc["name"],
-                        "sites": [site],
-                        "strength": proc["strength"],
-                    })
-                    self.index_list.append(i)
-            else:
-                for pair in proc["sites"]:
-                    self.expanded_processes.append({
-                        "name": proc["name"],
-                        "sites": list(pair),
-                        "strength": proc["strength"],
-                    })
-                    self.index_list.append(i)
+            for site in proc["sites"]:
+                sites = [site] if isinstance(site, int) else list(site)
+                self.expanded_processes.append({"name": proc["name"], "sites": sites, "strength": proc["strength"]})
+                self.index_list.append(i)
 
         self.strength_list: np.ndarray = np.array([proc["strength"] for proc in self.compact_processes])
 
