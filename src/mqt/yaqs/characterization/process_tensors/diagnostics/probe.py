@@ -97,6 +97,19 @@ def _sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
     return np.asarray(cliffords[idx], dtype=np.complex128)
 
 
+def _sample_depolarizing_pauli_unitary(rng: np.random.Generator) -> np.ndarray:
+    """Sample a Pauli unitary for a stochastic unraveling of the depolarizing channel."""
+    idx = int(rng.integers(0, 4))
+    if idx == 0:  # I
+        return np.eye(2, dtype=np.complex128)
+    if idx == 1:  # X
+        return np.asarray([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    if idx == 2:  # Y
+        return np.asarray([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
+    # Z
+    return np.asarray([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
+
+
 def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
     """Encode unitary channel Choi matrix as the standard 32-float row."""
     uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
@@ -190,6 +203,109 @@ def sample_split_cut_probes(
             else:
                 u = unitary_sampler(rng)
                 future_features[j, 1 + t] = _unitary_to_choi_features(u)
+                pairs_j.append({"type": "unitary", "U": u})
+        future_pairs.append(pairs_j)
+
+    return ProbeSet(
+        cut=c,
+        k=kk,
+        past_features=past_features,
+        future_features=future_features,
+        past_pairs=past_pairs,
+        past_cut_meas=past_cut_meas,
+        future_prep_cut=future_prep_cut,
+        future_pairs=future_pairs,
+    )
+
+
+def sample_split_gap_probes(
+    *,
+    cut: int,
+    gap: int,
+    k: int,
+    n_pasts: int,
+    n_futures: int,
+    rng: np.random.Generator,
+    intervention_mode: str = "unitary_break_mp",
+    unitary_ensemble: str = "haar",
+) -> ProbeSet:
+    """Sample split probes with a depolarizing memory gap after the break.
+
+    ``gap`` inserts that many stochastic depolarizing slots between the break intervention
+    and the remaining future region. For ``gap=0`` this reduces exactly to
+    :func:`sample_split_cut_probes`.
+    """
+    c = int(cut)
+    g = int(gap)
+    kk = int(k)
+    if g < 0:
+        raise ValueError(f"gap must be >= 0, got {gap}")
+    if not (1 <= c <= kk):
+        raise ValueError(f"cut must satisfy 1 <= cut <= k, got cut={cut}, k={k}")
+    if c + g + 1 > kk:
+        raise ValueError(f"require cut + gap + 1 <= k, got cut={c}, gap={g}, k={kk}")
+    if g == 0:
+        return sample_split_cut_probes(
+            cut=c,
+            k=kk,
+            n_pasts=n_pasts,
+            n_futures=n_futures,
+            rng=rng,
+            intervention_mode=intervention_mode,
+            unitary_ensemble=unitary_ensemble,
+        )
+
+    past_full = c - 1
+    future_full = kk - c - g
+    mode = str(intervention_mode).strip().lower()
+    if mode not in {"unitary_break_mp", "measure_prepare"}:
+        raise ValueError(f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}")
+    ensemble = str(unitary_ensemble).strip().lower()
+    if ensemble not in {"haar", "clifford"}:
+        raise ValueError(f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}")
+    unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
+
+    past_features = np.empty((n_pasts, past_full + 1, 32), dtype=np.float32)
+    past_pairs: list[list[Any]] = []
+    past_cut_meas: list[np.ndarray] = []
+    for i in range(n_pasts):
+        pairs_i: list[Any] = []
+        for t in range(past_full):
+            if mode == "measure_prepare":
+                feat, pair = _sample_step(rng)
+                past_features[i, t] = feat
+                pairs_i.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                past_features[i, t] = _unitary_to_choi_features(u)
+                pairs_i.append({"type": "unitary", "U": u})
+        feat_m, psi_m = _sample_cut_measurement_only(rng)
+        past_features[i, past_full] = feat_m
+        past_cut_meas.append(psi_m)
+        past_pairs.append(pairs_i)
+
+    future_features = np.empty((n_futures, 1 + g + future_full, 32), dtype=np.float32)
+    future_prep_cut: list[np.ndarray] = []
+    future_pairs: list[list[Any]] = []
+    for j in range(n_futures):
+        feat_p, psi_p = _sample_cut_preparation_only(rng)
+        future_features[j, 0] = feat_p
+        future_prep_cut.append(psi_p)
+        pairs_j: list[Any] = []
+        # Depolarizing buffer slots.
+        for t in range(g):
+            u_dep = _sample_depolarizing_pauli_unitary(rng)
+            future_features[j, 1 + t] = _unitary_to_choi_features(u_dep)
+            pairs_j.append({"type": "unitary", "U": u_dep})
+        # Remaining future region.
+        for t in range(future_full):
+            if mode == "measure_prepare":
+                feat, pair = _sample_step(rng)
+                future_features[j, 1 + g + t] = feat
+                pairs_j.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                future_features[j, 1 + g + t] = _unitary_to_choi_features(u)
                 pairs_j.append({"type": "unitary", "U": u})
         future_pairs.append(pairs_j)
 
