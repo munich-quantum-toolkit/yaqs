@@ -190,34 +190,74 @@ def run_benchmark(args: argparse.Namespace) -> tuple[list[dict[str, float | int]
 def plot_from_saved(*, summary_rows: list[dict[str, str | float | int]], out_stem: Path) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.cm import ScalarMappable
-    from matplotlib.colors import Normalize
-    from matplotlib.ticker import LogLocator, NullLocator
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+    from matplotlib.ticker import FixedLocator, LogFormatter, LogLocator, NullFormatter, NullLocator
+
+    def _truncate_cmap(name: str, lo: float, hi: float, n: int = 256) -> LinearSegmentedColormap:
+        base = plt.get_cmap(name)
+        return LinearSegmentedColormap.from_list(f"{name}_trunc_{lo:.2f}_{hi:.2f}", base(np.linspace(lo, hi, n)))
 
     _configure_matplotlib_prl_figure()
     fig, ax = plt.subplots(1, 1, figsize=(3.35, 2.45), constrained_layout=True)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
     js = sorted({float(r["J"]) for r in summary_rows})
-    norm = Normalize(vmin=min(js), vmax=max(js)) if js else Normalize(vmin=0, vmax=1)
-    cmap = plt.get_cmap("viridis")
+    norm = Normalize(vmin=0.0, vmax=2.0)
+    cmap = _truncate_cmap("Reds", 0.35, 0.95)
     m_vals = sorted({int(float(r["m"])) for r in summary_rows})
+    all_js = js
+    highlight_targets = [0.4, 1.0, 2.0]
+    highlight_js = sorted({float(min(js, key=lambda x: abs(x - t))) for t in highlight_targets}) if js else []
 
-    for jv in js:
+    # Background family: thin lines, no markers, no uncertainty shading.
+    for jv in all_js:
         sub = sorted([r for r in summary_rows if abs(float(r["J"]) - jv) < 1e-12], key=lambda r: int(float(r["m"])))
         xs = np.asarray([int(float(r["m"])) for r in sub], dtype=np.float64)
         mu = np.asarray([float(r["entropy_mean"]) for r in sub], dtype=np.float64)
-        sem = np.asarray([float(r.get("entropy_sem", 0.0)) for r in sub], dtype=np.float64)
         ys = np.clip(mu, 1e-30, None)
-        lo = np.clip(mu - sem, 1e-30, None)
-        hi = np.clip(mu + sem, 1e-30, None)
         col = cmap(norm(jv))
-        ax.semilogy(xs, ys, color=col, lw=0.9, marker="o", ms=2.2, alpha=0.9)
-        ax.fill_between(xs, lo, hi, color=col, alpha=0.08, linewidth=0)
+        mask = xs >= 3.0
+        if np.any(mask):
+            ax.semilogy(xs[mask], ys[mask], color=col, lw=0.8, alpha=0.38, zorder=1)
+
+    # Representative highlights: thicker lines + markers.
+    for jv in highlight_js:
+        sub = sorted([r for r in summary_rows if abs(float(r["J"]) - jv) < 1e-12], key=lambda r: int(float(r["m"])))
+        xs = np.asarray([int(float(r["m"])) for r in sub], dtype=np.float64)
+        mu = np.asarray([float(r["entropy_mean"]) for r in sub], dtype=np.float64)
+        ys = np.clip(mu, 1e-30, None)
+        col = cmap(norm(jv))
+        mask = xs >= 3.0
+        if np.any(mask):
+            ax.semilogy(
+                xs[mask],
+                ys[mask],
+                color=col,
+                lw=1.7,
+                marker="o",
+                ms=4.0,
+                markeredgewidth=0.0,
+                alpha=0.98,
+                zorder=3,
+            )
 
     ax.set_xlabel(r"Probe budget $m$ ($N_p=N_f$)")
     ax.set_ylabel(r"$S_V$")
-    ax.set_xticks(m_vals)
+    ax.set_xscale("log", base=2)
+    major_ticks = [2, 4, 8, 16, 32, 64]
+    major_ticks = [t for t in major_ticks if m_vals and min(m_vals) <= t <= max(m_vals)]
+    if major_ticks:
+        ax.xaxis.set_major_locator(FixedLocator(major_ticks))
+    ax.xaxis.set_major_formatter(LogFormatter(base=2, labelOnlyBase=False))
+    minor_ticks = [3, 5, 6, 10, 12, 24, 48]
+    minor_ticks = [t for t in minor_ticks if m_vals and min(m_vals) <= t <= max(m_vals)]
+    if minor_ticks:
+        ax.xaxis.set_minor_locator(FixedLocator(minor_ticks))
+    ax.xaxis.set_minor_formatter(NullFormatter())
     ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
     ax.yaxis.set_minor_locator(NullLocator())
-    ax.grid(True, which="major", axis="y", alpha=0.1, linewidth=0.3)
+    ax.grid(True, which="major", axis="y", alpha=0.08, linewidth=0.3)
+    ax.grid(False, axis="x")
     ax.set_ylim(1e-6, 1)
     sm = ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
@@ -232,18 +272,28 @@ def plot_from_saved(*, summary_rows: list[dict[str, str | float | int]], out_ste
 def plot_error_from_saved(*, summary_rows: list[dict[str, str | float | int]], out_stem: Path) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.cm import ScalarMappable
-    from matplotlib.colors import Normalize
-    from matplotlib.ticker import LogLocator, NullLocator
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+    from matplotlib.ticker import FixedLocator, LogFormatter, LogLocator, NullFormatter, NullLocator
+
+    def _truncate_cmap(name: str, lo: float, hi: float, n: int = 256) -> LinearSegmentedColormap:
+        base = plt.get_cmap(name)
+        return LinearSegmentedColormap.from_list(f"{name}_trunc_{lo:.2f}_{hi:.2f}", base(np.linspace(lo, hi, n)))
 
     _configure_matplotlib_prl_figure()
     fig, ax = plt.subplots(1, 1, figsize=(3.35, 2.45), constrained_layout=True)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
     js = sorted({float(r["J"]) for r in summary_rows})
-    norm = Normalize(vmin=min(js), vmax=max(js)) if js else Normalize(vmin=0, vmax=1)
-    cmap = plt.get_cmap("viridis")
+    norm = Normalize(vmin=0.0, vmax=2.0)
+    cmap = _truncate_cmap("Reds", 0.35, 0.95)
     m_vals = sorted({int(float(r["m"])) for r in summary_rows})
     m_ref = max(m_vals) if m_vals else 0
+    all_js = js
+    highlight_targets = [0.4, 1.0, 2.0]
+    highlight_js = sorted({float(min(js, key=lambda x: abs(x - t))) for t in highlight_targets}) if js else []
 
-    for jv in js:
+    # Background family.
+    for jv in all_js:
         sub = sorted([r for r in summary_rows if abs(float(r["J"]) - jv) < 1e-12], key=lambda r: int(float(r["m"])))
         if not sub:
             continue
@@ -253,21 +303,64 @@ def plot_error_from_saved(*, summary_rows: list[dict[str, str | float | int]], o
         ref_mu = float(ref_rows[0]["entropy_mean"])
         xs = np.asarray([int(float(r["m"])) for r in sub], dtype=np.float64)
         mu = np.asarray([float(r["entropy_mean"]) for r in sub], dtype=np.float64)
-        sem = np.asarray([float(r.get("entropy_sem", 0.0)) for r in sub], dtype=np.float64)
-        err = np.abs(mu - ref_mu)
-        lo = np.clip(err - sem, 1e-30, None)
-        hi = np.clip(err + sem, 1e-30, None)
-        ys = np.clip(err, 1e-30, None)
+        denom = max(abs(ref_mu), 1e-30)
+        rel_err = np.abs(mu - ref_mu) / denom
+        ys = np.clip(rel_err, 1e-30, None)
         col = cmap(norm(jv))
-        ax.semilogy(xs, ys, color=col, lw=0.9, marker="o", ms=2.2, alpha=0.9)
-        ax.fill_between(xs, lo, hi, color=col, alpha=0.08, linewidth=0)
+        mask = xs >= 3.0
+        if np.any(mask):
+            ax.semilogy(xs[mask], ys[mask], color=col, lw=0.8, alpha=0.38, zorder=1)
 
+    # Representative highlights.
+    for jv in highlight_js:
+        sub = sorted([r for r in summary_rows if abs(float(r["J"]) - jv) < 1e-12], key=lambda r: int(float(r["m"])))
+        if not sub:
+            continue
+        ref_rows = [r for r in sub if int(float(r["m"])) == int(m_ref)]
+        if not ref_rows:
+            continue
+        ref_mu = float(ref_rows[0]["entropy_mean"])
+        xs = np.asarray([int(float(r["m"])) for r in sub], dtype=np.float64)
+        mu = np.asarray([float(r["entropy_mean"]) for r in sub], dtype=np.float64)
+        denom = max(abs(ref_mu), 1e-30)
+        ys = np.clip(np.abs(mu - ref_mu) / denom, 1e-30, None)
+        col = cmap(norm(jv))
+        mask = xs >= 3.0
+        if np.any(mask):
+            ax.semilogy(
+                xs[mask],
+                ys[mask],
+                color=col,
+                lw=1.7,
+                marker="o",
+                ms=4.0,
+                markeredgewidth=0.0,
+                alpha=0.98,
+                zorder=3,
+            )
+    ax.set_ylim(1e-2, 1)
     ax.set_xlabel(r"Probe budget $m$ ($N_p=N_f$)")
-    ax.set_ylabel(r"$|S_V(m)-S_V(m_{\mathrm{ref}})|$")
-    ax.set_xticks(m_vals)
+    ax.set_ylabel(r"$|S_V(m)-S_V(m_{\mathrm{ref}})|/|S_V(m_{\mathrm{ref}})|$")
+    ax.set_xscale("log", base=2)
+    major_ticks = [2, 4, 8, 16, 32, 64]
+    major_ticks = [t for t in major_ticks if m_vals and min(m_vals) <= t <= max(m_vals)]
+    if major_ticks:
+        ax.xaxis.set_major_locator(FixedLocator(major_ticks))
+    ax.xaxis.set_major_formatter(LogFormatter(base=2, labelOnlyBase=False))
+    minor_ticks = [3, 5, 6, 10, 12, 24, 48]
+    minor_ticks = [t for t in minor_ticks if m_vals and min(m_vals) <= t <= max(m_vals)]
+    if minor_ticks:
+        ax.xaxis.set_minor_locator(FixedLocator(minor_ticks))
+    ax.xaxis.set_minor_formatter(NullFormatter())
     ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
     ax.yaxis.set_minor_locator(NullLocator())
-    ax.grid(True, which="major", axis="y", alpha=0.1, linewidth=0.3)
+    ax.grid(True, which="major", axis="y", alpha=0.08, linewidth=0.3)
+    ax.grid(False, axis="x")
+    # Reference slope guide for visual convergence comparison.
+    x_ref = np.asarray([m for m in m_vals if m >= 3], dtype=np.float64)
+    if x_ref.size:
+        y_ref = 1.0 / np.sqrt(x_ref)
+        ax.semilogy(x_ref, y_ref, color="black", lw=1.2, alpha=0.9)
     sm = ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax, pad=0.02, shrink=0.9)

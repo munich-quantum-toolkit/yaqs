@@ -202,7 +202,7 @@ def plot_finite_size_summary_figure(
                 sub = [r for r in summary_rows if int(float(r["L"])) == L and abs(float(r["J"]) - jv) < 1e-9]
                 if not sub:
                     continue
-                xs.append(L)
+                xs.append(L-1)
                 ys.append(float(sub[0][key]))
             if xs:
                 pts = sorted(zip(xs, ys), key=lambda p: p[0])
@@ -214,7 +214,7 @@ def plot_finite_size_summary_figure(
                     color=_col_j(jv),
                     label=rf"$J={jv:g}$",
                 )
-        ax.set_xlabel(r"$L$")
+        ax.set_xlabel(r"$Environment Size$")
         ax.set_ylabel(ylabel)
         ax.legend(frameon=False, loc="best", fontsize=7)
         ax.grid(True, alpha=0.12, linewidth=0.4)
@@ -276,12 +276,22 @@ def plot_integrated_entropy_vs_l(
     out_stem: Path,
 ) -> None:
     import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
 
     _configure_matplotlib()
     js = sorted({float(r["J"]) for r in summary_rows})
     ls_all = sorted({int(float(r["L"])) for r in summary_rows})
 
-    fig, ax = plt.subplots(1, 1, figsize=(3.4, 2.6), constrained_layout=True)
+    def _truncate_cmap(name: str, lo: float, hi: float, n: int = 256) -> LinearSegmentedColormap:
+        base = plt.get_cmap(name)
+        return LinearSegmentedColormap.from_list(f"{name}_trunc_{lo:.2f}_{hi:.2f}", base(np.linspace(lo, hi, n)))
+
+    fig, ax = plt.subplots(1, 1, figsize=(3.4, 2.55), constrained_layout=True)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    j_norm = Normalize(vmin=0.0, vmax=2.0)
+    j_cmap = _truncate_cmap("Reds", 0.30, 0.95)
+
     for jv in js:
         xs: list[int] = []
         ys: list[float] = []
@@ -289,7 +299,7 @@ def plot_integrated_entropy_vs_l(
             sub = [r for r in summary_rows if int(float(r["L"])) == L and abs(float(r["J"]) - jv) < 1e-9]
             if not sub:
                 continue
-            xs.append(L)
+            xs.append(L-1)
             ys.append(float(sub[0]["integrated_entropy"]))
         if xs:
             pts = sorted(zip(xs, ys), key=lambda p: p[0])
@@ -297,14 +307,21 @@ def plot_integrated_entropy_vs_l(
                 [p[0] for p in pts],
                 [p[1] for p in pts],
                 marker="o",
-                lw=1.2,
-                color=_col_j(jv),
+                lw=1.7,
+                ms=5.0,
+                markeredgewidth=0.0,
+                color=j_cmap(j_norm(jv)),
                 label=rf"$J={jv:g}$",
             )
-    ax.set_xlabel(r"$L$")
-    ax.set_ylabel(r"$\sum_c S_V(c)$")
-    ax.legend(frameon=False, loc="best", fontsize=7)
-    ax.grid(True, alpha=0.12, linewidth=0.4)
+    ax.set_xlabel(r"Environmental Sites")
+    ax.set_ylabel(r"Integrated Memory $\sum_c S_V(c)$")
+    ax.set_xticks([1, 2, 3, 4, 5, 6, 7])
+    ax.legend(frameon=False, loc="upper right", fontsize=7.0, handlelength=1.8, borderaxespad=0.25)
+    ax.grid(True, axis="y", alpha=0.10, linewidth=0.35)
+    ax.grid(False, axis="x")
+    ax.tick_params(direction="in", which="both", top=True, right=True, length=3.5, width=0.8)
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.15)
     fig.savefig(out_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
     fig.savefig(out_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
