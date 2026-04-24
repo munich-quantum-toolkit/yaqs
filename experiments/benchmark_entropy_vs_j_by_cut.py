@@ -91,6 +91,13 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--parallel", action="store_true", default=True)
     p.add_argument("--no-parallel", dest="parallel", action="store_false")
     p.add_argument(
+        "--unitary-ensemble",
+        type=str,
+        default="haar",
+        choices=("haar", "clifford"),
+        help="Non-break random unitary ensemble for unitary_break_mp probes.",
+    )
+    p.add_argument(
         "--plot-heatmap-only",
         action="store_true",
         dest="plot_heatmap_only",
@@ -611,6 +618,7 @@ def main() -> None:
             n_pasts=int(args.n_pasts),
             n_futures=int(args.n_futures),
             rng=probe_rng,
+            unitary_ensemble=str(args.unitary_ensemble),
         )
         for jv in J_SWEEP_DEFAULT:
             op = MPO.ising(length=L_FIXED, J=float(jv), g=G_FIXED)

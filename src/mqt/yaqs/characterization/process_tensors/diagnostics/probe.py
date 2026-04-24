@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Protocol
 
 import numpy as np
@@ -61,6 +62,41 @@ def _sample_random_unitary(rng: np.random.Generator) -> np.ndarray:
     return np.asarray(u, dtype=np.complex128)
 
 
+@lru_cache(maxsize=1)
+def _single_qubit_clifford_group() -> tuple[np.ndarray, ...]:
+    """Enumerate the 24 single-qubit Clifford unitaries from generators H and S."""
+    h = (1.0 / np.sqrt(2.0)) * np.asarray([[1.0, 1.0], [1.0, -1.0]], dtype=np.complex128)
+    s = np.asarray([[1.0, 0.0], [0.0, 1.0j]], dtype=np.complex128)
+    gens = (h, s)
+    eye = np.eye(2, dtype=np.complex128)
+
+    elems: list[np.ndarray] = [eye]
+    queue: list[np.ndarray] = [eye]
+    while queue:
+        u = queue.pop(0)
+        for g in gens:
+            v = g @ u
+            # normalize global phase using first significant entry
+            flat = v.reshape(-1)
+            idx = int(np.argmax(np.abs(flat)))
+            ref = flat[idx]
+            if np.abs(ref) > 1e-15:
+                v = v * np.exp(-1j * np.angle(ref))
+            if not any(np.allclose(v, w, atol=1e-12, rtol=0.0) for w in elems):
+                elems.append(v)
+                queue.append(v)
+        if len(elems) >= 24 and not queue:
+            break
+    return tuple(elems[:24])
+
+
+def _sample_random_clifford_unitary(rng: np.random.Generator) -> np.ndarray:
+    """Sample a uniformly random element from the 24 single-qubit Cliffords."""
+    cliffords = _single_qubit_clifford_group()
+    idx = int(rng.integers(0, len(cliffords)))
+    return np.asarray(cliffords[idx], dtype=np.complex128)
+
+
 def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
     """Encode unitary channel Choi matrix as the standard 32-float row."""
     uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
@@ -89,12 +125,17 @@ def sample_split_cut_probes(
     n_futures: int,
     rng: np.random.Generator,
     intervention_mode: str = "unitary_break_mp",
+    unitary_ensemble: str = "haar",
 ) -> ProbeSet:
     """Sample split-cut probes.
 
     Modes:
     - ``unitary_break_mp`` (default): random unitary at non-break steps, MP at break.
     - ``measure_prepare``: legacy all-random MP at all steps.
+
+    For ``unitary_break_mp``, ``unitary_ensemble`` controls non-break unitaries:
+    - ``haar`` (default): Haar-like random unitary via QR.
+    - ``clifford``: uniformly random single-qubit Clifford.
     """
     c = int(cut)
     kk = int(k)
@@ -108,6 +149,11 @@ def sample_split_cut_probes(
     if mode not in {"unitary_break_mp", "measure_prepare"}:
         msg = f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}"
         raise ValueError(msg)
+    ensemble = str(unitary_ensemble).strip().lower()
+    if ensemble not in {"haar", "clifford"}:
+        msg = f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}"
+        raise ValueError(msg)
+    unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
 
     past_features = np.empty((n_pasts, past_full + 1, 32), dtype=np.float32)
     past_pairs: list[list[Any]] = []
@@ -120,7 +166,7 @@ def sample_split_cut_probes(
                 past_features[i, t] = feat
                 pairs_i.append(pair)
             else:
-                u = _sample_random_unitary(rng)
+                u = unitary_sampler(rng)
                 past_features[i, t] = _unitary_to_choi_features(u)
                 pairs_i.append({"type": "unitary", "U": u})
         feat_m, psi_m = _sample_cut_measurement_only(rng)
@@ -142,7 +188,7 @@ def sample_split_cut_probes(
                 future_features[j, 1 + t] = feat
                 pairs_j.append(pair)
             else:
-                u = _sample_random_unitary(rng)
+                u = unitary_sampler(rng)
                 future_features[j, 1 + t] = _unitary_to_choi_features(u)
                 pairs_j.append({"type": "unitary", "U": u})
         future_pairs.append(pairs_j)
