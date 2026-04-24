@@ -43,7 +43,7 @@ DT_FIXED = 0.1
 G_FIXED = 1.0
 BRANCH_WEIGHT_BETA = 1.0
 
-L_LIST_DEFAULT = (2, 3, 4, 5, 6, 7, 8)
+L_LIST_DEFAULT = (2, 3, 4, 5, 6, 7, 8, 9, 10)
 J_LIST_DEFAULT = (0.5, 1.0, 1.5, 2.0)
 PROFILE_L_DEFAULT = (2, 3, 4, 5, 6, 7, 8)
 PROFILE_J_DEFAULT = 1.0
@@ -418,9 +418,9 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--g", type=float, default=G_FIXED)
     p.add_argument("--l-values", type=str, default=",".join(str(x) for x in L_LIST_DEFAULT))
     p.add_argument("--j-values", type=str, default=",".join(str(x) for x in J_LIST_DEFAULT))
-    p.add_argument("--n-pasts", type=int, default=16)
-    p.add_argument("--n-futures", type=int, default=16)
-    p.add_argument("--n-seeds", type=int, default=2)
+    p.add_argument("--n-pasts", type=int, default=32)
+    p.add_argument("--n-futures", type=int, default=32)
+    p.add_argument("--n-seeds", type=int, default=1)
     p.add_argument("--profile-j", type=float, default=PROFILE_J_DEFAULT)
     p.add_argument("--profile-l", type=str, default=",".join(str(x) for x in PROFILE_L_DEFAULT))
     p.add_argument("--plot-only", action="store_true", help="Only build figures from CSVs.")
