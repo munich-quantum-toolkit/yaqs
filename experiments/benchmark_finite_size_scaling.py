@@ -315,13 +315,82 @@ def plot_integrated_entropy_vs_l(
             )
     ax.set_xlabel(r"Environmental Sites")
     ax.set_ylabel(r"Integrated Memory $\sum_c S_V(c)$")
-    ax.set_xticks([1, 2, 3, 4, 5, 6, 7])
+    ax.set_xticks([1, 2, 3, 4, 5, 6, 7, 8, 9])
     ax.legend(frameon=False, loc="upper right", fontsize=7.0, handlelength=1.8, borderaxespad=0.25)
     ax.grid(True, axis="y", alpha=0.10, linewidth=0.35)
     ax.grid(False, axis="x")
     ax.tick_params(direction="in", which="both", top=True, right=True, length=3.5, width=0.8)
     for spine in ax.spines.values():
         spine.set_linewidth(1.15)
+    fig.savefig(out_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(out_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+
+
+def plot_entropy_vs_l_for_fixed_cuts(
+    detail_rows: list[dict[str, str | float | int]],
+    *,
+    out_stem: Path,
+    cuts: tuple[int, ...] = (5, 10, 15),
+) -> None:
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+    def _truncate_cmap(name: str, lo: float, hi: float, n: int = 256) -> LinearSegmentedColormap:
+        base = plt.get_cmap(name)
+        return LinearSegmentedColormap.from_list(f"{name}_trunc_{lo:.2f}_{hi:.2f}", base(np.linspace(lo, hi, n)))
+
+    _configure_matplotlib()
+    js = sorted({float(r["J"]) for r in detail_rows})
+    ls_all = sorted({int(float(r["L"])) for r in detail_rows})
+    j_norm = Normalize(vmin=0.0, vmax=2.0)
+    j_cmap = _truncate_cmap("Reds", 0.30, 0.95)
+
+    fig, axes = plt.subplots(1, 3, figsize=(7.1, 2.55), constrained_layout=True, sharey=True)
+    fig.patch.set_facecolor("white")
+
+    for ax, cut in zip(axes, cuts, strict=False):
+        ax.set_facecolor("white")
+        for jv in js:
+            xs: list[int] = []
+            ys: list[float] = []
+            for L in ls_all:
+                sub = [
+                    r
+                    for r in detail_rows
+                    if int(float(r["c"])) == int(cut)
+                    and int(float(r["L"])) == L
+                    and abs(float(r["J"]) - jv) < 1e-9
+                ]
+                if not sub:
+                    continue
+                xs.append(L)
+                ys.append(float(sub[0]["entropy"]))
+            if xs:
+                pts = sorted(zip(xs, ys), key=lambda p: p[0])
+                ax.plot(
+                    [p[0] for p in pts],
+                    [p[1] for p in pts],
+                    marker="o",
+                    lw=1.6,
+                    ms=4.6,
+                    markeredgewidth=0.0,
+                    color=j_cmap(j_norm(jv)),
+                    label=rf"$J={jv:g}$",
+                )
+
+        ax.set_title(rf"$c={int(cut)}$", fontsize=10)
+        ax.set_xlabel(r"$L$")
+        ax.set_xticks([2, 3, 4, 5, 6, 7, 8])
+        ax.grid(True, axis="y", alpha=0.10, linewidth=0.35)
+        ax.grid(False, axis="x")
+        ax.tick_params(direction="in", which="both", top=True, right=True, length=3.5, width=0.8)
+        for spine in ax.spines.values():
+            spine.set_linewidth(1.1)
+
+    axes[0].set_ylabel(r"$S_V(c)$")
+    axes[-1].legend(frameon=False, loc="upper right", fontsize=7.0, handlelength=1.8, borderaxespad=0.25)
+
     fig.savefig(out_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
     fig.savefig(out_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
@@ -476,7 +545,12 @@ def main() -> None:
         summary_raw = _load_csv(summary_path)
         if args.plot_integrated_only:
             plot_integrated_entropy_vs_l(summary_raw, out_stem=out_dir / "fig_integrated_entropy_vs_L")
+            if not detail_path.is_file():
+                raise FileNotFoundError(f"Detail CSV not found: {detail_path}")
+            detail_raw = _load_csv(detail_path)
+            plot_entropy_vs_l_for_fixed_cuts(detail_raw, out_stem=out_dir / "fig_entropy_vs_L_cuts_5_10_15")
             print(f"Wrote {out_dir / 'fig_integrated_entropy_vs_L.pdf'}", flush=True)
+            print(f"Wrote {out_dir / 'fig_entropy_vs_L_cuts_5_10_15.pdf'}", flush=True)
             return
         if not detail_path.is_file():
             raise FileNotFoundError(f"Detail CSV not found: {detail_path}")
@@ -493,8 +567,10 @@ def main() -> None:
             out_stem=out_dir / "fig_peak_cut_vs_L",
             profile_j=float(args.profile_j),
         )
+        plot_entropy_vs_l_for_fixed_cuts(detail_raw, out_stem=out_dir / "fig_entropy_vs_L_cuts_5_10_15")
         print(f"Wrote {out_dir / 'fig_finite_size_scaling_summary.pdf'}", flush=True)
         print(f"Wrote {out_dir / 'fig_peak_cut_vs_L.pdf'}", flush=True)
+        print(f"Wrote {out_dir / 'fig_entropy_vs_L_cuts_5_10_15.pdf'}", flush=True)
         return
 
     _, _ = run_benchmark(args)
@@ -513,8 +589,10 @@ def main() -> None:
             out_stem=out_dir / "fig_peak_cut_vs_L",
             profile_j=float(args.profile_j),
         )
+        plot_entropy_vs_l_for_fixed_cuts(detail_raw, out_stem=out_dir / "fig_entropy_vs_L_cuts_5_10_15")
         print(f"Wrote {out_dir / 'fig_finite_size_scaling_summary.pdf'}", flush=True)
         print(f"Wrote {out_dir / 'fig_peak_cut_vs_L.pdf'}", flush=True)
+        print(f"Wrote {out_dir / 'fig_entropy_vs_L_cuts_5_10_15.pdf'}", flush=True)
     print(f"Done. Results in {out_dir}", flush=True)
 
 
