@@ -34,6 +34,10 @@ class ProbeSet:
     past_cut_meas: list[np.ndarray]
     future_prep_cut: list[np.ndarray]
     future_pairs: list[list[Any]]
+    # Optional explicit sequence grid for non-standard constructions.
+    all_pairs_grid: list[list[Any]] | None = None
+    n_pasts_grid: int | None = None
+    n_futures_grid: int | None = None
 
 
 class ProbeProcess(Protocol):
@@ -108,6 +112,13 @@ def _sample_depolarizing_pauli_unitary(rng: np.random.Generator) -> np.ndarray:
         return np.asarray([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
     # Z
     return np.asarray([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
+
+
+def _sample_z_basis_state(rng: np.random.Generator) -> np.ndarray:
+    """Sample |0> or |1> with equal probability."""
+    if int(rng.integers(0, 2)) == 0:
+        return np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    return np.asarray([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
 
 
 def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
@@ -321,8 +332,133 @@ def sample_split_gap_probes(
     )
 
 
+def sample_split_symmetric_gap_probes(
+    *,
+    center_cut: int,
+    ell: int,
+    k: int,
+    n_pasts: int,
+    n_futures: int,
+    rng: np.random.Generator,
+    intervention_mode: str = "unitary_break_mp",
+    unitary_ensemble: str = "haar",
+) -> ProbeSet:
+    """Sample probes for symmetric erased block around ``center_cut``.
+
+    ``ell`` is half-width, so erased block width is ``2*ell+1`` from ``c_left=center_cut-ell``
+    to ``c_right=center_cut+ell``. For ``ell=0`` this reduces to ordinary split-cut probing
+    at ``center_cut``.
+    """
+    c0 = int(center_cut)
+    e = int(ell)
+    kk = int(k)
+    if e < 0:
+        raise ValueError(f"ell must be >= 0, got {ell}")
+    if not (1 <= c0 <= kk):
+        raise ValueError(f"center_cut must satisfy 1 <= center_cut <= k, got {center_cut}, k={k}")
+    ell_max = min(c0 - 1, kk - c0)
+    if e > ell_max:
+        raise ValueError(f"ell must satisfy 0 <= ell <= {ell_max}, got {ell}")
+    if e == 0:
+        return sample_split_cut_probes(
+            cut=c0,
+            k=kk,
+            n_pasts=n_pasts,
+            n_futures=n_futures,
+            rng=rng,
+            intervention_mode=intervention_mode,
+            unitary_ensemble=unitary_ensemble,
+        )
+
+    c_left = c0 - e
+    c_right = c0 + e
+    dep_count = max(0, c_right - c_left - 1)
+    past_full = c_left - 1
+    future_tail = kk - c_right
+
+    mode = str(intervention_mode).strip().lower()
+    if mode not in {"unitary_break_mp", "measure_prepare"}:
+        raise ValueError(f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}")
+    ensemble = str(unitary_ensemble).strip().lower()
+    if ensemble not in {"haar", "clifford"}:
+        raise ValueError(f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}")
+    unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
+
+    past_pairs: list[list[Any]] = []
+    past_cut_meas: list[np.ndarray] = []
+    for _i in range(n_pasts):
+        pairs_i: list[Any] = []
+        for _t in range(past_full):
+            if mode == "measure_prepare":
+                _feat, pair = _sample_step(rng)
+                pairs_i.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                pairs_i.append({"type": "unitary", "U": u})
+        _feat_m, psi_m = _sample_cut_measurement_only(rng)
+        past_cut_meas.append(psi_m)
+        past_pairs.append(pairs_i)
+
+    future_prep_cut: list[np.ndarray] = []
+    future_pairs: list[list[Any]] = []
+    for _j in range(n_futures):
+        _feat_p, psi_p = _sample_cut_preparation_only(rng)
+        future_prep_cut.append(psi_p)
+        pairs_j: list[Any] = []
+        for _t in range(future_tail):
+            if mode == "measure_prepare":
+                _feat, pair = _sample_step(rng)
+                pairs_j.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                pairs_j.append({"type": "unitary", "U": u})
+        future_pairs.append(pairs_j)
+
+    # Build explicit sequence grid:
+    # past ... ; measure-only at c_left ; depolarizing slots ; prepare step at c_right ; future tail ...
+    all_pairs: list[list[Any]] = []
+    z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    for i in range(n_pasts):
+        for j in range(n_futures):
+            full: list[Any] = []
+            full.extend(past_pairs[i])
+            # measurement-only at c_left (project and keep measured state)
+            psi_m = np.asarray(past_cut_meas[i], dtype=np.complex128)
+            full.append((psi_m, psi_m))
+            # depolarizing buffer (stochastic Pauli twirl)
+            for _ in range(dep_count):
+                full.append({"type": "unitary", "U": _sample_depolarizing_pauli_unitary(rng)})
+            # preparation at c_right (using sampled preparation state)
+            full.append((z0, np.asarray(future_prep_cut[j], dtype=np.complex128)))
+            full.extend(future_pairs[j])
+            if len(full) != kk:
+                raise RuntimeError(f"internal: symmetric gap sequence length mismatch, got {len(full)} expected {kk}")
+            all_pairs.append(full)
+
+    # Features are not consumed by exact evaluator, but keep placeholder arrays for consistency.
+    past_features = np.zeros((n_pasts, max(1, past_full + 1), 32), dtype=np.float32)
+    future_features = np.zeros((n_futures, max(1, 1 + dep_count + future_tail), 32), dtype=np.float32)
+    return ProbeSet(
+        cut=c_left,
+        k=kk,
+        past_features=past_features,
+        future_features=future_features,
+        past_pairs=past_pairs,
+        past_cut_meas=past_cut_meas,
+        future_prep_cut=future_prep_cut,
+        future_pairs=future_pairs,
+        all_pairs_grid=all_pairs,
+        n_pasts_grid=int(n_pasts),
+        n_futures_grid=int(n_futures),
+    )
+
+
 def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]:
     """Construct full sequence pair grid from split-cut probes."""
+    if probe_set.all_pairs_grid is not None:
+        npg = int(probe_set.n_pasts_grid) if probe_set.n_pasts_grid is not None else len(probe_set.past_pairs)
+        nfg = int(probe_set.n_futures_grid) if probe_set.n_futures_grid is not None else len(probe_set.future_pairs)
+        return probe_set.all_pairs_grid, npg, nfg
     c = int(probe_set.cut)
     kk = int(probe_set.k)
     n_p = len(probe_set.past_pairs)
