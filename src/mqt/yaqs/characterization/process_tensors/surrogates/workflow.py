@@ -49,6 +49,7 @@ from ..core.utils import (
     _evolve_backend_state,
     _get_rho_site_zero,
     _reprepare_backend_state_forced,
+    _reset_backend_site_zero_to_product_ket,
 )
 from .data import SequenceRolloutSample, stack_rollouts
 from .model import TransformerComb
@@ -252,11 +253,31 @@ def _final_state_rollout_core(
     break_step: int | None = None
     num_evolutions_in_loop = 0
 
+    z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     for step_idx, step in enumerate(psi_pairs):
-        if isinstance(step, dict) and str(step.get("type", "")).lower() == "unitary":
-            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-            state = _apply_backend_unitary_site_zero(state, u, solver)
-            sp = 1.0
+        if isinstance(step, dict):
+            step_type = str(step.get("type", "")).lower()
+            if step_type in {"unitary", "depolarizing_pauli"}:
+                u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
+                state = _apply_backend_unitary_site_zero(state, u, solver)
+                sp = 1.0
+            elif step_type == "measure_only":
+                psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
+                psi_reset = np.asarray(step.get("psi_reset", z0), dtype=np.complex128).reshape(2)
+                state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
+                sp = float(step_prob)
+            elif step_type == "prepare_only":
+                psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
+                state, _step_prob = _reprepare_backend_state_forced(state, z0, psi_prep, solver)
+                sp = 1.0
+            elif step_type == "reset_only":
+                psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+                state = _reset_backend_site_zero_to_product_ket(
+                    state, psi_r, solver, chain_length=int(hamiltonian.length)
+                )
+                sp = 1.0
+            else:
+                raise ValueError(f"Unsupported step type: {step_type!r}")
         else:
             psi_meas, psi_prep = step
             state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
@@ -452,11 +473,30 @@ def _surrogate_rollout_worker(
     rho_sequence_packed = np.empty((num_steps, 8), dtype=np.float32)
     out_i = 0
 
+    z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
     for step_idx, step in enumerate(psi_pairs):
-        if isinstance(step, dict) and str(step.get("type", "")).lower() == "unitary":
-            u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
-            state = _apply_backend_unitary_site_zero(state, u, solver)
-            step_prob = 1.0
+        if isinstance(step, dict):
+            step_type = str(step.get("type", "")).lower()
+            if step_type in {"unitary", "depolarizing_pauli"}:
+                u = np.asarray(step["U"], dtype=np.complex128).reshape(2, 2)
+                state = _apply_backend_unitary_site_zero(state, u, solver)
+                step_prob = 1.0
+            elif step_type == "measure_only":
+                psi_meas = np.asarray(step["psi_meas"], dtype=np.complex128).reshape(2)
+                psi_reset = np.asarray(step.get("psi_reset", z0), dtype=np.complex128).reshape(2)
+                state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_reset, solver)
+            elif step_type == "prepare_only":
+                psi_prep = np.asarray(step["psi_prep"], dtype=np.complex128).reshape(2)
+                state, _tmp_prob = _reprepare_backend_state_forced(state, z0, psi_prep, solver)
+                step_prob = 1.0
+            elif step_type == "reset_only":
+                psi_r = np.asarray(step["psi_reset"], dtype=np.complex128).reshape(2)
+                state = _reset_backend_site_zero_to_product_ket(
+                    state, psi_r, solver, chain_length=int(hamiltonian.length)
+                )
+                step_prob = 1.0
+            else:
+                raise ValueError(f"Unsupported step type: {step_type!r}")
         else:
             psi_meas, psi_prep = step
             state, step_prob = _reprepare_backend_state_forced(state, psi_meas, psi_prep, solver)
