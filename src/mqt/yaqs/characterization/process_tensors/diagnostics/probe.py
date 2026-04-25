@@ -114,13 +114,6 @@ def _sample_depolarizing_pauli_unitary(rng: np.random.Generator) -> np.ndarray:
     return np.asarray([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
 
 
-def _sample_z_basis_state(rng: np.random.Generator) -> np.ndarray:
-    """Sample |0> or |1> with equal probability."""
-    if int(rng.integers(0, 2)) == 0:
-        return np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    return np.asarray([0.0 + 0.0j, 1.0 + 0.0j], dtype=np.complex128)
-
-
 def _unitary_to_choi_features(u: np.ndarray) -> np.ndarray:
     """Encode unitary channel Choi matrix as the standard 32-float row."""
     uu = np.asarray(u, dtype=np.complex128).reshape(2, 2)
@@ -343,11 +336,14 @@ def sample_split_symmetric_gap_probes(
     intervention_mode: str = "unitary_break_mp",
     unitary_ensemble: str = "haar",
 ) -> ProbeSet:
-    """Sample probes for symmetric erased block around ``center_cut``.
+    """Sample probes for a **hard-reset memory-gap** (symmetric system-erasure block).
 
-    ``ell`` is half-width, so erased block width is ``2*ell+1`` from ``c_left=center_cut-ell``
-    to ``c_right=center_cut+ell``. For ``ell=0`` this reduces to ordinary split-cut probing
-    at ``center_cut``.
+    ``ell`` is the symmetric half-width around the midpoint cut; the blocked region has width
+    ``2*ell+1`` from ``c_left=center_cut-ell`` to ``c_right=center_cut+ell``. Between the row
+    label (left measurement + fixed reset) and the column label (right preparation), the same
+    deterministic ``reset_only`` steps are inserted for every ``(i,j)`` — a repeated system clamp,
+    not an exact depolarizing channel. For ``ell=0`` this reduces to ordinary split-cut probing at
+    ``center_cut``.
     """
     c0 = int(center_cut)
     e = int(ell)
@@ -372,7 +368,8 @@ def sample_split_symmetric_gap_probes(
 
     c_left = c0 - e
     c_right = c0 + e
-    dep_count = max(0, c_right - c_left - 1)
+    # Timesteps strictly between left boundary (measure+reset) and right boundary (prepare).
+    blocked_steps = max(0, c_right - c_left - 1)
     past_full = c_left - 1
     future_tail = kk - c_right
 
@@ -415,21 +412,22 @@ def sample_split_symmetric_gap_probes(
         future_pairs.append(pairs_j)
 
     # Build explicit sequence grid:
-    # past ... ; measure-only at c_left ; depolarizing slots ; prepare step at c_right ; future tail ...
+    # past ... ; left boundary (row label) ; symmetric system-erasure block ; right boundary (column label) ; future ...
     all_pairs: list[list[Any]] = []
     z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    # Common middle block: identical hard resets for every (i, j); no sampling, no row/column dependence.
+    erased_block_common: list[dict[str, Any]] = [{"type": "reset_only", "psi_reset": z0} for _ in range(blocked_steps)]
     for i in range(n_pasts):
         for j in range(n_futures):
             full: list[Any] = []
             full.extend(past_pairs[i])
-            # measurement-only at c_left (project and keep measured state)
+            # Left boundary: measurement-defined row label, then fixed reset independent of row.
             psi_m = np.asarray(past_cut_meas[i], dtype=np.complex128)
-            full.append((psi_m, psi_m))
-            # depolarizing buffer (stochastic Pauli twirl)
-            for _ in range(dep_count):
-                full.append({"type": "unitary", "U": _sample_depolarizing_pauli_unitary(rng)})
-            # preparation at c_right (using sampled preparation state)
-            full.append((z0, np.asarray(future_prep_cut[j], dtype=np.complex128)))
+            full.append({"type": "measure_only", "psi_meas": psi_m, "psi_reset": z0})
+            # Interior erased slots: same channel sequence for all (i, j).
+            full.extend(erased_block_common)
+            # Right boundary: prepare-only column label (handled by evaluator step semantics).
+            full.append({"type": "prepare_only", "psi_prep": np.asarray(future_prep_cut[j], dtype=np.complex128)})
             full.extend(future_pairs[j])
             if len(full) != kk:
                 raise RuntimeError(f"internal: symmetric gap sequence length mismatch, got {len(full)} expected {kk}")
@@ -437,7 +435,7 @@ def sample_split_symmetric_gap_probes(
 
     # Features are not consumed by exact evaluator, but keep placeholder arrays for consistency.
     past_features = np.zeros((n_pasts, max(1, past_full + 1), 32), dtype=np.float32)
-    future_features = np.zeros((n_futures, max(1, 1 + dep_count + future_tail), 32), dtype=np.float32)
+    future_features = np.zeros((n_futures, max(1, 1 + blocked_steps + future_tail), 32), dtype=np.float32)
     return ProbeSet(
         cut=c_left,
         k=kk,

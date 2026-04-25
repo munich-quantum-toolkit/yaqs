@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Exact benchmark: heatmap S_V(ell, J) with symmetric depolarizing memory gap.
+"""Exact benchmark: heatmap S_V(ell, J) for a symmetric **hard-reset memory gap**.
 
 This mirrors the entropy-vs-J-by-cut benchmark, replacing the x-axis from cut ``c`` to
-depolarizing symmetric half-width ``ell`` around the middle cut.
+symmetric half-width ``ell`` around the middle cut. The middle region is a **system erasure
+block**: the same deterministic ``reset_only`` steps for every matrix entry ``(i,j)``, not a
+stochastic or exact depolarizing channel.
 
-Here ``ell`` is the symmetric half-width around the midpoint cut; the total erased block
-width is ``2*ell+1``.
+Here ``ell`` is the symmetric half-width around the midpoint cut; the blocked region width is
+``2*ell+1``.
 """
 
 from __future__ import annotations
@@ -117,7 +119,7 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
     cmap.set_under(color="black")
     cmap.set_bad(color=(1.0, 1.0, 1.0, 0.0))
     im = ax0.pcolormesh(g_edges, j_edges, z_mesh, cmap=cmap, norm=LogNorm(vmin=HEATMAP_COLOR_VMIN, vmax=HEATMAP_COLOR_VMAX), shading="auto", linewidth=0, edgecolors="none", antialiased=False, rasterized=True)
-    ax0.set_xlabel(r"Symmetric gap half-width $\ell$")
+    ax0.set_xlabel(r"Symmetric reset half-width $\ell$")
     ax0.set_ylabel(r"Coupling $J$")
     ax0.grid(False)
     cbar = fig.colorbar(im, ax=ax0, shrink=0.92, pad=0.012, aspect=18)
@@ -155,7 +157,7 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
         ji = j_vals.index(jv)
         ys = np.asarray([max(float(z[gi, ji]), HEATMAP_COLOR_VMIN) for gi in range(len(ells))], dtype=np.float64)
         ax2.semilogy(ells, ys, lw=1.8, marker="o", ms=4.6, markeredgewidth=0.0, color=panel3_cmap(panel3_norm(jv)), alpha=0.92, label=rf"$J={jv:g}$")
-    ax2.set_xlabel(r"Symmetric gap half-width $\ell$")
+    ax2.set_xlabel(r"Symmetric reset half-width $\ell$")
     ax2.set_ylabel(r"$S_V$")
     ax2.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
     ax2.yaxis.set_minor_locator(NullLocator())

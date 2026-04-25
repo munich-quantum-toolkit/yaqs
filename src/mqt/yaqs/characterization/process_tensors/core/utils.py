@@ -166,6 +166,50 @@ def _reprepare_backend_state_forced(
     return new_mps, prob
 
 
+def _single_qubit_unitary_mapping_basis0_to_ket(psi: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Return a 2×2 unitary whose first column is ``psi`` (normalized computational |0⟩ → ``psi``)."""
+    p = np.asarray(psi, dtype=np.complex128).reshape(2)
+    nrm = float(np.linalg.norm(p))
+    if nrm < 1e-15:
+        p = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    else:
+        p = p / nrm
+    a, b = p[0], p[1]
+    return np.array([[a, -np.conj(b)], [b, np.conj(a)]], dtype=np.complex128)
+
+
+def _reset_backend_site_zero_to_product_ket(
+    state: MPS | NDArray[np.complex128],
+    psi_reset: NDArray[np.complex128],
+    solver: str,
+    *,
+    chain_length: int,
+) -> MPS | NDArray[np.complex128]:
+    """Clamp site 0 to ``psi_reset`` and all other sites to |0⟩ (deterministic, unit weight).
+
+    Used for hard-reset / memory-gap probes: destroys correlations and carries no branch weight.
+    """
+    p = np.asarray(psi_reset, dtype=np.complex128).reshape(2)
+    nrm = float(np.linalg.norm(p))
+    if nrm < 1e-15:
+        p = np.array([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    else:
+        p = p / nrm
+    if solver == "MCWF":
+        assert isinstance(state, np.ndarray)
+        L = int(chain_length)
+        rest_dim = 2 ** (L - 1)
+        psi_rest = np.zeros(rest_dim, dtype=np.complex128)
+        psi_rest[0] = 1.0 + 0.0j
+        return np.kron(p, psi_rest).astype(np.complex128).reshape(-1)
+    assert isinstance(state, MPS)
+    u = _single_qubit_unitary_mapping_basis0_to_ket(p)
+    new_mps = MPS(length=int(chain_length), state="zeros")
+    t0 = np.asarray(new_mps.tensors[0], dtype=np.complex128)
+    new_mps.tensors[0] = np.einsum("ab,bcd->acd", u, t0)
+    return new_mps
+
+
 def _apply_backend_unitary_site_zero(
     state: MPS | NDArray[np.complex128],
     unitary: NDArray[np.complex128],
