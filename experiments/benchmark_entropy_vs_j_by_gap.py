@@ -36,6 +36,7 @@ from mqt.yaqs.characterization.process_tensors.diagnostics.probe import sample_s
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
+K_FIXED = 50
 CENTER_CUT = K_FIXED // 2
 TAU_MAX = max(0, K_FIXED - CENTER_CUT - 1)
 TAU_DEFAULT = tuple(range(0, TAU_MAX + 1))
