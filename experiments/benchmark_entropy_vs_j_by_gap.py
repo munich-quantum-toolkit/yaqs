@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Exact benchmark: heatmap S_V(ell, J) for a symmetric **hard-reset memory gap**.
+"""Exact benchmark: delayed causal-break memory-length sweep ``S_V(tau, J)``.
 
 This mirrors the entropy-vs-J-by-cut benchmark, replacing the x-axis from cut ``c`` to
-symmetric half-width ``ell`` around the middle cut. The middle region is a **system erasure
-block**: the same deterministic ``reset_only`` steps for every matrix entry ``(i,j)``, not a
-stochastic or exact depolarizing channel.
+delay ``tau`` between a left causal break and a right preparation.
 
-Here ``ell`` is the symmetric half-width around the midpoint cut; the blocked region width is
-``2*ell+1``.
+For each ``tau``: rows vary by past probes + left measurement label, columns vary by right
+preparation label + future probes, and the ``tau`` bridge slots are common identity/no-op system
+instruments for every ``(i,j)`` while physical evolution continues.
 """
 
 from __future__ import annotations
@@ -33,14 +32,14 @@ from benchmark_entropy_vs_j_by_cut import (
     _list_initial_states_sys_env0,
     _load_summary_csv,
 )
-from mqt.yaqs.characterization.process_tensors.diagnostics.probe import sample_split_symmetric_gap_probes
+from mqt.yaqs.characterization.process_tensors.diagnostics.probe import sample_split_delayed_break_probes
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 CENTER_CUT = K_FIXED // 2
-ELL_MAX = min(CENTER_CUT - 1, K_FIXED - CENTER_CUT)
-MEMORY_GAPS_DEFAULT = tuple(range(0, ELL_MAX + 1))
-PANEL2_FIXED_ELLS = (0, 1, 2, 4, 8)
+TAU_MAX = max(0, K_FIXED - CENTER_CUT - 1)
+TAU_DEFAULT = tuple(range(0, TAU_MAX + 1))
+PANEL2_FIXED_TAUS = (0, 1, 2, 4, 8)
 PANEL3_TARGET_JS = (0.4, 1.0, 2.0)
 
 
@@ -48,8 +47,9 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--n-pasts", type=int, default=32)
     p.add_argument("--n-futures", type=int, default=32)
-    p.add_argument("--ells", type=str, default=",".join(str(g) for g in MEMORY_GAPS_DEFAULT))
-    p.add_argument("--gaps", type=str, default="", help="Deprecated alias for --ells.")
+    p.add_argument("--taus", type=str, default=",".join(str(g) for g in TAU_DEFAULT))
+    p.add_argument("--ells", type=str, default="", help="Deprecated alias for --taus.")
+    p.add_argument("--gaps", type=str, default="", help="Deprecated alias for --taus.")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--n-seeds", type=int, default=1)
     p.add_argument("--out-dir", type=Path, default=Path("benchmark_entropy_vs_j_by_gap_results"))
@@ -64,10 +64,10 @@ def _parse_args() -> argparse.Namespace:
 def _parse_int_list(spec: str) -> list[int]:
     vals = sorted({int(tok.strip()) for tok in spec.split(",") if tok.strip()})
     if not vals:
-        raise ValueError("expected at least one ell")
+        raise ValueError("expected at least one tau")
     for g in vals:
-        if g < 0 or g > ELL_MAX:
-            raise ValueError(f"ell must satisfy 0 <= ell <= {ELL_MAX}, got {g}")
+        if g < 0 or g > TAU_MAX:
+            raise ValueError(f"tau must satisfy 0 <= tau <= {TAU_MAX}, got {g}")
     return vals
 
 
@@ -90,15 +90,15 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
     if not rows:
         return
     _configure_matplotlib_prl_figure()
-    ells = sorted({int(float(r["ell"])) for r in rows})
+    taus = sorted({int(float(r["tau"])) for r in rows})
     j_vals = sorted({float(r["J"]) for r in rows})
-    z = np.full((len(ells), len(j_vals)), np.nan, dtype=np.float64)
+    z = np.full((len(taus), len(j_vals)), np.nan, dtype=np.float64)
     for r in rows:
-        gi = ells.index(int(float(r["ell"])))
+        gi = taus.index(int(float(r["tau"])))
         ji = j_vals.index(float(r["J"]))
         z[gi, ji] = float(r["entropy"])
 
-    g_arr = np.asarray(ells, dtype=np.float64)
+    g_arr = np.asarray(taus, dtype=np.float64)
     j_arr = np.asarray(j_vals, dtype=np.float64)
     g_edges = np.concatenate([[g_arr[0] - 0.5], 0.5 * (g_arr[:-1] + g_arr[1:]), [g_arr[-1] + 0.5]]) if len(g_arr) > 1 else np.array([-0.5, 0.5])
     if len(j_arr) > 1:
@@ -119,7 +119,7 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
     cmap.set_under(color="black")
     cmap.set_bad(color=(1.0, 1.0, 1.0, 0.0))
     im = ax0.pcolormesh(g_edges, j_edges, z_mesh, cmap=cmap, norm=LogNorm(vmin=HEATMAP_COLOR_VMIN, vmax=HEATMAP_COLOR_VMAX), shading="auto", linewidth=0, edgecolors="none", antialiased=False, rasterized=True)
-    ax0.set_xlabel(r"Symmetric reset half-width $\ell$")
+    ax0.set_xlabel(r"Delay $\tau$")
     ax0.set_ylabel(r"Coupling $J$")
     ax0.grid(False)
     cbar = fig.colorbar(im, ax=ax0, shrink=0.92, pad=0.012, aspect=18)
@@ -127,11 +127,11 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
     cbar.ax.yaxis.set_major_formatter(LogFormatterMathtext(base=10.0))
     cbar.ax.tick_params(length=3.0, width=0.7, labelsize=13)
 
-    panel2_gaps = [g for g in PANEL2_FIXED_ELLS if g in ells]
+    panel2_gaps = [g for g in PANEL2_FIXED_TAUS if g in taus]
     panel2_cmap = plt.get_cmap("Blues")
-    panel2_norm = Normalize(vmin=0.0, vmax=float(max(ells) if ells else 1))
+    panel2_norm = Normalize(vmin=0.0, vmax=float(max(taus) if taus else 1))
     for g in panel2_gaps:
-        sub = sorted((r for r in rows if int(float(r["ell"])) == int(g)), key=lambda r: float(r["J"]))
+        sub = sorted((r for r in rows if int(float(r["tau"])) == int(g)), key=lambda r: float(r["J"]))
         ax1.semilogy(
             [float(r["J"]) for r in sub],
             [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in sub],
@@ -141,7 +141,7 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
             ms=3.8,
             markeredgewidth=0.0,
             alpha=0.95,
-            label=rf"$\ell={g}$",
+            label=rf"$\tau={g}$",
         )
     ax1.set_xlabel(r"Coupling $J$")
     ax1.set_ylabel(r"$S_V$")
@@ -155,16 +155,16 @@ def plot_entropy_heatmap_gap_vs_j(rows: list[dict[str, str | float | int]], out_
     panel3_norm = Normalize(vmin=0.0, vmax=2.0)
     for jv in panel3_js:
         ji = j_vals.index(jv)
-        ys = np.asarray([max(float(z[gi, ji]), HEATMAP_COLOR_VMIN) for gi in range(len(ells))], dtype=np.float64)
-        ax2.semilogy(ells, ys, lw=1.8, marker="o", ms=4.6, markeredgewidth=0.0, color=panel3_cmap(panel3_norm(jv)), alpha=0.92, label=rf"$J={jv:g}$")
-    ax2.set_xlabel(r"Symmetric reset half-width $\ell$")
+        ys = np.asarray([max(float(z[gi, ji]), HEATMAP_COLOR_VMIN) for gi in range(len(taus))], dtype=np.float64)
+        ax2.semilogy(taus, ys, lw=1.8, marker="o", ms=4.6, markeredgewidth=0.0, color=panel3_cmap(panel3_norm(jv)), alpha=0.92, label=rf"$J={jv:g}$")
+    ax2.set_xlabel(r"Delay $\tau$")
     ax2.set_ylabel(r"$S_V$")
     ax2.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
     ax2.yaxis.set_minor_locator(NullLocator())
     ax2.grid(True, which="major", axis="y", alpha=0.10, linewidth=0.35)
     ax2.legend(frameon=False, fontsize=7.0, handlelength=1.4, borderaxespad=0.2)
 
-    y_side = [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in rows if int(float(r["ell"])) in panel2_gaps]
+    y_side = [max(float(r["entropy"]), HEATMAP_COLOR_VMIN) for r in rows if int(float(r["tau"])) in panel2_gaps]
     y_hi = min(1.0, max(HEATMAP_COLOR_VMIN * 1.2, (float(np.nanmax(y_side)) * 1.25 if y_side else 1.0)))
     ax1.set_ylim(HEATMAP_COLOR_VMIN, y_hi)
     ax2.set_ylim(HEATMAP_COLOR_VMIN, y_hi)
@@ -194,25 +194,26 @@ def main() -> None:
         print(f"Wrote heatmap: {out_dir / 'fig_entropy_heatmap_gap_vs_J.pdf'}", flush=True)
         return
 
-    ell_spec = str(args.ells) if str(args.ells).strip() else str(args.gaps)
-    if str(args.gaps).strip() and not str(args.ells).strip():
-        print("Using deprecated --gaps alias; please use --ells.", flush=True)
-    ells = _parse_int_list(ell_spec)
+    tau_spec = str(args.taus).strip()
+    if not tau_spec:
+        tau_spec = str(args.ells).strip() or str(args.gaps).strip()
+    if (str(args.ells).strip() or str(args.gaps).strip()) and not str(args.taus).strip():
+        print("Using deprecated --ells/--gaps alias; please use --taus.", flush=True)
+    taus = _parse_int_list(tau_spec)
     n_seeds = int(args.n_seeds)
     init_rng = np.random.default_rng(int(args.seed) + 77_777)
     initial_list = _list_initial_states_sys_env0(n_seeds=n_seeds, rng=init_rng)
     np.save(out_dir / "initial_states.npy", np.stack(initial_list, axis=0))
 
     rows: list[dict[str, float | int]] = []
-    for ell in ells:
-        c_left = int(CENTER_CUT - ell)
-        c_right = int(CENTER_CUT + ell)
-        erased_width = int(2 * ell + 1)
-        print(f"ell={ell:2d}, c_left={c_left:2d}, c_right={c_right:2d}, erased_width={erased_width:2d}", flush=True)
-        probe_rng = np.random.default_rng(int(args.seed) + 10_000 * int(ell))
-        probe_set = sample_split_symmetric_gap_probes(
-            center_cut=int(CENTER_CUT),
-            ell=int(ell),
+    for tau in taus:
+        left_cut = int(CENTER_CUT)
+        right_cut = int(left_cut + tau + 1)
+        print(f"tau={tau:2d}, left_cut={left_cut:2d}, right_cut={right_cut:2d}, bridge_slots={tau:2d}", flush=True)
+        probe_rng = np.random.default_rng(int(args.seed) + 10_000 * int(tau))
+        probe_set = sample_split_delayed_break_probes(
+            left_cut=int(left_cut),
+            tau=int(tau),
             k=K_FIXED,
             n_pasts=int(args.n_pasts),
             n_futures=int(args.n_futures),
@@ -242,11 +243,9 @@ def main() -> None:
                     "k": K_FIXED,
                     "dt": DT_FIXED,
                     "g": G_FIXED,
-                    "center_cut": int(CENTER_CUT),
-                    "ell": int(ell),
-                    "erased_width": int(erased_width),
-                    "c_left": int(c_left),
-                    "c_right": int(c_right),
+                    "left_cut": int(left_cut),
+                    "tau": int(tau),
+                    "right_cut": int(right_cut),
                     "J": float(jv),
                     "n_pasts": int(args.n_pasts),
                     "n_futures": int(args.n_futures),
@@ -258,7 +257,7 @@ def main() -> None:
                     "rank": int(round(float(np.mean(ranks)))),
                 }
             )
-            print(f"ell={ell:2d}, J={jv:>4.2f}, S_mean={rows[-1]['entropy']:.6e}", flush=True)
+            print(f"tau={tau:2d}, J={jv:>4.2f}, S_mean={rows[-1]['entropy']:.6e}", flush=True)
 
     _write_summary_csv(out_dir / "summary.csv", rows)
     (out_dir / "summary.json").write_text(json.dumps(rows, indent=2))

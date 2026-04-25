@@ -451,6 +451,114 @@ def sample_split_symmetric_gap_probes(
     )
 
 
+def sample_split_delayed_break_probes(
+    *,
+    left_cut: int,
+    tau: int,
+    k: int,
+    n_pasts: int,
+    n_futures: int,
+    rng: np.random.Generator,
+    sigma_ref: np.ndarray | None = None,
+    intervention_mode: str = "unitary_break_mp",
+    unitary_ensemble: str = "haar",
+) -> ProbeSet:
+    """Sample probes for delayed causal-break memory-length benchmark.
+
+    Construction for each full sequence:
+    ``past(i) + [left break: (E_m(i), sigma_ref)] + [identity]^tau + [prepare_only sigma_p(j)] + future(j)``.
+    The ``tau`` bridge is common to all ``(i,j)`` entries and independent of row/column labels.
+    """
+    c_left = int(left_cut)
+    tt = int(tau)
+    kk = int(k)
+    if tt < 0:
+        raise ValueError(f"tau must be >= 0, got {tau}")
+    if not (1 <= c_left <= kk):
+        raise ValueError(f"left_cut must satisfy 1 <= left_cut <= k, got {left_cut}, k={k}")
+    c_right = c_left + tt + 1
+    if c_right > kk:
+        tau_max = max(0, kk - c_left - 1)
+        raise ValueError(f"tau must satisfy 0 <= tau <= {tau_max}, got {tau}")
+    past_full = c_left - 1
+    future_tail = kk - c_right
+
+    mode = str(intervention_mode).strip().lower()
+    if mode not in {"unitary_break_mp", "measure_prepare"}:
+        raise ValueError(f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}")
+    ensemble = str(unitary_ensemble).strip().lower()
+    if ensemble not in {"haar", "clifford"}:
+        raise ValueError(f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}")
+    unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
+
+    past_pairs: list[list[Any]] = []
+    past_cut_meas: list[np.ndarray] = []
+    for _i in range(n_pasts):
+        pairs_i: list[Any] = []
+        for _t in range(past_full):
+            if mode == "measure_prepare":
+                _feat, pair = _sample_step(rng)
+                pairs_i.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                pairs_i.append({"type": "unitary", "U": u})
+        _feat_m, psi_m = _sample_cut_measurement_only(rng)
+        past_cut_meas.append(psi_m)
+        past_pairs.append(pairs_i)
+
+    future_prep_cut: list[np.ndarray] = []
+    future_pairs: list[list[Any]] = []
+    for _j in range(n_futures):
+        _feat_p, psi_p = _sample_cut_preparation_only(rng)
+        future_prep_cut.append(psi_p)
+        pairs_j: list[Any] = []
+        for _t in range(future_tail):
+            if mode == "measure_prepare":
+                _feat, pair = _sample_step(rng)
+                pairs_j.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                pairs_j.append({"type": "unitary", "U": u})
+        future_pairs.append(pairs_j)
+
+    z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+    sigma_ref_vec = z0 if sigma_ref is None else np.asarray(sigma_ref, dtype=np.complex128).reshape(2)
+    nrm = float(np.linalg.norm(sigma_ref_vec))
+    sigma_ref_vec = sigma_ref_vec / max(nrm, 1e-15)
+    u_id = np.eye(2, dtype=np.complex128)
+    bridge_common: list[dict[str, Any]] = [{"type": "unitary", "U": u_id} for _ in range(tt)]
+
+    all_pairs: list[list[Any]] = []
+    for i in range(n_pasts):
+        for j in range(n_futures):
+            full: list[Any] = []
+            full.extend(past_pairs[i])
+            psi_m = np.asarray(past_cut_meas[i], dtype=np.complex128)
+            full.append((psi_m, sigma_ref_vec))
+            full.extend(bridge_common)
+            full.append({"type": "prepare_only", "psi_prep": np.asarray(future_prep_cut[j], dtype=np.complex128)})
+            full.extend(future_pairs[j])
+            if len(full) != kk:
+                raise RuntimeError(f"internal: delayed-break sequence length mismatch, got {len(full)} expected {kk}")
+            all_pairs.append(full)
+
+    past_features = np.zeros((n_pasts, max(1, past_full + 1), 32), dtype=np.float32)
+    future_features = np.zeros((n_futures, max(1, 1 + tt + future_tail), 32), dtype=np.float32)
+    return ProbeSet(
+        cut=c_left,
+        k=kk,
+        past_features=past_features,
+        future_features=future_features,
+        past_pairs=past_pairs,
+        past_cut_meas=past_cut_meas,
+        future_prep_cut=future_prep_cut,
+        future_pairs=future_pairs,
+        all_pairs_grid=all_pairs,
+        n_pasts_grid=int(n_pasts),
+        n_futures_grid=int(n_futures),
+    )
+
+
 def build_all_pairs_grid(probe_set: ProbeSet) -> tuple[list[list[Any]], int, int]:
     """Construct full sequence pair grid from split-cut probes."""
     if probe_set.all_pairs_grid is not None:
