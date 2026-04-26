@@ -34,16 +34,16 @@ from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
 J_FIXED = 1.0
-L_VALUES_DEFAULT = tuple(range(2, 11))
-K_VALUES_DEFAULT = tuple(range(2, 101, 2))
+L_VALUES_DEFAULT = tuple(range(2, 6))
+K_VALUES_DEFAULT = tuple(range(2, 501, 2))
 REP_LS = (2, 4, 6, 8, 10)
 REP_KS = (10, 20, 40, 80, 100)
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-pasts", type=int, default=16)
-    p.add_argument("--n-futures", type=int, default=16)
+    p.add_argument("--n-pasts", type=int, default=32)
+    p.add_argument("--n-futures", type=int, default=32)
     p.add_argument("--n-seeds", type=int, default=1)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--l-values", type=str, default=",".join(str(v) for v in L_VALUES_DEFAULT))
@@ -226,8 +226,8 @@ def main() -> None:
         print(f"Wrote heatmap: {out_dir / 'fig_entropy_heatmap_middlecut_vs_L_k.pdf'}", flush=True)
         return
 
-    l_values = _parse_int_list(str(args.l_values), name="L", min_v=2, max_v=64)
-    k_values = _parse_int_list(str(args.k_values), name="k", min_v=2, max_v=200)
+    l_values = _parse_int_list(str(args.l_values), name="L", min_v=2, max_v=np.inf)
+    k_values = _parse_int_list(str(args.k_values), name="k", min_v=2, max_v=np.inf)
     if int(args.n_seeds) < 1:
         raise ValueError("n-seeds must be >= 1")
 

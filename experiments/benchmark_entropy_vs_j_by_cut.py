@@ -57,7 +57,7 @@ BRANCH_WEIGHT_BETA = 1.0
 
 # Fixed log color limits for the cut×J heatmap (values clip to ends of the scale).
 HEATMAP_COLOR_VMIN = 1e-3
-HEATMAP_COLOR_VMAX = 1.0
+HEATMAP_COLOR_VMAX = 3.0
 
 # Panel 2: $S_V$ vs $J$ at these fixed cuts $c$.
 PANEL2_FIXED_CUTS: tuple[int, ...] = (10, 15, 19)
