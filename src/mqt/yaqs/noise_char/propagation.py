@@ -37,8 +37,14 @@ def noise_model_to_operator_list(noise_model: NoiseModel) -> list[Observable]:
     noise_list: list[Observable] = []
 
     for proc in noise_model.processes:
-        gate = getattr(GateLibrary, proc["name"])
-        noise_list.extend(Observable(gate(), site) for site in proc["sites"])
+        gate_cls = getattr(GateLibrary, proc["name"])
+        gate_instance = gate_cls()
+        if gate_instance.interaction == 1:
+            noise_list.extend(Observable(gate_cls(), site) for site in proc["sites"])
+        else:
+            # 2-site operator: one Observable for the pair; fix name to registered key
+            gate_instance.name = proc["name"]
+            noise_list.append(Observable(gate_instance, proc["sites"]))
     return noise_list
 
 
