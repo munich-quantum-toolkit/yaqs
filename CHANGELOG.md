@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad`
 - added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
 - added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
 - added Arnoldi iteration as alternative to Lanczos method ([#338]) ([**@aaronleesander**])

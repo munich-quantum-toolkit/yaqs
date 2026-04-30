@@ -248,6 +248,22 @@ def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) ->
     return mps
 
 
+def _expected_uniform_clipped_bonds(length: int, chi_max: int) -> list[int]:
+    """Expected qubit bond-dimension schedule for the Haar-random initializer.
+
+    Args:
+        length: Number of sites.
+        chi_max: Maximum internal bond dimension.
+
+    Returns:
+        A list of bond dimensions ``[chi_0, ..., chi_L]`` with open boundaries.
+    """
+    bonds = [1]
+    bonds.extend(min(chi_max, 2 ** min(i, length - i)) for i in range(1, length))
+    bonds.append(1)
+    return bonds
+
+
 rng = np.random.default_rng()
 
 ##############################################################################
@@ -1138,6 +1154,65 @@ def test_pad_raises_on_shrink() -> None:
 
     with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
         mps.pad_bond_dimension(2)  # would shrink - must fail
+
+
+def test_haar_random_shapes_and_isometries() -> None:
+    """Haar-random initializer should produce feasible bonds and site-wise isometries."""
+    length = 8
+    chi_max = 4
+    mps = MPS(length=length, state="haar-random", pad=chi_max)
+    expected = _expected_uniform_clipped_bonds(length, chi_max)
+
+    for i, tensor in enumerate(mps.tensors):
+        d, chi_l, chi_r = tensor.shape
+        assert d == 2
+        assert chi_l == expected[i]
+        assert chi_r == expected[i + 1]
+
+        q_mat = tensor.reshape(d * chi_l, chi_r)
+        ident = np.eye(chi_r, dtype=np.complex128)
+        np.testing.assert_allclose(q_mat.conj().T @ q_mat, ident, atol=1e-12)
+
+    assert np.isclose(mps.norm(), 1.0, atol=1e-12)
+
+
+def test_haar_random_default_pad_is_product_state() -> None:
+    """Without pad, Haar-random defaults to χ_max=1 and should be a product state."""
+    mps = MPS(length=6, state="haar-random")
+    for tensor in mps.tensors:
+        assert tensor.shape[1] == 1
+        assert tensor.shape[2] == 1
+
+    assert np.isclose(mps.get_entropy([2, 3]), 0.0, atol=1e-12)
+
+
+def test_haar_random_entropy_statistics_vs_random_mps() -> None:
+    """Haar-random MPS should show higher mean entropy and lower variance than random tensors."""
+    length = 8
+    chi_max = 4
+    cut = length // 2 - 1
+    num_samples = 120
+
+    bonds = _expected_uniform_clipped_bonds(length, chi_max)
+    shapes = [(2, bonds[i], bonds[i + 1]) for i in range(length)]
+    local_rng = np.random.default_rng(1234)
+
+    rand_entropies = np.empty(num_samples, dtype=np.float64)
+    haar_entropies = np.empty(num_samples, dtype=np.float64)
+
+    for idx in range(num_samples):
+        tensors = [crandn(shape, seed=local_rng) for shape in shapes]
+        rand_state = MPS(length=length, tensors=tensors, physical_dimensions=2)
+        rand_state.normalize()
+        rand_state.set_canonical_form(cut)
+        rand_entropies[idx] = rand_state.get_entropy([cut, cut + 1])
+
+        haar_state = MPS(length=length, state="haar-random", pad=chi_max)
+        haar_state.set_canonical_form(cut)
+        haar_entropies[idx] = haar_state.get_entropy([cut, cut + 1])
+
+    assert float(np.mean(haar_entropies)) > float(np.mean(rand_entropies))
+    assert float(np.std(haar_entropies)) < float(np.std(rand_entropies))
 
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])
