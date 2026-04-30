@@ -1186,6 +1186,12 @@ def test_haar_random_default_pad_is_product_state() -> None:
     assert np.isclose(mps.get_entropy([2, 3]), 0.0, atol=1e-12)
 
 
+def test_haar_random_invalid_pad_raises() -> None:
+    """Haar-random initializer should reject non-positive target bond dimensions."""
+    with pytest.raises(ValueError, match="Target bond dimension must be at least 1"):
+        _ = MPS(length=6, state="haar-random", pad=0)
+
+
 def test_haar_random_entropy_statistics_vs_random_mps() -> None:
     """Haar-random MPS should show higher mean entropy and lower variance than random tensors."""
     length = 8
