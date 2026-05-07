@@ -173,6 +173,16 @@ class AnalogSimParams:
         If True, a progress bar is printed as trajectories finish.
     noise_model:
         The noise model used for the verification, populated after a simulation run.
+    compute_autocorrelator:
+        If True, the analog driver also records an ensemble-averaged autocorrelator (see
+        ``autocorrelator_*`` fields).
+    autocorrelator_observable:
+        Observable :math:`O` used when ``compute_autocorrelator`` is True.
+    autocorrelator_times:
+        Time grid written by the driver when autocorrelators are computed; ``None`` otherwise.
+    autocorrelator_results:
+        Ensemble-mean autocorrelator samples aligned with ``autocorrelator_times``; ``None`` if not
+        requested.
 
     Methods:
     --------
@@ -200,6 +210,8 @@ class AnalogSimParams:
         show_progress: bool = True,
         num_threads: int = 1,
         solver: str = "TJM",
+        compute_autocorrelator: bool = False,
+        autocorrelator_observable: Observable | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -237,8 +249,12 @@ class AnalogSimParams:
             Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
             Defaults to 1 for efficiency on small/medium bond dimensions.
         solver : str, optional
-            The solver method to use. Must be one of "TJM" (Tensor Jump Method), "Lindblad" (exact density matrix),
-            or "MCWF" (Monte Carlo Wavefunction). Defaults to "TJM" if not specified.r is not "TJM" or "Lindblad".
+            The solver method to use. Must be one of "TJM" (Tensor Jump Method), "Lindblad" (exact
+            density matrix), or "MCWF" (Monte Carlo Wavefunction). Defaults to "TJM" if not specified.
+        compute_autocorrelator :
+            If True, also compute autocorrelator values across the simulation time grid.
+        autocorrelator_observable :
+            The observable used for autocorrelator evaluation when `compute_autocorrelator` is True.
 
         Raises:
             ValueError: If the solver is not "TJM", "Lindblad", or "MCWF".
@@ -285,6 +301,10 @@ class AnalogSimParams:
         self.get_state = get_state
         self.show_progress = show_progress
         self.num_threads = num_threads
+        self.compute_autocorrelator = compute_autocorrelator
+        self.autocorrelator_observable = autocorrelator_observable
+        self.autocorrelator_times: NDArray[np.float64] | None = None
+        self.autocorrelator_results: NDArray[np.complex128] | None = None
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
