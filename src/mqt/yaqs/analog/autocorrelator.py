@@ -21,7 +21,11 @@ if TYPE_CHECKING:
 
 
 def _swap_gate_4() -> np.ndarray:
-    """Two-qubit SWAP in the lexicographic ``|ab⟩`` basis (``a`` left, ``b`` right qubit)."""
+    """Two-qubit SWAP in the lexicographic two-qubit basis ``|ab⟩`` (``a`` left, ``b`` right).
+
+    Returns:
+        ``4x4`` complex SWAP matrix in the lexicographic two-qubit basis.
+    """
     return np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
 
 
@@ -30,6 +34,9 @@ def _permuted_periodic_wrap_gate(gate4: np.ndarray) -> np.ndarray:
 
     After forwarding SWAPs, the tensor pair ``(L-2, L-1)`` carries ``(q_0, q_{L-1})`` while ``gate4`` is defined
     for ``(q_{L-1}, q_0)`` matching :func:`embed_two_site_operator_periodic` conventions.
+
+    Returns:
+        Permuted ``4x4`` matrix acting on the merged NN basis at ``(L-2, L-1)``.
     """
     p_perm = np.zeros((4, 4), dtype=np.complex128)
     for a in range(2):
@@ -42,7 +49,7 @@ def _permuted_periodic_wrap_gate(gate4: np.ndarray) -> np.ndarray:
 
 
 def _apply_two_site_nn_matrix_inplace(state: MPS, site_left: int, mat4: np.ndarray) -> None:
-    """Apply a ``4×4`` gate to adjacent sites ``(site_left, site_left+1)`` in-place."""
+    """Apply a ``4 x 4`` gate to adjacent sites ``(site_left, site_left+1)`` in-place."""
     i, j = site_left, site_left + 1
     a = state.tensors[i]
     b = state.tensors[j]
@@ -90,7 +97,7 @@ def _bubble_swaps_backward_for_wrap(state: MPS) -> None:
 
 
 def apply_observable_inplace(state: MPS, observable: Observable) -> None:
-    """Apply a one- or two-site observable to an MPS in-place.
+    r"""Apply a one- or two-site observable to an MPS in-place.
 
     The implementation mirrors the operator-application part of :meth:`MPS.local_expect`
     but preserves the transformed ``state`` tensor train (for example, to build
@@ -108,10 +115,7 @@ def apply_observable_inplace(state: MPS, observable: Observable) -> None:
             on adjacent sites (except the supported periodic wrap), or if the observable type is
             unsupported.
     """
-    if isinstance(observable.sites, int):
-        sites = [observable.sites]
-    else:
-        sites = observable.sites
+    sites = [observable.sites] if isinstance(observable.sites, int) else observable.sites
 
     if observable.gate.matrix.shape[0] == 2:
         site = sites[0]
@@ -148,7 +152,7 @@ def mixed_expectation(
     ket: MPS,
     observable: Observable,
 ) -> np.complex128:
-    """Compute the mixed matrix element :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
+    r"""Compute the mixed matrix element :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
 
     This applies ``observable`` to a deep copy of ``ket`` and contracts with ``bra`` using
     :meth:`MPS.scalar_product`.

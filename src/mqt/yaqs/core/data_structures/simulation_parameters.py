@@ -183,6 +183,14 @@ class AnalogSimParams:
     autocorrelator_results:
         Ensemble-mean autocorrelator samples aligned with ``autocorrelator_times``; ``None`` if not
         requested.
+    two_time_correlators:
+        Optional list of ``(A, B)`` observable pairs for unitary-ensemble two-time correlators
+        (probe ``A`` at evolved time, ``B`` applied at :math:`t=0`).
+    two_time_correlator_times:
+        Time grid for ``two_time_correlator_results`` when that feature is used; ``None`` otherwise.
+    two_time_correlator_results:
+        Ensemble mean over trajectories, shape ``(n_pairs, n_times)`` or ``(n_pairs, 1)``;
+        ``None`` if not requested.
 
     Methods:
     --------
@@ -212,6 +220,7 @@ class AnalogSimParams:
         solver: str = "TJM",
         compute_autocorrelator: bool = False,
         autocorrelator_observable: Observable | None = None,
+        two_time_correlators: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -255,6 +264,10 @@ class AnalogSimParams:
             If True, also compute autocorrelator values across the simulation time grid.
         autocorrelator_observable :
             The observable used for autocorrelator evaluation when `compute_autocorrelator` is True.
+        two_time_correlators :
+            For ``list[MPS]`` unitary ensemble runs only: list of ``(A, B)`` pairs evaluated as the
+            mixed contraction ``<psi(t)| A |phi_B(t)>`` with ``phi_B(t) = U(t) B |psi(0)>`` (see
+            unitary ensemble member worker).
 
         Raises:
             ValueError: If the solver is not "TJM", "Lindblad", or "MCWF".
@@ -305,6 +318,11 @@ class AnalogSimParams:
         self.autocorrelator_observable = autocorrelator_observable
         self.autocorrelator_times: NDArray[np.float64] | None = None
         self.autocorrelator_results: NDArray[np.complex128] | None = None
+        self.two_time_correlators: list[tuple[Observable, Observable]] = (
+            [] if two_time_correlators is None else list(two_time_correlators)
+        )
+        self.two_time_correlator_times: NDArray[np.float64] | None = None
+        self.two_time_correlator_results: NDArray[np.complex128] | None = None
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.

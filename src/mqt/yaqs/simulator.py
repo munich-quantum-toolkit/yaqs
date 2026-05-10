@@ -345,7 +345,9 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
     ))
 
 
-def _unitary_ensemble_worker(job_idx: int) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
+def _unitary_ensemble_worker(
+    job_idx: int,
+) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None, NDArray[np.complex128] | None]:
     """Execute one deterministic unitary ensemble member trajectory.
 
     Uses :data:`WORKER_CTX` keys ``initial_states``, ``sim_params``, and ``operator``.
@@ -354,9 +356,9 @@ def _unitary_ensemble_worker(job_idx: int) -> tuple[NDArray[np.float64], NDArray
         job_idx: Index of this member; selects ``WORKER_CTX["initial_states"][job_idx]``.
 
     Returns:
-        tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
-            Observable trajectories for one member and optional autocorrelator trajectory for the
-            same member.
+        tuple[NDArray[np.float64], NDArray[np.complex128] | None, NDArray[np.complex128] | None]:
+            Observable trajectories, optional autocorrelator trajectory, and optional two-time
+            correlator block for one member.
     """
     return unitary_ensemble_member_worker((
         job_idx,
@@ -806,7 +808,8 @@ def _run_analog_unitary_ensemble(
     Raises:
         ValueError: If noisy simulation is requested with a list of states, if ``solver`` is
             unsupported in list mode, if the list is empty, if state lengths do not match the MPO,
-            if ``get_state`` is requested, or if autocorrelator options are inconsistent.
+            if ``get_state`` is requested, or if autocorrelator / two-time correlator options are
+            inconsistent.
     """
     if noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes):
         msg = (
@@ -847,6 +850,15 @@ def _run_analog_unitary_ensemble(
             sim_params.times if sim_params.sample_timesteps else np.array([sim_params.elapsed_time], dtype=np.float64)
         )
 
+    n_pair_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
+    two_time_matrix: NDArray[np.complex128] | None = None
+    n_pairs = len(sim_params.two_time_correlators)
+    if n_pairs > 0:
+        two_time_matrix = np.zeros((len(initial_states), n_pairs, n_pair_cols), dtype=np.complex128)
+        sim_params.two_time_correlator_times = (
+            sim_params.times if sim_params.sample_timesteps else np.array([sim_params.elapsed_time], dtype=np.float64)
+        )
+
     payload: dict[str, Any] = {
         "initial_states": initial_states,
         "sim_params": sim_params,
@@ -855,7 +867,7 @@ def _run_analog_unitary_ensemble(
 
     if parallel and len(initial_states) > 1:
         max_workers = max(1, available_cpus() - 1)
-        for i, (obs_result, autocorr_result) in run_backend_parallel(
+        for i, (obs_result, autocorr_result, two_time_result) in run_backend_parallel(
             worker_fn=_unitary_ensemble_worker,
             payload=payload,
             n_jobs=len(initial_states),
@@ -871,22 +883,32 @@ def _run_analog_unitary_ensemble(
             if autocorr_matrix is not None:
                 assert autocorr_result is not None
                 autocorr_matrix[i] = autocorr_result
+            if two_time_matrix is not None:
+                assert two_time_result is not None
+                two_time_matrix[i] = two_time_result
     else:
         n_threads = available_cpus()
         args = [(i, initial_states[i], sim_params, operator) for i in range(len(initial_states))]
         iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not sim_params.show_progress)
         for i, arg in enumerate(iterator):
-            obs_result, autocorr_result = _call_backend(unitary_ensemble_member_worker, arg, n_threads=n_threads)
+            obs_result, autocorr_result, two_time_result = _call_backend(
+                unitary_ensemble_member_worker, arg, n_threads=n_threads
+            )
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
                 observable.trajectories[i] = obs_result[obs_index]
             if autocorr_matrix is not None:
                 assert autocorr_result is not None
                 autocorr_matrix[i] = autocorr_result
+            if two_time_matrix is not None:
+                assert two_time_result is not None
+                two_time_matrix[i] = two_time_result
 
     sim_params.aggregate_trajectories()
     if autocorr_matrix is not None:
         sim_params.autocorrelator_results = np.mean(autocorr_matrix, axis=0)
+    if two_time_matrix is not None:
+        sim_params.two_time_correlator_results = np.mean(two_time_matrix, axis=0)
 
 
 # ---------------------------------------------------------------------------
@@ -1079,6 +1101,7 @@ def run(
         and not sim_params.get_state
         and not sim_params.observables
         and not sim_params.compute_autocorrelator
+        and not sim_params.two_time_correlators
     ):
         msg = "No output specified: either observables or get_state must be set."
         raise ValueError(msg)

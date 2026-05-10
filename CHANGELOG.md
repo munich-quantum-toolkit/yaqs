@@ -11,6 +11,13 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added deterministic unitary analog ensemble evolution by allowing `simulator.run` to accept `list[MPS]` as `initial_state`
+- added optional autocorrelator evaluation (`compute_autocorrelator`) for unitary analog ensemble runs
+- added optional two-time correlator evaluation (`two_time_correlators`) for unitary analog ensemble runs, with results written to `two_time_correlator_results` on the simulation time grid
+- added periodic-wrap support for two-site observables on sites `(L-1, 0)` in `apply_observable_inplace` (full ring spin-current correlators)
+- added `unitary_ensemble_spin_current_row_worker` to accumulate bond-bond spin-current matrix elements per ensemble member
+- added benchmark script `tests/analog/bench_xxz_transverse_unitary_ensemble_autocorrelator.py` for transverse-field XXZ (Pauli) chains with QuSpin ED comparison (`YAQS_J`, `YAQS_DELTA`, `YAQS_FIELD`; set `YAQS_DELTA=YAQS_J` for XXX)
+- added script `scripts/plot_unitary_ensemble_autocorrelator_loglog_multi_N.py` to run default `simulator.run` unitary-ensemble autocorrelators for multiple chain lengths and save a combined log–log figure (`YAQS_LENGTHS`, `YAQS_NUM_STATES`, `YAQS_T_FINAL`, …)
 - added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad`
 - added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
 - added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
@@ -22,10 +29,12 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- XXZ spin-current benchmark now computes the **full** periodic `J` autocorrelator in YAQS (all bond pairs, including cross terms and the wrap bond), matching exact diagonalization.
 - changed Lindblad and MCWF solvers to use sparse implementation ([#338]) ([**@aaronleesander**])
 
 ### Fixed
 
+- fixed analog unitary-ensemble autocorrelator time ordering to match `⟨Uψ|O U O|ψ⟩` / `vdot(Uψ, O U O ψ)` (the bra was previously taken on the `O|ψ⟩` branch, altering dynamics at `t>0`)
 - fixed numba attempting to parallelize in already parallelized processes ([#337]) ([**@aaronleesander**])
 - fixed potential memory leak in parallelization ([#336]) ([**@aaronleesander**])
 
