@@ -34,12 +34,12 @@ from mqt.yaqs.characterization.process_tensors.diagnostics.probe import sample_s
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
-J_SWEEP_DEFAULT = [1.0]
+J_SWEEP_DEFAULT = [0.5, 1.0, 1.5, 2.0]
 PAST_LEN_FIXED = 15
 FUTURE_LEN_FIXED = 5
 ELL_MAX_FIXED = 25
 ELL_DEFAULT = tuple(range(0, ELL_MAX_FIXED + 1))
-PANEL_TARGET_JS = (0.4, 1.0, 2.0)
+PANEL_TARGET_JS = (0.5, 1.0, 1.5, 2.0)
 
 
 def _force_ell_measure_prepare_bridge(probe_set: object, *, left_cut: int, ell: int) -> None:
