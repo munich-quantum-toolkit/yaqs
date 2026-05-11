@@ -104,7 +104,11 @@ def apply_observable_inplace(state: MPS, observable: Observable) -> None:
     :math:`O|\psi\rangle` for mixed contractions).
 
     Two-site observables on the periodic wrap ``(L-1, 0)`` (``sites=[L-1, 0]``) are supported for
-    ``L > 2`` using a reversible adjacent-SWAP circuit.
+    ``L > 2`` using a reversible adjacent-SWAP circuit. For ``L == 2``, the same wrap convention
+    applies when ``sites=[L-1, 0]``: the ``4 x 4`` matrix is taken in the ``|q_{L-1}, q_0⟩`` basis
+    and mapped to the merged nearest-neighbor basis on ``(0, 1)`` via :func:`_permuted_periodic_wrap_gate`
+    (no SWAP network is needed). Use ``sites=[0, 1]`` for a standard nearest-neighbor gate in the
+    ``|q_0, q_1⟩`` basis.
 
     Args:
         state (MPS): The MPS to modify in-place.
@@ -127,6 +131,11 @@ def apply_observable_inplace(state: MPS, observable: Observable) -> None:
         length = state.length
 
         if length == 2:
+            if i == length - 1 and j == 0:
+                mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
+                g_merged = _permuted_periodic_wrap_gate(mat)
+                _apply_two_site_nn_matrix_inplace(state, 0, g_merged)
+                return
             i, j = min(i, j), max(i, j)
         elif (i == length - 1 and j == 0) or (i == 0 and j == length - 1):
             mat = np.asarray(observable.gate.matrix, dtype=np.complex128)

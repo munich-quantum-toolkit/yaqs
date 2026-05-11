@@ -73,6 +73,8 @@ def dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.nda
         Dense ``2^L`` by ``2^L`` complex matrix.
     """
     g = np.asarray(gate4, dtype=np.complex128)
+    # For ``L <= 2`` the SWAP network collapses; this helper is only used in tests for ``L >= 3``
+    # where it is checked against :func:`mixed_expectation` for the spin-current observable.
     if length <= 2:
         return np.asarray(g, dtype=np.complex128)
     dim = 2**length
@@ -86,17 +88,63 @@ def dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.nda
 
 
 def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
+    """Construct XY-derived spin-current bond operator.
+
+    Computes 0.25 * j_coupling * (X ⊗ Y - Y ⊗ X) where X, Y are Pauli matrices.
+
+    Args:
+        j_coupling: XY coupling strength.
+
+    Returns:
+        4x4 bond operator matrix.
+    """
     x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
     y = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
     return 0.25 * j_coupling * (np.kron(x, y) - np.kron(y, x))
 
 
 def _periodic_bond_endpoints(length: int) -> list[tuple[int, int]]:
+    """Generate nearest-neighbor bond pairs with periodic boundary conditions.
+
+    Args:
+        length: Number of sites.
+
+    Returns:
+        List of (site_a, site_b) tuples where site_b = (site_a + 1) % length.
+    """
     return [(i, (i + 1) % length) for i in range(length)]
 
 
 def _spin_current_observable_for_periodic_bond(site_a: int, site_b: int, j_xy: float) -> Observable:
+    """Create Observable for spin-current operator on a periodic bond.
+
+    Args:
+        site_a: First site index.
+        site_b: Second site index (typically (site_a + 1) % L).
+        j_xy: XY coupling strength.
+
+    Returns:
+        Observable wrapping the spin-current bond matrix.
+    """
     return Observable(BaseGate(_spin_current_bond_matrix(j_xy)), sites=[site_a, site_b])
+
+
+def test_l2_periodic_wrap_matches_explicit_permuted_nn_expectation() -> None:
+    r"""``L == 2`` wrap ``sites=[1, 0]`` must match NN ``sites=[0, 1]`` with :func:`_permuted_periodic_wrap_gate`.
+
+    This avoids comparing to a naive ``np.kron`` dense embedding: :meth:`MPS.to_vec` and the two-site
+    merge used in ``local_expect`` need not match that layout for general ``4 \times 4`` matrices.
+    """
+    length = 2
+    rng = np.random.default_rng(2026)
+    g_random = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype(np.complex128)
+    gate4 = (g_random + g_random.conj().T) / 2
+    mps = MPS(length, state="random", pad=8)
+    mps.normalize("B")
+    g_merged = _permuted_periodic_wrap_gate(np.asarray(gate4, dtype=np.complex128))
+    ex_wrap = mixed_expectation(mps, mps, Observable(BaseGate(gate4), sites=[length - 1, 0]))
+    ex_nn_permuted = mixed_expectation(mps, mps, Observable(BaseGate(g_merged), sites=[0, 1]))
+    assert ex_wrap == pytest.approx(ex_nn_permuted, rel=0, abs=1e-9)
 
 
 def test_wrap_expectation_matches_dense() -> None:
