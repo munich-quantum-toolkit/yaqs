@@ -5,15 +5,20 @@ This benchmark fixes the window geometry and sweeps only the delay length ``ell`
 
 ``past(15) + [measure, prepare |0>] + [(|0><0|, |0>) ]^ell + [prepare_only] + future(5)``.
 
+The past/future random probe ensemble is sampled **once** (fixed lengths); each ``ell`` only
+extends the intermediate reset measure-prepare bridge.
+
 Outputs a single paper-style plot of representative ``S_V`` vs ``ell`` curves for multiple ``J``.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -23,14 +28,20 @@ from benchmark_entropy_vs_j_by_cut import (
     G_FIXED,
     HEATMAP_COLOR_VMIN,
     J_SWEEP_DEFAULT,
-    K_FIXED,
     L_FIXED,
     _configure_matplotlib_prl_figure,
     _linear_weighted_metrics,
     _list_initial_states_sys_env0,
     _load_summary_csv,
 )
-from mqt.yaqs.characterization.process_tensors.diagnostics.probe import sample_split_delayed_break_probes
+from mqt.yaqs.characterization.process_tensors.diagnostics.probe import (
+    ProbeSet,
+    _sample_cut_measurement_only,
+    _sample_cut_preparation_only,
+    _sample_random_clifford_unitary,
+    _sample_random_unitary,
+    _sample_step,
+)
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -42,20 +53,103 @@ ELL_DEFAULT = tuple(range(0, ELL_MAX_FIXED + 1))
 PANEL_TARGET_JS = (0.5, 1.0, 1.5, 2.0)
 
 
-def _force_ell_measure_prepare_bridge(probe_set: object, *, left_cut: int, ell: int) -> None:
-    """Overwrite delayed bridge with explicit ``ell`` measure+prepare-|0> slots."""
-    tt = int(ell)
-    if tt <= 0:
-        return
-    # ``all_pairs_grid`` is populated by ``sample_split_delayed_break_probes``.
-    all_pairs = getattr(probe_set, "all_pairs_grid", None)
-    if all_pairs is None:
-        raise RuntimeError("probe_set missing all_pairs_grid; cannot enforce ell MP bridge")
+def _sample_base_past_future_ensemble(
+    *,
+    n_pasts: int,
+    n_futures: int,
+    rng: np.random.Generator,
+    intervention_mode: str = "unitary_break_mp",
+    unitary_ensemble: str = "haar",
+) -> tuple[list[list[Any]], list[np.ndarray], list[np.ndarray], list[list[Any]]]:
+    """Sample **one** past/future probe ensemble (fixed lengths); reused for every ``ell``."""
+    mode = str(intervention_mode).strip().lower()
+    if mode not in {"unitary_break_mp", "measure_prepare"}:
+        raise ValueError(f"intervention_mode must be 'unitary_break_mp' or 'measure_prepare', got {intervention_mode!r}")
+    ensemble = str(unitary_ensemble).strip().lower()
+    if ensemble not in {"haar", "clifford"}:
+        raise ValueError(f"unitary_ensemble must be 'haar' or 'clifford', got {unitary_ensemble!r}")
+    unitary_sampler = _sample_random_unitary if ensemble == "haar" else _sample_random_clifford_unitary
+
+    past_pairs: list[list[Any]] = []
+    past_cut_meas: list[np.ndarray] = []
+    for _i in range(n_pasts):
+        pairs_i: list[Any] = []
+        for _t in range(PAST_LEN_FIXED):
+            if mode == "measure_prepare":
+                _feat, pair = _sample_step(rng)
+                pairs_i.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                pairs_i.append({"type": "unitary", "U": u})
+        _feat_m, psi_m = _sample_cut_measurement_only(rng)
+        past_cut_meas.append(psi_m)
+        past_pairs.append(pairs_i)
+
+    future_prep_cut: list[np.ndarray] = []
+    future_pairs: list[list[Any]] = []
+    for _j in range(n_futures):
+        _feat_p, psi_p = _sample_cut_preparation_only(rng)
+        future_prep_cut.append(psi_p)
+        pairs_j: list[Any] = []
+        for _t in range(FUTURE_LEN_FIXED):
+            if mode == "measure_prepare":
+                _feat, pair = _sample_step(rng)
+                pairs_j.append(pair)
+            else:
+                u = unitary_sampler(rng)
+                pairs_j.append({"type": "unitary", "U": u})
+        future_pairs.append(pairs_j)
+
+    return past_pairs, past_cut_meas, future_prep_cut, future_pairs
+
+
+def _probe_set_for_ell(
+    *,
+    past_pairs: list[list[Any]],
+    past_cut_meas: list[np.ndarray],
+    future_prep_cut: list[np.ndarray],
+    future_pairs: list[list[Any]],
+    ell: int,
+) -> ProbeSet:
+    """Assemble full ``all_pairs_grid``: past + left MP break + ``ell`` reset MP + prepare + future."""
+    left_cut = int(PAST_LEN_FIXED + 1)
+    ell_i = int(ell)
+    k_this = int(PAST_LEN_FIXED + 1 + ell_i + 1 + FUTURE_LEN_FIXED)
     z0 = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
-    left_idx = int(left_cut) - 1
-    for seq in all_pairs:
-        for u in range(tt):
-            seq[left_idx + 1 + u] = (z0, z0)
+    n_p = len(past_pairs)
+    n_f = len(future_pairs)
+    all_pairs: list[list[Any]] = []
+    for i in range(n_p):
+        for j in range(n_f):
+            full: list[Any] = []
+            full.extend(copy.deepcopy(past_pairs[i]))
+            psi_m = np.asarray(past_cut_meas[i], dtype=np.complex128)
+            full.append((psi_m, z0))
+            for _ in range(ell_i):
+                full.append((z0, z0))
+            full.append(
+                {"type": "prepare_only", "psi_prep": np.asarray(future_prep_cut[j], dtype=np.complex128)}
+            )
+            full.extend(copy.deepcopy(future_pairs[j]))
+            if len(full) != k_this:
+                raise RuntimeError(f"internal: sequence length mismatch, got {len(full)} expected {k_this}")
+            all_pairs.append(full)
+
+    past_features = np.zeros((n_p, max(1, PAST_LEN_FIXED + 1), 32), dtype=np.float32)
+    future_features = np.zeros((n_f, max(1, 1 + ell_i + FUTURE_LEN_FIXED), 32), dtype=np.float32)
+    return ProbeSet(
+        cut=left_cut,
+        k=k_this,
+        past_features=past_features,
+        future_features=future_features,
+        past_pairs=copy.deepcopy(past_pairs),
+        past_cut_meas=[np.asarray(x, dtype=np.complex128) for x in past_cut_meas],
+        future_prep_cut=[np.asarray(x, dtype=np.complex128) for x in future_prep_cut],
+        future_pairs=copy.deepcopy(future_pairs),
+        all_pairs_grid=all_pairs,
+        n_pasts_grid=int(n_p),
+        n_futures_grid=int(n_f),
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -180,6 +274,14 @@ def main() -> None:
     initial_list = _list_initial_states_sys_env0(n_seeds=n_seeds, rng=init_rng)
     np.save(out_dir / "initial_states.npy", np.stack(initial_list, axis=0))
 
+    probe_rng = np.random.default_rng(int(args.seed) + 999_991)
+    past_pairs, past_cut_meas, future_prep_cut, future_pairs = _sample_base_past_future_ensemble(
+        n_pasts=int(args.n_pasts),
+        n_futures=int(args.n_futures),
+        rng=probe_rng,
+        unitary_ensemble=str(args.unitary_ensemble),
+    )
+
     rows: list[dict[str, float | int]] = []
     for ell in ells:
         left_cut = int(PAST_LEN_FIXED + 1)
@@ -187,21 +289,17 @@ def main() -> None:
         k_this = int(PAST_LEN_FIXED + 1 + ell + 1 + FUTURE_LEN_FIXED)
         print(
             f"ell={ell:2d}, left_cut={left_cut:2d}, right_cut={right_cut:2d}, k={k_this:2d}, "
-            f"past={PAST_LEN_FIXED}, future={FUTURE_LEN_FIXED}, bridge=ell measure+prepare(|0>)",
+            f"past={PAST_LEN_FIXED}, future={FUTURE_LEN_FIXED}, bridge=ell measure+prepare(|0>), "
+            "shared ensemble",
             flush=True,
         )
-        probe_rng = np.random.default_rng(int(args.seed) + 10_000 * int(ell))
-        probe_set = sample_split_delayed_break_probes(
-            left_cut=int(left_cut),
-            tau=int(ell),
-            k=int(k_this),
-            n_pasts=int(args.n_pasts),
-            n_futures=int(args.n_futures),
-            rng=probe_rng,
-            sigma_ref=np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128),
-            unitary_ensemble=str(args.unitary_ensemble),
+        probe_set = _probe_set_for_ell(
+            past_pairs=past_pairs,
+            past_cut_meas=past_cut_meas,
+            future_prep_cut=future_prep_cut,
+            future_pairs=future_pairs,
+            ell=ell,
         )
-        _force_ell_measure_prepare_bridge(probe_set, left_cut=left_cut, ell=ell)
         for jv in J_SWEEP_DEFAULT:
             op = MPO.ising(length=L_FIXED, J=float(jv), g=G_FIXED)
             sim_params = AnalogSimParams(dt=DT_FIXED, solver="MCWF", show_progress=False)
