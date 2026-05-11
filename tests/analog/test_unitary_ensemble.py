@@ -13,9 +13,10 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import simulator
+from mqt.yaqs.analog.unitary_ensemble import unitary_ensemble_member_worker
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
 
 
@@ -171,6 +172,170 @@ def test_unitary_ensemble_clears_correlator_outputs_when_features_disabled() -> 
     assert sim_params_off.two_time_correlator_results is None
     assert sim_params_off.autocorrelator_times is None
     assert sim_params_off.two_time_correlator_times is None
+
+
+def test_list_mps_analog_ensemble_rejects_non_tjm_solver() -> None:
+    """List-of-MPS analog ensemble only supports the TJM solver path."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+        solver="Lindblad",
+    )
+    with pytest.raises(ValueError, match=r"list\[MPS\] analog ensemble currently supports only solver='TJM'\."):
+        simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
+
+
+def test_list_mps_analog_ensemble_rejects_empty_state_list() -> None:
+    """Empty list[MPS] must fail before evolution."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+    )
+    with pytest.raises(ValueError, match="initial_state list must not be empty"):
+        simulator.run([], hamiltonian, sim_params, noise_model=None, parallel=False)
+
+
+def test_list_mps_analog_ensemble_rejects_state_length_mismatch() -> None:
+    """All ensemble MPS chain lengths must match the Hamiltonian MPO length."""
+    hamiltonian = MPO.ising(2, J=0.2, g=0.1)
+    states = [MPS(3, state="zeros"), MPS(3, state="ones")]
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+    )
+    with pytest.raises(ValueError, match="All initial states in the list must match the MPO length"):
+        simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
+
+
+def test_list_mps_analog_ensemble_rejects_get_state() -> None:
+    """get_state is not supported together with list[MPS] analog ensemble mode."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+        get_state=True,
+    )
+    with pytest.raises(ValueError, match="get_state=True is not supported for list\\[MPS\\] analog ensemble mode"):
+        simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
+
+
+def test_list_mps_autocorrelator_requires_observable() -> None:
+    """compute_autocorrelator without autocorrelator_observable must raise."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+        compute_autocorrelator=True,
+        autocorrelator_observable=None,
+    )
+    with pytest.raises(ValueError, match="compute_autocorrelator=True requires autocorrelator_observable"):
+        simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
+
+
+def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
+    """parallel=True with multiple members exercises the process-pool ensemble worker."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    z0 = Observable(Z(), 0)
+    z1 = Observable(Z(), 1)
+    sim_params = AnalogSimParams(
+        observables=[z0],
+        elapsed_time=0.15,
+        dt=0.05,
+        show_progress=False,
+        compute_autocorrelator=True,
+        autocorrelator_observable=z0,
+        two_time_correlators=[(z0, z1)],
+    )
+    simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=True)
+    assert z0.results is not None
+    assert sim_params.autocorrelator_results is not None
+    assert sim_params.two_time_correlator_results is not None
+
+
+def test_unitary_ensemble_member_worker_raises_when_autocorr_observable_missing() -> None:
+    """Worker must reject autocorrelator mode without an observable (mirrors driver validation)."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    mps = MPS(length, state="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+        compute_autocorrelator=True,
+        autocorrelator_observable=None,
+    )
+    with pytest.raises(ValueError, match="compute_autocorrelator=True requires autocorrelator_observable"):
+        unitary_ensemble_member_worker((0, mps, sim_params, hamiltonian))
+
+
+def test_unitary_ensemble_member_worker_uses_bug_evolution_mode() -> None:
+    """BUG tensor evolution should exercise the non-TDVP branch in ``_unitary_step``."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    mps = MPS(length, state="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.05,
+        dt=0.05,
+        show_progress=False,
+        evolution_mode=EvolutionMode.BUG,
+        max_bond_dim=64,
+        threshold=1e-10,
+    )
+    obs_result, autocorr, two_time = unitary_ensemble_member_worker((0, mps, sim_params, hamiltonian))
+    assert obs_result.shape == (1, len(sim_params.times))
+    assert autocorr is None
+    assert two_time is None
+
+
+def test_unitary_ensemble_member_worker_final_timestep_when_not_sampling() -> None:
+    """With ``sample_timesteps=False`` and multiple time slices, record correlators on the last step."""
+    length = 2
+    hamiltonian = MPO.ising(length, J=0.2, g=0.1)
+    mps = MPS(length, state="zeros")
+    z0 = Observable(Z(), 0)
+    z1 = Observable(Z(), 1)
+    sim_params = AnalogSimParams(
+        observables=[z0],
+        elapsed_time=0.2,
+        dt=0.1,
+        sample_timesteps=False,
+        show_progress=False,
+        compute_autocorrelator=True,
+        autocorrelator_observable=z0,
+        two_time_correlators=[(z0, z1)],
+        max_bond_dim=64,
+        threshold=1e-10,
+    )
+    assert len(sim_params.times) >= 3
+    obs_result, autocorr, two_time = unitary_ensemble_member_worker((0, mps, sim_params, hamiltonian))
+    assert obs_result.shape == (1, 1)
+    assert autocorr is not None
+    assert autocorr.shape == (1,)
+    assert two_time is not None
+    assert two_time.shape == (1, 1)
 
 
 def test_list_initial_states_with_noise_raises() -> None:

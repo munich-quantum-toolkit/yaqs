@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.analog.autocorrelator import mixed_expectation
+from mqt.yaqs.analog.autocorrelator import apply_observable_inplace, mixed_expectation
 from mqt.yaqs.analog.unitary_ensemble import unitary_ensemble_member_worker
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
@@ -155,3 +155,24 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
     jr = dense_embed_adjacent_two_site(length, 1, j_bond)
     expected = float(np.real(np.vdot(psi, jr @ jr @ psi)))
     assert val_worker == pytest.approx(expected, rel=0, abs=1e-6)
+
+
+def test_apply_observable_inplace_non_adjacent_two_site_raises() -> None:
+    """Two-site 4x4 observables must be nearest neighbors (or the supported periodic wrap)."""
+    length = 4
+    mps = MPS(length, state="random", pad=4)
+    mps.normalize("B")
+    gate4 = np.eye(4, dtype=np.complex128)
+    obs = Observable(BaseGate(gate4), sites=[0, 2])
+    with pytest.raises(ValueError, match="Only nearest-neighbor two-site observables are currently implemented"):
+        apply_observable_inplace(mps, obs)
+
+
+def test_apply_observable_inplace_unsupported_gate_dimension_raises() -> None:
+    """Only one-site (2x2) and two-site (4x4) gates are supported in the autocorrelator helper."""
+    length = 3
+    mps = MPS(length, state="random", pad=4)
+    mps.normalize("B")
+    obs = Observable(BaseGate(np.eye(8, dtype=np.complex128)), sites=[0, 1, 2])
+    with pytest.raises(ValueError, match="Autocorrelator observable must be one-site or nearest-neighbor two-site"):
+        apply_observable_inplace(mps, obs)
