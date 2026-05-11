@@ -364,7 +364,7 @@ def plot_entropy_vs_l_for_fixed_cuts(
                 ]
                 if not sub:
                     continue
-                xs.append(L)
+                xs.append(L-1)
                 ys.append(float(sub[0]["entropy"]))
             if xs:
                 pts = sorted(zip(xs, ys), key=lambda p: p[0])
@@ -380,8 +380,8 @@ def plot_entropy_vs_l_for_fixed_cuts(
                 )
 
         ax.set_title(rf"$c={int(cut)}$", fontsize=10)
-        ax.set_xlabel(r"$L$")
-        ax.set_xticks([2, 3, 4, 5, 6, 7, 8])
+        ax.set_xlabel(r"Environmental sites")
+        ax.set_xticks([1, 2, 3, 4, 5, 6, 7, 8, 9])
         ax.grid(True, axis="y", alpha=0.10, linewidth=0.35)
         ax.grid(False, axis="x")
         ax.tick_params(direction="in", which="both", top=True, right=True, length=3.5, width=0.8)
