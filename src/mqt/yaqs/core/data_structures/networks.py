@@ -229,6 +229,11 @@ class MPS:
 
         # Create d-level |0> state
         if not tensors:
+            haar_bond_cache: dict[str, list[int] | None] | None = None
+            haar_rng_cache: dict[str, np.random.Generator | None] | None = None
+            if state == "haar-random":
+                haar_bond_cache = {"dims": None}
+                haar_rng_cache = {"rng": None}
             for i, d in enumerate(self.physical_dimensions):
                 vector = np.zeros(d, dtype=complex)
                 if state == "zeros":
@@ -271,7 +276,13 @@ class MPS:
                     vector[1] = 1 - vector[0]
                 elif state == "haar-random":
                     target_dim = 1 if pad is None else pad
-                    tensor = _haar_random_tensor_core(i, d, target_dim)
+                    tensor = _haar_random_tensor_core(
+                        i,
+                        d,
+                        target_dim,
+                        _bond_cache=haar_bond_cache,
+                        _rng_cache=haar_rng_cache,
+                    )
                     self.tensors.append(tensor)
                     continue
                 elif state == "basis":

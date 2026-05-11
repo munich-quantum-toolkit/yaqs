@@ -15,7 +15,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 - added optional autocorrelator evaluation (`compute_autocorrelator`) for unitary analog ensemble runs, with results written to `autocorrelator_results` on the simulation time grid ([#409])
 - added optional two-time correlator evaluation (`two_time_correlators`) for unitary analog ensemble runs, with results written to `two_time_correlator_results` on the simulation time grid ([#409])
 - added periodic-wrap support for two-site observables on sites `(L-1, 0)` in `apply_observable_inplace` (useful in ring spin-current correlators) ([#409])
-- added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad`
+- added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad` ([#400]) ([**@Gauthameshwar**])
 - added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
 - added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
 - added Arnoldi iteration as alternative to Lanczos method ([#338]) ([**@aaronleesander**])
@@ -102,6 +102,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 [#409]: https://github.com/munich-quantum-toolkit/yaqs/pull/409
 [#344]: https://github.com/munich-quantum-toolkit/yaqs/pull/344
+[#400]: https://github.com/munich-quantum-toolkit/yaqs/pull/400
 [#339]: https://github.com/munich-quantum-toolkit/yaqs/pull/339
 [#338]: https://github.com/munich-quantum-toolkit/yaqs/pull/338
 [#337]: https://github.com/munich-quantum-toolkit/yaqs/pull/337
@@ -133,6 +134,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 [**@denialhaag**]: https://github.com/denialhaag
 [**@aaronleesander**]: https://github.com/aaronleesander
+[**@Gauthameshwar**]: https://github.com/Gauthameshwar
 [**@thilomueller**]: https://github.com/thilomueller
 [**@lucello**]: https://github.com/lucello
 
