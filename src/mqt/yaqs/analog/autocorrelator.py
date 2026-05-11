@@ -33,7 +33,7 @@ def _permuted_periodic_wrap_gate(gate4: np.ndarray) -> np.ndarray:
     """Express a gate on ``|q_{L-1}, q_0⟩`` in the merged NN basis ``|q_0, q_{L-1}⟩`` at sites ``(L-2, L-1)``.
 
     After forwarding SWAPs, the tensor pair ``(L-2, L-1)`` carries ``(q_0, q_{L-1})`` while ``gate4`` is defined
-    for ``(q_{L-1}, q_0)`` matching :func:`embed_two_site_operator_periodic` conventions.
+    for ``(q_{L-1}, q_0)``.
 
     Returns:
         Permuted ``4x4`` matrix acting on the merged NN basis at ``(L-2, L-1)``.

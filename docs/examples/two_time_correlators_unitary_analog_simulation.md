@@ -172,25 +172,33 @@ ax.plot(t_ens, np.real(czz_ens), "o-", label=r"ensemble $C_{zz}(t)$")
 ax.plot(t_ens, np.real(czx_ens), "s--", label=r"ensemble $C_{zx}(t)$")
 ax.set_xlabel("t")
 ax.set_ylabel(r"$\overline{C}_{ab}(t)$")
-ax.set_title(f"Typicality-style ensemble average (N={num_states})")
+ax.set_title(f"Typicality-style ensemble average of $C_{{zz}}(t)$ and $C_{{zx}}(t)$ (N={num_states})")
 ax.legend()
 ax.grid(alpha=0.3)
 plt.show()
 ```
 
-In the above plot, we see that on computing the ensemble average of the two-time correlators, the $C_{zz}(t)$ converges monotonically to zero, and the $C_{xz}(t)$ stays relatively around zero in contrast to the values we saw in a single MPS trajectory earlier.
+In the above illustrative run, the ensemble-averaged $C_{zz}(t)$ shows a monotonic decay trend toward zero, while $C_{zx}(t)$ remains comparatively close to zero over the sampled window, in contrast to the single-MPS trajectory.
 
 ## 4. Spin transport example: periodic spin-current autocorrelator
 
 For periodic XXZ chains, define local bond current
+
+<!-- prettier-ignore-start -->
 \[
-j*r = J*{xx} (S*r^x S*{r+1}^y - S*r^y S*{r+1}^x),
+j_r = J_{xx} \bigl(S_r^x S_{r+1}^y - S_r^y S_{r+1}^x\bigr)
 \]
+<!-- prettier-ignore-end -->
+
 and total current $J = \sum_r j_r$.
 The normalized autocorrelator
+
+<!-- prettier-ignore-start -->
 \[
-C\_{JJ}(t) = \frac{1}{L}\,\langle J(t)\,J(0)\rangle
+C_{JJ}(t) = \frac{1}{L}\,\langle J(t)\,J(0)\rangle
 \]
+<!-- prettier-ignore-end -->
+
 can be assembled from all bond-pair two-time correlators.
 Such current autocorrelators are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories {cite:p}`steinigeweg2014_prl_spin_current`.
 For finite-temperature Drude weights, diffusion, and integrable XXZ phenomenology—including the role of conservation laws—see the review {cite:p}`bertini2020_arxiv_1d_transport_review`.

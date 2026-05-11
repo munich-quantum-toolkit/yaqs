@@ -59,7 +59,24 @@ def _ed_first_k_basis_two_time_mean(
     a2: np.ndarray,
     b2: np.ndarray,
 ) -> np.ndarray:
-    """Return ``(1/k) sum_n <n|U^†(t) A U(t) B|n>`` over first ``k`` basis kets."""
+    r"""Compute the dense ED mean two-time correlator over the first ``k`` basis states.
+
+    Args:
+        length: Chain length.
+        j_xy: XY coupling strength.
+        delta: ZZ anisotropy coupling.
+        h_x: Transverse-field strength.
+        times: Time grid for evaluating the correlator.
+        k: Number of computational-basis states to average.
+        site: Site index where one-site operators are embedded.
+        a2: Dense ``2x2`` probe operator :math:`A`.
+        b2: Dense ``2x2`` kick operator :math:`B`.
+
+    Returns:
+        numpy.ndarray: Complex vector with values of
+        :math:`(1/k)\\sum_n \\langle n|U^\\dagger(t) A U(t) B|n\rangle`
+        at each entry of ``times``.
+    """
     dim = 2**length
     k_eff = min(k, dim)
     h_dense = _build_xxz_tf_open_chain_dense(length, j_xy, delta, h_x)
@@ -78,7 +95,7 @@ def _ed_first_k_basis_two_time_mean(
 
 
 def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
-    """L=6, first-20 basis-state ensemble should match dense ED for 3 Pauli and one mixed two-time pair."""
+    """Match YAQS two-time correlators against dense ED for a transverse-field XXZ setup."""
     length = 6
     j_xy = 1.0
     delta = 0.7
@@ -113,6 +130,7 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
     )
     simulator.run(states, h_mpo, sim_params, noise_model=None, parallel=False)
     assert sim_params.two_time_correlator_results is not None
+    assert sim_params.two_time_correlator_times is not None, "Expected two-time correlator time grid to be set."
     yaqs = np.asarray(sim_params.two_time_correlator_results, dtype=np.complex128)
     times = np.asarray(sim_params.two_time_correlator_times, dtype=np.float64)
 

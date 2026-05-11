@@ -9,9 +9,6 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -21,29 +18,96 @@ from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import BaseGate
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_BENCH_SCRIPT = _REPO_ROOT / "scripts" / "bench_xxz_spin_current_autocorrelator_yaqs_vs_ed.py"
+
+def _swap_gate_4() -> np.ndarray:
+    """Two-qubit SWAP in lexicographic ``|ab⟩`` basis.
+
+    Returns:
+        The ``4x4`` SWAP matrix.
+    """
+    return np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
 
 
-def _load_bench_module():  # noqa: ANN202
-    spec = importlib.util.spec_from_file_location("yaqs_bench_xxz_spin_current", _BENCH_SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _permuted_periodic_wrap_gate(gate4: np.ndarray) -> np.ndarray:
+    """Same convention as :func:`mqt.yaqs.analog.autocorrelator._permuted_periodic_wrap_gate`.
+
+    Returns:
+        Permuted ``4x4`` matrix acting on the merged NN basis at ``(L-2, L-1)``.
+    """
+    p_perm = np.zeros((4, 4), dtype=np.complex128)
+    for a in range(2):
+        for b in range(2):
+            idx_merged = 2 * a + b
+            idx_bond = 2 * b + a
+            p_perm[idx_bond, idx_merged] = 1.0
+    g = np.asarray(gate4, dtype=np.complex128)
+    return p_perm.conj().T @ g @ p_perm
+
+
+def dense_embed_adjacent_two_site(length: int, site_left: int, gate4: np.ndarray) -> np.ndarray:
+    r"""Embed a ``4 x 4`` NN gate on ``(site_left, site_left+1)`` into ``(C^2)^{\otimes L}``.
+
+    Uses the same qubit order as :meth:`MPS.to_vec` (site ``0`` leftmost).
+
+    Returns:
+        Dense ``2^L`` by ``2^L`` complex matrix.
+    """
+    left_dim = 2**site_left
+    right_dim = 2 ** (length - site_left - 2)
+    op4 = np.asarray(gate4, dtype=np.complex128)
+    return np.asarray(
+        np.kron(
+            np.kron(np.eye(left_dim, dtype=np.complex128), op4),
+            np.eye(right_dim, dtype=np.complex128),
+        ),
+        dtype=np.complex128,
+    )
+
+
+def dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.ndarray:
+    """Dense embedding of ``gate4`` on ``(q_{L-1}, q_0)``.
+
+    Matches :func:`~mqt.yaqs.analog.autocorrelator.apply_observable_inplace` conventions.
+
+    Returns:
+        Dense ``2^L`` by ``2^L`` complex matrix.
+    """
+    g = np.asarray(gate4, dtype=np.complex128)
+    if length <= 2:
+        return np.asarray(g, dtype=np.complex128)
+    dim = 2**length
+    sw = _swap_gate_4()
+    u_fwd = np.eye(dim, dtype=np.complex128)
+    for i in range(length - 2):
+        u_fwd = dense_embed_adjacent_two_site(length, i, sw) @ u_fwd
+    g_merged = _permuted_periodic_wrap_gate(g)
+    g_nn = dense_embed_adjacent_two_site(length, length - 2, g_merged)
+    return np.asarray(u_fwd.conj().T @ g_nn @ u_fwd, dtype=np.complex128)
+
+
+def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
+    x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    y = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
+    return 0.25 * j_coupling * (np.kron(x, y) - np.kron(y, x))
+
+
+def _periodic_bond_endpoints(length: int) -> list[tuple[int, int]]:
+    return [(i, (i + 1) % length) for i in range(length)]
+
+
+def _spin_current_observable_for_periodic_bond(site_a: int, site_b: int, j_xy: float) -> Observable:
+    return Observable(BaseGate(_spin_current_bond_matrix(j_xy)), sites=[site_a, site_b])
 
 
 def test_wrap_expectation_matches_dense() -> None:
     """Periodic wrap observable on `(L-1, 0)` should match dense expectation."""
-    mod = _load_bench_module()
     length = 5
     j_xy = 1.1
     mps = MPS(length, state="random", pad=16)
     mps.normalize("B")
     psi = np.asarray(mps.to_vec(), dtype=np.complex128)
-    j_mat = mod.spin_current_bond_matrix(j_xy)
-    j_dense = mod.embed_two_site_operator_periodic(length, length - 1, 0, j_mat)
+    j_mat = _spin_current_bond_matrix(j_xy)
+    j_dense = dense_embed_periodic_wrap_two_site(length, j_mat)
     obs = Observable(BaseGate(j_mat), sites=[length - 1, 0])
     ex_dense = float(np.real(np.vdot(psi, j_dense @ psi)))
     ex_mps = float(np.real(mixed_expectation(mps, mps, obs)))
@@ -52,17 +116,13 @@ def test_wrap_expectation_matches_dense() -> None:
 
 def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> None:
     """At ``t=0``, entry ``(r,r)`` of the two-time block matches ``⟨ψ|j_r j_r|ψ⟩`` (bulk bond)."""
-    mod = _load_bench_module()
     length = 4
     j_xy = 1.0
     delta = 0.8
     mps = MPS(length, state="random", pad=8)
     mps.normalize("B")
 
-    row = tuple(
-        mod.spin_current_observable_for_periodic_bond(length, a, b, j_xy)
-        for a, b in mod.periodic_bond_endpoints(length)
-    )
+    row = tuple(_spin_current_observable_for_periodic_bond(a, b, j_xy) for a, b in _periodic_bond_endpoints(length))
     s_index = 1
     obs_s = row[s_index]
     pairs = [(obs_r, obs_s) for obs_r in row]
@@ -91,7 +151,7 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
     val_worker = float(np.real(mat[s_index, 0]))
 
     psi = np.asarray(mps.to_vec(), dtype=np.complex128)
-    j_bond = mod.spin_current_bond_matrix(j_xy)
-    jr = mod.embed_two_site_operator(length, 1, j_bond)
+    j_bond = _spin_current_bond_matrix(j_xy)
+    jr = dense_embed_adjacent_two_site(length, 1, j_bond)
     expected = float(np.real(np.vdot(psi, jr @ jr @ psi)))
     assert val_worker == pytest.approx(expected, rel=0, abs=1e-6)

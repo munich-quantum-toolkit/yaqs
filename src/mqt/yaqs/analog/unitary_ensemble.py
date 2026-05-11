@@ -128,6 +128,15 @@ def unitary_ensemble_member_worker(
         if two_time_results is not None:
             for p, (probe_a, _b_op) in enumerate(pairs):
                 two_time_results[p, 0] = mixed_expectation(state, two_time_phis[p], probe_a)
+    elif last_index == 0:
+        state.evaluate_observables(sim_params, observable_results)
+        if autocorr_results is not None:
+            assert autocorr_phi is not None
+            assert sim_params.autocorrelator_observable is not None
+            autocorr_results[0] = mixed_expectation(state, autocorr_phi, sim_params.autocorrelator_observable)
+        if two_time_results is not None:
+            for p, (probe_a, _b_op) in enumerate(pairs):
+                two_time_results[p, 0] = mixed_expectation(state, two_time_phis[p], probe_a)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         _unitary_step(state, hamiltonian, sim_params)

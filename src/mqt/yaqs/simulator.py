@@ -839,6 +839,8 @@ def _run_analog_unitary_ensemble(
     for observable in sim_params.sorted_observables:
         observable.initialize(sim_params)
 
+    sim_params.autocorrelator_times = None
+    sim_params.autocorrelator_results = None
     autocorr_matrix: NDArray[np.complex128] | None = None
     if sim_params.compute_autocorrelator:
         if sim_params.autocorrelator_observable is None:
@@ -850,6 +852,8 @@ def _run_analog_unitary_ensemble(
             sim_params.times if sim_params.sample_timesteps else np.array([sim_params.elapsed_time], dtype=np.float64)
         )
 
+    sim_params.two_time_correlator_times = None
+    sim_params.two_time_correlator_results = None
     n_pair_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
     two_time_matrix: NDArray[np.complex128] | None = None
     n_pairs = len(sim_params.two_time_correlators)
