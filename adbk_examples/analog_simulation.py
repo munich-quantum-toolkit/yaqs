@@ -27,7 +27,7 @@ def main():
 
     # ============================== CONFIG ==================================
     # 1) System and Hamiltonian
-    length = 3 # Total length of the chain
+    length = 1 # Total length of the chain
     j_coupling = 1.0 # How much neighboring sites interact
     g_field = 1.0 # How much a field interacts with individual sites
     initial_state = "zeros" # Starting state of the chain
@@ -42,7 +42,7 @@ def main():
     threshold = 1e-6 # Accuracy of the simulation. Lower is more accurate, but slower.
 
     # 3) Noise model and scheduled jumps
-    gamma = 1  # Noise strength acting on every site. Use between 1e-3 and 1e-1.
+    gamma = 0  # Noise strength acting on every site. Use between 1e-3 and 1e-1.
     processes = [{"name": "lowering", "sites": [site], "strength": gamma} for site in range(length)]
     scheduled_jump_time = None # Time of a scheduled jump. Set to None to disable.
     scheduled_jump_site = 2 # Location of scheduled jump
@@ -99,9 +99,9 @@ def main():
     ax.set_ylabel("Site")
     # Center integer site labels on each heatmap row.
     ax.set_yticks(np.arange(length) + 0.5)
-    ax.set_yticklabels([str(site) for site in range(length)])
+    ax.set_yticklabels([str(site+1) for site in range(length)])
     ax.set_title("Observable Dynamics Heatmap")
-    fig.colorbar(image, ax=ax, label="<X>")
+    fig.colorbar(image, ax=ax, label="<Z>")
     fig.tight_layout()
     fig.savefig(heatmap_png_path, dpi=200)
     plt.close(fig)
