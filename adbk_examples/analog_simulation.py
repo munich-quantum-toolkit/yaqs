@@ -42,7 +42,8 @@ def main():
     threshold = 1e-6 # Accuracy of the simulation. Lower is more accurate, but slower.
 
     # 3) Noise model and scheduled jumps
-    gamma = 0  # Noise strength acting on every site. Use between 1e-3 and 1e-1.
+    gamma = 1  # Noise strength acting on every site. Use between 1e-3 and 1e-1.
+    processes = [{"name": "lowering", "sites": [site], "strength": gamma} for site in range(length)]
     scheduled_jump_time = None # Time of a scheduled jump. Set to None to disable.
     scheduled_jump_site = 2 # Location of scheduled jump
     scheduled_jump_operator = "lowering" # Type of noise scheduled
@@ -59,7 +60,6 @@ def main():
     state = MPS(length, state=initial_state)
 
     # Build noise model directly in this script to keep it easy to modify.
-    processes = [{"name": "pauli_z", "sites": [site], "strength": gamma} for site in range(length)]
     scheduled_jumps = []
     if scheduled_jump_time is not None:
         if scheduled_jump_site < 0 or scheduled_jump_site >= length:
@@ -77,6 +77,7 @@ def main():
         threshold=threshold,
         order=1,
         sample_timesteps=True,
+        solver="MCWF"
     )
 
     simulator.run(state, hamiltonian, sim_params, noise_model)
