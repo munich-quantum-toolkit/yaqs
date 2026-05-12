@@ -48,7 +48,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 J_SWEEP_DEFAULT = [0.5, 1.0, 1.5, 2.0]
 PAST_LEN_FIXED = 15
 FUTURE_LEN_FIXED = 5
-ELL_MAX_FIXED = 25
+ELL_MAX_FIXED = 15
 ELL_DEFAULT = tuple(range(0, ELL_MAX_FIXED + 1))
 PANEL_TARGET_JS = (0.5, 1.0, 1.5, 2.0)
 
@@ -154,13 +154,13 @@ def _probe_set_for_ell(
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-pasts", type=int, default=32)
-    p.add_argument("--n-futures", type=int, default=32)
+    p.add_argument("--n-pasts", type=int, default=64)
+    p.add_argument("--n-futures", type=int, default=64)
     p.add_argument("--ells", type=str, default=",".join(str(g) for g in ELL_DEFAULT))
     p.add_argument("--taus", type=str, default="", help="Deprecated alias for --ells.")
     p.add_argument("--gaps", type=str, default="", help="Deprecated alias for --ells.")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--n-seeds", type=int, default=1)
+    p.add_argument("--n-seeds", type=int, default=5)
     p.add_argument("--out-dir", type=Path, default=Path("benchmark_entropy_vs_j_by_ell_results"))
     p.add_argument("--parallel", action="store_true", default=True)
     p.add_argument("--no-parallel", dest="parallel", action="store_false")
