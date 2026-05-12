@@ -60,6 +60,8 @@ Define the initial state
 from mqt.yaqs.core.data_structures.networks import MPS
 
 state = MPS(L, state="zeros")
+# Alternative: initialize an entangled random state with capped bond dimension.
+# state = MPS(L, state="haar-random", pad=4)
 ```
 
 Define the noise model
