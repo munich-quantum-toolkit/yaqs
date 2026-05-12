@@ -12,19 +12,19 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Two-Time Correlators in Unitary Analog Simulation
+# Noiseless Ensemble Evolution
 
-This page demonstrates workflows for computing two-time correlators in deterministic unitary analog evolution in YAQS.
+This page demonstrates workflows for computing two-time correlations in a deterministic (no noisy jumps) unitary ensemble in YAQS.
 The focus is on compact, executable examples:
 
-- single-state correlators,
-- ensemble-averaged correlators (typicality view),
-- and a small periodic spin-current transport example.
+- Single-state auto/two-time correlations.
+- Ensemble-averaged correlations (typicality view).
+- Small periodic spin-current transport example.
 
 ## 1. Unitary analog evolution primer
 
 In unitary analog evolution, we have no noise or tensor jumps.
-Pass `noise_model=None` to `simulator.run`.
+To trigger the backend to perform a unitary dynamics, you can avoid passing `noise_model=''` to `simulator.run` because `noise_model` is set to `None` by default.
 
 ```{code-cell} ipython3
 import numpy as np
@@ -64,7 +64,7 @@ primer_params = AnalogSimParams(
     show_progress=False,
 )
 
-simulator.run(psi0, H_open, primer_params, noise_model=None, parallel=False)
+simulator.run(psi0, H_open, primer_params, parallel=True)
 times_primer = primer_params.times
 zexp_primer = primer_params.observables[0].results
 ```
@@ -79,15 +79,15 @@ ax.grid(alpha=0.3)
 plt.show()
 ```
 
-## 2. Two-time Correlators
+## 2. Two-time Correlations
 
 For an initial state $|\psi(0)\rangle$ and unitary $U(t)$:
 
-- Autocorrelator (for one observable $O$):
+- Autocorrelation (for one observable $O$):
   \[
   C\_{OO}(t) = \langle \psi(0)| U^\dagger(t)\, O\, U(t)\, O |\psi(0)\rangle.
   \]
-- Generic two-time correlator (probe $A$ and kick $B$):
+- Generic two-time correlation (probe $A$ and kick $B$):
   \[
   C\_{AB}(t) = \langle \psi(0)| U^\dagger(t)\, A\, U(t)\, B |\psi(0)\rangle.
   \]
@@ -115,7 +115,7 @@ single_state_params = AnalogSimParams(
     two_time_correlators=[(sz_mid, sx_mid)],  # C_zx(t) = <Sz(t) Sx(0)>
 )
 
-simulator.run([MPS(L, state="haar-random", pad=2)], H_open, single_state_params, noise_model=None, parallel=False)
+simulator.run([MPS(L, state="haar-random", pad=2)], H_open, single_state_params, parallel=False)
 
 t_single = single_state_params.autocorrelator_times
 czz_single = single_state_params.autocorrelator_results
@@ -128,7 +128,7 @@ ax.plot(t_single, np.real(czz_single), "o-", label=r"$C_{zz}(t)$")
 ax.plot(t_single, np.real(czx_single), "s--", label=r"$C_{zx}(t)$")
 ax.set_xlabel("t")
 ax.set_ylabel(r"$C_{ab}(t)$")
-ax.set_title("Single-state two-time correlators")
+ax.set_title("Single-state two-time correlations")
 ax.legend()
 ax.grid(alpha=0.3)
 plt.show()
@@ -136,7 +136,7 @@ plt.show()
 
 ## 3. Typicality view: from one state to an ensemble
 
-In dynamical typicality studies, one often averages correlators over an ensemble of initial states.
+In dynamical typicality studies, one often averages correlations over an ensemble of initial states.
 Under certain thermalisation guarantees, one can show that the typical relaxation behavior of _any_ state can be represented by an ensemble average of the expectation over randomly initialised states.
 For sufficiently rich ensembles, this can approximate high-temperature traces and reveal robust transport trends.
 
@@ -160,7 +160,7 @@ ensemble_params = AnalogSimParams(
     two_time_correlators=[(Observable(Z(), mid), Observable(X(), mid))],
 )
 
-simulator.run(ensemble_states, H_open, ensemble_params, noise_model=None, parallel=False)
+simulator.run(ensemble_states, H_open, ensemble_params, parallel=True)
 t_ens = ensemble_params.autocorrelator_times
 czz_ens = ensemble_params.autocorrelator_results
 czx_ens = ensemble_params.two_time_correlator_results[0]
@@ -180,7 +180,7 @@ plt.show()
 
 In the above illustrative run, the ensemble-averaged $C_{zz}(t)$ shows a monotonic decay trend toward zero, while $C_{zx}(t)$ remains comparatively close to zero over the sampled window, in contrast to the single-MPS trajectory.
 
-## 4. Spin transport example: periodic spin-current autocorrelator
+## 4. Spin transport example: periodic spin-current autocorrelation
 
 For periodic XXZ chains, define local bond current
 
@@ -200,7 +200,7 @@ C_{JJ}(t) = \frac{1}{L}\,\langle J(t)\,J(0)\rangle
 <!-- prettier-ignore-end -->
 
 can be assembled from all bond-pair two-time correlators.
-Such current autocorrelators are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories {cite:p}`steinigeweg2014_prl_spin_current`.
+Such current autocorrelations are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories {cite:p}`steinigeweg2014_prl_spin_current`.
 For finite-temperature Drude weights, diffusion, and integrable XXZ phenomenology—including the role of conservation laws—see the review {cite:p}`bertini2020_arxiv_1d_transport_review`.
 
 ```{code-cell} ipython3
@@ -251,7 +251,7 @@ for d in deltas:
         show_progress=False,
         two_time_correlators=pairs_jj,
     )
-    simulator.run(states_transport, h_periodic, sp, noise_model=None, parallel=False)
+    simulator.run(states_transport, h_periodic, sp, parallel=True)
     assert sp.two_time_correlator_results is not None
     t_transport = sp.two_time_correlator_times
     c_jj = np.real(np.sum(sp.two_time_correlator_results, axis=0) / Ltr)
@@ -264,7 +264,7 @@ for d in deltas:
     ax.plot(t_transport, transport_curves[d], marker="o", ms=3, label=rf"$\Delta={d}$")
 ax.set_xlabel("t")
 ax.set_ylabel(r"$C_{JJ}(t)$")
-ax.set_title("Periodic XXZ spin-current autocorrelator (small illustrative setup)")
+ax.set_title("Periodic XXZ spin-current autocorrelation (small illustrative setup)")
 ax.legend()
 ax.grid(alpha=0.3)
 plt.show()

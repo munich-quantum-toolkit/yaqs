@@ -35,7 +35,7 @@ self
 
 installation
 examples/analog_simulation
-examples/two_time_correlators_unitary_analog_simulation
+examples/noiseless_ensemble_evolution
 examples/scheduled_jumps
 examples/transmon_emulation
 examples/process_tomography
