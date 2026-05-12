@@ -1,7 +1,7 @@
 """Educational analog Ising simulation that saves observable dynamics to .npy.
 
 Edit the parameters in the CONFIG section, then run this file.
-The saved array has shape (num_sites, num_time_points), so each row is one site's <X>(t).
+The saved array has shape (num_sites, num_time_points), so each row is one site's <O>(t).
 """
 
 from pathlib import Path
