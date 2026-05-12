@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Unitary ensemble evolution helpers for analog simulations."""
+"""Ensemble evolution helpers for analog simulations."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..analog.autocorrelator import apply_observable_inplace, mixed_expectation
 from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.tdvp import local_dynamic_tdvp
@@ -52,7 +51,7 @@ def _step_auxiliary_states(
         _unitary_step(phi_p, hamiltonian, sim_params)
 
 
-def unitary_ensemble_member_worker(
+def ensemble_member_worker(
     args: tuple[int, MPS, AnalogSimParams, MPO],
 ) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None, NDArray[np.complex128] | None]:
     r"""Run one deterministic unitary ensemble member (no stochastic noise).
@@ -101,7 +100,7 @@ def unitary_ensemble_member_worker(
             raise ValueError(msg)
 
         autocorr_phi = copy.deepcopy(state)
-        apply_observable_inplace(autocorr_phi, sim_params.autocorrelator_observable)
+        autocorr_phi.apply_local(sim_params.autocorrelator_observable)
         if sim_params.sample_timesteps:
             autocorr_results = np.zeros(len(sim_params.times), dtype=np.complex128)
         else:
@@ -116,7 +115,7 @@ def unitary_ensemble_member_worker(
             two_time_results = np.zeros((n_pairs, 1), dtype=np.complex128)
         for _probe_a, b_op in pairs:
             phi_b = copy.deepcopy(state)
-            apply_observable_inplace(phi_b, b_op)
+            phi_b.apply_local(b_op)
             two_time_phis.append(phi_b)
 
     if sim_params.sample_timesteps:
@@ -124,19 +123,19 @@ def unitary_ensemble_member_worker(
         if autocorr_results is not None:
             assert autocorr_phi is not None
             assert sim_params.autocorrelator_observable is not None
-            autocorr_results[0] = mixed_expectation(state, autocorr_phi, sim_params.autocorrelator_observable)
+            autocorr_results[0] = autocorr_phi.mixed_expectation(state, sim_params.autocorrelator_observable)
         if two_time_results is not None:
             for p, (probe_a, _b_op) in enumerate(pairs):
-                two_time_results[p, 0] = mixed_expectation(state, two_time_phis[p], probe_a)
+                two_time_results[p, 0] = two_time_phis[p].mixed_expectation(state, probe_a)
     elif last_index == 0:
         state.evaluate_observables(sim_params, observable_results)
         if autocorr_results is not None:
             assert autocorr_phi is not None
             assert sim_params.autocorrelator_observable is not None
-            autocorr_results[0] = mixed_expectation(state, autocorr_phi, sim_params.autocorrelator_observable)
+            autocorr_results[0] = autocorr_phi.mixed_expectation(state, sim_params.autocorrelator_observable)
         if two_time_results is not None:
             for p, (probe_a, _b_op) in enumerate(pairs):
-                two_time_results[p, 0] = mixed_expectation(state, two_time_phis[p], probe_a)
+                two_time_results[p, 0] = two_time_phis[p].mixed_expectation(state, probe_a)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         _unitary_step(state, hamiltonian, sim_params)
@@ -147,18 +146,18 @@ def unitary_ensemble_member_worker(
             if autocorr_results is not None:
                 assert autocorr_phi is not None
                 assert sim_params.autocorrelator_observable is not None
-                autocorr_results[j] = mixed_expectation(state, autocorr_phi, sim_params.autocorrelator_observable)
+                autocorr_results[j] = autocorr_phi.mixed_expectation(state, sim_params.autocorrelator_observable)
             if two_time_results is not None:
                 for p, (probe_a, _b_op) in enumerate(pairs):
-                    two_time_results[p, j] = mixed_expectation(state, two_time_phis[p], probe_a)
+                    two_time_results[p, j] = two_time_phis[p].mixed_expectation(state, probe_a)
         elif j == last_index:
             state.evaluate_observables(sim_params, observable_results)
             if autocorr_results is not None:
                 assert autocorr_phi is not None
                 assert sim_params.autocorrelator_observable is not None
-                autocorr_results[0] = mixed_expectation(state, autocorr_phi, sim_params.autocorrelator_observable)
+                autocorr_results[0] = autocorr_phi.mixed_expectation(state, sim_params.autocorrelator_observable)
             if two_time_results is not None:
                 for p, (probe_a, _b_op) in enumerate(pairs):
-                    two_time_results[p, 0] = mixed_expectation(state, two_time_phis[p], probe_a)
+                    two_time_results[p, 0] = two_time_phis[p].mixed_expectation(state, probe_a)
 
     return observable_results, autocorr_results, two_time_results

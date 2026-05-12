@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import simulator
-from mqt.yaqs.analog.unitary_ensemble import unitary_ensemble_member_worker
+from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode, Observable
@@ -287,7 +287,7 @@ def test_unitary_ensemble_member_worker_raises_when_autocorr_observable_missing(
         autocorrelator_observable=None,
     )
     with pytest.raises(ValueError, match="compute_autocorrelator=True requires autocorrelator_observable"):
-        unitary_ensemble_member_worker((0, mps, sim_params, hamiltonian))
+        ensemble_member_worker((0, mps, sim_params, hamiltonian))
 
 
 def test_unitary_ensemble_member_worker_uses_bug_evolution_mode() -> None:
@@ -304,7 +304,7 @@ def test_unitary_ensemble_member_worker_uses_bug_evolution_mode() -> None:
         max_bond_dim=64,
         threshold=1e-10,
     )
-    obs_result, autocorr, two_time = unitary_ensemble_member_worker((0, mps, sim_params, hamiltonian))
+    obs_result, autocorr, two_time = ensemble_member_worker((0, mps, sim_params, hamiltonian))
     assert obs_result.shape == (1, len(sim_params.times))
     assert autocorr is None
     assert two_time is None
@@ -330,7 +330,7 @@ def test_unitary_ensemble_member_worker_final_timestep_when_not_sampling() -> No
         threshold=1e-10,
     )
     assert len(sim_params.times) >= 3
-    obs_result, autocorr, two_time = unitary_ensemble_member_worker((0, mps, sim_params, hamiltonian))
+    obs_result, autocorr, two_time = ensemble_member_worker((0, mps, sim_params, hamiltonian))
     assert obs_result.shape == (1, 1)
     assert autocorr is not None
     assert autocorr.shape == (1,)

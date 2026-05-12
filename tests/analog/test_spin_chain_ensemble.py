@@ -5,16 +5,18 @@
 #
 # Licensed under the MIT License
 
-"""End-to-end XXZ+transverse-field unitary-ensemble checks against dense ED."""
+"""End-to-end spin-chain ensemble checks against dense ED and worker paths."""
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs import simulator
+from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Y, Z
 
 
 def _embed_one_site_operator(length: int, site: int, op2: np.ndarray) -> np.ndarray:
@@ -27,6 +29,97 @@ def _embed_two_site_operator(length: int, site_left: int, op4: np.ndarray) -> np
     left_dim = 2**site_left
     right_dim = 2 ** (length - site_left - 2)
     return np.kron(np.kron(np.eye(left_dim, dtype=np.complex128), op4), np.eye(right_dim, dtype=np.complex128))
+
+
+def _swap_gate_4() -> np.ndarray:
+    """Two-qubit SWAP in lexicographic ``|ab>`` basis.
+
+    Returns:
+        The ``4x4`` SWAP matrix in the lexicographic two-qubit basis.
+    """
+    return np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
+
+
+def _permuted_periodic_wrap_gate(gate4: np.ndarray) -> np.ndarray:
+    """Permute wrap gate from ``|q_{L-1}, q_0>`` into merged nearest-neighbor ordering.
+
+    Args:
+        gate4: Two-qubit gate matrix in the periodic-wrap bond convention.
+
+    Returns:
+        The permuted ``4x4`` matrix acting on the merged nearest-neighbor basis at ``(L-2, L-1)``.
+    """
+    p_perm = np.zeros((4, 4), dtype=np.complex128)
+    for a in range(2):
+        for b in range(2):
+            idx_merged = 2 * a + b
+            idx_bond = 2 * b + a
+            p_perm[idx_bond, idx_merged] = 1.0
+    g = np.asarray(gate4, dtype=np.complex128)
+    return p_perm.conj().T @ g @ p_perm
+
+
+def _dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.ndarray:
+    """Dense embedding of a two-site gate on periodic bond ``(q_{L-1}, q_0)``.
+
+    Args:
+        length: Number of sites.
+        gate4: Two-qubit ``4 x 4`` gate on the wrap bond.
+
+    Returns:
+        Dense ``2^L`` by ``2^L`` complex matrix.
+    """
+    g = np.asarray(gate4, dtype=np.complex128)
+    if length <= 2:
+        return np.asarray(g, dtype=np.complex128)
+    dim = 2**length
+    sw = _swap_gate_4()
+    u_fwd = np.eye(dim, dtype=np.complex128)
+    for i in range(length - 2):
+        u_fwd = _embed_two_site_operator(length, i, sw) @ u_fwd
+    g_merged = _permuted_periodic_wrap_gate(g)
+    g_nn = _embed_two_site_operator(length, length - 2, g_merged)
+    return np.asarray(u_fwd.conj().T @ g_nn @ u_fwd, dtype=np.complex128)
+
+
+def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
+    """Construct XY-derived spin-current bond operator.
+
+    Args:
+        j_coupling: XY coupling strength scaling the bond operator.
+
+    Returns:
+        The ``4x4`` complex spin-current bond matrix.
+    """
+    x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    y = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
+    return 0.25 * j_coupling * (np.kron(x, y) - np.kron(y, x))
+
+
+def _periodic_bond_endpoints(length: int) -> list[tuple[int, int]]:
+    """Generate nearest-neighbor bond pairs with periodic boundary conditions.
+
+    Args:
+        length: Number of sites.
+
+    Returns:
+        List of ``(site_a, site_b)`` tuples with ``site_b = (site_a + 1) % length``.
+    """
+    return [(i, (i + 1) % length) for i in range(length)]
+
+
+def _spin_current_observable_for_periodic_bond(site_a: int, site_b: int, j_xy: float) -> Observable:
+    """Create an Observable for spin-current on one periodic bond.
+
+    Args:
+        site_a: First site index.
+        site_b: Second site index.
+        j_xy: XY coupling strength.
+
+    Returns:
+        Observable wrapping the spin-current bond matrix on ``(site_a, site_b)``.
+    """
+    return Observable(BaseGate(_spin_current_bond_matrix(j_xy)), sites=[site_a, site_b])
 
 
 def _build_xxz_tf_open_chain_dense(length: int, j_xy: float, delta: float, h_x: float) -> np.ndarray:
@@ -154,3 +247,46 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
 
     max_abs_per_pair = np.max(np.abs(yaqs - ed), axis=1)
     assert np.all(max_abs_per_pair < 1e-5), f"pairwise max errors were {max_abs_per_pair!r}"
+
+
+def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> None:
+    """At ``t=0``, two-time block diagonal entry ``(r,r)`` must match dense ``<psi|j_r j_r|psi>``."""
+    length = 4
+    j_xy = 1.0
+    delta = 0.8
+    mps = MPS(length, state="random", pad=8)
+    mps.normalize("B")
+
+    row = tuple(_spin_current_observable_for_periodic_bond(a, b, j_xy) for a, b in _periodic_bond_endpoints(length))
+    s_index = 1
+    obs_s = row[s_index]
+    pairs = [(obs_r, obs_s) for obs_r in row]
+
+    h = MPO.hamiltonian(
+        length=length,
+        two_body=[(0.25 * j_xy, "X", "X"), (0.25 * j_xy, "Y", "Y"), (0.25 * delta, "Z", "Z")],
+        bc="periodic",
+    )
+
+    sim_params = AnalogSimParams(
+        observables=[],
+        elapsed_time=0.0,
+        dt=0.5,
+        max_bond_dim=32,
+        threshold=1e-10,
+        order=1,
+        sample_timesteps=True,
+        show_progress=False,
+        compute_autocorrelator=False,
+        two_time_correlators=pairs,
+    )
+
+    _, _, mat = ensemble_member_worker((0, mps, sim_params, h))
+    assert mat is not None
+    val_worker = float(np.real(mat[s_index, 0]))
+
+    psi = np.asarray(mps.to_vec(), dtype=np.complex128)
+    j_bond = _spin_current_bond_matrix(j_xy)
+    jr = _embed_two_site_operator(length, 1, j_bond)
+    expected = float(np.real(np.vdot(psi, jr @ jr @ psi)))
+    assert val_worker == pytest.approx(expected, rel=0, abs=1e-6)

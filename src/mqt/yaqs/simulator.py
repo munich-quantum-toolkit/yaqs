@@ -95,9 +95,9 @@ if TYPE_CHECKING:
     from .core.data_structures.noise_model import NoiseModel
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from .analog.ensemble import ensemble_member_worker
 from .analog.lindblad import lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
-from .analog.unitary_ensemble import unitary_ensemble_member_worker
 from .digital.digital_tjm import digital_tjm
 
 __all__ = ["available_cpus", "run", "run_backend_parallel"]  # public API of this module
@@ -360,7 +360,7 @@ def _unitary_ensemble_worker(
             Observable trajectories, optional autocorrelator trajectory, and optional two-time
             correlator block for one member.
     """
-    return unitary_ensemble_member_worker((
+    return ensemble_member_worker((
         job_idx,
         WORKER_CTX["initial_states"][job_idx],
         WORKER_CTX["sim_params"],
@@ -782,9 +782,9 @@ def _run_circuit(
 
 
 # ---------------------------------------------------------------------------
-# 13) ANALOG UNITARY ENSEMBLE (list of initial states)
+# 13) ENSEMBLE (deterministic unitary evolution of initial state list)
 # ---------------------------------------------------------------------------
-def _run_analog_unitary_ensemble(
+def _run_ensemble(
     initial_states: list[MPS],
     operator: MPO,
     sim_params: AnalogSimParams,
@@ -896,7 +896,7 @@ def _run_analog_unitary_ensemble(
         iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not sim_params.show_progress)
         for i, arg in enumerate(iterator):
             obs_result, autocorr_result, two_time_result = _call_backend(
-                unitary_ensemble_member_worker, arg, n_threads=n_threads
+                ensemble_member_worker, arg, n_threads=n_threads
             )
             for obs_index, observable in enumerate(sim_params.sorted_observables):
                 assert observable.trajectories is not None, "Trajectories should have been initialized"
@@ -944,7 +944,7 @@ def _run_analog(
     """
     # Deterministic unitary ensemble mode
     if isinstance(initial_state, list):
-        _run_analog_unitary_ensemble(
+        _run_ensemble(
             cast("list[MPS]", initial_state),
             operator,
             sim_params,
@@ -1084,8 +1084,8 @@ def run(
         if any(not isinstance(state, MPS) for state in initial_state):
             msg = "initial_state list must contain only MPS objects."
             raise TypeError(msg)
-        typed_initial_states = cast("list[MPS]", initial_state)
-        for state in typed_initial_states:
+        initial_state_list = cast("list[MPS]", initial_state)
+        for state in initial_state_list:
             state.normalize("B")
     else:
         initial_state.normalize("B")

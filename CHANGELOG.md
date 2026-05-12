@@ -11,10 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added deterministic unitary analog ensemble evolution by allowing `simulator.run` to accept `list[MPS]` as `initial_state` ([#409])
-- added optional autocorrelator evaluation (`compute_autocorrelator`) for unitary analog ensemble runs, with results written to `autocorrelator_results` on the simulation time grid ([#409])
-- added optional two-time correlator evaluation (`two_time_correlators`) for unitary analog ensemble runs, with results written to `two_time_correlator_results` on the simulation time grid ([#409])
-- added periodic-wrap support for two-site observables on sites `(L-1, 0)` in `apply_observable_inplace` (useful in ring spin-current correlators) ([#409])
+- added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
 - added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad` ([#400]) ([**@Gauthameshwar**])
 - added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
 - added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
