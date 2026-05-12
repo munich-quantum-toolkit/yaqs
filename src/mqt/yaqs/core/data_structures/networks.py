@@ -104,9 +104,12 @@ class MPS:
                 - "Neel": Alternating pattern |0101...⟩.
                 - "wall": Domain wall at given site |000111>
                 - "random": Initializes each qubit randomly.
+                - "haar-random": Initializes an entangled MPS via Haar-random isometries.
                 - "basis": Initializes a qubit in an input computational basis.
                 Default is "zeros".
             pad: Pads the state with extra zeros to increase bond dimension. Can increase numerical stability.
+                For ``state="haar-random"``, this value is interpreted as the target maximum internal
+                bond dimension χ_max. If omitted, χ_max defaults to 1.
             basis_string: String used to initialize the state in a specific computational basis.
                 This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
                 For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
@@ -134,8 +137,105 @@ class MPS:
             self.physical_dimensions = physical_dimensions
         assert len(self.physical_dimensions) == length
 
+        def _bond_caps(target_dim: int) -> list[int]:
+            """Compute feasible MPS bond dimensions for a target maximum.
+
+            Args:
+                target_dim: Target maximum internal bond dimension.
+
+            Returns:
+                List of length ``self.length + 1`` with bond dimensions
+                ``[chi_0, ..., chi_L]`` where boundaries satisfy
+                ``chi_0 = chi_L = 1``.
+
+            Raises:
+                ValueError: If ``target_dim < 1``.
+            """
+            if target_dim < 1:
+                msg = "Target bond dimension must be at least 1."
+                raise ValueError(msg)
+            caps = [0] * (self.length + 1)
+            caps[0] = 1
+            caps[self.length] = 1
+
+            # Left-to-right representability cap
+            left_cap = 1
+            for i in range(1, self.length):
+                left_cap *= self.physical_dimensions[i - 1]
+                caps[i] = left_cap
+
+            # Right-to-left representability cap
+            right_cap = 1
+            for i in range(self.length - 1, 0, -1):
+                right_cap *= self.physical_dimensions[i]
+                caps[i] = min(caps[i], right_cap)
+
+            # Apply target cap on internal bonds
+            for i in range(1, self.length):
+                caps[i] = min(caps[i], target_dim)
+
+            return caps
+
+        def _haar_random_tensor_core(
+            site: int,
+            local_dim: int,
+            target_dim: int,
+            *,
+            _bond_cache: dict[str, list[int] | None] | None = None,
+            _rng_cache: dict[str, np.random.Generator | None] | None = None,
+        ) -> NDArray[np.complex128]:
+            """Construct one Haar-random isometric MPS tensor core lazily.
+
+            Args:
+                site: Site index of the tensor core.
+                local_dim: Physical dimension at the site.
+                target_dim: Target maximum internal bond dimension.
+                _bond_cache: Optional cache for lazily computed bond dimensions.
+                _rng_cache: Optional cache for lazily initialized RNG.
+
+            Returns:
+                Tensor core with shape ``(local_dim, chi_l, chi_r)``.
+            """
+            if _rng_cache is None:
+                _rng_cache = {"rng": None}
+            if _bond_cache is None:
+                _bond_cache = {"dims": None}
+            if _bond_cache["dims"] is None:
+                _bond_cache["dims"] = _bond_caps(target_dim)
+            if _rng_cache["rng"] is None:
+                _rng_cache["rng"] = np.random.default_rng()
+
+            bond_dims = _bond_cache["dims"]
+            rng = _rng_cache["rng"]
+            assert bond_dims is not None
+            assert rng is not None
+
+            chi_l = bond_dims[site]
+            chi_r = bond_dims[site + 1]
+            assert chi_r <= local_dim * chi_l, "Invalid bond schedule for Haar-random initialization."
+
+            x_mat = rng.standard_normal((local_dim * chi_l, chi_r)) + 1j * rng.standard_normal((
+                local_dim * chi_l,
+                chi_r,
+            ))
+            q_mat, r_mat = np.linalg.qr(x_mat, mode="reduced")
+
+            # Fix arbitrary QR phases for a well-defined Haar isometry sample.
+            diag = np.diag(r_mat)
+            phases = np.ones_like(diag, dtype=np.complex128)
+            non_zero = np.abs(diag) > 0
+            phases[non_zero] = diag[non_zero] / np.abs(diag[non_zero])
+            q_mat /= phases[np.newaxis, :]
+
+            return q_mat.reshape(local_dim, chi_l, chi_r).astype(np.complex128)
+
         # Create d-level |0> state
         if not tensors:
+            haar_bond_cache: dict[str, list[int] | None] | None = None
+            haar_rng_cache: dict[str, np.random.Generator | None] | None = None
+            if state == "haar-random":
+                haar_bond_cache = {"dims": None}
+                haar_rng_cache = {"rng": None}
             for i, d in enumerate(self.physical_dimensions):
                 vector = np.zeros(d, dtype=complex)
                 if state == "zeros":
@@ -176,6 +276,17 @@ class MPS:
                     rng = np.random.default_rng()
                     vector[0] = rng.random()
                     vector[1] = 1 - vector[0]
+                elif state == "haar-random":
+                    target_dim = 1 if pad is None else pad
+                    tensor = _haar_random_tensor_core(
+                        i,
+                        d,
+                        target_dim,
+                        _bond_cache=haar_bond_cache,
+                        _rng_cache=haar_rng_cache,
+                    )
+                    self.tensors.append(tensor)
+                    continue
                 elif state == "basis":
                     assert basis_string is not None, "basis_string must be provided for 'basis' state initialization."
                     self.init_mps_from_basis(basis_string, self.physical_dimensions)
@@ -191,7 +302,7 @@ class MPS:
 
             if state == "random":
                 self.normalize()
-        if pad is not None:
+        if pad is not None and state != "haar-random":
             self.pad_bond_dimension(pad)
 
     def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
