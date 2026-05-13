@@ -158,13 +158,11 @@ class AnalogSimParams:
         get_state: If ``True``, store and return the output MPS state.
         show_progress: If ``True``, show a progress bar as trajectories finish.
         noise_model: Noise model used for the run, populated after simulation.
-        compute_autocorrelator: If ``True``, also record ensemble-averaged autocorrelator values.
-        autocorrelator_observable: Observable :math:`O` used when ``compute_autocorrelator`` is enabled.
-        autocorrelator_times: Time grid for autocorrelator results, or ``None`` when unused.
-        autocorrelator_results: Ensemble-mean autocorrelator aligned with ``autocorrelator_times``.
-        two_time_correlators: Optional ``(A, B)`` observable pairs for unitary-ensemble two-time correlators.
-        two_time_correlator_times: Time grid for two-time correlator results, or ``None`` when unused.
-        two_time_correlator_results: Ensemble mean with shape ``(n_pairs, n_times)`` or ``(n_pairs, 1)``.
+        multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
+            two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
+            Autocorrelation is the special case ``(O, O)``. Results are indexed by pair position.
+        multi_time_observables_times: Time grid for ``multi_time_observables`` results, or ``None`` when unused.
+        multi_time_observables_results: Ensemble mean with shape ``(n_pairs, n_times)`` or ``(n_pairs, 1)``.
     """
 
     output_state: MPS | None = None
@@ -187,9 +185,7 @@ class AnalogSimParams:
         show_progress: bool = True,
         num_threads: int = 1,
         solver: str = "TJM",
-        compute_autocorrelator: bool = False,
-        autocorrelator_observable: Observable | None = None,
-        two_time_correlators: list[tuple[Observable, Observable]] | None = None,
+        multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -211,10 +207,9 @@ class AnalogSimParams:
             show_progress: If ``True``, print a progress bar as trajectories finish.
             num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
             solver: Solver method, one of ``"TJM"``, ``"Lindblad"``, or ``"MCWF"``.
-            compute_autocorrelator: If ``True``, compute autocorrelator values on the simulation grid.
-            autocorrelator_observable: Observable used when ``compute_autocorrelator`` is ``True``.
-            two_time_correlators: For ``list[MPS]`` unitary ensemble runs only, list of ``(A, B)`` pairs
-                evaluated as ``<psi(t)| A |phi_B(t)>`` with ``phi_B(t) = U(t) B |psi(0)>``.
+            multi_time_observables: For ``list[MPS]`` unitary ensemble runs only, list of ``(A, B)``
+                pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
+                case ``(O, O)``.
 
         Raises:
             ValueError: If the solver is not "TJM", "Lindblad", or "MCWF".
@@ -261,15 +256,11 @@ class AnalogSimParams:
         self.get_state = get_state
         self.show_progress = show_progress
         self.num_threads = num_threads
-        self.compute_autocorrelator = compute_autocorrelator
-        self.autocorrelator_observable = autocorrelator_observable
-        self.autocorrelator_times: NDArray[np.float64] | None = None
-        self.autocorrelator_results: NDArray[np.complex128] | None = None
-        self.two_time_correlators: list[tuple[Observable, Observable]] = (
-            [] if two_time_correlators is None else list(two_time_correlators)
+        self.multi_time_observables: list[tuple[Observable, Observable]] = (
+            [] if multi_time_observables is None else list(multi_time_observables)
         )
-        self.two_time_correlator_times: NDArray[np.float64] | None = None
-        self.two_time_correlator_results: NDArray[np.complex128] | None = None
+        self.multi_time_observables_times: NDArray[np.float64] | None = None
+        self.multi_time_observables_results: NDArray[np.complex128] | None = None
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.

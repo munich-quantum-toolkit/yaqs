@@ -12,9 +12,9 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Noiseless Ensemble Evolution
+# Ensemble Evolution
 
-This page demonstrates workflows for computing two-time correlations in a deterministic (no noisy jumps) unitary ensemble in YAQS.
+This page demonstrates workflows for computing two-time correlations in a deterministic (noiseless, unitary) ensemble in YAQS.
 The focus is on compact, executable examples:
 
 - Single-state auto/two-time correlations.
@@ -95,8 +95,8 @@ For an initial state $|\psi(0)\rangle$ and unitary $U(t)$:
 These quantities probe dynamical memory and relaxation.
 They are standard observables in **dynamical quantum typicality (DQT)** and related finite-temperature dynamics studies, where one compares single-trajectory and ensemble-averaged behavior.
 
-The unitary-ensemble backend computes `two_time_correlators` for `list[MPS]` inputs.
-For a single-state demonstration, we pass a list with one element.
+The unitary-ensemble backend computes `multi_time_observables` pairs for `list[MPS]` inputs.
+Autocorrelation is the special case where both the observables are the same `(O, O)`. For a single-state demonstration, we pass a list with one element.
 
 ```{code-cell} ipython3
 sz_mid = Observable(Z(), mid)
@@ -110,16 +110,14 @@ single_state_params = AnalogSimParams(
     threshold=1e-10,
     sample_timesteps=True,
     show_progress=False,
-    compute_autocorrelator=True,
-    autocorrelator_observable=sz_mid,
-    two_time_correlators=[(sz_mid, sx_mid)],  # C_zx(t) = <Sz(t) Sx(0)>
+    multi_time_observables=[(sz_mid, sz_mid), (sz_mid, sx_mid)],  # row 0: C_zz(t), row 1: C_zx(t)
 )
 
 simulator.run([MPS(L, state="haar-random", pad=2)], H_open, single_state_params, parallel=False)
 
-t_single = single_state_params.autocorrelator_times
-czz_single = single_state_params.autocorrelator_results
-czx_single = single_state_params.two_time_correlator_results[0]
+t_single = single_state_params.multi_time_observables_times
+czz_single = single_state_params.multi_time_observables_results[0]
+czx_single = single_state_params.multi_time_observables_results[1]
 ```
 
 ```{code-cell} ipython3
@@ -155,15 +153,16 @@ ensemble_params = AnalogSimParams(
     threshold=1e-10,
     sample_timesteps=True,
     show_progress=False,
-    compute_autocorrelator=True,
-    autocorrelator_observable=Observable(Z(), mid),
-    two_time_correlators=[(Observable(Z(), mid), Observable(X(), mid))],
+    multi_time_observables=[
+        (Observable(Z(), mid), Observable(Z(), mid)),  # C_zz(t) autocorrelation
+        (Observable(Z(), mid), Observable(X(), mid)),  # C_zx(t)
+    ],
 )
 
 simulator.run(ensemble_states, H_open, ensemble_params, parallel=True)
-t_ens = ensemble_params.autocorrelator_times
-czz_ens = ensemble_params.autocorrelator_results
-czx_ens = ensemble_params.two_time_correlator_results[0]
+t_ens = ensemble_params.multi_time_observables_times
+czz_ens = ensemble_params.multi_time_observables_results[0]
+czx_ens = ensemble_params.multi_time_observables_results[1]
 ```
 
 ```{code-cell} ipython3
@@ -200,8 +199,8 @@ C_{JJ}(t) = \frac{1}{L}\,\langle J(t)\,J(0)\rangle
 <!-- prettier-ignore-end -->
 
 can be assembled from all bond-pair two-time correlators.
-Such current autocorrelations are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories {cite:p}`steinigeweg2014_prl_spin_current`.
-For finite-temperature Drude weights, diffusion, and integrable XXZ phenomenology—including the role of conservation laws—see the review {cite:p}`bertini2020_arxiv_1d_transport_review`.
+Such current autocorrelations are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories ([Steiningeweg *et al.*, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601)).
+For finite-temperature Drude weights, diffusion, and integrable XXZ phenomenology—including the role of conservation laws—see the review ([Bertini *et al.*, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003)).
 
 ```{code-cell} ipython3
 def spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
@@ -249,12 +248,12 @@ for d in deltas:
         threshold=1e-10,
         sample_timesteps=True,
         show_progress=False,
-        two_time_correlators=pairs_jj,
+        multi_time_observables=pairs_jj,
     )
     simulator.run(states_transport, h_periodic, sp, parallel=True)
-    assert sp.two_time_correlator_results is not None
-    t_transport = sp.two_time_correlator_times
-    c_jj = np.real(np.sum(sp.two_time_correlator_results, axis=0) / Ltr)
+    assert sp.multi_time_observables_results is not None
+    t_transport = sp.multi_time_observables_times
+    c_jj = np.real(np.sum(sp.multi_time_observables_results, axis=0) / Ltr)
     transport_curves[d] = c_jj
 ```
 
@@ -271,8 +270,8 @@ plt.show()
 ```
 
 This finite-size, short-time run already shows different relaxation trends for different anisotropies.
-In the thermodynamic limit and Kubo picture, the long-time behavior of $C_{JJ}(t)$ is tied to the spin Drude weight and to ballistic versus diffusive transport in the XXZ chain; {cite:p}`bertini2020_arxiv_1d_transport_review` summarizes the established finite-temperature picture (including subtleties at $\Delta=1$ and in finite systems).
-The illustrative curves here use small $L$ and a handful of Haar-random states; larger-scale or higher-accuracy studies follow typicality, as seen in {cite:p}`steinigeweg2014_prl_spin_current`.
+In the thermodynamic limit and Kubo picture, the long-time behavior of $C_{JJ}(t)$ is tied to the spin Drude weight and to ballistic versus diffusive transport in the XXZ chain; [Bertini *et al.*, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003) summarizes the established finite-temperature picture (including subtleties at $\Delta=1$ and in finite systems).
+The illustrative curves here use small $L$ and a handful of Haar-random states; larger-scale or higher-accuracy studies follow typicality, as in [Steiningeweg *et al.*, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601).
 
 :::{tip} Practical notes: scaling runs and MPS entanglement
 

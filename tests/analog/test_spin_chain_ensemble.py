@@ -219,13 +219,13 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
         threshold=1e-12,
         sample_timesteps=True,
         show_progress=False,
-        two_time_correlators=pairs,
+        multi_time_observables=pairs,
     )
     simulator.run(states, h_mpo, sim_params, noise_model=None, parallel=False)
-    assert sim_params.two_time_correlator_results is not None
-    assert sim_params.two_time_correlator_times is not None, "Expected two-time correlator time grid to be set."
-    yaqs = np.asarray(sim_params.two_time_correlator_results, dtype=np.complex128)
-    times = np.asarray(sim_params.two_time_correlator_times, dtype=np.float64)
+    assert sim_params.multi_time_observables_results is not None
+    assert sim_params.multi_time_observables_times is not None, "Expected multi_time_observables time grid to be set."
+    yaqs = np.asarray(sim_params.multi_time_observables_results, dtype=np.complex128)
+    times = np.asarray(sim_params.multi_time_observables_times, dtype=np.float64)
 
     x2 = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
     y2 = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
@@ -277,11 +277,10 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
         order=1,
         sample_timesteps=True,
         show_progress=False,
-        compute_autocorrelator=False,
-        two_time_correlators=pairs,
+        multi_time_observables=pairs,
     )
 
-    _, _, mat = ensemble_member_worker((0, mps, sim_params, h))
+    _, mat = ensemble_member_worker((0, mps, sim_params, h))
     assert mat is not None
     val_worker = float(np.real(mat[s_index, 0]))
 
