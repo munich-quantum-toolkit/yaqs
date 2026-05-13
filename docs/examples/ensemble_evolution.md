@@ -199,8 +199,8 @@ C_{JJ}(t) = \frac{1}{L}\,\langle J(t)\,J(0)\rangle
 <!-- prettier-ignore-end -->
 
 can be assembled from all bond-pair two-time correlators.
-Such current autocorrelations are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories ([Steiningeweg *et al.*, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601)).
-For finite-temperature Drude weights, diffusion, and integrable XXZ phenomenology—including the role of conservation laws—see the review ([Bertini *et al.*, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003)).
+Such current autocorrelations are central to linear-response spin transport; dynamical typicality makes it practical to estimate high-temperature ensemble quantities from a few random pure-state trajectories ([Steiningeweg _et al._, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601)).
+For finite-temperature Drude weights, diffusion, and integrable XXZ phenomenology—including the role of conservation laws—see the review ([Bertini _et al._, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003)).
 
 ```{code-cell} ipython3
 def spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
@@ -270,8 +270,8 @@ plt.show()
 ```
 
 This finite-size, short-time run already shows different relaxation trends for different anisotropies.
-In the thermodynamic limit and Kubo picture, the long-time behavior of $C_{JJ}(t)$ is tied to the spin Drude weight and to ballistic versus diffusive transport in the XXZ chain; [Bertini *et al.*, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003) summarizes the established finite-temperature picture (including subtleties at $\Delta=1$ and in finite systems).
-The illustrative curves here use small $L$ and a handful of Haar-random states; larger-scale or higher-accuracy studies follow typicality, as in [Steiningeweg *et al.*, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601).
+In the thermodynamic limit and Kubo picture, the long-time behavior of $C_{JJ}(t)$ is tied to the spin Drude weight and to ballistic versus diffusive transport in the XXZ chain; [Bertini _et al._, Rev. Mod. Phys. **93**, 025003 (2021)](https://doi.org/10.1103/RevModPhys.93.025003) summarizes the established finite-temperature picture (including subtleties at $\Delta=1$ and in finite systems).
+The illustrative curves here use small $L$ and a handful of Haar-random states; larger-scale or higher-accuracy studies follow typicality, as in [Steiningeweg _et al._, Phys. Rev. Lett. **112**, 120601 (2014)](https://doi.org/10.1103/PhysRevLett.112.120601).
 
 :::{tip} Practical notes: scaling runs and MPS entanglement
 
