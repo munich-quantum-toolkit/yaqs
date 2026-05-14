@@ -71,7 +71,7 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
         rem = opr % (p_dim * mpo_r)
         p = rem // mpo_r
         r = rem % mpo_r
-        for a in prange(a_in):  # type: ignore[attr-defined]
+        for a in prange(a_in):  # ty: ignore[not-iterable]
             for aa in range(a_out):
                 sum_val = 0.0 + 0.0j
                 for mpo_l_idx in range(mpo_l):
@@ -83,7 +83,7 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
     out = np.zeros((rows, cols), dtype=np.complex128)
 
     # Final contraction over MPO right bond and reshape to matrix
-    for o_aa in prange(o_dim * a_out):  # type: ignore[attr-defined]
+    for o_aa in prange(o_dim * a_out):  # ty: ignore[not-iterable]
         o = o_aa // a_out
         aa = o_aa % a_out
         for bb in range(b_out):
@@ -146,7 +146,7 @@ def build_dense_heff_bond_numba(left_env: np.ndarray, right_env: np.ndarray) -> 
         for w in range(w_dim):
             row_idx = p * w_dim + w
 
-            for u in prange(u_dim):  # type: ignore[attr-defined]
+            for u in prange(u_dim):  # ty: ignore[not-iterable]
                 for v in range(v_dim):
                     col_idx = u * v_dim + v
 

@@ -285,7 +285,6 @@ class AnalogSimParams:
         self.get_state = get_state
         self.show_progress = show_progress
         self.num_threads = num_threads
-        assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
@@ -536,7 +535,6 @@ class StrongSimParams:
         self.num_mid_measurements = num_mid_measurements
         self.show_progress = show_progress
         self.num_threads = num_threads
-        assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.

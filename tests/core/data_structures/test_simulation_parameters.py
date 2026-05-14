@@ -266,9 +266,7 @@ def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
 def test_aggregate_trajectories_schmidt_requires_array() -> None:
     """For Schmidt spectrum, trajectories must be a *array*; list should raise AssertionError."""
     ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[2, 3])
-
-    # Wrong type: a single ndarray (method expects list[...] and asserts)
-    ss_obs.trajectories = [0.9, 0.1]  # type: ignore [assignment]
+    ss_obs.trajectories = [0.9, 0.1]  # ty: ignore[invalid-assignment]
 
     sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, show_progress=False)
 
@@ -399,7 +397,7 @@ def test_strong_aggregate_mixed_regular_and_schmidt() -> None:
 def test_strong_aggregate_schmidt_requires_array() -> None:
     """Schmidt branch must assert if trajectories is not an array."""
     ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
-    ssp.trajectories = [0.9, 0.1]  # type: ignore [assignment]
+    ssp.trajectories = [0.9, 0.1]  # ty: ignore[invalid-assignment]
 
     params = StrongSimParams(observables=[ssp], num_traj=1)
 

@@ -38,7 +38,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _get_parallel_context, _worker_init  # noqa: PLC2701
+from mqt.yaqs.simulator import _get_parallel_context, worker_init  # noqa: PLC2701
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,7 +89,7 @@ def test_threading_config() -> None:
 
     try:
         # Simulate worker init with strict thread cap
-        _worker_init({}, n_threads=1)
+        worker_init({}, n_threads=1)
 
         # Check if Numba threads are set to 1
         assert numba.get_num_threads() == 1
@@ -1027,3 +1027,29 @@ def test_scheduled_jump_two_site() -> None:
     # t=0.0 (0), 0.1 (1), 0.2 (2) -> flip.
     np.testing.assert_allclose(results[:2], 1.0, atol=1e-10)
     np.testing.assert_allclose(results[2:], -1.0, atol=1e-10)
+
+
+def test_no_output_error() -> None:
+    """Verify that simulator.run raises AssertionError when no output is specified."""
+    num_qubits = 2
+    state = MPS(num_qubits, state="zeros")
+    circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
+    H = MPO.ising(num_qubits, J=1, g=0.5)
+
+    # 1. AnalogSimParams (No observables, get_state=False)
+    sim_params_analog = AnalogSimParams(
+        observables=[],
+        elapsed_time=0.1,
+        dt=0.1,
+        get_state=False,
+    )
+    with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
+        simulator.run(state, H, sim_params_analog)
+
+    # 2. StrongSimParams (No observables, get_state=False)
+    sim_params_strong = StrongSimParams(
+        observables=[],
+        get_state=False,
+    )
+    with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
+        simulator.run(state, circ, sim_params_strong)

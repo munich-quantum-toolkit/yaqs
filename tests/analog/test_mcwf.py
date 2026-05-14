@@ -8,7 +8,6 @@
 """Tests for the Monte Carlo Wavefunction (MCWF) Solver."""
 
 import numpy as np
-import pytest
 
 from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
@@ -159,17 +158,6 @@ def test_mcwf_zero_strength_noise() -> None:
     # Preprocess should not add any jump ops
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
     assert len(ctx.jump_ops) == 0
-
-
-def test_mcwf_system_size_limit() -> None:
-    """Test that MCWF raises ValueError for system size > 14."""
-    n_sites = 15
-    psi = MPS(n_sites)
-    h = MPO.ising(n_sites, J=1.0, g=1.0)
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=1.0, solver="MCWF", observables=[Observable("z", sites=[0])])
-
-    with pytest.raises(ValueError, match=r"System size .* is too large"):
-        run(psi, h, sim_params, None)
 
 
 def test_mcwf_diagnostic_observables() -> None:

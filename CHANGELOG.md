@@ -11,10 +11,18 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad` ([#400]) ([**@Gauthameshwar**])
+- added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
+- added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
+- added Arnoldi iteration as alternative to Lanczos method ([#338]) ([**@aaronleesander**])
 - added Monte Carlo Wavefunction solver ([#333]) ([**@aaronleesander**])
 - added MPO.from_matrix() method ([#331]) ([**@lucello**])
 - added Lindblad solver for small systems ([#330]) ([**@aaronleesander**])
 - Noise model strengths can now be sampled from a normal distribution ([#329]) ([**@aaronleesander**])
+
+### Changed
+
+- changed Lindblad and MCWF solvers to use sparse implementation ([#338]) ([**@aaronleesander**])
 
 ### Fixed
 
@@ -88,6 +96,10 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#344]: https://github.com/munich-quantum-toolkit/yaqs/pull/344
+[#400]: https://github.com/munich-quantum-toolkit/yaqs/pull/400
+[#339]: https://github.com/munich-quantum-toolkit/yaqs/pull/339
+[#338]: https://github.com/munich-quantum-toolkit/yaqs/pull/338
 [#337]: https://github.com/munich-quantum-toolkit/yaqs/pull/337
 [#336]: https://github.com/munich-quantum-toolkit/yaqs/pull/336
 [#333]: https://github.com/munich-quantum-toolkit/yaqs/pull/333
@@ -117,6 +129,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 [**@denialhaag**]: https://github.com/denialhaag
 [**@aaronleesander**]: https://github.com/aaronleesander
+[**@Gauthameshwar**]: https://github.com/Gauthameshwar
 [**@thilomueller**]: https://github.com/thilomueller
 [**@lucello**]: https://github.com/lucello
 
