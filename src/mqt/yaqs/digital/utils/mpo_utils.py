@@ -316,8 +316,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             theta = apply_temporal_zone(theta, dag2, [overall_site, overall_site + 1], conjugate=True)
             mpo.tensors[overall_site], mpo.tensors[overall_site + 1] = decompose_theta(theta, threshold)
 
-            gate_mpo.tensors[site_gate_mpo] = None  # type: ignore [call-overload]
-            gate_mpo.tensors[site_gate_mpo + 1] = None  # type: ignore [call-overload]
+            gate_mpo.tensors[site_gate_mpo] = None  # ty: ignore[invalid-assignment]
+            gate_mpo.tensors[site_gate_mpo + 1] = None  # ty: ignore[invalid-assignment]
 
         # Process odd-indexed (or hanging) tensor if present.
         if site_gate_mpo == len(sites) - 1 and any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors):
@@ -342,7 +342,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
             theta = apply_temporal_zone(theta, dag2, [overall_site - 1, overall_site], conjugate=True)
 
             mpo.tensors[overall_site - 1], mpo.tensors[overall_site] = decompose_theta(theta, threshold)
-            gate_mpo.tensors[site_gate_mpo] = None  # type: ignore [call-overload]
+            gate_mpo.tensors[site_gate_mpo] = None  # ty: ignore[invalid-assignment]
 
     assert not any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors), "Not all gate tensors were applied."
 

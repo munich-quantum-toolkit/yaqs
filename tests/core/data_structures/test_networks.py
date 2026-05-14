@@ -248,6 +248,22 @@ def random_mps(shapes: list[tuple[int, int, int]], *, normalize: bool = True) ->
     return mps
 
 
+def _expected_uniform_clipped_bonds(length: int, chi_max: int) -> list[int]:
+    """Expected qubit bond-dimension schedule for the Haar-random initializer.
+
+    Args:
+        length: Number of sites.
+        chi_max: Maximum internal bond dimension.
+
+    Returns:
+        A list of bond dimensions ``[chi_0, ..., chi_L]`` with open boundaries.
+    """
+    bonds = [1]
+    bonds.extend(min(chi_max, 2 ** min(i, length - i)) for i in range(1, length))
+    bonds.append(1)
+    return bonds
+
+
 rng = np.random.default_rng()
 
 ##############################################################################
@@ -800,6 +816,111 @@ def test_single_shot() -> None:
     np.testing.assert_allclose(val, 0, atol=1e-12)
 
 
+def test_single_shot_basis() -> None:
+    """Test measure_single_shot with different bases.
+
+    Verify that:
+    - x+ state measured in X basis always yields 0.
+    - x- state measured in X basis always yields 1.
+    - y+ state measured in Y basis always yields 0.
+    - y- state measured in Y basis always yields 1.
+    """
+    # X basis tests
+    psi_x_plus = MPS(length=1, state="x+")
+    for _ in range(10):
+        assert psi_x_plus.measure_single_shot(basis="X") == 0
+
+    psi_x_minus = MPS(length=1, state="x-")
+    for _ in range(10):
+        assert psi_x_minus.measure_single_shot(basis="X") == 1
+
+    # Y basis tests
+    psi_y_plus = MPS(length=1, state="y+")
+    for _ in range(10):
+        assert psi_y_plus.measure_single_shot(basis="Y") == 0
+
+    psi_y_minus = MPS(length=1, state="y-")
+    for _ in range(10):
+        assert psi_y_minus.measure_single_shot(basis="Y") == 1
+
+
+def test_measure_shots_basis() -> None:
+    """Test measure_shots with different bases."""
+    psi_x_plus = MPS(length=1, state="x+")
+    results = psi_x_plus.measure_shots(shots=10, basis="X")
+    assert results == {0: 10}
+
+    psi_y_plus = MPS(length=1, state="y+")
+    results = psi_y_plus.measure_shots(shots=10, basis="Y")
+    assert results == {0: 10}
+
+    # Verify that X measurement on Z state gives 50/50
+    psi_zero = MPS(length=1, state="zeros")
+    results = psi_zero.measure_shots(shots=100, basis="X")
+    assert results.get(0, 0) > 0
+    assert results.get(1, 0) > 0
+    assert sum(results.values()) == 100
+
+
+def test_inplace_measure() -> None:
+    """Test the in-place .measure(site, basis) method.
+
+    Verify that:
+    - Measuring a |+> state in Z basis collapses it to |0> or |1>.
+    - Measuring a GHZ-like state |00> + |11> collapses the other site.
+    """
+    # 1. Single qubit collapse
+    psi = MPS(length=1, state="x+")
+    psi.normalize(form="B")  # Ensure center is at 0
+    outcome = psi.measure(site=0, basis="Z")
+    assert outcome in {0, 1}
+    # Check that expectation value matches the outcome
+    expected_val = 1.0 if outcome == 0 else -1.0
+    assert np.isclose(psi.expect(Observable(Z(), 0)), expected_val)
+
+    # 2. GHZ state collapse (2 sites)
+    psi = MPS(length=2, state="zeros")
+    h_gate = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
+    psi.tensors[0] = oe.contract("ab, bcd->acd", h_gate, psi.tensors[0])
+
+    a = psi.tensors[0]
+    b = psi.tensors[1]
+
+    theta = np.tensordot(a, b, axes=(2, 1))  # (d1, l1, d2, r2) = (2, 1, 2, 1)
+    theta = theta.transpose(1, 0, 2, 3)  # (l1, d1, d2, r2)
+    theta = theta.reshape(1, 4, 1)
+    cx_mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
+    theta = oe.contract("ab, cbd->cad", cx_mat, theta)
+
+    u, s, v = np.linalg.svd(theta.reshape(2, 2), full_matrices=False)
+    psi.tensors[0] = u.reshape(2, 1, 2)
+    psi.tensors[1] = (np.diag(s) @ v).reshape(2, 2, 1)
+
+    psi.normalize(form="B")
+    # State is now (|00> + |11>) / sqrt(2)
+    # Measure site 0 in Z
+    outcome = psi.measure(site=0, basis="Z")
+    assert outcome in {0, 1}
+
+    # After measurement, the state should be |00> or |11>.
+    # Verification via state vector is robust to normalization/canonical form.
+    vec = psi.to_vec()
+    expected_vec = np.array([1, 0, 0, 0]) if outcome == 0 else np.array([0, 0, 0, 1])
+
+    # We might have a global phase or sign depending on SVD
+    fidelity = np.abs(np.vdot(vec, expected_vec)) ** 2
+    assert np.isclose(fidelity, 1.0)
+
+    # 3. Multiple sites and basis
+    psi = MPS(length=3, state="zeros")
+    psi.normalize(form="B")
+    # Measure site 2 in X basis
+    outcome = psi.measure(site=2, basis="X")
+    assert outcome in {0, 1}
+
+    assert np.isclose(psi.expect(Observable(X(), 2)), 1.0 if outcome == 0 else -1.0)
+
+
 def test_multi_shot() -> None:
     """Test measure over multiple shots on an MPS initialized in the |1> state.
 
@@ -1033,6 +1154,71 @@ def test_pad_raises_on_shrink() -> None:
 
     with pytest.raises(ValueError, match="Target bond dim must be at least current bond dim"):
         mps.pad_bond_dimension(2)  # would shrink - must fail
+
+
+def test_haar_random_shapes_and_isometries() -> None:
+    """Haar-random initializer should produce feasible bonds and site-wise isometries."""
+    length = 8
+    chi_max = 4
+    mps = MPS(length=length, state="haar-random", pad=chi_max)
+    expected = _expected_uniform_clipped_bonds(length, chi_max)
+
+    for i, tensor in enumerate(mps.tensors):
+        d, chi_l, chi_r = tensor.shape
+        assert d == 2
+        assert chi_l == expected[i]
+        assert chi_r == expected[i + 1]
+
+        q_mat = tensor.reshape(d * chi_l, chi_r)
+        ident = np.eye(chi_r, dtype=np.complex128)
+        np.testing.assert_allclose(q_mat.conj().T @ q_mat, ident, atol=1e-12)
+
+    assert np.isclose(mps.norm(), 1.0, atol=1e-12)
+
+
+def test_haar_random_default_pad_is_product_state() -> None:
+    """Without pad, Haar-random defaults to χ_max=1 and should be a product state."""
+    mps = MPS(length=6, state="haar-random")
+    for tensor in mps.tensors:
+        assert tensor.shape[1] == 1
+        assert tensor.shape[2] == 1
+
+    assert np.isclose(mps.get_entropy([2, 3]), 0.0, atol=1e-12)
+
+
+def test_haar_random_invalid_pad_raises() -> None:
+    """Haar-random initializer should reject non-positive target bond dimensions."""
+    with pytest.raises(ValueError, match="Target bond dimension must be at least 1"):
+        _ = MPS(length=6, state="haar-random", pad=0)
+
+
+def test_haar_random_entropy_statistics_vs_random_mps() -> None:
+    """Haar-random MPS should show higher mean entropy and lower variance than random tensors."""
+    length = 8
+    chi_max = 4
+    cut = length // 2 - 1
+    num_samples = 120
+
+    bonds = _expected_uniform_clipped_bonds(length, chi_max)
+    shapes = [(2, bonds[i], bonds[i + 1]) for i in range(length)]
+    local_rng = np.random.default_rng(1234)
+
+    rand_entropies = np.empty(num_samples, dtype=np.float64)
+    haar_entropies = np.empty(num_samples, dtype=np.float64)
+
+    for idx in range(num_samples):
+        tensors = [crandn(shape, seed=local_rng) for shape in shapes]
+        rand_state = MPS(length=length, tensors=tensors, physical_dimensions=2)
+        rand_state.normalize()
+        rand_state.set_canonical_form(cut)
+        rand_entropies[idx] = rand_state.get_entropy([cut, cut + 1])
+
+        haar_state = MPS(length=length, state="haar-random", pad=chi_max)
+        haar_state.set_canonical_form(cut)
+        haar_entropies[idx] = haar_state.get_entropy([cut, cut + 1])
+
+    assert float(np.mean(haar_entropies)) > float(np.mean(rand_entropies))
+    assert float(np.std(haar_entropies)) < float(np.std(rand_entropies))
 
 
 @pytest.mark.parametrize("center", [0, 1, 2, 3])

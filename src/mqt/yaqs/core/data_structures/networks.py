@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 import opt_einsum as oe
+import scipy.sparse
 from numpy.typing import NDArray
 from tqdm import tqdm
 
@@ -101,9 +102,12 @@ class MPS:
                 - "Neel": Alternating pattern |0101...⟩.
                 - "wall": Domain wall at given site |000111>
                 - "random": Initializes each qubit randomly.
+                - "haar-random": Initializes an entangled MPS via Haar-random isometries.
                 - "basis": Initializes a qubit in an input computational basis.
                 Default is "zeros".
             pad: Pads the state with extra zeros to increase bond dimension. Can increase numerical stability.
+                For ``state="haar-random"``, this value is interpreted as the target maximum internal
+                bond dimension χ_max. If omitted, χ_max defaults to 1.
             basis_string: String used to initialize the state in a specific computational basis.
                 This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
                 For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
@@ -131,8 +135,105 @@ class MPS:
             self.physical_dimensions = physical_dimensions
         assert len(self.physical_dimensions) == length
 
+        def _bond_caps(target_dim: int) -> list[int]:
+            """Compute feasible MPS bond dimensions for a target maximum.
+
+            Args:
+                target_dim: Target maximum internal bond dimension.
+
+            Returns:
+                List of length ``self.length + 1`` with bond dimensions
+                ``[chi_0, ..., chi_L]`` where boundaries satisfy
+                ``chi_0 = chi_L = 1``.
+
+            Raises:
+                ValueError: If ``target_dim < 1``.
+            """
+            if target_dim < 1:
+                msg = "Target bond dimension must be at least 1."
+                raise ValueError(msg)
+            caps = [0] * (self.length + 1)
+            caps[0] = 1
+            caps[self.length] = 1
+
+            # Left-to-right representability cap
+            left_cap = 1
+            for i in range(1, self.length):
+                left_cap *= self.physical_dimensions[i - 1]
+                caps[i] = left_cap
+
+            # Right-to-left representability cap
+            right_cap = 1
+            for i in range(self.length - 1, 0, -1):
+                right_cap *= self.physical_dimensions[i]
+                caps[i] = min(caps[i], right_cap)
+
+            # Apply target cap on internal bonds
+            for i in range(1, self.length):
+                caps[i] = min(caps[i], target_dim)
+
+            return caps
+
+        def _haar_random_tensor_core(
+            site: int,
+            local_dim: int,
+            target_dim: int,
+            *,
+            _bond_cache: dict[str, list[int] | None] | None = None,
+            _rng_cache: dict[str, np.random.Generator | None] | None = None,
+        ) -> NDArray[np.complex128]:
+            """Construct one Haar-random isometric MPS tensor core lazily.
+
+            Args:
+                site: Site index of the tensor core.
+                local_dim: Physical dimension at the site.
+                target_dim: Target maximum internal bond dimension.
+                _bond_cache: Optional cache for lazily computed bond dimensions.
+                _rng_cache: Optional cache for lazily initialized RNG.
+
+            Returns:
+                Tensor core with shape ``(local_dim, chi_l, chi_r)``.
+            """
+            if _rng_cache is None:
+                _rng_cache = {"rng": None}
+            if _bond_cache is None:
+                _bond_cache = {"dims": None}
+            if _bond_cache["dims"] is None:
+                _bond_cache["dims"] = _bond_caps(target_dim)
+            if _rng_cache["rng"] is None:
+                _rng_cache["rng"] = np.random.default_rng()
+
+            bond_dims = _bond_cache["dims"]
+            rng = _rng_cache["rng"]
+            assert bond_dims is not None
+            assert rng is not None
+
+            chi_l = bond_dims[site]
+            chi_r = bond_dims[site + 1]
+            assert chi_r <= local_dim * chi_l, "Invalid bond schedule for Haar-random initialization."
+
+            x_mat = rng.standard_normal((local_dim * chi_l, chi_r)) + 1j * rng.standard_normal((
+                local_dim * chi_l,
+                chi_r,
+            ))
+            q_mat, r_mat = np.linalg.qr(x_mat, mode="reduced")
+
+            # Fix arbitrary QR phases for a well-defined Haar isometry sample.
+            diag = np.diag(r_mat)
+            phases = np.ones_like(diag, dtype=np.complex128)
+            non_zero = np.abs(diag) > 0
+            phases[non_zero] = diag[non_zero] / np.abs(diag[non_zero])
+            q_mat /= phases[np.newaxis, :]
+
+            return q_mat.reshape(local_dim, chi_l, chi_r).astype(np.complex128)
+
         # Create d-level |0> state
         if not tensors:
+            haar_bond_cache: dict[str, list[int] | None] | None = None
+            haar_rng_cache: dict[str, np.random.Generator | None] | None = None
+            if state == "haar-random":
+                haar_bond_cache = {"dims": None}
+                haar_rng_cache = {"rng": None}
             for i, d in enumerate(self.physical_dimensions):
                 vector = np.zeros(d, dtype=complex)
                 if state == "zeros":
@@ -173,6 +274,17 @@ class MPS:
                     rng = np.random.default_rng()
                     vector[0] = rng.random()
                     vector[1] = 1 - vector[0]
+                elif state == "haar-random":
+                    target_dim = 1 if pad is None else pad
+                    tensor = _haar_random_tensor_core(
+                        i,
+                        d,
+                        target_dim,
+                        _bond_cache=haar_bond_cache,
+                        _rng_cache=haar_rng_cache,
+                    )
+                    self.tensors.append(tensor)
+                    continue
                 elif state == "basis":
                     assert basis_string is not None, "basis_string must be provided for 'basis' state initialization."
                     self.init_mps_from_basis(basis_string, self.physical_dimensions)
@@ -188,7 +300,7 @@ class MPS:
 
             if state == "random":
                 self.normalize()
-        if pad is not None:
+        if pad is not None and state != "haar-random":
             self.pad_bond_dimension(pad)
 
     def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
@@ -744,7 +856,7 @@ class MPS:
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
 
-    def measure_single_shot(self) -> int:
+    def measure_single_shot(self, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Perform a single-shot measurement on a Matrix Product State (MPS).
 
         This function simulates a projective measurement on an MPS. For each site, it computes the
@@ -752,23 +864,51 @@ class MPS:
         basis states, and randomly selects an outcome. The overall measurement result is encoded as an
         integer corresponding to the measured bitstring.
 
+        Args:
+            basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
+            rng: Optional random number generator for outcome sampling.
+
         Returns:
             int: The measurement outcome represented as an integer.
+
+        Raises:
+            ValueError: If an invalid basis is provided.
         """
         temp_state = copy.deepcopy(self)
         bitstring = []
-        for site, tensor in enumerate(temp_state.tensors):
-            reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
-            probabilities = np.diag(reduced_density_matrix).real
+
+        basis = basis.upper()
+        if basis == "Z":
+            rotation = np.eye(2, dtype=complex)
+        elif basis == "X":
+            # H gate to rotate X to Z
+            rotation = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+        elif basis == "Y":
+            # Rotate Y to Z: H Sdag (or equivalent)
+            rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
+        else:
+            msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
+            raise ValueError(msg)
+
+        if rng is None:
             rng = np.random.default_rng()
-            chosen_index = rng.choice(len(probabilities), p=probabilities)
+
+        for site, tensor in enumerate(temp_state.tensors):
+            # Rotate the tensor to the measurement basis
+            # tensor shape is (p, l, r)
+            rotated_tensor = oe.contract("ab, bcd->acd", rotation, tensor)
+
+            reduced_density_matrix = oe.contract("abc, dbc->ad", rotated_tensor, np.conj(rotated_tensor))
+            probabilities = np.diag(reduced_density_matrix).real
+            chosen_index = rng.choice(len(probabilities), p=probabilities / np.sum(probabilities))
             bitstring.append(chosen_index)
             selected_state = np.zeros(len(probabilities))
             selected_state[chosen_index] = 1
-            # Multiply state: project the tensor onto the selected state.
-            projected_tensor = oe.contract("a, acd->cd", selected_state, tensor)
+
             # Propagate the measurement to the next site.
             if site != self.length - 1:
+                projected_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
+
                 temp_state.tensors[site + 1] = (  # noqa: B909
                     1
                     / np.sqrt(probabilities[chosen_index])
@@ -776,7 +916,7 @@ class MPS:
                 )
         return sum(c << i for i, c in enumerate(bitstring))
 
-    def measure_shots(self, shots: int) -> dict[int, int]:
+    def measure_shots(self, shots: int, basis: str = "Z") -> dict[int, int]:
         """Perform multiple single-shot measurements on an MPS and aggregate the results.
 
         This function executes a specified number of measurement shots on the given MPS. For each shot,
@@ -785,6 +925,7 @@ class MPS:
 
         Args:
             shots: The number of measurement shots to perform.
+            basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
 
         Returns:
             A dictionary where keys are measured basis states (as integers) and values are the corresponding counts.
@@ -800,15 +941,85 @@ class MPS:
                 concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor,
                 tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
             ):
-                futures = [executor.submit(self.measure_single_shot) for _ in range(shots)]
+                futures = [executor.submit(self.measure_single_shot, basis) for _ in range(shots)]
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
                     results[result] = results.get(result, 0) + 1
                     pbar.update(1)
             return results
-        basis_state = self.measure_single_shot()
+        basis_state = self.measure_single_shot(basis)
         results[basis_state] = results.get(basis_state, 0) + 1
         return results
+
+    def measure(self, site: int, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
+        """Perform an in-place projective measurement on a single site of the MPS.
+
+        This method modifies the MPS tensors to reflect the measurement outcome. It assumes the MPS
+        is initially in a right-canonical form (orthogonality center at site 0) and shifts the center
+        to the target site before measuring.
+
+        Args:
+            site: The index of the site to measure.
+            basis: The basis to measure in. Options are "X", "Y", or "Z" (default).
+            rng: Optional random number generator for outcome sampling.
+
+        Returns:
+            int: The measurement outcome (0 or 1 for qubits).
+
+        Raises:
+            ValueError: If an invalid site or basis is provided.
+        """
+        if site < 0 or site >= self.length:
+            msg = f"Invalid site {site} for MPS of length {self.length}."
+            raise ValueError(msg)
+
+        # Shift orthogonality center to target site (assuming starts at 0)
+        for i in range(site):
+            self.shift_orthogonality_center_right(i)
+
+        basis = basis.upper()
+        if basis == "Z":
+            rotation = np.eye(2, dtype=complex)
+        elif basis == "X":
+            rotation = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+        elif basis == "Y":
+            rotation = np.array([[1, -1j], [1, 1j]], dtype=complex) / np.sqrt(2)
+        else:
+            msg = f"Invalid basis: {basis}. Expected 'X', 'Y', or 'Z'."
+            raise ValueError(msg)
+
+        tensor = self.tensors[site]
+        # Rotate the tensor to the measurement basis
+        rotated_tensor = oe.contract("ab, bcd->acd", rotation, tensor)
+
+        # Compute reduced density matrix at the orthogonality center
+        reduced_density_matrix = oe.contract("abc, dbc->ad", rotated_tensor, np.conj(rotated_tensor))
+        probabilities = np.diag(reduced_density_matrix).real.copy()
+
+        # Ensure probabilities are normalized (site is center)
+        norm_factor = np.sum(probabilities)
+        probabilities /= norm_factor
+
+        if rng is None:
+            rng = np.random.default_rng()
+
+        chosen_index = rng.choice(len(probabilities), p=probabilities)
+
+        selected_state = np.zeros(len(probabilities), dtype=complex)
+        selected_state[chosen_index] = 1.0
+
+        # Project the rotated tensor onto the selected outcome
+        projected_rotated_tensor = oe.contract("a, acd->cd", selected_state, rotated_tensor)
+
+        # Rotate back to original basis for the new tensor
+        original_basis_selection = oe.contract("ab, a->b", np.conj(rotation), selected_state)
+
+        # Normalize and update the site tensor
+        self.tensors[site] = (1.0 / np.sqrt(probabilities[chosen_index])) * oe.contract(
+            "a, cd->acd", original_basis_selection, projected_rotated_tensor
+        )
+
+        return int(chosen_index)
 
     def project_onto_bitstring(self, bitstring: str) -> np.complex128:
         """Projection-valued measurement.
@@ -1774,6 +1985,61 @@ class MPO:
 
         # Final left and right bonds should be 1
         return np.squeeze(mat, axis=(2, 3))
+
+    def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
+        """MPO to sparse matrix conversion.
+
+        Efficiently constructs a sparse matrix from the MPO tensors by iterating
+        over the terms in the MPO sum. This avoids creating the full dense matrix
+        intermediate.
+
+        Returns:
+            The sparse matrix representation of the MPO in CSR format.
+        """
+        d = self.physical_dimension
+
+        current_operators = {0: scipy.sparse.csr_matrix(np.eye(1, dtype=complex))}
+
+        for tensor in self.tensors:
+            _d_out, _d_in, d_left, d_right = tensor.shape
+
+            next_operators = {}
+
+            for beta in range(d_right):
+                accumulated = None
+
+                for alpha in range(d_left):
+                    if alpha not in current_operators:
+                        continue
+
+                    # Extract local operator for this bond transition (alpha -> beta)
+                    op_local_dense = tensor[:, :, alpha, beta]
+
+                    # Optimization: Skip if local op is zero
+                    if np.all(op_local_dense == 0):
+                        continue
+
+                    # Convert to sparse
+                    op_local = scipy.sparse.csr_matrix(op_local_dense)
+                    op_left = current_operators[alpha]
+
+                    # Kronecker product: Left (X) Local
+                    term = scipy.sparse.kron(op_left, op_local, format="csr")
+
+                    accumulated = term if accumulated is None else accumulated + term
+
+                if accumulated is not None:
+                    next_operators[beta] = accumulated
+
+            current_operators = next_operators
+
+        # Final result should be in current_operators[0] because the last bond dim is 1
+        if 0 not in current_operators:
+            # Should practically not happen for valid MPOs unless it's a zero operator
+            dim = d**self.length
+            return scipy.sparse.csr_matrix((dim, dim), dtype=complex)
+
+        return current_operators[0]
 
     @classmethod
     def from_matrix(

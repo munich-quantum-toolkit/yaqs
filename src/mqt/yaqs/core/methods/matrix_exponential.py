@@ -224,3 +224,103 @@ def _compute_krylov_result(
         )
     coeffs = nrm * np.exp(-1j * dt * w_hess) * u_hess[0]
     return np.asarray(lanczos_mat @ (u_hess @ coeffs), dtype=np.complex128)
+
+
+def expm_arnoldi(
+    matrix_free_operator: Callable[[NDArray[np.complex128]], NDArray[np.complex128]],
+    vec: NDArray[np.complex128],
+    dt: float,
+    max_arnoldi_iterations: int = 25,
+    tol: float = 1e-12,
+) -> NDArray[np.complex128]:
+    """Compute the Arnoldi subspace approximation of the matrix exponential applied to a vector.
+
+    This behaves similarly to `expm_krylov` but uses the Arnoldi iteration, which is applicable
+    to general non-Hermitian matrices (e.g., effective Hamiltonians in MCWF).
+
+    Approximates exp(-1j * dt * A) * v.
+
+    Args:
+        matrix_free_operator: Matrix-vector product function.
+        vec: Initial vector.
+        dt: Time step.
+        max_arnoldi_iterations: Max subspace size.
+        tol: Convergence tolerance.
+
+    Returns:
+        Approximation of exp(-1j * dt * A) * vec.
+    """
+    vec_norm = np.linalg.norm(vec)
+    if vec_norm == 0:
+        return vec
+
+    m_max = max_arnoldi_iterations
+    # Hessenberg matrix H (upper Hessenberg)
+    # Dimensions (m+1) x m to store h_{j+1, j}
+    h = np.zeros((m_max + 1, m_max), dtype=np.complex128)
+
+    # Orthonormal basis vectors V
+    v = np.zeros((vec.size, m_max + 1), dtype=np.complex128)
+
+    v[:, 0] = vec / vec_norm
+
+    for j in range(m_max):
+        w = matrix_free_operator(v[:, j])
+
+        # Arnoldi orthogonalization (Modified Gram-Schmidt)
+        for i in range(j + 1):
+            h[i, j] = np.vdot(v[:, i], w)
+            w -= h[i, j] * v[:, i]
+
+        h[j + 1, j] = np.linalg.norm(w)
+
+        # Breakdown check
+        if h[j + 1, j] < 1e-12:
+            k = j + 1
+            return _compute_arnoldi_result(h[:k, :k], v[:, :k], float(vec_norm), dt)
+
+        if j < m_max:
+            v[:, j + 1] = w / h[j + 1, j]
+
+        # Adaptive check
+        # Approximation: beta * | [exp(-i*dt*H_j)]_{j, 0} |
+        # Only check periodically or after some steps
+        if j >= 1:
+            k = j + 1
+            # Compute exponential of small Hessenberg matrix H[:k, :k]
+            h_small = h[:k, :k]
+
+            # Compute exponential of -i * dt * H applied to basis vector e_0
+            # We use scipy.linalg.expm which handles non-Hermitian matrices robustly
+            u_small = scipy.linalg.expm(-1j * dt * h_small)
+
+            phi_last = u_small[k - 1, 0]
+            err = h[k, k - 1].real * abs(phi_last)  # h is complex but norm is real
+
+            if err < tol:
+                return np.asarray(v[:, :k] @ (u_small[:, 0] * vec_norm), dtype=np.complex128)
+
+    # Fallback if max iterations reached
+    k = m_max
+    return _compute_arnoldi_result(h[:k, :k], v[:, :k], float(vec_norm), dt)
+
+
+def _compute_arnoldi_result(
+    h_mat: NDArray[np.complex128],
+    v_mat: NDArray[np.complex128],
+    nrm: float,
+    dt: float,
+) -> NDArray[np.complex128]:
+    """Compute final Arnoldi result from Hessenberg matrix and basis.
+
+    Args:
+        h_mat: Hessenberg matrix.
+        v_mat: Basis vectors.
+        nrm: Norm of input vector.
+        dt: Time step.
+
+    Returns:
+        Approximated vector.
+    """
+    u_small = scipy.linalg.expm(-1j * dt * h_mat)
+    return np.asarray(v_mat @ (u_small[:, 0] * nrm), dtype=np.complex128)
