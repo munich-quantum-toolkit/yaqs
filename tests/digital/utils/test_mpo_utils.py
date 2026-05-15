@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -235,7 +235,7 @@ def test_update_mpo() -> None:
     """
     mpo = MPO()
     length = 2
-    mpo.init_identity(length)
+    mpo.identity(length)
     circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -257,7 +257,7 @@ def test_apply_layer() -> None:
     """
     mpo = MPO()
     length = 3
-    mpo.init_identity(length)
+    mpo.identity(length)
     circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -278,7 +278,7 @@ def test_apply_long_range_layer() -> None:
     """
     mpo = MPO()
     num_qubits = 3
-    mpo.init_identity(num_qubits)
+    mpo.identity(num_qubits)
     circuit = QuantumCircuit(num_qubits)
     circuit.cx(0, 2)
     dag1 = circuit_to_dag(circuit)

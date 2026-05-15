@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -118,6 +118,11 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         else:
             raise NotImplementedError
 
+    # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
+    single_qubit_nodes.sort(key=lambda node: node.qargs[0]._index)  # noqa: SLF001
+    even_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
+    odd_nodes.sort(key=lambda node: min(node.qargs[0]._index, node.qargs[1]._index))  # noqa: SLF001
+
     return single_qubit_nodes, even_nodes, odd_nodes, measure_barriers
 
 
@@ -173,7 +178,7 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
             tensors.append(w)
 
     mpo = MPO()
-    mpo.init_custom(tensors)
+    mpo.custom(tensors)
     return mpo, first_site, last_site
 
 
@@ -202,7 +207,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
         state.shift_orthogonality_center_right(i)
 
     short_mpo = MPO()
-    short_mpo.init_custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
+    short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
     assert window[1] - window[0] + 1 > 1, "MPS cannot be length 1"
     short_state = MPS(length=window[1] - window[0] + 1, tensors=state.tensors[window[0] : window[1] + 1])
 
@@ -271,6 +276,9 @@ def digital_tjm(
         else:
             results = np.zeros((len(sim_params.sorted_observables), 1))
 
+    # Instantiate a fresh RNG for this trajectory
+    rng = np.random.default_rng()
+
     col_idx = 0
     canonical_form_lost = False
     while dag.op_nodes():
@@ -293,7 +301,7 @@ def digital_tjm(
                 else:
                     local_noise_model = create_local_noise_model(noise_model, first_site, last_site)
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params)
+                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
                 dag.remove_op_node(node)
 

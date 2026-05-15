@@ -35,7 +35,10 @@ self
 
 installation
 examples/analog_simulation
+examples/ensemble_evolution
+examples/scheduled_jumps
 examples/transmon_emulation
+examples/process_tomography
 examples/strong_circuit_simulation
 examples/sample_observable_digital_tjm
 examples/weak_circuit_simulation
@@ -53,6 +56,8 @@ UPGRADING
 :titlesonly:
 
 contributing
+ai_usage
+tooling
 support
 ```
 ````

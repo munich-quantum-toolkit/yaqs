@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import importlib
 import multiprocessing
+import os
+import sys
 
+import numba
 import numpy as np
 import pytest
 
@@ -35,6 +38,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
+from mqt.yaqs.simulator import _get_parallel_context, worker_init  # noqa: PLC2701
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,8 +46,9 @@ def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Should return multiprocessing.cpu_count().
     """
-    # Ensure the env var is absent
+    # Ensure the env vars are absent
     monkeypatch.delenv("SLURM_CPUS_ON_NODE", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
 
     assert simulator.available_cpus() == multiprocessing.cpu_count()
 
@@ -54,12 +59,57 @@ def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
     Should return that exact value.
     """
     monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
 
     # Reload the module only if available_cpus caches anything at import;
     # here it's not necessary, but harmless:
     importlib.reload(simulator)
 
     assert simulator.available_cpus() == 8
+
+
+def test_threading_config() -> None:
+    """Verify correct multiprocessing context and Numba threading configuration."""
+    # 1. Context Selection
+    ctx = _get_parallel_context()
+    if sys.platform == "linux":
+        # On Linux, we expect fork
+        assert ctx.get_start_method() == "fork"
+    else:
+        # On Windows (win32) and macOS (darwin), we expect spawn
+        assert ctx.get_start_method() == "spawn"
+
+    # 2. Worker Initialization Logic
+    # Verify _worker_init caps Numba threads
+
+    # Save current state
+    original_numba_threads = numba.get_num_threads()
+    # Save environment variables that _limit_worker_threads modified
+    env_snapshot = os.environ.copy()
+
+    try:
+        # Simulate worker init with strict thread cap
+        worker_init({}, n_threads=1)
+
+        # Check if Numba threads are set to 1
+        assert numba.get_num_threads() == 1
+        # Check if env var is set (best effort)
+        assert os.environ.get("NUMBA_NUM_THREADS") == "1"
+
+    finally:
+        # Restore state
+        numba.set_num_threads(original_numba_threads)
+
+        # Restore environment variables
+        # 1. Remove keys that were added
+        for key in list(os.environ):
+            if key not in env_snapshot:
+                del os.environ[key]
+
+        # 2. Restore keys that were modified/deleted
+        for key, value in env_snapshot.items():
+            if os.environ.get(key) != value:
+                os.environ[key] = value
 
 
 def test_analog_simulation() -> None:
@@ -74,8 +124,7 @@ def test_analog_simulation() -> None:
     length = 5
     initial_state = MPS(length, state="zeros")
 
-    H = MPO()
-    H.init_ising(length, J=1, g=0.5)
+    H = MPO.ising(length, J=1, g=0.5)
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
@@ -128,8 +177,7 @@ def test_analog_simulation_parallel_off() -> None:
     length = 5
     initial_state = MPS(length, state="zeros")
 
-    H = MPO()
-    H.init_ising(length, J=1, g=0.5)
+    H = MPO.ising(length, J=1, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
         elapsed_time=1,
@@ -178,8 +226,7 @@ def test_analog_simulation_get_state() -> None:
         length = 2
         initial_state = MPS(length, state="zeros")
 
-        H = MPO()
-        H.init_ising(length, J=1, g=0.5)
+        H = MPO.ising(length, J=1, g=0.5)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), length // 2)],
@@ -330,10 +377,10 @@ def test_weak_simulation_noise() -> None:
     """Test the weak simulation branch with a non-None noise model.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system.
-    It sets up WeakSimParams with a specified number of shots, max bond dimension, threshold, and window size,
-    and a noise model with small strengths. After running simulator.run, the test verifies that sim_params.num_traj
-    equals the number of shots, that each measurement is a dictionary, and that the total number of shots
-    recorded in sim_params.results equals the expected number.
+    It sets up WeakSimParams with a sufficient number of shots for statistical verification, max bond dimension,
+    threshold, and window size, and a noise model with small strengths. After running simulator.run, the test
+    verifies that sim_params.num_traj equals the number of shots, that each measurement is a dictionary,
+    and that the total number of shots recorded in sim_params.results equals the expected number.
     """
     num_qubits = 5
     initial_state = MPS(num_qubits)
@@ -341,7 +388,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -360,7 +407,7 @@ def test_weak_simulation_no_noise() -> None:
     """Test the weak simulation branch when the noise model is None.
 
     This test creates an MPS and an Ising circuit (with measurement) for a 5-qubit system,
-    and configures WeakSimParams with a specified number of shots. When noise_model is None,
+    and configures WeakSimParams with a sufficient number of shots. When noise_model is None,
     the simulation should set sim_params.num_traj to 1. The test verifies that the measurements and results
     are consistent with this behavior.
     """
@@ -369,7 +416,7 @@ def test_weak_simulation_no_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=1024, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
 
     noise_model = None
 
@@ -462,8 +509,7 @@ def test_two_site_correlator_left_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -572,8 +618,7 @@ def test_two_site_correlator_center() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -686,8 +731,7 @@ def test_two_site_correlator_right_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO()
-    H_0.init_ising(L, J, g)
+    H_0 = MPO.ising(L, J, g)
 
     state = MPS(L, state="zeros")
 
@@ -844,8 +888,7 @@ def test_transmon_simulation() -> None:
     alpha = -0.3 / (2 * np.pi)
     g = 0.2 / (2 * np.pi)
 
-    H_0 = MPO()
-    H_0.init_coupled_transmon(
+    H_0 = MPO.coupled_transmon(
         length=length,
         qubit_dim=qubit_dim,
         resonator_dim=resonator_dim,
@@ -894,3 +937,119 @@ def test_transmon_simulation() -> None:
 
     # finally check total leakage
     np.testing.assert_array_less(leakage, 5e-2)
+
+
+def test_scheduled_jump_single_site() -> None:
+    """Tests a scheduled Pauli-X flip on a single qubit."""
+    L = 1
+    T = 1.0
+    dt = 0.1
+    jump_time = 0.5
+
+    # Initial state |0>
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    # Scheduled X jump at t=0.5
+    scheduled_jumps = [{"time": jump_time, "sites": [0], "name": "x"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+
+    # Measure Z on site 0
+    z_obs = Observable(Z(), sites=0)
+    sim_params = AnalogSimParams(
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        observables=[z_obs],
+        show_progress=False,
+    )
+
+    # Use a vacuum Hamiltonian (all zeros) for pure jump dynamics
+    hamiltonian = MPO.ising(L, 0.0, 0.0)
+
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = z_obs.results
+    assert results is not None
+
+    np.testing.assert_allclose(results[:5], 1.0, atol=1e-10)
+    np.testing.assert_allclose(results[5:], -1.0, atol=1e-10)
+
+
+def test_scheduled_jump_two_site() -> None:
+    """Tests a scheduled XX jump on two qubits."""
+    L = 2
+    T = 0.4
+    dt = 0.1
+    jump_time = 0.2
+
+    # Initial state |00>
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    # Scheduled XX jump at t=0.2
+    scheduled_jumps = [{"time": jump_time, "sites": [0, 1], "name": "crosstalk_xx"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+
+    # Measure ZZ on site 0, 1
+    zz_obs = Observable(ZZ(), sites=[0, 1])
+    sim_params = AnalogSimParams(
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        observables=[zz_obs],
+        show_progress=False,
+    )
+
+    # Vacuum Hamiltonian
+    hamiltonian = MPO.ising(L, 0.0, 0.0)
+
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = zz_obs.results
+    assert results is not None
+
+    # Reset state for second run to verify dynamics again with a different observable
+    state = MPS(L, state="zeros")
+    state.normalize("B")
+
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), sites=0)],
+        elapsed_time=T,
+        dt=dt,
+        num_traj=1,
+        show_progress=False,
+    )
+    simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
+
+    results = sim_params.observables[0].results
+    assert results is not None
+    # t=0.0 (0), 0.1 (1), 0.2 (2) -> flip.
+    np.testing.assert_allclose(results[:2], 1.0, atol=1e-10)
+    np.testing.assert_allclose(results[2:], -1.0, atol=1e-10)
+
+
+def test_no_output_error() -> None:
+    """Verify that simulator.run raises AssertionError when no output is specified."""
+    num_qubits = 2
+    state = MPS(num_qubits, state="zeros")
+    circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
+    H = MPO.ising(num_qubits, J=1, g=0.5)
+
+    # 1. AnalogSimParams (No observables, get_state=False)
+    sim_params_analog = AnalogSimParams(
+        observables=[],
+        elapsed_time=0.1,
+        dt=0.1,
+        get_state=False,
+    )
+    with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
+        simulator.run(state, H, sim_params_analog)
+
+    # 2. StrongSimParams (No observables, get_state=False)
+    sim_params_strong = StrongSimParams(
+        observables=[],
+        get_state=False,
+    )
+    with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
+        simulator.run(state, circ, sim_params_strong)

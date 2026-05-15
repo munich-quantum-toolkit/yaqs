@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -57,7 +57,7 @@ def run(
 
     start_time = time.time()
     mpo = MPO()
-    mpo.init_identity(circuit1.num_qubits)
+    mpo.identity(circuit1.num_qubits)
 
     circuit1_dag = circuit_to_dag(circuit1)
     circuit2_dag = circuit_to_dag(circuit2)

@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -26,13 +26,19 @@ import numpy as np
 import opt_einsum as oe
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from numpy.typing import NDArray
 
     from ..data_structures.networks import MPO, MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
+
+
+DENSE_THRESHOLD = 128
 
 
 def split_mps_tensor(
@@ -88,7 +94,7 @@ def split_mps_tensor(
         shape_transposed[0] * shape_transposed[1],
         shape_transposed[2] * shape_transposed[3],
     )
-    u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
 
     # Handled by dynamic TDVP
     keep = min(len(s_vec), sim_params.max_bond_dim) if not dynamic else len(s_vec)
@@ -96,13 +102,18 @@ def split_mps_tensor(
     if sim_params.trunc_mode == "discarded_weight":
         discard = 0.0
         min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
+        # iterate from smallest to largest
         for idx, s in enumerate(reversed(s_vec)):
-            discard += s**2
-            if discard >= sim_params.threshold:
-                keep = max(len(s_vec) - (idx + 1), min_keep)
+            next_discard = discard + s * s
+            if next_discard > sim_params.threshold:
+                # don't discard this one; discard only the ones already counted
+                keep = max(len(s_vec) - idx, min_keep)
                 break
+            discard = next_discard
     elif sim_params.trunc_mode == "relative":
-        keep = min(sum(s_vec / max(s_vec) > sim_params.threshold), sim_params.max_bond_dim)
+        smax = s_vec[0]
+        keep = 0 if smax == 0 else int(np.sum((s_vec / smax) >= sim_params.threshold))
+        keep = min(keep, sim_params.max_bond_dim)
         keep = max(keep, sim_params.min_bond_dim)
 
     left_tensor = u_mat[:, :keep]
@@ -237,7 +248,7 @@ def update_left_environment(
     return np.tensordot(ket, tensor, axes=((0, 1), (0, 2)))
 
 
-def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
+def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex128]]:
     """Compute the right operator blocks (partial contractions) for the given MPS and MPO.
 
     Starting from the rightmost site, an identity-like tensor is constructed and then
@@ -258,10 +269,10 @@ def initialize_right_environments(psi: MPS, op: MPO) -> NDArray[np.complex128]:
         msg = "The lengths of the state and the operator must match."
         raise ValueError(msg)
 
-    right_blocks = np.empty(num_sites, dtype=object)
+    right_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     right_virtual_dim = psi.tensors[num_sites - 1].shape[2]
     mpo_right_dim = op.tensors[num_sites - 1].shape[3]
-    right_identity = np.zeros((right_virtual_dim, mpo_right_dim, right_virtual_dim), dtype=complex)
+    right_identity = np.zeros((right_virtual_dim, mpo_right_dim, right_virtual_dim), dtype=np.complex128)
     for i in range(right_virtual_dim):
         for a in range(mpo_right_dim):
             right_identity[i, a, i] = 1
@@ -321,13 +332,240 @@ def project_bond(
     return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
 
 
+def build_dense_heff_site(
+    left_env: NDArray[np.complex128],  # shape (a, l, A)
+    right_env: NDArray[np.complex128],  # shape (b, r, B)
+    op: NDArray[np.complex128],  # shape (o, p, l, r)
+) -> NDArray[np.complex128]:
+    r"""Construct the dense effective operator for a single-site Hamiltonian update.
+
+    This function builds the dense matrix representation ``H_eff`` of the linear
+    map implemented by :func:`project_site`.  The operator is defined implicitly by
+
+        Y = project_site(left_env, right_env, op, X),
+
+    where ``X`` is a local MPS tensor of shape ``(p, a, b)`` and ``Y`` is the
+    resulting tensor of shape ``(o, A, B)``.
+
+    The returned matrix ``H_eff`` satisfies
+
+        vec(Y) = H_eff @ vec(X),
+
+    where ``vec`` denotes NumPy row-major flattening (``reshape(-1)``).
+
+    The dense operator is constructed directly via a single multi-index tensor
+    contraction over the MPO tensor and the left and right operator blocks.
+    This avoids the explicit application of ``project_site`` to each basis
+    vector of the local tensor space and is algebraically equivalent to the
+    generic basis-expansion construction.
+
+    Args:
+        left_env (NDArray[np.complex128]):
+            Left operator block, a 3-index tensor of shape ``(a, l, A)``.
+        right_env (NDArray[np.complex128]):
+            Right operator block, a 3-index tensor of shape ``(b, r, B)``.
+        op (NDArray[np.complex128]):
+            Local MPO tensor, a 4-index tensor of shape ``(o, p, l, r)``.
+
+    Returns:
+        NDArray[np.complex128]:
+            A dense matrix ``H_eff`` of shape ``(o * A * B, p * a * b)`` such that
+            applying ``H_eff @ vec(X)`` reproduces the action of
+            ``project_site(left_env, right_env, op, X)`` exactly.
+
+    Notes:
+        - The index ordering of ``H_eff`` is consistent with NumPy row-major
+          flattening of both input and output tensors.
+        - This function is intended for small local Hilbert spaces, where
+          explicitly materializing the dense effective operator is efficient.
+          For larger local dimensions, the matrix-free projector path should be
+          preferred.
+    """
+    left_env = np.asarray(left_env, dtype=np.complex128)
+    right_env = np.asarray(right_env, dtype=np.complex128)
+    op = np.asarray(op, dtype=np.complex128)
+    # h[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
+    h6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
+    o_dim, a_dim_out, b_dim_out, p_dim, a_dim_in, b_dim_in = h6.shape
+    return np.asarray(
+        h6.reshape(o_dim * a_dim_out * b_dim_out, p_dim * a_dim_in * b_dim_in),
+        dtype=np.complex128,
+    )
+
+
+def build_dense_heff_bond(
+    left_env: NDArray[np.complex128],  # shape (u, a, p)
+    right_env: NDArray[np.complex128],  # shape (v, a, w)
+) -> NDArray[np.complex128]:
+    r"""Construct the dense effective operator for the bond contraction.
+
+    This function builds the dense matrix representation ``H_eff`` of the linear
+    map implemented by :func:`project_bond`.  The operator is defined implicitly by
+
+        Y = project_bond(left_env, right_env, C),
+
+    where ``C`` is a bond tensor of shape ``(u, v)`` and ``Y`` is the resulting
+    tensor of shape ``(p, w)``.
+
+    The returned matrix ``H_eff`` satisfies
+
+        vec(Y) = H_eff @ vec(C),
+
+    where ``vec`` denotes NumPy row-major flattening (``reshape(-1)``).
+
+    This implementation constructs ``H_eff`` directly using a single tensor
+    contraction, avoiding the explicit application of ``project_bond`` to each
+    basis vector of the local space.  The result is algebraically equivalent to
+    the generic basis-expansion construction but significantly more efficient.
+
+    Args:
+        left_env (NDArray[np.complex128]):
+            Left operator block, a 3-index tensor of shape ``(u, a, p)``.
+        right_env (NDArray[np.complex128]):
+            Right operator block, a 3-index tensor of shape ``(v, a, w)``.
+
+    Returns:
+        NDArray[np.complex128]:
+            A dense matrix ``H_eff`` of shape ``(p * w, u * v)`` such that
+            applying ``H_eff @ vec(C)`` reproduces the action of
+            ``project_bond(left_env, right_env, C)`` exactly.
+
+    Notes:
+        This function is intended for small local bond dimensions, where
+        explicitly materializing the dense effective operator is efficient and
+        typically faster than repeated tensor contractions inside a Krylov
+        iteration.  For large bond dimensions, the matrix-free projector path
+        should be preferred.
+    """
+    left_env = np.asarray(left_env, dtype=np.complex128)
+    right_env = np.asarray(right_env, dtype=np.complex128)
+
+    # h[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
+    h4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
+    p_dim, w_dim, u_dim, v_dim = h4.shape
+    return np.asarray(h4.reshape(p_dim * w_dim, u_dim * v_dim), dtype=np.complex128)
+
+
+def _build_dense_effective_hamiltonian(
+    projector: Callable[..., NDArray[np.complex128]],
+    proj_args: tuple[NDArray[np.complex128], ...],
+    tensor_shape: tuple[int, ...],
+) -> NDArray[np.complex128]:
+    r"""Construct a dense matrix representation of the local effective operator.
+
+    The operator is defined implicitly by the projector:
+
+        Y = projector(*proj_args, X)
+
+    where X and Y are local tensors of shape ``tensor_shape``. This function
+    builds the unique dense matrix ``H_eff`` such that:
+
+        vec(Y) = H_eff @ vec(X)
+
+    for every possible local tensor X. This is accomplished by applying the
+    projector to each basis vector ``e_j`` of the flattened local space and
+    storing the resulting column ``vec(Y_j)``. Since the operator is
+    reconstructed directly from the projector, the result is guaranteed to
+    match the behavior of ``project_site`` or ``project_bond`` exactly,
+    independent of index order or contraction details.
+
+    Args:
+        projector:
+            A function implementing the local operator action, e.g.
+            ``project_site(left_env, right_env, op, ket)`` or
+            ``project_bond(left_env, right_env, bond_tensor)``.
+        proj_args:
+            Extra positional arguments passed to ``projector`` before the tensor X.
+            These typically include the left environment, right environment, and
+            (for ``project_site``) the local MPO tensor.
+        tensor_shape:
+            The shape of the local tensor X. The flattened operator ``H_eff`` will
+            have dimension ``n_loc = prod(tensor_shape)``.
+
+    Returns:
+        NDArray[np.complex128]: A dense matrix of shape ``(n_loc, n_loc)`` such that
+        applying ``H_eff @ vec(X)`` reproduces the action of
+        ``projector(*proj_args, X)`` to machine precision.
+
+    Notes:
+        This method is intended for small local dimensions, where explicitly
+        materializing ``H_eff`` is efficient and typically faster than repeated
+        tensor contractions inside a Krylov iteration. For large local
+        dimensions, the matrix-free path (projector applied directly inside
+        Lanczos) is preferred.
+    """
+    # Fast paths
+    if projector is project_site:
+        left_env, right_env, op = proj_args
+        return build_dense_heff_site(left_env, right_env, op)
+
+    if projector is project_bond:
+        left_env, right_env = proj_args
+        return build_dense_heff_bond(left_env, right_env)
+
+    # Generic fallback (slow but general)
+    n_loc = int(np.prod(tensor_shape))
+    h_eff = np.empty((n_loc, n_loc), dtype=np.complex128)
+    e = np.zeros(n_loc, dtype=np.complex128)
+    for j in range(n_loc):
+        e[:] = 0.0
+        e[j] = 1.0
+        x_tensor = e.reshape(tensor_shape)
+        y_tensor = projector(*proj_args, x_tensor)
+        h_eff[:, j] = y_tensor.reshape(-1)
+
+    return h_eff
+
+
+def _evolve_local_tensor_krylov(
+    projector: Callable[..., NDArray[np.complex128]],
+    tensor: NDArray[np.complex128],
+    dt: float,
+    proj_args: tuple[NDArray[np.complex128], ...],
+    dense_threshold: int = DENSE_THRESHOLD,
+) -> NDArray[np.complex128]:
+    """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
+
+    Args:
+        projector: Function implementing the local operator action on a tensor,
+            e.g. project_site(left_env, right_env, op, ket) or
+                 project_bond(left_env, right_env, bond_tensor).
+        tensor: Tensor to evolve (arbitrary shape).
+        dt: Time step for evolution.
+        proj_args: Extra arguments passed to `projector` before the tensor.
+        dense_threshold: Maximum size of flattened tensor to use dense operator.
+
+    Returns:
+        The evolved tensor with the same shape as `tensor`.
+    """
+    tensor_shape = tensor.shape
+    tensor_flat = tensor.reshape(-1)
+    n_loc = tensor_flat.size
+
+    if n_loc <= dense_threshold:
+        # Build dense H_eff once from environments + MPO
+        h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
+
+        def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            return h_eff @ x_flat
+
+    else:
+        # Matrix-free projector path
+        def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            x_tensor = x_flat.reshape(tensor_shape)
+            y_tensor = projector(*proj_args, x_tensor)
+            return y_tensor.reshape(-1)
+
+    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt)
+    return evolved_flat.reshape(tensor_shape)
+
+
 def update_site(
     left_env: NDArray[np.complex128],
     right_env: NDArray[np.complex128],
     op: NDArray[np.complex128],
     ket: NDArray[np.complex128],
     dt: float,
-    lanczos_iterations: int,
 ) -> NDArray[np.complex128]:
     """Evolve the local MPS tensor A forward in time using the local Hamiltonian.
 
@@ -340,19 +578,12 @@ def update_site(
         op (NDArray[np.complex128]): Local MPO tensor.
         ket (NDArray[np.complex128]): Local MPS tensor.
         dt (float): Time step for evolution.
-        lanczos_iterations (int): Number of Lanczos iterations.
 
     Returns:
         NDArray[np.complex128]: The updated MPS tensor after evolution.
     """
-    ket_flat = ket.reshape(-1)
-    evolved_ket_flat = expm_krylov(
-        lambda x: project_site(left_env, right_env, op, x.reshape(ket.shape)).reshape(-1),
-        ket_flat,
-        dt,
-        lanczos_iterations,
-    )
-    return evolved_ket_flat.reshape(ket.shape)
+    proj_args = (left_env, right_env, op)
+    return _evolve_local_tensor_krylov(projector=project_site, tensor=ket, dt=dt, proj_args=proj_args)
 
 
 def update_bond(
@@ -360,7 +591,6 @@ def update_bond(
     right_env: NDArray[np.complex128],
     bond_tensor: NDArray[np.complex128],
     dt: float,
-    lanczos_iterations: int,
 ) -> NDArray[np.complex128]:
     """Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
 
@@ -372,26 +602,23 @@ def update_bond(
         right_env (NDArray[np.complex128]): Right operator block.
         bond_tensor (NDArray[np.complex128]): Bond tensor.
         dt (float): Time step for the bond evolution.
-        lanczos_iterations (int): Number of Lanczos iterations.
 
     Returns:
         NDArray[np.complex128]: The updated bond tensor after evolution.
     """
-    bond_tensor_flat = bond_tensor.reshape(-1)
-    evolved_bond_tensor_flat = expm_krylov(
-        lambda x: project_bond(left_env, right_env, x.reshape(bond_tensor.shape)).reshape(-1),
-        bond_tensor_flat,
-        dt,
-        lanczos_iterations,
+    proj_args = (left_env, right_env)
+    return _evolve_local_tensor_krylov(
+        projector=project_bond,
+        tensor=bond_tensor,
+        dt=dt,
+        proj_args=proj_args,
     )
-    return evolved_bond_tensor_flat.reshape(bond_tensor.shape)
 
 
 def single_site_tdvp(
     state: MPS,
     hamiltonian: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    numiter_lanczos: int = 25,
 ) -> None:
     """Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
 
@@ -404,7 +631,6 @@ def single_site_tdvp(
         hamiltonian (MPO): Hamiltonian represented as an MPO.
         sim_params (AnalogSimParams | StrongSimParams | WeakSimParams):
             Simulation parameters containing the time step 'dt' (and possibly a threshold for SVD truncation).
-        numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -416,7 +642,7 @@ def single_site_tdvp(
 
     right_blocks = initialize_right_environments(state, hamiltonian)
 
-    left_blocks = np.empty(num_sites, dtype=object)
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -436,7 +662,6 @@ def single_site_tdvp(
             hamiltonian.tensors[i],
             state.tensors[i],
             0.5 * sim_params.dt,
-            numiter_lanczos,
         )
         tensor_shape = state.tensors[i].shape
         reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
@@ -445,9 +670,7 @@ def single_site_tdvp(
         left_blocks[i + 1] = update_left_environment(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
         )
-        bond_tensor = update_bond(
-            left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
-        )
+        bond_tensor = update_bond(left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt)
         state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -460,7 +683,6 @@ def single_site_tdvp(
         hamiltonian.tensors[last],
         state.tensors[last],
         sim_params.dt,
-        numiter_lanczos,
     )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -481,9 +703,7 @@ def single_site_tdvp(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
         )
         bond_tensor = bond_tensor.transpose()
-        bond_tensor = update_bond(
-            left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
-        )
+        bond_tensor = update_bond(left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt)
         state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
         state.tensors[i - 1] = update_site(
             left_blocks[i - 1],
@@ -491,7 +711,6 @@ def single_site_tdvp(
             hamiltonian.tensors[i - 1],
             state.tensors[i - 1],
             0.5 * sim_params.dt,
-            numiter_lanczos,
         )
 
 
@@ -499,7 +718,6 @@ def two_site_tdvp(
     state: MPS,
     hamiltonian: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    numiter_lanczos: int = 25,
     *,
     dynamic: bool = False,
 ) -> None:
@@ -516,7 +734,6 @@ def two_site_tdvp(
         hamiltonian (MPO): Hamiltonian represented as an MPO.
         sim_params (AnalogSimParams | StrongSimParams | WeakSimParams):
             Simulation parameters containing the time step 'dt' and SVD threshold.
-        numiter_lanczos (int, optional): Number of Lanczos iterations for each local update. Defaults to 25.
         dynamic: Determines if bond dimension is handled by dynamic TDVP (True) or truncation (False).
 
     Raises:
@@ -532,7 +749,7 @@ def two_site_tdvp(
 
     right_blocks = initialize_right_environments(state, hamiltonian)
 
-    left_blocks = np.empty(num_sites, dtype=object)
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = hamiltonian.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -549,9 +766,7 @@ def two_site_tdvp(
     for i in range(num_sites - 2):
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
-        )
+        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
             merged_tensor,
             "right",
@@ -568,7 +783,6 @@ def two_site_tdvp(
             hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
-            numiter_lanczos,
         )
 
     # Guarantees unit time at final site for circuits
@@ -578,9 +792,7 @@ def two_site_tdvp(
     i = num_sites - 2
     merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
     merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-    merged_tensor = update_site(
-        left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt, numiter_lanczos
-    )
+    merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt)
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
@@ -611,13 +823,10 @@ def two_site_tdvp(
             hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
-            numiter_lanczos,
         )
         merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
-        )
+        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
         state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
             merged_tensor,
             "left",
@@ -634,7 +843,6 @@ def local_dynamic_tdvp(
     state: MPS,
     hamiltonian: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    numiter_lanczos: int = 25,
 ) -> None:
     """Perform a dynamic TDVP sweep: at each bond.
 
@@ -643,11 +851,9 @@ def local_dynamic_tdvp(
     apply a two-site TDVP step.
 
     Args:
-        state (MPS): MPS state to evolve.
-        hamiltonian (MPO): MPO Hamiltonian.
+        state: MPS state to evolve.
+        hamiltonian: MPO Hamiltonian.
         sim_params: Simulation parameters including dt and threshold.
-        max_bond_dim (int): Maximum allowed bond dimension for two-site updates.
-        numiter_lanczos (int): Lanczos iterations per local update.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -657,13 +863,17 @@ def local_dynamic_tdvp(
         msg = "State and Hamiltonian must have the same length"
         raise ValueError(msg)
 
+    if num_sites == 1:
+        single_site_tdvp(state, hamiltonian, sim_params)
+        return
+
     # Prepare environments
     right_blocks = initialize_right_environments(state, hamiltonian)
-    left_blocks = np.empty(num_sites, dtype=object)
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     # build identity for left_blocks[0]
     chi0 = state.tensors[0].shape[1]
     mpo_dim = hamiltonian.tensors[0].shape[2]
-    eye = np.zeros((chi0, mpo_dim, chi0), dtype=right_blocks[0].dtype)
+    eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
     for i in range(chi0):
         eye[i, :, i] = 1
     left_blocks[0] = eye
@@ -683,7 +893,6 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i],
                 state.tensors[i],
                 0.5 * sim_params.dt,
-                numiter_lanczos,
             )
             if i != num_sites - 1:
                 tensor_shape = state.tensors[i].shape
@@ -693,9 +902,7 @@ def local_dynamic_tdvp(
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
                 )
-                bond_tensor = update_bond(
-                    left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
-                )
+                bond_tensor = update_bond(left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt)
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
             if i == num_sites - 2:
                 # Guarantees final site is 1TDVP
@@ -707,7 +914,7 @@ def local_dynamic_tdvp(
             merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
-                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
 
             state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
@@ -728,7 +935,7 @@ def local_dynamic_tdvp(
             merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
-                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
             state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
                 merged_tensor,
@@ -746,7 +953,6 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i + 1],
                 state.tensors[i + 1],
                 -0.5 * sim_params.dt,
-                numiter_lanczos,
             )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -763,7 +969,6 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i],
                 state.tensors[i],
                 0.5 * sim_params.dt,
-                numiter_lanczos,
             )
             if i != 0:
                 state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
@@ -783,9 +988,7 @@ def local_dynamic_tdvp(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
                 )
                 bond_tensor = bond_tensor.transpose()
-                bond_tensor = update_bond(
-                    left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt, numiter_lanczos
-                )
+                bond_tensor = update_bond(left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt)
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
 
                 if i == 1:
@@ -797,7 +1000,7 @@ def local_dynamic_tdvp(
             merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
             merged_tensor = update_site(
-                left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt, numiter_lanczos
+                left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
             state.tensors[i - 1], state.tensors[i] = split_mps_tensor(
                 merged_tensor,
@@ -817,7 +1020,6 @@ def local_dynamic_tdvp(
                     hamiltonian.tensors[i - 1],
                     state.tensors[i - 1],
                     -0.5 * sim_params.dt,
-                    numiter_lanczos,
                 )
 
 
@@ -838,6 +1040,10 @@ def global_dynamic_tdvp(
             such as the maximum allowable bond dimension for the MPS.
     """
     current_max_bond_dim = state.get_max_bond()
+    if state.length == 1:
+        single_site_tdvp(state, hamiltonian, sim_params)
+        return
+
     if current_max_bond_dim < sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_tdvp(state, hamiltonian, sim_params, dynamic=True)

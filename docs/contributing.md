@@ -4,7 +4,7 @@
 # Contributing
 
 Thank you for your interest in contributing to MQT YAQS!
-This document outlines how to contribute and the development guidelines.
+This document outlines the development guidelines and how to contribute.
 
 We use GitHub to [host code](https://github.com/munich-quantum-toolkit/yaqs), to [track issues and feature requests][issues], as well as accept [pull requests](https://github.com/munich-quantum-toolkit/yaqs/pulls).
 See <https://docs.github.com/en/get-started/quickstart> for a general introduction to working with GitHub and contributing to projects.
@@ -55,6 +55,7 @@ Pick the path that fits your time and interests:
 ## Guidelines
 
 Please adhere to the following guidelines to help the project grow sustainably.
+Contributions that do not comply with these guidelines or violate our {doc}`AI Usage Guidelines <ai_usage>` may be rejected without further review.
 
 ### Core Guidelines
 
@@ -73,6 +74,15 @@ Please adhere to the following guidelines to help the project grow sustainably.
 - Follow the project's coding standards and conventions.
 - Be open to feedback and willing to make necessary changes based on code reviews.
 
+### AI-assisted contributions
+
+We acknowledge the utility of AI-based coding assistants (e.g., GitHub Copilot, ChatGPT) in modern software development.
+However, their use requires a high degree of responsibility and transparency to maintain code quality and licensing compliance.
+
+Please carefully read and follow our dedicated {doc}`AI Usage Guidelines <ai_usage>` before submitting any AI-assisted contribution.
+In short: **You are responsible for every line of code you submit**, and a **human must always be in the loop**.
+We require disclosure of AI tool usage in your PR description.
+
 ### Pull Request Workflow
 
 - Create PRs early.
@@ -88,9 +98,53 @@ Please adhere to the following guidelines to help the project grow sustainably.
   Do not close and reopen a new PR.
   Respond to comments to signal that you have addressed the feedback.
   Do not resolve review comments yourself; the reviewer will do so once satisfied.
+- If the reviewer suggested changes with explicit code suggestions as part of the comments, apply these directly using the GitHub UI.
+  This attributes the changes to the reviewer and automatically resolves the respective comments (this is an exception to the rule above).
+  If there are multiple suggestions that you want to apply at once, you can batch them into a single commit.
+  Go to the "Files changed" tab of the PR, and then click "Add suggestion to batch" for each suggestion you want to include.
+  Once you are done selecting suggestions, click "Commit suggestions".
+  Only apply suggestions manually if using the GitHub UI is not feasible.
 - Re-request a review after pushing changes that address feedback.
 - Do not squash commits locally; maintainers typically squash on merge.
   Avoid rebasing or force-pushing before reviews; you may rebase after addressing feedback if desired.
+
+### Working with CodeRabbit
+
+We use [CodeRabbit](https://www.coderabbit.ai/) for automated code review on pull requests.
+We use this tool to ease the workload on our maintainers and to counteract the trend of sloppy AI-assisted contributions.
+Note that having your PR reviewed by CodeRabbit does **not** count as an AI-assisted contribution for the purpose of the disclosure requirement mentioned above.
+
+To get the most out of it and help the project maintain its high ambitions for code quality, please follow these practices:
+
+- **Review the review**:
+  Do not take CodeRabbit's suggestions as absolute truth.
+  LLMs can be overly defensive and conservative, leading to overcomplicated code.
+  Treat its comments as suggestions: consider them, but feel free to disagree and explain why.
+- **Draft PRs**:
+  CodeRabbit runs on every push to non-draft PRs.
+  If you are still experimenting, mark your PR as a draft so that the automated review only runs when you are ready for feedback.
+- **Respond to comments**:
+  Do not simply resolve CodeRabbit's comments without answering them.
+  It learns from your replies and improves over time.
+  If a suggestion does not apply, take a moment to explain why in a reply.
+- **Avoid multiple AI review bots**:
+  CodeRabbit performs significantly worse when other AI review bots (e.g., GitHub Copilot) are active on the same PR.
+  For the best results, do not tag Copilot unless you have already iterated with CodeRabbit and want an extra pass.
+- **Engage CodeRabbit in discussions**:
+  When team members are discussing code in PR comments, CodeRabbit stays silent by default.
+  Tag {code}`@coderabbitai` to engage it in the conversation and get its feedback on the specific points being discussed.
+  In particular, when you tag another person in a comment, ensure to also tag CodeRabbit.
+  Otherwise, you will just get an automatic "It seems like the humans are having a chat" response from CodeRabbit anyway, which does not add much value.
+- **Let CodeRabbit resolve comments**:
+  Wait until after the next push before considering resolving CodeRabbit's comments manually.
+  CodeRabbit will automatically resolve comments that it thinks have been addressed by your changes.
+  Sometimes, it gets stuck, at which point you may resolve it manually.
+- **Manual review on drafts**:
+  You can trigger a full review on a draft PR by commenting with {code}`@coderabbitai full review`.
+- **Continuing after reviews are paused**:
+  CodeRabbit has a default threshold for the number of reviews it performs on a PR before pausing further reviews to avoid spamming.
+  If you want to resume reviews, you can ask CodeRabbit to resume by commenting with {code}`@coderabbitai resume`.
+  Note that this will not trigger a review immediately; it will just allow CodeRabbit to perform reviews on the next push or manual trigger.
 
 ## Get Started 🎉
 
@@ -111,7 +165,7 @@ We recommend using [{code}`nox`][nox] for development.
 {code}`nox` is a Python automation tool that allows you to define tasks in a {code}`noxfile.py` file and then run them with a single command.
 If you have not installed it yet, see our {ref}`installation guide for developers <development-setup>`.
 
-We define four convenient {code}`nox` sessions in our {code}`noxfile.py`:
+We define some convenient {code}`nox` sessions in our {code}`noxfile.py`:
 
 - {code}`tests` to run the Python tests
 - {code}`minimums` to run the Python tests with the minimum dependencies
@@ -137,7 +191,7 @@ We take extra care to install the project without build isolation so that rebuil
 If you only want to run the tests on a specific Python version, you can pass the desired Python version to the {code}`nox` command.
 
 ```console
-$ nox -s tests-3.12
+$ nox -s tests-3.14
 ```
 
 :::{note}
@@ -164,12 +218,12 @@ The Python code is formatted and linted using a collection of [{code}`pre-commit
 This collection includes
 
 - [ruff][ruff], an extremely fast Python linter and formatter written in Rust, and
-- [mypy][mypy], a static type checker for Python code.
+- [ty][ty], Astral's type checker for Python.
 
 The hooks can be installed by running the following command in the root directory:
 
 ```console
-$ pre-commit install
+$ prek install
 ```
 
 This will install the hooks in the {code}`.git/hooks` directory of the repository.
@@ -183,10 +237,10 @@ $ nox -s lint
 
 :::{note}
 
-If you do not want to use {code}`nox`, you can also run the hooks manually by using {code}`pre-commit`.
+If you do not want to use {code}`nox`, you can also run the hooks manually by using {code}`prek`.
 
 ```console
-$ pre-commit run --all-files
+$ prek run --all-files
 ```
 
 :::
@@ -249,6 +303,7 @@ Here are some tips for finding the cause of certain failures:
 
 - If the {code}`pre-commit.ci` check fails, some of the {code}`pre-commit` checks failed and could not be fixed automatically by the _pre-commit.ci_ bot.
   The individual log messages frequently provide helpful suggestions on how to fix the warnings.
+
 - If the {code}`docs/readthedocs.org:\*` check fails, the documentation could not be built properly.
   Inspect the corresponding log file for any errors.
 
@@ -322,7 +377,7 @@ Afterward, navigate to the [Releases page](https://github.com/munich-quantum-too
 <!--- Links --->
 
 [clion]: https://www.jetbrains.com/clion/
-[mypy]: https://mypy-lang.org/
+[ty]: https://docs.astral.sh/ty/
 [nox]: https://nox.thea.codes/en/stable/
 [issues]: https://github.com/munich-quantum-toolkit/yaqs/issues
 [pipx]: https://pypa.github.io/pipx/

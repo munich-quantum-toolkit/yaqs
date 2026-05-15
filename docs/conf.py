@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-import warnings
+import os
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,19 +24,15 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).parent.parent.resolve()
 
+# Keep matplotlib/font cache writable and local during docs builds.
+os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "docs" / "_build" / ".mplconfig"))
+
 
 try:
-    from mqt.yaqs import __version__ as version
+    version = metadata.version("mqt.yaqs")
 except ModuleNotFoundError:
-    try:
-        version = metadata.version("mqt.yaqs")
-    except ModuleNotFoundError:
-        msg = (
-            "Package should be installed to produce documentation! "
-            "Assuming a modern git archive was used for version discovery."
-        )
-        warnings.warn(msg, stacklevel=1)
-        version = "0.0.0+git"
+    msg = "mqt.yaqs must be installed to build the documentation"
+    raise ModuleNotFoundError(msg) from None
 
 # Filter git details from version
 release = version.split("+")[0]
@@ -44,7 +40,7 @@ release = version.split("+")[0]
 project = "MQT YAQS"
 author = "Chair for Design Automation, TUM"
 language = "en"
-project_copyright = "2023 - 2025, Chair for Design Automation, TUM"
+project_copyright = "2025 - 2026, Chair for Design Automation, TUM"
 
 master_doc = "index"
 
@@ -184,8 +180,10 @@ latex_documents = [
     (
         master_doc,
         "mqt_yaqs.tex",
-        r"MQT YAQS\\{\large A Tool for Simulating"
-        r"Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware}",
+        (
+            r"MQT YAQS\\{\large A Tool for Simulating"
+            r"Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware}"
+        ),
         r"Chair for Design Automation\\Technical University of Munich",
         "howto",
         False,

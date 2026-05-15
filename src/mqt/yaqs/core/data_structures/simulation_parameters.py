@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2025 Chair for Design Automation, TUM
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
 # All rights reserved.
 #
 # SPDX-License-Identifier: MIT
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.networks import MPS
+    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
@@ -88,6 +89,14 @@ class Observable:
                 gate = GateLibrary.entropy()
             elif gate == "schmidt_spectrum":
                 gate = GateLibrary.schmidt_spectrum()
+            elif gate == "pvm":
+                gate = GateLibrary.pvm(gate)
+            elif hasattr(GateLibrary, gate):
+                attr = getattr(GateLibrary, gate)
+                try:
+                    gate = attr()
+                except TypeError:
+                    gate = GateLibrary.pvm(gate)
             else:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
@@ -135,38 +144,25 @@ class AnalogSimParams:
     A class to represent the parameters for an analog simulation.
 
     Attributes:
-    -----------
-    observables :
-        A list of observables to be tracked during the simulation.
-    sorted_observables :
-        A list of observables sorted by site and name.
-    elapsed_time :
-        The total time for the simulation.
-    dt :
-        The time step for the simulation (default is 0.1).
-    times :
-        An array of time points from 0 to T with step dt.
-    sample_timesteps :
-        A flag to indicate whether to sample timesteps (default is True).
-    num_traj :
-        The number of samples to be taken (default is 1000).
-    max_bond_dim :
-        The maximum bond dimension (default is 2).
-    trunc_mode :
-        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-    threshold :
-        The threshold value for the simulation (default is 1e-6).
-    order :
-        The order of the simulation (default is 1).
-    get_state:
-        If True, output MPS is returned.
-    how_progress:
-        If True, a progress bar is printed as trajectories finish.
-
-    Methods:
-    --------
-    aggregate_trajectories() -> None:
-        Aggregates the trajectories of the observables by computing their mean.
+        observables: List of observables tracked during the simulation.
+        sorted_observables: Observables sorted by site and name.
+        elapsed_time: Total simulation time.
+        dt: Simulation time step.
+        times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
+        sample_timesteps: If ``True``, record values at all sampled timesteps.
+        num_traj: Number of trajectories (for stochastic solvers).
+        max_bond_dim: Maximum allowed bond dimension.
+        trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
+        threshold: Truncation threshold.
+        order: Integration order.
+        get_state: If ``True``, store and return the output MPS state.
+        show_progress: If ``True``, show a progress bar as trajectories finish.
+        noise_model: Noise model used for the run, populated after simulation.
+        multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
+            two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
+            Autocorrelation is the special case ``(O, O)``. Results are indexed by pair position.
+        multi_time_observables_times: Time grid for ``multi_time_observables`` results, or ``None`` when unused.
+        multi_time_observables_results: Ensemble mean with shape ``(n_pairs, n_times)`` or ``(n_pairs, 1)``.
     """
 
     output_state: MPS | None = None
@@ -187,40 +183,42 @@ class AnalogSimParams:
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
         show_progress: bool = True,
+        num_threads: int = 1,
+        solver: str = "TJM",
+        multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
 
         Initializes parameters for a physics-based quantum simulation.
 
-        Parameters
-        ----------
-        observables :
-            List of observables to measure during the simulation.
-        elapsed_time :
-            Total simulation time.
-        dt :
-            Time step interval, by default 0.1.
-        num_traj :
-            Number of simulation samples, by default 1000.
-        max_bond_dim :
-            Maximum bond dimension allowed, by default 2.
-        min_bond_dim:
-            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-        trunc_mode :
-            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-        threshold :
-            Threshold for simulation accuracy, by default 1e-6.
-        order :
-            Order of approximation or numerical scheme, by default 1.
-        sample_timesteps :
-            Flag indicating whether to sample at intermediate time steps, by default True.
-        tensorevol_mode :
-            Mode of tensor evolution in the simulation, by default EvolutionMode.TDVP.
-        get_state :
-            If True, output MPS is returned.
-        show_progress:
-            If True, a progress bar is printed as trajectories finish.
+        Args:
+            observables: List of observables to measure during the simulation.
+            elapsed_time: Total simulation time.
+            dt: Time step interval.
+            num_traj: Number of simulation samples.
+            max_bond_dim: Maximum bond dimension allowed.
+            min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
+            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            threshold: Threshold for simulation accuracy.
+            order: Order of approximation or numerical scheme.
+            sample_timesteps: Whether to sample at intermediate time steps.
+            evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
+            get_state: If ``True``, output MPS is returned.
+            show_progress: If ``True``, print a progress bar as trajectories finish.
+            num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
+            solver: Solver method, one of ``"TJM"``, ``"Lindblad"``, or ``"MCWF"``.
+            multi_time_observables: For ``list[MPS]`` unitary ensemble runs only, list of ``(A, B)``
+                pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
+                case ``(O, O)``.
+
+        Raises:
+            ValueError: If the solver is not "TJM", "Lindblad", or "MCWF".
         """
+        self.noise_model: NoiseModel | None = None
+        if solver not in {"TJM", "Lindblad", "MCWF"}:
+            msg = f"Invalid solver '{solver}'. Allowed values are 'TJM', 'Lindblad', or 'MCWF'."
+            raise ValueError(msg)
+        self.solver = solver
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -257,7 +255,12 @@ class AnalogSimParams:
         self.evolution_mode = evolution_mode
         self.get_state = get_state
         self.show_progress = show_progress
-        assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
+        self.num_threads = num_threads
+        self.multi_time_observables: list[tuple[Observable, Observable]] = (
+            [] if multi_time_observables is None else list(multi_time_observables)
+        )
+        self.multi_time_observables_times: NDArray[np.float64] | None = None
+        self.multi_time_observables_results: NDArray[np.complex128] | None = None
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
@@ -304,6 +307,8 @@ class WeakSimParams:
         If True, sample layers.
     show_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
@@ -350,6 +355,7 @@ class WeakSimParams:
         show_progress:
             If True, a progress bar is printed as trajectories finish.
         """
+        self.noise_model: NoiseModel | None = None
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
@@ -416,6 +422,8 @@ class StrongSimParams:
         If True, output MPS is returned.
     show_progress:
         If True, a progress bar is printed as trajectories finish.
+    noise_model:
+        The noise model used for the verification, populated after a simulation run.
 
     Methods:
     --------
@@ -443,6 +451,7 @@ class StrongSimParams:
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
         show_progress: bool = True,
+        num_threads: int = 1,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -464,7 +473,11 @@ class StrongSimParams:
             If True, output MPS is returned.
         show_progress:
             If True, a progress bar is printed as trajectories finish.
+        num_threads:
+            Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
+            Defaults to 1 for efficiency on small/medium bond dimensions.
         """
+        self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -497,7 +510,7 @@ class StrongSimParams:
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
         self.show_progress = show_progress
-        assert self.get_state or self.observables, "No output specified: either observables or get_state must be set."
+        self.num_threads = num_threads
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.

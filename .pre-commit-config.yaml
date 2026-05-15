@@ -1,131 +1,87 @@
 # To run all pre-commit checks, use:
 #
-#     pre-commit run -a
+#     uvx prek run -a
 #
 # To install pre-commit hooks that run every time you commit:
 #
-#     pre-commit install
+#     uv tool install prek
+#     prek install
 #
 
 ci:
   autoupdate_commit_msg: "⬆️🪝 update pre-commit hooks"
   autoupdate_schedule: quarterly
   autofix_commit_msg: "🎨 pre-commit fixes"
-  skip: [mypy]
+  skip: [ty-check]
 
 repos:
-  # Standard hooks
+  ## Standard hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      - id: check-added-large-files
-      - id: check-case-conflict
-      - id: check-docstring-first
       - id: check-merge-conflict
-      - id: check-symlinks
-      - id: check-toml
-      - id: check-yaml
-      - id: debug-statements
+        priority: 0
       - id: end-of-file-fixer
-      - id: mixed-line-ending
-      - id: requirements-txt-fixer
+        priority: 1
       - id: trailing-whitespace
+        priority: 2
 
-  # Handling unwanted unicode characters
-  - repo: https://github.com/sirosen/texthooks
-    rev: 0.7.1
+  ## Check JSON schemata
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.2
     hooks:
-      - id: fix-ligatures
-      - id: fix-smartquotes
+      - id: check-github-workflows
+        priority: 0
+      - id: check-readthedocs
+        priority: 0
 
-  # Check for common mistakes
-  - repo: https://github.com/pre-commit/pygrep-hooks
-    rev: v1.10.0
+  ## Check best practices for scientific Python code
+  - repo: https://github.com/scientific-python/cookie
+    rev: 2026.04.04
     hooks:
-      - id: rst-backticks
-      - id: rst-directive-colons
-      - id: rst-inline-touching-normal
+      - id: sp-repo-review
+        additional_dependencies: ["repo-review[cli]"]
+        priority: 0
 
-  # Python linting using ruff
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0
+  ## Check pyproject.toml file
+  - repo: https://github.com/henryiii/validate-pyproject-schema-store
+    rev: 2026.04.26
     hooks:
-      - id: ruff-check
-        args: ["--fix", "--show-fixes"]
-      - id: ruff-format
+      - id: validate-pyproject
+        priority: 0
 
-  # Static type checking using mypy
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+  ## Ensure uv.lock is up to date
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.8
     hooks:
-      - id: mypy
-        files: ^(src/mqt|tests|examples|noxfile.py)
-        args: []
-        additional_dependencies:
-          - nox
-          - pytest
-          - numpy
-          - scipy-stubs
-          - types-tqdm
-          - matplotlib
+      - id: uv-lock
+        priority: 0
 
-  # Also run Black on examples in the documentation
-  - repo: https://github.com/adamchainz/blacken-docs
-    rev: 1.20.0
-    hooks:
-      - id: blacken-docs
-        additional_dependencies: [black==25.*]
-
-  # Check for license headers
-  - repo: https://github.com/emzeat/mz-lictools
-    rev: v2.8.0
-    hooks:
-      - id: license-tools
-
-  # Catch common capitalization mistakes
+  ## Check for common capitalization mistakes
   - repo: local
     hooks:
       - id: disallow-caps
         name: Disallow improper capitalization
         language: pygrep
-        entry: PyBind|Numpy|Cmake|CCache|Github|PyTest|Mqt|Tum
-        exclude: .pre-commit-config.yaml
+        entry: \b(Numpy|Github|PyTest|Mqt|Tum)\b
+        exclude: ^(\.pre-commit-config\.yaml)$
+        priority: 0
 
-  # Format configuration files with prettier
-  - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.6.2
-    hooks:
-      - id: prettier
-        types_or: [yaml, markdown, html, css, scss, javascript, json]
-
-  # Check for spelling
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.38.1
+  ## Check for typos
+  - repo: https://github.com/adhtruong/mirrors-typos
+    rev: v1.46.0
     hooks:
       - id: typos
+        priority: 3
 
-  # Check best practices for scientific Python code
-  - repo: https://github.com/scientific-python/cookie
-    rev: 2025.10.01
+  ## Check license headers
+  - repo: https://github.com/emzeat/mz-lictools
+    rev: v2.9.0
     hooks:
-      - id: sp-repo-review
-        additional_dependencies: ["repo-review[cli]"]
+      - id: license-tools
+        priority: 4
 
-  # Check JSON schemata
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.34.1
-    hooks:
-      - id: check-dependabot
-      - id: check-github-workflows
-      - id: check-readthedocs
-
-  # Check the pyproject.toml file
-  - repo: https://github.com/henryiii/validate-pyproject-schema-store
-    rev: 2025.10.11
-    hooks:
-      - id: validate-pyproject
-
-  # Tidy up BibTeX files
+  ## Format BibTeX files with bibtex-tidy
   - repo: https://github.com/FlamingTempura/bibtex-tidy
     rev: v1.14.0
     hooks:
@@ -142,3 +98,36 @@ repos:
             "--trailing-commas",
             "--remove-empty-fields",
           ]
+        priority: 5
+
+  ## Format configuration files with prettier
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.8.3
+    hooks:
+      - id: prettier
+        types_or: [yaml, markdown, html, css, scss, javascript, json, json5]
+        priority: 5
+
+  ## Format and lint Python files with ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff-format
+        types_or: [python, pyi, jupyter, markdown]
+        priority: 6
+      - id: ruff-check
+        require_serial: true
+        priority: 7
+
+  ## Check Python types with ty
+  - repo: local
+    hooks:
+      - id: ty-check
+        name: ty check
+        entry: uv run ty check
+        language: unsupported
+        require_serial: true
+        types_or: [python, pyi, jupyter]
+        exclude: ^(docs/)
+        pass_filenames: false
+        priority: 8
