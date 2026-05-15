@@ -144,40 +144,25 @@ class AnalogSimParams:
     A class to represent the parameters for an analog simulation.
 
     Attributes:
-    -----------
-    observables :
-        A list of observables to be tracked during the simulation.
-    sorted_observables :
-        A list of observables sorted by site and name.
-    elapsed_time :
-        The total time for the simulation.
-    dt :
-        The time step for the simulation (default is 0.1).
-    times :
-        An array of time points from 0 to T with step dt.
-    sample_timesteps :
-        A flag to indicate whether to sample timesteps (default is True).
-    num_traj :
-        The number of samples to be taken (default is 1000).
-    max_bond_dim :
-        The maximum bond dimension (default is 2).
-    trunc_mode :
-        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-    threshold :
-        The threshold value for the simulation (default is 1e-6).
-    order :
-        The order of the simulation (default is 1).
-    get_state:
-        If True, output MPS is returned.
-    how_progress:
-        If True, a progress bar is printed as trajectories finish.
-    noise_model:
-        The noise model used for the verification, populated after a simulation run.
-
-    Methods:
-    --------
-    aggregate_trajectories() -> None:
-        Aggregates the trajectories of the observables by computing their mean.
+        observables: List of observables tracked during the simulation.
+        sorted_observables: Observables sorted by site and name.
+        elapsed_time: Total simulation time.
+        dt: Simulation time step.
+        times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
+        sample_timesteps: If ``True``, record values at all sampled timesteps.
+        num_traj: Number of trajectories (for stochastic solvers).
+        max_bond_dim: Maximum allowed bond dimension.
+        trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
+        threshold: Truncation threshold.
+        order: Integration order.
+        get_state: If ``True``, store and return the output MPS state.
+        show_progress: If ``True``, show a progress bar as trajectories finish.
+        noise_model: Noise model used for the run, populated after simulation.
+        multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
+            two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
+            Autocorrelation is the special case ``(O, O)``. Results are indexed by pair position.
+        multi_time_observables_times: Time grid for ``multi_time_observables`` results, or ``None`` when unused.
+        multi_time_observables_results: Ensemble mean with shape ``(n_pairs, n_times)`` or ``(n_pairs, 1)``.
     """
 
     output_state: MPS | None = None
@@ -200,45 +185,31 @@ class AnalogSimParams:
         show_progress: bool = True,
         num_threads: int = 1,
         solver: str = "TJM",
+        multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
 
         Initializes parameters for a physics-based quantum simulation.
 
-        Parameters
-        ----------
-        observables :
-            List of observables to measure during the simulation.
-        elapsed_time :
-            Total simulation time.
-        dt :
-            Time step interval, by default 0.1.
-        num_traj :
-            Number of simulation samples, by default 1000.
-        max_bond_dim :
-            Maximum bond dimension allowed, by default 2.
-        min_bond_dim:
-            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-        trunc_mode :
-            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-        threshold :
-            Threshold for simulation accuracy, by default 1e-6.
-        order :
-            Order of approximation or numerical scheme, by default 1.
-        sample_timesteps :
-            Flag indicating whether to sample at intermediate time steps, by default True.
-        tensorevol_mode :
-            Mode of tensor evolution in the simulation, by default EvolutionMode.TDVP.
-        get_state :
-            If True, output MPS is returned.
-        show_progress:
-            If True, a progress bar is printed as trajectories finish.
-        num_threads:
-            Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
-            Defaults to 1 for efficiency on small/medium bond dimensions.
-        solver : str, optional
-            The solver method to use. Must be one of "TJM" (Tensor Jump Method), "Lindblad" (exact density matrix),
-            or "MCWF" (Monte Carlo Wavefunction). Defaults to "TJM" if not specified.r is not "TJM" or "Lindblad".
+        Args:
+            observables: List of observables to measure during the simulation.
+            elapsed_time: Total simulation time.
+            dt: Time step interval.
+            num_traj: Number of simulation samples.
+            max_bond_dim: Maximum bond dimension allowed.
+            min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
+            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            threshold: Threshold for simulation accuracy.
+            order: Order of approximation or numerical scheme.
+            sample_timesteps: Whether to sample at intermediate time steps.
+            evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
+            get_state: If ``True``, output MPS is returned.
+            show_progress: If ``True``, print a progress bar as trajectories finish.
+            num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
+            solver: Solver method, one of ``"TJM"``, ``"Lindblad"``, or ``"MCWF"``.
+            multi_time_observables: For ``list[MPS]`` unitary ensemble runs only, list of ``(A, B)``
+                pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
+                case ``(O, O)``.
 
         Raises:
             ValueError: If the solver is not "TJM", "Lindblad", or "MCWF".
@@ -285,6 +256,11 @@ class AnalogSimParams:
         self.get_state = get_state
         self.show_progress = show_progress
         self.num_threads = num_threads
+        self.multi_time_observables: list[tuple[Observable, Observable]] = (
+            [] if multi_time_observables is None else list(multi_time_observables)
+        )
+        self.multi_time_observables_times: NDArray[np.float64] | None = None
+        self.multi_time_observables_results: NDArray[np.complex128] | None = None
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.

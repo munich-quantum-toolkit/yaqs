@@ -102,9 +102,12 @@ class MPS:
                 - "Neel": Alternating pattern |0101...⟩.
                 - "wall": Domain wall at given site |000111>
                 - "random": Initializes each qubit randomly.
+                - "haar-random": Initializes an entangled MPS via Haar-random isometries.
                 - "basis": Initializes a qubit in an input computational basis.
                 Default is "zeros".
             pad: Pads the state with extra zeros to increase bond dimension. Can increase numerical stability.
+                For ``state="haar-random"``, this value is interpreted as the target maximum internal
+                bond dimension χ_max. If omitted, χ_max defaults to 1.
             basis_string: String used to initialize the state in a specific computational basis.
                 This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
                 For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
@@ -132,8 +135,105 @@ class MPS:
             self.physical_dimensions = physical_dimensions
         assert len(self.physical_dimensions) == length
 
+        def _bond_caps(target_dim: int) -> list[int]:
+            """Compute feasible MPS bond dimensions for a target maximum.
+
+            Args:
+                target_dim: Target maximum internal bond dimension.
+
+            Returns:
+                List of length ``self.length + 1`` with bond dimensions
+                ``[chi_0, ..., chi_L]`` where boundaries satisfy
+                ``chi_0 = chi_L = 1``.
+
+            Raises:
+                ValueError: If ``target_dim < 1``.
+            """
+            if target_dim < 1:
+                msg = "Target bond dimension must be at least 1."
+                raise ValueError(msg)
+            caps = [0] * (self.length + 1)
+            caps[0] = 1
+            caps[self.length] = 1
+
+            # Left-to-right representability cap
+            left_cap = 1
+            for i in range(1, self.length):
+                left_cap *= self.physical_dimensions[i - 1]
+                caps[i] = left_cap
+
+            # Right-to-left representability cap
+            right_cap = 1
+            for i in range(self.length - 1, 0, -1):
+                right_cap *= self.physical_dimensions[i]
+                caps[i] = min(caps[i], right_cap)
+
+            # Apply target cap on internal bonds
+            for i in range(1, self.length):
+                caps[i] = min(caps[i], target_dim)
+
+            return caps
+
+        def _haar_random_tensor_core(
+            site: int,
+            local_dim: int,
+            target_dim: int,
+            *,
+            _bond_cache: dict[str, list[int] | None] | None = None,
+            _rng_cache: dict[str, np.random.Generator | None] | None = None,
+        ) -> NDArray[np.complex128]:
+            """Construct one Haar-random isometric MPS tensor core lazily.
+
+            Args:
+                site: Site index of the tensor core.
+                local_dim: Physical dimension at the site.
+                target_dim: Target maximum internal bond dimension.
+                _bond_cache: Optional cache for lazily computed bond dimensions.
+                _rng_cache: Optional cache for lazily initialized RNG.
+
+            Returns:
+                Tensor core with shape ``(local_dim, chi_l, chi_r)``.
+            """
+            if _rng_cache is None:
+                _rng_cache = {"rng": None}
+            if _bond_cache is None:
+                _bond_cache = {"dims": None}
+            if _bond_cache["dims"] is None:
+                _bond_cache["dims"] = _bond_caps(target_dim)
+            if _rng_cache["rng"] is None:
+                _rng_cache["rng"] = np.random.default_rng()
+
+            bond_dims = _bond_cache["dims"]
+            rng = _rng_cache["rng"]
+            assert bond_dims is not None
+            assert rng is not None
+
+            chi_l = bond_dims[site]
+            chi_r = bond_dims[site + 1]
+            assert chi_r <= local_dim * chi_l, "Invalid bond schedule for Haar-random initialization."
+
+            x_mat = rng.standard_normal((local_dim * chi_l, chi_r)) + 1j * rng.standard_normal((
+                local_dim * chi_l,
+                chi_r,
+            ))
+            q_mat, r_mat = np.linalg.qr(x_mat, mode="reduced")
+
+            # Fix arbitrary QR phases for a well-defined Haar isometry sample.
+            diag = np.diag(r_mat)
+            phases = np.ones_like(diag, dtype=np.complex128)
+            non_zero = np.abs(diag) > 0
+            phases[non_zero] = diag[non_zero] / np.abs(diag[non_zero])
+            q_mat /= phases[np.newaxis, :]
+
+            return q_mat.reshape(local_dim, chi_l, chi_r).astype(np.complex128)
+
         # Create d-level |0> state
         if not tensors:
+            haar_bond_cache: dict[str, list[int] | None] | None = None
+            haar_rng_cache: dict[str, np.random.Generator | None] | None = None
+            if state == "haar-random":
+                haar_bond_cache = {"dims": None}
+                haar_rng_cache = {"rng": None}
             for i, d in enumerate(self.physical_dimensions):
                 vector = np.zeros(d, dtype=complex)
                 if state == "zeros":
@@ -174,6 +274,17 @@ class MPS:
                     rng = np.random.default_rng()
                     vector[0] = rng.random()
                     vector[1] = 1 - vector[0]
+                elif state == "haar-random":
+                    target_dim = 1 if pad is None else pad
+                    tensor = _haar_random_tensor_core(
+                        i,
+                        d,
+                        target_dim,
+                        _bond_cache=haar_bond_cache,
+                        _rng_cache=haar_rng_cache,
+                    )
+                    self.tensors.append(tensor)
+                    continue
                 elif state == "basis":
                     assert basis_string is not None, "basis_string must be provided for 'basis' state initialization."
                     self.init_mps_from_basis(basis_string, self.physical_dimensions)
@@ -189,7 +300,7 @@ class MPS:
 
             if state == "random":
                 self.normalize()
-        if pad is not None:
+        if pad is not None and state != "haar-random":
             self.pad_bond_dimension(pad)
 
     def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
@@ -662,6 +773,120 @@ class MPS:
             temp_state.tensors[j] = b_new
 
         return self.scalar_product(temp_state, sites)
+
+    def apply_local(self, observable: Observable) -> None:
+        r"""Apply a one- or two-site local observable to this MPS in-place.
+
+        Supports nearest-neighbor two-site gates and periodic-wrap gates on
+        ``(L-1, 0)``. For ``L == 2`` with wrap ordering ``[1, 0]``, the gate is
+        interpreted in ``|q_{L-1}, q_0>`` ordering and permuted to the merged
+        nearest-neighbor basis on ``(0, 1)``.
+
+        Args:
+            observable: One-site (``2 x 2``) or two-site (``4 x 4``) observable.
+
+        Raises:
+            ValueError: If the observable is not one- or two-site local under the
+                supported adjacency conventions.
+        """
+
+        def permuted_periodic_wrap(gate4: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            """Permute wrap gate from |q_{L-1}, q_0> to merged |q_0, q_{L-1}> ordering.
+
+            Returns:
+                Permuted 4x4 gate matrix.
+            """
+            p_perm = np.zeros((4, 4), dtype=np.complex128)
+            for a in range(2):
+                for b in range(2):
+                    p_perm[2 * b + a, 2 * a + b] = 1.0
+            return p_perm.conj().T @ gate4 @ p_perm
+
+        def apply_two_site_nn_inplace(state: MPS, site_left: int, mat4: NDArray[np.complex128]) -> None:
+            """Apply 4x4 gate to adjacent sites (site_left, site_left+1) in-place via SVD."""
+            i, j = site_left, site_left + 1
+            a = state.tensors[i]
+            b = state.tensors[j]
+            d_i, left, _ = a.shape
+            d_j, _, right = b.shape
+
+            theta = np.tensordot(a, b, axes=(2, 1)).transpose(1, 0, 2, 3)
+            theta = theta.reshape(left, d_i * d_j, right)
+            theta = oe.contract("ab, cbd->cad", mat4, theta).reshape(left, d_i, d_j, right)
+
+            theta_mat = theta.reshape(left * d_i, d_j * right)
+            u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+
+            u_tensor = u_mat.reshape(left, d_i, len(s_vec)).transpose(1, 0, 2)
+            v_tensor = (np.diag(s_vec) @ v_mat).reshape(len(s_vec), d_j, right).transpose(1, 0, 2)
+
+            state.tensors[i] = u_tensor
+            state.tensors[j] = v_tensor
+
+        def bubble_swaps_forward(state: MPS) -> None:
+            """Move logical q_0 next to q_{L-1} via adjacent SWAPs."""
+            sw = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
+            for i in range(state.length - 2):
+                apply_two_site_nn_inplace(state, i, sw)
+
+        def bubble_swaps_backward(state: MPS) -> None:
+            """Undo bubble_swaps_forward."""
+            sw = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
+            for i in reversed(range(state.length - 2)):
+                apply_two_site_nn_inplace(state, i, sw)
+
+        sites = [observable.sites] if isinstance(observable.sites, int) else observable.sites
+
+        if observable.gate.matrix.shape[0] == 2:
+            site = sites[0]
+            self.tensors[site] = oe.contract("ab, bcd->acd", observable.gate.matrix, self.tensors[site])
+            return
+
+        if observable.gate.matrix.shape[0] == 4:
+            i, j = int(sites[0]), int(sites[1])
+            length = self.length
+
+            if length == 2:
+                if i == length - 1 and j == 0:
+                    mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
+                    g_merged = permuted_periodic_wrap(mat)
+                    apply_two_site_nn_inplace(self, 0, g_merged)
+                    return
+                i, j = min(i, j), max(i, j)
+            elif (i == length - 1 and j == 0) or (i == 0 and j == length - 1):
+                mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
+                bubble_swaps_forward(self)
+                g_merged = permuted_periodic_wrap(mat)
+                apply_two_site_nn_inplace(self, length - 2, g_merged)
+                bubble_swaps_backward(self)
+                return
+
+            if j != i + 1:
+                msg = "Only nearest-neighbor two-site observables are currently implemented."
+                raise ValueError(msg)
+
+            apply_two_site_nn_inplace(self, i, np.asarray(observable.gate.matrix, dtype=np.complex128))
+            return
+
+        msg = "Local observable must be one-site or nearest-neighbor two-site."
+        raise ValueError(msg)
+
+    def mixed_expectation(self, bra: MPS, observable: Observable) -> np.complex128:
+        r"""Compute the mixed matrix element :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
+
+        This applies ``observable`` to a deep copy of ``self`` (the ket) and contracts
+        with ``bra`` using :meth:`scalar_product`.
+
+        Args:
+            bra: Bra MPS (left vector).
+            observable: One-site or two-site local observable, same conventions as :meth:`apply_local`.
+
+        Returns:
+            The scalar contraction :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
+        """
+        ket_with_op = copy.deepcopy(self)
+        ket_with_op.apply_local(observable)
+        return bra.scalar_product(ket_with_op)
 
     def evaluate_observables(
         self,

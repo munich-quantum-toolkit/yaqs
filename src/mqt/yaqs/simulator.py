@@ -52,6 +52,9 @@ from concurrent.futures import (
 )
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+# Needed for unitary ensemble simulations
+import numpy as np
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -80,20 +83,19 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
-from .core.data_structures.networks import MPO
+from .core.data_structures.networks import MPO, MPS
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from concurrent.futures import Future
 
-    import numpy as np
     from numpy.typing import NDArray
 
-    from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
+from .analog.ensemble import ensemble_member_worker
 from .analog.lindblad import lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
@@ -338,6 +340,28 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
         traj_idx,
         WORKER_CTX["initial_state"],
         WORKER_CTX["noise_model"],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
+    ))
+
+
+def _unitary_ensemble_worker(
+    job_idx: int,
+) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
+    """Execute one deterministic unitary ensemble member trajectory.
+
+    Uses :data:`WORKER_CTX` keys ``initial_states``, ``sim_params``, and ``operator``.
+
+    Args:
+        job_idx: Index of this member; selects ``WORKER_CTX["initial_states"][job_idx]``.
+
+    Returns:
+        tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
+            Observable trajectories and optional ``multi_time_observables`` block for one member.
+    """
+    return ensemble_member_worker((
+        job_idx,
+        WORKER_CTX["initial_states"][job_idx],
         WORKER_CTX["sim_params"],
         WORKER_CTX["operator"],
     ))
@@ -757,12 +781,121 @@ def _run_circuit(
 
 
 # ---------------------------------------------------------------------------
+# 13) ENSEMBLE (deterministic unitary evolution of initial state list)
+# ---------------------------------------------------------------------------
+def _run_ensemble(
+    initial_states: list[MPS],
+    operator: MPO,
+    sim_params: AnalogSimParams,
+    noise_model: NoiseModel | None,
+    *,
+    parallel: bool,
+) -> None:
+    """Run deterministic unitary evolution for an ensemble of initial MPS states.
+
+    This mode is intentionally separate from stochastic-noise trajectories: users may either provide
+    a list of initial states with no noise (this mode), or a single initial state with noise
+    (standard TJM / Lindblad / MCWF paths).
+
+    Args:
+        initial_states: One MPS per ensemble member; lengths must match ``operator.length``.
+        operator: Hamiltonian as an MPO shared by all members.
+        sim_params: Analog parameters; ``num_traj`` is set to ``len(initial_states)``.
+        noise_model: Must be absent or contain only zero-strength processes.
+        parallel: If True and more than one member, uses :func:`run_backend_parallel`.
+
+    Raises:
+        ValueError: If noisy simulation is requested with a list of states, if ``solver`` is
+            unsupported in list mode, if the list is empty, or if state lengths do not match the MPO.
+    """
+    if noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes):
+        msg = (
+            "list[MPS] with noisy analog simulation is not supported yet. "
+            "Use list[MPS] with no noise for unitary ensembles, or use a single MPS for noisy simulation."
+        )
+        raise ValueError(msg)
+    # Will later add support for MCWF if needed
+    if sim_params.solver != "TJM":
+        msg = "list[MPS] analog ensemble currently supports only solver='TJM'."
+        raise ValueError(msg)
+
+    if not initial_states:
+        msg = "initial_state list must not be empty."
+        raise ValueError(msg)
+
+    if any(state.length != operator.length for state in initial_states):
+        msg = "All initial states in the list must match the MPO length."
+        raise ValueError(msg)
+    # Can be added later if needed
+    if sim_params.get_state:
+        msg = "get_state=True is not supported for list[MPS] analog ensemble mode."
+        raise ValueError(msg)
+
+    sim_params.num_traj = len(initial_states)
+
+    for observable in sim_params.sorted_observables:
+        observable.initialize(sim_params)
+
+    sim_params.multi_time_observables_times = None
+    sim_params.multi_time_observables_results = None
+    n_pairs = len(sim_params.multi_time_observables)
+    n_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
+    multi_time_matrix: NDArray[np.complex128] | None = None
+    if n_pairs > 0:
+        multi_time_matrix = np.zeros((len(initial_states), n_pairs, n_cols), dtype=np.complex128)
+        sim_params.multi_time_observables_times = (
+            sim_params.times if sim_params.sample_timesteps else np.array([sim_params.elapsed_time], dtype=np.float64)
+        )
+
+    payload: dict[str, Any] = {
+        "initial_states": initial_states,
+        "sim_params": sim_params,
+        "operator": operator,
+    }
+
+    if parallel and len(initial_states) > 1:
+        max_workers = max(1, available_cpus() - 1)
+        for i, (obs_result, multi_time_result) in run_backend_parallel(
+            worker_fn=_unitary_ensemble_worker,
+            payload=payload,
+            n_jobs=len(initial_states),
+            max_workers=max_workers,
+            show_progress=sim_params.show_progress,
+            desc="Running unitary ensemble",
+            max_retries=10,
+            retry_exceptions=(CancelledError, TimeoutError, OSError),
+        ):
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
+                assert observable.trajectories is not None, "Trajectories should have been initialized"
+                observable.trajectories[i] = obs_result[obs_index]
+            if multi_time_matrix is not None:
+                assert multi_time_result is not None
+                multi_time_matrix[i] = multi_time_result
+    else:
+        n_threads = available_cpus()
+        args = [(i, initial_states[i], sim_params, operator) for i in range(len(initial_states))]
+        iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not sim_params.show_progress)
+        for i, arg in enumerate(iterator):
+            obs_result, multi_time_result = _call_backend(ensemble_member_worker, arg, n_threads=n_threads)
+            for obs_index, observable in enumerate(sim_params.sorted_observables):
+                assert observable.trajectories is not None, "Trajectories should have been initialized"
+                observable.trajectories[i] = obs_result[obs_index]
+            if multi_time_matrix is not None:
+                assert multi_time_result is not None
+                multi_time_matrix[i] = multi_time_result
+
+    sim_params.aggregate_trajectories()
+    if multi_time_matrix is not None:
+        sim_params.multi_time_observables_results = np.mean(multi_time_matrix, axis=0)
+
+
+# ---------------------------------------------------------------------------
 # 13) ANALOG (HAMILTONIAN) SIMULATION — similar to strong sim:
 #     choose 1st/2nd-order integrator backend, run trajectories, collect
 #     observable trajectories, and aggregate.
 # ---------------------------------------------------------------------------
 def _run_analog(
-    initial_state: MPS,
+    initial_state: MPS | list[MPS],
     operator: MPO,
     sim_params: AnalogSimParams,
     noise_model: NoiseModel | None,
@@ -776,12 +909,24 @@ def _run_analog(
     (represented as an MPO). The trajectories are executed (in parallel if specified) and the results are aggregated.
 
     Args:
-        initial_state: The initial system state as an MPS.
+        initial_state: The initial system state as an MPS, or a list of MPS states
+            for deterministic unitary analog ensemble evolution.
         operator: The Hamiltonian operator represented as an MPO.
         sim_params: Simulation parameters for analog simulation, including time step and evolution order.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
     """
+    # Deterministic unitary ensemble mode
+    if isinstance(initial_state, list):
+        _run_ensemble(
+            cast("list[MPS]", initial_state),
+            operator,
+            sim_params,
+            noise_model,
+            parallel=parallel,
+        )
+        return
+
     # Choose integrator order (1 or 2) for the analog TJM backend
 
     backend: Callable[[Any], NDArray[np.float64]]
@@ -876,7 +1021,7 @@ def _run_analog(
 #     circuit or analog engines based on sim_params type.
 # ---------------------------------------------------------------------------
 def run(
-    initial_state: MPS,
+    initial_state: MPS | list[MPS],
     operator: MPO | QuantumCircuit,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     noise_model: NoiseModel | None = None,
@@ -890,7 +1035,10 @@ def run(
     the operator must be a QuantumCircuit; for Hamiltonian simulations, the operator must be an MPO.
 
     Args:
-        initial_state: The initial state of the system as an MPS. Must be B normalized.
+        initial_state:
+            The initial state as an MPS, or a list of MPS for deterministic analog unitary
+            ensemble evolution (``AnalogSimParams`` only). Lists are normalized in-place to
+            ``B`` form.
         operator: The operator representing the evolution; an MPO for analog simulations
             or a QuantumCircuit for circuit simulations.
         sim_params: Simulation parameters specifying the simulation mode and settings.
@@ -901,10 +1049,20 @@ def run(
 
     Raises:
         ValueError: If no output is specified (neither observables nor get_state is set).
+        TypeError: If the provided initial_state type is incompatible with the
+            selected simulation mode.
 
     """
     # Ensure the state is in B-normalization before any evolution
-    initial_state.normalize("B")
+    if isinstance(initial_state, list):
+        if any(not isinstance(state, MPS) for state in initial_state):
+            msg = "initial_state list must contain only MPS objects."
+            raise TypeError(msg)
+        initial_state_list = cast("list[MPS]", initial_state)
+        for state in initial_state_list:
+            state.normalize("B")
+    else:
+        initial_state.normalize("B")
 
     # Sample a concrete noise model once for this run (static disorder)
     if noise_model is not None:
@@ -912,15 +1070,23 @@ def run(
     sim_params.noise_model = noise_model
 
     # Deferred output validation
+    # Allow correlator-only analog runs
+    if isinstance(sim_params, StrongSimParams) and not sim_params.get_state and not sim_params.observables:
+        msg = "No output specified: either observables or get_state must be set."
+        raise ValueError(msg)
     if (
-        isinstance(sim_params, (StrongSimParams, AnalogSimParams))
+        isinstance(sim_params, AnalogSimParams)
         and not sim_params.get_state
         and not sim_params.observables
+        and not sim_params.multi_time_observables
     ):
         msg = "No output specified: either observables or get_state must be set."
         raise ValueError(msg)
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
+        if isinstance(initial_state, list):
+            msg = "Circuit simulation requires a single MPS initial_state."
+            raise TypeError(msg)
         assert isinstance(operator, QuantumCircuit)
         _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, AnalogSimParams):
