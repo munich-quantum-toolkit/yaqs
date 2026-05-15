@@ -16,6 +16,7 @@ from mqt.yaqs import simulator
 from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Y, Z
 
 
@@ -204,7 +205,7 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
         one_body=[(0.5 * h_x, "X")],
         bc="open",
     )
-    states = [MPS(length, state="basis", basis_string=format(i, f"0{length}b")) for i in range(k)]
+    states = [State(length, initial="basis", basis_string=format(i, f"0{length}b")) for i in range(k)]
 
     ox = Observable(X(), mid)
     oy = Observable(Y(), mid)

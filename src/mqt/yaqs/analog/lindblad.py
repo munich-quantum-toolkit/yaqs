@@ -65,23 +65,42 @@ class LindbladContext:
 
 
 def preprocess_lindblad(
-    initial_state: MPS,
+    initial_state: MPS | None,
     hamiltonian: MPO,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
+    *,
+    rho_initial: NDArray[np.complex128] | None = None,
+    num_sites: int | None = None,
 ) -> LindbladContext:
     """Pre-compute operators and optional fixed-step propagator for Lindblad evolution.
 
     Args:
-        initial_state: The initial MPS state (converted to rho = |psi><psi|).
+        initial_state: The initial MPS state (converted to rho = |psi><psi| when no
+            ``rho_initial`` is passed), or ``None`` when ``rho_initial`` is supplied.
         hamiltonian: The Hamiltonian MPO.
         noise_model: The noise model.
         sim_params: Simulation parameters.
+        rho_initial: Optional density matrix (square) or flattened vector for vec(rho).
+        num_sites: Number of lattice sites when ``initial_state`` is ``None``.
 
     Returns:
         LindbladContext ready for time evolution.
+
+    Raises:
+        ValueError: If neither ``initial_state`` nor ``rho_initial`` is provided, or if
+            ``num_sites`` is missing when only ``rho_initial`` is given.
     """
-    num_sites = initial_state.length
+    if initial_state is not None:
+        num_sites = initial_state.length
+    elif rho_initial is not None:
+        if num_sites is None:
+            msg = "num_sites is required when preprocess_lindblad is called with rho_initial only."
+            raise ValueError(msg)
+    else:
+        msg = "preprocess_lindblad requires initial_state or rho_initial."
+        raise ValueError(msg)
+
     dim = 2**num_sites
 
     if num_sites > 10:
@@ -93,9 +112,21 @@ def preprocess_lindblad(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
-    # 1. Initial state: pure |psi><psi| from MPS (flattened column-major vec(rho)).
-    psi = initial_state.to_vec()
-    rho_initial = np.outer(psi, psi.conj()).flatten()
+    # 1. Initial state as flattened vec(rho) (column-major order of the matrix).
+    if rho_initial is not None:
+        rho_arr = np.asarray(rho_initial, dtype=np.complex128)
+        rho_mat = rho_arr if rho_arr.ndim == 2 else rho_arr.reshape(dim, dim)
+        trace = np.trace(rho_mat)
+        if np.isclose(trace, 0.0):
+            msg = "rho_initial must have non-zero trace."
+            raise ValueError(msg)
+        if not np.isclose(trace, 1.0):
+            rho_mat /= trace
+        rho_vec = rho_mat.flatten()
+    else:
+        assert initial_state is not None
+        psi = initial_state.to_vec()
+        rho_vec = np.outer(psi, psi.conj()).flatten()
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     h_mat = hamiltonian.to_sparse_matrix()
@@ -135,7 +166,7 @@ def preprocess_lindblad(
         step_propagator = scipy.linalg.expm(liouvillian * sim_params.dt)
 
     return LindbladContext(
-        rho_initial=rho_initial,
+        rho_initial=rho_vec,
         dim=dim,
         h_mat=h_mat,
         jump_ops=jump_ops,
@@ -304,6 +335,17 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
     return obs_results
 
 
+def lindblad_evolve(ctx: LindbladContext) -> NDArray[np.float64]:
+    """Evolve a preprocessed Lindblad context and return observable trajectories.
+
+    Returns:
+        An array of expectation values for each observable over time.
+    """
+    if ctx.step_propagator is not None:
+        return _evolve_with_propagator(ctx)
+    return _evolve_with_ode(ctx)
+
+
 def lindblad(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
 ) -> NDArray[np.float64]:
@@ -322,7 +364,4 @@ def lindblad(
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
     ctx = preprocess_lindblad(initial_state, hamiltonian, noise_model, sim_params)
-
-    if ctx.step_propagator is not None:
-        return _evolve_with_propagator(ctx)
-    return _evolve_with_ode(ctx)
+    return lindblad_evolve(ctx)

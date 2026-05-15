@@ -11,7 +11,7 @@ This module provides unit tests for the CircuitTJM functionality.
 The tests verify that various components of the CircuitTJM implementation work correctly,
 including:
   - Grouping and processing of DAG layers for single-qubit and two-qubit gates.
-  - Application of single-qubit and two-qubit gates to a Matrix Product State (MPS).
+  - Application of single-qubit and two-qubit gates to a Matrix Product MPS (MPS).
   - Construction of generator MPOs from gate operations.
   - Extraction of local windows from MPS and MPO objects.
   - Execution of circuit-based simulations in both strong and weak simulation regimes.
@@ -35,6 +35,7 @@ from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Z
 from mqt.yaqs.digital.digital_tjm import (
@@ -436,7 +437,7 @@ def test_noisy_digital_tjm_matches_reference() -> None:
         num_traj=800,
         show_progress=False,
     )
-    state = MPS(num_qubits, state="zeros", pad=2)
+    state = State(num_qubits, initial="zeros", pad=2)
     simulator.run(state, qc, sim_params, noise_model, parallel=False)
 
     tjm_results = np.empty((num_qubits, 6), dtype=float)
@@ -506,7 +507,7 @@ def test_digital_tjm_longrange_noise() -> None:
         show_progress=False,
     )
 
-    state = MPS(num_qubits, state="zeros", pad=2)
+    state = State(num_qubits, initial="zeros", pad=2)
     simulator.run(state, qc, sim_params, noise_model, parallel=False)
 
     tjm_results = np.empty((num_qubits, num_layers), dtype=float)
@@ -538,7 +539,7 @@ def test_no_mid_measurements_results_have_two_columns() -> None:
     sim_params = StrongSimParams(
         observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True, show_progress=False
     )
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
 
     simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
 
@@ -573,7 +574,7 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
     sim_params = StrongSimParams(
         observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True, show_progress=False
     )
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
 
     simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
 
@@ -604,7 +605,7 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
     sim_params = StrongSimParams(
         observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True, show_progress=False
     )
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
 
     simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
 

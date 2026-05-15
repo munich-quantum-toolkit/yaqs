@@ -8,14 +8,14 @@
 """High-level simulator module for using YAQS.
 
 This module implements the common simulation routine for both circuit-based and Hamiltonian (analog) simulations.
-It provides functions to run simulation trajectories in parallel using an MPS representation of the quantum state.
+It provides functions to run simulation trajectories in parallel using an State representation of the quantum state.
 Depending on the type of simulation parameters provided (WeakSimParams, StrongSimParams, or AnalogSimParams),
 the simulation is dispatched to the appropriate backend:
   - For circuit simulations, a QuantumCircuit is used and processed via the _run_circuit function.
   - For analog simulations, an MPO is used to represent the Hamiltonian and processed via the _run_analog function.
 
 The module supports both strong and weak simulation schemes, including functionality for:
-  - Initializing the state (MPS) to a canonical form (B normalized).
+  - Initializing the state (State) to a canonical form (B normalized).
   - Running trajectories with noise (using a provided NoiseModel) and aggregating results.
   - Parallel execution of trajectories using a ProcessPoolExecutor with progress reporting via tqdm.
 
@@ -58,6 +58,8 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from .core.data_structures.networks import MPS
+
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
 threadpool_limits: Callable[..., Any] | None
@@ -83,8 +85,9 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
-from .core.data_structures.networks import MPO, MPS
+from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from .core.data_structures.state import State
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -96,7 +99,7 @@ if TYPE_CHECKING:
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .analog.ensemble import ensemble_member_worker
-from .analog.lindblad import lindblad
+from .analog.lindblad import lindblad, lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 
@@ -179,7 +182,7 @@ def available_cpus() -> int:
 #   - Set environment caps (no-ops if already set)
 #   - Try to cap numexpr and MKL explicitly if present
 #   - Optionally use threadpoolctl to cap vendored OpenMP pools (OpenBLAS, MKL)
-#   - Initialize the worker-global context with large objects (e.g. MPS, NoiseModel)
+#   - Initialize the worker-global context with large objects (e.g. State, NoiseModel)
 # ---------------------------------------------------------------------------
 THREAD_ENV_VARS: dict[str, str] = {
     # OpenMP default thread count (covers any library compiled with OpenMP,
@@ -213,7 +216,7 @@ def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
     strategy avoids repeated pickling of large objects for every task.
 
     Args:
-        payload: A dictionary containing large, read-only objects (e.g., MPS,
+        payload: A dictionary containing large, read-only objects (e.g., State,
             MPO, NoiseModel, SimParams) to be stored in the global worker context.
         n_threads: The maximum number of threads allowed for this worker process.
             Defaults to 1 to prevent thread oversubscription.
@@ -382,6 +385,23 @@ def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
     return mcwf((traj_idx, WORKER_CTX["ctx"]))
 
 
+def _lindblad_ctx_worker(_traj_idx: int) -> NDArray[np.float64]:
+    """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
+
+    Returns:
+        Observable expectation values over time for one trajectory.
+    """
+    return lindblad_evolve(WORKER_CTX["ctx"])
+
+
+def _materialized_mps(state: State) -> MPS | None:
+    """Return the encoded MPS if present, else ``None``."""
+    try:
+        return state.mps
+    except RuntimeError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # 8) SAFETY WRAPPER FOR SERIAL BACKEND CALLS
 # Wrap a single backend call in a context that (again) caps threadpools.
@@ -468,7 +488,7 @@ def run_backend_parallel(
     Args:
         worker_fn: The worker function to execute. It must accept a single
             integer argument (the job index) and return a result of type `TRes`.
-        payload: A dictionary of large objects (e.g., MPS, NoiseModel) to be
+        payload: A dictionary of large objects (e.g., State, NoiseModel) to be
             initialized in the global worker context. passed to `_worker_init`.
         n_jobs: The total number of jobs to execute (indices 0 to n_jobs-1).
         max_workers: The maximum number of worker processes to use.
@@ -573,8 +593,7 @@ def _run_strong_sim(
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
     """
-    # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
-    # We type as Any to keep ty happy without over-constraining element types.
+    # Typed loosely as Any because digital_tjm returns per-observable scalars.
     backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
     # If there's no noise at all, we don't need multiple trajectories
@@ -770,7 +789,7 @@ def _run_circuit(
         parallel: Flag indicating whether to run trajectories in parallel.
     """
     # Sanity check: MPS length must equal circuit qubit count
-    assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
+    assert initial_state.length == operator.num_qubits, "MPS and circuit qubit counts do not match."
     # Internal convention expects qubit order reversed (if applicable)
     operator = copy.deepcopy(operator.reverse_bits())
 
@@ -810,13 +829,13 @@ def _run_ensemble(
     """
     if noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes):
         msg = (
-            "list[MPS] with noisy analog simulation is not supported yet. "
-            "Use list[MPS] with no noise for unitary ensembles, or use a single MPS for noisy simulation."
+            "list[State] with noisy analog simulation is not supported yet. "
+            "Use list[State] with no noise for unitary ensembles, or use a single State for noisy simulation."
         )
         raise ValueError(msg)
     # Will later add support for vector representation if needed
     if sim_params.representation != "mps":
-        msg = "list[MPS] analog ensemble currently supports only representation='mps'."
+        msg = "list[State] analog ensemble currently supports only representation='mps'."
         raise ValueError(msg)
 
     if not initial_states:
@@ -828,7 +847,7 @@ def _run_ensemble(
         raise ValueError(msg)
     # Can be added later if needed
     if sim_params.get_state:
-        msg = "get_state=True is not supported for list[MPS] analog ensemble mode."
+        msg = "get_state=True is not supported for list[State] analog ensemble mode."
         raise ValueError(msg)
 
     sim_params.num_traj = len(initial_states)
@@ -895,7 +914,7 @@ def _run_ensemble(
 #     observable trajectories, and aggregate.
 # ---------------------------------------------------------------------------
 def _run_analog(
-    initial_state: MPS | list[MPS],
+    initial_state: State | list[State],
     operator: MPO,
     sim_params: AnalogSimParams,
     noise_model: NoiseModel | None,
@@ -909,7 +928,7 @@ def _run_analog(
     (represented as an MPO). The trajectories are executed (in parallel if specified) and the results are aggregated.
 
     Args:
-        initial_state: The initial system state as an MPS, or a list of MPS states
+        initial_state: The initial system state as an State, or a list of State states
             for deterministic unitary analog ensemble evolution.
         operator: The Hamiltonian operator represented as an MPO.
         sim_params: Simulation parameters for analog simulation, including time step and evolution order.
@@ -918,8 +937,11 @@ def _run_analog(
     """
     # Deterministic unitary ensemble mode
     if isinstance(initial_state, list):
+        initial_state_list = cast("list[State]", initial_state)
+        for spec in initial_state_list:
+            spec.encode(sim_params.representation)
         _run_ensemble(
-            cast("list[MPS]", initial_state),
+            [spec.mps for spec in initial_state_list],
             operator,
             sim_params,
             noise_model,
@@ -927,11 +949,18 @@ def _run_analog(
         )
         return
 
+    initial_state.encode(sim_params.representation)
+    mps = _materialized_mps(initial_state)
+
     # Choose integrator order (1 or 2) for the analog TJM backend
 
     backend: Callable[[Any], NDArray[np.float64]]
+    use_lindblad_ctx = False
     if sim_params.representation == "density_matrix":
         backend = lindblad
+        if mps is None:
+            backend = lindblad_evolve
+            use_lindblad_ctx = True
     elif sim_params.representation == "vector":
         backend = mcwf
     elif sim_params.order == 1:
@@ -959,13 +988,33 @@ def _run_analog(
 
     if sim_params.representation == "vector":
         # Optimization: Pre-compute dense operators once
-        ctx = preprocess_mcwf(initial_state, operator, noise_model, sim_params)
+        ctx = preprocess_mcwf(
+            mps,
+            operator,
+            noise_model,
+            sim_params,
+            psi_initial=None if mps is not None else initial_state.vector,
+            num_sites=initial_state.length if mps is None else None,
+        )
         payload = {"ctx": ctx}
         worker_fn = _mcwf_worker
+    elif use_lindblad_ctx:
+        assert mps is None
+        lindblad_ctx = preprocess_lindblad(
+            None,
+            operator,
+            noise_model,
+            sim_params,
+            rho_initial=initial_state.density_matrix,
+            num_sites=initial_state.length,
+        )
+        payload = {"ctx": lindblad_ctx}
+        worker_fn = _lindblad_ctx_worker
     else:
-        # Standard mps / density_matrix arguments
+        assert mps is not None, "MPS representation requires a materialized MPS."
+        # Standard mps / density_matrix (MPS-initialized) arguments
         payload = {
-            "initial_state": initial_state,
+            "initial_state": mps,
             "noise_model": noise_model,
             "sim_params": sim_params,
             "operator": operator,
@@ -1000,8 +1049,10 @@ def _run_analog(
             # For vector serial, we still use the pre-computed ctx
             # ctx is already in local scope from above if block
             args = [(i, ctx) for i in range(sim_params.num_traj)]
+        elif use_lindblad_ctx:
+            args = [lindblad_ctx for _ in range(sim_params.num_traj)]
         else:
-            args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+            args = [(i, mps, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
 
         # Use tqdm if show_progress is True
         iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
@@ -1017,11 +1068,11 @@ def _run_analog(
 
 
 # ---------------------------------------------------------------------------
-# 14) PUBLIC ENTRY POINT — normalize MPS to B-canonical, then dispatch to
-#     circuit or analog engines based on sim_params type.
+# 14) PUBLIC ENTRY POINT — dispatch to circuit or analog engines based on
+#     sim_params type (analog paths encode inside _run_analog).
 # ---------------------------------------------------------------------------
 def run(
-    initial_state: MPS | list[MPS],
+    initial_state: State | list[State],
     operator: MPO | QuantumCircuit,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     noise_model: NoiseModel | None = None,
@@ -1030,15 +1081,17 @@ def run(
 ) -> None:
     """Execute the common simulation routine for both circuit and Hamiltonian simulations.
 
-    This function first normalizes the initial state (MPS) to B normalization, then dispatches the simulation
-    to the appropriate backend based on the type of simulation parameters provided. For circuit-based simulations,
-    the operator must be a QuantumCircuit; for Hamiltonian simulations, the operator must be an MPO.
+    This function dispatches the simulation to the appropriate backend based on the type of
+    simulation parameters provided. For circuit-based simulations, the initial state is
+    B-normalized MPS for circuits; for analog simulations,
+    :meth:`~mqt.yaqs.core.data_structures.state.State.encode` is called from
+    ``sim_params.representation`` inside :func:`_run_analog`.
 
     Args:
         initial_state:
-            The initial state as an MPS, or a list of MPS for deterministic analog unitary
-            ensemble evolution (``AnalogSimParams`` only). Lists are normalized in-place to
-            ``B`` form.
+            The initial state as a :class:`~mqt.yaqs.core.data_structures.state.State`, or a
+            list of states for deterministic analog unitary ensemble evolution
+            (``AnalogSimParams`` only).
         operator: The operator representing the evolution; an MPO for analog simulations
             or a QuantumCircuit for circuit simulations.
         sim_params: Simulation parameters specifying the simulation mode and settings.
@@ -1053,16 +1106,9 @@ def run(
             selected simulation mode.
 
     """
-    # Ensure the state is in B-normalization before any evolution
-    if isinstance(initial_state, list):
-        if any(not isinstance(state, MPS) for state in initial_state):
-            msg = "initial_state list must contain only MPS objects."
-            raise TypeError(msg)
-        initial_state_list = cast("list[MPS]", initial_state)
-        for state in initial_state_list:
-            state.normalize("B")
-    else:
-        initial_state.normalize("B")
+    if isinstance(initial_state, list) and any(not isinstance(state, State) for state in initial_state):
+        msg = "initial_state list must contain only State objects."
+        raise TypeError(msg)
 
     # Sample a concrete noise model once for this run (static disorder)
     if noise_model is not None:
@@ -1085,10 +1131,12 @@ def run(
 
     if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         if isinstance(initial_state, list):
-            msg = "Circuit simulation requires a single MPS initial_state."
+            msg = "Circuit simulation requires a single State initial_state."
             raise TypeError(msg)
         assert isinstance(operator, QuantumCircuit)
-        _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
+        assert isinstance(initial_state, State)
+        initial_state.encode("mps")
+        _run_circuit(initial_state.mps, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, AnalogSimParams):
         assert isinstance(operator, MPO)
         _run_analog(initial_state, operator, sim_params, noise_model, parallel=parallel)

@@ -67,10 +67,13 @@ class MCWFContext:
 
 
 def preprocess_mcwf(
-    initial_state: MPS,
+    initial_state: MPS | None,
     hamiltonian: MPO,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
+    *,
+    psi_initial: NDArray[np.complex128] | None = None,
+    num_sites: int | None = None,
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
@@ -78,15 +81,30 @@ def preprocess_mcwf(
     ``preprocess_mcwf`` in ``simulator.py``).
 
     Args:
-        initial_state: The initial MPS state.
+        initial_state: The initial MPS state, or ``None`` when ``psi_initial`` is supplied.
         hamiltonian: The Hamiltonian MPO.
         noise_model: The noise model.
         sim_params: Simulation parameters.
+        psi_initial: Optional pre-encoded dense state vector (unit norm applied here).
+        num_sites: Number of lattice sites when ``initial_state`` is ``None``.
 
     Returns:
         MCWFContext containing dense arrays ready for trajectory simulation.
+
+    Raises:
+        ValueError: If neither ``initial_state`` nor ``psi_initial`` is provided, or if
+            ``num_sites`` is missing when only ``psi_initial`` is given.
     """
-    num_sites = initial_state.length
+    if initial_state is not None:
+        num_sites = initial_state.length
+    elif psi_initial is not None:
+        if num_sites is None:
+            msg = "num_sites is required when preprocess_mcwf is called with psi_initial only."
+            raise ValueError(msg)
+    else:
+        msg = "preprocess_mcwf requires initial_state or psi_initial."
+        raise ValueError(msg)
+
     dim = 2**num_sites
 
     if num_sites > 14:
@@ -97,8 +115,12 @@ def preprocess_mcwf(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
-    # 1. Initial state |psi> as dense vector (MPS is only the user-facing specification).
-    psi = initial_state.to_vec()
+    # 1. Initial state |psi> as dense vector.
+    if psi_initial is not None:
+        psi = np.asarray(psi_initial, dtype=np.complex128).reshape(-1)
+    else:
+        assert initial_state is not None
+        psi = initial_state.to_vec()
     psi /= np.linalg.norm(psi)
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.

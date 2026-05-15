@@ -7,7 +7,7 @@
 
 """Tests for network classes.
 
-This module provides unit tests for the Matrix Product State (MPS) class and its associated methods.
+This module provides unit tests for the Matrix Product MPS (MPS) class and its associated methods.
 It verifies correct initialization, custom tensor assignment, bond dimension computation, network flipping,
 orthogonality center shifting, normalization, observable measurement, and overall validity of MPS objects.
 These tests ensure that the MPS class functions as expected in various simulation scenarios.
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, Id, X, Z
 
 # ---- single-qubit ops ----
@@ -1075,7 +1076,7 @@ def test_inplace_measure() -> None:
     psi.tensors[1] = (np.diag(s) @ v).reshape(2, 2, 1)
 
     psi.normalize(form="B")
-    # State is now (|00> + |11>) / sqrt(2)
+    # MPS is now (|00> + |11>) / sqrt(2)
     # Measure site 0 in Z
     outcome = psi.measure(site=0, basis="Z")
     assert outcome in {0, 1}
@@ -1241,7 +1242,7 @@ def test_convert_to_vector_fidelity() -> None:
     circ.cx(0, 1)
     state_vector = np.array([0.70710678, 0, 0, 0.70710678, 0, 0, 0, 0])
     # Define the initial state
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
     sim_params = StrongSimParams(
@@ -1267,7 +1268,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     state_vector = np.array([0.70710678, 0, 0, 0, 0, 0.70710678, 0, 0])
 
     # Define the initial state
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
 
     # Define the simulation parameters
     sim_params = StrongSimParams(

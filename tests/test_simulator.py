@@ -36,6 +36,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     StrongSimParams,
     WeakSimParams,
 )
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.simulator import _get_parallel_context, worker_init  # noqa: PLC2701
@@ -122,7 +123,7 @@ def test_analog_simulation() -> None:
     correctly initialized and that the measurement results are approximately as expected.
     """
     length = 5
-    initial_state = MPS(length, state="zeros")
+    initial_state = State(length, initial="zeros")
 
     H = MPO.ising(length, J=1, g=0.5)
 
@@ -175,7 +176,7 @@ def test_analog_simulation_parallel_off() -> None:
     Additionally, this tests that single-site observables can be initialized with a list of a single int for usability.
     """
     length = 5
-    initial_state = MPS(length, state="zeros")
+    initial_state = State(length, initial="zeros")
 
     H = MPO.ising(length, J=1, g=0.5)
     sim_params = AnalogSimParams(
@@ -224,7 +225,7 @@ def test_analog_simulation_get_state() -> None:
     """
     for order in [1, 2]:
         length = 2
-        initial_state = MPS(length, state="zeros")
+        initial_state = State(length, initial="zeros")
 
         H = MPO.ising(length, J=1, g=0.5)
 
@@ -265,7 +266,7 @@ def test_strong_simulation() -> None:
     are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
     """
     num_qubits = 5
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
@@ -312,7 +313,7 @@ def test_strong_simulation_no_noise() -> None:
     circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circ.measure_all()
 
-    state = MPS(length=num_qubits)
+    state = State(length=num_qubits)
 
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], max_bond_dim=16, get_state=True, show_progress=False)
 
@@ -335,7 +336,7 @@ def test_strong_simulation_parallel_off() -> None:
     are initialized correctly. Expected measurement outcomes are compared approximately to pre-defined values.
     """
     num_qubits = 5
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
@@ -383,7 +384,7 @@ def test_weak_simulation_noise() -> None:
     and that the total number of shots recorded in sim_params.results equals the expected number.
     """
     num_qubits = 5
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
@@ -412,7 +413,7 @@ def test_weak_simulation_no_noise() -> None:
     are consistent with this behavior.
     """
     num_qubits = 5
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
@@ -440,7 +441,7 @@ def test_weak_simulation_get_state() -> None:
     This test constructs a 2-site Ising circuit and compares the output statevector with known values from qiskit.
     """
     num_qubits = 2
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
@@ -464,7 +465,7 @@ def test_weak_simulation_get_state_noise() -> None:
     return the final state. Since the noisy simulation cannot return the statevector, an exception should be raised.
     """
     num_qubits = 2
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
@@ -487,7 +488,7 @@ def test_mismatch() -> None:
     and verifies that an AssertionError with the appropriate message is raised.
     """
     num_qubits = 5
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     circuit = create_ising_circuit(L=num_qubits - 1, J=1, g=0.5, dt=0.1, timesteps=10)
     circuit.measure_all()
@@ -496,7 +497,7 @@ def test_mismatch() -> None:
 
     noise_model = None
 
-    with pytest.raises(AssertionError, match=r"State and circuit qubit counts do not match."):
+    with pytest.raises(AssertionError, match=r"MPS and circuit qubit counts do not match."):
         simulator.run(initial_state, circuit, sim_params, noise_model)
 
 
@@ -511,7 +512,7 @@ def test_two_site_correlator_left_boundary() -> None:
     g = 0.1
     H_0 = MPO.ising(L, J, g)
 
-    state = MPS(L, state="zeros")
+    state = State(L, initial="zeros")
 
     sim_params = AnalogSimParams(
         observables=[Observable(XX(), [0, 1]), Observable(YY(), [0, 1]), Observable(ZZ(), [0, 1])],
@@ -620,7 +621,7 @@ def test_two_site_correlator_center() -> None:
     g = 0.1
     H_0 = MPO.ising(L, J, g)
 
-    state = MPS(L, state="zeros")
+    state = State(L, initial="zeros")
 
     sim_params = AnalogSimParams(
         observables=[
@@ -733,7 +734,7 @@ def test_two_site_correlator_right_boundary() -> None:
     g = 0.1
     H_0 = MPO.ising(L, J, g)
 
-    state = MPS(L, state="zeros")
+    state = State(L, initial="zeros")
 
     sim_params = AnalogSimParams(
         observables=[
@@ -844,7 +845,7 @@ def test_two_site_correlator_center_circuit() -> None:
     J = 1
     g = 0.1
     circ = create_ising_circuit(L=L, J=J, g=g, dt=0.1, timesteps=20)
-    state = MPS(L, state="zeros")
+    state = State(L, initial="zeros")
 
     sim_params = StrongSimParams(
         observables=[
@@ -898,7 +899,9 @@ def test_transmon_simulation() -> None:
         coupling=g,
     )
 
-    state = MPS(length, state="basis", basis_string="100", physical_dimensions=[qubit_dim, resonator_dim, qubit_dim])
+    state = State(
+        length, initial="basis", basis_string="100", physical_dimensions=[qubit_dim, resonator_dim, qubit_dim]
+    )
     T_swap = np.pi / (np.sqrt(2) * g)
 
     sim_params = AnalogSimParams(
@@ -947,8 +950,7 @@ def test_scheduled_jump_single_site() -> None:
     jump_time = 0.5
 
     # Initial state |0>
-    state = MPS(L, state="zeros")
-    state.normalize("B")
+    state = State(L, initial="zeros")
 
     # Scheduled X jump at t=0.5
     scheduled_jumps = [{"time": jump_time, "sites": [0], "name": "x"}]
@@ -984,8 +986,7 @@ def test_scheduled_jump_two_site() -> None:
     jump_time = 0.2
 
     # Initial state |00>
-    state = MPS(L, state="zeros")
-    state.normalize("B")
+    state = State(L, initial="zeros")
 
     # Scheduled XX jump at t=0.2
     scheduled_jumps = [{"time": jump_time, "sites": [0, 1], "name": "crosstalk_xx"}]
@@ -1010,8 +1011,7 @@ def test_scheduled_jump_two_site() -> None:
     assert results is not None
 
     # Reset state for second run to verify dynamics again with a different observable
-    state = MPS(L, state="zeros")
-    state.normalize("B")
+    state = State(L, initial="zeros")
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), sites=0)],
@@ -1029,10 +1029,50 @@ def test_scheduled_jump_two_site() -> None:
     np.testing.assert_allclose(results[2:], -1.0, atol=1e-10)
 
 
+def test_run_vector_preset_without_materialized_mps() -> None:
+    """Analog run with vector representation uses encoded dense state, not MPS."""
+    length = 3
+    state = State(length, initial="zeros")
+    state.encode("vector")
+    with pytest.raises(RuntimeError, match="MPS not materialized"):
+        _ = state.mps
+    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    obs = Observable("z", sites=[0])
+    params = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=0.1,
+        dt=0.1,
+        representation="vector",
+        show_progress=False,
+    )
+    simulator.run(state, hamiltonian, params, None)
+    assert obs.results is not None
+
+
+def test_run_density_matrix_preset_without_materialized_mps() -> None:
+    """Analog run with density_matrix representation uses encoded rho, not MPS."""
+    length = 3
+    state = State(length, initial="zeros")
+    state.encode("density_matrix")
+    with pytest.raises(RuntimeError, match="MPS not materialized"):
+        _ = state.mps
+    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    obs = Observable("z", sites=[0])
+    params = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=0.1,
+        dt=0.1,
+        representation="density_matrix",
+        show_progress=False,
+    )
+    simulator.run(state, hamiltonian, params, None)
+    assert obs.results is not None
+
+
 def test_no_output_error() -> None:
     """Verify that simulator.run raises AssertionError when no output is specified."""
     num_qubits = 2
-    state = MPS(num_qubits, state="zeros")
+    state = State(num_qubits, initial="zeros")
     circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     H = MPO.ising(num_qubits, J=1, g=0.5)
 

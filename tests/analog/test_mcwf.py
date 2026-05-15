@@ -13,6 +13,7 @@ from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
 
 
@@ -22,7 +23,7 @@ def test_mcwf_amplitude_damping() -> None:
     Checks if the average of many trajectories matches the analytical solution.
     """
     n_sites = 1
-    initial_state = MPS(n_sites, state="ones")  # |1>
+    initial_state = State(n_sites, initial="ones")  # |1>
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)
     for i in range(len(hamiltonian.tensors)):
@@ -69,7 +70,7 @@ def test_mcwf_unitary_rabi() -> None:
     Should be deterministic and match exact solution tightly.
     """
     n_sites = 1
-    initial_state = MPS(n_sites, state="zeros")  # |0>
+    initial_state = State(n_sites, initial="zeros")  # |0>
 
     hamiltonian = MPO.ising(n_sites, J=0.0, g=-1.0)
 
@@ -100,7 +101,7 @@ def test_mcwf_unitary_rabi() -> None:
 def test_mcwf_dephasing() -> None:
     """Test 2-qubit system with local dephasing on one qubit."""
     n_sites = 2
-    initial_state = MPS(n_sites, state="x+")  # |++>
+    initial_state = State(n_sites, initial="x+")  # |++>
 
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)

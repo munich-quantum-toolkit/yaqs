@@ -264,7 +264,8 @@ def test_two_site_tdvp() -> None:
 
     This test initializes an Ising MPO and an MPS of length 5, sets up AnalogSimParams,
     and runs two_site_TDVP. It checks that the MPS retains the correct number of tensors,
-    that all tensors remain numpy arrays, and that the MPS is in canonical form with the orthogonality center at site 0.
+    that all tensors remain numpy arrays, and that the MPS is in canonical form with
+    the orthogonality center at site 0.
     """
     L = 5
     J = 1

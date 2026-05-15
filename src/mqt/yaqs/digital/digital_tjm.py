@@ -217,10 +217,10 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
     """Apply two-qubit gate.
 
-    Applies a two-qubit gate to the given Matrix Product State (MPS) with dynamic TDVP.
+    Applies a two-qubit gate to the given Matrix Product MPS (MPS) with dynamic TDVP.
 
     Args:
-        state (MPS): The Matrix Product State to which the gate will be applied.
+        state (MPS): The Matrix Product MPS to which the gate will be applied.
         node (DAGOpNode): The node representing the two-qubit gate in the Directed Acyclic Graph (DAG).
         sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior
         of the algorithm.
@@ -252,7 +252,7 @@ def digital_tjm(
     Args:
         args: A tuple containing the following elements:
             - An index or identifier, primarily for parallelization
-            - The initial state of the system represented as a Matrix Product State.
+            - The initial state of the system represented as a Matrix Product MPS.
             - The noise model to be applied during the simulation, or None if no noise is to be applied.
             - Parameters for the simulation, either for strong or weak simulation.
             - The quantum circuit to be simulated.

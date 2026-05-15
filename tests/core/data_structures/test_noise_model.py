@@ -21,9 +21,10 @@ from typing import Any
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 from mqt.yaqs.simulator import run
@@ -208,7 +209,7 @@ def test_noise_distribution_integration() -> None:
     noise_model = NoiseModel(processes)
 
     # Initial state
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     # Simulation parameters
     sim_params = AnalogSimParams(

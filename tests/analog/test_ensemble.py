@@ -17,6 +17,7 @@ from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import Z
 
 
@@ -24,7 +25,7 @@ def test_unitary_ensemble_observable_average() -> None:
     """Aggregate observables over ensemble members in list-of-state analog runs."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.6, g=0.2)
-    initial_states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
 
     observable = Observable(Z(), 0)
     sim_params = AnalogSimParams(
@@ -47,7 +48,7 @@ def test_unitary_ensemble_autocorrelator_outputs_mean_matrix_row() -> None:
     """Autocorrelation (O,O) pair yields a ``(1, n_times)`` ensemble-mean result."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.5, g=0.1)
-    initial_states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
     correlator_op = Observable(Z(), 0)
 
     sim_params = AnalogSimParams(
@@ -72,7 +73,7 @@ def test_unitary_ensemble_multi_time_observables_mean_matrix() -> None:
     """Aggregate multi_time_observables pairs to an ensemble-mean matrix."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
-    initial_states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
     z0 = Observable(Z(), 0)
     z1 = Observable(Z(), 1)
     pairs: list[tuple[Observable, Observable]] = [(z0, z1), (z1, z0)]
@@ -98,7 +99,7 @@ def test_unitary_ensemble_t0_only_records_when_not_sampling_timesteps() -> None:
     """When only ``t=0`` exists and sampling is off, observable/correlators are still recorded."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
-    initial_states = [MPS(length, state="zeros")]
+    initial_states = [State(length, initial="zeros")]
     z0 = Observable(Z(), 0)
     z1 = Observable(Z(), 1)
 
@@ -127,7 +128,7 @@ def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> N
     """Reusing ``sim_params`` should clear prior multi_time_observables outputs when feature is off."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
-    initial_states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
     z0 = Observable(Z(), 0)
     z1 = Observable(Z(), 1)
 
@@ -164,7 +165,7 @@ def test_list_mps_analog_ensemble_rejects_non_mps_representation() -> None:
     """List-of-MPS analog ensemble only supports the mps representation path."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
-    states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    states = [State(length, initial="zeros"), State(length, initial="ones")]
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         elapsed_time=0.1,
@@ -172,7 +173,9 @@ def test_list_mps_analog_ensemble_rejects_non_mps_representation() -> None:
         show_progress=False,
         representation="density_matrix",
     )
-    with pytest.raises(ValueError, match=r"list\[MPS\] analog ensemble currently supports only representation='mps'\."):
+    with pytest.raises(
+        ValueError, match=r"list\[State\] analog ensemble currently supports only representation='mps'\."
+    ):
         simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
 
 
@@ -193,7 +196,7 @@ def test_list_mps_analog_ensemble_rejects_empty_state_list() -> None:
 def test_list_mps_analog_ensemble_rejects_state_length_mismatch() -> None:
     """All ensemble MPS chain lengths must match the Hamiltonian MPO length."""
     hamiltonian = MPO.ising(2, J=0.2, g=0.1)
-    states = [MPS(3, state="zeros"), MPS(3, state="ones")]
+    states = [State(3, initial="zeros"), State(3, initial="ones")]
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         elapsed_time=0.1,
@@ -208,7 +211,7 @@ def test_list_mps_analog_ensemble_rejects_get_state() -> None:
     """get_state is not supported together with list[MPS] analog ensemble mode."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
-    states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    states = [State(length, initial="zeros"), State(length, initial="ones")]
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         elapsed_time=0.1,
@@ -216,7 +219,7 @@ def test_list_mps_analog_ensemble_rejects_get_state() -> None:
         show_progress=False,
         get_state=True,
     )
-    with pytest.raises(ValueError, match="get_state=True is not supported for list\\[MPS\\] analog ensemble mode"):
+    with pytest.raises(ValueError, match="get_state=True is not supported for list\\[State\\] analog ensemble mode"):
         simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
 
 
@@ -224,7 +227,7 @@ def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
     """parallel=True with multiple members exercises the process-pool ensemble worker."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
-    states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    states = [State(length, initial="zeros"), State(length, initial="ones")]
     z0 = Observable(Z(), 0)
     z1 = Observable(Z(), 1)
     sim_params = AnalogSimParams(
@@ -286,7 +289,7 @@ def test_list_initial_states_with_noise_raises() -> None:
     """Raise an explicit error for noisy analog runs with list[MPS]."""
     length = 2
     hamiltonian = MPO.ising(length, J=1.0, g=0.2)
-    initial_states = [MPS(length, state="zeros"), MPS(length, state="ones")]
+    initial_states = [State(length, initial="zeros"), State(length, initial="ones")]
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.1}])
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
@@ -298,8 +301,8 @@ def test_list_initial_states_with_noise_raises() -> None:
     with pytest.raises(
         ValueError,
         match=(
-            r"(?s)list\[MPS\] with noisy analog simulation is not supported yet\."
-            r".*list\[MPS\] with no noise.*single MPS for noisy simulation"
+            r"(?s)list\[State\] with noisy analog simulation is not supported yet\."
+            r".*list\[State\] with no noise.*single State for noisy simulation"
         ),
     ):
         simulator.run(initial_states, hamiltonian, sim_params, noise_model=noise_model, parallel=False)

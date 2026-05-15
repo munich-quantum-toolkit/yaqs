@@ -186,7 +186,7 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
     """
     num_sites = mpo.length
     if num_sites != state.length:
-        msg = "State and Hamiltonian must have the same number of sites"
+        msg = "MPS and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):

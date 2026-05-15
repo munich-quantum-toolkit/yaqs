@@ -13,13 +13,14 @@ from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, prepr
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
 
 
 def test_lindblad_amplitude_damping() -> None:
     """Test single qubit amplitude damping with exact Lindblad solver."""
     n_sites = 1
-    initial_state = MPS(n_sites, state="ones")  # |1>
+    initial_state = State(n_sites, initial="ones")  # |1>
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)
     for i in range(len(hamiltonian.tensors)):
@@ -58,7 +59,7 @@ def test_lindblad_amplitude_damping() -> None:
 def test_lindblad_unitary_rabi() -> None:
     """Test single qubit unitary evolution (Rabi oscillation) with no noise."""
     n_sites = 1
-    initial_state = MPS(n_sites, state="zeros")  # |0>
+    initial_state = State(n_sites, initial="zeros")  # |0>
 
     hamiltonian = MPO.ising(n_sites, J=0.0, g=-1.0)
     # MPO.ising returns H = -J ZZ - g X.
@@ -84,7 +85,7 @@ def test_lindblad_unitary_rabi() -> None:
 def test_lindblad_dephasing() -> None:
     """Test 2-qubit system with local dephasing on one qubit."""
     n_sites = 2
-    initial_state = MPS(n_sites, state="x+")  # |++> = (|0>+|1>)(|0>+|1>)/2
+    initial_state = State(n_sites, initial="x+")  # |++> = (|0>+|1>)(|0>+|1>)/2
 
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)
@@ -127,7 +128,7 @@ def test_lindblad_dephasing_both_qubits() -> None:
     multiple jump operators are present. Both qubits should decay identically.
     """
     n_sites = 2
-    initial_state = MPS(n_sites, state="x+")  # |++> = (|0>+|1>)(|0>+|1>)/2
+    initial_state = State(n_sites, initial="x+")  # |++> = (|0>+|1>)(|0>+|1>)/2
 
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)
@@ -255,7 +256,7 @@ def test_lindblad_noisy_small_system_has_propagator() -> None:
 def test_noiseless_mps_matches_density_matrix() -> None:
     """Noiseless Hamiltonian evolution agrees between mps and density_matrix representations."""
     n_sites = 3
-    psi = MPS(n_sites, state="zeros")
+    psi = State(n_sites, initial="zeros")
     h = MPO.ising(n_sites, J=1.0, g=0.5)
     obs = Observable("z", sites=[0])
     t_max = 0.5

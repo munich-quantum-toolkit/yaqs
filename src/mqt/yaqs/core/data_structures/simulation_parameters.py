@@ -151,7 +151,7 @@ class AnalogSimParams:
         times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
-        representation: State representation used during analog simulation
+        representation: MPS representation used during analog simulation
             (``"mps"``, ``"vector"``, or ``"density_matrix"``).
         max_bond_dim: Maximum allowed bond dimension.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
@@ -208,7 +208,7 @@ class AnalogSimParams:
             get_state: If ``True``, output MPS is returned.
             show_progress: If ``True``, print a progress bar as trajectories finish.
             num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
-            representation: State representation for the run: ``"mps"`` (tensor network),
+            representation: MPS representation for the run: ``"mps"`` (tensor network),
                 ``"vector"`` (dense state vector), or ``"density_matrix"`` (exact master equation).
                 With ``noise_model=None`` or zero strengths, ``"density_matrix"`` evolves the
                 density matrix unitarily; ``"mps"`` and ``"vector"`` reduce to Hamiltonian evolution.
