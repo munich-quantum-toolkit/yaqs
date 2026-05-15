@@ -365,6 +365,9 @@ def _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals: int, t: float, u: float)
     for site in range(num_sites):
         up = 2 * site
         down = 2 * site + 1
+        h += (u / 4) * term([(up, _I2), (down, _I2)])
+        h += -(u / 4) * term([(up, _Z2)])
+        h += -(u / 4) * term([(down, _Z2)])
         h += (u / 4) * term([(up, _Z2), (down, _Z2)])
 
     for site in range(num_sites - 1):
@@ -544,13 +547,41 @@ def test_fermi_hubbard_1d_jordan_wigner_correct_operator() -> None:
     assert mpo.length == num_orbitals
     assert mpo.physical_dimension == 2
     assert len(mpo.tensors) == num_orbitals
-    assert all(tensor.shape[2] <= 7 and tensor.shape[3] <= 7 for tensor in mpo.tensors)
+    assert all(tensor.shape[2] <= 16 and tensor.shape[3] <= 16 for tensor in mpo.tensors)
 
     h_dense = _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals, t, u)
     np.testing.assert_allclose(mpo.to_matrix(), h_dense, atol=1e-10)
 
     with pytest.raises(ValueError, match=re.escape("length must be an even integer ≥ 2 (ordering: 1↑,1↓,2↑,2↓,...).")):
         MPO.fermi_hubbard_1d(length=5, t=t, u=u, jordan_wigner=True)
+
+
+def test_fermi_hubbard_1d_length_one() -> None:
+    """Verify a single fermionic site MPO matches the dense reference."""
+    length = 1
+    u, t = 0.5, 1.0
+
+    mpo = MPO.fermi_hubbard_1d(length, t, u)
+
+    assert mpo.length == length
+    assert mpo.physical_dimension == 4
+    assert mpo.tensors[0].shape == (4, 4, 1, 1)
+
+    h_dense = _fermi_hubbard_1d_fermionic_dense(length, t, u)
+    np.testing.assert_allclose(mpo.to_matrix(), h_dense, atol=1e-10)
+
+
+def test_fermi_hubbard_1d_cross_representation() -> None:
+    """Onsite terms agree between fermionic and JW MPOs under the site basis map.
+
+      Hopping terms differ between representations (composite fermionic sites vs JW
+    qubit chain), so this test uses ``t=0`` to compare only the interaction part.
+    """
+    u = 0.5
+    for length in (1, 2, 3):
+        h_ferm = MPO.fermi_hubbard_1d(length, t=0.0, u=u).to_matrix()
+        h_jw = MPO.fermi_hubbard_1d(2 * length, t=0.0, u=u, jordan_wigner=True).to_matrix()
+        np.testing.assert_allclose(h_ferm, h_jw, atol=1e-10)
 
 
 def test_identity() -> None:

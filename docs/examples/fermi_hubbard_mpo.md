@@ -14,7 +14,11 @@ This example shows how to build a 1D Fermi-Hubbard Hamiltonian as an MPO using {
 YAQS supports two representations:
 
 - **Fermionic sites** (default): one site with local dimension 4 per physical lattice site.
-- **Jordan-Wigner Pauli chain** (`jordan_wigner=True`): qubits in the order 1↑, 1↓, 2↑, 2↓, … with local dimension 2.
+  Ladder operators act on a composite ↑/↓ basis per site; this is not a Jordan–Wigner qubit chain
+  across sites, but matches the standard tensor-product embedding of site Fock spaces.
+- **Jordan-Wigner Pauli chain** (`jordan_wigner=True`): qubits in the order 1↑, 1↓, 2↑, 2↓, … with
+  local dimension 2 and full JW signs between spin orbitals. Use this mode for Pauli-string /
+  qubit simulators.
 
 The Hamiltonian (open boundaries, no chemical potential) is
 

@@ -1533,13 +1533,23 @@ class MPO:
 
         .. math::
 
-            H = \\frac{U}{4} \\sum_i Z_{i,\\uparrow} Z_{i,\\downarrow}
+            U n_{i,\\uparrow} n_{i,\\downarrow}
+            = \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
+            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
+
+            H = \\sum_i \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
+            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
             - \\frac{t}{2} \\sum_i \\left( X_{\\uparrow,i} Z_{\\downarrow,i} X_{\\uparrow,i+1}
             + Y_{\\uparrow,i} Z_{\\downarrow,i} Y_{\\uparrow,i+1} \\right)
             - \\frac{t}{2} \\sum_i \\left( X_{\\downarrow,i} Z_{\\uparrow,i+1} X_{\\downarrow,i+1}
             + Y_{\\downarrow,i} Z_{\\uparrow,i+1} Y_{\\downarrow,i+1} \\right)
 
-        In this mode ``length`` is the number of **spin orbitals** and must be even and
+        Without ``jordan_wigner``, the MPO uses fermionic ladder operators on composite
+        dimension-4 sites (hard-core constraint per site). Inter-site algebra matches
+        that embedding; use ``jordan_wigner=True`` for a Pauli-chain representation
+        with full Jordan-Wigner signs between spin orbitals.
+
+        In JW mode ``length`` is the number of **spin orbitals** and must be even and
         at least 2.
 
         Args:
@@ -1561,9 +1571,6 @@ class MPO:
                 msg = "length must be an even integer ≥ 2 (ordering: 1↑,1↓,2↑,2↓,...)."
                 raise ValueError(msg)
             return cls._fermi_hubbard_1d_jordan_wigner(length=length, t=t, u=u)
-        if length < 1:
-            msg = "length must be a positive integer."
-            raise ValueError(msg)
         return cls._fermi_hubbard_1d_fermionic(length=length, t=t, u=u)
 
     @classmethod
@@ -1602,8 +1609,11 @@ class MPO:
         tensor[5, 5] = identity
 
         tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128) for _ in range(length)]
-        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(np.complex128)
-        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 5:6].astype(np.complex128)
+        tensors[0] = tensors[0][:, :, 0:1, :]
+        if length == 1:
+            tensors[0] = tensors[0][:, :, :, 5:6]
+        else:
+            tensors[-1] = tensors[-1][:, :, :, 5:6]
 
         mpo = cls()
         mpo.tensors = tensors
@@ -1614,54 +1624,29 @@ class MPO:
 
     @classmethod
     def _fermi_hubbard_1d_jordan_wigner(cls, length: int, t: float, u: float) -> MPO:
-        physical_dimension = 2
-        zero = np.zeros((physical_dimension, physical_dimension), dtype=complex)
-        identity = np.eye(physical_dimension, dtype=complex)
-        x = cls._PAULI_2["X"]
-        y = cls._PAULI_2["Y"]
-        z = cls._PAULI_2["Z"]
-
-        inner_up = np.zeros((7, 7, physical_dimension, physical_dimension), dtype=complex)
-        inner_up[0, 0] = identity
-        inner_up[1, 0] = zero
-        inner_up[2, 0] = -(t / 2) * x
-        inner_up[4, 0] = -(t / 2) * y
-        inner_up[6, 1] = (u / 4) * z
-        inner_up[3, 2] = z
-        inner_up[6, 3] = x
-        inner_up[5, 4] = z
-        inner_up[6, 5] = y
-        inner_up[6, 6] = identity
-
-        inner_down = np.zeros((7, 7, physical_dimension, physical_dimension), dtype=complex)
-        inner_down[0, 0] = identity
-        inner_down[1, 0] = z
-        inner_down[2, 0] = -(t / 2) * x
-        inner_down[4, 0] = -(t / 2) * y
-        inner_down[6, 1] = zero
-        inner_down[3, 2] = z
-        inner_down[6, 3] = x
-        inner_down[5, 4] = z
-        inner_down[6, 5] = y
-        inner_down[6, 6] = identity
-
-        left_bound = np.array([zero, (u / 4) * z, zero, x, zero, y, identity], dtype=complex)[np.newaxis, :]
-        right_bound = np.array(
-            [identity, z, -(t / 2) * x, zero, -(t / 2) * y, zero, zero],
-            dtype=complex,
-        )[:, np.newaxis]
-
-        site_tensors: list[np.ndarray] = []
-        for site in range(length):
-            if site == 0:
-                site_tensors.append(left_bound)
-            elif site == length - 1:
-                site_tensors.append(right_bound)
-            else:
-                site_tensors.append(inner_up if site % 2 == 0 else inner_down)
+        num_sites = length // 2
+        terms: list[tuple[complex | float, str]] = []
+        for site in range(num_sites):
+            up, down = 2 * site, 2 * site + 1
+            terms.extend([
+                (u / 4, ""),
+                (-u / 4, f"Z{up}"),
+                (-u / 4, f"Z{down}"),
+                (u / 4, f"Z{up} Z{down}"),
+            ])
+        for site in range(num_sites - 1):
+            up, down = 2 * site, 2 * site + 1
+            up_next = 2 * (site + 1)
+            down_next = 2 * (site + 1) + 1
+            terms.extend([
+                (-t / 2, f"X{up} Z{down} X{up_next}"),
+                (-t / 2, f"Y{up} Z{down} Y{up_next}"),
+                (-t / 2, f"X{down} Z{up_next} X{down_next}"),
+                (-t / 2, f"Y{down} Z{up_next} Y{down_next}"),
+            ])
 
         mpo = cls()
-        mpo.custom(site_tensors)
+        mpo.from_pauli_sum(terms=terms, length=length, n_sweeps=0)
         return mpo
 
     @classmethod
@@ -1848,12 +1833,11 @@ class MPO:
 
         # build the full tensor list
         tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128) for _ in range(length)]
-
-        # Left boundary: take only row 0
-        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(np.complex128)
-
-        # Right boundary: take only col 3
-        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].astype(np.complex128)
+        tensors[0] = tensors[0][:, :, 0:1, :]
+        if length == 1:
+            tensors[0] = tensors[0][:, :, :, 3:4]
+        else:
+            tensors[-1] = tensors[-1][:, :, :, 3:4]
 
         mpo = cls()
         mpo.tensors = tensors
