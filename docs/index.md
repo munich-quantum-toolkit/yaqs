@@ -36,6 +36,7 @@ self
 installation
 examples/analog_simulation
 examples/ensemble_evolution
+examples/solver_comparison
 examples/scheduled_jumps
 examples/transmon_emulation
 examples/process_tomography
