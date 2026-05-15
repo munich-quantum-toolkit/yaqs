@@ -9,7 +9,7 @@
 
 import numpy as np
 
-from mqt.yaqs.analog.lindblad import lindblad
+from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, preprocess_lindblad
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
@@ -176,9 +176,15 @@ def test_lindblad_zero_strength_noise() -> None:
     obs = Observable("z", sites=[0])
     sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[obs])
 
-    args = (0, psi, noise, sim_params, h)
-    # Should run without error
-    lindblad(args)
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert len(ctx.jump_ops) == 0
+    assert ctx.is_unitary
+    dim = 2**n_sites
+    assert dim * dim <= MAX_LIOUVILLIAN_VECTOR_DIM
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (dim * dim, dim * dim)
+
+    lindblad((0, psi, noise, sim_params, h))
 
 
 def test_lindblad_diagnostic_observables() -> None:
@@ -210,6 +216,40 @@ def test_lindblad_diagnostic_observables() -> None:
     assert diag_idx != -1
     # Result for diagnostic should be 0.0
     assert np.allclose(res_lindblad[diag_idx, :], 0.0)
+
+
+def test_preprocess_lindblad_sets_propagator_small_system() -> None:
+    """Small systems precompute a fixed Liouvillian step propagator."""
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="density_matrix",
+        observables=[Observable("z", sites=[0])],
+    )
+    ctx = preprocess_lindblad(psi, h, None, sim_params)
+    vec_dim = (2**n_sites) ** 2
+    assert vec_dim <= MAX_LIOUVILLIAN_VECTOR_DIM
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (vec_dim, vec_dim)
+    assert ctx.is_unitary
+
+
+def test_lindblad_noisy_small_system_has_propagator() -> None:
+    """Open-system runs on small Hilbert spaces also use the precomputed propagator."""
+    n_sites = 2
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[])
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert not ctx.is_unitary
+    assert ctx.step_propagator is not None
 
 
 def test_noiseless_mps_matches_density_matrix() -> None:
