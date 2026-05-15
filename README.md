@@ -140,4 +140,4 @@ The Munich Quantum Toolkit has been supported by the European Research Council (
     <img src="https://raw.githubusercontent.com/munich-quantum-toolkit/.github/refs/heads/main/docs/_static/mqt-funding-footer-light.svg" width="90%" alt="MQT Funding Footer">
   </picture>
 </p>
-```
+
