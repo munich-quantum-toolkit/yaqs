@@ -5,11 +5,23 @@
 #
 # Licensed under the MIT License
 
-"""Monte Carlo Wavefunction (MCWF) evolution for the vector representation.
+"""Monte Carlo wavefunction (MCWF) evolution for ``representation='vector'``.
 
-Converts MPS/MPO inputs into dense operators and evolves the state vector under
-an effective non-Hermitian Hamiltonian (with optional quantum jumps). For noiseless
-runs, evolution is unitary; for larger systems prefer ``representation='mps'``.
+This module implements a stochastic unraveling of the Lindblad master equation for
+small systems. MPS/MPO inputs are contracted to a dense state vector and sparse
+operators; the trajectory is evolved in Hilbert space (not in a tensor network).
+
+Effective non-Hermitian dynamics between jumps:
+
+    H_eff = H - (i/2) sum_k L_k^dag L_k
+
+with a state vector updated by ``exp(-i H_eff dt)`` and occasional quantum jumps
+``L_k``. When there is no noise, ``H_eff = H`` and evolution is unitary.
+
+Hamiltonians are time-independent in YAQS today, so for fixed ``dt`` the map
+``U_step = exp(-i H_eff dt)`` can be precomputed once (see ``MAX_PRECOMPUTE_DIM``).
+Per-step Arnoldi is only used when the Hilbert-space dimension is too large to
+store ``U_step``. For larger lattices use ``representation='mps'`` instead.
 """
 
 from __future__ import annotations
@@ -33,20 +45,23 @@ if TYPE_CHECKING:
 
 from .utils import _embed_observable_sparse, _embed_operator_sparse
 
-# Maximum Hilbert-space dimension for storing a dense time-step propagator U_step.
+# Maximum Hilbert-space dimension dim = 2^N for storing dense U_step (dim x dim).
+# N=12 -> dim=4096 (~256 MB per propagator); N=14 falls back to per-step Krylov.
 MAX_PRECOMPUTE_DIM = 4096
 
 
 @dataclass
 class MCWFContext:
-    """Context for MCWF simulation containing pre-computed sparse operators."""
+    """Pre-computed data for one MCWF trajectory (shared across parallel workers via preprocess)."""
 
     psi_initial: NDArray[np.complex128]
     heff: scipy.sparse.spmatrix
     jump_ops: list[scipy.sparse.spmatrix]
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None]
     sim_params: AnalogSimParams
+    # True when there is no dissipative part (no jump operators); skips jump/RNG logic.
     is_unitary: bool = False
+    # exp(-i H_eff dt) as sparse matrix, if dim <= MAX_PRECOMPUTE_DIM; else None.
     step_propagator: scipy.sparse.csr_matrix | None = None
     output_state: NDArray[np.complex128] | None = None
 
@@ -59,6 +74,9 @@ def preprocess_mcwf(
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
+    Called once per ``simulator.run`` before trajectory workers start (see
+    ``preprocess_mcwf`` in ``simulator.py``).
+
     Args:
         initial_state: The initial MPS state.
         hamiltonian: The Hamiltonian MPO.
@@ -68,11 +86,9 @@ def preprocess_mcwf(
     Returns:
         MCWFContext containing dense arrays ready for trajectory simulation.
     """
-    # Check dimensions
     num_sites = initial_state.length
     dim = 2**num_sites
 
-    # Limit system size to avoid OOM
     if num_sites > 14:
         msg = (
             f"System size {num_sites} is too large for representation='vector' even with sparse matrices. "
@@ -81,14 +97,14 @@ def preprocess_mcwf(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
-    # 1. Initial State to Vector
+    # 1. Initial state |psi> as dense vector (MPS is only the user-facing specification).
     psi = initial_state.to_vec()
     psi /= np.linalg.norm(psi)
 
-    # 2. Convert Hamiltonian MPO to sparse matrix
+    # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     h_mat = hamiltonian.to_sparse_matrix()
 
-    # 3. Prepare Jump Operators
+    # 3. Jump operators L_k = sqrt(gamma) * op embedded on the full space.
     jump_ops: list[scipy.sparse.spmatrix] = []
     if noise_model is not None:
         for process in noise_model.processes:
@@ -100,7 +116,7 @@ def preprocess_mcwf(
 
     is_unitary = len(jump_ops) == 0
 
-    # 4. Construct Effective Hamiltonian
+    # 4. Effective Hamiltonian for the no-jump evolution between stochastic events.
     heff = h_mat.copy()
     if jump_ops:
         sum_ldag_l = scipy.sparse.csr_matrix((dim, dim), dtype=complex)
@@ -109,13 +125,13 @@ def preprocess_mcwf(
             sum_ldag_l += op_csr.conj().T @ op_csr
         heff -= 0.5j * sum_ldag_l
 
-    # 5. Precompute time-step propagator U_step = exp(-i * H_eff * dt) when affordable
+    # 5. Fixed-step propagator U_step = exp(-i H_eff dt) (time-independent H in YAQS).
     step_propagator: scipy.sparse.csr_matrix | None = None
     if dim <= MAX_PRECOMPUTE_DIM:
         u_dense = scipy.linalg.expm(-1j * sim_params.dt * heff.toarray())
         step_propagator = scipy.sparse.csr_matrix(u_dense)
 
-    # 6. Prepare Observables
+    # 6. Observables embedded on the full space; diagnostics are not defined on |psi>.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
         if obs.gate.name in {"runtime_cost", "max_bond", "total_bond", "entropy", "schmidt_spectrum"}:
@@ -141,17 +157,22 @@ def _apply_noisy_step(
     ctx: MCWFContext,
     rng: np.random.Generator,
 ) -> NDArray[np.complex128]:
-    """Apply norm check, optional quantum jump, and renormalization for one MCWF step.
+    """MCWF no-jump / jump decision and renormalization for one time step.
+
+    ``psi_next`` is the result of non-unitary evolution ``exp(-i H_eff dt) |psi>``
+    (not yet normalized). Norm loss ``1 - ||psi_next||^2`` is the jump probability.
 
     Returns:
-        Normalized state vector after the non-unitary step (with or without jump).
+        Normalized state vector after the step (with or without jump).
     """
     norm_sq = np.vdot(psi_next, psi_next).real
     p_jump = 1.0 - norm_sq
 
     if rng.random() >= p_jump:
+        # No jump: renormalize the evolved state.
         return psi_next / np.sqrt(norm_sq)
 
+    # Jump occurred: choose channel k with probability proportional to ||L_k |psi>||^2.
     param_psi = psi
     normalization_sum = 0.0
     weights: list[float] = []
@@ -163,6 +184,7 @@ def _apply_noisy_step(
         normalization_sum += w
 
     if normalization_sum < 1e-15:
+        # Degenerate case: fall back to no-jump renormalization.
         return psi_next / np.sqrt(norm_sq)
 
     weights_arr = np.array(weights, dtype=np.float64)
@@ -174,12 +196,12 @@ def _apply_noisy_step(
 
 
 def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
-    """Run a single Monte Carlo Wavefunction trajectory using pre-computed context.
+    """Run a single Monte Carlo wavefunction trajectory.
 
     Args:
         args: A tuple containing:
-            - int: Trajectory identifier.
-            - MCWFContext: Pre-computed simulation context.
+            - int: Trajectory identifier (used for RNG seeding in parallel runs).
+            - MCWFContext: Pre-computed simulation context from ``preprocess_mcwf``.
 
     Returns:
         An array of expectation values for each observable over time.
@@ -213,6 +235,7 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
 
     for t_idx in range(1, num_steps):
         if ctx.step_propagator is not None:
+            # Fast path: one application of precomputed U_step = exp(-i H_eff dt).
             if ctx.is_unitary:
                 psi = ctx.step_propagator @ psi
             else:
@@ -220,8 +243,10 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
                 psi_next = ctx.step_propagator @ psi_before
                 psi = _apply_noisy_step(psi_before, psi_next, ctx, rng)
         elif ctx.is_unitary:
+            # Noiseless but Hilbert space too large to store U_step: Hermitian Lanczos per step.
             psi = expm_krylov(lambda v: ctx.heff @ v, psi, dt)
         else:
+            # Noisy and no stored U_step: general non-Hermitian Arnoldi per step.
             psi_next = expm_arnoldi(lambda v: ctx.heff @ v, psi, dt)
             psi = _apply_noisy_step(psi, psi_next, ctx, rng)
 

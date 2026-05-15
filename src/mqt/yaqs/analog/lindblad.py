@@ -5,10 +5,21 @@
 #
 # Licensed under the MIT License
 
-"""Exact master-equation evolution for the density-matrix representation.
+"""Exact Lindblad master-equation evolution for ``representation='density_matrix'``.
 
-Converts MPS/MPO inputs into dense operators and integrates the Lindblad equation.
-For small Hilbert spaces, a fixed time-step Liouvillian propagator is precomputed.
+This module integrates the ensemble-averaged master equation (deterministic in rho):
+
+    drho/dt = -i[H, rho] + sum_k ( L_k rho L_k^dag - 0.5 {L_k^dag L_k, rho} )
+
+MPS/MPO specify the initial pure state and Hamiltonian; the state is carried as a
+dense ``dim x dim`` matrix with ``dim = 2^N``. With ``noise_model=None`` (or zero
+strengths), the dissipator vanishes and evolution is unitary on rho.
+
+Because ``H`` and the jump operators are time-independent, the generator is fixed.
+For small systems we precompute ``exp(L dt)`` where ``L`` is the Liouvillian
+superoperator (``d vec(rho)/dt = L @ vec(rho)``). Larger systems fall back to
+adaptive RK45 on the same RHS. Suitable for ``N <= 10``; use ``representation='mps'``
+or ``'vector'`` for larger lattices.
 """
 
 from __future__ import annotations
@@ -31,22 +42,25 @@ if TYPE_CHECKING:
 
 from .utils import _embed_observable_sparse, _embed_operator_sparse
 
-# Maximum length of vec(rho) for storing a dense Liouvillian step propagator (dim**2).
+# Maximum length of vec(rho) = dim**2 for storing dense exp(L * dt).
+# vec_dim=4096 corresponds to N=6 qubits (propagator ~256 MB); N=7+ uses ODE fallback.
 MAX_LIOUVILLIAN_VECTOR_DIM = 4096
 
 
 @dataclass
 class LindbladContext:
-    """Pre-computed operators for density-matrix master-equation evolution."""
+    """Pre-computed operators for one density-matrix evolution run."""
 
     rho_initial: NDArray[np.complex128]
     dim: int
     h_mat: scipy.sparse.spmatrix
     jump_ops: list[scipy.sparse.spmatrix]
+    # sum_k L_k^dag L_k, used in the anti-commutator term -0.5 {sum_k L_k^dag L_k, rho}.
     l_dag_l_sum: scipy.sparse.csr_matrix
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None]
     sim_params: AnalogSimParams
     is_unitary: bool = False
+    # exp(L * dt) with L the Liouvillian superoperator, if vec(rho) is small enough.
     step_propagator: NDArray[np.complex128] | None = None
 
 
@@ -59,7 +73,7 @@ def preprocess_lindblad(
     """Pre-compute operators and optional fixed-step propagator for Lindblad evolution.
 
     Args:
-        initial_state: The initial MPS state.
+        initial_state: The initial MPS state (converted to rho = |psi><psi|).
         hamiltonian: The Hamiltonian MPO.
         noise_model: The noise model.
         sim_params: Simulation parameters.
@@ -79,11 +93,14 @@ def preprocess_lindblad(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
+    # 1. Initial state: pure |psi><psi| from MPS (flattened column-major vec(rho)).
     psi = initial_state.to_vec()
     rho_initial = np.outer(psi, psi.conj()).flatten()
 
+    # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     h_mat = hamiltonian.to_sparse_matrix()
 
+    # 3. Jump operators L_k = sqrt(gamma) * op on the full space.
     jump_ops: list[scipy.sparse.spmatrix] = []
     if noise_model is not None:
         for process in noise_model.processes:
@@ -95,12 +112,14 @@ def preprocess_lindblad(
 
     is_unitary = len(jump_ops) == 0
 
+    # 4. Precompute sum_k L_k^dag L_k for the dissipator anti-commutator (skipped if noiseless).
     l_dag_l_sum = scipy.sparse.csr_matrix((dim, dim), dtype=np.complex128)
     if jump_ops:
         for op in jump_ops:
             op_csr = cast("Any", op)
             l_dag_l_sum += op_csr.conj().T @ op_csr
 
+    # 5. Embed observables; MPS-only diagnostics are not traced on rho.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
         if obs.gate.name in {"runtime_cost", "max_bond", "total_bond", "entropy", "schmidt_spectrum"}:
@@ -108,6 +127,7 @@ def preprocess_lindblad(
         else:
             embedded_observables.append(_embed_observable_sparse(obs, num_sites))
 
+    # 6. Fixed-step propagator exp(L dt) when vec(rho) fits in memory (time-independent generator).
     step_propagator: NDArray[np.complex128] | None = None
     vec_dim = dim * dim
     if vec_dim <= MAX_LIOUVILLIAN_VECTOR_DIM:
@@ -136,12 +156,18 @@ def _lindblad_rhs_flat(
 ) -> NDArray[np.complex128]:
     """Evaluate drho/dt flattened, matching the Lindblad master equation.
 
+    Used both by the ODE integrator and when building the Liouvillian column-wise.
+
     Returns:
         Flattened time derivative of the density matrix.
     """
     rho = rho_flat.reshape((dim, dim))
     h_any = cast("Any", h_mat)
+
+    # Unitary part: -i [H, rho] = -i (H rho - rho H).
     drho = -1j * (h_any @ rho - rho @ h_any)
+
+    # Dissipative part: sum_k L_k rho L_k^dag - 0.5 {sum_k L_k^dag L_k, rho}.
     for l_op in jump_ops:
         l_op_any = cast("Any", l_op)
         l_dag = l_op_any.conj().T
@@ -149,6 +175,7 @@ def _lindblad_rhs_flat(
     l_sum_any = cast("Any", l_dag_l_sum)
     ac_term = 0.5 * (l_sum_any @ rho + rho @ l_sum_any)
     drho -= ac_term
+
     return drho.flatten()
 
 
@@ -159,6 +186,9 @@ def _build_liouvillian_superoperator(
     l_dag_l_sum: scipy.sparse.csr_matrix,
 ) -> NDArray[np.complex128]:
     """Build dense Liouvillian L such that d vec(rho)/dt = L @ vec(rho).
+
+    Columns are obtained by applying ``_lindblad_rhs_flat`` to basis vectors, so the
+    superoperator matches the ODE RHS exactly without hand-derived Kronecker formulas.
 
     Returns:
         Dense Liouvillian superoperator of shape ``(dim**2, dim**2)``.
@@ -183,7 +213,7 @@ def _measure_rho(
     obs_results: NDArray[np.float64],
     t_idx: int,
 ) -> None:
-    """Record observable expectations at one time index."""
+    """Record <O> = Tr(O rho) for each observable at time index ``t_idx``."""
     rho_t = rho_flat.reshape((dim, dim))
     for i, op_mat in enumerate(ctx.embedded_observables):
         if op_mat is not None:
@@ -195,7 +225,10 @@ def _measure_rho(
 
 
 def _evolve_with_propagator(ctx: LindbladContext) -> NDArray[np.float64]:
-    """Fixed-dt evolution using a precomputed Liouvillian step propagator.
+    """Evolve rho on the fixed grid ``sim_params.times`` via vec(rho) <- exp(L dt) vec(rho).
+
+    Matches the user ``dt`` step used elsewhere in YAQS (not adaptive substeps).
+    Noiseless runs use the same map but without separate dissipator terms in L.
 
     Returns:
         Observable expectation values at each sampled time.
@@ -221,7 +254,10 @@ def _evolve_with_propagator(ctx: LindbladContext) -> NDArray[np.float64]:
 
 
 def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
-    """Adaptive RK45 integration when the Liouvillian propagator is not stored.
+    """Adaptive RK45 integration when ``vec(rho)`` is too large to store ``exp(L dt)``.
+
+    Uses the same ``_lindblad_rhs_flat`` as the propagator path; tolerances come from
+    ``sim_params.threshold``.
 
     Returns:
         Observable expectation values at each sampled time.
@@ -232,11 +268,13 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
     sim_params = ctx.sim_params
     dim = ctx.dim
 
+    # Ensure t_span covers t_eval (sim_params.times) even if floats drift slightly.
     t_end = max(sim_params.elapsed_time, sim_params.times[-1] + 1e-9)
     t_span = (0.0, t_end)
     t_eval = sim_params.times
 
     def lindblad_rhs(_t: float, rho_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        # Time argument unused: generator is autonomous (time-independent H and jumps).
         return _lindblad_rhs_flat(rho_flat, dim, ctx.h_mat, ctx.jump_ops, ctx.l_dag_l_sum)
 
     result = solve_ivp(
@@ -256,6 +294,7 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
         )
         raise RuntimeError(msg)
 
+    # result.y has shape (dim^2, num_time_points).
     num_obs = len(sim_params.sorted_observables)
     obs_results = np.zeros((num_obs, len(result.t)), dtype=np.float64)
 
@@ -268,11 +307,11 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
 def lindblad(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
 ) -> NDArray[np.float64]:
-    """Run an exact Lindblad master equation simulation.
+    """Run an exact Lindblad master-equation simulation.
 
     Args:
         args: A tuple containing:
-            - int: Trajectory identifier (unused).
+            - int: Trajectory identifier (unused; evolution is deterministic in rho).
             - MPS: The initial state.
             - NoiseModel | None: The noise model.
             - AnalogSimParams: Simulation parameters.
