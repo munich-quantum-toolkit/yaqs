@@ -256,9 +256,7 @@ def test_mcwf_trajectory_rng_seeding() -> None:
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
-    noise = NoiseModel(
-        processes=[{"name": "dephasing", "sites": [0], "strength": 2.0, "matrix": sigma_z}]
-    )
+    noise = NoiseModel(processes=[{"name": "dephasing", "sites": [0], "strength": 2.0, "matrix": sigma_z}])
     obs = Observable("x", sites=[0])
     sim_params = AnalogSimParams(
         dt=0.02,
