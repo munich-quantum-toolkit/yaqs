@@ -92,19 +92,20 @@ def build_heisenberg_mpo(L: int, J: float, h: float) -> MPO:
 
 
 def noise_jump_bitflip(L: int, gamma: float) -> NoiseModel:
-    """Diffusive/Jump unraveling with collapse operator sqrt(gamma) X_i."""
+    """Diffusive/Jump unraveling with collapse operator sqrt(gamma) X_i (bit-flip channel)."""
     return NoiseModel(
-        [{"name": "pauli_z", "sites": [i], "strength": gamma} for i in range(L)]
+        [{"name": "pauli_x", "sites": [i], "strength": gamma} for i in range(L)]
     )
 
 
 def noise_meas_bitflip(L: int, gamma: float) -> NoiseModel:
-    """Measurement unraveling reproducing the same Lindbladian as pauli_x jumps."""
+    """Measurement unraveling reproducing the same Lindbladian as pauli_x jumps (X basis)."""
     # Strength = 2*gamma to match Lindblad term 2*gamma * (D[P+] + D[P-]) = gamma * D[X]
+    # YAQS names: measure_x_0 / measure_x_1 are projectors onto |+> and |-> (NoiseLibrary).
     return NoiseModel(
         [{"name": name, "sites": [i], "strength": 2.0 * gamma}
          for i in range(L)
-         for name in ["measure_0", "measure_1"]]
+         for name in ["measure_x_0", "measure_x_1"]]
     )
 
 
@@ -164,7 +165,6 @@ def run_unraveling_pilot(
     )
     
     simulator.run(state, H, sim_params, noise_model=noise_model, parallel=True)
-    print("Obs val", sim_params.observables[0].results)
 
     # Extraction
     obs_avg = np.array(sim_params.observables[0].results, dtype=float)
