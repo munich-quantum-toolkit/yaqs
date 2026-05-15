@@ -273,6 +273,114 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
     return H
 
 
+def _embed_local_ops(length: int, local_dim: int, site_ops: list[np.ndarray]) -> np.ndarray:
+    """Embed a list of single-site operators into the full Hilbert space.
+
+    Returns:
+        np.ndarray: The embedded operator on the full chain Hilbert space.
+    """
+    identity = np.eye(local_dim, dtype=complex)
+    op_list = [identity] * length
+    for site, op in enumerate(site_ops):
+        op_list[site] = op
+    out = np.array([[1.0]], dtype=complex)
+    for op in op_list:
+        out = np.kron(out, op)
+    return out
+
+
+def _fermi_hubbard_1d_fermionic_dense(length: int, t: float, u: float) -> np.ndarray:
+    r"""Dense 1D Fermi-Hubbard Hamiltonian matching ``MPO.fermi_hubbard_1d``.
+
+    Uses open boundaries and
+    :math:`H = -t \\sum_{i,\\sigma} (c^\\dagger_{i,\\sigma} c_{i+1,\\sigma} + \\mathrm{h.c.})
+    + U \\sum_i n_{i,\\uparrow} n_{i,\\downarrow}` on local dimension-4 sites
+    (basis :math:`|0\\rangle, |\\!\\downarrow\\rangle, |\\!\\uparrow\\rangle, |\\!\\uparrow\\downarrow\\rangle`).
+
+    Returns:
+        np.ndarray: Dense Hamiltonian matrix of shape ``(4**length, 4**length)``.
+    """
+    local_dim = 4
+    c = np.array([[0, 1], [0, 0]], dtype=complex)
+    c_dag = np.array([[0, 0], [1, 0]], dtype=complex)
+    identity2 = np.eye(2, dtype=complex)
+    c_up = np.kron(c, identity2)
+    c_down = np.kron(identity2, c)
+    c_up_dag = np.kron(c_dag, identity2)
+    c_down_dag = np.kron(identity2, c_dag)
+    n_up = c_up_dag @ c_up
+    n_down = c_down_dag @ c_down
+    identity4 = np.eye(local_dim, dtype=complex)
+    onsite = u * n_up @ n_down
+
+    dim = local_dim**length
+    h = np.zeros((dim, dim), dtype=complex)
+
+    for site in range(length):
+        site_ops = [identity4] * length
+        site_ops[site] = onsite
+        h += _embed_local_ops(length, local_dim, site_ops)
+
+    for site in range(length - 1):
+        for c_right, c_left in ((c_up, c_up_dag), (c_down, c_down_dag)):
+            hop_ops = [identity4] * length
+            hop_ops[site] = c_left
+            hop_ops[site + 1] = c_right
+            h += -t * _embed_local_ops(length, local_dim, hop_ops)
+
+            hop_ops = [identity4] * length
+            hop_ops[site] = c_right
+            hop_ops[site + 1] = c_left
+            h += -t * _embed_local_ops(length, local_dim, hop_ops)
+
+    return h
+
+
+def _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals: int, t: float, u: float) -> np.ndarray:
+    """Dense JW-transformed Fermi-Hubbard on an interleaved spin chain.
+
+    ``num_orbitals`` must be even. Orbitals are ordered 1↑, 1↓, 2↑, 2↓, ...
+    and the Hamiltonian matches the docstring of ``MPO.fermi_hubbard_1d(..., jordan_wigner=True)``.
+
+    Returns:
+        np.ndarray: Dense Hamiltonian matrix of shape ``(2**num_orbitals, 2**num_orbitals)``.
+
+    Raises:
+        ValueError: If ``num_orbitals`` is odd.
+    """
+    if num_orbitals % 2 != 0:
+        msg = "num_orbitals must be even."
+        raise ValueError(msg)
+
+    num_sites = num_orbitals // 2
+    dim = 2**num_orbitals
+    h = np.zeros((dim, dim), dtype=complex)
+
+    def term(ops: list[tuple[int, np.ndarray]]) -> np.ndarray:
+        local = [_I2] * num_orbitals
+        for index, op in ops:
+            local[index] = op
+        return _embed_local_ops(num_orbitals, 2, local)
+
+    for site in range(num_sites):
+        up = 2 * site
+        down = 2 * site + 1
+        h += (u / 4) * term([(up, _Z2), (down, _Z2)])
+
+    for site in range(num_sites - 1):
+        up = 2 * site
+        down = 2 * site + 1
+        up_next = 2 * (site + 1)
+        h += -(t / 2) * term([(up, _X2), (down, _Z2), (up_next, _X2)])
+        h += -(t / 2) * term([(up, _Y2), (down, _Z2), (up_next, _Y2)])
+
+        down_next = 2 * (site + 1) + 1
+        h += -(t / 2) * term([(down, _X2), (up_next, _Z2), (down_next, _X2)])
+        h += -(t / 2) * term([(down, _Y2), (up_next, _Z2), (down_next, _Y2)])
+
+    return h
+
+
 def untranspose_block(mpo_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Reverse the transposition of an MPO tensor.
 
@@ -410,9 +518,9 @@ def test_bose_hubbard_correct_operator() -> None:
     np.testing.assert_allclose(H_mpo, H_dense, atol=1e-8)
 
 
-def test_fermi_hubbard_1d() -> None:
-    """Verify the fermionic 1D Fermi-Hubbard MPO has expected structure."""
-    length = 5
+def test_fermi_hubbard_1d_correct_operator() -> None:
+    """Verify the fermionic 1D Fermi-Hubbard MPO matches the dense Hamiltonian."""
+    length = 3
     u, t = 0.5, 1.0
 
     mpo = MPO.fermi_hubbard_1d(length, t, u)
@@ -420,44 +528,26 @@ def test_fermi_hubbard_1d() -> None:
     assert mpo.length == length
     assert mpo.physical_dimension == 4
     assert len(mpo.tensors) == length
+    assert all(tensor.shape[2] <= 6 and tensor.shape[3] <= 6 for tensor in mpo.tensors)
 
-    left_block = untranspose_block(mpo.tensors[0])
-    assert left_block.shape == (1, 6, 4, 4)
-
-    for i, tensor in enumerate(mpo.tensors):
-        if i == 0:
-            assert tensor.shape == (4, 4, 1, 6)
-        elif i == length - 1:
-            assert tensor.shape == (4, 4, 6, 1)
-        else:
-            assert tensor.shape == (4, 4, 6, 6)
-
-    assert mpo.to_matrix().shape == (4**length, 4**length)
+    h_dense = _fermi_hubbard_1d_fermionic_dense(length, t, u)
+    np.testing.assert_allclose(mpo.to_matrix(), h_dense, atol=1e-10)
 
 
-def test_fermi_hubbard_1d_jordan_wigner() -> None:
-    """Verify the JW-transformed 1D Fermi-Hubbard MPO has expected structure."""
-    length = 6
+def test_fermi_hubbard_1d_jordan_wigner_correct_operator() -> None:
+    """Verify the JW 1D Fermi-Hubbard MPO matches the dense Pauli Hamiltonian."""
+    num_orbitals = 4
     u, t = 0.5, 1.0
 
-    mpo = MPO.fermi_hubbard_1d(length, t, u, jordan_wigner=True)
+    mpo = MPO.fermi_hubbard_1d(num_orbitals, t, u, jordan_wigner=True)
 
-    assert mpo.length == length
+    assert mpo.length == num_orbitals
     assert mpo.physical_dimension == 2
-    assert len(mpo.tensors) == length
+    assert len(mpo.tensors) == num_orbitals
+    assert all(tensor.shape[2] <= 7 and tensor.shape[3] <= 7 for tensor in mpo.tensors)
 
-    left_block = untranspose_block(mpo.tensors[0])
-    assert left_block.shape == (1, 7, 2, 2)
-
-    for i, tensor in enumerate(mpo.tensors):
-        if i == 0:
-            assert tensor.shape == (2, 2, 1, 7)
-        elif i == length - 1:
-            assert tensor.shape == (2, 2, 7, 1)
-        else:
-            assert tensor.shape == (2, 2, 7, 7)
-
-    assert mpo.to_matrix().shape == (2**length, 2**length)
+    h_dense = _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals, t, u)
+    np.testing.assert_allclose(mpo.to_matrix(), h_dense, atol=1e-10)
 
     with pytest.raises(ValueError, match=re.escape("length must be an even integer ≥ 2 (ordering: 1↑,1↓,2↑,2↓,...).")):
         MPO.fermi_hubbard_1d(length=5, t=t, u=u, jordan_wigner=True)
