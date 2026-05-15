@@ -65,10 +65,10 @@ def lindblad(
     # Limit system size to avoid OOM
     if num_sites > 10:
         msg = (
-            f"System size {num_sites} exceeds the recommended limit (10) for the exact Lindblad solver. "
-            "Lindblad uses dense-like scaling for the density matrix (2^2N elements). "
+            f"System size {num_sites} exceeds the recommended limit (10) for representation='density_matrix'. "
+            "Density-matrix evolution uses dense-like scaling (2^2N elements). "
             "Simulation may be very slow or run out of memory. "
-            "Consider using the TJM solver for larger systems."
+            "Consider using representation='mps' for larger systems."
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 

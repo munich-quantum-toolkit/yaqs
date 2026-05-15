@@ -41,7 +41,7 @@ def test_mcwf_amplitude_damping() -> None:
     # We need enough trajectories to converge reasonably well
     num_traj = 200
     sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=t_max, dt=dt, solver="MCWF", num_traj=num_traj, show_progress=False
+        observables=[obs], elapsed_time=t_max, dt=dt, representation="vector", num_traj=num_traj, show_progress=False
     )
 
     run(initial_state, hamiltonian, sim_params, noise_model, parallel=False)
@@ -81,7 +81,7 @@ def test_mcwf_unitary_rabi() -> None:
         observables=[obs],
         elapsed_time=t_max,
         dt=dt,
-        solver="MCWF",
+        representation="vector",
         num_traj=1,  # Deterministic
     )
 
@@ -121,7 +121,12 @@ def test_mcwf_dephasing() -> None:
 
     num_traj = 200
     sim_params = AnalogSimParams(
-        observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="MCWF", num_traj=num_traj, show_progress=False
+        observables=[obs0, obs1],
+        elapsed_time=t_max,
+        dt=dt,
+        representation="vector",
+        num_traj=num_traj,
+        show_progress=False,
     )
 
     # Use parallel=True to verify infrastructure
@@ -153,7 +158,9 @@ def test_mcwf_zero_strength_noise() -> None:
     # Define noise with 0 strength
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="MCWF", observables=[Observable("z", sites=[0])])
+    sim_params = AnalogSimParams(
+        dt=0.1, elapsed_time=0.1, representation="vector", observables=[Observable("z", sites=[0])]
+    )
 
     # Preprocess should not add any jump ops
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
@@ -171,7 +178,7 @@ def test_mcwf_diagnostic_observables() -> None:
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="MCWF", observables=[obs_diag, obs_real])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="vector", observables=[obs_diag, obs_real])
 
     # MCWF Preprocess
     ctx = preprocess_mcwf(psi, h, None, sim_params)

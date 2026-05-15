@@ -104,9 +104,9 @@ def test_tomography_run_defaults() -> None:
 
 
 def test_tomography_mcwf_multistep() -> None:
-    """Test multi-step process tomography with MCWF solver."""
+    """Test multi-step process tomography with vector representation."""
     op = MPO.ising(length=2, J=1.0, g=0.5)
-    params = AnalogSimParams(dt=0.1, solver="MCWF", num_traj=10)
+    params = AnalogSimParams(dt=0.1, representation="vector", num_traj=10)
     pt = run(op, params, timesteps=[0.1, 0.1])
     assert pt.tensor.shape == (4, 16, 16)
 

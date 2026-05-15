@@ -77,9 +77,9 @@ def preprocess_mcwf(
     # Limit system size to avoid OOM
     if num_sites > 14:
         msg = (
-            f"System size {num_sites} is too large for MCWF solver even with sparse matrices. "
+            f"System size {num_sites} is too large for representation='vector' even with sparse matrices. "
             "Simulation may be very slow or run out of memory. "
-            "Consider using the TJM solver for larger systems."
+            "Consider using representation='mps' for larger systems."
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 

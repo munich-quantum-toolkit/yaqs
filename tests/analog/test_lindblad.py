@@ -39,7 +39,7 @@ def test_lindblad_amplitude_damping() -> None:
         observables=[obs],
         elapsed_time=t_max,
         dt=dt,
-        solver="Lindblad",
+        representation="density_matrix",
         num_traj=1,  # Deterministic
     )
 
@@ -68,7 +68,7 @@ def test_lindblad_unitary_rabi() -> None:
     dt = 0.05
     obs = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, solver="Lindblad")
+    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, representation="density_matrix")
 
     run(initial_state, hamiltonian, sim_params, None)
 
@@ -103,7 +103,7 @@ def test_lindblad_dephasing() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="Lindblad")
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, representation="density_matrix")
 
     run(initial_state, hamiltonian, sim_params, noise_model)
 
@@ -149,7 +149,7 @@ def test_lindblad_dephasing_both_qubits() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="Lindblad")
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, representation="density_matrix")
 
     run(initial_state, hamiltonian, sim_params, noise_model)
 
@@ -174,7 +174,7 @@ def test_lindblad_zero_strength_noise() -> None:
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
 
     obs = Observable("z", sites=[0])
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="Lindblad", observables=[obs])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[obs])
 
     args = (0, psi, noise, sim_params, h)
     # Should run without error
@@ -192,7 +192,9 @@ def test_lindblad_diagnostic_observables() -> None:
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="Lindblad", observables=[obs_diag, obs_real])
+    sim_params = AnalogSimParams(
+        dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[obs_diag, obs_real]
+    )
 
     # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
     args = (0, psi, None, sim_params, h)
@@ -208,3 +210,41 @@ def test_lindblad_diagnostic_observables() -> None:
     assert diag_idx != -1
     # Result for diagnostic should be 0.0
     assert np.allclose(res_lindblad[diag_idx, :], 0.0)
+
+
+def test_noiseless_mps_matches_density_matrix() -> None:
+    """Noiseless Hamiltonian evolution agrees between mps and density_matrix representations."""
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    obs = Observable("z", sites=[0])
+    t_max = 0.5
+    dt = 0.1
+
+    params_mps = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=t_max,
+        dt=dt,
+        representation="mps",
+        max_bond_dim=32,
+        show_progress=False,
+    )
+    run(psi, h, params_mps, None)
+    assert obs.results is not None
+    z_mps = obs.results[-1]
+
+    obs_rho = Observable("z", sites=[0])
+    params_rho = AnalogSimParams(
+        observables=[obs_rho],
+        elapsed_time=t_max,
+        dt=dt,
+        representation="density_matrix",
+        show_progress=False,
+    )
+    run(psi, h, params_rho, None)
+    assert obs_rho.results is not None
+    z_rho = obs_rho.results[-1]
+
+    assert z_mps is not None
+    assert z_rho is not None
+    assert np.isclose(z_mps, z_rho, atol=1e-4), f"mps={z_mps}, density_matrix={z_rho}"
