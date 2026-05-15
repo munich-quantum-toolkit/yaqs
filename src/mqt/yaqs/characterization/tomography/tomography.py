@@ -389,6 +389,8 @@ def run(
 
     mcwf_static_ctx = None
     if sim_params.representation == "vector":
+        # Shape-only placeholder: preprocess_mcwf uses length and static operators only.
+        # Workers override dynamic_ctx.psi_initial with the real state vector each step.
         dummy_mps = MPS(length=operator.length, state="zeros")
         mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
 

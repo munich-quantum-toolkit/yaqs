@@ -999,7 +999,7 @@ def _run_analog(
         if sim_params.representation == "vector":
             # For vector serial, we still use the pre-computed ctx
             # ctx is already in local scope from above if block
-            args = [(i, ctx) for i in range(sim_params.num_traj)]
+            args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
         else:
             args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
 

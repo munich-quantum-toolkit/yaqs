@@ -21,6 +21,8 @@ quantum simulation. It verifies that:
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 
@@ -90,7 +92,7 @@ def test_analog_simparams_defaults() -> None:
 def test_analog_simparams_invalid_representation() -> None:
     """Test that AnalogSimParams rejects unknown representation values."""
     with pytest.raises(ValueError, match=r"Invalid representation 'tjm'"):
-        AnalogSimParams(representation="tjm")  # ty: ignore[invalid-argument-type]
+        AnalogSimParams(representation=cast("Any", "tjm"))
 
 
 def test_observable_initialize_with_sample_timesteps() -> None:

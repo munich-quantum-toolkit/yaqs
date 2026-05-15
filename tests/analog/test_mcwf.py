@@ -7,13 +7,21 @@
 
 """Tests for the Monte Carlo Wavefunction (MCWF) Solver."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
+import mqt.yaqs.analog.mcwf as mcwf_mod
 from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.simulator import run
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_mcwf_amplitude_damping() -> None:
@@ -237,3 +245,109 @@ def test_mcwf_diagnostic_observables() -> None:
     res_mcwf = mcwf((0, ctx))
     # Result for diagnostic should be 0.0
     assert np.allclose(res_mcwf[diag_idx, :], 0.0)
+
+
+def test_mcwf_trajectory_rng_seeding() -> None:
+    """Same traj_idx yields identical MCWF trajectories; different indices differ."""
+    n_sites = 1
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
+    noise = NoiseModel(
+        processes=[{"name": "dephasing", "sites": [0], "strength": 2.0, "matrix": sigma_z}]
+    )
+    obs = Observable("x", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.02,
+        elapsed_time=1.0,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+
+    res_a = mcwf((3, ctx))
+    res_b = mcwf((3, ctx))
+    res_c = mcwf((7, ctx))
+
+    assert np.allclose(res_a, res_b)
+    assert not np.allclose(res_a, res_c)
+
+
+def test_mcwf_noisy_evolution_with_propagator() -> None:
+    """Noisy open-system evolution uses the precomputed step propagator path."""
+    n_sites = 2
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.3}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.15,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    assert ctx.step_propagator is not None
+    assert not ctx.is_unitary
+
+    res = mcwf((0, ctx))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))
+
+
+def test_mcwf_unitary_krylov_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When U_step is not stored, unitary evolution uses expm_krylov per step."""
+    monkeypatch.setattr(mcwf_mod, "MAX_PRECOMPUTE_DIM", 4)
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, None, sim_params)
+    assert ctx.step_propagator is None
+    assert ctx.is_unitary
+
+    res = mcwf((0, ctx))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))
+
+
+def test_mcwf_noisy_arnoldi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When U_step is not stored, noisy evolution uses expm_arnoldi per step."""
+    monkeypatch.setattr(mcwf_mod, "MAX_PRECOMPUTE_DIM", 4)
+    n_sites = 3
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    assert ctx.step_propagator is None
+    assert not ctx.is_unitary
+
+    res = mcwf((0, ctx))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))

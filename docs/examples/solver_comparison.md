@@ -101,7 +101,7 @@ plt.show()
 > confidence intervals to visualize the uncertainty. The `density_matrix` representation, in contrast,
 > returns the deterministic ensemble average directly.
 
-### Noiseless cross-check
+## Noiseless cross-check
 
 With no noise, `representation="density_matrix"` evolves $\rho$ under the Hamiltonian only
 (`noise_model=None`). The same holds for `mps` and `vector` (a single deterministic trajectory).
