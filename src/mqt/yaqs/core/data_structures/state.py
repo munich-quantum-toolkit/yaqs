@@ -43,7 +43,11 @@ def _infer_qubit_length(hilbert_dim: int) -> int:
 
 
 def _normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Return a unit-norm copy of a state vector."""
+    """Return a unit-norm copy of a state vector.
+
+    Raises:
+        ValueError: If the vector has zero norm.
+    """
     vec = np.asarray(vec, dtype=np.complex128).reshape(-1)
     norm = np.linalg.norm(vec)
     if norm == 0:
@@ -53,7 +57,11 @@ def _normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:
 
 
 def _normalize_density_matrix(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Return a trace-one copy of a density matrix."""
+    """Return a trace-one copy of a density matrix.
+
+    Raises:
+        ValueError: If ``rho`` is not square or has zero trace.
+    """
     rho = np.asarray(rho, dtype=np.complex128)
     if rho.ndim != 2 or rho.shape[0] != rho.shape[1]:
         msg = "density_matrix must be a square 2-D array."
@@ -63,7 +71,7 @@ def _normalize_density_matrix(rho: NDArray[np.complex128]) -> NDArray[np.complex
         msg = "density_matrix must have non-zero trace."
         raise ValueError(msg)
     if not np.isclose(trace, 1.0):
-        rho = rho / trace
+        rho /= trace
     return rho
 
 
@@ -112,7 +120,8 @@ class State:
 
         Raises:
             ValueError: If more than one of ``tensors``, ``vector``, and ``density_matrix`` is set,
-                if ``length`` cannot be inferred, or if array shapes are invalid.
+                if ``length`` cannot be inferred, or if array shapes are invalid, or if a vector or
+                density matrix has zero norm or trace.
         """
         manual = [tensors is not None, vector is not None, density_matrix is not None]
         if sum(manual) > 1:
@@ -161,7 +170,11 @@ class State:
 
     @classmethod
     def from_mps(cls, mps: MPS) -> State:
-        """Wrap an existing :class:`MPS` as a :class:`State` (already in MPS form)."""
+        """Wrap an existing :class:`MPS` as a :class:`State` (already in MPS form).
+
+        Returns:
+            A :class:`State` that references ``mps`` and is already encoded as ``"mps"``.
+        """
         wrapped = cls(
             mps.length,
             tensors=list(mps.tensors),
@@ -172,6 +185,14 @@ class State:
         return wrapped
 
     def _build_mps(self) -> MPS:
+        """Return the MPS representation, building it from tensors or presets if needed.
+
+        Returns:
+            The materialized :class:`MPS`.
+
+        Raises:
+            ValueError: If this :class:`State` was created from ``vector`` or ``density_matrix``.
+        """
         if self._mps is None:
             if self._vector is not None or self._density_matrix is not None:
                 msg = (
@@ -191,7 +212,11 @@ class State:
 
     @property
     def mps(self) -> MPS:
-        """Tensor-network representation after :meth:`encode` with ``"mps"`` (or a compatible encoding)."""
+        """Tensor-network representation after :meth:`encode` with ``"mps"`` (or a compatible encoding).
+
+        Raises:
+            RuntimeError: If :meth:`encode` with ``"mps"`` has not been called.
+        """
         if self._mps is None:
             msg = "MPS not materialized; call encode('mps') first."
             raise RuntimeError(msg)
@@ -199,7 +224,11 @@ class State:
 
     @property
     def vector(self) -> NDArray[np.complex128]:
-        """Normalized dense state vector after :meth:`encode` with ``"vector"``."""
+        """Normalized dense state vector after :meth:`encode` with ``"vector"``.
+
+        Raises:
+            RuntimeError: If :meth:`encode` with ``"vector"`` has not been called.
+        """
         if self._vector is None:
             msg = "Vector not materialized; call encode('vector') first."
             raise RuntimeError(msg)
@@ -207,14 +236,18 @@ class State:
 
     @property
     def density_matrix(self) -> NDArray[np.complex128]:
-        """Density matrix after :meth:`encode` with ``"density_matrix"``."""
+        """Density matrix after :meth:`encode` with ``"density_matrix"``.
+
+        Raises:
+            RuntimeError: If :meth:`encode` with ``"density_matrix"`` has not been called.
+        """
         if self._density_matrix is None:
             msg = "Density matrix not materialized; call encode('density_matrix') first."
             raise RuntimeError(msg)
         return self._density_matrix
 
     def encode(self, representation: Representation) -> State:
-        """Materialize the state for the requested simulation representation.
+        r"""Materialize the state for the requested simulation representation.
 
         Args:
             representation: ``"mps"`` (B-normalized MPS), ``"vector"`` (unit-norm dense
