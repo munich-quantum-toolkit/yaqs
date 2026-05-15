@@ -4,12 +4,6 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
-### New `state="haar-random"` MPS initializer
-
-An additional MPS initializer is available: `MPS(..., state="haar-random")`.
-It constructs an entangled MPS from Haar-random isometries and uses `pad` as a bond-dimension cap for this mode.
-If `pad` is not provided, it defaults to bond dimension 1.
-
 ### End of support for x86 macOS systems
 
 Starting with this release, we can no longer guarantee support for x86 macOS systems.

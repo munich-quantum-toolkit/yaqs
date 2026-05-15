@@ -38,13 +38,98 @@ if TYPE_CHECKING:
 
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, X, Z
+from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, Id, X, Z
 
 # ---- single-qubit ops ----
 _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
 _Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
+
+
+def _swap_gate_4() -> np.ndarray:
+    """Construct the two-qubit SWAP matrix in lexicographic basis.
+
+    Returns:
+        np.ndarray: The ``4 x 4`` SWAP matrix.
+    """
+    return np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
+
+
+def _permuted_periodic_wrap_gate(gate4: np.ndarray) -> np.ndarray:
+    """Permute wrap-ordered two-site gates into merged nearest-neighbor ordering.
+
+    Args:
+        gate4: Two-site gate in ``|q_{L-1}, q_0>`` ordering.
+
+    Returns:
+        np.ndarray: Gate in merged ordering ``|q_0, q_{L-1}>``.
+    """
+    p_perm = np.zeros((4, 4), dtype=np.complex128)
+    for a in range(2):
+        for b in range(2):
+            idx_merged = 2 * a + b
+            idx_bond = 2 * b + a
+            p_perm[idx_bond, idx_merged] = 1.0
+    g = np.asarray(gate4, dtype=np.complex128)
+    return p_perm.conj().T @ g @ p_perm
+
+
+def _dense_embed_adjacent_two_site(length: int, site_left: int, gate4: np.ndarray) -> np.ndarray:
+    """Embed a two-site gate onto neighboring sites in a dense Hilbert space.
+
+    Args:
+        length: Number of qubits.
+        site_left: Left site index.
+        gate4: Two-site gate matrix.
+
+    Returns:
+        np.ndarray: Embedded dense operator.
+    """
+    left_dim = 2**site_left
+    right_dim = 2 ** (length - site_left - 2)
+    op4 = np.asarray(gate4, dtype=np.complex128)
+    return np.asarray(
+        np.kron(np.kron(np.eye(left_dim, dtype=np.complex128), op4), np.eye(right_dim, dtype=np.complex128)),
+        dtype=np.complex128,
+    )
+
+
+def _dense_embed_periodic_wrap_two_site(length: int, gate4: np.ndarray) -> np.ndarray:
+    """Embed a two-site gate on periodic bond ``(L-1, 0)``.
+
+    Args:
+        length: Number of qubits.
+        gate4: Two-site gate matrix in wrap ordering.
+
+    Returns:
+        np.ndarray: Embedded dense operator.
+    """
+    g = np.asarray(gate4, dtype=np.complex128)
+    if length <= 2:
+        return np.asarray(g, dtype=np.complex128)
+    dim = 2**length
+    sw = _swap_gate_4()
+    u_fwd = np.eye(dim, dtype=np.complex128)
+    for i in range(length - 2):
+        u_fwd = _dense_embed_adjacent_two_site(length, i, sw) @ u_fwd
+    g_merged = _permuted_periodic_wrap_gate(g)
+    g_nn = _dense_embed_adjacent_two_site(length, length - 2, g_merged)
+    return np.asarray(u_fwd.conj().T @ g_nn @ u_fwd, dtype=np.complex128)
+
+
+def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
+    """Construct an XY spin-current bond matrix.
+
+    Args:
+        j_coupling: XY coupling.
+
+    Returns:
+        np.ndarray: ``4 x 4`` bond operator.
+    """
+    x = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
+    y = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
+    return 0.25 * j_coupling * (np.kron(x, y) - np.kron(y, x))
 
 
 def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
@@ -790,6 +875,99 @@ def test_local_expect_x_on_plus_state() -> None:
     psi_mps = MPS(length=3, state="x+")
     val = psi_mps.local_expect(x, sites=0)
     np.testing.assert_allclose(val, 1.0, atol=1e-12)
+
+
+def test_mps_apply_local_l2_periodic_wrap_matches_permuted_nn() -> None:
+    """For ``L == 2``, wrap-ordered and permuted NN applications must agree."""
+    length = 2
+    rng = np.random.default_rng(2026)
+    g_random = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype(np.complex128)
+    gate4 = (g_random + g_random.conj().T) / 2
+    g_merged = _permuted_periodic_wrap_gate(gate4)
+
+    mps_wrap = MPS(length, state="random", pad=8)
+    mps_wrap.normalize("B")
+    mps_nn = copy.deepcopy(mps_wrap)
+
+    mps_wrap.apply_local(Observable(BaseGate(gate4), sites=[length - 1, 0]))
+    mps_nn.apply_local(Observable(BaseGate(g_merged), sites=[0, 1]))
+
+    np.testing.assert_allclose(np.asarray(mps_wrap.to_vec()), np.asarray(mps_nn.to_vec()), atol=1e-9)
+
+
+def test_mps_apply_local_periodic_wrap_matches_dense_expectation() -> None:
+    """Periodic-wrap application should reproduce dense expectation values."""
+    length = 5
+    j_xy = 1.1
+    mps = MPS(length, state="random", pad=16)
+    mps.normalize("B")
+    psi = np.asarray(mps.to_vec(), dtype=np.complex128)
+
+    j_mat = _spin_current_bond_matrix(j_xy)
+    j_dense = _dense_embed_periodic_wrap_two_site(length, j_mat)
+    obs = Observable(BaseGate(j_mat), sites=[length - 1, 0])
+
+    mps_with_op = copy.deepcopy(mps)
+    mps_with_op.apply_local(obs)
+
+    ex_dense = float(np.real(np.vdot(psi, j_dense @ psi)))
+    ex_mps = float(np.real(mps.scalar_product(mps_with_op)))
+    assert ex_mps == pytest.approx(ex_dense, rel=0, abs=1e-6)
+
+
+def test_mps_apply_local_non_adjacent_two_site_raises() -> None:
+    """Two-site 4x4 observables must be nearest neighbors (or periodic wrap)."""
+    length = 4
+    mps = MPS(length, state="random", pad=4)
+    mps.normalize("B")
+    gate4 = np.eye(4, dtype=np.complex128)
+    obs = Observable(BaseGate(gate4), sites=[0, 2])
+    with pytest.raises(ValueError, match="Only nearest-neighbor two-site observables are currently implemented"):
+        mps.apply_local(obs)
+
+
+def test_mps_apply_local_unsupported_gate_dimension_raises() -> None:
+    """Only one-site (2x2) and two-site (4x4) gates are supported."""
+    length = 3
+    mps = MPS(length, state="random", pad=4)
+    mps.normalize("B")
+    obs = Observable(BaseGate(np.eye(8, dtype=np.complex128)), sites=[0, 1, 2])
+    with pytest.raises(ValueError, match="Local observable must be one-site or nearest-neighbor two-site"):
+        mps.apply_local(obs)
+
+
+def test_mps_mixed_expectation_l2_periodic_wrap_matches_permuted_nn() -> None:
+    """For ``L == 2``, wrap-ordered and permuted NN mixed expectations must agree."""
+    length = 2
+    rng = np.random.default_rng(2026)
+    g_random = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype(np.complex128)
+    gate4 = (g_random + g_random.conj().T) / 2
+    g_merged = _permuted_periodic_wrap_gate(gate4)
+
+    mps_wrap = MPS(length, state="random", pad=8)
+    mps_wrap.normalize("B")
+    mps_nn = copy.deepcopy(mps_wrap)
+
+    ex_wrap = mps_wrap.mixed_expectation(mps_nn, Observable(BaseGate(gate4), sites=[length - 1, 0]))
+    ex_nn_permuted = mps_nn.mixed_expectation(mps_wrap, Observable(BaseGate(g_merged), sites=[0, 1]))
+    assert ex_wrap == pytest.approx(ex_nn_permuted, rel=0, abs=1e-9)
+
+
+def test_mps_mixed_expectation_periodic_wrap_matches_dense_expectation() -> None:
+    """Periodic-wrap mixed expectation should reproduce dense expectation values."""
+    length = 5
+    j_xy = 1.1
+    mps = MPS(length, state="random", pad=16)
+    mps.normalize("B")
+    psi = np.asarray(mps.to_vec(), dtype=np.complex128)
+
+    j_mat = _spin_current_bond_matrix(j_xy)
+    j_dense = _dense_embed_periodic_wrap_two_site(length, j_mat)
+    obs = Observable(BaseGate(j_mat), sites=[length - 1, 0])
+
+    ex_dense = float(np.real(np.vdot(psi, j_dense @ psi)))
+    ex_mps = float(np.real(mps.mixed_expectation(mps, obs)))
+    assert ex_mps == pytest.approx(ex_dense, rel=0, abs=1e-6)
 
 
 def test_measure() -> None:

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,6 +23,9 @@ if TYPE_CHECKING:
     from pybtex.richtext import HRef
 
 ROOT = Path(__file__).parent.parent.resolve()
+
+# Keep matplotlib/font cache writable and local during docs builds.
+os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "docs" / "_build" / ".mplconfig"))
 
 
 try:

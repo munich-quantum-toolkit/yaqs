@@ -774,6 +774,120 @@ class MPS:
 
         return self.scalar_product(temp_state, sites)
 
+    def apply_local(self, observable: Observable) -> None:
+        r"""Apply a one- or two-site local observable to this MPS in-place.
+
+        Supports nearest-neighbor two-site gates and periodic-wrap gates on
+        ``(L-1, 0)``. For ``L == 2`` with wrap ordering ``[1, 0]``, the gate is
+        interpreted in ``|q_{L-1}, q_0>`` ordering and permuted to the merged
+        nearest-neighbor basis on ``(0, 1)``.
+
+        Args:
+            observable: One-site (``2 x 2``) or two-site (``4 x 4``) observable.
+
+        Raises:
+            ValueError: If the observable is not one- or two-site local under the
+                supported adjacency conventions.
+        """
+
+        def permuted_periodic_wrap(gate4: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            """Permute wrap gate from |q_{L-1}, q_0> to merged |q_0, q_{L-1}> ordering.
+
+            Returns:
+                Permuted 4x4 gate matrix.
+            """
+            p_perm = np.zeros((4, 4), dtype=np.complex128)
+            for a in range(2):
+                for b in range(2):
+                    p_perm[2 * b + a, 2 * a + b] = 1.0
+            return p_perm.conj().T @ gate4 @ p_perm
+
+        def apply_two_site_nn_inplace(state: MPS, site_left: int, mat4: NDArray[np.complex128]) -> None:
+            """Apply 4x4 gate to adjacent sites (site_left, site_left+1) in-place via SVD."""
+            i, j = site_left, site_left + 1
+            a = state.tensors[i]
+            b = state.tensors[j]
+            d_i, left, _ = a.shape
+            d_j, _, right = b.shape
+
+            theta = np.tensordot(a, b, axes=(2, 1)).transpose(1, 0, 2, 3)
+            theta = theta.reshape(left, d_i * d_j, right)
+            theta = oe.contract("ab, cbd->cad", mat4, theta).reshape(left, d_i, d_j, right)
+
+            theta_mat = theta.reshape(left * d_i, d_j * right)
+            u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+
+            u_tensor = u_mat.reshape(left, d_i, len(s_vec)).transpose(1, 0, 2)
+            v_tensor = (np.diag(s_vec) @ v_mat).reshape(len(s_vec), d_j, right).transpose(1, 0, 2)
+
+            state.tensors[i] = u_tensor
+            state.tensors[j] = v_tensor
+
+        def bubble_swaps_forward(state: MPS) -> None:
+            """Move logical q_0 next to q_{L-1} via adjacent SWAPs."""
+            sw = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
+            for i in range(state.length - 2):
+                apply_two_site_nn_inplace(state, i, sw)
+
+        def bubble_swaps_backward(state: MPS) -> None:
+            """Undo bubble_swaps_forward."""
+            sw = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.complex128)
+            for i in reversed(range(state.length - 2)):
+                apply_two_site_nn_inplace(state, i, sw)
+
+        sites = [observable.sites] if isinstance(observable.sites, int) else observable.sites
+
+        if observable.gate.matrix.shape[0] == 2:
+            site = sites[0]
+            self.tensors[site] = oe.contract("ab, bcd->acd", observable.gate.matrix, self.tensors[site])
+            return
+
+        if observable.gate.matrix.shape[0] == 4:
+            i, j = int(sites[0]), int(sites[1])
+            length = self.length
+
+            if length == 2:
+                if i == length - 1 and j == 0:
+                    mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
+                    g_merged = permuted_periodic_wrap(mat)
+                    apply_two_site_nn_inplace(self, 0, g_merged)
+                    return
+                i, j = min(i, j), max(i, j)
+            elif (i == length - 1 and j == 0) or (i == 0 and j == length - 1):
+                mat = np.asarray(observable.gate.matrix, dtype=np.complex128)
+                bubble_swaps_forward(self)
+                g_merged = permuted_periodic_wrap(mat)
+                apply_two_site_nn_inplace(self, length - 2, g_merged)
+                bubble_swaps_backward(self)
+                return
+
+            if j != i + 1:
+                msg = "Only nearest-neighbor two-site observables are currently implemented."
+                raise ValueError(msg)
+
+            apply_two_site_nn_inplace(self, i, np.asarray(observable.gate.matrix, dtype=np.complex128))
+            return
+
+        msg = "Local observable must be one-site or nearest-neighbor two-site."
+        raise ValueError(msg)
+
+    def mixed_expectation(self, bra: MPS, observable: Observable) -> np.complex128:
+        r"""Compute the mixed matrix element :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
+
+        This applies ``observable`` to a deep copy of ``self`` (the ket) and contracts
+        with ``bra`` using :meth:`scalar_product`.
+
+        Args:
+            bra: Bra MPS (left vector).
+            observable: One-site or two-site local observable, same conventions as :meth:`apply_local`.
+
+        Returns:
+            The scalar contraction :math:`\langle\mathrm{bra}|O|\mathrm{ket}\rangle`.
+        """
+        ket_with_op = copy.deepcopy(self)
+        ket_with_op.apply_local(observable)
+        return bra.scalar_product(ket_with_op)
+
     def evaluate_observables(
         self,
         sim_params: AnalogSimParams | StrongSimParams,
