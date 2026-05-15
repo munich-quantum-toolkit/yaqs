@@ -20,6 +20,147 @@ if TYPE_CHECKING:
 
 Representation = Literal["mps", "vector", "density_matrix"]
 
+_PRODUCT_STATE_PRESETS = frozenset({
+    "zeros",
+    "ones",
+    "x+",
+    "x-",
+    "y+",
+    "y-",
+    "Neel",
+    "wall",
+    "random",
+    "basis",
+})
+
+
+def _preset_is_product_state(initial: str) -> bool:
+    """Return whether ``initial`` names a rank-1 product preset (not entangled).
+
+    Returns:
+        ``True`` for product presets such as ``"zeros"`` or ``"x+"``; ``False`` for ``"haar-random"``.
+    """
+    return initial in _PRODUCT_STATE_PRESETS
+
+
+def _resolve_physical_dimensions(
+    length: int,
+    physical_dimensions: list[int] | int | None,
+) -> list[int]:
+    """Resolve per-site physical dimensions (default: qubits).
+
+    Returns:
+        A list of length ``length`` with each site's physical dimension.
+
+    Raises:
+        ValueError: If a list is passed with the wrong length.
+    """
+    if physical_dimensions is None:
+        return [2] * length
+    if isinstance(physical_dimensions, int):
+        return [physical_dimensions] * length
+    if len(physical_dimensions) != length:
+        msg = f"physical_dimensions length {len(physical_dimensions)} != {length}."
+        raise ValueError(msg)
+    return list(physical_dimensions)
+
+
+def _local_vector_for_preset(
+    site: int,
+    initial: str,
+    local_dim: int,
+    *,
+    length: int,
+    basis_string: str | None,
+    rng: np.random.Generator,
+) -> NDArray[np.complex128]:
+    """Local state vector for one site (matches :class:`MPS` preset rules).
+
+    Returns:
+        A length-``local_dim`` complex vector for the site.
+
+    Raises:
+        ValueError: If ``initial`` is unknown, ``basis`` is missing ``basis_string``, or local
+            dimension is too small for the preset.
+    """
+    vector = np.zeros(local_dim, dtype=np.complex128)
+    if initial == "zeros":
+        vector[0] = 1.0
+    elif initial == "ones":
+        if local_dim < 2:
+            msg = "ones preset requires local dimension at least 2."
+            raise ValueError(msg)
+        vector[1] = 1.0
+    elif initial == "x+":
+        vector[0] = 1 / np.sqrt(2)
+        vector[1] = 1 / np.sqrt(2)
+    elif initial == "x-":
+        vector[0] = 1 / np.sqrt(2)
+        vector[1] = -1 / np.sqrt(2)
+    elif initial == "y+":
+        vector[0] = 1 / np.sqrt(2)
+        vector[1] = 1j / np.sqrt(2)
+    elif initial == "y-":
+        vector[0] = 1 / np.sqrt(2)
+        vector[1] = -1j / np.sqrt(2)
+    elif initial == "Neel":
+        if site % 2:
+            vector[0] = 1.0
+        elif local_dim > 1:
+            vector[1] = 1.0
+        else:
+            vector[0] = 1.0
+    elif initial == "wall":
+        if site < length // 2:
+            vector[0] = 1.0
+        elif local_dim > 1:
+            vector[1] = 1.0
+        else:
+            vector[0] = 1.0
+    elif initial == "random":
+        if local_dim < 2:
+            msg = "random preset requires local dimension at least 2."
+            raise ValueError(msg)
+        vector[0] = rng.random()
+        vector[1] = 1.0 - vector[0]
+    elif initial == "basis":
+        if basis_string is None:
+            msg = "basis_string must be provided for initial='basis'."
+            raise ValueError(msg)
+        idx = int(basis_string[site])
+        if idx >= local_dim:
+            msg = f"basis index {idx} out of range for local dimension {local_dim}."
+            raise ValueError(msg)
+        vector[idx] = 1.0
+    else:
+        msg = f"Unknown product-state preset: {initial!r}"
+        raise ValueError(msg)
+    return vector
+
+
+def _product_state_vector(
+    length: int,
+    initial: str,
+    physical_dimensions: list[int] | int | None,
+    *,
+    basis_string: str | None = None,
+    seed: int | None = None,
+) -> NDArray[np.complex128]:
+    """Build a normalized product-state vector without constructing an MPS.
+
+    Returns:
+        The normalized dense state vector of length ``prod(physical_dimensions)``.
+    """
+    dims = _resolve_physical_dimensions(length, physical_dimensions)
+    rng = np.random.default_rng(seed)
+    psi = _local_vector_for_preset(0, initial, dims[0], length=length, basis_string=basis_string, rng=rng)
+    # kron(v_site, psi) so site 0 remains the least significant index (MPS to_vec order).
+    for site in range(1, length):
+        local = _local_vector_for_preset(site, initial, dims[site], length=length, basis_string=basis_string, rng=rng)
+        psi = np.kron(local, psi)
+    vec = np.asarray(psi, dtype=np.complex128).reshape(-1)
+    return _normalize_vector(vec)
+
 
 def _infer_qubit_length(hilbert_dim: int) -> int:
     """Infer the number of qubits from a Hilbert-space dimension ``2**n``.
@@ -44,6 +185,9 @@ def _infer_qubit_length(hilbert_dim: int) -> int:
 
 def _normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Return a unit-norm copy of a state vector.
+
+    Returns:
+        The normalized vector.
 
     Raises:
         ValueError: If the vector has zero norm.
@@ -82,13 +226,14 @@ class State:
     :meth:`encode` (or let ``run`` do so) to materialize an :class:`~mqt.yaqs.core.data_structures.networks.MPS`,
     dense vector, or density matrix for the chosen ``AnalogSimParams.representation``.
 
-    Manual data (mutually exclusive):
+    Manual data (mutually exclusive; each is encoded automatically at construction):
 
-    - ``tensors``: list of MPS cores → MPS representation.
-    - ``vector``: 1-D array → dense state vector.
-    - ``density_matrix``: 2-D array → density matrix.
+    - ``tensors``: list of MPS cores → encoded as ``"mps"``.
+    - ``vector``: 1-D array → encoded as ``"vector"``.
+    - ``density_matrix``: 2-D array → encoded as ``"density_matrix"``.
 
-    If none of these are given, an MPS is built from ``initial`` (and related kwargs).
+    If none of these are given, only ``length`` / preset kwargs are stored until
+    :meth:`encode` or :func:`~mqt.yaqs.simulator.run`.
     """
 
     def __init__(
@@ -102,6 +247,7 @@ class State:
         density_matrix: NDArray[np.complex128] | None = None,
         pad: int | None = None,
         basis_string: str | None = None,
+        seed: int | None = None,
     ) -> None:
         """Build a state specification.
 
@@ -112,11 +258,12 @@ class State:
             initial: Product-state preset passed to :class:`MPS` when no manual data is given.
                 Same options as ``MPS(..., state=...)`` (``"zeros"``, ``"ones"``, ``"x+"``, …).
             physical_dimensions: Per-site physical dimension(s); default is qubits (2).
-            tensors: MPS tensor cores (rank-3 arrays per site) → MPS representation.
-            vector: 1-D state vector → dense ``representation='vector'`` data.
-            density_matrix: 2-D square array → ``representation='density_matrix'`` data.
+            tensors: MPS tensor cores (rank-3 arrays per site); encoded as ``"mps"`` immediately.
+            vector: 1-D state vector; encoded as ``"vector"`` immediately.
+            density_matrix: 2-D square array; encoded as ``"density_matrix"`` immediately.
             pad: Bond-dimension padding passed through to :class:`MPS` (preset/tensor paths only).
             basis_string: Computational-basis string when ``initial="basis"``.
+            seed: RNG seed for ``initial="random"`` when building dense product vectors.
 
         Raises:
             ValueError: If more than one of ``tensors``, ``vector``, and ``density_matrix`` is set,
@@ -133,6 +280,7 @@ class State:
         self._tensors: list[NDArray[np.complex128]] | None = None
         self.pad = pad
         self.basis_string = basis_string
+        self.seed = seed
         self._encoded_as: Representation | None = None
         self._mps: MPS | None = None
         self._vector: NDArray[np.complex128] | None = None
@@ -148,6 +296,7 @@ class State:
                 raise ValueError(msg)
             self.length = n_sites if length is None else length
             self._tensors = [np.asarray(t, dtype=np.complex128) for t in tensors]
+            self.encode("mps")
         elif vector is not None:
             self._vector = _normalize_vector(vector)
             hilbert_dim = self._vector.size
@@ -155,6 +304,7 @@ class State:
                 self.length = _infer_qubit_length(hilbert_dim)
             else:
                 self.length = length
+            self.encode("vector")
         elif density_matrix is not None:
             self._density_matrix = _normalize_density_matrix(density_matrix)
             hilbert_dim = self._density_matrix.shape[0]
@@ -162,6 +312,7 @@ class State:
                 self.length = _infer_qubit_length(hilbert_dim)
             else:
                 self.length = length
+            self.encode("density_matrix")
         else:
             if length is None:
                 msg = "length is required when not passing tensors, vector, or density_matrix."
@@ -175,11 +326,8 @@ class State:
         Returns:
             A :class:`State` that references ``mps`` and is already encoded as ``"mps"``.
         """
-        wrapped = cls(
-            mps.length,
-            tensors=list(mps.tensors),
-            physical_dimensions=list(mps.physical_dimensions),
-        )
+        wrapped = cls(mps.length, physical_dimensions=list(mps.physical_dimensions))
+        wrapped._tensors = [np.asarray(t, dtype=np.complex128) for t in mps.tensors]
         wrapped._mps = mps
         wrapped._encoded_as = "mps"
         return wrapped
@@ -210,12 +358,38 @@ class State:
             )
         return self._mps
 
+    def _can_build_dense_from_preset(self) -> bool:
+        """Whether :meth:`encode` can materialize a dense vector without an MPS.
+
+        Returns:
+            ``True`` if the state was specified by a product preset (not tensors / haar-random).
+        """
+        if self._tensors is not None:
+            return False
+        if not _preset_is_product_state(self.initial):
+            return False
+        return not (self.initial == "basis" and self.basis_string is None)
+
+    def _dense_vector_from_preset(self) -> NDArray[np.complex128]:
+        """Normalized product-state vector for the stored preset.
+
+        Returns:
+            Dense vector for ``self.initial`` without building an :class:`MPS`.
+        """
+        return _product_state_vector(
+            self.length,
+            self.initial,
+            self.physical_dimensions,
+            basis_string=self.basis_string,
+            seed=self.seed,
+        )
+
     @property
     def mps(self) -> MPS:
-        """Tensor-network representation after :meth:`encode` with ``"mps"`` (or a compatible encoding).
+        """Tensor-network representation when encoded as ``"mps"`` (including ``tensors=`` init).
 
         Raises:
-            RuntimeError: If :meth:`encode` with ``"mps"`` has not been called.
+            RuntimeError: If the state is not encoded as ``"mps"``.
         """
         if self._mps is None:
             msg = "MPS not materialized; call encode('mps') first."
@@ -224,10 +398,10 @@ class State:
 
     @property
     def vector(self) -> NDArray[np.complex128]:
-        """Normalized dense state vector after :meth:`encode` with ``"vector"``.
+        """Normalized dense state vector when encoded as ``"vector"`` (including ``vector=`` init).
 
         Raises:
-            RuntimeError: If :meth:`encode` with ``"vector"`` has not been called.
+            RuntimeError: If the state is not encoded as ``"vector"``.
         """
         if self._vector is None:
             msg = "Vector not materialized; call encode('vector') first."
@@ -236,10 +410,10 @@ class State:
 
     @property
     def density_matrix(self) -> NDArray[np.complex128]:
-        """Density matrix after :meth:`encode` with ``"density_matrix"``.
+        """Density matrix when encoded as ``"density_matrix"`` (including ``density_matrix=`` init).
 
         Raises:
-            RuntimeError: If :meth:`encode` with ``"density_matrix"`` has not been called.
+            RuntimeError: If the state is not encoded as ``"density_matrix"``.
         """
         if self._density_matrix is None:
             msg = "Density matrix not materialized; call encode('density_matrix') first."
@@ -268,6 +442,8 @@ class State:
         elif representation == "vector":
             if self._vector is not None:
                 self._vector = _normalize_vector(self._vector)
+            elif self._can_build_dense_from_preset():
+                self._vector = self._dense_vector_from_preset()
             else:
                 mps = self._build_mps()
                 self._vector = _normalize_vector(mps.to_vec())
@@ -276,6 +452,11 @@ class State:
                 self._density_matrix = _normalize_density_matrix(self._density_matrix)
             elif self._vector is not None:
                 vec = _normalize_vector(self._vector)
+                dim = vec.size
+                self._density_matrix = np.outer(vec, vec.conj()).reshape(dim, dim)
+            elif self._can_build_dense_from_preset():
+                vec = self._dense_vector_from_preset()
+                self._vector = vec
                 dim = vec.size
                 self._density_matrix = np.outer(vec, vec.conj()).reshape(dim, dim)
             else:
