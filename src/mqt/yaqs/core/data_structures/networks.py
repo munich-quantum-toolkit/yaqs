@@ -1518,14 +1518,29 @@ class MPO:
         *,
         jordan_wigner: bool = False,
     ) -> MPO:
-        """Construct a 1D Fermi-Hubbard Hamiltonian MPO.
+        r"""Construct a 1D Fermi-Hubbard Hamiltonian MPO.
 
         Without ``jordan_wigner``, builds the standard fermionic MPO on sites with
-        local dimension 4 (|↑⟩, |↓⟩, |↑↓⟩, |0⟩ ordering via Kronecker products).
+        local dimension 4. The single-site basis is
+        :math:`|0\\rangle, |\\!\\downarrow\\rangle, |\\!\\uparrow\\rangle, |\\!\\uparrow\\downarrow\\rangle`
+        (NumPy ``kron`` ordering for :math:`|\\!\\uparrow\\rangle \\otimes |\\!\\downarrow\\rangle`).
+        The Hamiltonian is
+        :math:`H = -t \\sum_{i,\\sigma} (c^\\dagger_{i,\\sigma} c_{i+1,\\sigma} + \\mathrm{h.c.})
+        + U \\sum_i n_{i,\\uparrow} n_{i,\\downarrow}`.
 
         With ``jordan_wigner=True``, builds the Jordan-Wigner Pauli-string MPO on an
-        interleaved spin chain 1↑, 1↓, 2↑, 2↓, ... (local dimension 2). In this mode
-        ``length`` is the number of **spin orbitals** and must be even and at least 2.
+        interleaved spin chain 1↑, 1↓, 2↑, 2↓, ... (local dimension 2):
+
+        .. math::
+
+            H = \\frac{U}{4} \\sum_i Z_{i,\\uparrow} Z_{i,\\downarrow}
+            - \\frac{t}{2} \\sum_i \\left( X_{\\uparrow,i} Z_{\\downarrow,i} X_{\\uparrow,i+1}
+            + Y_{\\uparrow,i} Z_{\\downarrow,i} Y_{\\uparrow,i+1} \\right)
+            - \\frac{t}{2} \\sum_i \\left( X_{\\downarrow,i} Z_{\\uparrow,i+1} X_{\\downarrow,i+1}
+            + Y_{\\downarrow,i} Z_{\\uparrow,i+1} Y_{\\downarrow,i+1} \\right)
+
+        In this mode ``length`` is the number of **spin orbitals** and must be even and
+        at least 2.
 
         Args:
             length: Chain length. Number of fermionic sites if ``jordan_wigner`` is
@@ -1553,9 +1568,13 @@ class MPO:
 
     @classmethod
     def _fermi_hubbard_1d_fermionic(cls, length: int, t: float, u: float) -> MPO:
+        if length <= 0:
+            msg = "length must be positive."
+            raise ValueError(msg)
 
         physical_dimension = 4
         identity = np.eye(physical_dimension, dtype=complex)
+        zero = np.zeros_like(identity, dtype=complex)
         c = np.array([[0, 1], [0, 0]], dtype=complex)
         c_dag = np.array([[0, 0], [1, 0]], dtype=complex)
         c_up = np.kron(c, np.eye(2, dtype=complex))
@@ -1566,31 +1585,31 @@ class MPO:
         n_down = np.kron(np.eye(2, dtype=complex), c_dag @ c)
         onsite = u * n_up @ n_down
 
-        left_bound = np.array(
-            [onsite, t * c_up, t * c_down, -t * c_up_dag, -t * c_down_dag, identity],
-            dtype=complex,
-        )[np.newaxis, :]
+        # Bond layout matches ``bose_hubbard``: channels
+        # 0=identity, 1=c↑†, 2=c↓†, 3=c↑, 4=c↓, 5=accumulator.
+        tensor = np.empty((6, 6, physical_dimension, physical_dimension), dtype=object)
+        tensor[:, :] = [[zero for _ in range(6)] for _ in range(6)]
+        tensor[0, 0] = identity
+        tensor[0, 1] = c_up_dag
+        tensor[0, 2] = c_down_dag
+        tensor[0, 3] = c_up
+        tensor[0, 4] = c_down
+        tensor[0, 5] = onsite
+        tensor[1, 5] = -t * c_up
+        tensor[2, 5] = -t * c_down
+        tensor[3, 5] = -t * c_up_dag
+        tensor[4, 5] = -t * c_down_dag
+        tensor[5, 5] = identity
 
-        inner = np.zeros((6, 6, physical_dimension, physical_dimension), dtype=complex)
-        inner[0, 0] = identity
-        inner[1, 0] = c_up_dag
-        inner[2, 0] = c_down_dag
-        inner[3, 0] = c_up
-        inner[4, 0] = c_down
-        inner[5, 0] = onsite
-        inner[5, 1] = t * c_up
-        inner[5, 2] = t * c_down
-        inner[5, 3] = -t * c_up_dag
-        inner[5, 4] = -t * c_down_dag
-        inner[5, 5] = identity
-
-        right_bound = np.array(
-            [identity, c_up_dag, c_down_dag, c_up, c_down, onsite],
-            dtype=complex,
-        )[:, np.newaxis]
+        tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128) for _ in range(length)]
+        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(np.complex128)
+        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 5:6].astype(np.complex128)
 
         mpo = cls()
-        mpo.finite_state_machine(length, left_bound, inner, right_bound)
+        mpo.tensors = tensors
+        mpo.length = length
+        mpo.physical_dimension = physical_dimension
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
         return mpo
 
     @classmethod
