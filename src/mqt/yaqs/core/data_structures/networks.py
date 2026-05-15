@@ -1309,6 +1309,7 @@ class MPO:
 
     - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
     - ``MPO.hamiltonian(...)``: generic one-/two-body Pauli interactions.
+    - ``MPO.fermi_hubbard_1d(...)``: 1D Fermi-Hubbard (fermionic or Jordan-Wigner Pauli).
     - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
     - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
     - ``identity(...)``, ``custom(...)``, ``finite_state_machine(...)``: in-place builders.
@@ -1509,6 +1510,146 @@ class MPO:
         )
 
     @classmethod
+    def fermi_hubbard_1d(
+        cls,
+        length: int,
+        t: float,
+        u: float,
+        *,
+        jordan_wigner: bool = False,
+    ) -> MPO:
+        r"""Construct a 1D Fermi-Hubbard Hamiltonian MPO.
+
+        Without ``jordan_wigner``, builds the standard fermionic MPO on sites with
+        local dimension 4. The single-site basis is
+        :math:`|0\\rangle, |\\!\\downarrow\\rangle, |\\!\\uparrow\\rangle, |\\!\\uparrow\\downarrow\\rangle`
+        (NumPy ``kron`` ordering for :math:`|\\!\\uparrow\\rangle \\otimes |\\!\\downarrow\\rangle`).
+        The Hamiltonian is
+        :math:`H = -t \\sum_{i,\\sigma} (c^\\dagger_{i,\\sigma} c_{i+1,\\sigma} + \\mathrm{h.c.})
+        + U \\sum_i n_{i,\\uparrow} n_{i,\\downarrow}`.
+
+        With ``jordan_wigner=True``, builds the Jordan-Wigner Pauli-string MPO on an
+        interleaved spin chain 1↑, 1↓, 2↑, 2↓, ... (local dimension 2):
+
+        .. math::
+
+            U n_{i,\\uparrow} n_{i,\\downarrow}
+            = \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
+            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
+
+            H = \\sum_i \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
+            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
+            - \\frac{t}{2} \\sum_i \\left( X_{\\uparrow,i} Z_{\\downarrow,i} X_{\\uparrow,i+1}
+            + Y_{\\uparrow,i} Z_{\\downarrow,i} Y_{\\uparrow,i+1} \\right)
+            - \\frac{t}{2} \\sum_i \\left( X_{\\downarrow,i} Z_{\\uparrow,i+1} X_{\\downarrow,i+1}
+            + Y_{\\downarrow,i} Z_{\\uparrow,i+1} Y_{\\downarrow,i+1} \\right)
+
+        Without ``jordan_wigner``, the MPO uses fermionic ladder operators on composite
+        dimension-4 sites (hard-core constraint per site). Inter-site algebra matches
+        that embedding; use ``jordan_wigner=True`` for a Pauli-chain representation
+        with full Jordan-Wigner signs between spin orbitals.
+
+        In JW mode ``length`` is the number of **spin orbitals** and must be even and
+        at least 2.
+
+        Args:
+            length: Chain length. Number of fermionic sites if ``jordan_wigner`` is
+                False; number of spin orbitals (even) if True.
+            t: Hopping strength.
+            u: On-site interaction strength.
+            jordan_wigner: If True, use the JW-transformed Pauli MPO; otherwise use
+                the fermionic operator MPO.
+
+        Returns:
+            An MPO representing the 1D Fermi-Hubbard Hamiltonian.
+
+        Raises:
+            ValueError: If ``length`` is invalid for the chosen representation.
+        """
+        if jordan_wigner:
+            if length % 2 != 0 or length < 2:
+                msg = "length must be an even integer ≥ 2 (ordering: 1↑,1↓,2↑,2↓,...)."
+                raise ValueError(msg)
+            return cls._fermi_hubbard_1d_jordan_wigner(length=length, t=t, u=u)
+        return cls._fermi_hubbard_1d_fermionic(length=length, t=t, u=u)
+
+    @classmethod
+    def _fermi_hubbard_1d_fermionic(cls, length: int, t: float, u: float) -> MPO:
+        if length <= 0:
+            msg = "length must be positive."
+            raise ValueError(msg)
+
+        physical_dimension = 4
+        identity = np.eye(physical_dimension, dtype=complex)
+        zero = np.zeros_like(identity, dtype=complex)
+        c = np.array([[0, 1], [0, 0]], dtype=complex)
+        c_dag = np.array([[0, 0], [1, 0]], dtype=complex)
+        c_up = np.kron(c, np.eye(2, dtype=complex))
+        c_down = np.kron(np.eye(2, dtype=complex), c)
+        c_up_dag = np.kron(c_dag, np.eye(2, dtype=complex))
+        c_down_dag = np.kron(np.eye(2, dtype=complex), c_dag)
+        n_up = np.kron(c_dag @ c, np.eye(2, dtype=complex))
+        n_down = np.kron(np.eye(2, dtype=complex), c_dag @ c)
+        onsite = u * n_up @ n_down
+
+        # Bond layout matches ``bose_hubbard``: channels
+        # 0=identity, 1=c↑†, 2=c↓†, 3=c↑, 4=c↓, 5=accumulator.
+        tensor = np.empty((6, 6, physical_dimension, physical_dimension), dtype=object)
+        tensor[:, :] = [[zero for _ in range(6)] for _ in range(6)]
+        tensor[0, 0] = identity
+        tensor[0, 1] = c_up_dag
+        tensor[0, 2] = c_down_dag
+        tensor[0, 3] = c_up
+        tensor[0, 4] = c_down
+        tensor[0, 5] = onsite
+        tensor[1, 5] = -t * c_up
+        tensor[2, 5] = -t * c_down
+        tensor[3, 5] = -t * c_up_dag
+        tensor[4, 5] = -t * c_down_dag
+        tensor[5, 5] = identity
+
+        tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128) for _ in range(length)]
+        tensors[0] = tensors[0][:, :, 0:1, :]
+        if length == 1:
+            tensors[0] = tensors[0][:, :, :, 5:6]
+        else:
+            tensors[-1] = tensors[-1][:, :, :, 5:6]
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = length
+        mpo.physical_dimension = physical_dimension
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+        return mpo
+
+    @classmethod
+    def _fermi_hubbard_1d_jordan_wigner(cls, length: int, t: float, u: float) -> MPO:
+        num_sites = length // 2
+        terms: list[tuple[complex | float, str]] = []
+        for site in range(num_sites):
+            up, down = 2 * site, 2 * site + 1
+            terms.extend([
+                (u / 4, ""),
+                (-u / 4, f"Z{up}"),
+                (-u / 4, f"Z{down}"),
+                (u / 4, f"Z{up} Z{down}"),
+            ])
+        for site in range(num_sites - 1):
+            up, down = 2 * site, 2 * site + 1
+            up_next = 2 * (site + 1)
+            down_next = 2 * (site + 1) + 1
+            terms.extend([
+                (-t / 2, f"X{up} Z{down} X{up_next}"),
+                (-t / 2, f"Y{up} Z{down} Y{up_next}"),
+                (-t / 2, f"X{down} Z{up_next} X{down_next}"),
+                (-t / 2, f"Y{down} Z{up_next} Y{down_next}"),
+            ])
+
+        mpo = cls()
+        mpo.from_pauli_sum(terms=terms, length=length, n_sweeps=0)
+        return mpo
+
+    @classmethod
     def coupled_transmon(
         cls,
         length: int,
@@ -1692,12 +1833,11 @@ class MPO:
 
         # build the full tensor list
         tensors = [np.transpose(tensor.copy(), (2, 3, 0, 1)).astype(np.complex128) for _ in range(length)]
-
-        # Left boundary: take only row 0
-        tensors[0] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, 0:1, :].astype(np.complex128)
-
-        # Right boundary: take only col 3
-        tensors[-1] = np.transpose(tensor.copy(), (2, 3, 0, 1))[:, :, :, 3:4].astype(np.complex128)
+        tensors[0] = tensors[0][:, :, 0:1, :]
+        if length == 1:
+            tensors[0] = tensors[0][:, :, :, 3:4]
+        else:
+            tensors[-1] = tensors[-1][:, :, :, 3:4]
 
         mpo = cls()
         mpo.tensors = tensors
