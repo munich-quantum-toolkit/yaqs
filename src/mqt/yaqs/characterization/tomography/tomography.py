@@ -238,10 +238,10 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
     alpha_seq = worker_sequences[seq_idx]
 
     # 3. Initialize state to |0...0>
-    is_mcwf = sim_params.solver == "MCWF"
+    is_vector = sim_params.representation == "vector"
     current_state: MPS | NDArray[np.complex128]
 
-    if is_mcwf:
+    if is_vector:
         num_sites = operator.length
         current_state = np.array([1.0], dtype=np.complex128)
         for _ in range(num_sites):
@@ -276,7 +276,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         _, psi_next, _ = basis_set[p_t]
         _, psi_proj, _ = basis_set[m_t]
 
-        if is_mcwf:
+        if is_vector:
             assert isinstance(current_state, np.ndarray)
             current_state, step_prob = _reprepare_site_zero_vector_forced(
                 cast("NDArray[np.complex128]", current_state), psi_proj, psi_next
@@ -302,7 +302,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         n_steps = int(np.round(duration / step_params.dt))
         step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
 
-        if is_mcwf:
+        if is_vector:
             static_ctx = WORKER_CTX["mcwf_static_ctx"]
             dynamic_ctx = copy.copy(static_ctx)
             dynamic_ctx.psi_initial = current_state
@@ -388,7 +388,9 @@ def run(
         num_trajectories = 1
 
     mcwf_static_ctx = None
-    if sim_params.solver == "MCWF":
+    if sim_params.representation == "vector":
+        # Shape-only placeholder: preprocess_mcwf uses length and static operators only.
+        # Workers override dynamic_ctx.psi_initial with the real state vector each step.
         dummy_mps = MPS(length=operator.length, state="zeros")
         mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
 

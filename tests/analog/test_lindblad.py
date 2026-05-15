@@ -7,13 +7,21 @@
 
 """Tests for the Exact Lindblad Solver."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from mqt.yaqs.analog.lindblad import lindblad
+import mqt.yaqs.analog.lindblad as lindblad_mod
+from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, preprocess_lindblad
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.simulator import run
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_lindblad_amplitude_damping() -> None:
@@ -39,7 +47,7 @@ def test_lindblad_amplitude_damping() -> None:
         observables=[obs],
         elapsed_time=t_max,
         dt=dt,
-        solver="Lindblad",
+        representation="density_matrix",
         num_traj=1,  # Deterministic
     )
 
@@ -68,7 +76,7 @@ def test_lindblad_unitary_rabi() -> None:
     dt = 0.05
     obs = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, solver="Lindblad")
+    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, representation="density_matrix")
 
     run(initial_state, hamiltonian, sim_params, None)
 
@@ -103,7 +111,7 @@ def test_lindblad_dephasing() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="Lindblad")
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, representation="density_matrix")
 
     run(initial_state, hamiltonian, sim_params, noise_model)
 
@@ -149,7 +157,7 @@ def test_lindblad_dephasing_both_qubits() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="Lindblad")
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, representation="density_matrix")
 
     run(initial_state, hamiltonian, sim_params, noise_model)
 
@@ -174,11 +182,17 @@ def test_lindblad_zero_strength_noise() -> None:
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
 
     obs = Observable("z", sites=[0])
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="Lindblad", observables=[obs])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[obs])
 
-    args = (0, psi, noise, sim_params, h)
-    # Should run without error
-    lindblad(args)
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert len(ctx.jump_ops) == 0
+    assert ctx.is_unitary
+    dim = 2**n_sites
+    assert dim * dim <= MAX_LIOUVILLIAN_VECTOR_DIM
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (dim * dim, dim * dim)
+
+    lindblad((0, psi, noise, sim_params, h))
 
 
 def test_lindblad_diagnostic_observables() -> None:
@@ -192,7 +206,9 @@ def test_lindblad_diagnostic_observables() -> None:
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="Lindblad", observables=[obs_diag, obs_real])
+    sim_params = AnalogSimParams(
+        dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[obs_diag, obs_real]
+    )
 
     # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
     args = (0, psi, None, sim_params, h)
@@ -208,3 +224,133 @@ def test_lindblad_diagnostic_observables() -> None:
     assert diag_idx != -1
     # Result for diagnostic should be 0.0
     assert np.allclose(res_lindblad[diag_idx, :], 0.0)
+
+
+def test_preprocess_lindblad_sets_propagator_small_system() -> None:
+    """Small systems precompute a fixed Liouvillian step propagator."""
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="density_matrix",
+        observables=[Observable("z", sites=[0])],
+    )
+    ctx = preprocess_lindblad(psi, h, None, sim_params)
+    vec_dim = (2**n_sites) ** 2
+    assert vec_dim <= MAX_LIOUVILLIAN_VECTOR_DIM
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (vec_dim, vec_dim)
+    assert ctx.is_unitary
+
+
+def test_lindblad_noisy_small_system_has_propagator() -> None:
+    """Open-system runs on small Hilbert spaces also use the precomputed propagator."""
+    n_sites = 2
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[])
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert not ctx.is_unitary
+    assert ctx.step_propagator is not None
+
+
+def test_noiseless_mps_matches_density_matrix() -> None:
+    """Noiseless Hamiltonian evolution agrees between mps and density_matrix representations."""
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    obs = Observable("z", sites=[0])
+    t_max = 0.5
+    dt = 0.1
+
+    params_mps = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=t_max,
+        dt=dt,
+        representation="mps",
+        max_bond_dim=32,
+        show_progress=False,
+    )
+    run(psi, h, params_mps, None)
+    assert obs.results is not None
+    z_mps = obs.results[-1]
+
+    obs_rho = Observable("z", sites=[0])
+    params_rho = AnalogSimParams(
+        observables=[obs_rho],
+        elapsed_time=t_max,
+        dt=dt,
+        representation="density_matrix",
+        show_progress=False,
+    )
+    run(psi, h, params_rho, None)
+    assert obs_rho.results is not None
+    z_rho = obs_rho.results[-1]
+
+    assert z_mps is not None
+    assert z_rho is not None
+    assert np.isclose(z_mps, z_rho, atol=1e-4), f"mps={z_mps}, density_matrix={z_rho}"
+
+
+def test_lindblad_propagator_records_all_timepoints() -> None:
+    """Propagator path records observables at every entry in sim_params.times."""
+    n_sites = 1
+    psi = MPS(n_sites, state="ones")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    noise = NoiseModel(processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": sigma_minus}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=0.2,
+        dt=0.05,
+        representation="density_matrix",
+        sample_timesteps=False,
+    )
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert ctx.step_propagator is not None
+
+    res = lindblad((0, psi, noise, sim_params, h))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))
+    assert not np.allclose(res[0, 0], res[0, -1])
+
+
+def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When vec(rho) is too large to store exp(L dt), evolution uses RK45 ODE integration."""
+    monkeypatch.setattr(lindblad_mod, "MAX_LIOUVILLIAN_VECTOR_DIM", 4)
+    n_sites = 2
+    psi = MPS(n_sites, state="ones")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    gamma = 1.0
+    noise = NoiseModel(processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=0.2,
+        dt=0.05,
+        representation="density_matrix",
+        sample_timesteps=True,
+    )
+
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert ctx.step_propagator is None
+
+    res = lindblad((0, psi, noise, sim_params, h))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))

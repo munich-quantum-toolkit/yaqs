@@ -7,13 +7,21 @@
 
 """Tests for the Monte Carlo Wavefunction (MCWF) Solver."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
+import mqt.yaqs.analog.mcwf as mcwf_mod
+from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.simulator import run
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_mcwf_amplitude_damping() -> None:
@@ -41,7 +49,7 @@ def test_mcwf_amplitude_damping() -> None:
     # We need enough trajectories to converge reasonably well
     num_traj = 200
     sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=t_max, dt=dt, solver="MCWF", num_traj=num_traj, show_progress=False
+        observables=[obs], elapsed_time=t_max, dt=dt, representation="vector", num_traj=num_traj, show_progress=False
     )
 
     run(initial_state, hamiltonian, sim_params, noise_model, parallel=False)
@@ -81,7 +89,7 @@ def test_mcwf_unitary_rabi() -> None:
         observables=[obs],
         elapsed_time=t_max,
         dt=dt,
-        solver="MCWF",
+        representation="vector",
         num_traj=1,  # Deterministic
     )
 
@@ -121,7 +129,12 @@ def test_mcwf_dephasing() -> None:
 
     num_traj = 200
     sim_params = AnalogSimParams(
-        observables=[obs0, obs1], elapsed_time=t_max, dt=dt, solver="MCWF", num_traj=num_traj, show_progress=False
+        observables=[obs0, obs1],
+        elapsed_time=t_max,
+        dt=dt,
+        representation="vector",
+        num_traj=num_traj,
+        show_progress=False,
     )
 
     # Use parallel=True to verify infrastructure
@@ -153,11 +166,50 @@ def test_mcwf_zero_strength_noise() -> None:
     # Define noise with 0 strength
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="MCWF", observables=[Observable("z", sites=[0])])
+    sim_params = AnalogSimParams(
+        dt=0.1, elapsed_time=0.1, representation="vector", observables=[Observable("z", sites=[0])]
+    )
 
-    # Preprocess should not add any jump ops
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
     assert len(ctx.jump_ops) == 0
+    assert ctx.is_unitary
+    dim = 2**n_sites
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (dim, dim)
+
+
+def test_preprocess_mcwf_sets_propagator_small_system() -> None:
+    """Small systems precompute a fixed time-step propagator."""
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="vector",
+        observables=[Observable("z", sites=[0])],
+    )
+    ctx = preprocess_mcwf(psi, h, None, sim_params)
+    dim = 2**n_sites
+    assert dim <= MAX_PRECOMPUTE_DIM
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (dim, dim)
+    assert ctx.is_unitary
+
+
+def test_mcwf_noisy_system_has_propagator() -> None:
+    """Open-system runs on small Hilbert spaces also use the precomputed propagator."""
+    n_sites = 2
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="vector", observables=[])
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    assert not ctx.is_unitary
+    assert ctx.step_propagator is not None
 
 
 def test_mcwf_diagnostic_observables() -> None:
@@ -171,7 +223,7 @@ def test_mcwf_diagnostic_observables() -> None:
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, solver="MCWF", observables=[obs_diag, obs_real])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="vector", observables=[obs_diag, obs_real])
 
     # MCWF Preprocess
     ctx = preprocess_mcwf(psi, h, None, sim_params)
@@ -193,3 +245,107 @@ def test_mcwf_diagnostic_observables() -> None:
     res_mcwf = mcwf((0, ctx))
     # Result for diagnostic should be 0.0
     assert np.allclose(res_mcwf[diag_idx, :], 0.0)
+
+
+def test_mcwf_trajectory_rng_seeding() -> None:
+    """Same traj_idx yields identical MCWF trajectories; different indices differ."""
+    n_sites = 1
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
+    noise = NoiseModel(processes=[{"name": "dephasing", "sites": [0], "strength": 2.0, "matrix": sigma_z}])
+    obs = Observable("x", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.02,
+        elapsed_time=1.0,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+
+    res_a = mcwf((3, ctx))
+    res_b = mcwf((3, ctx))
+    res_c = mcwf((7, ctx))
+
+    assert np.allclose(res_a, res_b)
+    assert not np.allclose(res_a, res_c)
+
+
+def test_mcwf_noisy_evolution_with_propagator() -> None:
+    """Noisy open-system evolution uses the precomputed step propagator path."""
+    n_sites = 2
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.3}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.15,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    assert ctx.step_propagator is not None
+    assert not ctx.is_unitary
+
+    res = mcwf((0, ctx))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))
+
+
+def test_mcwf_unitary_krylov_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When U_step is not stored, unitary evolution uses expm_krylov per step."""
+    monkeypatch.setattr(mcwf_mod, "MAX_PRECOMPUTE_DIM", 4)
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, None, sim_params)
+    assert ctx.step_propagator is None
+    assert ctx.is_unitary
+
+    res = mcwf((0, ctx))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))
+
+
+def test_mcwf_noisy_arnoldi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When U_step is not stored, noisy evolution uses expm_arnoldi per step."""
+    monkeypatch.setattr(mcwf_mod, "MAX_PRECOMPUTE_DIM", 4)
+    n_sites = 3
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="vector",
+        observables=[obs],
+        sample_timesteps=True,
+    )
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    assert ctx.step_propagator is None
+    assert not ctx.is_unitary
+
+    res = mcwf((0, ctx))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))

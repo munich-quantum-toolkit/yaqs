@@ -805,7 +805,7 @@ def _run_ensemble(
         parallel: If True and more than one member, uses :func:`run_backend_parallel`.
 
     Raises:
-        ValueError: If noisy simulation is requested with a list of states, if ``solver`` is
+        ValueError: If noisy simulation is requested with a list of states, if ``representation`` is
             unsupported in list mode, if the list is empty, or if state lengths do not match the MPO.
     """
     if noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes):
@@ -814,9 +814,9 @@ def _run_ensemble(
             "Use list[MPS] with no noise for unitary ensembles, or use a single MPS for noisy simulation."
         )
         raise ValueError(msg)
-    # Will later add support for MCWF if needed
-    if sim_params.solver != "TJM":
-        msg = "list[MPS] analog ensemble currently supports only solver='TJM'."
+    # Will later add support for vector representation if needed
+    if sim_params.representation != "mps":
+        msg = "list[MPS] analog ensemble currently supports only representation='mps'."
         raise ValueError(msg)
 
     if not initial_states:
@@ -915,6 +915,9 @@ def _run_analog(
         sim_params: Simulation parameters for analog simulation, including time step and evolution order.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
+
+    Raises:
+        ValueError: If ``get_state=True`` with ``representation='density_matrix'``.
     """
     # Deterministic unitary ensemble mode
     if isinstance(initial_state, list):
@@ -930,20 +933,24 @@ def _run_analog(
     # Choose integrator order (1 or 2) for the analog TJM backend
 
     backend: Callable[[Any], NDArray[np.float64]]
-    if sim_params.solver == "Lindblad":
+    if sim_params.representation == "density_matrix":
         backend = lindblad
-    elif sim_params.solver == "MCWF":
+    elif sim_params.representation == "vector":
         backend = mcwf
     elif sim_params.order == 1:
         backend = analog_tjm_1
     else:
         backend = analog_tjm_2
 
+    if sim_params.representation == "density_matrix" and sim_params.get_state:
+        msg = "get_state=True is not supported for representation='density_matrix'."
+        raise ValueError(msg)
+
     # If no noise, determinism implies a single trajectory suffices
     if (
         noise_model is None
         or all(proc["strength"] == 0 for proc in noise_model.processes)
-        or sim_params.solver == "Lindblad"
+        or sim_params.representation == "density_matrix"
     ):
         sim_params.num_traj = 1
     else:
@@ -957,13 +964,13 @@ def _run_analog(
     payload: dict[str, Any]
     worker_fn: Callable[[int], Any]
 
-    if sim_params.solver == "MCWF":
+    if sim_params.representation == "vector":
         # Optimization: Pre-compute dense operators once
         ctx = preprocess_mcwf(initial_state, operator, noise_model, sim_params)
         payload = {"ctx": ctx}
         worker_fn = _mcwf_worker
     else:
-        # Standard TJM/Lindblad arguments
+        # Standard mps / density_matrix arguments
         payload = {
             "initial_state": initial_state,
             "noise_model": noise_model,
@@ -996,10 +1003,10 @@ def _run_analog(
 
         # Reconstruct args locally for serial execution
         args: list[Any]
-        if sim_params.solver == "MCWF":
-            # For MCWF serial, we still use the pre-computed ctx
+        if sim_params.representation == "vector":
+            # For vector serial, we still use the pre-computed ctx
             # ctx is already in local scope from above if block
-            args = [(i, ctx) for i in range(sim_params.num_traj)]
+            args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
         else:
             args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
 

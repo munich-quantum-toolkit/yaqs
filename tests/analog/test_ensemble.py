@@ -160,8 +160,8 @@ def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> N
     assert sim_params_off.multi_time_observables_times is None
 
 
-def test_list_mps_analog_ensemble_rejects_non_tjm_solver() -> None:
-    """List-of-MPS analog ensemble only supports the TJM solver path."""
+def test_list_mps_analog_ensemble_rejects_non_mps_representation() -> None:
+    """List-of-MPS analog ensemble only supports the mps representation path."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
     states = [MPS(length, state="zeros"), MPS(length, state="ones")]
@@ -170,9 +170,9 @@ def test_list_mps_analog_ensemble_rejects_non_tjm_solver() -> None:
         elapsed_time=0.1,
         dt=0.1,
         show_progress=False,
-        solver="Lindblad",
+        representation="density_matrix",
     )
-    with pytest.raises(ValueError, match=r"list\[MPS\] analog ensemble currently supports only solver='TJM'\."):
+    with pytest.raises(ValueError, match=r"list\[MPS\] analog ensemble currently supports only representation='mps'\."):
         simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
 
 
