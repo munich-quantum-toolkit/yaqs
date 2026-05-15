@@ -9,7 +9,7 @@
 
 import numpy as np
 
-from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
+from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
@@ -162,9 +162,46 @@ def test_mcwf_zero_strength_noise() -> None:
         dt=0.1, elapsed_time=0.1, representation="vector", observables=[Observable("z", sites=[0])]
     )
 
-    # Preprocess should not add any jump ops
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
     assert len(ctx.jump_ops) == 0
+    assert ctx.is_unitary
+    dim = 2**n_sites
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (dim, dim)
+
+
+def test_preprocess_mcwf_sets_propagator_small_system() -> None:
+    """Small systems precompute a fixed time-step propagator."""
+    n_sites = 3
+    psi = MPS(n_sites, state="zeros")
+    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        dt=0.05,
+        elapsed_time=0.1,
+        representation="vector",
+        observables=[Observable("z", sites=[0])],
+    )
+    ctx = preprocess_mcwf(psi, h, None, sim_params)
+    dim = 2**n_sites
+    assert dim <= MAX_PRECOMPUTE_DIM
+    assert ctx.step_propagator is not None
+    assert ctx.step_propagator.shape == (dim, dim)
+    assert ctx.is_unitary
+
+
+def test_mcwf_noisy_system_has_propagator() -> None:
+    """Open-system runs on small Hilbert spaces also use the precomputed propagator."""
+    n_sites = 2
+    psi = MPS(n_sites, state="x+")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+    noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="vector", observables=[])
+    ctx = preprocess_mcwf(psi, h, noise, sim_params)
+    assert not ctx.is_unitary
+    assert ctx.step_propagator is not None
 
 
 def test_mcwf_diagnostic_observables() -> None:
