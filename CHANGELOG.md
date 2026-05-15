@@ -11,7 +11,18 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
+- added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])\
+
+### Changed
+
+### Fixed
+
+- minor cleanup ([#420]) ([**@aaronleesander**])
+
+## [0.5.0] - 2026-05-12
+
+### Added
+
 - added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad` ([#400]) ([**@Gauthameshwar**])
 - added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
 - added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
@@ -90,6 +101,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 <!-- Version links -->
 
 [Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.4.0...HEAD
+[0.5.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0
 [0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
 [0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
@@ -97,6 +109,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#420]: https://github.com/munich-quantum-toolkit/yaqs/pull/420
 [#409]: https://github.com/munich-quantum-toolkit/yaqs/pull/409
 [#344]: https://github.com/munich-quantum-toolkit/yaqs/pull/344
 [#400]: https://github.com/munich-quantum-toolkit/yaqs/pull/400
