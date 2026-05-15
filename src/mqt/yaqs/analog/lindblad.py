@@ -242,13 +242,11 @@ def _evolve_with_propagator(ctx: LindbladContext) -> NDArray[np.float64]:
     obs_results = np.zeros((num_obs, num_steps), dtype=np.float64)
 
     rho_vec = ctx.rho_initial.copy()
-    if sim_params.sample_timesteps:
-        _measure_rho(rho_vec, dim, ctx, obs_results, 0)
+    _measure_rho(rho_vec, dim, ctx, obs_results, 0)
 
     for t_idx in range(1, num_steps):
         rho_vec = ctx.step_propagator @ rho_vec
-        if sim_params.sample_timesteps or t_idx == num_steps - 1:
-            _measure_rho(rho_vec, dim, ctx, obs_results, t_idx)
+        _measure_rho(rho_vec, dim, ctx, obs_results, t_idx)
 
     return obs_results
 

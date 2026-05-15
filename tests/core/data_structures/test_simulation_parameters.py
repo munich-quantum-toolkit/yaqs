@@ -92,7 +92,7 @@ def test_analog_simparams_defaults() -> None:
 def test_analog_simparams_invalid_representation() -> None:
     """Test that AnalogSimParams rejects unknown representation values."""
     with pytest.raises(ValueError, match=r"Invalid representation 'tjm'"):
-        AnalogSimParams(representation=cast("Any", "tjm"))
+        AnalogSimParams(representation=cast(Any, "tjm"))  # noqa: TC006
 
 
 def test_observable_initialize_with_sample_timesteps() -> None:
