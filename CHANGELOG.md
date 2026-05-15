@@ -16,6 +16,8 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
+
 ### Fixed
 
 - minor cleanup ([#420]) ([**@aaronleesander**])
@@ -110,6 +112,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#422]: https://github.com/munich-quantum-toolkit/yaqs/pull/422
 [#220]: https://github.com/munich-quantum-toolkit/yaqs/pull/220
 [#420]: https://github.com/munich-quantum-toolkit/yaqs/pull/420
 [#409]: https://github.com/munich-quantum-toolkit/yaqs/pull/409
@@ -144,8 +147,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Contributor -->
 
-[**@denialhaag**]: https://github.com/denialhaag
 [**@aaronleesander**]: https://github.com/aaronleesander
+[**@denialhaag**]: https://github.com/denialhaag
 [**@Gauthameshwar**]: https://github.com/Gauthameshwar
 [**@thilomueller**]: https://github.com/thilomueller
 [**@lucello**]: https://github.com/lucello
