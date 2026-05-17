@@ -9,54 +9,24 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import scipy.sparse
 
+from .hamiltonian_utils import (
+    Representation,
+    attach_mpo,
+    sparse_to_csr,
+    validate_representation,
+)
 from .networks import MPO
-from .state import _infer_qubit_length
+from .state_utils import infer_qubit_length
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-Representation = Literal["mpo", "sparse", "dense"]
-
-_ALLOWED_REPRESENTATIONS = frozenset({"mpo", "sparse", "dense"})
-
-
-def _sparse_to_csr(matrix: scipy.sparse.spmatrix) -> scipy.sparse.csr_matrix:
-    """Return ``matrix`` as CSR (copies only when needed)."""
-    if isinstance(matrix, scipy.sparse.csr_matrix):
-        return matrix
-    return scipy.sparse.csr_matrix(matrix)
-
-
-def _attach_mpo(wrapped: Hamiltonian, mpo: MPO) -> None:
-    """Initialize ``wrapped`` from an existing MPO (factory helper for :meth:`Hamiltonian.from_mpo`)."""
-    wrapped.length = mpo.length
-    wrapped.physical_dimension = mpo.physical_dimension
-    wrapped.representation = "mpo"
-    wrapped._tensors = None  # noqa: SLF001
-    wrapped._matrix = None  # noqa: SLF001
-    wrapped._sparse_matrix = None  # noqa: SLF001
-    wrapped._mpo = mpo  # noqa: SLF001
-    wrapped._encoded_as = "mpo"  # noqa: SLF001
-
-
-def _validate_representation(value: str) -> Representation:
-    """Validate and return a Hamiltonian representation label.
-
-    Returns:
-        A valid ``"mpo"``, ``"sparse"``, or ``"dense"`` label.
-
-    Raises:
-        ValueError: If ``value`` is not ``"mpo"``, ``"sparse"``, or ``"dense"``.
-    """
-    if value not in _ALLOWED_REPRESENTATIONS:
-        msg = f"Invalid representation {value!r}. Allowed values are 'mpo', 'sparse', or 'dense'."
-        raise ValueError(msg)
-    return cast("Representation", value)
+__all__ = ["Hamiltonian", "Representation"]
 
 
 class Hamiltonian:
@@ -130,7 +100,7 @@ class Hamiltonian:
                 raise ValueError(msg)
             hilbert_dim = mat.shape[0]
             if length is None:
-                self.length = _infer_qubit_length(hilbert_dim)
+                self.length = infer_qubit_length(hilbert_dim)
             else:
                 self.length = length
             self._matrix = mat
@@ -140,13 +110,13 @@ class Hamiltonian:
             self.representation = "dense"
         else:
             assert sparse_matrix is not None
-            sparse = _sparse_to_csr(sparse_matrix)
+            sparse = sparse_to_csr(sparse_matrix)
             hilbert_dim = sparse.shape[0]
             if sparse.shape[0] != sparse.shape[1]:
                 msg = "sparse_matrix must be square."
                 raise ValueError(msg)
             if length is None:
-                self.length = _infer_qubit_length(hilbert_dim)
+                self.length = infer_qubit_length(hilbert_dim)
             else:
                 self.length = length
             self._sparse_matrix = sparse
@@ -165,7 +135,7 @@ class Hamiltonian:
             A :class:`Hamiltonian` referencing ``mpo``.
         """
         wrapped = cls.__new__(cls)
-        _attach_mpo(wrapped, mpo)
+        attach_mpo(wrapped, mpo)
         return wrapped
 
     @classmethod
@@ -376,7 +346,7 @@ class Hamiltonian:
             ValueError: If the requested representation cannot be built from the specification.
         """
         rep: Representation = (
-            self.representation if representation is None else _validate_representation(representation)
+            self.representation if representation is None else validate_representation(representation)
         )
         if self._encoded_as == rep:
             if rep == "mpo" and self._mpo is not None:
@@ -391,7 +361,7 @@ class Hamiltonian:
         elif rep == "sparse":
             if self._sparse_matrix is None:
                 if self._mpo is not None:
-                    self._sparse_matrix = _sparse_to_csr(self._mpo.to_sparse_matrix())
+                    self._sparse_matrix = sparse_to_csr(self._mpo.to_sparse_matrix())
                 elif self._matrix is not None:
                     self._sparse_matrix = scipy.sparse.csr_matrix(self._matrix)
                 else:

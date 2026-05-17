@@ -164,6 +164,70 @@ def test_manual_data_rejects_conflicting_representation() -> None:
     vec = np.array([1.0, 0.0], dtype=np.complex128)
     with pytest.raises(ValueError, match="inferred as 'vector' from vector="):
         State(vector=vec, representation="mps")
+    rho = np.eye(2, dtype=np.complex128)
+    with pytest.raises(ValueError, match="inferred as 'density_matrix' from density_matrix="):
+        State(density_matrix=rho, representation="vector")
+
+
+def test_state_tensors_length_mismatch() -> None:
+    """length= must match len(tensors)."""
+    mps_ref = MPS(2, state="zeros")
+    with pytest.raises(ValueError, match="does not match len\\(tensors\\)"):
+        State(tensors=list(mps_ref.tensors), length=3)
+
+
+def test_state_tensors_representation_conflict() -> None:
+    """representation= must not contradict tensors=."""
+    mps_ref = MPS(2, state="zeros")
+    with pytest.raises(ValueError, match="inferred as 'mps' from tensors="):
+        State(tensors=list(mps_ref.tensors), representation="vector")
+
+
+def test_state_vector_explicit_length() -> None:
+    """Vector init accepts an explicit length when Hilbert dimension is known."""
+    vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
+    spec = State(vector=vec, length=2)
+    assert spec.length == 2
+
+
+def test_state_density_matrix_explicit_length() -> None:
+    """Density-matrix init accepts an explicit length."""
+    rho = np.eye(4, dtype=np.complex128) / 4.0
+    spec = State(density_matrix=rho, length=2)
+    assert spec.length == 2
+
+
+def test_state_vector_property_unavailable_for_density() -> None:
+    """vector property raises when encoded as density_matrix."""
+    spec = State(2, initial="zeros", representation="density_matrix")
+    with pytest.raises(RuntimeError, match="State vector is not available"):
+        _ = spec.vector
+
+
+def test_state_density_matrix_property_unavailable_for_vector() -> None:
+    """density_matrix property raises when encoded as vector."""
+    spec = State(2, initial="zeros", representation="vector")
+    with pytest.raises(RuntimeError, match="Density matrix is not available"):
+        _ = spec.density_matrix
+
+
+def test_ensure_encoded_density_matrix_from_vector_init() -> None:
+    """Vector-initialized State can be encoded as a density matrix."""
+    vec = np.array([1.0, 0.0], dtype=np.complex128)
+    spec = State(vector=vec)
+    spec.ensure_encoded("density_matrix")
+    expected = np.outer(vec, vec.conj())
+    np.testing.assert_allclose(spec.density_matrix, expected)
+
+
+def test_ensure_encoded_density_matrix_from_preset() -> None:
+    """Preset State can encode density_matrix without materializing MPS first."""
+    spec = State(2, initial="x+", representation="mps")
+    spec.ensure_encoded("density_matrix")
+    ref_vec = MPS(2, state="x+").to_vec()
+    ref_vec /= np.linalg.norm(ref_vec)
+    expected = np.outer(ref_vec, ref_vec.conj())
+    np.testing.assert_allclose(spec.density_matrix, expected)
 
 
 def test_manual_init_mutually_exclusive() -> None:
@@ -232,6 +296,46 @@ def test_preset_random_with_seed() -> None:
     np.testing.assert_allclose(spec_a.vector, spec_b.vector)
 
 
+def test_state_preset_without_length_raises() -> None:
+    """Preset construction requires length=."""
+    with pytest.raises(ValueError, match="length is required"):
+        State(initial="zeros")
+
+
+def test_state_tensors_empty_raises() -> None:
+    """Empty tensor list is rejected."""
+    with pytest.raises(ValueError, match="non-empty list"):
+        State(tensors=[])
+
+
+def test_state_vector_zero_norm_raises() -> None:
+    """Zero state vectors are rejected at construction."""
+    with pytest.raises(ValueError, match="non-zero"):
+        State(vector=np.zeros(2, dtype=np.complex128))
+
+
+def test_state_density_matrix_renormalizes_trace() -> None:
+    """Non-unit-trace density matrices are normalized at construction."""
+    rho = 2.0 * np.eye(2, dtype=np.complex128)
+    spec = State(density_matrix=rho)
+    assert np.isclose(np.trace(spec.density_matrix), 1.0)
+
+
+def test_state_physical_dimensions_int() -> None:
+    """Integer physical_dimensions broadcasts to all sites."""
+    spec = State(2, initial="zeros", physical_dimensions=2)
+    assert spec.length == 2
+    assert spec.mps.length == 2
+
+
+@pytest.mark.parametrize("initial", ["y+", "y-", "Neel", "wall"])
+def test_preset_vector_matches_product_builder(initial: str) -> None:
+    """Additional product presets match dense product-state construction."""
+    spec = State(4, initial=initial, representation="vector")
+    ref = State(4, initial=initial, representation="vector").vector
+    np.testing.assert_allclose(spec.vector, ref)
+
+
 def test_haar_random_ensure_encoded_vector_uses_mps() -> None:
     """Entangled haar-random presets still require MPS for dense encoding."""
     spec = State(4, initial="haar-random", pad=4, representation="vector")
@@ -239,3 +343,21 @@ def test_haar_random_ensure_encoded_vector_uses_mps() -> None:
     spec.ensure_encoded("vector")
     assert spec.representation == "vector"
     np.testing.assert_allclose(np.linalg.norm(spec.vector), 1.0)
+
+
+def test_ensure_encoded_density_matrix_from_tensors() -> None:
+    """Tensor-initialized State builds density matrices via an internal MPS."""
+    mps_ref = MPS(2, state="zeros")
+    spec = State(tensors=list(mps_ref.tensors), representation="mps")
+    spec.ensure_encoded("density_matrix")
+    ref_vec = mps_ref.to_vec()
+    ref_vec /= np.linalg.norm(ref_vec)
+    expected = np.outer(ref_vec, ref_vec.conj())
+    np.testing.assert_allclose(spec.density_matrix, expected)
+
+
+def test_haar_random_ensure_encoded_density_matrix_uses_mps() -> None:
+    """Entangled presets materialize density matrices through MPS.to_vec."""
+    spec = State(4, initial="haar-random", pad=4, representation="mps")
+    spec.ensure_encoded("density_matrix")
+    assert np.isclose(np.trace(spec.density_matrix), 1.0)
