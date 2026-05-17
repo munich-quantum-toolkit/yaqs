@@ -126,7 +126,7 @@ def preprocess_mcwf(
             msg = f"psi_initial size {psi.size} does not match Hilbert dimension {dim}."
             raise ValueError(msg)
         norm = np.linalg.norm(psi)
-        if norm == 0.0:
+        if np.isclose(norm, 0.0):
             msg = "psi_initial must have non-zero norm."
             raise ValueError(msg)
         psi /= norm
