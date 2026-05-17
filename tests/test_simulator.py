@@ -29,7 +29,7 @@ import pytest
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
@@ -267,9 +267,7 @@ def test_density_matrix_get_state_rejected() -> None:
         get_state=True,
         show_progress=False,
     )
-    with pytest.raises(
-        ValueError, match=r"get_state=True is not supported for State\.representation='density_matrix'"
-    ):
+    with pytest.raises(ValueError, match=r"get_state=True is not supported for State\.representation='density_matrix'"):
         simulator.run(psi, h, sim_params, None)
 
 

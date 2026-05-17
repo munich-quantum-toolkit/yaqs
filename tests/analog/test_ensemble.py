@@ -15,7 +15,7 @@ import pytest
 from mqt.yaqs import simulator
 from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode, Observable
 from mqt.yaqs.core.data_structures.state import State

@@ -59,7 +59,7 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from .core.data_structures.networks import MPS
+    from .core.data_structures.networks import MPO, MPS
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
@@ -87,7 +87,6 @@ from tqdm import tqdm
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
 from .core.data_structures.hamiltonian import Hamiltonian
-from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .core.data_structures.state import State
 
@@ -101,7 +100,7 @@ if TYPE_CHECKING:
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .analog.ensemble import ensemble_member_worker
-from .analog.lindblad import lindblad, lindblad_evolve, preprocess_lindblad
+from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 
@@ -406,7 +405,7 @@ def _materialized_mps(state: State) -> MPS | None:
 
 def _hamiltonian_backend_target(state_rep: str) -> str:
     """Internal storage target for ``Hamiltonian`` given ``State.representation``."""
-    if state_rep in ("vector", "density_matrix"):
+    if state_rep in {"vector", "density_matrix"}:
         return "sparse"
     return "mpo"
 

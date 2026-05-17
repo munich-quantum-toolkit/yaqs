@@ -23,8 +23,8 @@ from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO, MPS
 from ..core.data_structures.noise_model import NoiseModel
-from ..core.data_structures.state import State
 from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from ..core.data_structures.state import State
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp

@@ -210,9 +210,7 @@ def test_lindblad_diagnostic_observables() -> None:
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(
-        dt=0.1, elapsed_time=0.1, observables=[obs_diag, obs_real]
-    )
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs_diag, obs_real])
 
     # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
     args = (0, psi, None, sim_params, h)

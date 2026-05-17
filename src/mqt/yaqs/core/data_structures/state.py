@@ -361,10 +361,7 @@ class State:
             else:
                 self.length = length
             if representation is not None and representation != "density_matrix":
-                msg = (
-                    "representation is inferred as 'density_matrix' from density_matrix=; "
-                    "omit representation=."
-                )
+                msg = "representation is inferred as 'density_matrix' from density_matrix=; omit representation=."
                 raise ValueError(msg)
             self.representation = "density_matrix"
         else:

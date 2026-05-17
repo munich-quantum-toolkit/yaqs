@@ -199,10 +199,7 @@ class Hamiltonian:
         """
         if self._mpo is None:
             if self._matrix is not None or self._sparse_matrix is not None:
-                msg = (
-                    "Cannot build an MPO from matrix or sparse_matrix data; "
-                    "use tensors= or a preset classmethod."
-                )
+                msg = "Cannot build an MPO from matrix or sparse_matrix data; use tensors= or a preset classmethod."
                 raise ValueError(msg)
             if self._tensors is None:
                 msg = "No MPO specification available."

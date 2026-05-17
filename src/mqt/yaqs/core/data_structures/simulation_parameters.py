@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 from enum import Enum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -27,8 +27,8 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+    from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
