@@ -35,7 +35,6 @@ params = AnalogSimParams(...)
 run(psi, H, params, noise_model)
 ```
 
-
 ### End of support for x86 macOS systems
 
 Starting with this release, we can no longer guarantee support for x86 macOS systems.
