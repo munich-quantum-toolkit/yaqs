@@ -12,20 +12,19 @@ from __future__ import annotations
 import concurrent.futures
 import copy
 import multiprocessing
-import re
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 import numpy as np
 import opt_einsum as oe
-import scipy.sparse
-from numpy.typing import NDArray
 from tqdm import tqdm
 
-from ..libraries.gate_library import Destroy
 from ..methods.decompositions import right_qr, two_site_svd
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
+
 
 class MPS:
     """Matrix Product State (MPS) class for representing quantum states.
@@ -1280,4 +1279,3 @@ class MPS:
         vec = np.squeeze(vec, axis=-1)
         # Flatten the resulting multi-index into a one-dimensional state vector.
         return vec.flatten()
-
