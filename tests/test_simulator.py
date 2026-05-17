@@ -1108,7 +1108,7 @@ def test_analog_run_rejects_mpo_operator() -> None:
         show_progress=False,
     )
     with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
-        simulator.run(state, mpo, params, None)
+        simulator.run(state, mpo, params, None)  # ty: ignore[invalid-argument-type]
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
