@@ -61,8 +61,8 @@ class MCWFContext:
     sim_params: AnalogSimParams
     # True when there is no dissipative part (no jump operators); skips jump/RNG logic.
     is_unitary: bool = False
-    # exp(-i H_eff dt) as sparse matrix, if dim <= MAX_PRECOMPUTE_DIM; else None.
-    step_propagator: scipy.sparse.csr_matrix | None = None
+    # exp(-i H_eff dt) as dense matrix, if dim <= MAX_PRECOMPUTE_DIM; else None.
+    step_propagator: NDArray[np.complex128] | None = None
     output_state: NDArray[np.complex128] | None = None
 
 
@@ -148,10 +148,9 @@ def preprocess_mcwf(
         heff -= 0.5j * sum_ldag_l
 
     # 5. Fixed-step propagator U_step = exp(-i H_eff dt) (time-independent H in YAQS).
-    step_propagator: scipy.sparse.csr_matrix | None = None
+    step_propagator: NDArray[np.complex128] | None = None
     if dim <= MAX_PRECOMPUTE_DIM:
-        u_dense = scipy.linalg.expm(-1j * sim_params.dt * heff.toarray())
-        step_propagator = scipy.sparse.csr_matrix(u_dense)
+        step_propagator = scipy.linalg.expm(-1j * sim_params.dt * heff.toarray())
 
     # 6. Observables embedded on the full space; diagnostics are not defined on |psi>.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
@@ -228,12 +227,12 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     Returns:
         An array of expectation values for each observable over time.
     """
-    _traj_idx, ctx = args
+    traj_idx, ctx = args
     sim_params = ctx.sim_params
     dt = sim_params.dt
 
     psi = ctx.psi_initial.copy()
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(int(traj_idx))
 
     num_obs = len(sim_params.sorted_observables)
     num_steps = len(sim_params.times)

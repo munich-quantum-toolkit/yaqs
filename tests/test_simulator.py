@@ -257,6 +257,20 @@ def test_analog_simulation_get_state() -> None:
         np.testing.assert_allclose(1, fidelity)
 
 
+def test_density_matrix_get_state_rejected() -> None:
+    """density_matrix evolution does not support returning an output state."""
+    psi = MPS(2, state="zeros")
+    h = MPO.ising(2, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        representation="density_matrix",
+        get_state=True,
+        show_progress=False,
+    )
+    with pytest.raises(ValueError, match=r"get_state=True is not supported for representation='density_matrix'"):
+        simulator.run(psi, h, sim_params, None)
+
+
 def test_strong_simulation() -> None:
     """Test the circuit-based simulation branch using StrongSimParams.
 

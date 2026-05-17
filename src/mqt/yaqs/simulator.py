@@ -934,6 +934,9 @@ def _run_analog(
         sim_params: Simulation parameters for analog simulation, including time step and evolution order.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
+
+    Raises:
+        ValueError: If ``get_state=True`` with ``representation='density_matrix'``.
     """
     # Deterministic unitary ensemble mode
     if isinstance(initial_state, list):
@@ -967,6 +970,10 @@ def _run_analog(
         backend = analog_tjm_1
     else:
         backend = analog_tjm_2
+
+    if sim_params.representation == "density_matrix" and sim_params.get_state:
+        msg = "get_state=True is not supported for representation='density_matrix'."
+        raise ValueError(msg)
 
     # If no noise, determinism implies a single trajectory suffices
     if (
@@ -1048,7 +1055,7 @@ def _run_analog(
         if sim_params.representation == "vector":
             # For vector serial, we still use the pre-computed ctx
             # ctx is already in local scope from above if block
-            args = [(i, ctx) for i in range(sim_params.num_traj)]
+            args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
         elif use_lindblad_ctx:
             args = [lindblad_ctx for _ in range(sim_params.num_traj)]
         else:

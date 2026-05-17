@@ -7,14 +7,22 @@
 
 """Tests for the Exact Lindblad Solver."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
+import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, preprocess_lindblad
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_lindblad_amplitude_damping() -> None:
@@ -289,3 +297,61 @@ def test_noiseless_mps_matches_density_matrix() -> None:
     assert z_mps is not None
     assert z_rho is not None
     assert np.isclose(z_mps, z_rho, atol=1e-4), f"mps={z_mps}, density_matrix={z_rho}"
+
+
+def test_lindblad_propagator_records_all_timepoints() -> None:
+    """Propagator path records observables at every entry in sim_params.times."""
+    n_sites = 1
+    psi = MPS(n_sites, state="ones")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    noise = NoiseModel(processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": sigma_minus}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=0.2,
+        dt=0.05,
+        representation="density_matrix",
+        sample_timesteps=False,
+    )
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert ctx.step_propagator is not None
+
+    res = lindblad((0, psi, noise, sim_params, h))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))
+    assert not np.allclose(res[0, 0], res[0, -1])
+
+
+def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When vec(rho) is too large to store exp(L dt), evolution uses RK45 ODE integration."""
+    monkeypatch.setattr(lindblad_mod, "MAX_LIOUVILLIAN_VECTOR_DIM", 4)
+    n_sites = 2
+    psi = MPS(n_sites, state="ones")
+    h = MPO()
+    h.identity(n_sites)
+    for i in range(len(h.tensors)):
+        h.tensors[i] *= 0.0
+
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    gamma = 1.0
+    noise = NoiseModel(processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}])
+    obs = Observable("z", sites=[0])
+    sim_params = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=0.2,
+        dt=0.05,
+        representation="density_matrix",
+        sample_timesteps=True,
+    )
+
+    ctx = preprocess_lindblad(psi, h, noise, sim_params)
+    assert ctx.step_propagator is None
+
+    res = lindblad((0, psi, noise, sim_params, h))
+    assert res.shape == (1, len(sim_params.times))
+    assert np.all(np.isfinite(res))
