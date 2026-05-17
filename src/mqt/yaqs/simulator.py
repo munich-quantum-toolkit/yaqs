@@ -768,7 +768,7 @@ def _run_weak_sim(
 #     to strong or weak simulation path based on the sim params type.
 # ---------------------------------------------------------------------------
 def _run_circuit(
-    initial_state: MPS,
+    initial_state: State,
     operator: QuantumCircuit,
     sim_params: WeakSimParams | StrongSimParams,
     noise_model: NoiseModel | None,
@@ -777,26 +777,40 @@ def _run_circuit(
 ) -> None:
     """Run circuit-based simulation trajectories.
 
-    This function validates that the number of qubits in the quantum circuit matches the length of the MPS,
-    reverses the bit order of the circuit, and dispatches the simulation to the appropriate backend based on
-    whether the simulation parameters indicate strong or weak simulation.
+    This function requires :attr:`~mqt.yaqs.core.data_structures.state.State.representation`
+    ``"mps"``, materializes the state, validates that the number of qubits in the quantum circuit
+    matches the MPS length, reverses the bit order of the circuit, and dispatches the simulation
+    to the appropriate backend based on whether the simulation parameters indicate strong or weak
+    simulation.
 
     Args:
-        initial_state: The initial system state as an MPS.
+        initial_state: The initial system state (must use MPS representation).
         operator: The quantum circuit to simulate.
         sim_params: Simulation parameters for circuit simulation.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
+
+    Raises:
+        ValueError: If ``initial_state.representation`` is not ``"mps"``.
     """
+    if initial_state.representation != "mps":
+        msg = (
+            "Circuit simulation requires State.representation='mps'. "
+            "Use representation='vector' or 'density_matrix' only for analog Hamiltonian runs."
+        )
+        raise ValueError(msg)
+    initial_state.encode()
+    mps = initial_state.mps
+
     # Sanity check: MPS length must equal circuit qubit count
-    assert initial_state.length == operator.num_qubits, "MPS and circuit qubit counts do not match."
+    assert mps.length == operator.num_qubits, "MPS and circuit qubit counts do not match."
     # Internal convention expects qubit order reversed (if applicable)
     operator = copy.deepcopy(operator.reverse_bits())
 
     if isinstance(sim_params, StrongSimParams):
-        _run_strong_sim(initial_state, operator, sim_params, noise_model, parallel=parallel)
+        _run_strong_sim(mps, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, WeakSimParams):
-        _run_weak_sim(initial_state, operator, sim_params, noise_model, parallel=parallel)
+        _run_weak_sim(mps, operator, sim_params, noise_model, parallel=parallel)
 
 
 # ---------------------------------------------------------------------------
@@ -1088,8 +1102,9 @@ def run(
     """Execute the common simulation routine for both circuit and Hamiltonian simulations.
 
     This function dispatches the simulation to the appropriate backend based on the type of
-    simulation parameters provided. For circuit-based simulations, the initial state is
-    B-normalized MPS for circuits; for analog simulations,
+    simulation parameters provided. For circuit-based simulations, the initial
+    :class:`~mqt.yaqs.core.data_structures.state.State` must use ``representation="mps"``; for analog
+    simulations,
     :meth:`~mqt.yaqs.core.data_structures.state.State.encode` is called from
     :attr:`~mqt.yaqs.core.data_structures.state.State.representation` inside :func:`_run_analog`.
 
@@ -1141,8 +1156,7 @@ def run(
             raise TypeError(msg)
         assert isinstance(operator, QuantumCircuit)
         assert isinstance(initial_state, State)
-        initial_state.encode("mps")
-        _run_circuit(initial_state.mps, operator, sim_params, noise_model, parallel=parallel)
+        _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, AnalogSimParams):
         assert isinstance(operator, MPO)
         _run_analog(initial_state, operator, sim_params, noise_model, parallel=parallel)

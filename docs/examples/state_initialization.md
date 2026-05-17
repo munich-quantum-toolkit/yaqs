@@ -46,7 +46,7 @@ assert wrapped.representation == "mps"
 assert wrapped.mps is mps
 ```
 
-**Circuit simulation** still evolves an MPS internally: `run` always encodes the state as `"mps"` for digital backends, regardless of `State.representation` on analog-style presets.
+**Circuit simulation** requires `representation="mps"` (the preset default). `run` with `StrongSimParams` / `WeakSimParams` rejects vector and density-matrix states.
 
 ## How `representation` is chosen
 
@@ -240,7 +240,7 @@ print("From vector=, MCWF Z_0:", obs_vec.results[-1])
 
 - **Memory**: `vector` scales as $2^N$; `density_matrix` as $2^{2N}$. Prefer `representation="mps"` for longer chains.
 - **Entangled presets**: `"haar-random"` needs an MPS to form dense data.
-- **Circuits**: digital `run` always uses an MPS; use presets or `tensors=`, not raw `vector=` / `density_matrix=`, unless you only care about analog paths.
+- **Circuits**: use `State(..., representation="mps")` (default); `vector=` / `density_matrix=` states cannot run circuits.
 - **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
 - **`get_state`**: not supported with `representation="density_matrix"` or with stochastic noise (unchanged).
 

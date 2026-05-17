@@ -15,7 +15,7 @@ mystnb:
 # Strong Circuit Simulation (Observable)
 
 This example demonstrates how to run a circuit simulation using the YAQS simulator.
-An Ising circuit is created and an initial MPS is prepared in the $\ket{0}$ state.
+An Ising circuit is created and an initial [`State`](mqt.yaqs.core.data_structures.state.State) is prepared in the $\ket{0}$ state (MPS representation).
 A noise model is applied and simulation parameters (using StrongSimParams) are defined.
 The simulation is run for a range of noise strengths (gamma values), and the expectation values of the $Z$ observable are recorded and displayed as a heatmap.
 
@@ -33,10 +33,10 @@ circuit.draw(output="mpl")
 Define the initial state
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import Z
 
-state = MPS(num_qubits, state="zeros")
+state = State(num_qubits, initial="zeros")
 ```
 
 Define the simulation parameters

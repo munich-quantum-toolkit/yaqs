@@ -272,6 +272,24 @@ def test_density_matrix_get_state_rejected() -> None:
         simulator.run(psi, h, sim_params, None)
 
 
+@pytest.mark.parametrize(
+    "state",
+    [
+        State(2, initial="zeros", representation="vector"),
+        State(2, initial="zeros", representation="density_matrix"),
+        State(vector=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)),
+    ],
+)
+def test_circuit_run_rejects_non_mps_state(state: State) -> None:
+    """Circuit simulation requires State.representation='mps'."""
+    from qiskit import QuantumCircuit
+
+    circuit = QuantumCircuit(2)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], show_progress=False)
+    with pytest.raises(ValueError, match=r"Circuit simulation requires State\.representation='mps'"):
+        simulator.run(state, circuit, sim_params, None)
+
+
 def test_strong_simulation() -> None:
     """Test the circuit-based simulation branch using StrongSimParams.
 

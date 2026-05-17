@@ -273,6 +273,9 @@ class State:
 
     For preset-only construction (``length``, ``initial=``, …), set ``representation=`` if
     not using the default ``"mps"``. Otherwise call :meth:`encode` or :func:`~mqt.yaqs.simulator.run`.
+
+    Circuit simulation (``StrongSimParams`` / ``WeakSimParams``) requires ``representation="mps"``
+    (enforced in :func:`~mqt.yaqs.simulator.run`).
     """
 
     def __init__(
