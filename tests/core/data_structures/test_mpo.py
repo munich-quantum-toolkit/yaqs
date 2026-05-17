@@ -608,45 +608,45 @@ def test_check_if_identity() -> None:
 
 
 ##############################################################################
-def test_hamiltonian_raises_on_nonpositive_length() -> None:
-    """Hamiltonian input validation: non-positive system size must raise."""
+def test_pauli_raises_on_nonpositive_length() -> None:
+    """Pauli MPO input validation: non-positive system size must raise."""
     with pytest.raises(ValueError, match=r"L must be positive\."):
-        MPO.hamiltonian(length=0)
+        MPO.pauli(length=0)
 
     with pytest.raises(ValueError, match=r"L must be positive\."):
-        MPO.hamiltonian(length=-3)
+        MPO.pauli(length=-3)
 
 
-def test_hamiltonian_raises_on_invalid_bc() -> None:
-    """Hamiltonian input validation: unsupported boundary conditions must raise."""
+def test_pauli_raises_on_invalid_bc() -> None:
+    """Pauli MPO input validation: unsupported boundary conditions must raise."""
     with pytest.raises(ValueError, match=r"bc must be 'open' or 'periodic'\."):
-        MPO.hamiltonian(length=4, bc="closed")
+        MPO.pauli(length=4, bc="closed")
 
     with pytest.raises(ValueError, match=r"bc must be 'open' or 'periodic'\."):
-        MPO.hamiltonian(length=4, bc="")
+        MPO.pauli(length=4, bc="")
 
 
-def test_hamiltonian_raises_on_invalid_one_body_operator() -> None:
-    """Hamiltonian input validation: invalid single-site operator labels must raise."""
+def test_pauli_raises_on_invalid_one_body_operator() -> None:
+    """Pauli MPO input validation: invalid single-site operator labels must raise."""
     with pytest.raises(ValueError, match=r"Invalid operator 'Q'"):
-        MPO.hamiltonian(length=3, one_body=[(1.0, "Q")])
+        MPO.pauli(length=3, one_body=[(1.0, "Q")])
 
 
-def test_hamiltonian_raises_on_invalid_two_body_operator_left() -> None:
-    """Hamiltonian input validation: invalid left two-body operator labels must raise."""
+def test_pauli_raises_on_invalid_two_body_operator_left() -> None:
+    """Pauli MPO input validation: invalid left two-body operator labels must raise."""
     with pytest.raises(ValueError, match=r"Invalid operator 'Q'"):
-        MPO.hamiltonian(length=3, two_body=[(1.0, "Q", "Z")])
+        MPO.pauli(length=3, two_body=[(1.0, "Q", "Z")])
 
 
-def test_hamiltonian_raises_on_invalid_two_body_operator_right() -> None:
-    """Hamiltonian input validation: invalid right two-body operator labels must raise."""
+def test_pauli_raises_on_invalid_two_body_operator_right() -> None:
+    """Pauli MPO input validation: invalid right two-body operator labels must raise."""
     with pytest.raises(ValueError, match=r"Invalid operator 'Q'"):
-        MPO.hamiltonian(length=3, two_body=[(1.0, "X", "Q")])
+        MPO.pauli(length=3, two_body=[(1.0, "X", "Q")])
 
 
-def test_hamiltonian_normalizes_operator_case() -> None:
-    """Hamiltonian construction: operator labels are case-insensitive and normalized."""
-    _ = MPO.hamiltonian(
+def test_pauli_normalizes_operator_case() -> None:
+    """Pauli MPO construction: operator labels are case-insensitive and normalized."""
+    _ = MPO.pauli(
         length=2,
         one_body=[(0.5, "x")],
         two_body=[(1.0, "z", "y")],

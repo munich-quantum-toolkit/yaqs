@@ -265,7 +265,7 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
     obs_s = row[s_index]
     pairs = [(obs_r, obs_s) for obs_r in row]
 
-    h = MPO.hamiltonian(
+    h = MPO.pauli(
         length=length,
         two_body=[(0.25 * j_xy, "X", "X"), (0.25 * j_xy, "Y", "Y"), (0.25 * delta, "Z", "Z")],
         bc="periodic",

@@ -122,7 +122,7 @@ def crandn(
     size: int | tuple[int, ...],
     *args: int,
     seed: np.random.Generator | int | None = None,
-) -> NDArray[np.complex128]:
+) -> np.ndarray:
     """Draw random samples from the standard complex normal distribution.
 
     Args:

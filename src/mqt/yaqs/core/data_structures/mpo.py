@@ -48,7 +48,7 @@ class MPO:
     Use classmethod factories to build common Hamiltonians or custom operators:
 
     - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
-    - ``MPO.hamiltonian(...)``: generic one-/two-body Pauli interactions.
+    - ``MPO.pauli(...)``: generic one-/two-body Pauli interactions.
     - ``MPO.fermi_hubbard_1d(...)``: 1D Fermi-Hubbard (fermionic or Jordan-Wigner Pauli).
     - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
     - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
@@ -89,7 +89,7 @@ class MPO:
     physical_dimension: int
 
     @classmethod
-    def hamiltonian(
+    def pauli(
         cls,
         *,
         length: int,
@@ -195,7 +195,7 @@ class MPO:
         Returns:
             An MPO representing the Ising Hamiltonian.
         """
-        return cls.hamiltonian(
+        return cls.pauli(
             length=length,
             two_body=[(-J, "Z", "Z")],
             one_body=[(-g, "X")],
@@ -238,7 +238,7 @@ class MPO:
         Returns:
             An MPO representing the Heisenberg Hamiltonian.
         """
-        return cls.hamiltonian(
+        return cls.pauli(
             length=length,
             two_body=[(-Jx, "X", "X"), (-Jy, "Y", "Y"), (-Jz, "Z", "Z")],
             one_body=[(-h, "Z")] if h != 0 else [],

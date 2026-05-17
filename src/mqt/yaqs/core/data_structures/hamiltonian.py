@@ -217,13 +217,13 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Pauli-string Hamiltonian from one- and two-body terms (delegates to :meth:`MPO.hamiltonian`).
+        """Pauli-string Hamiltonian from one- and two-body terms (delegates to :meth:`MPO.pauli`).
 
         Returns:
             A :class:`Hamiltonian` with ``representation="mpo"``.
         """
         return cls.from_mpo(
-            MPO.hamiltonian(
+            MPO.pauli(
                 length=length,
                 two_body=two_body,
                 one_body=one_body,
