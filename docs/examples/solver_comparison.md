@@ -31,9 +31,6 @@ L = 3
 J = 1.0
 g = 0.5
 H = Hamiltonian.ising(L, J, g)
-state_rho = State(L, initial="zeros", representation="density_matrix")
-state_vector = State(L, initial="zeros", representation="vector")
-state_mps = State(L, initial="zeros", representation="mps")
 
 # Noise: Dephasing on all sites
 gamma = 0.2
@@ -54,7 +51,7 @@ params_rho = AnalogSimParams(
     elapsed_time=t_max,
     dt=dt,
 )
-run(state_rho, H, params_rho, noise)
+run(State(L, initial="zeros", representation="density_matrix"), H, params_rho, noise)
 res_rho = obs.results.flatten()
 times = params_rho.times
 
@@ -66,7 +63,7 @@ params_vector = AnalogSimParams(
     dt=dt,
     num_traj=500,
 )
-run(state_vector, H, params_vector, noise)
+run(State(L, initial="zeros", representation="vector"), H, params_vector, noise)
 res_vector = obs.results.flatten()
 
 # 5. mps (default, stochastic trajectories)
@@ -78,7 +75,7 @@ params_mps = AnalogSimParams(
     num_traj=500,
     max_bond_dim=16,
 )
-run(state_mps, H, params_mps, noise)
+run(State(L, initial="zeros", representation="mps"), H, params_mps, noise)
 res_mps = obs.results.flatten()
 
 # 6. Plot Comparison
@@ -122,9 +119,9 @@ params_rho_unitary = AnalogSimParams(
     dt=0.1,
     show_progress=False,
 )
-run(state_mps, H, params_mps_unitary, None)
+run(State(L, initial="zeros", representation="mps"), H, params_mps_unitary, None)
 z_mps = obs_mps.results[-1]
-run(state_rho, H, params_rho_unitary, None)
+run(State(L, initial="zeros", representation="density_matrix"), H, params_rho_unitary, None)
 z_rho = obs_rho.results[-1]
 print(f"Noiseless <Z_0> at t=1: mps={z_mps:.6f}, density_matrix={z_rho:.6f}")
 ```

@@ -49,6 +49,7 @@ def attach_mpo(wrapped: Hamiltonian, mpo: MPO) -> None:
     wrapped.length = mpo.length
     wrapped.physical_dimension = mpo.physical_dimension
     wrapped.representation = "mpo"
+    # Private fields: wrapped is a fresh Hamiltonian from __new__; attach_mpo is the sole initializer.
     wrapped._tensors = None  # noqa: SLF001
     wrapped._matrix = None  # noqa: SLF001
     wrapped._sparse_matrix = None  # noqa: SLF001

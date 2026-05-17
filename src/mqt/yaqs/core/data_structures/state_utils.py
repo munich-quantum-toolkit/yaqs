@@ -133,18 +133,22 @@ def local_vector_for_preset(
             msg = "ones preset requires local dimension at least 2."
             raise ValueError(msg)
         vector[1] = 1.0
-    elif initial == "x+":
-        vector[0] = 1 / np.sqrt(2)
-        vector[1] = 1 / np.sqrt(2)
-    elif initial == "x-":
-        vector[0] = 1 / np.sqrt(2)
-        vector[1] = -1 / np.sqrt(2)
-    elif initial == "y+":
-        vector[0] = 1 / np.sqrt(2)
-        vector[1] = 1j / np.sqrt(2)
-    elif initial == "y-":
-        vector[0] = 1 / np.sqrt(2)
-        vector[1] = -1j / np.sqrt(2)
+    elif initial in ("x+", "x-", "y+", "y-"):
+        if local_dim < 2:
+            msg = f"{initial} preset requires local dimension at least 2."
+            raise ValueError(msg)
+        if initial == "x+":
+            vector[0] = 1 / np.sqrt(2)
+            vector[1] = 1 / np.sqrt(2)
+        elif initial == "x-":
+            vector[0] = 1 / np.sqrt(2)
+            vector[1] = -1 / np.sqrt(2)
+        elif initial == "y+":
+            vector[0] = 1 / np.sqrt(2)
+            vector[1] = 1j / np.sqrt(2)
+        else:
+            vector[0] = 1 / np.sqrt(2)
+            vector[1] = -1j / np.sqrt(2)
     elif initial == "Neel":
         if site % 2:
             vector[0] = 1.0
@@ -168,6 +172,12 @@ def local_vector_for_preset(
     elif initial == "basis":
         if basis_string is None:
             msg = "basis_string must be provided for initial='basis'."
+            raise ValueError(msg)
+        if site >= len(basis_string):
+            msg = (
+                f"basis_string length {len(basis_string)} is too short for site {site} "
+                f"(chain length {length})."
+            )
             raise ValueError(msg)
         idx = int(basis_string[site])
         if idx >= local_dim:

@@ -393,6 +393,13 @@ def run(
     if noise_model is None:
         num_trajectories = 1
 
+    if representation == "density_matrix":
+        msg = (
+            "Process tomography does not support representation='density_matrix'; "
+            "use 'mps' or 'vector'."
+        )
+        raise ValueError(msg)
+
     operator.ensure_encoded("mpo")
     if representation == "vector":
         operator.ensure_encoded("sparse")

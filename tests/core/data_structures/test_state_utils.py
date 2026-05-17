@@ -117,6 +117,13 @@ def test_local_vector_for_preset_product_states(initial: str) -> None:
         assert np.isclose(np.linalg.norm(vec), 1.0)
 
 
+def test_local_vector_for_preset_x_plus_requires_dim_two() -> None:
+    """x+ preset needs local dimension at least 2."""
+    rng = np.random.default_rng(0)
+    with pytest.raises(ValueError, match="x\\+ preset requires"):
+        local_vector_for_preset(0, "x+", 1, length=1, basis_string=None, rng=rng)
+
+
 def test_local_vector_for_preset_ones_requires_dim_two() -> None:
     """Ones preset needs local dimension at least 2."""
     rng = np.random.default_rng(0)

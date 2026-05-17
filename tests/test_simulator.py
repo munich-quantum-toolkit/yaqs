@@ -19,6 +19,7 @@ qubit counts.
 from __future__ import annotations
 
 import importlib
+from typing import Any, cast
 import multiprocessing
 import os
 import sys
@@ -513,7 +514,7 @@ def test_weak_simulation_get_state_noise() -> None:
 
 
 def test_mismatch() -> None:
-    """Test that simulator.run raises an AssertionError when the state and circuit qubit counts mismatch.
+    """Test that simulator.run raises ValueError when state and circuit qubit counts mismatch.
 
     This test creates an MPS of length 5 and a circuit with length 4 (one fewer qubits),
     and verifies that an AssertionError with the appropriate message is raised.
@@ -528,7 +529,7 @@ def test_mismatch() -> None:
 
     noise_model = None
 
-    with pytest.raises(AssertionError, match=r"MPS and circuit qubit counts do not match."):
+    with pytest.raises(ValueError, match=r"qubit counts do not match"):
         simulator.run(initial_state, circuit, sim_params, noise_model)
 
 
@@ -1076,6 +1077,9 @@ def test_run_vector_preset_without_materialized_mps() -> None:
     )
     simulator.run(state, hamiltonian, params, None)
     assert obs.results is not None
+    assert state.representation == "vector"
+    with pytest.raises(RuntimeError, match="MPS is not available"):
+        _ = state.mps
 
 
 def test_run_density_matrix_preset_without_materialized_mps() -> None:
@@ -1094,6 +1098,9 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
     )
     simulator.run(state, hamiltonian, params, None)
     assert obs.results is not None
+    assert state.representation == "density_matrix"
+    with pytest.raises(RuntimeError, match="MPS is not available"):
+        _ = state.mps
 
 
 def test_analog_run_rejects_mpo_operator() -> None:
@@ -1107,7 +1114,7 @@ def test_analog_run_rejects_mpo_operator() -> None:
         show_progress=False,
     )
     with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
-        simulator.run(state, mpo, params, None)  # ty: ignore[invalid-argument-type]
+        simulator.run(state, cast(Any, mpo), params, None)
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:

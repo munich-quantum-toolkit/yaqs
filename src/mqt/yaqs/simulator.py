@@ -851,7 +851,9 @@ def _run_circuit(
     mps = initial_state.mps
 
     # Sanity check: MPS length must equal circuit qubit count
-    assert mps.length == operator.num_qubits, "MPS and circuit qubit counts do not match."
+    if mps.length != operator.num_qubits:
+        msg = "State and circuit qubit counts do not match."
+        raise ValueError(msg)
     # Internal convention expects qubit order reversed (if applicable)
     operator = copy.deepcopy(operator.reverse_bits())
 
@@ -1202,8 +1204,12 @@ def run(
         if isinstance(initial_state, list):
             msg = "Circuit simulation requires a single State initial_state."
             raise TypeError(msg)
-        assert isinstance(operator, QuantumCircuit)
-        assert isinstance(initial_state, State)
+        if not isinstance(operator, QuantumCircuit):
+            msg = "Circuit simulation requires a QuantumCircuit operator."
+            raise TypeError(msg)
+        if not isinstance(initial_state, State):
+            msg = "Circuit simulation requires a State initial_state."
+            raise TypeError(msg)
         _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, AnalogSimParams):
         if not isinstance(operator, Hamiltonian):

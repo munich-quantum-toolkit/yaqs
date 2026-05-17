@@ -22,6 +22,7 @@ from .state_utils import (
     preset_is_product_state,
     product_state_vector,
     reject_preset_only_kwargs,
+    resolve_physical_dimensions,
     validate_representation,
 )
 
@@ -122,6 +123,13 @@ class State:
             if length is None:
                 self.length = infer_qubit_length(hilbert_dim)
             else:
+                expected = int(np.prod(resolve_physical_dimensions(length, physical_dimensions)))
+                if hilbert_dim != expected:
+                    msg = (
+                        f"vector size {hilbert_dim} does not match Hilbert dimension "
+                        f"{expected} for length={length}."
+                    )
+                    raise ValueError(msg)
                 self.length = length
             if representation is not None and representation != "vector":
                 msg = "representation is inferred as 'vector' from vector=; omit representation=."
@@ -134,6 +142,13 @@ class State:
             if length is None:
                 self.length = infer_qubit_length(hilbert_dim)
             else:
+                expected = int(np.prod(resolve_physical_dimensions(length, physical_dimensions)))
+                if hilbert_dim != expected:
+                    msg = (
+                        f"density_matrix dimension {hilbert_dim} does not match Hilbert dimension "
+                        f"{expected} for length={length}."
+                    )
+                    raise ValueError(msg)
                 self.length = length
             if representation is not None and representation != "density_matrix":
                 msg = "representation is inferred as 'density_matrix' from density_matrix=; omit representation=."

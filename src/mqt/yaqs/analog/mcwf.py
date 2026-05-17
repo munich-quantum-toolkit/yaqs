@@ -95,8 +95,9 @@ def preprocess_mcwf(
         MCWFContext containing dense arrays ready for trajectory simulation.
 
     Raises:
-        ValueError: If neither ``initial_state`` nor ``psi_initial`` is provided, or if
-            ``num_sites`` is missing when only ``psi_initial`` is given.
+        ValueError: If neither ``initial_state`` nor ``psi_initial`` is provided, if
+            ``num_sites`` is missing when only ``psi_initial`` is given, if
+            ``psi_initial`` has the wrong Hilbert-space size, or if ``psi_initial`` has zero norm.
     """
     if initial_state is not None:
         num_sites = initial_state.length
@@ -121,10 +122,18 @@ def preprocess_mcwf(
     # 1. Initial state |psi> as dense vector.
     if psi_initial is not None:
         psi = np.asarray(psi_initial, dtype=np.complex128).reshape(-1)
+        if psi.size != dim:
+            msg = f"psi_initial size {psi.size} does not match Hilbert dimension {dim}."
+            raise ValueError(msg)
+        norm = np.linalg.norm(psi)
+        if norm == 0.0:
+            msg = "psi_initial must have non-zero norm."
+            raise ValueError(msg)
+        psi /= norm
     else:
         assert initial_state is not None
         psi = initial_state.to_vec()
-    psi /= np.linalg.norm(psi)
+        psi /= np.linalg.norm(psi)
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     if h_sparse is not None:

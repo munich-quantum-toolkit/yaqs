@@ -178,7 +178,7 @@ ax.grid(alpha=0.3)
 plt.show()
 ```
 
-In the above illustrative run, the ensemble-averaged $C_{zz}(t)$ shows a monotonic decay trend toward zero, while $C_{zx}(t)$ remains comparatively close to zero over the sampled window, in contrast to the single-state trajectory.
+In this illustrative run, the ensemble-averaged $C_{zz}(t)$ appears to decay toward zero while $C_{zx}(t)$ stays comparatively close to zero over the sampled window; other runs may show different behavior.
 
 ## 4. Spin transport example: periodic spin-current autocorrelation
 

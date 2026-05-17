@@ -102,6 +102,13 @@ class Hamiltonian:
             if length is None:
                 self.length = infer_qubit_length(hilbert_dim)
             else:
+                expected = physical_dimension**length
+                if hilbert_dim != expected:
+                    msg = (
+                        f"matrix dimension {hilbert_dim} does not match "
+                        f"physical_dimension**length={expected}."
+                    )
+                    raise ValueError(msg)
                 self.length = length
             self._matrix = mat
             if representation is not None and representation != "dense":
@@ -118,6 +125,13 @@ class Hamiltonian:
             if length is None:
                 self.length = infer_qubit_length(hilbert_dim)
             else:
+                expected = physical_dimension**length
+                if hilbert_dim != expected:
+                    msg = (
+                        f"sparse_matrix dimension {hilbert_dim} does not match "
+                        f"physical_dimension**length={expected}."
+                    )
+                    raise ValueError(msg)
                 self.length = length
             self._sparse_matrix = sparse
             if representation is not None and representation != "sparse":

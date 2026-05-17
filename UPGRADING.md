@@ -6,14 +6,15 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ### `simulator.run` uses `State` and `Hamiltonian`
 
-Analog and circuit entry points no longer accept raw [`MPS`](src/mqt/yaqs/core/data_structures/networks.py) /
-[`MPO`](src/mqt/yaqs/core/data_structures/networks.py) objects. Use [`State`](src/mqt/yaqs/core/data_structures/state.py)
+Analog and circuit entry points no longer accept raw [`MPS`](src/mqt/yaqs/core/data_structures/mps.py) /
+[`MPO`](src/mqt/yaqs/core/data_structures/mpo.py) objects. Use [`State`](src/mqt/yaqs/core/data_structures/state.py)
 and [`Hamiltonian`](src/mqt/yaqs/core/data_structures/hamiltonian.py) instead.
 
 **Before:**
 
 ```python
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.simulator import run
 
 psi = MPS(4, state="zeros")

@@ -118,14 +118,23 @@ def preprocess_lindblad(
     # 1. Initial state as flattened vec(rho) (column-major order of the matrix).
     if rho_initial is not None:
         rho_arr = np.asarray(rho_initial, dtype=np.complex128)
-        rho_mat = rho_arr if rho_arr.ndim == 2 else rho_arr.reshape(dim, dim)
+        if rho_arr.ndim == 2:
+            if rho_arr.shape != (dim, dim):
+                msg = f"rho_initial shape {rho_arr.shape} does not match ({dim}, {dim})."
+                raise ValueError(msg)
+            rho_mat = rho_arr
+        else:
+            if rho_arr.size != dim * dim:
+                msg = f"rho_initial size {rho_arr.size} does not match Hilbert dimension {dim * dim}."
+                raise ValueError(msg)
+            rho_mat = rho_arr.reshape(dim, dim, order="F")
         trace = np.trace(rho_mat)
         if np.isclose(trace, 0.0):
             msg = "rho_initial must have non-zero trace."
             raise ValueError(msg)
         if not np.isclose(trace, 1.0):
             rho_mat /= trace
-        rho_vec = rho_mat.flatten()
+        rho_vec = rho_mat.flatten(order="F")
     else:
         assert initial_state is not None
         psi = initial_state.to_vec()

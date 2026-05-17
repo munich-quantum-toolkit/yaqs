@@ -590,7 +590,7 @@ class MPO:
             physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
 
         """
-        mat = np.eye(2, dtype=np.complex128)
+        mat = np.eye(physical_dimension, dtype=np.complex128)
         mat = np.expand_dims(mat, (2, 3))
         self.length = length
         self.physical_dimension = physical_dimension
@@ -1067,6 +1067,10 @@ class MPO:
         """
         if d <= 0:
             msg = f"Physical dimension d must be > 0, got d={d}."
+            raise ValueError(msg)
+
+        if np.ndim(mat) != 2:
+            msg = "Matrix must be a 2-D array for uniform MPO factorization."
             raise ValueError(msg)
 
         rows, cols = mat.shape
