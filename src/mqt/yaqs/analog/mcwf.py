@@ -127,7 +127,7 @@ def preprocess_mcwf(
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     if h_sparse is not None:
-        h_mat = h_sparse.tocsr()
+        h_mat = scipy.sparse.csr_matrix(h_sparse)
     elif hamiltonian is not None:
         h_mat = hamiltonian.to_sparse_matrix()
     else:

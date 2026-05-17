@@ -25,6 +25,13 @@ Representation = Literal["mpo", "sparse", "dense"]
 _ALLOWED_REPRESENTATIONS = frozenset({"mpo", "sparse", "dense"})
 
 
+def _sparse_to_csr(matrix: scipy.sparse.spmatrix) -> scipy.sparse.csr_matrix:
+    """Return ``matrix`` as CSR (copies only when needed)."""
+    if isinstance(matrix, scipy.sparse.csr_matrix):
+        return matrix
+    return scipy.sparse.csr_matrix(matrix)
+
+
 def _validate_representation(value: str) -> Representation:
     """Validate and return a Hamiltonian representation label.
 
@@ -82,7 +89,8 @@ class Hamiltonian:
         self.physical_dimension = physical_dimension
         self._tensors: list[NDArray[np.complex128]] | None = None
         self._matrix: NDArray[np.complex128] | None = None
-        self._sparse_matrix: scipy.sparse.spmatrix | None = None
+        self._sparse_matrix: scipy.sparse.csr_matrix | None = None
+        self.representation: Representation
         self._mpo: MPO | None = None
         self._encoded_as: Representation | None = None
 
@@ -117,7 +125,7 @@ class Hamiltonian:
             self.representation = "dense"
         else:
             assert sparse_matrix is not None
-            sparse = sparse_matrix.tocsr()
+            sparse = _sparse_to_csr(sparse_matrix)
             hilbert_dim = sparse.shape[0]
             if sparse.shape[0] != sparse.shape[1]:
                 msg = "sparse_matrix must be square."
@@ -231,7 +239,7 @@ class Hamiltonian:
         if self._encoded_as != "sparse" or self._sparse_matrix is None:
             msg = f"Sparse matrix is not available for representation={self.representation!r}."
             raise RuntimeError(msg)
-        return cast("scipy.sparse.csr_matrix", self._sparse_matrix)
+        return self._sparse_matrix
 
     @property
     def matrix(self) -> NDArray[np.complex128]:
@@ -251,7 +259,9 @@ class Hamiltonian:
         Returns:
             ``self`` for chaining.
         """
-        rep = self.representation if representation is None else _validate_representation(representation)
+        rep: Representation = (
+            self.representation if representation is None else _validate_representation(representation)
+        )
         if self._encoded_as == rep:
             if rep == "mpo" and self._mpo is not None:
                 return self
@@ -265,7 +275,7 @@ class Hamiltonian:
         elif rep == "sparse":
             if self._sparse_matrix is None:
                 if self._mpo is not None:
-                    self._sparse_matrix = self._mpo.to_sparse_matrix()
+                    self._sparse_matrix = _sparse_to_csr(self._mpo.to_sparse_matrix())
                 elif self._matrix is not None:
                     self._sparse_matrix = scipy.sparse.csr_matrix(self._matrix)
                 else:
@@ -308,7 +318,7 @@ class Hamiltonian:
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
         """Sparse matrix (converts from cached forms without changing :attr:`representation`)."""
         if self._sparse_matrix is not None:
-            return cast("scipy.sparse.csr_matrix", self._sparse_matrix)
+            return self._sparse_matrix
         if self._mpo is not None:
             return self._mpo.to_sparse_matrix()
         if self._matrix is not None:
