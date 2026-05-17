@@ -11,12 +11,16 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added [`State`](src/mqt/yaqs/core/data_structures/state.py) and [`Hamiltonian`](src/mqt/yaqs/core/data_structures/hamiltonian.py) user-facing specifications with eager encoding at construction ([#422]) ([**@aaronleesander**])
 - added Fermionic and Jordan-Wigner MPO encodings of 1D Fermi-Hubbard model ([#220]) ([**@thilomueller**])
 - added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
 
 ### Changed
 
+- changed [`simulator.run`](src/mqt/yaqs/simulator.py) to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
 - changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
+
+### Removed
 
 ### Fixed
 

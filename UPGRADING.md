@@ -4,6 +4,38 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### `simulator.run` uses `State` and `Hamiltonian`
+
+Analog and circuit entry points no longer accept raw [`MPS`](src/mqt/yaqs/core/data_structures/networks.py) /
+[`MPO`](src/mqt/yaqs/core/data_structures/networks.py) objects. Use [`State`](src/mqt/yaqs/core/data_structures/state.py)
+and [`Hamiltonian`](src/mqt/yaqs/core/data_structures/hamiltonian.py) instead.
+
+**Before:**
+
+```python
+from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.simulator import run
+
+psi = MPS(4, state="zeros")
+H = MPO.ising(4, J=1.0, g=0.5)
+params = AnalogSimParams(..., solver="MCWF")
+run(psi, H, params, noise_model)
+```
+
+**After:**
+
+```python
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.simulator import run
+
+psi = State(4, initial="zeros", representation="vector")
+H = Hamiltonian.ising(4, J=1.0, g=0.5)
+params = AnalogSimParams(...)
+run(psi, H, params, noise_model)
+```
+
+
 ### End of support for x86 macOS systems
 
 Starting with this release, we can no longer guarantee support for x86 macOS systems.
