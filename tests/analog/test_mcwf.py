@@ -31,7 +31,7 @@ def test_mcwf_amplitude_damping() -> None:
     Checks if the average of many trajectories matches the analytical solution.
     """
     n_sites = 1
-    initial_state = State(n_sites, initial="ones")  # |1>
+    initial_state = State(n_sites, initial="ones", representation="vector")  # |1>
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)
     for i in range(len(hamiltonian.tensors)):
@@ -50,7 +50,7 @@ def test_mcwf_amplitude_damping() -> None:
     # We need enough trajectories to converge reasonably well
     num_traj = 200
     sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=t_max, dt=dt, representation="vector", num_traj=num_traj, show_progress=False
+        observables=[obs], elapsed_time=t_max, dt=dt, num_traj=num_traj, show_progress=False
     )
 
     run(initial_state, hamiltonian, sim_params, noise_model, parallel=False)
@@ -78,7 +78,7 @@ def test_mcwf_unitary_rabi() -> None:
     Should be deterministic and match exact solution tightly.
     """
     n_sites = 1
-    initial_state = State(n_sites, initial="zeros")  # |0>
+    initial_state = State(n_sites, initial="zeros", representation="vector")  # |0>
 
     hamiltonian = MPO.ising(n_sites, J=0.0, g=-1.0)
 
@@ -90,7 +90,6 @@ def test_mcwf_unitary_rabi() -> None:
         observables=[obs],
         elapsed_time=t_max,
         dt=dt,
-        representation="vector",
         num_traj=1,  # Deterministic
     )
 
@@ -109,7 +108,7 @@ def test_mcwf_unitary_rabi() -> None:
 def test_mcwf_dephasing() -> None:
     """Test 2-qubit system with local dephasing on one qubit."""
     n_sites = 2
-    initial_state = State(n_sites, initial="x+")  # |++>
+    initial_state = State(n_sites, initial="x+", representation="vector")  # |++>
 
     hamiltonian = MPO()
     hamiltonian.identity(n_sites)
@@ -133,7 +132,6 @@ def test_mcwf_dephasing() -> None:
         observables=[obs0, obs1],
         elapsed_time=t_max,
         dt=dt,
-        representation="vector",
         num_traj=num_traj,
         show_progress=False,
     )
@@ -168,7 +166,7 @@ def test_mcwf_zero_strength_noise() -> None:
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
 
     sim_params = AnalogSimParams(
-        dt=0.1, elapsed_time=0.1, representation="vector", observables=[Observable("z", sites=[0])]
+        dt=0.1, elapsed_time=0.1, observables=[Observable("z", sites=[0])]
     )
 
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
@@ -187,7 +185,6 @@ def test_preprocess_mcwf_sets_propagator_small_system() -> None:
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.1,
-        representation="vector",
         observables=[Observable("z", sites=[0])],
     )
     ctx = preprocess_mcwf(psi, h, None, sim_params)
@@ -207,7 +204,7 @@ def test_mcwf_noisy_system_has_propagator() -> None:
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="vector", observables=[])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[])
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
     assert not ctx.is_unitary
     assert ctx.step_propagator is not None
@@ -224,7 +221,7 @@ def test_mcwf_diagnostic_observables() -> None:
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="vector", observables=[obs_diag, obs_real])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs_diag, obs_real])
 
     # MCWF Preprocess
     ctx = preprocess_mcwf(psi, h, None, sim_params)
@@ -262,7 +259,6 @@ def test_mcwf_trajectory_rng_seeding() -> None:
     sim_params = AnalogSimParams(
         dt=0.02,
         elapsed_time=1.0,
-        representation="vector",
         observables=[obs],
         sample_timesteps=True,
     )
@@ -289,7 +285,6 @@ def test_mcwf_noisy_evolution_with_propagator() -> None:
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.15,
-        representation="vector",
         observables=[obs],
         sample_timesteps=True,
     )
@@ -312,7 +307,6 @@ def test_mcwf_unitary_krylov_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.1,
-        representation="vector",
         observables=[obs],
         sample_timesteps=True,
     )
@@ -339,7 +333,6 @@ def test_mcwf_noisy_arnoldi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.1,
-        representation="vector",
         observables=[obs],
         sample_timesteps=True,
     )

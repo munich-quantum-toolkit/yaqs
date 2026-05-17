@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import copy
 import itertools
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 
@@ -238,7 +238,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
     alpha_seq = worker_sequences[seq_idx]
 
     # 3. Initialize state to |0...0>
-    is_vector = sim_params.representation == "vector"
+    is_vector = WORKER_CTX["representation"] == "vector"
     current_state: MPS | NDArray[np.complex128]
 
     if is_vector:
@@ -328,6 +328,8 @@ def run(
     timesteps: list[float] | None = None,
     num_trajectories: int = 100,
     noise_model: NoiseModel | None = None,
+    *,
+    representation: Literal["mps", "vector", "density_matrix"] = "mps",
 ) -> ProcessTensor:
     """Run Process Tomography / Process Tensor Tomography using parallelized backend.
 
@@ -344,6 +346,8 @@ def run(
                    If None, defaults to [sim_params.elapsed_time] (standard 1-step tomography).
         num_trajectories: Number of trajectories to average per sequence (for noise unravelling).
         noise_model: Noise model to apply. If None, uses sim_params.noise_model.
+        representation: State representation for evolution inside tomography workers
+            (``"mps"``, ``"vector"``, or ``"density_matrix"``).
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.
@@ -388,7 +392,7 @@ def run(
         num_trajectories = 1
 
     mcwf_static_ctx = None
-    if sim_params.representation == "vector":
+    if representation == "vector":
         # Shape-only placeholder: preprocess_mcwf uses length and static operators only.
         # Workers override dynamic_ctx.psi_initial with the real state vector each step.
         dummy_mps = MPS(length=operator.length, state="zeros")
@@ -404,6 +408,7 @@ def run(
         "noise_model": noise_model,
         "num_trajectories": num_trajectories,
         "mcwf_static_ctx": mcwf_static_ctx,
+        "representation": representation,
     }
 
     # 3. Parallel Execution

@@ -833,11 +833,6 @@ def _run_ensemble(
             "Use list[State] with no noise for unitary ensembles, or use a single State for noisy simulation."
         )
         raise ValueError(msg)
-    # Will later add support for vector representation if needed
-    if sim_params.representation != "mps":
-        msg = "list[State] analog ensemble currently supports only representation='mps'."
-        raise ValueError(msg)
-
     if not initial_states:
         msg = "initial_state list must not be empty."
         raise ValueError(msg)
@@ -936,13 +931,16 @@ def _run_analog(
         parallel: Flag indicating whether to run trajectories in parallel.
 
     Raises:
-        ValueError: If ``get_state=True`` with ``representation='density_matrix'``.
+        ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``.
     """
     # Deterministic unitary ensemble mode
     if isinstance(initial_state, list):
         initial_state_list = cast("list[State]", initial_state)
+        if any(spec.representation != "mps" for spec in initial_state_list):
+            msg = "list[State] analog ensemble currently supports only State.representation='mps'."
+            raise ValueError(msg)
         for spec in initial_state_list:
-            spec.encode(sim_params.representation)
+            spec.encode()
         _run_ensemble(
             [spec.mps for spec in initial_state_list],
             operator,
@@ -952,34 +950,35 @@ def _run_analog(
         )
         return
 
-    initial_state.encode(sim_params.representation)
+    initial_state.encode()
     mps = _materialized_mps(initial_state)
+    state_rep = initial_state.representation
 
     # Choose integrator order (1 or 2) for the analog TJM backend
 
     backend: Callable[[Any], NDArray[np.float64]]
     use_lindblad_ctx = False
-    if sim_params.representation == "density_matrix":
+    if state_rep == "density_matrix":
         backend = lindblad
         if mps is None:
             backend = lindblad_evolve
             use_lindblad_ctx = True
-    elif sim_params.representation == "vector":
+    elif state_rep == "vector":
         backend = mcwf
     elif sim_params.order == 1:
         backend = analog_tjm_1
     else:
         backend = analog_tjm_2
 
-    if sim_params.representation == "density_matrix" and sim_params.get_state:
-        msg = "get_state=True is not supported for representation='density_matrix'."
+    if state_rep == "density_matrix" and sim_params.get_state:
+        msg = "get_state=True is not supported for State.representation='density_matrix'."
         raise ValueError(msg)
 
     # If no noise, determinism implies a single trajectory suffices
     if (
         noise_model is None
         or all(proc["strength"] == 0 for proc in noise_model.processes)
-        or sim_params.representation == "density_matrix"
+        or state_rep == "density_matrix"
     ):
         sim_params.num_traj = 1
     else:
@@ -993,7 +992,7 @@ def _run_analog(
     payload: dict[str, Any]
     worker_fn: Callable[[int], Any]
 
-    if sim_params.representation == "vector":
+    if state_rep == "vector":
         # Optimization: Pre-compute dense operators once
         ctx = preprocess_mcwf(
             mps,
@@ -1052,7 +1051,7 @@ def _run_analog(
 
         # Reconstruct args locally for serial execution
         args: list[Any]
-        if sim_params.representation == "vector":
+        if state_rep == "vector":
             # For vector serial, we still use the pre-computed ctx
             # ctx is already in local scope from above if block
             args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
@@ -1092,7 +1091,7 @@ def run(
     simulation parameters provided. For circuit-based simulations, the initial state is
     B-normalized MPS for circuits; for analog simulations,
     :meth:`~mqt.yaqs.core.data_structures.state.State.encode` is called from
-    ``sim_params.representation`` inside :func:`_run_analog`.
+    :attr:`~mqt.yaqs.core.data_structures.state.State.representation` inside :func:`_run_analog`.
 
     Args:
         initial_state:

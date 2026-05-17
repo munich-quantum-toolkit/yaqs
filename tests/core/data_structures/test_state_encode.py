@@ -9,11 +9,33 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPS
 from mqt.yaqs.core.data_structures.state import Representation, State
+
+
+def test_state_default_representation_is_mps() -> None:
+    """Preset-only State defaults to MPS representation."""
+    psi = State(3, initial="zeros")
+    assert psi.representation == "mps"
+
+
+def test_state_invalid_representation() -> None:
+    """State rejects unknown representation values."""
+    with pytest.raises(ValueError, match=r"Invalid representation 'tjm'"):
+        State(2, representation=cast(Any, "tjm"))  # noqa: TC006
+
+
+def test_encode_without_argument_uses_state_representation() -> None:
+    """encode() with no argument materializes self.representation."""
+    psi = State(3, initial="zeros", representation="vector")
+    psi.encode()
+    assert psi._encoded_as == "vector"
+    assert psi._mps is None
 
 
 @pytest.mark.parametrize(
@@ -69,7 +91,7 @@ def test_encode_idempotent() -> None:
 def test_encode_invalid_representation_raises() -> None:
     """Unknown representation strings raise ValueError."""
     psi = State(2, initial="zeros")
-    with pytest.raises(ValueError, match="Unknown representation"):
+    with pytest.raises(ValueError, match=r"Invalid representation 'invalid'"):
         psi.encode("invalid")  # ty: ignore[invalid-argument-type]
 
 
@@ -93,6 +115,7 @@ def test_init_from_tensor_list() -> None:
     mps_ref = MPS(2, state="zeros")
     spec = State(tensors=list(mps_ref.tensors))
     assert spec.length == 2
+    assert spec.representation == "mps"
     assert spec._encoded_as == "mps"
     np.testing.assert_allclose(spec.mps.to_vec(), mps_ref.to_vec())
 
@@ -102,6 +125,7 @@ def test_init_from_vector() -> None:
     vec = np.array([1.0, 0.0], dtype=np.complex128)
     spec = State(vector=vec)
     assert spec.length == 1
+    assert spec.representation == "vector"
     assert spec._encoded_as == "vector"
     np.testing.assert_allclose(spec.vector, vec)
 
@@ -111,8 +135,31 @@ def test_init_from_density_matrix() -> None:
     rho = np.diag([1.0, 0.0]).astype(np.complex128)
     spec = State(density_matrix=rho)
     assert spec.length == 1
+    assert spec.representation == "density_matrix"
     assert spec._encoded_as == "density_matrix"
     np.testing.assert_allclose(spec.density_matrix, rho)
+
+
+def test_manual_data_infers_representation_without_kwarg() -> None:
+    """tensors/vector/density_matrix set representation; no representation= needed."""
+    mps_ref = MPS(2, state="zeros")
+    from_tensors = State(tensors=list(mps_ref.tensors))
+    assert from_tensors.representation == "mps"
+
+    vec = np.array([1.0, 0.0], dtype=np.complex128)
+    from_vector = State(vector=vec)
+    assert from_vector.representation == "vector"
+
+    rho = np.diag([1.0, 0.0]).astype(np.complex128)
+    from_rho = State(density_matrix=rho)
+    assert from_rho.representation == "density_matrix"
+
+
+def test_manual_data_rejects_conflicting_representation() -> None:
+    """Explicit representation= must not contradict manual data."""
+    vec = np.array([1.0, 0.0], dtype=np.complex128)
+    with pytest.raises(ValueError, match="inferred as 'vector' from vector="):
+        State(vector=vec, representation="mps")
 
 
 def test_manual_init_mutually_exclusive() -> None:
@@ -140,7 +187,7 @@ def test_manual_init_mutually_exclusive() -> None:
 )
 def test_preset_kwargs_rejected_for_manual_data(kwargs: dict) -> None:
     """Preset-only arguments cannot be passed with tensors, vector, or density_matrix."""
-    with pytest.raises(ValueError, match="apply only to preset"):
+    with pytest.raises(ValueError, match="only to preset State construction"):
         State(**kwargs)
 
 

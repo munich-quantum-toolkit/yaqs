@@ -165,16 +165,18 @@ def test_list_mps_analog_ensemble_rejects_non_mps_representation() -> None:
     """List-of-MPS analog ensemble only supports the mps representation path."""
     length = 2
     hamiltonian = MPO.ising(length, J=0.2, g=0.1)
-    states = [State(length, initial="zeros"), State(length, initial="ones")]
+    states = [
+        State(length, initial="zeros", representation="density_matrix"),
+        State(length, initial="ones", representation="density_matrix"),
+    ]
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         elapsed_time=0.1,
         dt=0.1,
         show_progress=False,
-        representation="density_matrix",
     )
     with pytest.raises(
-        ValueError, match=r"list\[State\] analog ensemble currently supports only representation='mps'\."
+        ValueError, match=r"list\[State\] analog ensemble currently supports only State\.representation='mps'\."
     ):
         simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
 

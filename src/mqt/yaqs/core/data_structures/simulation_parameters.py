@@ -151,8 +151,6 @@ class AnalogSimParams:
         times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
-        representation: MPS representation used during analog simulation
-            (``"mps"``, ``"vector"``, or ``"density_matrix"``).
         max_bond_dim: Maximum allowed bond dimension.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
@@ -186,7 +184,6 @@ class AnalogSimParams:
         get_state: bool = False,
         show_progress: bool = True,
         num_threads: int = 1,
-        representation: Literal["mps", "vector", "density_matrix"] = "mps",
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
@@ -208,22 +205,12 @@ class AnalogSimParams:
             get_state: If ``True``, output MPS is returned.
             show_progress: If ``True``, print a progress bar as trajectories finish.
             num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
-            representation: MPS representation for the run: ``"mps"`` (tensor network),
-                ``"vector"`` (dense state vector), or ``"density_matrix"`` (exact master equation).
-                With ``noise_model=None`` or zero strengths, ``"density_matrix"`` evolves the
-                density matrix unitarily; ``"mps"`` and ``"vector"`` reduce to Hamiltonian evolution.
-            multi_time_observables: For ``list[MPS]`` unitary ensemble runs only, list of ``(A, B)``
+            multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
                 case ``(O, O)``.
 
-        Raises:
-            ValueError: If ``representation`` is not ``"mps"``, ``"vector"``, or ``"density_matrix"``.
         """
         self.noise_model: NoiseModel | None = None
-        if representation not in {"mps", "vector", "density_matrix"}:
-            msg = f"Invalid representation '{representation}'. Allowed values are 'mps', 'vector', or 'density_matrix'."
-            raise ValueError(msg)
-        self.representation = representation
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."

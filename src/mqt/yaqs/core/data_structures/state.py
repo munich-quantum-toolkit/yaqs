@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 
@@ -19,6 +19,43 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 Representation = Literal["mps", "vector", "density_matrix"]
+
+_ALLOWED_REPRESENTATIONS = frozenset({"mps", "vector", "density_matrix"})
+
+
+def _validate_representation(value: str) -> Representation:
+    """Validate and return a simulation representation label.
+
+    Raises:
+        ValueError: If ``value`` is not ``"mps"``, ``"vector"``, or ``"density_matrix"``.
+    """
+    if value not in _ALLOWED_REPRESENTATIONS:
+        msg = f"Invalid representation {value!r}. Allowed values are 'mps', 'vector', or 'density_matrix'."
+        raise ValueError(msg)
+    return cast("Representation", value)
+
+
+def _reject_preset_only_kwargs(
+    *,
+    initial: str,
+    pad: int | None,
+    basis_string: str | None,
+    seed: int | None,
+) -> None:
+    """Raise if preset-only kwargs are passed together with manual state data."""
+    if initial != "zeros":
+        msg = "initial= and other preset options apply only to preset State construction."
+        raise ValueError(msg)
+    if pad is not None:
+        msg = "pad applies only to preset State construction."
+        raise ValueError(msg)
+    if basis_string is not None:
+        msg = "basis_string applies only to preset State construction."
+        raise ValueError(msg)
+    if seed is not None:
+        msg = "seed applies only to preset State construction."
+        raise ValueError(msg)
+
 
 _PRODUCT_STATE_PRESETS = frozenset({
     "zeros",
@@ -222,18 +259,20 @@ def _normalize_density_matrix(rho: NDArray[np.complex128]) -> NDArray[np.complex
 class State:
     """Initial quantum state for :func:`~mqt.yaqs.simulator.run`.
 
-    Holds problem-side configuration (length, preset, physical dimensions). Call
-    :meth:`encode` (or let ``run`` do so) to materialize an :class:`~mqt.yaqs.core.data_structures.networks.MPS`,
-    dense vector, or density matrix for the chosen ``AnalogSimParams.representation``.
+    Holds problem-side configuration (length, preset, physical dimensions, representation).
+    Call :meth:`encode` (or let ``run`` do so) to materialize an
+    :class:`~mqt.yaqs.core.data_structures.networks.MPS`, dense vector, or density matrix for
+    :attr:`representation`.
 
-    Manual data (mutually exclusive; each is encoded automatically at construction):
+    Manual data (mutually exclusive; ``representation`` is inferred and the state is encoded
+    at construction—do not pass ``representation=``):
 
-    - ``tensors``: list of MPS cores → encoded as ``"mps"``.
-    - ``vector``: 1-D array → encoded as ``"vector"``.
-    - ``density_matrix``: 2-D array → encoded as ``"density_matrix"``.
+    - ``tensors``: list of MPS cores → ``representation="mps"``.
+    - ``vector``: 1-D array → ``representation="vector"``.
+    - ``density_matrix``: 2-D array → ``representation="density_matrix"``.
 
-    If none of these are given, only ``length`` / preset kwargs are stored until
-    :meth:`encode` or :func:`~mqt.yaqs.simulator.run`.
+    For preset-only construction (``length``, ``initial=``, …), set ``representation=`` if
+    not using the default ``"mps"``. Otherwise call :meth:`encode` or :func:`~mqt.yaqs.simulator.run`.
     """
 
     def __init__(
@@ -241,6 +280,7 @@ class State:
         length: int | None = None,
         *,
         initial: str = "zeros",
+        representation: Representation | None = None,
         physical_dimensions: list[int] | int | None = None,
         tensors: list[NDArray[np.complex128]] | None = None,
         vector: NDArray[np.complex128] | None = None,
@@ -257,6 +297,9 @@ class State:
                 when that dimension is a power of two. Required for preset-only construction.
             initial: Product-state preset passed to :class:`MPS` when no manual data is given.
                 Same options as ``MPS(..., state=...)`` (``"zeros"``, ``"ones"``, ``"x+"``, …).
+            representation: For preset-only states: ``"mps"`` (default, TJM), ``"vector"`` (MCWF),
+                or ``"density_matrix"`` (Lindblad). Ignored when ``tensors``, ``vector``, or
+                ``density_matrix`` is passed (inferred automatically).
             physical_dimensions: Per-site physical dimension(s); default is qubits (2).
             tensors: MPS tensor cores (rank-3 arrays per site); encoded as ``"mps"`` immediately.
             vector: 1-D state vector; encoded as ``"vector"`` immediately.
@@ -287,6 +330,7 @@ class State:
         self._density_matrix: NDArray[np.complex128] | None = None
 
         if tensors is not None:
+            _reject_preset_only_kwargs(initial=initial, pad=pad, basis_string=basis_string, seed=seed)
             if len(tensors) == 0:
                 msg = "tensors must be a non-empty list of MPS cores."
                 raise ValueError(msg)
@@ -296,28 +340,46 @@ class State:
                 raise ValueError(msg)
             self.length = n_sites if length is None else length
             self._tensors = [np.asarray(t, dtype=np.complex128) for t in tensors]
-            self.encode("mps")
+            if representation is not None and representation != "mps":
+                msg = "representation is inferred as 'mps' from tensors=; omit representation=."
+                raise ValueError(msg)
+            self.representation = "mps"
+            self.encode()
         elif vector is not None:
+            _reject_preset_only_kwargs(initial=initial, pad=pad, basis_string=basis_string, seed=seed)
             self._vector = _normalize_vector(vector)
             hilbert_dim = self._vector.size
             if length is None:
                 self.length = _infer_qubit_length(hilbert_dim)
             else:
                 self.length = length
-            self.encode("vector")
+            if representation is not None and representation != "vector":
+                msg = "representation is inferred as 'vector' from vector=; omit representation=."
+                raise ValueError(msg)
+            self.representation = "vector"
+            self.encode()
         elif density_matrix is not None:
+            _reject_preset_only_kwargs(initial=initial, pad=pad, basis_string=basis_string, seed=seed)
             self._density_matrix = _normalize_density_matrix(density_matrix)
             hilbert_dim = self._density_matrix.shape[0]
             if length is None:
                 self.length = _infer_qubit_length(hilbert_dim)
             else:
                 self.length = length
-            self.encode("density_matrix")
+            if representation is not None and representation != "density_matrix":
+                msg = (
+                    "representation is inferred as 'density_matrix' from density_matrix=; "
+                    "omit representation=."
+                )
+                raise ValueError(msg)
+            self.representation = "density_matrix"
+            self.encode()
         else:
             if length is None:
                 msg = "length is required when not passing tensors, vector, or density_matrix."
                 raise ValueError(msg)
             self.length = length
+            self.representation = "mps" if representation is None else _validate_representation(representation)
 
     @classmethod
     def from_mps(cls, mps: MPS) -> State:
@@ -330,6 +392,7 @@ class State:
         wrapped._tensors = [np.asarray(t, dtype=np.complex128) for t in mps.tensors]
         wrapped._mps = mps
         wrapped._encoded_as = "mps"
+        wrapped.representation = "mps"
         return wrapped
 
     def _build_mps(self) -> MPS:
@@ -420,12 +483,13 @@ class State:
             raise RuntimeError(msg)
         return self._density_matrix
 
-    def encode(self, representation: Representation) -> State:
+    def encode(self, representation: Representation | None = None) -> State:
         r"""Materialize the state for the requested simulation representation.
 
         Args:
             representation: ``"mps"`` (B-normalized MPS), ``"vector"`` (unit-norm dense
-                :math:`|\\psi\\rangle`), or ``"density_matrix"`` (density operator).
+                :math:`|\\psi\\rangle`), or ``"density_matrix"`` (density operator). Defaults to
+                :attr:`representation`.
 
         Returns:
             ``self`` for chaining.
@@ -434,12 +498,13 @@ class State:
             ValueError: If ``representation`` is not recognized or cannot be produced from
                 the data supplied at construction.
         """
-        if self._encoded_as == representation:
+        rep = self.representation if representation is None else _validate_representation(representation)
+        if self._encoded_as == rep:
             return self
-        if representation == "mps":
+        if rep == "mps":
             mps = self._build_mps()
             mps.normalize("B")
-        elif representation == "vector":
+        elif rep == "vector":
             if self._vector is not None:
                 self._vector = _normalize_vector(self._vector)
             elif self._can_build_dense_from_preset():
@@ -447,7 +512,7 @@ class State:
             else:
                 mps = self._build_mps()
                 self._vector = _normalize_vector(mps.to_vec())
-        elif representation == "density_matrix":
+        elif rep == "density_matrix":
             if self._density_matrix is not None:
                 self._density_matrix = _normalize_density_matrix(self._density_matrix)
             elif self._vector is not None:
@@ -465,7 +530,7 @@ class State:
                 dim = vec.size
                 self._density_matrix = np.outer(vec, vec.conj()).reshape(dim, dim)
         else:
-            msg = f"Unknown representation: {representation!r}"
+            msg = f"Unknown representation: {rep!r}"
             raise ValueError(msg)
-        self._encoded_as = representation
+        self._encoded_as = rep
         return self

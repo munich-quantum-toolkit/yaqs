@@ -259,15 +259,16 @@ def test_analog_simulation_get_state() -> None:
 
 def test_density_matrix_get_state_rejected() -> None:
     """density_matrix evolution does not support returning an output state."""
-    psi = MPS(2, state="zeros")
+    psi = State(2, initial="zeros", representation="density_matrix")
     h = MPO.ising(2, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
-        representation="density_matrix",
         get_state=True,
         show_progress=False,
     )
-    with pytest.raises(ValueError, match=r"get_state=True is not supported for representation='density_matrix'"):
+    with pytest.raises(
+        ValueError, match=r"get_state=True is not supported for State\.representation='density_matrix'"
+    ):
         simulator.run(psi, h, sim_params, None)
 
 
@@ -1046,8 +1047,7 @@ def test_scheduled_jump_two_site() -> None:
 def test_run_vector_preset_without_materialized_mps() -> None:
     """Analog run with vector representation uses encoded dense state, not MPS."""
     length = 3
-    state = State(length, initial="zeros")
-    state.encode("vector")
+    state = State(length, initial="zeros", representation="vector")
     with pytest.raises(RuntimeError, match="MPS not materialized"):
         _ = state.mps
     hamiltonian = MPO.ising(length, 1.0, 0.5)
@@ -1056,7 +1056,6 @@ def test_run_vector_preset_without_materialized_mps() -> None:
         observables=[obs],
         elapsed_time=0.1,
         dt=0.1,
-        representation="vector",
         show_progress=False,
     )
     simulator.run(state, hamiltonian, params, None)
@@ -1066,8 +1065,7 @@ def test_run_vector_preset_without_materialized_mps() -> None:
 def test_run_density_matrix_preset_without_materialized_mps() -> None:
     """Analog run with density_matrix representation uses encoded rho, not MPS."""
     length = 3
-    state = State(length, initial="zeros")
-    state.encode("density_matrix")
+    state = State(length, initial="zeros", representation="density_matrix")
     with pytest.raises(RuntimeError, match="MPS not materialized"):
         _ = state.mps
     hamiltonian = MPO.ising(length, 1.0, 0.5)
@@ -1076,7 +1074,6 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
         observables=[obs],
         elapsed_time=0.1,
         dt=0.1,
-        representation="density_matrix",
         show_progress=False,
     )
     simulator.run(state, hamiltonian, params, None)
