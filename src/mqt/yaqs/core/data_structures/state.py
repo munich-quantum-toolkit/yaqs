@@ -125,10 +125,7 @@ class State:
             else:
                 expected = int(np.prod(resolve_physical_dimensions(length, physical_dimensions)))
                 if hilbert_dim != expected:
-                    msg = (
-                        f"vector size {hilbert_dim} does not match Hilbert dimension "
-                        f"{expected} for length={length}."
-                    )
+                    msg = f"vector size {hilbert_dim} does not match Hilbert dimension {expected} for length={length}."
                     raise ValueError(msg)
                 self.length = length
             if representation is not None and representation != "vector":

@@ -174,10 +174,7 @@ def local_vector_for_preset(
             msg = "basis_string must be provided for initial='basis'."
             raise ValueError(msg)
         if site >= len(basis_string):
-            msg = (
-                f"basis_string length {len(basis_string)} is too short for site {site} "
-                f"(chain length {length})."
-            )
+            msg = f"basis_string length {len(basis_string)} is too short for site {site} (chain length {length})."
             raise ValueError(msg)
         idx = int(basis_string[site])
         if idx >= local_dim:

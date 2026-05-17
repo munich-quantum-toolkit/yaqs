@@ -104,10 +104,7 @@ class Hamiltonian:
             else:
                 expected = physical_dimension**length
                 if hilbert_dim != expected:
-                    msg = (
-                        f"matrix dimension {hilbert_dim} does not match "
-                        f"physical_dimension**length={expected}."
-                    )
+                    msg = f"matrix dimension {hilbert_dim} does not match physical_dimension**length={expected}."
                     raise ValueError(msg)
                 self.length = length
             self._matrix = mat
@@ -127,10 +124,7 @@ class Hamiltonian:
             else:
                 expected = physical_dimension**length
                 if hilbert_dim != expected:
-                    msg = (
-                        f"sparse_matrix dimension {hilbert_dim} does not match "
-                        f"physical_dimension**length={expected}."
-                    )
+                    msg = f"sparse_matrix dimension {hilbert_dim} does not match physical_dimension**length={expected}."
                     raise ValueError(msg)
                 self.length = length
             self._sparse_matrix = sparse

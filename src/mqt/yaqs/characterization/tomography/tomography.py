@@ -394,10 +394,7 @@ def run(
         num_trajectories = 1
 
     if representation == "density_matrix":
-        msg = (
-            "Process tomography does not support representation='density_matrix'; "
-            "use 'mps' or 'vector'."
-        )
+        msg = "Process tomography does not support representation='density_matrix'; use 'mps' or 'vector'."
         raise ValueError(msg)
 
     operator.ensure_encoded("mpo")
