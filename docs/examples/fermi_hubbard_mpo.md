@@ -7,9 +7,12 @@ mystnb:
   execution_timeout: 300
 ---
 
-# 1D Fermi-Hubbard MPO
+# 1D Fermi-Hubbard Hamiltonian
 
-This example shows how to build a 1D Fermi-Hubbard Hamiltonian as an MPO using {class}`~mqt.yaqs.core.data_structures.networks.MPO.fermi_hubbard_1d`.
+This example shows how to build a 1D Fermi-Hubbard Hamiltonian for analog simulation using
+{class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d` (backed by an MPO internally).
+You can also call {class}`~mqt.yaqs.core.data_structures.networks.MPO.fermi_hubbard_1d` directly and wrap the result
+with {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.from_mpo` for custom workflows.
 
 YAQS supports two representations:
 
@@ -27,30 +30,30 @@ H = -t \sum_{i,\sigma} \left(c^\dagger_{i,\sigma} c_{i+1,\sigma} + \mathrm{h.c.}
 + U \sum_i n_{i,\uparrow} n_{i,\downarrow}.
 $$
 
-## Fermionic MPO
+## Fermionic Hamiltonian
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 
 num_sites = 4
 t = 1.0
 u = 0.5
 
-h_mpo = MPO.fermi_hubbard_1d(num_sites, t=t, u=u)
-print(f"sites={h_mpo.length}, local dim={h_mpo.physical_dimension}, matrix shape={h_mpo.to_matrix().shape}")
+H = Hamiltonian.fermi_hubbard_1d(num_sites, t=t, u=u)
+print(f"sites={H.length}, local dim={H.mpo.physical_dimension}, matrix shape={H.mpo.to_matrix().shape}")
 ```
 
 The single-site basis is $|0\rangle, |\!\downarrow\rangle, |\!\uparrow\rangle, |\!\uparrow\downarrow\rangle$ (NumPy `kron` ordering for $|\!\uparrow\rangle \otimes |\!\downarrow\rangle$).
 
-## Jordan-Wigner MPO
+## Jordan-Wigner Hamiltonian
 
 For the same model on $L$ physical sites, pass `length=2 * L` spin orbitals:
 
 ```{code-cell} ipython3
 num_orbitals = 2 * num_sites
 
-h_jw = MPO.fermi_hubbard_1d(num_orbitals, t=t, u=u, jordan_wigner=True)
-print(f"orbitals={h_jw.length}, local dim={h_jw.physical_dimension}, matrix shape={h_jw.to_matrix().shape}")
+H_jw = Hamiltonian.fermi_hubbard_1d(num_orbitals, t=t, u=u, jordan_wigner=True)
+print(f"orbitals={H_jw.length}, local dim={H_jw.mpo.physical_dimension}, matrix shape={H_jw.mpo.to_matrix().shape}")
 ```
 
 ## Relation to the Trotter circuit helper
@@ -58,4 +61,4 @@ print(f"orbitals={h_jw.length}, local dim={h_jw.physical_dimension}, matrix shap
 {func}`~mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit` builds a **digital** Trotter circuit on separate ↑ and ↓ registers and can include a chemical potential $\mu$.
 The MPO factories above target the **analog** Hamiltonian without $\mu$ and use either fermionic operators or an interleaved JW layout.
 
-For digital simulation of the circuit model, use the circuit API; for tensor-network evolution of the Hubbard Hamiltonian, use `MPO.fermi_hubbard_1d`.
+For digital simulation of the circuit model, use the circuit API; for tensor-network evolution of the Hubbard Hamiltonian, use `Hamiltonian.fermi_hubbard_1d` with [`simulator.run`](mqt.yaqs.simulator.run).

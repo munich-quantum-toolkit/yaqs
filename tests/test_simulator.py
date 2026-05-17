@@ -245,8 +245,8 @@ def test_analog_simulation_get_state() -> None:
 
         simulator.run(initial_state, H, sim_params)
         assert sim_params.output_state is not None
-        assert isinstance(sim_params.output_state, MPS)
-        sv = sim_params.output_state.to_vec()
+        assert isinstance(sim_params.output_state, State)
+        sv = sim_params.output_state.mps.to_vec()
 
         expected = [
             3.48123000e-01 + 0.76996349j,
@@ -353,8 +353,8 @@ def test_strong_simulation_no_noise() -> None:
 
     simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
-    assert isinstance(sim_params.output_state, MPS)
-    sv = sim_params.output_state.to_vec()
+    assert isinstance(sim_params.output_state, State)
+    sv = sim_params.output_state.mps.to_vec()
 
     expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
     fidelity = np.abs(np.vdot(sv, expected)) ** 2
@@ -484,8 +484,8 @@ def test_weak_simulation_get_state() -> None:
 
     simulator.run(initial_state, circuit, sim_params, noise_model)
     assert sim_params.output_state is not None
-    assert isinstance(sim_params.output_state, MPS)
-    sv = sim_params.output_state.to_vec()
+    assert isinstance(sim_params.output_state, State)
+    sv = sim_params.output_state.mps.to_vec()
 
     expected = [0.34870601 + 0.7690227j, 0.03494528 + 0.34828721j, 0.03494528 + 0.34828721j, -0.19159629 - 0.07244828j]
     fidelity = np.abs(np.vdot(sv, expected)) ** 2
@@ -1097,6 +1097,20 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
     )
     simulator.run(state, hamiltonian, params, None)
     assert obs.results is not None
+
+
+def test_analog_run_rejects_mpo_operator() -> None:
+    """Legacy MPO operators are not accepted by simulator.run."""
+    state = State(2, initial="zeros")
+    mpo = MPO.ising(2, J=1.0, g=0.5)
+    params = AnalogSimParams(
+        observables=[Observable("z", sites=[0])],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+    )
+    with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
+        simulator.run(state, mpo, params, None)
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:

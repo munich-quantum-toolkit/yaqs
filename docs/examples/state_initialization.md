@@ -196,6 +196,6 @@ print("From vector=, MCWF Z_0:", obs_vec.results[-1])
 - **Entangled presets**: `"haar-random"` may need an internal MPS for dense representations.
 - **Circuits**: use `State(..., representation="mps")` (default); `vector=` / `density_matrix=` states cannot run circuits.
 - **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
-- **`get_state`**: not supported with `representation="density_matrix"` or with stochastic noise (unchanged).
+- **`get_state`**: when supported, `sim_params.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State) (use `.mps` for the underlying MPS). Not supported with `representation="density_matrix"` or with stochastic noise.
 
 For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.networks.MPS) API reference.

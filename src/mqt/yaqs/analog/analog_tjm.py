@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..core.data_structures.simulation_parameters import EvolutionMode
+from ..core.data_structures.state import State
 from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
@@ -133,7 +134,7 @@ def sample(
     else:
         psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params, rng=rng)
     if j == len(sim_params.times) - 1 and sim_params.get_state:
-        sim_params.output_state = psi
+        sim_params.output_state = State.from_mps(psi)
 
     if sim_params.sample_timesteps:
         psi.evaluate_observables(sim_params, results, j)
@@ -235,6 +236,6 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
             state.evaluate_observables(sim_params, results)
 
     if sim_params.get_state:
-        sim_params.output_state = state
+        sim_params.output_state = State.from_mps(state)
 
     return results

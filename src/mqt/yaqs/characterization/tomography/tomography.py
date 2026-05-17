@@ -319,7 +319,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
             hamiltonian._ensure_encoded("mpo")
             backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
             assert step_params.output_state is not None
-            current_state = cast("MPS", step_params.output_state)
+            current_state = step_params.output_state.mps
 
     sequence_results = [_get_rho_site_zero(current_state)]
     return (seq_idx, traj_idx, sequence_results, sequence_weight)

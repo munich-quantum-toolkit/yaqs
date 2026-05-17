@@ -1427,7 +1427,7 @@ def test_convert_to_vector_fidelity() -> None:
     )
     simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
-    tdvp_state = sim_params.output_state.to_vec()
+    tdvp_state = sim_params.output_state.mps.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 
@@ -1453,7 +1453,7 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     )
     simulator.run(state, circ, sim_params)
     assert sim_params.output_state is not None
-    tdvp_state = sim_params.output_state.to_vec()
+    tdvp_state = sim_params.output_state.mps.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 

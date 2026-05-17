@@ -8,11 +8,12 @@
 """High-level simulator module for using YAQS.
 
 This module implements the common simulation routine for both circuit-based and Hamiltonian (analog) simulations.
-It provides functions to run simulation trajectories in parallel using an State representation of the quantum state.
+It provides functions to run simulation trajectories in parallel using :class:`~mqt.yaqs.core.data_structures.state.State`
+and :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` at the public API boundary.
 Depending on the type of simulation parameters provided (WeakSimParams, StrongSimParams, or AnalogSimParams),
 the simulation is dispatched to the appropriate backend:
   - For circuit simulations, a QuantumCircuit is used and processed via the _run_circuit function.
-  - For analog simulations, an MPO is used to represent the Hamiltonian and processed via the _run_analog function.
+  - For analog simulations, a Hamiltonian is validated and materialized, then processed via the _run_analog function.
 
 The module supports both strong and weak simulation schemes, including functionality for:
   - Initializing the state (State) to a canonical form (B normalized).

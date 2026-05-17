@@ -23,6 +23,7 @@ from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.networks import MPO, MPS
 from ..core.data_structures.noise_model import NoiseModel
+from ..core.data_structures.state import State
 from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
@@ -316,7 +317,7 @@ def digital_tjm(
         if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
             # All shots can be done at once in noise-free model
             if sim_params.get_state:
-                sim_params.output_state = state
+                sim_params.output_state = State.from_mps(state)
             return state.measure_shots(sim_params.shots)
         # Each shot is an individual trajectory
         return state.measure_shots(shots=1)
@@ -326,6 +327,6 @@ def digital_tjm(
 
     assert isinstance(sim_params, StrongSimParams)
     if sim_params.get_state:
-        sim_params.output_state = state
+        sim_params.output_state = State.from_mps(state)
     state.evaluate_observables(sim_params, results, results.shape[1] - 1)
     return results
