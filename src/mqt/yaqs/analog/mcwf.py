@@ -68,12 +68,13 @@ class MCWFContext:
 
 def preprocess_mcwf(
     initial_state: MPS | None,
-    hamiltonian: MPO,
+    hamiltonian: MPO | None,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
     *,
     psi_initial: NDArray[np.complex128] | None = None,
     num_sites: int | None = None,
+    h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
@@ -82,11 +83,12 @@ def preprocess_mcwf(
 
     Args:
         initial_state: The initial MPS state, or ``None`` when ``psi_initial`` is supplied.
-        hamiltonian: The Hamiltonian MPO.
+        hamiltonian: The Hamiltonian MPO (ignored if ``h_sparse`` is set).
         noise_model: The noise model.
         sim_params: Simulation parameters.
         psi_initial: Optional pre-encoded dense state vector (unit norm applied here).
         num_sites: Number of lattice sites when ``initial_state`` is ``None``.
+        h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
 
     Returns:
         MCWFContext containing dense arrays ready for trajectory simulation.
@@ -124,7 +126,13 @@ def preprocess_mcwf(
     psi /= np.linalg.norm(psi)
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
-    h_mat = hamiltonian.to_sparse_matrix()
+    if h_sparse is not None:
+        h_mat = h_sparse.tocsr()
+    elif hamiltonian is not None:
+        h_mat = hamiltonian.to_sparse_matrix()
+    else:
+        msg = "preprocess_mcwf requires hamiltonian or h_sparse."
+        raise ValueError(msg)
 
     # 3. Jump operators L_k = sqrt(gamma) * op embedded on the full space.
     jump_ops: list[scipy.sparse.spmatrix] = []

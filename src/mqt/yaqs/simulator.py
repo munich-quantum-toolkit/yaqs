@@ -85,6 +85,7 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
+from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.networks import MPO
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .core.data_structures.state import State
@@ -400,6 +401,46 @@ def _materialized_mps(state: State) -> MPS | None:
         return state.mps
     except RuntimeError:
         return None
+
+
+def _hamiltonian_backend_target(state_rep: str) -> str:
+    """Internal storage target for ``Hamiltonian`` given ``State.representation``."""
+    if state_rep in ("vector", "density_matrix"):
+        return "sparse"
+    return "mpo"
+
+
+def _validate_state_hamiltonian_pairing(state: State, hamiltonian: Hamiltonian) -> None:
+    """Check ``State`` and ``Hamiltonian`` can be evolved together.
+
+    Raises:
+        ValueError: If representations or lengths are incompatible.
+    """
+    if state.length != hamiltonian.length:
+        msg = f"State.length={state.length} does not match Hamiltonian.length={hamiltonian.length}."
+        raise ValueError(msg)
+    if state.representation == "mps" and hamiltonian.representation != "mpo":
+        msg = (
+            "TJM simulation requires Hamiltonian.representation='mpo'. "
+            "Use State.representation='vector' or 'density_matrix' for matrix Hamiltonians."
+        )
+        raise ValueError(msg)
+
+
+def _prepare_hamiltonian_for_run(
+    hamiltonian: Hamiltonian,
+    state_rep: str,
+) -> tuple[MPO | None, Any]:
+    """Ensure ``hamiltonian`` is encoded for the backend matching ``state_rep``.
+
+    Returns:
+        ``(mpo, h_sparse)`` with one entry set for the active backend.
+    """
+    target = _hamiltonian_backend_target(state_rep)
+    hamiltonian._ensure_encoded(cast("Any", target))
+    if target == "mpo":
+        return hamiltonian.mpo, None
+    return None, hamiltonian.sparse_matrix
 
 
 # ---------------------------------------------------------------------------
@@ -799,7 +840,7 @@ def _run_circuit(
             "Use representation='vector' or 'density_matrix' only for analog Hamiltonian runs."
         )
         raise ValueError(msg)
-    initial_state._encode()
+    initial_state._ensure_encoded("mps")
     mps = initial_state.mps
 
     # Sanity check: MPS length must equal circuit qubit count
@@ -924,7 +965,7 @@ def _run_ensemble(
 # ---------------------------------------------------------------------------
 def _run_analog(
     initial_state: State | list[State],
-    operator: MPO,
+    operator: Hamiltonian,
     sim_params: AnalogSimParams,
     noise_model: NoiseModel | None,
     *,
@@ -933,13 +974,13 @@ def _run_analog(
     """Run analog simulation trajectories for Hamiltonian evolution.
 
     This function selects the appropriate analog simulation backend based on sim_params.order
-    (either one-site or two-site evolution) and runs the simulation trajectories for the given Hamiltonian
-    (represented as an MPO). The trajectories are executed (in parallel if specified) and the results are aggregated.
+    (either one-site or two-site evolution) and runs the simulation trajectories for the given Hamiltonian.
+    The trajectories are executed (in parallel if specified) and the results are aggregated.
 
     Args:
         initial_state: The initial system state as an State, or a list of State states
             for deterministic unitary analog ensemble evolution.
-        operator: The Hamiltonian operator represented as an MPO.
+        operator: The Hamiltonian specification (materialized once per ``run`` call).
         sim_params: Simulation parameters for analog simulation, including time step and evolution order.
         noise_model: The noise model applied during simulation.
         parallel: Flag indicating whether to run trajectories in parallel.
@@ -953,30 +994,30 @@ def _run_analog(
         if any(spec.representation != "mps" for spec in initial_state_list):
             msg = "list[State] analog ensemble currently supports only State.representation='mps'."
             raise ValueError(msg)
+        operator._ensure_encoded("mpo")
         for spec in initial_state_list:
-            spec._encode()
+            spec._ensure_encoded("mps")
+            _validate_state_hamiltonian_pairing(spec, operator)
         _run_ensemble(
             [spec.mps for spec in initial_state_list],
-            operator,
+            operator.mpo,
             sim_params,
             noise_model,
             parallel=parallel,
         )
         return
 
-    initial_state._encode()
+    initial_state._ensure_encoded(initial_state.representation)
     mps = _materialized_mps(initial_state)
     state_rep = initial_state.representation
+    _validate_state_hamiltonian_pairing(initial_state, operator)
+    mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
 
     # Choose integrator order (1 or 2) for the analog TJM backend
 
     backend: Callable[[Any], NDArray[np.float64]]
-    use_lindblad_ctx = False
     if state_rep == "density_matrix":
-        backend = lindblad
-        if mps is None:
-            backend = lindblad_evolve
-            use_lindblad_ctx = True
+        backend = lindblad_evolve
     elif state_rep == "vector":
         backend = mcwf
     elif sim_params.order == 1:
@@ -1007,37 +1048,37 @@ def _run_analog(
     worker_fn: Callable[[int], Any]
 
     if state_rep == "vector":
-        # Optimization: Pre-compute dense operators once
         ctx = preprocess_mcwf(
             mps,
-            operator,
+            mpo_op,
             noise_model,
             sim_params,
             psi_initial=None if mps is not None else initial_state.vector,
             num_sites=initial_state.length if mps is None else None,
+            h_sparse=h_sparse,
         )
         payload = {"ctx": ctx}
         worker_fn = _mcwf_worker
-    elif use_lindblad_ctx:
-        assert mps is None
+    elif state_rep == "density_matrix":
         lindblad_ctx = preprocess_lindblad(
-            None,
-            operator,
+            mps,
+            mpo_op,
             noise_model,
             sim_params,
             rho_initial=initial_state.density_matrix,
             num_sites=initial_state.length,
+            h_sparse=h_sparse,
         )
         payload = {"ctx": lindblad_ctx}
         worker_fn = _lindblad_ctx_worker
     else:
         assert mps is not None, "MPS representation requires a materialized MPS."
-        # Standard mps / density_matrix (MPS-initialized) arguments
+        assert mpo_op is not None
         payload = {
             "initial_state": mps,
             "noise_model": noise_model,
             "sim_params": sim_params,
-            "operator": operator,
+            "operator": mpo_op,
             "backend": backend,
         }
         worker_fn = _analog_worker
@@ -1069,10 +1110,10 @@ def _run_analog(
             # For vector serial, we still use the pre-computed ctx
             # ctx is already in local scope from above if block
             args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
-        elif use_lindblad_ctx:
+        elif state_rep == "density_matrix":
             args = [lindblad_ctx for _ in range(sim_params.num_traj)]
         else:
-            args = [(i, mps, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+            args = [(i, mps, noise_model, sim_params, mpo_op) for i in range(sim_params.num_traj)]
 
         # Use tqdm if show_progress is True
         iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
@@ -1093,7 +1134,7 @@ def _run_analog(
 # ---------------------------------------------------------------------------
 def run(
     initial_state: State | list[State],
-    operator: MPO | QuantumCircuit,
+    operator: Hamiltonian | QuantumCircuit,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     noise_model: NoiseModel | None = None,
     *,
@@ -1104,17 +1145,17 @@ def run(
     This function dispatches the simulation to the appropriate backend based on the type of
     simulation parameters provided. For circuit-based simulations, the initial
     :class:`~mqt.yaqs.core.data_structures.state.State` must use ``representation="mps"``; for analog
-    simulations,
-    materializes the state from :attr:`~mqt.yaqs.core.data_structures.state.State.representation`
-    inside :func:`_run_analog`.
+    simulations, :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` and
+    :class:`~mqt.yaqs.core.data_structures.state.State` are materialized as needed inside
+    :func:`_run_analog`.
 
     Args:
         initial_state:
             The initial state as a :class:`~mqt.yaqs.core.data_structures.state.State`, or a
             list of states for deterministic analog unitary ensemble evolution
             (``AnalogSimParams`` only).
-        operator: The operator representing the evolution; an MPO for analog simulations
-            or a QuantumCircuit for circuit simulations.
+        operator: :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` for analog
+            simulations or a :class:`~qiskit.circuit.QuantumCircuit` for circuit simulations.
         sim_params: Simulation parameters specifying the simulation mode and settings.
         noise_model: The noise model to apply during simulation. If provided, it is sampled once
             at the beginning of the run to generate a concrete noise realization (static disorder).
@@ -1158,5 +1199,7 @@ def run(
         assert isinstance(initial_state, State)
         _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
     elif isinstance(sim_params, AnalogSimParams):
-        assert isinstance(operator, MPO)
+        if not isinstance(operator, Hamiltonian):
+            msg = "Analog simulation requires a Hamiltonian operator."
+            raise TypeError(msg)
         _run_analog(initial_state, operator, sim_params, noise_model, parallel=parallel)

@@ -31,8 +31,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from mqt.yaqs import simulator
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import BaseGate, Z, X, Y
 ```
 
@@ -44,7 +45,7 @@ h_x = 0.4
 
 # Open XXZ + transverse field: H = Jxx ∑_r (S^x_r S^x_{r+1} + S^y_r S^y_{r+1}) + Δ ∑_r S^z_r S^z_{r+1} + h_x ∑_r S^x_r
 # (Pauli convention in code: S^α = σ^α/2, matching two_body prefactors 0.25 * Jxx / Δ.)
-H_open = MPO.hamiltonian(
+H_open = Hamiltonian.hamiltonian(
     length=L,
     two_body=[(0.25 * Jxx, "X", "X"), (0.25 * Jxx, "Y", "Y"), (0.25 * delta, "Z", "Z")],
     one_body=[(0.5 * h_x, "X")],
@@ -52,7 +53,7 @@ H_open = MPO.hamiltonian(
 )
 
 mid = L // 2
-psi0 = MPS(L, state="haar-random", pad=2)
+psi0 = State(L, initial="haar-random", pad=2)
 
 primer_params = AnalogSimParams(
     observables=[Observable(Z(), mid)],
@@ -95,7 +96,7 @@ For an initial state $|\psi(0)\rangle$ and unitary $U(t)$:
 These quantities probe dynamical memory and relaxation.
 They are standard observables in **dynamical quantum typicality (DQT)** and related finite-temperature dynamics studies, where one compares single-trajectory and ensemble-averaged behavior.
 
-The unitary-ensemble backend computes `multi_time_observables` pairs for `list[MPS]` inputs.
+The unitary-ensemble backend computes `multi_time_observables` pairs for `list[State]` inputs (each with `representation="mps"`, the default).
 Autocorrelation is the special case where both the observables are the same `(O, O)`. For a single-state demonstration, we pass a list with one element.
 
 ```{code-cell} ipython3
@@ -113,7 +114,7 @@ single_state_params = AnalogSimParams(
     multi_time_observables=[(sz_mid, sz_mid), (sz_mid, sx_mid)],  # row 0: C_zz(t), row 1: C_zx(t)
 )
 
-simulator.run([MPS(L, state="haar-random", pad=2)], H_open, single_state_params, parallel=False)
+simulator.run([State(L, initial="haar-random", pad=2)], H_open, single_state_params, parallel=False)
 
 t_single = single_state_params.multi_time_observables_times
 czz_single = single_state_params.multi_time_observables_results[0]
@@ -138,12 +139,12 @@ In dynamical typicality studies, one often averages correlations over an ensembl
 Under certain thermalisation guarantees, one can show that the typical relaxation behavior of _any_ state can be represented by an ensemble average of the expectation over randomly initialised states.
 For sufficiently rich ensembles, this can approximate high-temperature traces and reveal robust transport trends.
 
-YAQS supports this directly by passing `list[MPS]` into `simulator.run`.
+YAQS supports this directly by passing `list[State]` into `simulator.run`.
 Each member evolves independently, which, when parallelized by the unitary backend, offers computational advantage to calculate these variables.
 
 ```{code-cell} ipython3
 num_states = 8
-ensemble_states = [MPS(L, state="haar-random", pad=2) for _ in range(num_states)]
+ensemble_states = [State(L, initial="haar-random", pad=2) for _ in range(num_states)]
 
 ensemble_params = AnalogSimParams(
     observables=[],
@@ -177,7 +178,7 @@ ax.grid(alpha=0.3)
 plt.show()
 ```
 
-In the above illustrative run, the ensemble-averaged $C_{zz}(t)$ shows a monotonic decay trend toward zero, while $C_{zx}(t)$ remains comparatively close to zero over the sampled window, in contrast to the single-MPS trajectory.
+In the above illustrative run, the ensemble-averaged $C_{zz}(t)$ shows a monotonic decay trend toward zero, while $C_{zx}(t)$ remains comparatively close to zero over the sampled window, in contrast to the single-state trajectory.
 
 ## 4. Spin transport example: periodic spin-current autocorrelation
 
@@ -227,14 +228,14 @@ t_final = 5.0
 dt = 0.15
 n_transport_states = 4
 
-states_transport = [MPS(Ltr, state="haar-random", pad=2) for _ in range(n_transport_states)]
+states_transport = [State(Ltr, initial="haar-random", pad=2) for _ in range(n_transport_states)]
 bond_obs = current_observables(Ltr, Jxx)
 pairs_jj = [(a, b) for a in bond_obs for b in bond_obs]
 
 transport_curves: dict[float, np.ndarray] = {}
 t_transport = None
 for d in deltas:
-    h_periodic = MPO.hamiltonian(
+    h_periodic = Hamiltonian.hamiltonian(
         length=Ltr,
         two_body=[(0.25 * Jxx, "X", "X"), (0.25 * Jxx, "Y", "Y"), (0.25 * d, "Z", "Z")],
         one_body=[],

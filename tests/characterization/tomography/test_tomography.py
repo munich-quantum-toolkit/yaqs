@@ -20,6 +20,7 @@ from mqt.yaqs.characterization.tomography.tomography import (
     get_choi_basis,
     run,
 )
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.networks import MPO
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
@@ -86,7 +87,7 @@ def _apply_local_map_site0(
 
 def test_tomography_run_basic() -> None:
     """Test standard single-step process tomography."""
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
     pt = run(op, params, timesteps=[0.1])
 
@@ -97,7 +98,7 @@ def test_tomography_run_basic() -> None:
 
 def test_tomography_run_defaults() -> None:
     """Test defaults (timesteps=None -> single step)."""
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, elapsed_time=0.1)
     pt = run(op, params)
     assert pt.tensor.shape == (4, 16)
@@ -105,7 +106,7 @@ def test_tomography_run_defaults() -> None:
 
 def test_tomography_mcwf_multistep() -> None:
     """Test multi-step process tomography with vector representation."""
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, num_traj=10)
     pt = run(op, params, timesteps=[0.1, 0.1], representation="vector")
     assert pt.tensor.shape == (4, 16, 16)
@@ -113,7 +114,7 @@ def test_tomography_mcwf_multistep() -> None:
 
 def test_tomography_run_multistep() -> None:
     """Test structure of multi-step PT."""
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
     pt = run(op, params, timesteps=[0.1, 0.2])
 
@@ -124,7 +125,7 @@ def test_tomography_run_multistep() -> None:
 
 def test_basis_reproduction() -> None:
     """Verify that identity map yields correct prediction."""
-    op = MPO.ising(length=2, J=0.0, g=0.0)  # Zero Hamiltonian
+    op = Hamiltonian.ising(length=2, J=0.0, g=0.0)  # Zero Hamiltonian
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
     pt = run(op, params, timesteps=[0.1])
 
@@ -139,7 +140,7 @@ def test_basis_reproduction() -> None:
 
 def test_predict_linearity() -> None:
     """Ensure predict_final_state is linear in the intervention maps."""
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
     pt = run(op, params, timesteps=[0.1])
 
@@ -161,7 +162,7 @@ def test_predict_linearity() -> None:
 
 def test_reconstruction_depolarizing() -> None:
     """Test reconstruction of a depolarizing channel via PT."""
-    op = MPO.ising(length=2, J=0.0, g=0.0)
+    op = Hamiltonian.ising(length=2, J=0.0, g=0.0)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16)
     pt = run(op, params, timesteps=[0.1])
 
@@ -239,7 +240,7 @@ def test_dual_extracts_one_hot_for_basis_maps() -> None:
 def test_held_out_prediction() -> None:
     """Test PT prediction against direct evolution for a random preparation map (1-step)."""
     rng = np.random.default_rng(42)
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
 
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
     pt = run(op, params, timesteps=[0.1])
@@ -267,7 +268,7 @@ def test_held_out_prediction() -> None:
 def test_multi_step_correctness() -> None:
     """Verify 2-step PT correctness against explicit global evolution."""
     rng = np.random.default_rng(42)
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
 
     # Use order=2 for TJM 2
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
@@ -322,7 +323,7 @@ def test_unnormalized_branch_semantics_h0() -> None:
     - trace(rho_out) == pt.weights[alpha]
     - trace(rho_out) == Tr(E_m |0><0|)
     """
-    op = MPO.ising(length=2, J=0.0, g=0.0)  # H = 0
+    op = Hamiltonian.ising(length=2, J=0.0, g=0.0)  # H = 0
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
     pt = run(op, params, timesteps=[0.1])
 
@@ -361,7 +362,7 @@ def test_tomography_with_noise() -> None:
     and stochastic noise operators without crashing. It does not perform an exact arithmetic assertion
     against the output.
     """
-    op = MPO.ising(length=2, J=1.0, g=0.5)
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
     params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
 
     # Create a simple noise model (e.g. amplitude damping on site 0)

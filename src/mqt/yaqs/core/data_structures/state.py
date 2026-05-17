@@ -260,8 +260,8 @@ class State:
     """Initial quantum state for :func:`~mqt.yaqs.simulator.run`.
 
     Specify *what* to simulate (length, preset, optional raw data) and *how* to represent it
-    during evolution (:attr:`representation`). Pass the ``State`` to ``run``; do not call
-    :meth:`_encode` or access :attr:`mps`, :attr:`vector`, or :attr:`density_matrix` beforehand.
+    during evolution (:attr:`representation`). Materialization happens at construction;
+    pass the ``State`` to :func:`~mqt.yaqs.simulator.run` (including in parameter loops).
 
     - **Presets** — ``State(L, initial="zeros")``; default ``representation="mps"`` (TJM).
       For MCWF or Lindblad, set ``representation="vector"`` or ``"density_matrix"``.
@@ -374,6 +374,16 @@ class State:
             self.length = length
             self.representation = "mps" if representation is None else _validate_representation(representation)
 
+        self._encode(self.representation)
+
+    def _ensure_encoded(self, representation: Representation | None = None) -> State:
+        """Materialize ``representation`` if needed (used by :func:`~mqt.yaqs.simulator.run`).
+
+        Returns:
+            ``self`` for chaining.
+        """
+        return self._encode(representation)
+
     @classmethod
     def from_mps(cls, mps: MPS) -> State:
         """Wrap an existing :class:`MPS` as a :class:`State` (already in MPS form).
@@ -386,6 +396,7 @@ class State:
         wrapped._mps = mps
         wrapped._encoded_as = "mps"
         wrapped.representation = "mps"
+        wrapped._encode("mps")
         return wrapped
 
     def _build_mps(self) -> MPS:
@@ -442,37 +453,37 @@ class State:
 
     @property
     def mps(self) -> MPS:
-        """Internal MPS after materialization (not for use before :func:`~mqt.yaqs.simulator.run`).
+        """MPS when :attr:`representation` is ``"mps"``.
 
         Raises:
-            RuntimeError: If the state has not been materialized as ``"mps"``.
+            RuntimeError: If the state is not encoded as ``"mps"``.
         """
         if self._encoded_as != "mps" or self._mps is None:
-            msg = "MPS is not available; pass this State to simulator.run instead."
+            msg = f"MPS is not available for representation={self.representation!r}."
             raise RuntimeError(msg)
         return self._mps
 
     @property
     def vector(self) -> NDArray[np.complex128]:
-        """Internal dense vector after materialization (not for use before ``run``).
+        """Dense state vector when :attr:`representation` is ``"vector"``.
 
         Raises:
-            RuntimeError: If the state has not been materialized as ``"vector"``.
+            RuntimeError: If the state is not encoded as ``"vector"``.
         """
         if self._encoded_as != "vector" or self._vector is None:
-            msg = "State vector is not available; pass this State to simulator.run instead."
+            msg = f"State vector is not available for representation={self.representation!r}."
             raise RuntimeError(msg)
         return self._vector
 
     @property
     def density_matrix(self) -> NDArray[np.complex128]:
-        """Internal density matrix after materialization (not for use before ``run``).
+        """Density matrix when :attr:`representation` is ``"density_matrix"``.
 
         Raises:
-            RuntimeError: If the state has not been materialized as ``"density_matrix"``.
+            RuntimeError: If the state is not encoded as ``"density_matrix"``.
         """
         if self._encoded_as != "density_matrix" or self._density_matrix is None:
-            msg = "Density matrix is not available; pass this State to simulator.run instead."
+            msg = f"Density matrix is not available for representation={self.representation!r}."
             raise RuntimeError(msg)
         return self._density_matrix
 
@@ -495,6 +506,7 @@ class State:
         if rep == "mps":
             mps = self._build_mps()
             mps.normalize("B")
+            self._mps = mps
         elif rep == "vector":
             if self._vector is not None:
                 self._vector = _normalize_vector(self._vector)

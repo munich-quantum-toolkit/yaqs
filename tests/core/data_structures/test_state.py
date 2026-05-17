@@ -58,8 +58,7 @@ def test_encode_mps_normalizes_b_form() -> None:
 
 def test_encode_vector_caches_normalized_vector() -> None:
     """encode('vector') stores a unit-norm dense vector."""
-    psi = State(3, initial="zeros")
-    psi._encode("vector")
+    psi = State(3, initial="zeros", representation="vector")
     assert psi._vector is not None
     assert psi._mps is None
     assert np.isclose(np.linalg.norm(psi.vector), 1.0)
@@ -70,8 +69,7 @@ def test_encode_vector_caches_normalized_vector() -> None:
 
 def test_encode_density_matrix_from_pure_state() -> None:
     """encode('density_matrix') caches |psi><psi| for a pure initial state."""
-    psi = State(2, initial="x+")
-    psi._encode("density_matrix")
+    psi = State(2, initial="x+", representation="density_matrix")
     assert psi._mps is None
     assert psi._vector is not None
     expected = np.outer(psi._vector, psi._vector.conj())
@@ -111,41 +109,32 @@ def test_from_mps_wraps_existing() -> None:
 
 
 def test_init_from_tensor_list() -> None:
-    """List of cores defers MPS materialization until _encode or run."""
+    """List of cores is encoded as MPS at construction."""
     mps_ref = MPS(2, state="zeros")
     spec = State(tensors=list(mps_ref.tensors))
     assert spec.length == 2
     assert spec.representation == "mps"
-    assert spec._encoded_as is None
-    with pytest.raises(RuntimeError, match="MPS is not available"):
-        _ = spec.mps
-    spec._encode()
+    assert spec._encoded_as == "mps"
     np.testing.assert_allclose(spec.mps.to_vec(), mps_ref.to_vec())
 
 
 def test_init_from_vector() -> None:
-    """1-D array defers dense vector access until _encode or run."""
+    """1-D array is encoded as a dense vector at construction."""
     vec = np.array([1.0, 0.0], dtype=np.complex128)
     spec = State(vector=vec)
     assert spec.length == 1
     assert spec.representation == "vector"
-    assert spec._encoded_as is None
-    with pytest.raises(RuntimeError, match="State vector is not available"):
-        _ = spec.vector
-    spec._encode()
+    assert spec._encoded_as == "vector"
     np.testing.assert_allclose(spec.vector, vec)
 
 
 def test_init_from_density_matrix() -> None:
-    """2-D array defers density-matrix access until _encode or run."""
+    """2-D array is encoded as a density matrix at construction."""
     rho = np.diag([1.0, 0.0]).astype(np.complex128)
     spec = State(density_matrix=rho)
     assert spec.length == 1
     assert spec.representation == "density_matrix"
-    assert spec._encoded_as is None
-    with pytest.raises(RuntimeError, match="Density matrix is not available"):
-        _ = spec.density_matrix
-    spec._encode()
+    assert spec._encoded_as == "density_matrix"
     np.testing.assert_allclose(spec.density_matrix, rho)
 
 
@@ -214,8 +203,7 @@ def test_encode_mps_from_vector_raises() -> None:
 def test_preset_encode_vector_matches_mps(initial: str) -> None:
     """Product presets build the same dense vector as MPS.to_vec without materializing MPS."""
     length = 4
-    spec = State(length, initial=initial)
-    spec._encode("vector")
+    spec = State(length, initial=initial, representation="vector")
     assert spec._mps is None
     ref = MPS(length, state=initial).to_vec()
     ref /= np.linalg.norm(ref)
@@ -224,8 +212,7 @@ def test_preset_encode_vector_matches_mps(initial: str) -> None:
 
 def test_preset_encode_basis_string() -> None:
     """basis preset uses basis_string for the dense product vector."""
-    spec = State(3, initial="basis", basis_string="010")
-    spec._encode("vector")
+    spec = State(3, initial="basis", basis_string="010", representation="vector")
     ref = MPS(3, state="basis", basis_string="010").to_vec()
     ref /= np.linalg.norm(ref)
     np.testing.assert_allclose(spec.vector, ref)
@@ -233,15 +220,12 @@ def test_preset_encode_basis_string() -> None:
 
 def test_preset_random_with_seed() -> None:
     """random preset is reproducible when seed is set on State."""
-    spec_a = State(3, initial="random", seed=42)
-    spec_b = State(3, initial="random", seed=42)
-    spec_a._encode("vector")
-    spec_b._encode("vector")
+    spec_a = State(3, initial="random", seed=42, representation="vector")
+    spec_b = State(3, initial="random", seed=42, representation="vector")
     np.testing.assert_allclose(spec_a.vector, spec_b.vector)
 
 
 def test_haar_random_encode_vector_uses_mps() -> None:
     """Entangled haar-random presets still require MPS for dense encoding."""
-    spec = State(4, initial="haar-random", pad=4)
-    spec._encode("vector")
+    spec = State(4, initial="haar-random", pad=4, representation="vector")
     assert spec._mps is not None

@@ -21,7 +21,7 @@ YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.s
 | **`State`** | User-facing initial condition: length, preset name, optional raw data, and **which representation** to evolve in (`"mps"`, `"vector"`, or `"density_matrix"`). |
 | **`MPS`** | Internal tensor network; used by the simulator when needed. Prefer [`State`](mqt.yaqs.core.data_structures.state.State) in application code. |
 
-**Workflow:** build a `State`, set `representation` when you need MCWF or Lindblad, then pass it to [`run`](mqt.yaqs.simulator.run). You do not need to materialize or inspect MPS cores, dense vectors, or density matrices yourself.
+**Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`run`](mqt.yaqs.simulator.run) — including in parameter loops.
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.state import State
@@ -127,12 +127,12 @@ Set **`representation` on `State`**, not on `AnalogSimParams`. [`run`](mqt.yaqs.
 ### Default: MPS / TJM
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.simulator import run
 
 L = 3
-H = MPO.ising(L, J=1.0, g=0.5)
+H = Hamiltonian.ising(L, J=1.0, g=0.5)
 obs = Observable("z", sites=[0])
 
 state_mps = State(L, initial="zeros")  # representation="mps" by default

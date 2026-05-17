@@ -66,23 +66,25 @@ class LindbladContext:
 
 def preprocess_lindblad(
     initial_state: MPS | None,
-    hamiltonian: MPO,
+    hamiltonian: MPO | None,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
     *,
     rho_initial: NDArray[np.complex128] | None = None,
     num_sites: int | None = None,
+    h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> LindbladContext:
     """Pre-compute operators and optional fixed-step propagator for Lindblad evolution.
 
     Args:
         initial_state: The initial MPS state (converted to rho = |psi><psi| when no
             ``rho_initial`` is passed), or ``None`` when ``rho_initial`` is supplied.
-        hamiltonian: The Hamiltonian MPO.
+        hamiltonian: The Hamiltonian MPO (ignored if ``h_sparse`` is set).
         noise_model: The noise model.
         sim_params: Simulation parameters.
         rho_initial: Optional density matrix (square) or flattened vector for vec(rho).
         num_sites: Number of lattice sites when ``initial_state`` is ``None``.
+        h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
 
     Returns:
         LindbladContext ready for time evolution.
@@ -129,7 +131,13 @@ def preprocess_lindblad(
         rho_vec = np.outer(psi, psi.conj()).flatten()
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
-    h_mat = hamiltonian.to_sparse_matrix()
+    if h_sparse is not None:
+        h_mat = h_sparse.tocsr()
+    elif hamiltonian is not None:
+        h_mat = hamiltonian.to_sparse_matrix()
+    else:
+        msg = "preprocess_lindblad requires hamiltonian or h_sparse."
+        raise ValueError(msg)
 
     # 3. Jump operators L_k = sqrt(gamma) * op on the full space.
     jump_ops: list[scipy.sparse.spmatrix] = []

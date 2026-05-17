@@ -28,6 +28,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import simulator
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import (
@@ -125,7 +126,7 @@ def test_analog_simulation() -> None:
     length = 5
     initial_state = State(length, initial="zeros")
 
-    H = MPO.ising(length, J=1, g=0.5)
+    H = Hamiltonian.ising(length, J=1, g=0.5)
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
@@ -178,7 +179,7 @@ def test_analog_simulation_parallel_off() -> None:
     length = 5
     initial_state = State(length, initial="zeros")
 
-    H = MPO.ising(length, J=1, g=0.5)
+    H = Hamiltonian.ising(length, J=1, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(length)],
         elapsed_time=1,
@@ -227,7 +228,7 @@ def test_analog_simulation_get_state() -> None:
         length = 2
         initial_state = State(length, initial="zeros")
 
-        H = MPO.ising(length, J=1, g=0.5)
+        H = Hamiltonian.ising(length, J=1, g=0.5)
 
         sim_params = AnalogSimParams(
             observables=[Observable(X(), length // 2)],
@@ -260,7 +261,7 @@ def test_analog_simulation_get_state() -> None:
 def test_density_matrix_get_state_rejected() -> None:
     """density_matrix evolution does not support returning an output state."""
     psi = State(2, initial="zeros", representation="density_matrix")
-    h = MPO.ising(2, J=1.0, g=0.5)
+    h = Hamiltonian.ising(2, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         get_state=True,
@@ -543,7 +544,7 @@ def test_two_site_correlator_left_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO.ising(L, J, g)
+    H_0 = Hamiltonian.ising(L, J, g)
 
     state = State(L, initial="zeros")
 
@@ -652,7 +653,7 @@ def test_two_site_correlator_center() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO.ising(L, J, g)
+    H_0 = Hamiltonian.ising(L, J, g)
 
     state = State(L, initial="zeros")
 
@@ -765,7 +766,7 @@ def test_two_site_correlator_right_boundary() -> None:
     L = 4
     J = 1
     g = 0.1
-    H_0 = MPO.ising(L, J, g)
+    H_0 = Hamiltonian.ising(L, J, g)
 
     state = State(L, initial="zeros")
 
@@ -922,7 +923,7 @@ def test_transmon_simulation() -> None:
     alpha = -0.3 / (2 * np.pi)
     g = 0.2 / (2 * np.pi)
 
-    H_0 = MPO.coupled_transmon(
+    H_0 = Hamiltonian.coupled_transmon(
         length=length,
         qubit_dim=qubit_dim,
         resonator_dim=resonator_dim,
@@ -1000,7 +1001,7 @@ def test_scheduled_jump_single_site() -> None:
     )
 
     # Use a vacuum Hamiltonian (all zeros) for pure jump dynamics
-    hamiltonian = MPO.ising(L, 0.0, 0.0)
+    hamiltonian = Hamiltonian.ising(L, 0.0, 0.0)
 
     simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
 
@@ -1036,7 +1037,7 @@ def test_scheduled_jump_two_site() -> None:
     )
 
     # Vacuum Hamiltonian
-    hamiltonian = MPO.ising(L, 0.0, 0.0)
+    hamiltonian = Hamiltonian.ising(L, 0.0, 0.0)
 
     simulator.run(state, hamiltonian, sim_params, noise_model=noise_model)
 
@@ -1068,7 +1069,7 @@ def test_run_vector_preset_without_materialized_mps() -> None:
     state = State(length, initial="zeros", representation="vector")
     with pytest.raises(RuntimeError, match="MPS is not available"):
         _ = state.mps
-    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    hamiltonian = Hamiltonian.ising(length, 1.0, 0.5)
     obs = Observable("z", sites=[0])
     params = AnalogSimParams(
         observables=[obs],
@@ -1086,7 +1087,7 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
     state = State(length, initial="zeros", representation="density_matrix")
     with pytest.raises(RuntimeError, match="MPS is not available"):
         _ = state.mps
-    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    hamiltonian = Hamiltonian.ising(length, 1.0, 0.5)
     obs = Observable("z", sites=[0])
     params = AnalogSimParams(
         observables=[obs],
@@ -1098,12 +1099,26 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
     assert obs.results is not None
 
 
+def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
+    """TJM requires Hamiltonian.representation='mpo'."""
+    state = State(2, initial="zeros")
+    h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
+    params = AnalogSimParams(
+        observables=[Observable("z", sites=[0])],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+    )
+    with pytest.raises(ValueError, match="TJM simulation requires Hamiltonian.representation='mpo'"):
+        simulator.run(state, h, params, None)
+
+
 def test_no_output_error() -> None:
     """Verify that simulator.run raises AssertionError when no output is specified."""
     num_qubits = 2
     state = State(num_qubits, initial="zeros")
     circ = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
-    H = MPO.ising(num_qubits, J=1, g=0.5)
+    H = Hamiltonian.ising(num_qubits, J=1, g=0.5)
 
     # 1. AnalogSimParams (No observables, get_state=False)
     sim_params_analog = AnalogSimParams(

@@ -15,13 +15,14 @@ mystnb:
 # Noisy Analog Simulation
 
 This module demonstrates how to run a analog simulation using the YAQS simulator visualize the results.
-In this example, an Ising Hamiltonian is initialized as an MPO, and an MPS state is prepared in the $\ket{0}$ state.
+In this example, an Ising Hamiltonian is initialized as an MPO, and a [`State`](mqt.yaqs.core.data_structures.state.State) is prepared in the $\ket{0}$ state.
 A noise model is applied, and simulation parameters are defined for an analog simulation using the Tensor Jump Method (TJM).
 After running the simulation, the expectation values of the $X$ observable are extracted and displayed as a heatmap.
 
 Define the system Hamiltonian. We show 3 possible ways to define the Ising Hamiltonian as an example.
 
 ```{code-cell} ipython3
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.networks import MPO
 
 L = 3
@@ -29,10 +30,10 @@ J = 1
 g = 0.5
 
 # Method 1: Pre-implemented Hamiltonians
-H_0 = MPO.ising(L, J, g)
+H_0 = Hamiltonian.ising(L, J, g)
 
 # Method 2: Same Ising Hamiltonian built via the generic Pauli interaction interface
-H_0 = MPO.hamiltonian(
+H_0 = Hamiltonian.hamiltonian(
     length=L,
     two_body=[(-J, "Z", "Z")],
     one_body=[(-g, "X")],
@@ -57,11 +58,11 @@ H_0.from_pauli_sum(terms=terms, length=L)
 Define the initial state
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.state import State
 
-state = MPS(L, state="zeros")
+state = State(L, initial="zeros")
 # Alternative: initialize an entangled random state with capped bond dimension.
-# state = MPS(L, state="haar-random", pad=4)
+# state = State(L, initial="haar-random", pad=4)
 ```
 
 Define the noise model

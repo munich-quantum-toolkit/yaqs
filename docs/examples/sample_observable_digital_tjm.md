@@ -55,7 +55,7 @@ Define the noise model and initial state
 import numpy as np
 
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.state import State
 
 noise_factor = 0.01
 processes = (
@@ -64,8 +64,8 @@ processes = (
 )
 noise_model = NoiseModel(processes)
 
-# Start in |000⟩; pad internal bonds slightly for numerical stability
-state = MPS(num_qubits, state="zeros", pad=2)
+# Start in |000⟩; pad internal bonds slightly for numerical stability (circuit requires representation="mps")
+state = State(num_qubits, initial="zeros", pad=2)
 ```
 
 Set up observables and simulation parameters with layer sampling enabled
