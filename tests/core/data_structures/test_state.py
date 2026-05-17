@@ -9,13 +9,16 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.networks import MPS
-from mqt.yaqs.core.data_structures.state import Representation, State
+from mqt.yaqs.core.data_structures.state import State
+
+if TYPE_CHECKING:
+    from mqt.yaqs.core.data_structures.state import Representation
 
 
 def test_state_default_representation_is_mps() -> None:
@@ -43,7 +46,7 @@ def test_encode_without_argument_uses_state_representation() -> None:
     ["mps", "vector", "density_matrix"],
 )
 def test_encode_sets_encoded_as(representation: Representation) -> None:
-    """encode records the active representation on the state."""
+    """Encode records the active representation on the state."""
     psi = State(3, initial="zeros")
     psi._encode(representation)
     assert psi._encoded_as == representation
@@ -211,7 +214,7 @@ def test_preset_encode_vector_matches_mps(initial: str) -> None:
 
 
 def test_preset_encode_basis_string() -> None:
-    """basis preset uses basis_string for the dense product vector."""
+    """Basis preset uses basis_string for the dense product vector."""
     spec = State(3, initial="basis", basis_string="010", representation="vector")
     ref = MPS(3, state="basis", basis_string="010").to_vec()
     ref /= np.linalg.norm(ref)
@@ -219,7 +222,7 @@ def test_preset_encode_basis_string() -> None:
 
 
 def test_preset_random_with_seed() -> None:
-    """random preset is reproducible when seed is set on State."""
+    """Random preset is reproducible when seed is set on State."""
     spec_a = State(3, initial="random", seed=42, representation="vector")
     spec_b = State(3, initial="random", seed=42, representation="vector")
     np.testing.assert_allclose(spec_a.vector, spec_b.vector)

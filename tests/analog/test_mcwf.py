@@ -51,9 +51,7 @@ def test_mcwf_amplitude_damping() -> None:
 
     # We need enough trajectories to converge reasonably well
     num_traj = 200
-    sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=t_max, dt=dt, num_traj=num_traj, show_progress=False
-    )
+    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, num_traj=num_traj, show_progress=False)
 
     run(initial_state, hamiltonian, sim_params, noise_model, parallel=False)
 
@@ -168,9 +166,7 @@ def test_mcwf_zero_strength_noise() -> None:
     # Define noise with 0 strength
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
 
-    sim_params = AnalogSimParams(
-        dt=0.1, elapsed_time=0.1, observables=[Observable("z", sites=[0])]
-    )
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[Observable("z", sites=[0])])
 
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
     assert len(ctx.jump_ops) == 0

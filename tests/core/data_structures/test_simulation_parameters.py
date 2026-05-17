@@ -21,8 +21,6 @@ quantum simulation. It verifies that:
 
 from __future__ import annotations
 
-from typing import Any, cast
-
 import numpy as np
 import pytest
 
