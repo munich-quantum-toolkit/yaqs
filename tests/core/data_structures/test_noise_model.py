@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
@@ -196,7 +196,7 @@ def test_noise_distribution_integration() -> None:
     """
     num_qubits = 2
     # Define Hamiltonian: Ising model
-    hamiltonian = MPO.ising(num_qubits, J=1.0, g=0.5)
+    hamiltonian = Hamiltonian.ising(num_qubits, J=1.0, g=0.5)
 
     # Define noise model with distribution
     processes = [

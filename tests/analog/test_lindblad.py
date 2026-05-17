@@ -15,6 +15,7 @@ import numpy as np
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, preprocess_lindblad
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.networks import MPO, MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
@@ -29,10 +30,11 @@ def test_lindblad_amplitude_damping() -> None:
     """Test single qubit amplitude damping with exact Lindblad solver."""
     n_sites = 1
     initial_state = State(n_sites, initial="ones", representation="density_matrix")
-    hamiltonian = MPO()
-    hamiltonian.identity(n_sites)
-    for i in range(len(hamiltonian.tensors)):
-        hamiltonian.tensors[i] *= 0.0  # H = 0
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0  # H = 0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
 
     # Noise: Amplitude Damping
     sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
@@ -68,7 +70,7 @@ def test_lindblad_unitary_rabi() -> None:
     n_sites = 1
     initial_state = State(n_sites, initial="zeros", representation="density_matrix")
 
-    hamiltonian = MPO.ising(n_sites, J=0.0, g=-1.0)
+    hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=-1.0)
     # MPO.ising returns H = -J ZZ - g X.
     # We want H = +1.0 * X. So set g = -1.0.
 
@@ -94,10 +96,11 @@ def test_lindblad_dephasing() -> None:
     n_sites = 2
     initial_state = State(n_sites, initial="x+", representation="density_matrix")
 
-    hamiltonian = MPO()
-    hamiltonian.identity(n_sites)
-    for i in range(len(hamiltonian.tensors)):
-        hamiltonian.tensors[i] *= 0.0
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
 
     # Dephasing on qubit 0 (sigma_z)
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
@@ -137,10 +140,11 @@ def test_lindblad_dephasing_both_qubits() -> None:
     n_sites = 2
     initial_state = State(n_sites, initial="x+", representation="density_matrix")
 
-    hamiltonian = MPO()
-    hamiltonian.identity(n_sites)
-    for i in range(len(hamiltonian.tensors)):
-        hamiltonian.tensors[i] *= 0.0
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
 
     # Dephasing on BOTH qubits with the same gamma and sigma_z
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
@@ -264,7 +268,7 @@ def test_noiseless_mps_matches_density_matrix() -> None:
     n_sites = 3
     psi_mps = State(n_sites, initial="zeros", representation="mps")
     psi_rho = State(n_sites, initial="zeros", representation="density_matrix")
-    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    h = Hamiltonian.ising(n_sites, J=1.0, g=0.5)
     obs = Observable("z", sites=[0])
     t_max = 0.5
     dt = 0.1
