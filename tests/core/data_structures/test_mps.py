@@ -27,7 +27,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     StrongSimParams,
 )
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, Id, X, Z
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
 
 _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
@@ -118,6 +118,7 @@ def _spin_current_bond_matrix(j_coupling: float) -> np.ndarray:
     y = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
     return 0.25 * j_coupling * (np.kron(x, y) - np.kron(y, x))
 
+
 def crandn(
     size: int | tuple[int, ...],
     *args: int,
@@ -177,6 +178,8 @@ def _expected_uniform_clipped_bonds(length: int, chi_max: int) -> list[int]:
     bonds.extend(min(chi_max, 2 ** min(i, length - i)) for i in range(1, length))
     bonds.append(1)
     return bonds
+
+
 rng = np.random.default_rng()
 
 
@@ -1263,5 +1266,3 @@ def test_evaluate_observables_meta_validation_errors() -> None:
     results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):
         mps.evaluate_observables(sim_non_adj, results_adj, column_index=0)
-
-

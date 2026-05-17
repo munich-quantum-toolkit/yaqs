@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -21,14 +20,12 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.gate_library import Destroy, Id
 
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
 # ---- single-qubit ops ----
 _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
 _Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
+
 
 def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
     """Embed a single-site operator into a length-L qubit Hilbert space.
@@ -279,6 +276,8 @@ def _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals: int, t: float, u: float)
         h += -(t / 2) * term([(down, _Y2), (up_next, _Z2), (down_next, _Y2)])
 
     return h
+
+
 rng = np.random.default_rng()
 
 
