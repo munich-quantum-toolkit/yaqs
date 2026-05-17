@@ -1066,7 +1066,7 @@ def test_run_vector_preset_without_materialized_mps() -> None:
     """Analog run with vector representation uses encoded dense state, not MPS."""
     length = 3
     state = State(length, initial="zeros", representation="vector")
-    with pytest.raises(RuntimeError, match="MPS not materialized"):
+    with pytest.raises(RuntimeError, match="MPS is not available"):
         _ = state.mps
     hamiltonian = MPO.ising(length, 1.0, 0.5)
     obs = Observable("z", sites=[0])
@@ -1084,7 +1084,7 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
     """Analog run with density_matrix representation uses encoded rho, not MPS."""
     length = 3
     state = State(length, initial="zeros", representation="density_matrix")
-    with pytest.raises(RuntimeError, match="MPS not materialized"):
+    with pytest.raises(RuntimeError, match="MPS is not available"):
         _ = state.mps
     hamiltonian = MPO.ising(length, 1.0, 0.5)
     obs = Observable("z", sites=[0])

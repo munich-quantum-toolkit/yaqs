@@ -19,9 +19,9 @@ YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.s
 | Layer | Role |
 |-------|------|
 | **`State`** | User-facing initial condition: length, preset name, optional raw data, and **which representation** to evolve in (`"mps"`, `"vector"`, or `"density_matrix"`). |
-| **`MPS`** | Internal tensor network; built when needed for TJM/circuits or when dense data must come from an MPS. |
+| **`MPS`** | Internal tensor network; used by the simulator when needed. Prefer [`State`](mqt.yaqs.core.data_structures.state.State) in application code. |
 
-**Representation lives on `State`, not on `AnalogSimParams`.** For analog Hamiltonian evolution, set `State(..., representation=...)` (default `"mps"` → tensor jump method). [`run`](mqt.yaqs.simulator.run) calls [`State.encode`](mqt.yaqs.core.data_structures.state.State.encode) from that field before dispatching to TJM, MCWF, or Lindblad.
+**Workflow:** build a `State`, set `representation` when you need MCWF or Lindblad, then pass it to [`run`](mqt.yaqs.simulator.run). You do not need to materialize or inspect MPS cores, dense vectors, or density matrices yourself.
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.state import State
@@ -35,36 +35,26 @@ print("MCWF representation:", mcwf_state.representation)
 
 ## `State` versus `MPS`
 
-Use `State` in [`run`](mqt.yaqs.simulator.run). Use [`MPS`](mqt.yaqs.core.data_structures.networks.MPS) directly only for low-level tensor-network code or to wrap an existing MPS.
-
-```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPS
-
-mps = MPS(4, state="zeros")
-wrapped = State.from_mps(mps)
-assert wrapped.representation == "mps"
-assert wrapped.mps is mps
-```
+Use `State` in [`run`](mqt.yaqs.simulator.run). Use [`MPS`](mqt.yaqs.core.data_structures.networks.MPS) directly only for low-level tensor-network code, or wrap an existing MPS with [`State.from_mps`](mqt.yaqs.core.data_structures.state.State.from_mps).
 
 **Circuit simulation** requires `representation="mps"` (the preset default). `run` with `StrongSimParams` / `WeakSimParams` rejects vector and density-matrix states.
 
 ## How `representation` is chosen
 
-| How you build `State` | `representation` | Encoded at `__init__`? |
-|-----------------------|--------------------|-------------------------|
-| Preset only (`length`, `initial=`, …) | Default `"mps"`; override with `representation="vector"` or `"density_matrix"` | No (lazy until `encode()` / `run`) |
-| `tensors=` (MPS cores) | Inferred `"mps"` — do **not** pass `representation=` | Yes |
-| `vector=` | Inferred `"vector"` | Yes |
-| `density_matrix=` | Inferred `"density_matrix"` | Yes |
+| How you build `State` | `representation` |
+|-----------------------|--------------------|
+| Preset only (`length`, `initial=`, …) | Default `"mps"`; override with `representation="vector"` or `"density_matrix"` |
+| `tensors=` (MPS cores) | Inferred `"mps"` — do **not** pass `representation=` |
+| `vector=` | Inferred `"vector"` |
+| `density_matrix=` | Inferred `"density_matrix"` |
 
 ```{code-cell} ipython3
 import numpy as np
 
 vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)
 from_vector = State(vector=vec)
-print(from_vector.representation, from_vector._encoded_as)
+print(from_vector.representation)
 
-# representation= is only for preset states
 lindblad_ready = State(2, initial="zeros", representation="density_matrix")
 print(lindblad_ready.representation)
 ```
@@ -73,30 +63,21 @@ print(lindblad_ready.representation)
 
 Presets match `MPS(..., state=...)` names: `"zeros"`, `"ones"`, `"x+"`, `"Neel"`, `"wall"`, `"basis"`, `"random"`, etc.
 
-```{code-cell} ipython3
-neel = State(4, initial="Neel")
-neel.encode("vector")  # or: State(4, initial="Neel", representation="vector") then run(...)
-print(np.round(np.abs(neel.vector), 3))
-```
-
-For **product** presets, `encode("vector")` / `encode("density_matrix")` can build dense data **without** keeping an MPS in memory (useful for small systems with MCWF or Lindblad).
-
-**Entangled** presets (e.g. `"haar-random"`) still build an MPS when you ask for a dense representation.
+For **MCWF** or **Lindblad**, set `representation` on the `State` and call `run` — no extra steps:
 
 ```{code-cell} ipython3
-entangled = State(4, initial="haar-random", pad=4)
-entangled.encode("vector")
-assert entangled.mps is not None  # MPS was materialized on this path
+neel_mcwf = State(4, initial="Neel", representation="vector")
+print(neel_mcwf.representation)
 ```
+
+Product presets can evolve in dense form without ever building an MPS in memory. **Entangled** presets (e.g. `"haar-random"`) may still require an internal MPS when you choose a dense representation.
 
 Reproducible `"random"` presets: pass `seed=` on `State`.
 
 ```{code-cell} ipython3
-a = State(3, initial="random", seed=7)
-b = State(3, initial="random", seed=7)
-a.encode("vector")
-b.encode("vector")
-np.testing.assert_allclose(a.vector, b.vector)
+a = State(3, initial="random", seed=7, representation="vector")
+b = State(3, initial="random", seed=7, representation="vector")
+# Same specification; run() will evolve both consistently.
 ```
 
 ## Manual initialization
@@ -106,10 +87,11 @@ Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation
 ### MPS cores (`tensors=`)
 
 ```{code-cell} ipython3
+from mqt.yaqs.core.data_structures.networks import MPS
+
 mps_ref = MPS(3, state="zeros")
 spec = State(tensors=list(mps_ref.tensors))
 print(spec.representation)
-np.testing.assert_allclose(spec.mps.to_vec(), mps_ref.to_vec(), atol=1e-10)
 ```
 
 ### Dense state vector (`vector=`)
@@ -119,7 +101,7 @@ np.testing.assert_allclose(spec.mps.to_vec(), mps_ref.to_vec(), atol=1e-10)
 ```{code-cell} ipython3
 vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.complex128)  # |00>
 spec = State(vector=vec)
-print(spec.length, spec.representation, np.linalg.norm(spec.vector))
+print(spec.length, spec.representation)
 ```
 
 ### Density matrix (`density_matrix=`)
@@ -127,46 +109,20 @@ print(spec.length, spec.representation, np.linalg.norm(spec.vector))
 ```{code-cell} ipython3
 rho = np.diag([1.0, 0.0, 0.0, 0.0]).astype(np.complex128)
 spec = State(density_matrix=rho)
-print(spec.representation, spec.density_matrix.shape, np.trace(spec.density_matrix))
+print(spec.representation)
 ```
 
-A `State` created only with `vector=` or `density_matrix=` cannot be turned into an MPS via `encode("mps")`; use `tensors=` or a preset instead.
+A `State` created only with `vector=` or `density_matrix=` cannot be used for circuit simulation; use `tensors=` or a preset with `representation="mps"` instead.
 
-## `encode()` and inspection
+## Representation and backends (analog)
 
-- After manual init, data is already encoded; properties `.mps`, `.vector`, or `.density_matrix` are ready.
-- Preset-only states encode on first `encode()` or when passed to `run`.
-- `encode()` with **no argument** uses [`State.representation`](mqt.yaqs.core.data_structures.state.State.representation).
+Set **`representation` on `State`**, not on `AnalogSimParams`. [`run`](mqt.yaqs.simulator.run) materializes the correct internal form and dispatches:
 
-| `representation` | Property | Backend (analog) |
-|------------------|----------|------------------|
-| `"mps"` (default) | `.mps` | TJM (`analog_tjm_1` / `analog_tjm_2`) |
-| `"vector"` | `.vector` | MCWF |
-| `"density_matrix"` | `.density_matrix` | Lindblad (small systems) |
-
-`encode` is idempotent for the same representation.
-
-```{code-cell} ipython3
-spec = State(3, initial="zeros", representation="vector")
-spec.encode()  # uses spec.representation
-v1 = spec.vector.copy()
-spec.encode()
-np.testing.assert_allclose(spec.vector, v1)
-```
-
-Dense product preset vs MPS reference:
-
-```{code-cell} ipython3
-spec = State(3, initial="x+")
-spec.encode("vector")
-ref = MPS(3, state="x+").to_vec()
-ref /= np.linalg.norm(ref)
-np.testing.assert_allclose(spec.vector, ref, atol=1e-10)
-```
-
-## Analog simulation with `run()`
-
-Set **`representation` on `State`**, not on `AnalogSimParams`. `run` calls `state.encode()` internally.
+| `representation` | Backend (analog) |
+|--------------------|------------------|
+| `"mps"` (default) | TJM (`analog_tjm_1` / `analog_tjm_2`) |
+| `"vector"` | MCWF |
+| `"density_matrix"` | Lindblad (small systems) |
 
 ### Default: MPS / TJM
 
@@ -191,8 +147,6 @@ print("TJM Z_0:", obs.results[-1])
 ```
 
 ### MCWF (`representation="vector"`)
-
-Product presets can skip materializing an MPS when `run` encodes to vector.
 
 ```{code-cell} ipython3
 state_vec = State(L, initial="zeros", representation="vector")
@@ -226,7 +180,7 @@ See {doc}`solver_comparison` for a side-by-side comparison of the three represen
 
 ### Passing dense data directly
 
-If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or `density_matrix=` — representation is inferred and no MPS is required for `run`:
+If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or `density_matrix=` — representation is inferred:
 
 ```{code-cell} ipython3
 psi = np.zeros(2**L, dtype=np.complex128)
@@ -238,8 +192,8 @@ print("From vector=, MCWF Z_0:", obs_vec.results[-1])
 
 ## Practical limits
 
-- **Memory**: `vector` scales as $2^N$; `density_matrix` as $2^{2N}$. Prefer `representation="mps"` for longer chains.
-- **Entangled presets**: `"haar-random"` needs an MPS to form dense data.
+- **Memory**: dense `vector` scales as $2^N$; `density_matrix` as $2^{2N}$. Prefer `representation="mps"` for longer chains.
+- **Entangled presets**: `"haar-random"` may need an internal MPS for dense representations.
 - **Circuits**: use `State(..., representation="mps")` (default); `vector=` / `density_matrix=` states cannot run circuits.
 - **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
 - **`get_state`**: not supported with `representation="density_matrix"` or with stochastic noise (unchanged).

@@ -799,7 +799,7 @@ def _run_circuit(
             "Use representation='vector' or 'density_matrix' only for analog Hamiltonian runs."
         )
         raise ValueError(msg)
-    initial_state.encode()
+    initial_state._encode()
     mps = initial_state.mps
 
     # Sanity check: MPS length must equal circuit qubit count
@@ -954,7 +954,7 @@ def _run_analog(
             msg = "list[State] analog ensemble currently supports only State.representation='mps'."
             raise ValueError(msg)
         for spec in initial_state_list:
-            spec.encode()
+            spec._encode()
         _run_ensemble(
             [spec.mps for spec in initial_state_list],
             operator,
@@ -964,7 +964,7 @@ def _run_analog(
         )
         return
 
-    initial_state.encode()
+    initial_state._encode()
     mps = _materialized_mps(initial_state)
     state_rep = initial_state.representation
 
@@ -1105,8 +1105,8 @@ def run(
     simulation parameters provided. For circuit-based simulations, the initial
     :class:`~mqt.yaqs.core.data_structures.state.State` must use ``representation="mps"``; for analog
     simulations,
-    :meth:`~mqt.yaqs.core.data_structures.state.State.encode` is called from
-    :attr:`~mqt.yaqs.core.data_structures.state.State.representation` inside :func:`_run_analog`.
+    materializes the state from :attr:`~mqt.yaqs.core.data_structures.state.State.representation`
+    inside :func:`_run_analog`.
 
     Args:
         initial_state:
