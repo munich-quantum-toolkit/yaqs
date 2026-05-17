@@ -930,7 +930,9 @@ class MPS:
 
             elif observable.gate.name == "pvm":
                 assert hasattr(observable.gate, "bitstring"), "Gate does not have attribute bitstring."
-                results[obs_index, column_index] = self.project_onto_bitstring(observable.gate.bitstring)
+                bitstring = observable.gate.bitstring
+                assert isinstance(bitstring, str)
+                results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
 
             else:
                 idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
