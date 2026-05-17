@@ -34,7 +34,8 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from ..data_structures.networks import MPO, MPS
+    from ..data_structures.mpo import MPO
+    from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 

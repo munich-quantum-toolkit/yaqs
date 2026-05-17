@@ -13,10 +13,9 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import scipy.sparse
 
-from .networks import MPO
-
 if TYPE_CHECKING:
     from .hamiltonian import Hamiltonian
+    from .mpo import MPO
 
 Representation = Literal["mpo", "sparse", "dense"]
 

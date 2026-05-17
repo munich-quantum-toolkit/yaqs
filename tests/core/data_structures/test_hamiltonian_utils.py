@@ -19,7 +19,7 @@ from mqt.yaqs.core.data_structures.hamiltonian_utils import (
     sparse_to_csr,
     validate_representation,
 )
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO
 
 
 def test_sparse_to_csr_returns_same_csr() -> None:

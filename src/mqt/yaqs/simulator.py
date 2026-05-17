@@ -61,7 +61,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from .core.data_structures.hamiltonian import Representation
-    from .core.data_structures.networks import MPO, MPS
+    from .core.data_structures.mpo import MPO
+    from .core.data_structures.mps import MPS
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.

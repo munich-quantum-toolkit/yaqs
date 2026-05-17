@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state import State
 
 if TYPE_CHECKING:
@@ -198,7 +198,7 @@ def test_state_density_matrix_explicit_length() -> None:
 
 
 def test_state_vector_property_unavailable_for_density() -> None:
-    """vector property raises when encoded as density_matrix."""
+    """Vector property raises when encoded as density_matrix."""
     spec = State(2, initial="zeros", representation="density_matrix")
     with pytest.raises(RuntimeError, match="State vector is not available"):
         _ = spec.vector

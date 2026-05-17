@@ -21,7 +21,8 @@ from ..core.methods.tdvp import local_dynamic_tdvp
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.networks import MPO, MPS
+    from ..core.data_structures.mpo import MPO
+    from ..core.data_structures.mps import MPS
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 

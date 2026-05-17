@@ -32,7 +32,7 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
 from mqt.yaqs import simulator
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
 from mqt.yaqs.core.data_structures.state import State

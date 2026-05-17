@@ -23,7 +23,7 @@ Define the system Hamiltonian. We show 3 possible ways to define the Ising Hamil
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO
 
 L = 3
 J = 1
@@ -33,7 +33,7 @@ g = 0.5
 H_0 = Hamiltonian.ising(L, J, g)
 
 # Method 2: Same Ising Hamiltonian built via the generic Pauli interaction interface
-H_0 = Hamiltonian.hamiltonian(
+H_0 = Hamiltonian.pauli(
     length=L,
     two_body=[(-J, "Z", "Z")],
     one_body=[(-g, "X")],

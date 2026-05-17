@@ -35,7 +35,7 @@ print("MCWF representation:", mcwf_state.representation)
 
 ## `State` versus `MPS`
 
-Use `State` in [`run`](mqt.yaqs.simulator.run). Use [`MPS`](mqt.yaqs.core.data_structures.networks.MPS) directly only for low-level tensor-network code, or wrap an existing MPS with [`State.from_mps`](mqt.yaqs.core.data_structures.state.State.from_mps).
+Use `State` in [`run`](mqt.yaqs.simulator.run). Use [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) directly only for low-level tensor-network code, or wrap an existing MPS with [`State.from_mps`](mqt.yaqs.core.data_structures.state.State.from_mps).
 
 **Circuit simulation** requires `representation="mps"` (the preset default). `run` with `StrongSimParams` / `WeakSimParams` rejects vector and density-matrix states.
 
@@ -87,7 +87,7 @@ Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation
 ### MPS cores (`tensors=`)
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.mps import MPS
 
 mps_ref = MPS(3, state="zeros")
 spec = State(tensors=list(mps_ref.tensors))
@@ -198,4 +198,4 @@ print("From vector=, MCWF Z_0:", obs_vec.results[-1])
 - **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
 - **`get_state`**: when supported, `sim_params.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State) (use `.mps` for the underlying MPS). Not supported with `representation="density_matrix"` or with stochastic noise.
 
-For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.networks.MPS) API reference.
+For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) API reference.

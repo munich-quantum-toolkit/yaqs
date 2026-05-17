@@ -20,7 +20,7 @@ from .hamiltonian_utils import (
     sparse_to_csr,
     validate_representation,
 )
-from .networks import MPO
+from .mpo import MPO
 from .state_utils import infer_qubit_length
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ __all__ = ["Hamiltonian", "Representation"]
 class Hamiltonian:
     """Hamiltonian for :func:`~mqt.yaqs.simulator.run` (analog evolution).
 
-    Build via classmethods (``ising``, ``hamiltonian``, …) or pass ``tensors`` / ``matrix`` /
+    Build via classmethods (``ising``, ``pauli``, …) or pass ``tensors`` / ``matrix`` /
     ``sparse_matrix``. Materialization happens at construction; reuse the same instance across
     ``run`` loops.
 
@@ -205,7 +205,7 @@ class Hamiltonian:
         )
 
     @classmethod
-    def hamiltonian(
+    def pauli(
         cls,
         *,
         length: int,
@@ -217,7 +217,7 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Generic Pauli Hamiltonian (delegates to :meth:`MPO.hamiltonian`).
+        """Pauli-string Hamiltonian from one- and two-body terms (delegates to :meth:`MPO.hamiltonian`).
 
         Returns:
             A :class:`Hamiltonian` with ``representation="mpo"``.
@@ -345,9 +345,7 @@ class Hamiltonian:
         Raises:
             ValueError: If the requested representation cannot be built from the specification.
         """
-        rep: Representation = (
-            self.representation if representation is None else validate_representation(representation)
-        )
+        rep: Representation = self.representation if representation is None else validate_representation(representation)
         if self._encoded_as == rep:
             if rep == "mpo" and self._mpo is not None:
                 return self

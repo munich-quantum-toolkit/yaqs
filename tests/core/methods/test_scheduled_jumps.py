@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z

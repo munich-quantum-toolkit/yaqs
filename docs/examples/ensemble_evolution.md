@@ -45,7 +45,7 @@ h_x = 0.4
 
 # Open XXZ + transverse field: H = Jxx ∑_r (S^x_r S^x_{r+1} + S^y_r S^y_{r+1}) + Δ ∑_r S^z_r S^z_{r+1} + h_x ∑_r S^x_r
 # (Pauli convention in code: S^α = σ^α/2, matching two_body prefactors 0.25 * Jxx / Δ.)
-H_open = Hamiltonian.hamiltonian(
+H_open = Hamiltonian.pauli(
     length=L,
     two_body=[(0.25 * Jxx, "X", "X"), (0.25 * Jxx, "Y", "Y"), (0.25 * delta, "Z", "Z")],
     one_body=[(0.5 * h_x, "X")],
@@ -235,7 +235,7 @@ pairs_jj = [(a, b) for a in bond_obs for b in bond_obs]
 transport_curves: dict[float, np.ndarray] = {}
 t_transport = None
 for d in deltas:
-    h_periodic = Hamiltonian.hamiltonian(
+    h_periodic = Hamiltonian.pauli(
         length=Ltr,
         two_body=[(0.25 * Jxx, "X", "X"), (0.25 * Jxx, "Y", "Y"), (0.25 * d, "Z", "Z")],
         one_body=[],

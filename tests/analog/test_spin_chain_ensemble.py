@@ -15,7 +15,8 @@ import pytest
 from mqt.yaqs import simulator
 from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Y, Z
@@ -200,7 +201,7 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
     k = 64
     mid = length // 2
 
-    h_mpo = Hamiltonian.hamiltonian(
+    h_mpo = Hamiltonian.pauli(
         length=length,
         two_body=[(0.25 * j_xy, "X", "X"), (0.25 * j_xy, "Y", "Y"), (0.25 * delta, "Z", "Z")],
         one_body=[(0.5 * h_x, "X")],

@@ -24,7 +24,7 @@ import numpy as np
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel

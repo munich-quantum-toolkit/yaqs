@@ -16,7 +16,7 @@ import pytest
 import scipy.sparse
 
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
@@ -101,7 +101,7 @@ def test_hamiltonian_coupled_transmon_factory() -> None:
 
 
 def test_hamiltonian_matrix_property_unavailable_for_mpo() -> None:
-    """matrix property raises for MPO-only Hamiltonian."""
+    """Matrix property raises for MPO-only Hamiltonian."""
     h = Hamiltonian.ising(2, J=1.0, g=0.5)
     with pytest.raises(RuntimeError, match="Dense matrix is not available"):
         _ = h.matrix
@@ -200,9 +200,9 @@ def test_hamiltonian_heisenberg_factory() -> None:
     assert h.mpo.length == 2
 
 
-def test_hamiltonian_generic_hamiltonian_factory() -> None:
-    """Generic Pauli Hamiltonian classmethod delegates to MPO."""
-    h = Hamiltonian.hamiltonian(
+def test_hamiltonian_pauli_factory() -> None:
+    """Pauli Hamiltonian classmethod delegates to MPO."""
+    h = Hamiltonian.pauli(
         length=2,
         two_body=[(-1.0, "Z", "Z")],
         one_body=[(-0.5, "X")],
@@ -265,7 +265,7 @@ def test_ensure_encoded_sparse_from_dense_hamiltonian() -> None:
 
 
 def test_hamiltonian_mpo_property_unavailable_for_dense_init() -> None:
-    """mpo property raises when only dense matrix is materialized."""
+    """Mpo property raises when only dense matrix is materialized."""
     h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
     with pytest.raises(RuntimeError, match="MPO is not available"):
         _ = h.mpo

@@ -118,7 +118,7 @@ def test_local_vector_for_preset_product_states(initial: str) -> None:
 
 
 def test_local_vector_for_preset_ones_requires_dim_two() -> None:
-    """ones preset needs local dimension at least 2."""
+    """Ones preset needs local dimension at least 2."""
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="ones preset requires"):
         local_vector_for_preset(0, "ones", 1, length=1, basis_string=None, rng=rng)
@@ -139,21 +139,21 @@ def test_local_vector_for_preset_wall_local_dim_one() -> None:
 
 
 def test_local_vector_for_preset_random_requires_dim_two() -> None:
-    """random preset needs local dimension at least 2."""
+    """Random preset needs local dimension at least 2."""
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="random preset requires"):
         local_vector_for_preset(0, "random", 1, length=1, basis_string=None, rng=rng)
 
 
 def test_local_vector_for_preset_basis_requires_string() -> None:
-    """basis preset requires basis_string."""
+    """Basis preset requires basis_string."""
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="basis_string must be provided"):
         local_vector_for_preset(0, "basis", 2, length=2, basis_string=None, rng=rng)
 
 
 def test_local_vector_for_preset_basis_index_out_of_range() -> None:
-    """basis index must fit local dimension."""
+    """Basis index must fit local dimension."""
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="out of range"):
         local_vector_for_preset(0, "basis", 2, length=2, basis_string="2", rng=rng)

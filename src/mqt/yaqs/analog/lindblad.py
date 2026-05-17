@@ -36,7 +36,8 @@ from scipy.integrate import solve_ivp
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.networks import MPO, MPS
+    from ..core.data_structures.mpo import MPO
+    from ..core.data_structures.mps import MPS
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .networks import MPS
+from .mps import MPS
 from .state_utils import (
     Representation,
     infer_qubit_length,

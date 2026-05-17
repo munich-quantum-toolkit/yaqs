@@ -21,7 +21,8 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
-from ..core.data_structures.networks import MPO, MPS
+from ..core.data_structures.mpo import MPO
+from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from ..core.data_structures.state import State
