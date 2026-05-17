@@ -206,7 +206,7 @@ def test_list_mps_analog_ensemble_rejects_state_length_mismatch() -> None:
         dt=0.1,
         show_progress=False,
     )
-    with pytest.raises(ValueError, match="State.length=3 does not match Hamiltonian.length=2"):
+    with pytest.raises(ValueError, match=r"State\.length=3 does not match Hamiltonian\.length=2"):
         simulator.run(states, hamiltonian, sim_params, noise_model=None, parallel=False)
 
 

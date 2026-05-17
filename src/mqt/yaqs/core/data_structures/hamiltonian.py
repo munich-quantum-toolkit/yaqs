@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import scipy.sparse
@@ -32,8 +32,23 @@ def _sparse_to_csr(matrix: scipy.sparse.spmatrix) -> scipy.sparse.csr_matrix:
     return scipy.sparse.csr_matrix(matrix)
 
 
+def _attach_mpo(wrapped: Hamiltonian, mpo: MPO) -> None:
+    """Initialize ``wrapped`` from an existing MPO (factory helper for :meth:`Hamiltonian.from_mpo`)."""
+    wrapped.length = mpo.length
+    wrapped.physical_dimension = mpo.physical_dimension
+    wrapped.representation = "mpo"
+    wrapped._tensors = None  # noqa: SLF001
+    wrapped._matrix = None  # noqa: SLF001
+    wrapped._sparse_matrix = None  # noqa: SLF001
+    wrapped._mpo = mpo  # noqa: SLF001
+    wrapped._encoded_as = "mpo"  # noqa: SLF001
+
+
 def _validate_representation(value: str) -> Representation:
     """Validate and return a Hamiltonian representation label.
+
+    Returns:
+        A valid ``"mpo"``, ``"sparse"``, or ``"dense"`` label.
 
     Raises:
         ValueError: If ``value`` is not ``"mpo"``, ``"sparse"``, or ``"dense"``.
@@ -150,14 +165,7 @@ class Hamiltonian:
             A :class:`Hamiltonian` referencing ``mpo``.
         """
         wrapped = cls.__new__(cls)
-        wrapped.length = mpo.length
-        wrapped.physical_dimension = mpo.physical_dimension
-        wrapped.representation = "mpo"
-        wrapped._tensors = None
-        wrapped._matrix = None
-        wrapped._sparse_matrix = None
-        wrapped._mpo = mpo
-        wrapped._encoded_as = "mpo"
+        _attach_mpo(wrapped, mpo)
         return wrapped
 
     @classmethod
@@ -166,10 +174,30 @@ class Hamiltonian:
         length: int,
         J: float,  # noqa: N803
         g: float,
-        **kwargs: Any,
+        *,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Transverse-field Ising Hamiltonian (delegates to :meth:`MPO.ising`)."""
-        return cls.from_mpo(MPO.ising(length, J, g, **kwargs))
+        """Transverse-field Ising Hamiltonian (delegates to :meth:`MPO.ising`).
+
+        Returns:
+            A :class:`Hamiltonian` with ``representation="mpo"``.
+        """
+        return cls.from_mpo(
+            MPO.ising(
+                length,
+                J,
+                g,
+                bc=bc,
+                physical_dimension=physical_dimension,
+                tol=tol,
+                max_bond_dim=max_bond_dim,
+                n_sweeps=n_sweeps,
+            ),
+        )
 
     @classmethod
     def heisenberg(
@@ -179,28 +207,113 @@ class Hamiltonian:
         Jy: float,  # noqa: N803
         Jz: float,  # noqa: N803
         h: float = 0.0,
-        **kwargs: Any,
+        *,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Heisenberg Hamiltonian (delegates to :meth:`MPO.heisenberg`)."""
-        return cls.from_mpo(MPO.heisenberg(length, Jx, Jy, Jz, h, **kwargs))
+        """Heisenberg Hamiltonian (delegates to :meth:`MPO.heisenberg`).
+
+        Returns:
+            A :class:`Hamiltonian` with ``representation="mpo"``.
+        """
+        return cls.from_mpo(
+            MPO.heisenberg(
+                length,
+                Jx,
+                Jy,
+                Jz,
+                h,
+                bc=bc,
+                physical_dimension=physical_dimension,
+                tol=tol,
+                max_bond_dim=max_bond_dim,
+                n_sweeps=n_sweeps,
+            ),
+        )
 
     @classmethod
-    def hamiltonian(cls, **kwargs: Any) -> Hamiltonian:
-        """Generic Pauli Hamiltonian (delegates to :meth:`MPO.hamiltonian`)."""
-        return cls.from_mpo(MPO.hamiltonian(**kwargs))
+    def hamiltonian(
+        cls,
+        *,
+        length: int,
+        two_body: list[tuple[complex | float, str, str]] | None = None,
+        one_body: list[tuple[complex | float, str]] | None = None,
+        bc: str = "open",
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> Hamiltonian:
+        """Generic Pauli Hamiltonian (delegates to :meth:`MPO.hamiltonian`).
+
+        Returns:
+            A :class:`Hamiltonian` with ``representation="mpo"``.
+        """
+        return cls.from_mpo(
+            MPO.hamiltonian(
+                length=length,
+                two_body=two_body,
+                one_body=one_body,
+                bc=bc,
+                physical_dimension=physical_dimension,
+                tol=tol,
+                max_bond_dim=max_bond_dim,
+                n_sweeps=n_sweeps,
+            ),
+        )
 
     @classmethod
-    def fermi_hubbard_1d(cls, **kwargs: Any) -> Hamiltonian:
-        """1D Fermi-Hubbard Hamiltonian (delegates to :meth:`MPO.fermi_hubbard_1d`)."""
-        return cls.from_mpo(MPO.fermi_hubbard_1d(**kwargs))
+    def fermi_hubbard_1d(
+        cls,
+        length: int,
+        t: float,
+        u: float,
+        *,
+        jordan_wigner: bool = False,
+    ) -> Hamiltonian:
+        """1D Fermi-Hubbard Hamiltonian (delegates to :meth:`MPO.fermi_hubbard_1d`).
+
+        Returns:
+            A :class:`Hamiltonian` with ``representation="mpo"``.
+        """
+        return cls.from_mpo(MPO.fermi_hubbard_1d(length, t=t, u=u, jordan_wigner=jordan_wigner))
 
     @classmethod
-    def coupled_transmon(cls, **kwargs: Any) -> Hamiltonian:
-        """Coupled transmon-resonator chain (delegates to :meth:`MPO.coupled_transmon`)."""
-        return cls.from_mpo(MPO.coupled_transmon(**kwargs))
+    def coupled_transmon(
+        cls,
+        length: int,
+        qubit_dim: int,
+        resonator_dim: int,
+        qubit_freq: float,
+        resonator_freq: float,
+        anharmonicity: float,
+        coupling: float,
+    ) -> Hamiltonian:
+        """Coupled transmon-resonator chain (delegates to :meth:`MPO.coupled_transmon`).
+
+        Returns:
+            A :class:`Hamiltonian` with ``representation="mpo"``.
+        """
+        return cls.from_mpo(
+            MPO.coupled_transmon(
+                length,
+                qubit_dim,
+                resonator_dim,
+                qubit_freq,
+                resonator_freq,
+                anharmonicity,
+                coupling,
+            ),
+        )
 
     def _build_mpo(self) -> MPO:
         """Build or return the MPO representation.
+
+        Returns:
+            The materialized :class:`MPO`.
 
         Raises:
             ValueError: If this Hamiltonian was created from matrix data only.
@@ -258,6 +371,9 @@ class Hamiltonian:
 
         Returns:
             ``self`` for chaining.
+
+        Raises:
+            ValueError: If the requested representation cannot be built from the specification.
         """
         rep: Representation = (
             self.representation if representation is None else _validate_representation(representation)
@@ -296,7 +412,7 @@ class Hamiltonian:
         self._encoded_as = rep
         return self
 
-    def _ensure_encoded(self, representation: Representation | None = None) -> Hamiltonian:
+    def ensure_encoded(self, representation: Representation | None = None) -> Hamiltonian:
         """Materialize ``representation`` if needed (used by :func:`~mqt.yaqs.simulator.run`).
 
         Returns:
@@ -305,7 +421,14 @@ class Hamiltonian:
         return self._encode(representation)
 
     def to_matrix(self) -> NDArray[np.complex128]:
-        """Dense matrix (converts from cached MPO/sparse without changing :attr:`representation`)."""
+        """Dense matrix (converts from cached MPO/sparse without changing :attr:`representation`).
+
+        Returns:
+            Dense Hamiltonian matrix on the full Hilbert space.
+
+        Raises:
+            RuntimeError: If no materialized data is available to convert.
+        """
         if self._matrix is not None:
             return np.asarray(self._matrix, dtype=np.complex128)
         if self._mpo is not None:
@@ -316,7 +439,14 @@ class Hamiltonian:
         raise RuntimeError(msg)
 
     def to_sparse_matrix(self) -> scipy.sparse.csr_matrix:
-        """Sparse matrix (converts from cached forms without changing :attr:`representation`)."""
+        """Sparse matrix (converts from cached forms without changing :attr:`representation`).
+
+        Returns:
+            Sparse Hamiltonian matrix on the full Hilbert space.
+
+        Raises:
+            RuntimeError: If no materialized data is available to convert.
+        """
         if self._sparse_matrix is not None:
             return self._sparse_matrix
         if self._mpo is not None:

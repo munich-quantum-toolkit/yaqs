@@ -26,6 +26,7 @@ import sys
 import numba
 import numpy as np
 import pytest
+from qiskit import QuantumCircuit
 
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
@@ -281,8 +282,6 @@ def test_density_matrix_get_state_rejected() -> None:
 )
 def test_circuit_run_rejects_non_mps_state(state: State) -> None:
     """Circuit simulation requires State.representation='mps'."""
-    from qiskit import QuantumCircuit
-
     circuit = QuantumCircuit(2)
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], show_progress=False)
     with pytest.raises(ValueError, match=r"Circuit simulation requires State\.representation='mps'"):
@@ -1121,7 +1120,7 @@ def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
         dt=0.1,
         show_progress=False,
     )
-    with pytest.raises(ValueError, match="TJM simulation requires Hamiltonian.representation='mpo'"):
+    with pytest.raises(ValueError, match=r"TJM simulation requires Hamiltonian\.representation='mpo'"):
         simulator.run(state, h, params, None)
 
 

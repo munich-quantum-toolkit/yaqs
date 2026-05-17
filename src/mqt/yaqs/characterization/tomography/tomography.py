@@ -315,7 +315,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         else:
             backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
             assert isinstance(current_state, MPS)
-            hamiltonian._ensure_encoded("mpo")
+            hamiltonian.ensure_encoded("mpo")
             backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
             assert step_params.output_state is not None
             current_state = step_params.output_state.mps
@@ -393,9 +393,9 @@ def run(
     if noise_model is None:
         num_trajectories = 1
 
-    operator._ensure_encoded("mpo")
+    operator.ensure_encoded("mpo")
     if representation == "vector":
-        operator._ensure_encoded("sparse")
+        operator.ensure_encoded("sparse")
 
     mcwf_static_ctx = None
     if representation == "vector":

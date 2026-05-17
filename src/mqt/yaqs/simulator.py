@@ -8,8 +8,9 @@
 """High-level simulator module for using YAQS.
 
 This module implements the common simulation routine for both circuit-based and Hamiltonian (analog) simulations.
-It provides functions to run simulation trajectories in parallel using :class:`~mqt.yaqs.core.data_structures.state.State`
-and :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` at the public API boundary.
+It provides functions to run simulation trajectories in parallel using
+:class:`~mqt.yaqs.core.data_structures.state.State` and
+:class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` at the public API boundary.
 Depending on the type of simulation parameters provided (WeakSimParams, StrongSimParams, or AnalogSimParams),
 the simulation is dispatched to the appropriate backend:
   - For circuit simulations, a QuantumCircuit is used and processed via the _run_circuit function.
@@ -59,6 +60,7 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from .core.data_structures.hamiltonian import Representation
     from .core.data_structures.networks import MPO, MPS
 
 # Optional: extra control over threadpools inside worker processes.
@@ -404,7 +406,11 @@ def _materialized_mps(state: State) -> MPS | None:
 
 
 def _hamiltonian_backend_target(state_rep: str) -> str:
-    """Internal storage target for ``Hamiltonian`` given ``State.representation``."""
+    """Internal storage target for ``Hamiltonian`` given ``State.representation``.
+
+    Returns:
+        ``"sparse"`` for vector or density-matrix states, otherwise ``"mpo"``.
+    """
     if state_rep in {"vector", "density_matrix"}:
         return "sparse"
     return "mpo"
@@ -437,7 +443,7 @@ def _prepare_hamiltonian_for_run(
         ``(mpo, h_sparse)`` with one entry set for the active backend.
     """
     target = _hamiltonian_backend_target(state_rep)
-    hamiltonian._ensure_encoded(cast("Any", target))
+    hamiltonian.ensure_encoded(cast("Representation", target))
     if target == "mpo":
         return hamiltonian.mpo, None
     return None, hamiltonian.sparse_matrix
@@ -840,7 +846,7 @@ def _run_circuit(
             "Use representation='vector' or 'density_matrix' only for analog Hamiltonian runs."
         )
         raise ValueError(msg)
-    initial_state._ensure_encoded("mps")
+    initial_state.ensure_encoded("mps")
     mps = initial_state.mps
 
     # Sanity check: MPS length must equal circuit qubit count
@@ -994,9 +1000,9 @@ def _run_analog(
         if any(spec.representation != "mps" for spec in initial_state_list):
             msg = "list[State] analog ensemble currently supports only State.representation='mps'."
             raise ValueError(msg)
-        operator._ensure_encoded("mpo")
+        operator.ensure_encoded("mpo")
         for spec in initial_state_list:
-            spec._ensure_encoded("mps")
+            spec.ensure_encoded("mps")
             _validate_state_hamiltonian_pairing(spec, operator)
         _run_ensemble(
             [spec.mps for spec in initial_state_list],
@@ -1007,7 +1013,7 @@ def _run_analog(
         )
         return
 
-    initial_state._ensure_encoded(initial_state.representation)
+    initial_state.ensure_encoded(initial_state.representation)
     mps = _materialized_mps(initial_state)
     state_rep = initial_state.representation
     _validate_state_hamiltonian_pairing(initial_state, operator)

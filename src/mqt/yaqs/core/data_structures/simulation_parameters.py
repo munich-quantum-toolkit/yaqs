@@ -202,7 +202,8 @@ class AnalogSimParams:
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
-            get_state: If ``True``, store the final state in :attr:`output_state` as a :class:`~mqt.yaqs.core.data_structures.state.State`.
+            get_state: If ``True``, store the final state in :attr:`output_state` as a
+                :class:`~mqt.yaqs.core.data_structures.state.State`.
             show_progress: If ``True``, print a progress bar as trajectories finish.
             num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``

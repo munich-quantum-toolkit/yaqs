@@ -26,6 +26,9 @@ _ALLOWED_REPRESENTATIONS = frozenset({"mps", "vector", "density_matrix"})
 def _validate_representation(value: str) -> Representation:
     """Validate and return a simulation representation label.
 
+    Returns:
+        A valid ``"mps"``, ``"vector"``, or ``"density_matrix"`` label.
+
     Raises:
         ValueError: If ``value`` is not ``"mps"``, ``"vector"``, or ``"density_matrix"``.
     """
@@ -42,7 +45,11 @@ def _reject_preset_only_kwargs(
     basis_string: str | None,
     seed: int | None,
 ) -> None:
-    """Raise if preset-only kwargs are passed together with manual state data."""
+    """Raise if preset-only kwargs are passed together with manual state data.
+
+    Raises:
+        ValueError: If any preset-only keyword is set together with manual state data.
+    """
     if initial != "zeros":
         msg = "initial= and other preset options apply only to preset State construction."
         raise ValueError(msg)
@@ -373,7 +380,7 @@ class State:
 
         self._encode(self.representation)
 
-    def _ensure_encoded(self, representation: Representation | None = None) -> State:
+    def ensure_encoded(self, representation: Representation | None = None) -> State:
         """Materialize ``representation`` if needed (used by :func:`~mqt.yaqs.simulator.run`).
 
         Returns:

@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for :meth:`mqt.yaqs.core.data_structures.state.State._encode`."""
+"""Tests for :meth:`mqt.yaqs.core.data_structures.state.State.ensure_encoded`."""
 
 from __future__ import annotations
 
@@ -33,73 +33,79 @@ def test_state_invalid_representation() -> None:
         State(2, representation=cast(Any, "tjm"))  # noqa: TC006
 
 
-def test_encode_without_argument_uses_state_representation() -> None:
-    """encode() with no argument materializes self.representation."""
+def test_ensure_encoded_without_argument_uses_state_representation() -> None:
+    """ensure_encoded() with no argument materializes self.representation."""
     psi = State(3, initial="zeros", representation="vector")
-    psi._encode()
-    assert psi._encoded_as == "vector"
-    assert psi._mps is None
+    psi.ensure_encoded()
+    assert psi.representation == "vector"
+    with pytest.raises(RuntimeError, match="MPS is not available"):
+        _ = psi.mps
 
 
 @pytest.mark.parametrize(
     "representation",
     ["mps", "vector", "density_matrix"],
 )
-def test_encode_sets_encoded_as(representation: Representation) -> None:
-    """Encode records the active representation on the state."""
+def test_ensure_encoded_materializes_representation(representation: Representation) -> None:
+    """ensure_encoded materializes the requested backend representation."""
     psi = State(3, initial="zeros")
-    psi._encode(representation)
-    assert psi._encoded_as == representation
+    psi.ensure_encoded(representation)
+    if representation == "mps":
+        _ = psi.mps
+    elif representation == "vector":
+        _ = psi.vector
+    else:
+        _ = psi.density_matrix
 
 
-def test_encode_mps_normalizes_b_form() -> None:
-    """encode('mps') leaves the underlying MPS in B-canonical form."""
+def test_ensure_encoded_mps_normalizes_b_form() -> None:
+    """ensure_encoded('mps') leaves the underlying MPS in B-canonical form."""
     psi = State(4, initial="x+")
-    psi._encode("mps")
+    psi.ensure_encoded("mps")
     assert psi.mps.check_canonical_form() != [-1]
 
 
-def test_encode_vector_caches_normalized_vector() -> None:
-    """encode('vector') stores a unit-norm dense vector."""
+def test_ensure_encoded_vector_caches_normalized_vector() -> None:
+    """ensure_encoded('vector') stores a unit-norm dense vector."""
     psi = State(3, initial="zeros", representation="vector")
-    assert psi._vector is not None
-    assert psi._mps is None
     assert np.isclose(np.linalg.norm(psi.vector), 1.0)
+    with pytest.raises(RuntimeError, match="MPS is not available"):
+        _ = psi.mps
     ref = MPS(3, state="zeros").to_vec()
     ref /= np.linalg.norm(ref)
     np.testing.assert_allclose(psi.vector, ref)
 
 
-def test_encode_density_matrix_from_pure_state() -> None:
-    """encode('density_matrix') caches |psi><psi| for a pure initial state."""
+def test_ensure_encoded_density_matrix_from_pure_state() -> None:
+    """ensure_encoded('density_matrix') caches |psi><psi| for a pure initial state."""
     psi = State(2, initial="x+", representation="density_matrix")
-    assert psi._mps is None
-    assert psi._vector is not None
-    expected = np.outer(psi._vector, psi._vector.conj())
+    with pytest.raises(RuntimeError, match="MPS is not available"):
+        _ = psi.mps
+    ref_vec = MPS(2, state="x+").to_vec()
+    ref_vec /= np.linalg.norm(ref_vec)
+    expected = np.outer(ref_vec, ref_vec.conj())
     np.testing.assert_allclose(psi.density_matrix, expected)
 
 
-def test_encode_idempotent() -> None:
-    """Repeated encode with the same representation is a no-op."""
-    psi = State(3, initial="zeros")
-    psi._encode("vector")
-    assert psi._vector is not None
-    cached = psi._vector.copy()
-    psi._encode("vector")
+def test_ensure_encoded_idempotent() -> None:
+    """Repeated ensure_encoded with the same representation is a no-op."""
+    psi = State(3, initial="zeros", representation="vector")
+    cached = psi.vector.copy()
+    psi.ensure_encoded("vector")
     np.testing.assert_allclose(psi.vector, cached)
 
 
-def test_encode_invalid_representation_raises() -> None:
+def test_ensure_encoded_invalid_representation_raises() -> None:
     """Unknown representation strings raise ValueError."""
     psi = State(2, initial="zeros")
     with pytest.raises(ValueError, match=r"Invalid representation 'invalid'"):
-        psi._encode("invalid")  # ty: ignore[invalid-argument-type]
+        psi.ensure_encoded("invalid")  # ty: ignore[invalid-argument-type]
 
 
 def test_initial_kwarg_builds_mps() -> None:
     """Constructor uses initial= preset names when building the MPS."""
     psi = State(2, initial="ones")
-    psi._encode("mps")
+    psi.ensure_encoded("mps")
     vec = psi.mps.to_vec()
     assert np.isclose(abs(vec[-1]), 1.0)
 
@@ -117,7 +123,6 @@ def test_init_from_tensor_list() -> None:
     spec = State(tensors=list(mps_ref.tensors))
     assert spec.length == 2
     assert spec.representation == "mps"
-    assert spec._encoded_as == "mps"
     np.testing.assert_allclose(spec.mps.to_vec(), mps_ref.to_vec())
 
 
@@ -127,7 +132,6 @@ def test_init_from_vector() -> None:
     spec = State(vector=vec)
     assert spec.length == 1
     assert spec.representation == "vector"
-    assert spec._encoded_as == "vector"
     np.testing.assert_allclose(spec.vector, vec)
 
 
@@ -137,7 +141,6 @@ def test_init_from_density_matrix() -> None:
     spec = State(density_matrix=rho)
     assert spec.length == 1
     assert spec.representation == "density_matrix"
-    assert spec._encoded_as == "density_matrix"
     np.testing.assert_allclose(spec.density_matrix, rho)
 
 
@@ -192,22 +195,23 @@ def test_preset_kwargs_rejected_for_manual_data(kwargs: dict) -> None:
         State(**kwargs)
 
 
-def test_encode_mps_from_vector_raises() -> None:
+def test_ensure_encoded_mps_from_vector_raises() -> None:
     """Vector-initialized states cannot be encoded as MPS without tensor data."""
     spec = State(vector=np.array([1.0, 0.0], dtype=np.complex128))
     with pytest.raises(ValueError, match="Cannot build an MPS"):
-        spec._encode("mps")
+        spec.ensure_encoded("mps")
 
 
 @pytest.mark.parametrize(
     "initial",
     ["zeros", "ones", "x+", "x-", "y+", "y-", "Neel", "wall"],
 )
-def test_preset_encode_vector_matches_mps(initial: str) -> None:
+def test_preset_ensure_encoded_vector_matches_mps(initial: str) -> None:
     """Product presets build the same dense vector as MPS.to_vec without materializing MPS."""
     length = 4
     spec = State(length, initial=initial, representation="vector")
-    assert spec._mps is None
+    with pytest.raises(RuntimeError, match="MPS is not available"):
+        _ = spec.mps
     ref = MPS(length, state=initial).to_vec()
     ref /= np.linalg.norm(ref)
     np.testing.assert_allclose(spec.vector, ref)
@@ -228,7 +232,10 @@ def test_preset_random_with_seed() -> None:
     np.testing.assert_allclose(spec_a.vector, spec_b.vector)
 
 
-def test_haar_random_encode_vector_uses_mps() -> None:
+def test_haar_random_ensure_encoded_vector_uses_mps() -> None:
     """Entangled haar-random presets still require MPS for dense encoding."""
     spec = State(4, initial="haar-random", pad=4, representation="vector")
-    assert spec._mps is not None
+    # Entangled presets materialize via an internal MPS before dense conversion.
+    spec.ensure_encoded("vector")
+    assert spec.representation == "vector"
+    np.testing.assert_allclose(np.linalg.norm(spec.vector), 1.0)
