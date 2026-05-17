@@ -19,10 +19,10 @@ qubit counts.
 from __future__ import annotations
 
 import importlib
-from typing import Any, cast
 import multiprocessing
 import os
 import sys
+from typing import Any, cast
 
 import numba
 import numpy as np
@@ -1114,7 +1114,7 @@ def test_analog_run_rejects_mpo_operator() -> None:
         show_progress=False,
     )
     with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
-        simulator.run(state, cast(Any, mpo), params, None)
+        simulator.run(state, cast("Any", mpo), params, None)
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:

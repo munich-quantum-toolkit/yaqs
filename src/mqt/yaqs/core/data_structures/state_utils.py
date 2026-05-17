@@ -133,7 +133,7 @@ def local_vector_for_preset(
             msg = "ones preset requires local dimension at least 2."
             raise ValueError(msg)
         vector[1] = 1.0
-    elif initial in ("x+", "x-", "y+", "y-"):
+    elif initial in {"x+", "x-", "y+", "y-"}:
         if local_dim < 2:
             msg = f"{initial} preset requires local dimension at least 2."
             raise ValueError(msg)
