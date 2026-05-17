@@ -16,10 +16,10 @@ mystnb:
 
 YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.state.State)) from **how evolution runs** ([`AnalogSimParams`](mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams), Hamiltonian, noise).
 
-| Layer | Role |
-|-------|------|
+| Layer       | Role                                                                                                                                                           |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`State`** | User-facing initial condition: length, preset name, optional raw data, and **which representation** to evolve in (`"mps"`, `"vector"`, or `"density_matrix"`). |
-| **`MPS`** | Internal tensor network; used by the simulator when needed. Prefer [`State`](mqt.yaqs.core.data_structures.state.State) in application code. |
+| **`MPS`**   | Internal tensor network; used by the simulator when needed. Prefer [`State`](mqt.yaqs.core.data_structures.state.State) in application code.                   |
 
 **Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`run`](mqt.yaqs.simulator.run) — including in parameter loops.
 
@@ -41,12 +41,12 @@ Use `State` in [`run`](mqt.yaqs.simulator.run). Use [`MPS`](mqt.yaqs.core.data_s
 
 ## How `representation` is chosen
 
-| How you build `State` | `representation` |
-|-----------------------|--------------------|
+| How you build `State`                 | `representation`                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
 | Preset only (`length`, `initial=`, …) | Default `"mps"`; override with `representation="vector"` or `"density_matrix"` |
-| `tensors=` (MPS cores) | Inferred `"mps"` — do **not** pass `representation=` |
-| `vector=` | Inferred `"vector"` |
-| `density_matrix=` | Inferred `"density_matrix"` |
+| `tensors=` (MPS cores)                | Inferred `"mps"` — do **not** pass `representation=`                           |
+| `vector=`                             | Inferred `"vector"`                                                            |
+| `density_matrix=`                     | Inferred `"density_matrix"`                                                    |
 
 ```{code-cell} ipython3
 import numpy as np
@@ -118,11 +118,11 @@ A `State` created only with `vector=` or `density_matrix=` cannot be used for ci
 
 Set **`representation` on `State`**, not on `AnalogSimParams`. [`run`](mqt.yaqs.simulator.run) materializes the correct internal form and dispatches:
 
-| `representation` | Backend (analog) |
-|--------------------|------------------|
-| `"mps"` (default) | TJM (`analog_tjm_1` / `analog_tjm_2`) |
-| `"vector"` | MCWF |
-| `"density_matrix"` | Lindblad (small systems) |
+| `representation`   | Backend (analog)                      |
+| ------------------ | ------------------------------------- |
+| `"mps"` (default)  | TJM (`analog_tjm_1` / `analog_tjm_2`) |
+| `"vector"`         | MCWF                                  |
+| `"density_matrix"` | Lindblad (small systems)              |
 
 ### Default: MPS / TJM
 
