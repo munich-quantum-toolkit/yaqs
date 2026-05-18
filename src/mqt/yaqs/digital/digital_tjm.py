@@ -29,6 +29,7 @@ from ..core.data_structures.state import State
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
+from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -264,7 +265,7 @@ def digital_tjm(
         If StrongSimParams are used, the results are the measured observables.
         If WeakSimParams are used, the results are the measurement outcomes for each shot.
     """
-    _, initial_state, noise_model, sim_params, circuit = args
+    traj_idx, initial_state, noise_model, sim_params, circuit = args
 
     state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)
@@ -278,8 +279,7 @@ def digital_tjm(
         else:
             results = np.zeros((len(sim_params.sorted_observables), 1))
 
-    # Instantiate a fresh RNG for this trajectory
-    rng = np.random.default_rng()
+    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     col_idx = 0
     canonical_form_lost = False

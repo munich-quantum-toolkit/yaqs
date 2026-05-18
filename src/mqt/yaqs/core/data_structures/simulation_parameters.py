@@ -151,6 +151,7 @@ class AnalogSimParams:
         times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
+        random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
         max_bond_dim: Maximum allowed bond dimension.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
@@ -184,6 +185,7 @@ class AnalogSimParams:
         get_state: bool = False,
         show_progress: bool = True,
         num_threads: int = 1,
+        random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
@@ -195,6 +197,7 @@ class AnalogSimParams:
             elapsed_time: Total simulation time.
             dt: Time step interval.
             num_traj: Number of simulation samples.
+            random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed.
             min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
@@ -249,6 +252,7 @@ class AnalogSimParams:
         self.get_state = get_state
         self.show_progress = show_progress
         self.num_threads = num_threads
+        self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
             [] if multi_time_observables is None else list(multi_time_observables)
         )
@@ -326,6 +330,7 @@ class WeakSimParams:
         *,
         get_state: bool = False,
         show_progress: bool = True,
+        random_seed: int | None = None,
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -347,6 +352,8 @@ class WeakSimParams:
             If True, store the final state in output_state as a State.
         show_progress:
             If True, a progress bar is printed as trajectories finish.
+        random_seed:
+            If set, makes per-shot jump RNG reproducible.
         """
         self.noise_model: NoiseModel | None = None
         self.measurements: list[dict[int, int] | None] = [None] * shots
@@ -357,6 +364,7 @@ class WeakSimParams:
         self.threshold = threshold
         self.get_state = get_state
         self.show_progress = show_progress
+        self.random_seed = random_seed
 
     def aggregate_measurements(self) -> None:
         """Aggregates shots into final result.
@@ -401,6 +409,8 @@ class StrongSimParams:
         A list of observables sorted by site and name.
     num_traj : int
         The number of trajectories to simulate. Default is 1000.
+    random_seed : int | None
+        If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
     max_bond_dim : int
         The maximum bond dimension for the simulation. Default is 2.
     min_bond_dim:
@@ -445,6 +455,7 @@ class StrongSimParams:
         num_mid_measurements: int = 0,
         show_progress: bool = True,
         num_threads: int = 1,
+        random_seed: int | None = None,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -469,6 +480,8 @@ class StrongSimParams:
         num_threads:
             Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
             Defaults to 1 for efficiency on small/medium bond dimensions.
+        random_seed:
+            If set, makes stochastic trajectories and noise-model sampling reproducible.
         """
         self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
@@ -504,6 +517,7 @@ class StrongSimParams:
         self.num_mid_measurements = num_mid_measurements
         self.show_progress = show_progress
         self.num_threads = num_threads
+        self.random_seed = random_seed
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.
