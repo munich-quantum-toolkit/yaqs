@@ -28,6 +28,7 @@ from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import local_dynamic_tdvp
+from ..core.random_utils import make_trajectory_rng
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -162,10 +163,9 @@ def analog_tjm_2(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
         NDArray[np.float64]: An array of expectation values for the trajectory, with dimensions
         determined by the number of observables and time steps.
     """
-    _i, initial_state, noise_model, sim_params, hamiltonian = args
+    traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
-    # Instantiate a fresh RNG for this trajectory (independent if spawned, or rely on distinct seeds if we passed them)
-    rng = np.random.default_rng()
+    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     state = copy.deepcopy(initial_state)
     if sim_params.sample_timesteps:
@@ -206,10 +206,9 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
         NDArray[np.float64]: An array of expectation values for the trajectory, with shape determined
         by the number of observables and time steps.
     """
-    _i, initial_state, noise_model, sim_params, hamiltonian = args
+    traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
-    # Instantiate a fresh RNG for this trajectory
-    rng = np.random.default_rng()
+    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     state = copy.deepcopy(initial_state)
 

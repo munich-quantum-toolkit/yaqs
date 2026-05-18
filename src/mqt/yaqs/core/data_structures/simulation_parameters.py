@@ -32,6 +32,26 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
+def _validate_random_seed(random_seed: int | None) -> None:
+    """Validate ``random_seed`` before storing it on simulation parameter objects.
+
+    Args:
+        random_seed: Base seed for reproducible stochastic runs, or ``None`` for unseeded RNG.
+
+    Raises:
+        TypeError: If ``random_seed`` is not ``None`` or an ``int``.
+        ValueError: If ``random_seed`` is negative.
+    """
+    if random_seed is None:
+        return
+    if isinstance(random_seed, bool) or not isinstance(random_seed, int):
+        msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
+        raise TypeError(msg)
+    if random_seed < 0:
+        msg = f"random_seed must be non-negative, got {random_seed}."
+        raise ValueError(msg)
+
+
 class EvolutionMode(Enum):
     """Enumerates the different modes of tensor evolution in the simulation."""
 
@@ -151,6 +171,7 @@ class AnalogSimParams:
         times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
+        random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
         max_bond_dim: Maximum allowed bond dimension.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
@@ -184,6 +205,7 @@ class AnalogSimParams:
         get_state: bool = False,
         show_progress: bool = True,
         num_threads: int = 1,
+        random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
@@ -195,6 +217,7 @@ class AnalogSimParams:
             elapsed_time: Total simulation time.
             dt: Time step interval.
             num_traj: Number of simulation samples.
+            random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed.
             min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
@@ -211,6 +234,7 @@ class AnalogSimParams:
                 case ``(O, O)``.
 
         """
+        _validate_random_seed(random_seed)
         self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
@@ -249,6 +273,7 @@ class AnalogSimParams:
         self.get_state = get_state
         self.show_progress = show_progress
         self.num_threads = num_threads
+        self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
             [] if multi_time_observables is None else list(multi_time_observables)
         )
@@ -326,28 +351,24 @@ class WeakSimParams:
         *,
         get_state: bool = False,
         show_progress: bool = True,
+        random_seed: int | None = None,
     ) -> None:
         """Weak circuit simulation initialization.
 
         Initializes parameters for a weak circuit simulation.
 
-        Parameters
-        ----------
-        shots : int
-            Number of measurement shots to simulate.
-        max_bond_dim : int, optional
-            Maximum bond dimension for simulation, by default 2.
-        min_bond_dim:
-            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-        trunc_mode:
-            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-        threshold : float, optional
-            Accuracy threshold for truncating tensors, by default 1e-6.
-        get_state:
-            If True, store the final state in output_state as a State.
-        show_progress:
-            If True, a progress bar is printed as trajectories finish.
+        Args:
+            shots: Number of measurement shots to simulate.
+            max_bond_dim: Maximum bond dimension for simulation.
+            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
+            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            threshold: Accuracy threshold for truncating tensors.
+            get_state: If ``True``, store the final state in :attr:`output_state` as a
+                :class:`~mqt.yaqs.core.data_structures.state.State`.
+            show_progress: If ``True``, print a progress bar as trajectories finish.
+            random_seed: If set, makes per-shot jump RNG reproducible.
         """
+        _validate_random_seed(random_seed)
         self.noise_model: NoiseModel | None = None
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
@@ -357,6 +378,7 @@ class WeakSimParams:
         self.threshold = threshold
         self.get_state = get_state
         self.show_progress = show_progress
+        self.random_seed = random_seed
 
     def aggregate_measurements(self) -> None:
         """Aggregates shots into final result.
@@ -401,6 +423,8 @@ class StrongSimParams:
         A list of observables sorted by site and name.
     num_traj : int
         The number of trajectories to simulate. Default is 1000.
+    random_seed : int | None
+        If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
     max_bond_dim : int
         The maximum bond dimension for the simulation. Default is 2.
     min_bond_dim:
@@ -445,31 +469,28 @@ class StrongSimParams:
         num_mid_measurements: int = 0,
         show_progress: bool = True,
         num_threads: int = 1,
+        random_seed: int | None = None,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
         Initializes parameters for a strong quantum circuit simulation.
 
-        Parameters
-        ----------
-        observables : list[Observable]
-            List of observables to measure during simulation.
-        num_traj : int, optional
-            Number of trajectories to simulate, by default 1000.
-        max_bond_dim : int, optional
-            Maximum bond dimension allowed in simulation, by default 2.
-        trunc_mode :
-            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-        threshold : float, optional
-            Threshold for simulation accuracy, by default 1e-6.
-        get_state:
-            If True, store the final state in output_state as a State.
-        show_progress:
-            If True, a progress bar is printed as trajectories finish.
-        num_threads:
-            Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
-            Defaults to 1 for efficiency on small/medium bond dimensions.
+        Args:
+            observables: List of observables to measure during simulation.
+            num_traj: Number of trajectories to simulate.
+            max_bond_dim: Maximum bond dimension allowed in simulation.
+            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
+            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            threshold: Threshold for simulation accuracy.
+            get_state: If ``True``, store the final state in :attr:`output_state` as a
+                :class:`~mqt.yaqs.core.data_structures.state.State`.
+            sample_layers: If ``True``, record observables at sampled circuit layers.
+            num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
+            show_progress: If ``True``, print a progress bar as trajectories finish.
+            num_threads: Number of threads for single-trajectory BLAS/LAPACK work.
+            random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
         """
+        _validate_random_seed(random_seed)
         self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
@@ -504,6 +525,7 @@ class StrongSimParams:
         self.num_mid_measurements = num_mid_measurements
         self.show_progress = show_progress
         self.num_threads = num_threads
+        self.random_seed = random_seed
 
     def aggregate_trajectories(self) -> None:
         """Aggregates trajectories for result.

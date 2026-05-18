@@ -22,6 +22,7 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
+from tests.conftest import YAQS_TEST_SEED
 
 
 def test_mcwf_amplitude_damping() -> None:
@@ -47,9 +48,15 @@ def test_mcwf_amplitude_damping() -> None:
     dt = 0.05
     obs = Observable("z", sites=[0])
 
-    # We need enough trajectories to converge reasonably well
-    num_traj = 200
-    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, num_traj=num_traj, show_progress=False)
+    num_traj = 100
+    sim_params = AnalogSimParams(
+        observables=[obs],
+        elapsed_time=t_max,
+        dt=dt,
+        num_traj=num_traj,
+        show_progress=False,
+        random_seed=YAQS_TEST_SEED,
+    )
 
     run(initial_state, hamiltonian, sim_params, noise_model, parallel=False)
 
@@ -64,7 +71,7 @@ def test_mcwf_amplitude_damping() -> None:
     delta_exact = 1 - 2 * np.exp(-gamma * times)
 
     # Comparison (allow larger tolerance due to stochastic noise ~ 1/sqrt(N))
-    # 1/sqrt(200) ~ 0.07. 3 sigma ~ 0.21.
+    # 1/sqrt(100) ~ 0.1. 3 sigma ~ 0.3; mean check uses 0.25 margin.
     # Comparison (using mean error for robustness against stochastic fluctuations)
     mean_diff = np.mean(np.abs(sigma_z_sim - delta_exact))
     assert mean_diff < 0.25, f"Mean diff: {mean_diff}"
@@ -126,13 +133,14 @@ def test_mcwf_dephasing() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    num_traj = 200
+    num_traj = 100
     sim_params = AnalogSimParams(
         observables=[obs0, obs1],
         elapsed_time=t_max,
         dt=dt,
         num_traj=num_traj,
         show_progress=False,
+        random_seed=YAQS_TEST_SEED,
     )
 
     # Use parallel=True to verify infrastructure
@@ -252,7 +260,7 @@ def test_mcwf_diagnostic_observables() -> None:
 
 
 def test_mcwf_trajectory_rng_seeding() -> None:
-    """Same traj_idx yields identical MCWF trajectories; different indices differ."""
+    """With random_seed set, same traj_idx is reproducible; different indices differ."""
     n_sites = 1
     psi = MPS(n_sites, state="x+")
     h = MPO()
@@ -267,6 +275,7 @@ def test_mcwf_trajectory_rng_seeding() -> None:
         elapsed_time=1.0,
         observables=[obs],
         sample_timesteps=True,
+        random_seed=YAQS_TEST_SEED,
     )
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
 

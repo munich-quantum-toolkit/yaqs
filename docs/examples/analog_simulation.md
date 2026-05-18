@@ -95,6 +95,59 @@ sim_params = AnalogSimParams(
 )
 ```
 
+## Reproducible (deterministic) stochastic runs
+
+Open-system simulations with `num_traj > 1` average over independent quantum-jump trajectories.
+By default, each call to {func}`~mqt.yaqs.simulator.run` draws a new random jump sequence, so aggregated observables can differ slightly from run to run.
+
+Set {attr}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams.random_seed` to fix the pseudorandom stream:
+
+- Each trajectory uses `numpy.random.default_rng(random_seed + traj_idx)`, so parallel workers stay reproducible and independent.
+- If the noise model has distribution-valued strengths, {func}`~mqt.yaqs.simulator.run` samples static disorder once using the same seed.
+
+Leave `random_seed=None` (the default) for genuine Monte Carlo sampling in production.
+
+The example below runs the same noisy setup twice; with a seed, the trajectory-averaged $\langle X \rangle$ curves match exactly.
+
+```{code-cell} ipython3
+import copy
+
+import numpy as np
+
+from mqt.yaqs import simulator
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+
+repro_params = AnalogSimParams(
+    observables=[Observable(X(), site) for site in range(L)],
+    elapsed_time=1.0,
+    dt=0.1,
+    num_traj=50,
+    max_bond_dim=4,
+    threshold=1e-6,
+    order=2,
+    sample_timesteps=True,
+    show_progress=False,
+    random_seed=42,
+)
+
+
+def run_reproducible() -> list[np.ndarray]:
+    st = copy.deepcopy(state)
+    params = copy.deepcopy(repro_params)
+    simulator.run(st, H_0, params, copy.deepcopy(noise_model), parallel=True)
+    return [np.asarray(obs.results) for obs in params.observables]
+
+
+first_run = run_reproducible()
+second_run = run_reproducible()
+assert all(np.allclose(a, b) for a, b in zip(first_run, second_run, strict=True))
+print("Both runs produced identical trajectory-averaged observables.")
+```
+
+The same `random_seed` field exists on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` for noisy digital simulations.
+
+After choosing a seed, you can tune `num_traj` for a fixed bias–variance trade-off instead of widening numerical tolerances to absorb run-to-run noise.
+
 Run the simulation
 
 ```{code-cell} ipython3

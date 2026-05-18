@@ -44,6 +44,7 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.simulator import _get_parallel_context, worker_init  # noqa: PLC2701
+from tests.conftest import YAQS_TEST_SEED
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -141,6 +142,7 @@ def test_analog_simulation() -> None:
         order=2,
         sample_timesteps=False,
         show_progress=False,
+        random_seed=YAQS_TEST_SEED,
     )
     gamma = 0.1
     noise_model = NoiseModel([
@@ -149,6 +151,13 @@ def test_analog_simulation() -> None:
 
     simulator.run(initial_state, H, sim_params, noise_model)
 
+    expected_z = [
+        0.6939175883763173,
+        0.8723190598293048,
+        0.8774367798552517,
+        0.8642160639619357,
+        0.6873260499377838,
+    ]
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for AnalogSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
@@ -156,16 +165,7 @@ def test_analog_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        if i == 0:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
-        elif i == 1:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 2:
-            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
-        elif i == 3:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 4:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
 
 
 def test_analog_simulation_parallel_off() -> None:
@@ -193,6 +193,7 @@ def test_analog_simulation_parallel_off() -> None:
         order=2,
         sample_timesteps=False,
         show_progress=False,
+        random_seed=YAQS_TEST_SEED,
     )
     gamma = 0.1
     noise_model = NoiseModel([
@@ -201,6 +202,13 @@ def test_analog_simulation_parallel_off() -> None:
 
     simulator.run(initial_state, H, sim_params, noise_model, parallel=False)
 
+    expected_z = [
+        0.6939175883763173,
+        0.8723190598293048,
+        0.8774367798552517,
+        0.8642160639619357,
+        0.6873260499377838,
+    ]
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for AnalogSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
@@ -208,16 +216,7 @@ def test_analog_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        if i == 0:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
-        elif i == 1:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 2:
-            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
-        elif i == 3:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 4:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
 
 
 def test_analog_simulation_get_state() -> None:
@@ -309,6 +308,7 @@ def test_strong_simulation() -> None:
         num_traj=10,
         max_bond_dim=4,
         show_progress=False,
+        random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
@@ -318,6 +318,13 @@ def test_strong_simulation() -> None:
 
     simulator.run(state, circuit, sim_params, noise_model)
 
+    expected_z = [
+        0.6731226288088834,
+        0.8628191799824898,
+        0.8686777017191668,
+        0.862819175965271,
+        0.6731226287649416,
+    ]
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for AnalogSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
@@ -325,16 +332,7 @@ def test_strong_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        if i == 0:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
-        elif i == 1:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 2:
-            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
-        elif i == 3:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 4:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
 
 
 def test_strong_simulation_no_noise() -> None:
@@ -379,6 +377,7 @@ def test_strong_simulation_parallel_off() -> None:
         num_traj=10,
         max_bond_dim=4,
         show_progress=False,
+        random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
     gamma = 1e-3
@@ -388,6 +387,13 @@ def test_strong_simulation_parallel_off() -> None:
 
     simulator.run(state, circuit, sim_params, noise_model, parallel=False)
 
+    expected_z = [
+        0.6731226288088834,
+        0.8628191799824898,
+        0.8686777017191668,
+        0.862819175965271,
+        0.6731226287649416,
+    ]
     for i, observable in enumerate(sim_params.observables):
         assert observable.results is not None, "Results was not initialized for AnalogSimParams."
         assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
@@ -395,16 +401,7 @@ def test_strong_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        if i == 0:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
-        elif i == 1:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 2:
-            assert np.isclose(observable.results[0], 0.86, atol=1e-1)
-        elif i == 3:
-            assert np.isclose(observable.results[0], 0.87, atol=1e-1)
-        elif i == 4:
-            assert np.isclose(observable.results[0], 0.70, atol=1e-1)
+        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
 
 
 def test_weak_simulation_noise() -> None:
@@ -422,7 +419,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=32, max_bond_dim=4, show_progress=False, random_seed=YAQS_TEST_SEED)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -450,7 +447,7 @@ def test_weak_simulation_no_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=64, max_bond_dim=4, show_progress=False)
 
     noise_model = None
 
@@ -940,7 +937,7 @@ def test_transmon_simulation() -> None:
     sim_params = AnalogSimParams(
         observables=[Observable(bitstring) for bitstring in ["000", "001", "010", "011", "100", "101", "110", "111"]],
         elapsed_time=T_swap,
-        dt=T_swap / 1000,
+        dt=T_swap / 100,
         sample_timesteps=False,
         show_progress=False,
     )

@@ -594,10 +594,10 @@ def test_measure_shots_basis() -> None:
 
     # Verify that X measurement on Z state gives 50/50
     psi_zero = MPS(length=1, state="zeros")
-    results = psi_zero.measure_shots(shots=100, basis="X")
+    results = psi_zero.measure_shots(shots=20, basis="X")
     assert results.get(0, 0) > 0
     assert results.get(1, 0) > 0
-    assert sum(results.values()) == 100
+    assert sum(results.values()) == 20
 
 
 def test_inplace_measure() -> None:

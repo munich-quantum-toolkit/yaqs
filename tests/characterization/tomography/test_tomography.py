@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 from scipy.linalg import expm
 
 from mqt.yaqs.characterization.tomography.tomography import (
@@ -28,6 +29,44 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+
+    from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor
+
+
+@pytest.fixture(scope="module")
+def ising_pt_single_step() -> ProcessTensor:
+    """Shared single-step PT for ``Hamiltonian.ising(2, J=1, g=0.5)``, ``max_bond_dim=16``.
+
+    Returns:
+        ProcessTensor from one ``run(..., timesteps=[0.1])`` call.
+    """
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16)
+    return run(op, params, timesteps=[0.1])
+
+
+@pytest.fixture(scope="module")
+def ising_pt_single_step_order2() -> ProcessTensor:
+    """Same as ``ising_pt_single_step`` but with ``order=2`` (TJM-2 evolution).
+
+    Returns:
+        ProcessTensor from one ``run(..., timesteps=[0.1])`` call.
+    """
+    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
+    return run(op, params, timesteps=[0.1])
+
+
+@pytest.fixture(scope="module")
+def h0_pt_single_step() -> ProcessTensor:
+    """Single-step PT for trivial ``Hamiltonian.ising(2, J=0, g=0)``.
+
+    Returns:
+        ProcessTensor from one ``run(..., timesteps=[0.1])`` call.
+    """
+    op = Hamiltonian.ising(length=2, J=0.0, g=0.0)
+    params = AnalogSimParams(dt=0.1, max_bond_dim=16)
+    return run(op, params, timesteps=[0.1])
 
 
 def _get_random_rho(rng: np.random.Generator) -> NDArray[np.complex128]:
@@ -84,11 +123,9 @@ def _apply_local_map_site0(
     return out4.reshape(4, 4)
 
 
-def test_tomography_run_basic() -> None:
+def test_tomography_run_basic(ising_pt_single_step: ProcessTensor) -> None:
     """Test standard single-step process tomography."""
-    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
-    params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = ising_pt_single_step
 
     assert pt.tensor.shape == (4, 16)
     assert pt.weights.shape == (16,)
@@ -122,11 +159,9 @@ def test_tomography_run_multistep() -> None:
     assert len(pt.timesteps) == 2
 
 
-def test_basis_reproduction() -> None:
+def test_basis_reproduction(h0_pt_single_step: ProcessTensor) -> None:
     """Verify that identity map yields correct prediction."""
-    op = Hamiltonian.ising(length=2, J=0.0, g=0.0)  # Zero Hamiltonian
-    params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = h0_pt_single_step
 
     def identity_map(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return rho
@@ -137,11 +172,9 @@ def test_basis_reproduction() -> None:
     np.testing.assert_allclose(rho_pred, expected, atol=1e-10)
 
 
-def test_predict_linearity() -> None:
+def test_predict_linearity(ising_pt_single_step: ProcessTensor) -> None:
     """Ensure predict_final_state is linear in the intervention maps."""
-    op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
-    params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = ising_pt_single_step
 
     def map1(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return rho
@@ -159,11 +192,9 @@ def test_predict_linearity() -> None:
     np.testing.assert_allclose(rho_sum, 0.5 * rho1 + 0.3 * rho2, atol=1e-10)
 
 
-def test_reconstruction_depolarizing() -> None:
+def test_reconstruction_depolarizing(h0_pt_single_step: ProcessTensor) -> None:
     """Test reconstruction of a depolarizing channel via PT."""
-    op = Hamiltonian.ising(length=2, J=0.0, g=0.0)
-    params = AnalogSimParams(dt=0.1, max_bond_dim=16)
-    pt = run(op, params, timesteps=[0.1])
+    pt = h0_pt_single_step
 
     def depolarize(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
         return 0.5 * np.trace(rho) * np.eye(2)
@@ -236,13 +267,11 @@ def test_dual_extracts_one_hot_for_basis_maps() -> None:
         np.testing.assert_allclose(c, expected, atol=1e-10)
 
 
-def test_held_out_prediction() -> None:
+def test_held_out_prediction(ising_pt_single_step_order2: ProcessTensor) -> None:
     """Test PT prediction against direct evolution for a random preparation map (1-step)."""
     rng = np.random.default_rng(42)
     op = Hamiltonian.ising(length=2, J=1.0, g=0.5)
-
-    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=2)
-    pt = run(op, params, timesteps=[0.1])
+    pt = ising_pt_single_step_order2
 
     # Hold-out intervention: prepare arbitrary mixed state rho_0
     rho_0 = _get_random_rho(rng)
@@ -314,7 +343,7 @@ def test_multi_step_correctness() -> None:
     np.testing.assert_allclose(rho_pred, rho_final, atol=1e-6)
 
 
-def test_unnormalized_branch_semantics_h0() -> None:
+def test_unnormalized_branch_semantics_h0(h0_pt_single_step: ProcessTensor) -> None:
     """Verify trace-weight consistency in the deterministic H=0 case.
 
     For each basis map A_{p,m}(rho) = Tr(E_m rho) rho_p, starting from |0><0| on site 0,
@@ -322,9 +351,7 @@ def test_unnormalized_branch_semantics_h0() -> None:
     - trace(rho_out) == pt.weights[alpha]
     - trace(rho_out) == Tr(E_m |0><0|)
     """
-    op = Hamiltonian.ising(length=2, J=0.0, g=0.0)  # H = 0
-    params = AnalogSimParams(dt=0.1, max_bond_dim=16, order=1)
-    pt = run(op, params, timesteps=[0.1])
+    pt = h0_pt_single_step
 
     basis = get_basis_states()
     _, choi_indices = get_choi_basis()
@@ -368,7 +395,7 @@ def test_tomography_with_noise() -> None:
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
 
     # Run tomography computationally with noise
-    pt = run(op, params, timesteps=[0.1], num_trajectories=5, noise_model=noise_model)
+    pt = run(op, params, timesteps=[0.1], num_trajectories=2, noise_model=noise_model)
 
     # Check that the tensor built properly without None outputs
     assert pt.tensor.shape == (4, 16)

@@ -1183,7 +1183,8 @@ def run(
 
     # Sample a concrete noise model once for this run (static disorder)
     if noise_model is not None:
-        noise_model = noise_model.sample()
+        sample_seed = getattr(sim_params, "random_seed", None)
+        noise_model = noise_model.sample(rng=sample_seed)
     sim_params.noise_model = noise_model
 
     # Deferred output validation

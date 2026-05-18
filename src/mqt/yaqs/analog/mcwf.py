@@ -35,6 +35,7 @@ import scipy.linalg
 import scipy.sparse
 
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
+from ..core.random_utils import make_trajectory_rng
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -253,7 +254,10 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     dt = sim_params.dt
 
     psi = ctx.psi_initial.copy()
-    rng = np.random.default_rng(int(traj_idx))
+    if sim_params.random_seed is not None:
+        rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
+    else:
+        rng = np.random.default_rng()
 
     num_obs = len(sim_params.sorted_observables)
     num_steps = len(sim_params.times)
