@@ -114,6 +114,8 @@ import copy
 
 import numpy as np
 
+from mqt.yaqs import simulator
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X
 
 repro_params = AnalogSimParams(
