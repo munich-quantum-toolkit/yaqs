@@ -429,11 +429,12 @@ def test_split_truncation_discarded_weight_kept_count(
     boundary_case = np.isclose(np.sum(tail_at_expected**2), threshold, rtol=0.0, atol=tol)
 
     if boundary_case:
-        # Accept either expected_keep or its immediate neighbor (usually one less),
-        # since tiny SVD differences can flip the decision at the boundary.
+        # Accept ±1 around expected_keep; SVD numerics can flip the decision at the boundary.
         acceptable = {expected_keep}
-        if expected_keep > 0:
+        if expected_keep > sim_params.min_bond_dim:
             acceptable.add(expected_keep - 1)
+        if expected_keep < len(svs):
+            acceptable.add(expected_keep + 1)
         assert keep in acceptable
     else:
         assert keep == expected_keep
