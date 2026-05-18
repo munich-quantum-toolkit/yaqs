@@ -22,7 +22,7 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
-from ...core.data_structures.networks import MPO
+from ...core.data_structures.mpo import MPO
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
 if TYPE_CHECKING:

@@ -39,7 +39,8 @@ from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.networks import MPO, MPS
+    from ..core.data_structures.mpo import MPO
+    from ..core.data_structures.mps import MPS
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -67,10 +68,14 @@ class MCWFContext:
 
 
 def preprocess_mcwf(
-    initial_state: MPS,
-    hamiltonian: MPO,
+    initial_state: MPS | None,
+    hamiltonian: MPO | None,
     noise_model: NoiseModel | None,
     sim_params: AnalogSimParams,
+    *,
+    psi_initial: NDArray[np.complex128] | None = None,
+    num_sites: int | None = None,
+    h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
@@ -78,15 +83,32 @@ def preprocess_mcwf(
     ``preprocess_mcwf`` in ``simulator.py``).
 
     Args:
-        initial_state: The initial MPS state.
-        hamiltonian: The Hamiltonian MPO.
+        initial_state: The initial MPS state, or ``None`` when ``psi_initial`` is supplied.
+        hamiltonian: The Hamiltonian MPO (ignored if ``h_sparse`` is set).
         noise_model: The noise model.
         sim_params: Simulation parameters.
+        psi_initial: Optional pre-encoded dense state vector (unit norm applied here).
+        num_sites: Number of lattice sites when ``initial_state`` is ``None``.
+        h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
 
     Returns:
         MCWFContext containing dense arrays ready for trajectory simulation.
+
+    Raises:
+        ValueError: If neither ``initial_state`` nor ``psi_initial`` is provided, if
+            ``num_sites`` is missing when only ``psi_initial`` is given, if
+            ``psi_initial`` has the wrong Hilbert-space size, or if ``psi_initial`` has zero norm.
     """
-    num_sites = initial_state.length
+    if initial_state is not None:
+        num_sites = initial_state.length
+    elif psi_initial is not None:
+        if num_sites is None:
+            msg = "num_sites is required when preprocess_mcwf is called with psi_initial only."
+            raise ValueError(msg)
+    else:
+        msg = "preprocess_mcwf requires initial_state or psi_initial."
+        raise ValueError(msg)
+
     dim = 2**num_sites
 
     if num_sites > 14:
@@ -97,12 +119,33 @@ def preprocess_mcwf(
         )
         warnings.warn(msg, RuntimeWarning, stacklevel=2)
 
-    # 1. Initial state |psi> as dense vector (MPS is only the user-facing specification).
-    psi = initial_state.to_vec()
-    psi /= np.linalg.norm(psi)
+    # 1. Initial state |psi> as dense vector.
+    if psi_initial is not None:
+        psi = np.asarray(psi_initial, dtype=np.complex128).reshape(-1)
+        if psi.size != dim:
+            msg = f"psi_initial size {psi.size} does not match Hilbert dimension {dim}."
+            raise ValueError(msg)
+        norm = np.linalg.norm(psi)
+        if np.isclose(norm, 0.0):
+            msg = "psi_initial must have non-zero norm."
+            raise ValueError(msg)
+        psi /= norm
+    else:
+        assert initial_state is not None
+        psi = initial_state.to_vec()
+        psi /= np.linalg.norm(psi)
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
-    h_mat = hamiltonian.to_sparse_matrix()
+    if h_sparse is not None:
+        h_mat = scipy.sparse.csr_matrix(h_sparse)
+        if h_mat.shape != (dim, dim):
+            msg = f"h_sparse must have shape ({dim}, {dim}), got {h_mat.shape}."
+            raise ValueError(msg)
+    elif hamiltonian is not None:
+        h_mat = hamiltonian.to_sparse_matrix()
+    else:
+        msg = "preprocess_mcwf requires hamiltonian or h_sparse."
+        raise ValueError(msg)
 
     # 3. Jump operators L_k = sqrt(gamma) * op embedded on the full space.
     jump_ops: list[scipy.sparse.spmatrix] = []

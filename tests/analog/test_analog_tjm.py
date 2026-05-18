@@ -38,9 +38,12 @@ import numpy as np
 
 from mqt.yaqs import simulator
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import X, Z
 
 
@@ -252,9 +255,9 @@ def test_analog_simulation_twositeprocesses() -> None:
     gamma_pair = 0.01
 
     # Setup YAQS simulation
-    H = MPO.ising(L, J, g)
+    H = Hamiltonian.ising(L, J, g)
 
-    state = MPS(L, state="zeros")
+    state = State(L, initial="zeros")
 
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(L)],
@@ -378,9 +381,9 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
     """
     # Setup YAQS simulation (same parameters as reference)
     L = 3
-    H = MPO.ising(L, 1.0, 0.5)
+    H = Hamiltonian.ising(L, 1.0, 0.5)
 
-    state = MPS(L, state="zeros")
+    state = State(L, initial="zeros")
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,

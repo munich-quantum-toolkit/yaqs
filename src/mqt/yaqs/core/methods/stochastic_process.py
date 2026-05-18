@@ -28,7 +28,7 @@ from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..data_structures.networks import MPS
+    from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
@@ -41,7 +41,7 @@ def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
     at site 0.
 
     Args:
-        state: The Matrix Product State representing the current state of the system.
+        state: The Matrix Product MPS representing the current state of the system.
             The state should be in mixed canonical form at site 0 or B normalized.
 
     Returns:
@@ -72,7 +72,7 @@ def create_probability_distribution(
     the associated jump operators and their target site(s).
 
     Args:
-        state: The Matrix Product State, assumed left-canonical at site 0 on entry.
+        state: The Matrix Product MPS, assumed left-canonical at site 0 on entry.
         noise_model: The noise model as a list of process dicts, each with keys
             "name", "strength", "sites", and "matrix" (for 1-site and adjacent 2-site processes)
             or "factors" (for long-range 2-site processes).
@@ -158,14 +158,14 @@ def stochastic_process(
     with appropriate tensor contractions and normalization to ensure physical validity.
 
     Args:
-        state: The current Matrix Product State, left-canonical at site 0.
+        state: The current Matrix Product MPS, left-canonical at site 0.
         noise_model: The noise model, or None for no jumps.
         dt: The time step for the evolution.
         sim_params: Simulation parameters (for splitting tensors, required for 2-site jumps).
         rng: The random number generator to use. If None, valid global rng or new generator is used.
 
     Returns:
-        MPS: The updated Matrix Product State after the stochastic process.
+        MPS: The updated Matrix Product MPS after the stochastic process.
 
     Raises:
         ValueError: If a 2-site jump is not nearest-neighbor, or if the jump operator does not act on 1 or 2 sites.

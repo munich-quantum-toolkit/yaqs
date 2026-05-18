@@ -15,9 +15,12 @@ import numpy as np
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, preprocess_lindblad
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
 
 if TYPE_CHECKING:
@@ -27,11 +30,12 @@ if TYPE_CHECKING:
 def test_lindblad_amplitude_damping() -> None:
     """Test single qubit amplitude damping with exact Lindblad solver."""
     n_sites = 1
-    initial_state = MPS(n_sites, state="ones")  # |1>
-    hamiltonian = MPO()
-    hamiltonian.identity(n_sites)
-    for i in range(len(hamiltonian.tensors)):
-        hamiltonian.tensors[i] *= 0.0  # H = 0
+    initial_state = State(n_sites, initial="ones", representation="density_matrix")
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0  # H = 0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
 
     # Noise: Amplitude Damping
     sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
@@ -47,7 +51,6 @@ def test_lindblad_amplitude_damping() -> None:
         observables=[obs],
         elapsed_time=t_max,
         dt=dt,
-        representation="density_matrix",
         num_traj=1,  # Deterministic
     )
 
@@ -66,9 +69,9 @@ def test_lindblad_amplitude_damping() -> None:
 def test_lindblad_unitary_rabi() -> None:
     """Test single qubit unitary evolution (Rabi oscillation) with no noise."""
     n_sites = 1
-    initial_state = MPS(n_sites, state="zeros")  # |0>
+    initial_state = State(n_sites, initial="zeros", representation="density_matrix")
 
-    hamiltonian = MPO.ising(n_sites, J=0.0, g=-1.0)
+    hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=-1.0)
     # MPO.ising returns H = -J ZZ - g X.
     # We want H = +1.0 * X. So set g = -1.0.
 
@@ -76,7 +79,7 @@ def test_lindblad_unitary_rabi() -> None:
     dt = 0.05
     obs = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt, representation="density_matrix")
+    sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt)
 
     run(initial_state, hamiltonian, sim_params, None)
 
@@ -92,12 +95,13 @@ def test_lindblad_unitary_rabi() -> None:
 def test_lindblad_dephasing() -> None:
     """Test 2-qubit system with local dephasing on one qubit."""
     n_sites = 2
-    initial_state = MPS(n_sites, state="x+")  # |++> = (|0>+|1>)(|0>+|1>)/2
+    initial_state = State(n_sites, initial="x+", representation="density_matrix")
 
-    hamiltonian = MPO()
-    hamiltonian.identity(n_sites)
-    for i in range(len(hamiltonian.tensors)):
-        hamiltonian.tensors[i] *= 0.0
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
 
     # Dephasing on qubit 0 (sigma_z)
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
@@ -111,7 +115,7 @@ def test_lindblad_dephasing() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, representation="density_matrix")
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt)
 
     run(initial_state, hamiltonian, sim_params, noise_model)
 
@@ -135,12 +139,13 @@ def test_lindblad_dephasing_both_qubits() -> None:
     multiple jump operators are present. Both qubits should decay identically.
     """
     n_sites = 2
-    initial_state = MPS(n_sites, state="x+")  # |++> = (|0>+|1>)(|0>+|1>)/2
+    initial_state = State(n_sites, initial="x+", representation="density_matrix")
 
-    hamiltonian = MPO()
-    hamiltonian.identity(n_sites)
-    for i in range(len(hamiltonian.tensors)):
-        hamiltonian.tensors[i] *= 0.0
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
 
     # Dephasing on BOTH qubits with the same gamma and sigma_z
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
@@ -157,7 +162,7 @@ def test_lindblad_dephasing_both_qubits() -> None:
     obs0 = Observable("x", sites=[0])
     obs1 = Observable("x", sites=[1])
 
-    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt, representation="density_matrix")
+    sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt)
 
     run(initial_state, hamiltonian, sim_params, noise_model)
 
@@ -182,7 +187,7 @@ def test_lindblad_zero_strength_noise() -> None:
     noise = NoiseModel(processes=[{"name": "lowering", "sites": [0], "strength": 0.0}])
 
     obs = Observable("z", sites=[0])
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[obs])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs])
 
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert len(ctx.jump_ops) == 0
@@ -206,9 +211,7 @@ def test_lindblad_diagnostic_observables() -> None:
     # Also add a real observable to verify mixing
     obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(
-        dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[obs_diag, obs_real]
-    )
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs_diag, obs_real])
 
     # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
     args = (0, psi, None, sim_params, h)
@@ -234,7 +237,6 @@ def test_preprocess_lindblad_sets_propagator_small_system() -> None:
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.1,
-        representation="density_matrix",
         observables=[Observable("z", sites=[0])],
     )
     ctx = preprocess_lindblad(psi, h, None, sim_params)
@@ -254,7 +256,7 @@ def test_lindblad_noisy_small_system_has_propagator() -> None:
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, representation="density_matrix", observables=[])
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[])
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert not ctx.is_unitary
     assert ctx.step_propagator is not None
@@ -263,8 +265,9 @@ def test_lindblad_noisy_small_system_has_propagator() -> None:
 def test_noiseless_mps_matches_density_matrix() -> None:
     """Noiseless Hamiltonian evolution agrees between mps and density_matrix representations."""
     n_sites = 3
-    psi = MPS(n_sites, state="zeros")
-    h = MPO.ising(n_sites, J=1.0, g=0.5)
+    psi_mps = State(n_sites, initial="zeros", representation="mps")
+    psi_rho = State(n_sites, initial="zeros", representation="density_matrix")
+    h = Hamiltonian.ising(n_sites, J=1.0, g=0.5)
     obs = Observable("z", sites=[0])
     t_max = 0.5
     dt = 0.1
@@ -273,11 +276,10 @@ def test_noiseless_mps_matches_density_matrix() -> None:
         observables=[obs],
         elapsed_time=t_max,
         dt=dt,
-        representation="mps",
         max_bond_dim=32,
         show_progress=False,
     )
-    run(psi, h, params_mps, None)
+    run(psi_mps, h, params_mps, None)
     assert obs.results is not None
     z_mps = obs.results[-1]
 
@@ -286,10 +288,9 @@ def test_noiseless_mps_matches_density_matrix() -> None:
         observables=[obs_rho],
         elapsed_time=t_max,
         dt=dt,
-        representation="density_matrix",
         show_progress=False,
     )
-    run(psi, h, params_rho, None)
+    run(psi_rho, h, params_rho, None)
     assert obs_rho.results is not None
     z_rho = obs_rho.results[-1]
 
@@ -314,7 +315,6 @@ def test_lindblad_propagator_records_all_timepoints() -> None:
         observables=[obs],
         elapsed_time=0.2,
         dt=0.05,
-        representation="density_matrix",
         sample_timesteps=False,
     )
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
@@ -344,7 +344,6 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
         observables=[obs],
         elapsed_time=0.2,
         dt=0.05,
-        representation="density_matrix",
         sample_timesteps=True,
     )
 

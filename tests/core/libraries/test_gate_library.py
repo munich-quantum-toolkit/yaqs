@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, X, Y, Z, extend_gate, split_tensor
 

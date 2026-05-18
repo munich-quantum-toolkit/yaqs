@@ -11,12 +11,16 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])
 - added Fermionic and Jordan-Wigner MPO encodings of 1D Fermi-Hubbard model ([#220]) ([**@thilomueller**])
 - added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
 
 ### Changed
 
+- changed [`simulator.run`](src/mqt/yaqs/simulator.py) to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
 - changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
+
+### Removed
 
 ### Fixed
 
@@ -112,6 +116,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#426]: https://github.com/munich-quantum-toolkit/yaqs/pull/426
 [#422]: https://github.com/munich-quantum-toolkit/yaqs/pull/422
 [#220]: https://github.com/munich-quantum-toolkit/yaqs/pull/220
 [#420]: https://github.com/munich-quantum-toolkit/yaqs/pull/420

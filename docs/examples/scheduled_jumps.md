@@ -24,17 +24,18 @@ In this notebook, we simulate a 10-site Ising chain and apply a scheduled Pauli-
 First, we define the Hamiltonian and the initial state. We'll use a standard transverse-field Ising model.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.state import State
 
 L = 10
 J = 1.0
 g = 1.0
 
 # Hamiltonian: H = -J Σ Z_i Z_{i+1} - g Σ X_i
-hamiltonian = MPO.ising(length=L, J=J, g=g)
+hamiltonian = Hamiltonian.ising(length=L, J=J, g=g)
 
 # Initial state: all zeros |00...0>
-state = MPS(L, state="zeros")
+state = State(L, initial="zeros")
 ```
 
 ## 2. Define the Scheduled Jump

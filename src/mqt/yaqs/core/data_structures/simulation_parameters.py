@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 from enum import Enum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -27,8 +27,8 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from mqt.yaqs.core.data_structures.networks import MPS
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+    from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
@@ -151,13 +151,11 @@ class AnalogSimParams:
         times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
-        representation: State representation used during analog simulation
-            (``"mps"``, ``"vector"``, or ``"density_matrix"``).
         max_bond_dim: Maximum allowed bond dimension.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
         order: Integration order.
-        get_state: If ``True``, store and return the output MPS state.
+        get_state: If ``True``, store the output state as a :class:`~mqt.yaqs.core.data_structures.state.State`.
         show_progress: If ``True``, show a progress bar as trajectories finish.
         noise_model: Noise model used for the run, populated after simulation.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
@@ -167,7 +165,7 @@ class AnalogSimParams:
         multi_time_observables_results: Ensemble mean with shape ``(n_pairs, n_times)`` or ``(n_pairs, 1)``.
     """
 
-    output_state: MPS | None = None
+    output_state: State | None = None
 
     def __init__(
         self,
@@ -186,7 +184,6 @@ class AnalogSimParams:
         get_state: bool = False,
         show_progress: bool = True,
         num_threads: int = 1,
-        representation: Literal["mps", "vector", "density_matrix"] = "mps",
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
         """Physics simulation parameters initialization.
@@ -205,25 +202,16 @@ class AnalogSimParams:
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
-            get_state: If ``True``, output MPS is returned.
+            get_state: If ``True``, store the final state in :attr:`output_state` as a
+                :class:`~mqt.yaqs.core.data_structures.state.State`.
             show_progress: If ``True``, print a progress bar as trajectories finish.
             num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
-            representation: State representation for the run: ``"mps"`` (tensor network),
-                ``"vector"`` (dense state vector), or ``"density_matrix"`` (exact master equation).
-                With ``noise_model=None`` or zero strengths, ``"density_matrix"`` evolves the
-                density matrix unitarily; ``"mps"`` and ``"vector"`` reduce to Hamiltonian evolution.
-            multi_time_observables: For ``list[MPS]`` unitary ensemble runs only, list of ``(A, B)``
+            multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
                 case ``(O, O)``.
 
-        Raises:
-            ValueError: If ``representation`` is not ``"mps"``, ``"vector"``, or ``"density_matrix"``.
         """
         self.noise_model: NoiseModel | None = None
-        if representation not in {"mps", "vector", "density_matrix"}:
-            msg = f"Invalid representation '{representation}'. Allowed values are 'mps', 'vector', or 'density_matrix'."
-            raise ValueError(msg)
-        self.representation = representation
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -307,7 +295,7 @@ class WeakSimParams:
     window_size : int | None
         The window size for the simulation.
     get_state:
-        If True, output MPS is returned.
+        If True, store the final state in output_state as a State.
     sample_layers:
         If True, sample layers.
     show_progress:
@@ -326,7 +314,7 @@ class WeakSimParams:
     # Properties set as placeholders for code compatibility
     dt = 1
     num_traj = 0
-    output_state: MPS | None = None
+    output_state: State | None = None
 
     def __init__(
         self,
@@ -356,7 +344,7 @@ class WeakSimParams:
         threshold : float, optional
             Accuracy threshold for truncating tensors, by default 1e-6.
         get_state:
-            If True, output MPS is returned.
+            If True, store the final state in output_state as a State.
         show_progress:
             If True, a progress bar is printed as trajectories finish.
         """
@@ -405,7 +393,7 @@ class StrongSimParams:
     -----------
     dt : int
         A placeholder property for code compatibility.
-    output_state: MPS
+    output_state: State
         Output state following simulation if get_state is True
     observables : list[Observable]
         A list of observables to be tracked during the simulation.
@@ -424,7 +412,7 @@ class StrongSimParams:
     window_size : int or None
         The size of the window for the simulation. Default is None.
     get_state:
-        If True, output MPS is returned.
+        If True, store the final state in output_state as a State.
     show_progress:
         If True, a progress bar is printed as trajectories finish.
     noise_model:
@@ -441,7 +429,7 @@ class StrongSimParams:
 
     # Properties set as placeholders for code compatibility
     dt = 1
-    output_state: MPS | None = None
+    output_state: State | None = None
 
     def __init__(
         self,
@@ -475,7 +463,7 @@ class StrongSimParams:
         threshold : float, optional
             Threshold for simulation accuracy, by default 1e-6.
         get_state:
-            If True, output MPS is returned.
+            If True, store the final state in output_state as a State.
         show_progress:
             If True, a progress bar is printed as trajectories finish.
         num_threads:

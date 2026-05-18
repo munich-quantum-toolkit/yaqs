@@ -24,7 +24,7 @@ from scipy.linalg import expm
 from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 
 if TYPE_CHECKING:
-    from ..data_structures.networks import MPS
+    from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
@@ -79,7 +79,7 @@ def apply_dissipation(
     each tensor in the state using an Einstein summation contraction.
 
     Args:
-        state: The Matrix Product State representing the current state of the system.
+        state: The Matrix Product State (MPS) representing the current state of the system.
         noise_model: The noise model containing jump operators and their
             corresponding strengths. If None or if all strengths are zero, no dissipation is applied.
         dt: The time step for the evolution, used in the exponentiation of the dissipative operator.

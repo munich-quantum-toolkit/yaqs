@@ -21,7 +21,7 @@ import opt_einsum as oe
 from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 
 if TYPE_CHECKING:
-    from ..data_structures.networks import MPS
+    from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams
 
@@ -52,13 +52,13 @@ def apply_scheduled_jumps(
     """Apply scheduled jumps to the state.
 
     Args:
-        state: The current Matrix Product State.
+        state: The current Matrix Product State (MPS).
         noise_model: The noise model containing scheduled jumps.
         time: The current simulation time.
         sim_params: Simulation parameters.
 
     Returns:
-        The updated Matrix Product State.
+        The updated Matrix Product State (MPS).
 
     Raises:
         ValueError: If a two-site jump acts on non-adjacent sites.

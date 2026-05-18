@@ -21,9 +21,11 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
-from ..core.data_structures.networks import MPO, MPS
+from ..core.data_structures.mpo import MPO
+from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from ..core.data_structures.state import State
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
@@ -217,10 +219,10 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
     """Apply two-qubit gate.
 
-    Applies a two-qubit gate to the given Matrix Product State (MPS) with dynamic TDVP.
+    Applies a two-qubit gate to the given Matrix Product MPS (MPS) with dynamic TDVP.
 
     Args:
-        state (MPS): The Matrix Product State to which the gate will be applied.
+        state (MPS): The Matrix Product MPS to which the gate will be applied.
         node (DAGOpNode): The node representing the two-qubit gate in the Directed Acyclic Graph (DAG).
         sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior
         of the algorithm.
@@ -252,7 +254,7 @@ def digital_tjm(
     Args:
         args: A tuple containing the following elements:
             - An index or identifier, primarily for parallelization
-            - The initial state of the system represented as a Matrix Product State.
+            - The initial state of the system represented as a Matrix Product MPS.
             - The noise model to be applied during the simulation, or None if no noise is to be applied.
             - Parameters for the simulation, either for strong or weak simulation.
             - The quantum circuit to be simulated.
@@ -316,7 +318,7 @@ def digital_tjm(
         if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
             # All shots can be done at once in noise-free model
             if sim_params.get_state:
-                sim_params.output_state = state
+                sim_params.output_state = State.from_mps(state)
             return state.measure_shots(sim_params.shots)
         # Each shot is an individual trajectory
         return state.measure_shots(shots=1)
@@ -326,6 +328,6 @@ def digital_tjm(
 
     assert isinstance(sim_params, StrongSimParams)
     if sim_params.get_state:
-        sim_params.output_state = state
+        sim_params.output_state = State.from_mps(state)
     state.evaluate_observables(sim_params, results, results.shape[1] - 1)
     return results

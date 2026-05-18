@@ -34,7 +34,8 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from ..data_structures.networks import MPO, MPS
+    from ..data_structures.mpo import MPO
+    from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -49,7 +50,7 @@ def split_mps_tensor(
     *,
     dynamic: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
+    """Split a Matrix Product MPS (MPS) tensor into two tensors using singular value decomposition (SVD).
 
     The input tensor is assumed to have a composite physical index of dimension d0*d1 and virtual dimensions D0 and D2,
     i.e. its shape is (d0*d1, D0, D2). The function reshapes and splits it into two tensors:
@@ -255,7 +256,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex1
     the network is contracted site-by-site moving to the left to produce a list of right operator blocks.
 
     Args:
-        psi (MPS): The Matrix Product State representing the quantum state.
+        psi (MPS): The Matrix Product MPS representing the quantum state.
         op (MPO): The Matrix Product Operator representing the Hamiltonian.
 
     Returns:
@@ -741,7 +742,7 @@ def two_site_tdvp(
     """
     num_sites = hamiltonian.length
     if num_sites != state.length:
-        msg = "State and Hamiltonian must have the same number of sites"
+        msg = "MPS and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
     if num_sites < 2:
         msg = "Hamiltonian is too short for a two-site update (2TDVP)."
@@ -860,7 +861,7 @@ def local_dynamic_tdvp(
     """
     num_sites = hamiltonian.length
     if num_sites != state.length:
-        msg = "State and Hamiltonian must have the same length"
+        msg = "MPS and Hamiltonian must have the same length"
         raise ValueError(msg)
 
     if num_sites == 1:
@@ -1034,7 +1035,7 @@ def global_dynamic_tdvp(
     `sim_params`.
 
     Args:
-        state (MPS): The Matrix Product State representing the current state of the system.
+        state (MPS): The Matrix Product MPS representing the current state of the system.
         hamiltonian (MPO): The Matrix Product Operator representing the Hamiltonian of the system.
         sim_params (AnalogSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
             such as the maximum allowable bond dimension for the MPS.

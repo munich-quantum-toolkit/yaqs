@@ -36,7 +36,8 @@ import numpy as np
 import pytest
 from scipy.linalg import expm
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.tdvp import (
@@ -264,7 +265,8 @@ def test_two_site_tdvp() -> None:
 
     This test initializes an Ising MPO and an MPS of length 5, sets up AnalogSimParams,
     and runs two_site_TDVP. It checks that the MPS retains the correct number of tensors,
-    that all tensors remain numpy arrays, and that the MPS is in canonical form with the orthogonality center at site 0.
+    that all tensors remain numpy arrays, and that the MPS is in canonical form with
+    the orthogonality center at site 0.
     """
     L = 5
     J = 1

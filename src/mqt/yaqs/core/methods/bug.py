@@ -25,7 +25,8 @@ from .tdvp import update_left_environment, update_right_environment, update_site
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..data_structures.networks import MPO, MPS
+    from ..data_structures.mpo import MPO
+    from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -186,7 +187,7 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
     """
     num_sites = mpo.length
     if num_sites != state.length:
-        msg = "State and Hamiltonian must have the same number of sites"
+        msg = "MPS and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
