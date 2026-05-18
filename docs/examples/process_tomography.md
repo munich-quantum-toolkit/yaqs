@@ -17,7 +17,7 @@ mystnb:
 Process Tensor Tomography (PTT) characterises multi-time correlations in an open quantum system
 by reconstructing a _process tensor_, a generalisation of the quantum channel concept to several
 time steps.
-Given a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) and a set of state preparations and measurement projections, YAQS runs the simulation in parallel,
+Given a {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` and a set of state preparations and measurement projections, YAQS runs the simulation in parallel,
 applies these interventions at each time point, and assembles the result into a {class}`ProcessTensor`
 object that can be used to:
 

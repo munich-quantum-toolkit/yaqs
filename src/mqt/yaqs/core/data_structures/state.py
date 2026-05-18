@@ -82,9 +82,13 @@ class State:
 
         Raises:
             ValueError: If more than one of ``tensors``, ``vector``, and ``density_matrix`` is set,
-                if ``length`` cannot be inferred, or if array shapes are invalid, or if a vector or
-                density matrix has zero norm or trace.
+                if ``length`` cannot be inferred, if ``length`` is not positive, or if array shapes
+                are invalid, or if a vector or density matrix has zero norm or trace.
         """
+        if length is not None and length <= 0:
+            msg = "length must be a positive integer."
+            raise ValueError(msg)
+
         manual = [tensors is not None, vector is not None, density_matrix is not None]
         if sum(manual) > 1:
             msg = "Specify at most one of tensors, vector, and density_matrix."

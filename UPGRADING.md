@@ -15,6 +15,7 @@ and [`Hamiltonian`](src/mqt/yaqs/core/data_structures/hamiltonian.py) instead.
 ```python
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.simulator import run
 
 psi = MPS(4, state="zeros")
@@ -27,6 +28,7 @@ run(psi, H, params, noise_model)
 
 ```python
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
 

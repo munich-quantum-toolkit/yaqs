@@ -27,6 +27,12 @@ def test_state_default_representation_is_mps() -> None:
     assert psi.representation == "mps"
 
 
+def test_state_rejects_nonpositive_length() -> None:
+    """Preset construction requires a positive chain length."""
+    with pytest.raises(ValueError, match="length must be a positive integer"):
+        State(0, initial="zeros")
+
+
 def test_state_invalid_representation() -> None:
     """State rejects unknown representation values."""
     with pytest.raises(ValueError, match=r"Invalid representation 'tjm'"):
@@ -99,7 +105,7 @@ def test_ensure_encoded_invalid_representation_raises() -> None:
     """Unknown representation strings raise ValueError."""
     psi = State(2, initial="zeros")
     with pytest.raises(ValueError, match=r"Invalid representation 'invalid'"):
-        psi.ensure_encoded("invalid")  # ty: ignore[invalid-argument-type]
+        psi.ensure_encoded(cast("Any", "invalid"))
 
 
 def test_initial_kwarg_builds_mps() -> None:

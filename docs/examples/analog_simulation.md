@@ -15,7 +15,7 @@ mystnb:
 # Noisy Analog Simulation
 
 This module demonstrates how to run a analog simulation using the YAQS simulator visualize the results.
-In this example, an Ising Hamiltonian is built as a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian), and a [`State`](mqt.yaqs.core.data_structures.state.State) is prepared in the $\ket{0}$ state.
+In this example, an Ising Hamiltonian is built as a {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`, and a {class}`~mqt.yaqs.core.data_structures.state.State` is prepared in the $\ket{0}$ state.
 A noise model is applied, and simulation parameters are defined for an analog simulation using the Tensor Jump Method (TJM).
 After running the simulation, the expectation values of the $X$ observable are extracted and displayed as a heatmap.
 

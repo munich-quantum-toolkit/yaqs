@@ -53,6 +53,18 @@ def test_resolve_physical_dimensions_list_mismatch() -> None:
         resolve_physical_dimensions(2, [2, 2, 2])
 
 
+def test_resolve_physical_dimensions_rejects_nonpositive_int() -> None:
+    """Integer physical_dimensions must be strictly positive."""
+    with pytest.raises(ValueError, match="resolve_physical_dimensions"):
+        resolve_physical_dimensions(2, 0)
+
+
+def test_resolve_physical_dimensions_rejects_nonpositive_list_element() -> None:
+    """Each list element must be a strictly positive integer."""
+    with pytest.raises(ValueError, match=r"physical_dimensions\[1\]"):
+        resolve_physical_dimensions(2, [2, -1])
+
+
 def test_infer_qubit_length_power_of_two() -> None:
     """Hilbert dimension must be a positive power of two."""
     assert infer_qubit_length(4) == 2

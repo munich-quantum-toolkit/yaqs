@@ -95,16 +95,29 @@ def resolve_physical_dimensions(
         A list of length ``length`` with each site's physical dimension.
 
     Raises:
-        ValueError: If a list is passed with the wrong length.
+        ValueError: If a list is passed with the wrong length, or any dimension is not a
+            positive integer.
     """
     if physical_dimensions is None:
         return [2] * length
     if isinstance(physical_dimensions, int):
+        if physical_dimensions <= 0:
+            msg = (
+                f"resolve_physical_dimensions: physical_dimensions must be a positive integer, "
+                f"got {physical_dimensions}."
+            )
+            raise ValueError(msg)
         return [physical_dimensions] * length
     if len(physical_dimensions) != length:
         msg = f"physical_dimensions length {len(physical_dimensions)} != {length}."
         raise ValueError(msg)
-    return list(physical_dimensions)
+    resolved: list[int] = []
+    for i, dim in enumerate(physical_dimensions):
+        if not isinstance(dim, int) or dim <= 0:
+            msg = f"resolve_physical_dimensions: physical_dimensions[{i}] must be a positive integer, got {dim!r}."
+            raise ValueError(msg)
+        resolved.append(dim)
+    return resolved
 
 
 def local_vector_for_preset(

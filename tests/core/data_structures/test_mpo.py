@@ -7,8 +7,6 @@
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mpo.MPO`."""
 
-# ruff: noqa: N806
-
 from __future__ import annotations
 
 import re
@@ -83,12 +81,12 @@ def _ising_dense(length: int, j_val: float, g: float) -> np.ndarray:
         Dense (2**length, 2**length) Hamiltonian matrix.
     """
     dim = 2**length
-    H = np.zeros((dim, dim), dtype=complex)
+    H = np.zeros((dim, dim), dtype=complex)  # noqa: N806 -- physics Hamiltonian matrix
 
     for i in range(length - 1):
-        H += (-j_val) * _embed_two_body(_Z2, _Z2, length, i)
+        H += (-j_val) * _embed_two_body(_Z2, _Z2, length, i)  # noqa: N806
     for i in range(length):
-        H += (-g) * _embed_one_body(_X2, length, i)
+        H += (-g) * _embed_one_body(_X2, length, i)  # noqa: N806
 
     return H
 
@@ -110,14 +108,14 @@ def _heisenberg_dense(length: int, jx: float, jy: float, jz: float, h: float) ->
         Dense (2**length, 2**length) Hamiltonian matrix.
     """
     dim = 2**length
-    H = np.zeros((dim, dim), dtype=complex)
+    H = np.zeros((dim, dim), dtype=complex)  # noqa: N806 -- physics Hamiltonian matrix
 
     for i in range(length - 1):
-        H += (-jx) * _embed_two_body(_X2, _X2, length, i)
-        H += (-jy) * _embed_two_body(_Y2, _Y2, length, i)
-        H += (-jz) * _embed_two_body(_Z2, _Z2, length, i)
+        H += (-jx) * _embed_two_body(_X2, _X2, length, i)  # noqa: N806
+        H += (-jy) * _embed_two_body(_Y2, _Y2, length, i)  # noqa: N806
+        H += (-jz) * _embed_two_body(_Z2, _Z2, length, i)  # noqa: N806
     for i in range(length):
-        H += (-h) * _embed_one_body(_Z2, length, i)
+        H += (-h) * _embed_one_body(_Z2, length, i)  # noqa: N806
 
     return H
 
@@ -135,7 +133,7 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
     id_op = np.eye(local_dim, dtype=complex)
 
     dim = local_dim**length
-    H = np.zeros((dim, dim), dtype=complex)
+    H = np.zeros((dim, dim), dtype=complex)  # noqa: N806 -- physics Hamiltonian matrix
 
     # Build H term-by-term using Kronecker products
     def embed(op_list: list[np.ndarray]) -> np.ndarray:
@@ -148,7 +146,7 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
     for i in range(length):
         op_list = [id_op] * length
         op_list[i] = omega * n + 0.5 * hubbard_u * (n @ (n - id_op))
-        H += embed(op_list)
+        H += embed(op_list)  # noqa: N806
 
     # Hopping terms
     for i in range(length - 1):
@@ -156,13 +154,13 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
         op_list1 = [id_op] * length
         op_list1[i] = adag
         op_list1[i + 1] = a
-        H += -hopping_j * embed(op_list1)
+        H += -hopping_j * embed(op_list1)  # noqa: N806
 
         # a_i * adag_{i+1}
         op_list2 = [id_op] * length
         op_list2[i] = a
         op_list2[i + 1] = adag
-        H += -hopping_j * embed(op_list2)
+        H += -hopping_j * embed(op_list2)  # noqa: N806
 
     return H
 
@@ -283,8 +281,8 @@ rng = np.random.default_rng()
 
 def test_ising_correct_operator() -> None:
     """Verify that the Ising MPO matches the exact dense Hamiltonian."""
-    L = 5
-    J = 1.0
+    L = 5  # noqa: N806 -- chain length matches physics notation
+    J = 1.0  # noqa: N806
     g = 0.5
 
     mpo = MPO.ising(L, J, g)
@@ -298,8 +296,8 @@ def test_ising_correct_operator() -> None:
 
 def test_heisenberg_correct_operator() -> None:
     """Verify that the Heisenberg MPO matches the exact dense Hamiltonian."""
-    L = 5
-    Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2
+    L = 5  # noqa: N806 -- chain length matches physics notation
+    Jx, Jy, Jz, h = 1.0, 0.5, 0.3, 0.2  # noqa: N806
 
     mpo = MPO.heisenberg(L, Jx, Jy, Jz, h)
 
@@ -311,8 +309,8 @@ def test_bose_hubbard_correct_operator() -> None:
     length = 4
     local_dim = 3  # up to 2 bosons per site
     omega = 0.7
-    J = 0.2
-    U = 1.3
+    J = 0.2  # noqa: N806 -- hopping matches MPO.bose_hubbard parameter name
+    U = 1.3  # noqa: N806
 
     mpo = MPO.bose_hubbard(
         length=length,
@@ -329,8 +327,8 @@ def test_bose_hubbard_correct_operator() -> None:
     assert all(t.shape[2] <= 4 and t.shape[3] <= 4 for t in mpo.tensors), "Bond dimension should be 4"
 
     # Dense comparison
-    H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)
-    H_mpo = mpo.to_matrix()
+    H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)  # noqa: N806
+    H_mpo = mpo.to_matrix()  # noqa: N806
     np.testing.assert_allclose(H_mpo, H_dense, atol=1e-8)
 
 
@@ -489,18 +487,18 @@ def test_from_matrix() -> None:
 
     length = 5
     d = 3  # local dimension
-    H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)
+    H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)  # noqa: N806 -- dense Hamiltonian matrix
 
-    Hmpo = MPO.from_matrix(H, d, 4)
+    Hmpo = MPO.from_matrix(H, d, 4)  # noqa: N806
     assert np.allclose(H, Hmpo.to_matrix())
 
-    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
-    Hmpo = MPO.from_matrix(H, d, 1_000_000)
+    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))  # noqa: N806
+    Hmpo = MPO.from_matrix(H, d, 1_000_000)  # noqa: N806
     assert np.allclose(H, Hmpo.to_matrix())
 
     length = 6
-    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))
-    Hmpo = MPO.from_matrix(H, d, 728)
+    H = rng.random((d**length, d**length)) + 1j * rng.random((d**length, d**length))  # noqa: N806
+    Hmpo = MPO.from_matrix(H, d, 728)  # noqa: N806
     assert np.max(np.abs(H - Hmpo.to_matrix())) < 1e-2
 
     mat = np.eye(1)
@@ -536,7 +534,7 @@ def test_to_mps() -> None:
     to the expected dimensions.
     """
     length = 3
-    J, g = 1.0, 0.5
+    J, g = 1.0, 0.5  # noqa: N806 -- Ising couplings match MPO.ising signature
 
     mpo = MPO.ising(length, J, g)
     mps = mpo.to_mps()
@@ -558,7 +556,7 @@ def test_check_if_valid_mpo() -> None:
     This test initializes an Ising MPO and calls check_if_valid_mpo, which should validate the MPO.
     """
     length = 4
-    J, g = 1.0, 0.5
+    J, g = 1.0, 0.5  # noqa: N806 -- Ising couplings match MPO.ising signature
 
     mpo = MPO.ising(length, J, g)
     mpo.check_if_valid_mpo()
@@ -571,7 +569,7 @@ def test_rotate() -> None:
     and that rotating back with conjugation returns tensors with the original physical dimensions.
     """
     length = 3
-    J, g = 1.0, 0.5
+    J, g = 1.0, 0.5  # noqa: N806 -- Ising couplings match MPO.ising signature
 
     mpo = MPO.ising(length, J, g)
     original_tensors = [t.copy() for t in mpo.tensors]
@@ -604,6 +602,20 @@ def test_check_if_identity() -> None:
     mpo.identity(length, pdim)
     fidelity_threshold = 0.9
     assert mpo.check_if_identity(fidelity_threshold) is True
+
+
+def test_identity_mpo_tensors_are_independent() -> None:
+    """Each site tensor in identity() must be a distinct array."""
+    mpo = MPO()
+    mpo.identity(3, physical_dimension=2)
+    assert mpo.tensors[0] is not mpo.tensors[1]
+
+
+def test_check_if_identity_non_qubit_physical_dimension() -> None:
+    """Identity check uses the MPO physical dimension, not the qubit default."""
+    mpo = MPO()
+    mpo.identity(2, physical_dimension=3)
+    assert mpo.check_if_identity(0.9) is True
 
 
 ##############################################################################

@@ -10,8 +10,8 @@ mystnb:
 # 1D Fermi-Hubbard Hamiltonian
 
 This example shows how to build a 1D Fermi-Hubbard Hamiltonian for analog simulation using
-{class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d` (backed by an MPO internally).
-You can also call {class}`~mqt.yaqs.core.data_structures.mpo.MPO.fermi_hubbard_1d` directly and wrap the result
+{meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d` (backed by an MPO internally).
+You can also call {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.fermi_hubbard_1d` directly and wrap the result
 with {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.from_mpo` for custom workflows.
 
 YAQS supports two representations:

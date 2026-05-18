@@ -111,7 +111,7 @@ def test_to_sparse_matrix_raises_without_data() -> None:
     """to_sparse_matrix raises when no backing data exists."""
     h = Hamiltonian.__new__(Hamiltonian)
     h.representation = "mpo"
-    h._encoded_as = None  # noqa: SLF001
+    h._encoded_as = None  # noqa: SLF001 -- white-box: Hamiltonian built via __new__ without caches
     h._matrix = None  # noqa: SLF001
     h._mpo = None  # noqa: SLF001
     h._sparse_matrix = None  # noqa: SLF001
@@ -123,24 +123,24 @@ def test_encode_sparse_raises_without_data() -> None:
     """_encode('sparse') fails when no specification is available."""
     h = Hamiltonian.__new__(Hamiltonian)
     h.representation = "mpo"
-    h._encoded_as = None  # noqa: SLF001
+    h._encoded_as = None  # noqa: SLF001 -- white-box: Hamiltonian built via __new__ without caches
     h._matrix = None  # noqa: SLF001
     h._mpo = None  # noqa: SLF001
     h._sparse_matrix = None  # noqa: SLF001
     with pytest.raises(ValueError, match="Cannot build sparse matrix"):
-        h._encode("sparse")  # noqa: SLF001
+        h._encode("sparse")  # noqa: SLF001 -- white-box: exercise private encode path
 
 
 def test_encode_dense_raises_without_data() -> None:
     """_encode('dense') fails when no specification is available."""
     h = Hamiltonian.__new__(Hamiltonian)
     h.representation = "dense"
-    h._encoded_as = None  # noqa: SLF001
+    h._encoded_as = None  # noqa: SLF001 -- white-box: Hamiltonian built via __new__ without caches
     h._matrix = None  # noqa: SLF001
     h._mpo = None  # noqa: SLF001
     h._sparse_matrix = None  # noqa: SLF001
     with pytest.raises(ValueError, match="Cannot build dense matrix"):
-        h._encode("dense")  # noqa: SLF001
+        h._encode("dense")  # noqa: SLF001 -- white-box: exercise private encode path
 
 
 def test_ensure_encoded_mpo_idempotent_when_already_materialized() -> None:
@@ -320,12 +320,12 @@ def test_ensure_encoded_dense_from_sparse_init() -> None:
 def test_build_mpo_raises_without_tensors() -> None:
     """_build_mpo fails when no tensor specification exists."""
     h = Hamiltonian.__new__(Hamiltonian)
-    h._mpo = None  # noqa: SLF001
+    h._mpo = None  # noqa: SLF001 -- white-box: Hamiltonian built via __new__ without caches
     h._tensors = None  # noqa: SLF001
     h._matrix = None  # noqa: SLF001
     h._sparse_matrix = None  # noqa: SLF001
     with pytest.raises(ValueError, match="No MPO specification available"):
-        h._build_mpo()  # noqa: SLF001
+        h._build_mpo()  # noqa: SLF001 -- white-box: exercise private build path
 
 
 def test_to_sparse_matrix_from_dense() -> None:
@@ -339,7 +339,7 @@ def test_to_matrix_raises_without_data() -> None:
     """to_matrix raises when no backing data exists."""
     h = Hamiltonian.__new__(Hamiltonian)
     h.representation = "mpo"
-    h._encoded_as = None  # noqa: SLF001
+    h._encoded_as = None  # noqa: SLF001 -- white-box: Hamiltonian built via __new__ without caches
     h._matrix = None  # noqa: SLF001
     h._mpo = None  # noqa: SLF001
     h._sparse_matrix = None  # noqa: SLF001
@@ -351,7 +351,7 @@ def test_build_mpo_raises_for_matrix_only() -> None:
     """Cannot build MPO from dense-only specification."""
     h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
     with pytest.raises(ValueError, match="Cannot build an MPO from matrix"):
-        h._build_mpo()  # noqa: SLF001
+        h._build_mpo()  # noqa: SLF001 -- white-box: exercise private build path
 
 
 def test_run_rejects_mpo_hamiltonian_with_mps_state() -> None:

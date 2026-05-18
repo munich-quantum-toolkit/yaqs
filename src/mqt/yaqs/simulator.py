@@ -1215,4 +1215,7 @@ def run(
         if not isinstance(operator, Hamiltonian):
             msg = "Analog simulation requires a Hamiltonian operator."
             raise TypeError(msg)
+        if not isinstance(initial_state, (State, list)):
+            msg = "Analog simulation requires initial_state to be a list or State."
+            raise TypeError(msg)
         _run_analog(initial_state, operator, sim_params, noise_model, parallel=parallel)

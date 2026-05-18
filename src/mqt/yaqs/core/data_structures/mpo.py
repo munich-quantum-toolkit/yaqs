@@ -597,7 +597,7 @@ class MPO:
 
         self.tensors = []
         for _ in range(length):
-            self.tensors.append(mat)
+            self.tensors.append(mat.copy())
 
     def finite_state_machine(
         self,
@@ -1175,7 +1175,7 @@ class MPO:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
         identity_mpo = MPO()
-        identity_mpo.identity(self.length)
+        identity_mpo.identity(self.length, physical_dimension=self.physical_dimension)
 
         identity_mps = identity_mpo.to_mps()
         mps = self.to_mps()

@@ -16,7 +16,7 @@ mystnb:
 
 This example demonstrates how to run an analog simulation of a chain consisting of transmon qubits and resonators using YAQS.
 
-An MPO Hamiltonian is initialized using a coupled transmon-resonator model. A [`State`](mqt.yaqs.core.data_structures.state.State) is prepared in a specific computational basis state. The system is evolved under a noise-free analog simulation using the Tensor Jump Method (TJM). Finally, expectation values for all computational basis states are collected and visualized.
+A {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` is initialized using a coupled transmon-resonator model. A {class}`~mqt.yaqs.core.data_structures.state.State` is prepared in a specific computational basis state. The system is evolved under a noise-free analog simulation using the Tensor Jump Method (TJM). Finally, expectation values for all computational basis states are collected and visualized.
 
 ## Define the system Hamiltonian
 

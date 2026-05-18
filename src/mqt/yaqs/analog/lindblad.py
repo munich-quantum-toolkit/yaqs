@@ -138,7 +138,7 @@ def preprocess_lindblad(
     else:
         assert initial_state is not None
         psi = initial_state.to_vec()
-        rho_vec = np.outer(psi, psi.conj()).flatten()
+        rho_vec = np.outer(psi, psi.conj()).flatten(order="F")
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     if h_sparse is not None:

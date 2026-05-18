@@ -32,6 +32,7 @@ from qiskit import QuantumCircuit
 from mqt.yaqs import simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
@@ -1115,6 +1116,19 @@ def test_analog_run_rejects_mpo_operator() -> None:
     )
     with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
         simulator.run(state, cast("Any", mpo), params, None)
+
+
+def test_analog_run_rejects_non_state_initial_state() -> None:
+    """Analog simulation requires initial_state to be State or list[State]."""
+    h = Hamiltonian.ising(2, J=1.0, g=0.5)
+    params = AnalogSimParams(
+        observables=[Observable("z", sites=[0])],
+        elapsed_time=0.1,
+        dt=0.1,
+        show_progress=False,
+    )
+    with pytest.raises(TypeError, match="Analog simulation requires initial_state to be a list or State"):
+        simulator.run(cast("Any", MPS(2, state="zeros")), h, params, None)
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:
