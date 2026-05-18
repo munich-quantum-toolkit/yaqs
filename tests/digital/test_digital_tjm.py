@@ -436,6 +436,7 @@ def test_noisy_digital_tjm_matches_reference() -> None:
         num_mid_measurements=4,
         num_traj=800,
         show_progress=False,
+        random_seed=7,
     )
     state = State(num_qubits, initial="zeros", pad=2)
     simulator.run(state, qc, sim_params, noise_model, parallel=False)
@@ -505,6 +506,7 @@ def test_digital_tjm_longrange_noise() -> None:
         num_mid_measurements=num_layers - 1,
         num_traj=200,  # Reduced from 400 for faster execution
         show_progress=False,
+        random_seed=9,
     )
 
     state = State(num_qubits, initial="zeros", pad=2)

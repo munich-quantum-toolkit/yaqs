@@ -268,6 +268,7 @@ def test_analog_simulation_twositeprocesses() -> None:
         order=2,
         sample_timesteps=True,
         show_progress=False,
+        random_seed=2024,
     )
 
     # Setup noise model with single-site and two-site crosstalk processes
@@ -393,6 +394,7 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
         order=2,
         sample_timesteps=True,
         show_progress=False,
+        random_seed=2024,
     )
 
     gamma_single = 0.02
