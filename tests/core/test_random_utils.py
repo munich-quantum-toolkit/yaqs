@@ -28,12 +28,9 @@ from mqt.yaqs.core.random_utils import make_trajectory_rng
 
 def test_make_trajectory_rng_reproducible_per_index() -> None:
     """Same base seed and traj index yield identical streams."""
-    rng_a = make_trajectory_rng(3, base_seed=100)
-    rng_b = make_trajectory_rng(3, base_seed=100)
-    assert rng_a.random() == rng_b.random()
+    assert make_trajectory_rng(3, base_seed=100).random() == make_trajectory_rng(3, base_seed=100).random()
 
-    rng_other = make_trajectory_rng(4, base_seed=100)
-    assert rng_a.random() != rng_other.random()
+    assert make_trajectory_rng(3, base_seed=100).random() != make_trajectory_rng(4, base_seed=100).random()
 
 
 def test_make_trajectory_rng_none_returns_generator() -> None:

@@ -24,7 +24,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    AnalogSimParams,
+    Observable,
+    StrongSimParams,
+    WeakSimParams,
+)
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
 
 
@@ -403,3 +408,37 @@ def test_strong_aggregate_schmidt_requires_array() -> None:
 
     with pytest.raises(AssertionError):
         params.aggregate_trajectories()
+
+
+@pytest.mark.parametrize(
+    ("param_cls", "kwargs"),
+    [
+        (AnalogSimParams, {}),
+        (WeakSimParams, {"shots": 1}),
+        (StrongSimParams, {}),
+    ],
+)
+def test_random_seed_rejects_invalid_type(
+    param_cls: type[AnalogSimParams | WeakSimParams | StrongSimParams],
+    kwargs: dict[str, object],
+) -> None:
+    """random_seed must be None or int."""
+    with pytest.raises(TypeError, match="random_seed must be int or None"):
+        param_cls(random_seed="not-a-seed", **kwargs)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize(
+    ("param_cls", "kwargs"),
+    [
+        (AnalogSimParams, {}),
+        (WeakSimParams, {"shots": 1}),
+        (StrongSimParams, {}),
+    ],
+)
+def test_random_seed_rejects_negative(
+    param_cls: type[AnalogSimParams | WeakSimParams | StrongSimParams],
+    kwargs: dict[str, object],
+) -> None:
+    """random_seed must be non-negative when set."""
+    with pytest.raises(ValueError, match="random_seed must be non-negative"):
+        param_cls(random_seed=-1, **kwargs)  # ty: ignore[invalid-argument-type]

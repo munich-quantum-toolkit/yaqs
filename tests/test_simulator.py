@@ -44,8 +44,7 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.simulator import _get_parallel_context, worker_init  # noqa: PLC2701
-
-YAQS_TEST_SEED = 42
+from tests.conftest import YAQS_TEST_SEED
 
 
 def test_available_cpus_without_slurm(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -32,6 +32,26 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
+def _validate_random_seed(random_seed: int | None) -> None:
+    """Validate ``random_seed`` before storing it on simulation parameter objects.
+
+    Args:
+        random_seed: Base seed for reproducible stochastic runs, or ``None`` for unseeded RNG.
+
+    Raises:
+        TypeError: If ``random_seed`` is not ``None`` or an ``int``.
+        ValueError: If ``random_seed`` is negative.
+    """
+    if random_seed is None:
+        return
+    if isinstance(random_seed, bool) or not isinstance(random_seed, int):
+        msg = f"random_seed must be int or None, got {type(random_seed).__name__}."
+        raise TypeError(msg)
+    if random_seed < 0:
+        msg = f"random_seed must be non-negative, got {random_seed}."
+        raise ValueError(msg)
+
+
 class EvolutionMode(Enum):
     """Enumerates the different modes of tensor evolution in the simulation."""
 
@@ -214,6 +234,7 @@ class AnalogSimParams:
                 case ``(O, O)``.
 
         """
+        _validate_random_seed(random_seed)
         self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
@@ -336,25 +357,18 @@ class WeakSimParams:
 
         Initializes parameters for a weak circuit simulation.
 
-        Parameters
-        ----------
-        shots : int
-            Number of measurement shots to simulate.
-        max_bond_dim : int, optional
-            Maximum bond dimension for simulation, by default 2.
-        min_bond_dim:
-            The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-        trunc_mode:
-            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-        threshold : float, optional
-            Accuracy threshold for truncating tensors, by default 1e-6.
-        get_state:
-            If True, store the final state in output_state as a State.
-        show_progress:
-            If True, a progress bar is printed as trajectories finish.
-        random_seed:
-            If set, makes per-shot jump RNG reproducible.
+        Args:
+            shots: Number of measurement shots to simulate.
+            max_bond_dim: Maximum bond dimension for simulation.
+            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
+            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            threshold: Accuracy threshold for truncating tensors.
+            get_state: If ``True``, store the final state in :attr:`output_state` as a
+                :class:`~mqt.yaqs.core.data_structures.state.State`.
+            show_progress: If ``True``, print a progress bar as trajectories finish.
+            random_seed: If set, makes per-shot jump RNG reproducible.
         """
+        _validate_random_seed(random_seed)
         self.noise_model: NoiseModel | None = None
         self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
@@ -461,28 +475,22 @@ class StrongSimParams:
 
         Initializes parameters for a strong quantum circuit simulation.
 
-        Parameters
-        ----------
-        observables : list[Observable]
-            List of observables to measure during simulation.
-        num_traj : int, optional
-            Number of trajectories to simulate, by default 1000.
-        max_bond_dim : int, optional
-            Maximum bond dimension allowed in simulation, by default 2.
-        trunc_mode :
-            The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-        threshold : float, optional
-            Threshold for simulation accuracy, by default 1e-6.
-        get_state:
-            If True, store the final state in output_state as a State.
-        show_progress:
-            If True, a progress bar is printed as trajectories finish.
-        num_threads:
-            Number of threads to use for single-trajectory simulations (BLAS/LAPACK).
-            Defaults to 1 for efficiency on small/medium bond dimensions.
-        random_seed:
-            If set, makes stochastic trajectories and noise-model sampling reproducible.
+        Args:
+            observables: List of observables to measure during simulation.
+            num_traj: Number of trajectories to simulate.
+            max_bond_dim: Maximum bond dimension allowed in simulation.
+            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
+            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            threshold: Threshold for simulation accuracy.
+            get_state: If ``True``, store the final state in :attr:`output_state` as a
+                :class:`~mqt.yaqs.core.data_structures.state.State`.
+            sample_layers: If ``True``, record observables at sampled circuit layers.
+            num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
+            show_progress: If ``True``, print a progress bar as trajectories finish.
+            num_threads: Number of threads for single-trajectory BLAS/LAPACK work.
+            random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
         """
+        _validate_random_seed(random_seed)
         self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (

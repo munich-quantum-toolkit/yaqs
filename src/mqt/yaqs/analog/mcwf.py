@@ -257,7 +257,7 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
     if sim_params.random_seed is not None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
     else:
-        rng = np.random.default_rng(int(traj_idx))
+        rng = np.random.default_rng()
 
     num_obs = len(sim_params.sorted_observables)
     num_steps = len(sim_params.times)
