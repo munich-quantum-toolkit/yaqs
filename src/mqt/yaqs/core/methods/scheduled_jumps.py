@@ -7,7 +7,7 @@
 
 """Scheduled Noise Jumps.
 
-This module implements functions for applying scheduled noise jumps to a Matrix Product MPS (MPS)
+This module implements functions for applying scheduled noise jumps to a Matrix Product State (MPS)
 during an analog simulation.
 """
 
@@ -52,13 +52,13 @@ def apply_scheduled_jumps(
     """Apply scheduled jumps to the state.
 
     Args:
-        state: The current Matrix Product MPS.
+        state: The current Matrix Product State (MPS).
         noise_model: The noise model containing scheduled jumps.
         time: The current simulation time.
         sim_params: Simulation parameters.
 
     Returns:
-        The updated Matrix Product MPS.
+        The updated Matrix Product State (MPS).
 
     Raises:
         ValueError: If a two-site jump acts on non-adjacent sites.

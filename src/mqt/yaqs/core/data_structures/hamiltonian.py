@@ -21,7 +21,7 @@ from .hamiltonian_utils import (
     validate_representation,
 )
 from .mpo import MPO
-from .state_utils import infer_qubit_length
+from .state_utils import infer_chain_length
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -64,8 +64,13 @@ class Hamiltonian:
             physical_dimension: Local Hilbert-space dimension for MPO construction from ``tensors``.
 
         Raises:
-            ValueError: If no manual data is given, data are mutually exclusive, or shapes are invalid.
+            ValueError: If no manual data is given, data are mutually exclusive, shapes are invalid,
+                or ``physical_dimension`` is not positive.
         """
+        if physical_dimension <= 0:
+            msg = "physical_dimension must be a positive integer."
+            raise ValueError(msg)
+
         manual = [tensors is not None, matrix is not None, sparse_matrix is not None]
         if sum(manual) != 1:
             msg = "Pass exactly one of tensors, matrix, or sparse_matrix, or use a classmethod preset."
@@ -100,7 +105,7 @@ class Hamiltonian:
                 raise ValueError(msg)
             hilbert_dim = mat.shape[0]
             if length is None:
-                self.length = infer_qubit_length(hilbert_dim)
+                self.length = infer_chain_length(hilbert_dim, physical_dimension=physical_dimension)
             else:
                 expected = physical_dimension**length
                 if hilbert_dim != expected:
@@ -120,7 +125,7 @@ class Hamiltonian:
                 msg = "sparse_matrix must be square."
                 raise ValueError(msg)
             if length is None:
-                self.length = infer_qubit_length(hilbert_dim)
+                self.length = infer_chain_length(hilbert_dim, physical_dimension=physical_dimension)
             else:
                 expected = physical_dimension**length
                 if hilbert_dim != expected:

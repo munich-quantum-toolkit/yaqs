@@ -646,7 +646,10 @@ class MPO:
                 self.tensors[i] = np.transpose(tensor, (2, 3, 0, 1))
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
         self.length = len(self.tensors)
-        self.physical_dimension = tensors[0].shape[0]
+        if transpose:
+            self.physical_dimension = self.tensors[0].shape[0]
+        else:
+            self.physical_dimension = self.tensors[0].shape[2]
 
     def from_pauli_sum(
         self,
@@ -1158,7 +1161,8 @@ class MPO:
         """
         right_bond = self.tensors[0].shape[3]
         for tensor in self.tensors[1::]:
-            assert tensor.shape[2] == right_bond
+            if tensor.shape[2] != right_bond:
+                return False
             right_bond = tensor.shape[3]
         return True
 
@@ -1181,8 +1185,9 @@ class MPO:
         mps = self.to_mps()
         trace = mps.scalar_product(identity_mps)
 
+        hilbert_dim = self.physical_dimension**self.length
         # Checks if trace is not a singular values for partial trace
-        return not np.round(np.abs(trace), 1) / 2**self.length < fidelity
+        return not np.round(np.abs(trace), 1) / hilbert_dim < fidelity
 
     @classmethod
     def _parse_pauli_string(cls, spec: str) -> dict[int, str]:

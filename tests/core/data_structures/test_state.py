@@ -105,7 +105,7 @@ def test_ensure_encoded_invalid_representation_raises() -> None:
     """Unknown representation strings raise ValueError."""
     psi = State(2, initial="zeros")
     with pytest.raises(ValueError, match=r"Invalid representation 'invalid'"):
-        psi.ensure_encoded(cast("Any", "invalid"))
+        psi.ensure_encoded(cast(Any, "invalid"))  # noqa: TC006
 
 
 def test_initial_kwarg_builds_mps() -> None:

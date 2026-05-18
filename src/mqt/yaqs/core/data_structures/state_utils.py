@@ -232,17 +232,38 @@ def infer_qubit_length(hilbert_dim: int) -> int:
 
     Returns:
         Number of qubits ``n``.
+    """
+    return infer_chain_length(hilbert_dim, physical_dimension=2)
+
+
+def infer_chain_length(hilbert_dim: int, *, physical_dimension: int) -> int:
+    """Infer chain length from ``hilbert_dim == physical_dimension**length``.
+
+    Args:
+        hilbert_dim: Dimension of the Hilbert space.
+        physical_dimension: Local Hilbert-space dimension at each site.
+
+    Returns:
+        Number of sites ``length``.
 
     Raises:
-        ValueError: If ``hilbert_dim`` is not a positive power of two.
+        ValueError: If ``physical_dimension`` is not positive or ``hilbert_dim`` is not an
+            exact power of ``physical_dimension``.
     """
-    if hilbert_dim < 1 or (hilbert_dim & (hilbert_dim - 1)) != 0:
+    if physical_dimension <= 0:
+        msg = "physical_dimension must be a positive integer."
+        raise ValueError(msg)
+    if hilbert_dim < 1:
+        msg = f"Hilbert-space dimension {hilbert_dim} must be positive."
+        raise ValueError(msg)
+    length = round(np.log(hilbert_dim) / np.log(physical_dimension))
+    if physical_dimension**length != hilbert_dim:
         msg = (
-            f"Hilbert-space dimension {hilbert_dim} is not a power of two; "
-            "pass ``length`` explicitly for non-uniform physical dimensions."
+            f"Hilbert-space dimension {hilbert_dim} is not physical_dimension**length "
+            f"for physical_dimension={physical_dimension}; pass ``length`` explicitly."
         )
         raise ValueError(msg)
-    return int(hilbert_dim.bit_length() - 1)
+    return int(length)
 
 
 def normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:

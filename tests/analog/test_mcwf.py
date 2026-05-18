@@ -9,9 +9,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
+import pytest
+import scipy.sparse
 
 import mqt.yaqs.analog.mcwf as mcwf_mod
 from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, mcwf, preprocess_mcwf
@@ -22,9 +22,6 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.simulator import run
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def test_mcwf_amplitude_damping() -> None:
@@ -175,6 +172,15 @@ def test_mcwf_zero_strength_noise() -> None:
     dim = 2**n_sites
     assert ctx.step_propagator is not None
     assert ctx.step_propagator.shape == (dim, dim)
+
+
+def test_preprocess_mcwf_rejects_mismatched_h_sparse_shape() -> None:
+    """h_sparse must match the Hilbert dimension implied by the initial state."""
+    psi = MPS(2, state="zeros")
+    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[])
+    bad_h = scipy.sparse.eye(8, format="csr")
+    with pytest.raises(ValueError, match=r"h_sparse must have shape \(4, 4\)"):
+        preprocess_mcwf(psi, None, None, sim_params, h_sparse=bad_h)
 
 
 def test_preprocess_mcwf_sets_propagator_small_system() -> None:

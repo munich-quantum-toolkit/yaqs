@@ -123,6 +123,13 @@ def _heisenberg_dense(length: int, jx: float, jy: float, jz: float, h: float) ->
 def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: float, hubbard_u: float) -> np.ndarray:
     """Construct the exact dense Bose-Hubbard Hamiltonian for comparison.
 
+    Args:
+        length: Number of lattice sites.
+        local_dim: Local Hilbert-space dimension per site.
+        omega: On-site chemical potential.
+        hopping_j: Nearest-neighbor hopping amplitude.
+        hubbard_u: On-site interaction strength.
+
     Returns:
         Dense Hamiltonian matrix.
     """
@@ -168,8 +175,13 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
 def _embed_local_ops(length: int, local_dim: int, site_ops: list[np.ndarray]) -> np.ndarray:
     """Embed a list of single-site operators into the full Hilbert space.
 
+    Args:
+        length: Number of lattice sites.
+        local_dim: Local Hilbert-space dimension per site.
+        site_ops: One operator per site (length ``length``).
+
     Returns:
-        np.ndarray: The embedded operator on the full chain Hilbert space.
+        The embedded operator on the full chain Hilbert space.
     """
     identity = np.eye(local_dim, dtype=complex)
     op_list = [identity] * length
@@ -189,8 +201,13 @@ def _fermi_hubbard_1d_fermionic_dense(length: int, t: float, u: float) -> np.nda
     + U \\sum_i n_{i,\\uparrow} n_{i,\\downarrow}` on local dimension-4 sites
     (basis :math:`|0\\rangle, |\\!\\downarrow\\rangle, |\\!\\uparrow\\rangle, |\\!\\uparrow\\downarrow\\rangle`).
 
+    Args:
+        length: Number of fermionic lattice sites.
+        t: Hopping amplitude.
+        u: On-site interaction strength.
+
     Returns:
-        np.ndarray: Dense Hamiltonian matrix of shape ``(4**length, 4**length)``.
+        Dense Hamiltonian matrix of shape ``(4**length, 4**length)``.
     """
     local_dim = 4
     c = np.array([[0, 1], [0, 0]], dtype=complex)
@@ -234,8 +251,13 @@ def _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals: int, t: float, u: float)
     ``num_orbitals`` must be even. Orbitals are ordered 1↑, 1↓, 2↑, 2↓, ...
     and the Hamiltonian matches the docstring of ``MPO.fermi_hubbard_1d(..., jordan_wigner=True)``.
 
+    Args:
+        num_orbitals: Number of spin orbitals (must be even).
+        t: Hopping amplitude.
+        u: On-site interaction strength.
+
     Returns:
-        np.ndarray: Dense Hamiltonian matrix of shape ``(2**num_orbitals, 2**num_orbitals)``.
+        Dense Hamiltonian matrix of shape ``(2**num_orbitals, 2**num_orbitals)``.
 
     Raises:
         ValueError: If ``num_orbitals`` is odd.
@@ -447,6 +469,18 @@ def test_finite_state_machine() -> None:
     assert np.allclose(mpo.tensors[-1], np.transpose(right_bound, (2, 3, 0, 1)))
 
 
+def test_custom_without_transpose_sets_physical_dimension() -> None:
+    """custom(transpose=False) reads the physical index from axis 2."""
+    pdim = 3
+    tensors = [
+        rng.random(size=(1, 2, pdim, pdim)).astype(np.complex128),
+        rng.random(size=(2, 1, pdim, pdim)).astype(np.complex128),
+    ]
+    mpo = MPO()
+    mpo.custom(tensors, transpose=False)
+    assert mpo.physical_dimension == pdim
+
+
 def test_custom() -> None:
     """Test that custom correctly sets up an MPO from a user-provided list of tensors.
 
@@ -468,7 +502,7 @@ def test_custom() -> None:
     assert mpo.physical_dimension == pdim
     assert len(mpo.tensors) == length
 
-    for original, created in zip(tensors, mpo.tensors, strict=False):
+    for original, created in zip(tensors, mpo.tensors, strict=True):
         assert original.shape == created.shape
         assert np.allclose(original, created)
 
@@ -483,8 +517,6 @@ def test_from_matrix() -> None:
     - random matrices at moderately truncated bond dimension
     - all validation error branches (Codecov)
     """
-    rng = np.random.default_rng()
-
     length = 5
     d = 3  # local dimension
     H = _bose_hubbard_dense(length, d, 0.9, 0.6, 0.2)  # noqa: N806 -- dense Hamiltonian matrix
@@ -559,7 +591,15 @@ def test_check_if_valid_mpo() -> None:
     J, g = 1.0, 0.5  # noqa: N806 -- Ising couplings match MPO.ising signature
 
     mpo = MPO.ising(length, J, g)
-    mpo.check_if_valid_mpo()
+    assert mpo.check_if_valid_mpo() is True
+
+
+def test_check_if_valid_mpo_detects_bond_mismatch() -> None:
+    """Invalid bond dimensions return False instead of asserting."""
+    mpo = MPO.ising(3, 1.0, 0.5)
+    mpo.tensors[1] = mpo.tensors[1].copy()
+    mpo.tensors[1] = np.zeros((2, 2, 2, 99), dtype=np.complex128)
+    assert mpo.check_if_valid_mpo() is False
 
 
 def test_rotate() -> None:
@@ -575,7 +615,7 @@ def test_rotate() -> None:
     original_tensors = [t.copy() for t in mpo.tensors]
 
     mpo.rotate(conjugate=False)
-    for orig, rotated in zip(original_tensors, mpo.tensors, strict=False):
+    for orig, rotated in zip(original_tensors, mpo.tensors, strict=True):
         assert rotated.shape == (
             orig.shape[1],
             orig.shape[0],

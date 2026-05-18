@@ -210,7 +210,7 @@ def _lindblad_rhs_flat(
     Returns:
         Flattened time derivative of the density matrix.
     """
-    rho = rho_flat.reshape((dim, dim))
+    rho = rho_flat.reshape((dim, dim), order="F")
     h_any = cast("Any", h_mat)
 
     # Unitary part: -i [H, rho] = -i (H rho - rho H).
@@ -225,7 +225,7 @@ def _lindblad_rhs_flat(
     ac_term = 0.5 * (l_sum_any @ rho + rho @ l_sum_any)
     drho -= ac_term
 
-    return drho.flatten()
+    return drho.flatten(order="F")
 
 
 def _build_liouvillian_superoperator(
@@ -263,7 +263,7 @@ def _measure_rho(
     t_idx: int,
 ) -> None:
     """Record <O> = Tr(O rho) for each observable at time index ``t_idx``."""
-    rho_t = rho_flat.reshape((dim, dim))
+    rho_t = rho_flat.reshape((dim, dim), order="F")
     for i, op_mat in enumerate(ctx.embedded_observables):
         if op_mat is not None:
             op_any = cast("Any", op_mat)

@@ -1115,7 +1115,7 @@ def test_analog_run_rejects_mpo_operator() -> None:
         show_progress=False,
     )
     with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
-        simulator.run(state, cast("Any", mpo), params, None)
+        simulator.run(state, cast(Any, mpo), params, None)  # noqa: TC006
 
 
 def test_analog_run_rejects_non_state_initial_state() -> None:
@@ -1128,7 +1128,7 @@ def test_analog_run_rejects_non_state_initial_state() -> None:
         show_progress=False,
     )
     with pytest.raises(TypeError, match="Analog simulation requires initial_state to be a list or State"):
-        simulator.run(cast("Any", MPS(2, state="zeros")), h, params, None)
+        simulator.run(cast(Any, MPS(2, state="zeros")), h, params, None)  # noqa: TC006
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:

@@ -71,6 +71,18 @@ def test_hamiltonian_matrix_explicit_length() -> None:
     assert h.length == 2
 
 
+def test_hamiltonian_matrix_infers_length_from_physical_dimension() -> None:
+    """Dense matrix init infers length using physical_dimension as the local base."""
+    h = Hamiltonian(matrix=np.eye(9, dtype=np.complex128), physical_dimension=3)
+    assert h.length == 2
+
+
+def test_hamiltonian_rejects_nonpositive_physical_dimension() -> None:
+    """physical_dimension must be strictly positive."""
+    with pytest.raises(ValueError, match="physical_dimension must be a positive integer"):
+        Hamiltonian(matrix=np.eye(4, dtype=np.complex128), physical_dimension=0)
+
+
 def test_hamiltonian_sparse_rejects_conflicting_representation() -> None:
     """representation= must not contradict sparse_matrix=."""
     sparse = scipy.sparse.eye(4, dtype=np.complex128, format="csr")

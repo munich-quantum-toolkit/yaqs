@@ -251,6 +251,9 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
 
     sequence_weight = 1.0
 
+    if not is_vector:
+        hamiltonian.ensure_encoded("mpo")
+
     # We only need the final output state after all evolution steps
     def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
         if isinstance(state, np.ndarray):
@@ -314,7 +317,6 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         else:
             backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
             assert isinstance(current_state, MPS)
-            hamiltonian.ensure_encoded("mpo")
             backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
             assert step_params.output_state is not None
             current_state = step_params.output_state.mps

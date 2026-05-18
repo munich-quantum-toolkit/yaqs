@@ -14,6 +14,7 @@ import pytest
 
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.data_structures.state_utils import (
+    infer_chain_length,
     infer_qubit_length,
     local_vector_for_preset,
     normalize_density_matrix,
@@ -65,10 +66,15 @@ def test_resolve_physical_dimensions_rejects_nonpositive_list_element() -> None:
         resolve_physical_dimensions(2, [2, -1])
 
 
+def test_infer_chain_length_general_base() -> None:
+    """Chain length is inferred from Hilbert dimension and local dimension."""
+    assert infer_chain_length(9, physical_dimension=3) == 2
+
+
 def test_infer_qubit_length_power_of_two() -> None:
     """Hilbert dimension must be a positive power of two."""
     assert infer_qubit_length(4) == 2
-    with pytest.raises(ValueError, match="not a power of two"):
+    with pytest.raises(ValueError, match="is not physical_dimension\\*\\*length"):
         infer_qubit_length(6)
 
 
