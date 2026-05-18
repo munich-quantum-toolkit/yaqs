@@ -7,6 +7,9 @@
 
 """Tests for trajectory RNG helpers and reproducible simulation."""
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 import copy
@@ -39,8 +42,8 @@ def test_make_trajectory_rng_none_returns_generator() -> None:
     assert isinstance(rng, np.random.Generator)
 
 
-@pytest.mark.parametrize("parallel", [False, True])
-def test_analog_run_reproducible_with_random_seed(parallel: bool) -> None:
+@pytest.mark.parametrize("run_parallel", [False, True])
+def test_analog_run_reproducible_with_random_seed(*, run_parallel: bool) -> None:
     """Two runs with the same random_seed produce identical aggregated observables."""
     length = 3
     state = State(length, initial="zeros", pad=4)
@@ -61,7 +64,7 @@ def test_analog_run_reproducible_with_random_seed(parallel: bool) -> None:
             show_progress=False,
             random_seed=2025,
         )
-        simulator.run(st, H, params, copy.deepcopy(noise_model), parallel=parallel)
+        simulator.run(st, H, params, copy.deepcopy(noise_model), parallel=run_parallel)
         return [float(np.real(obs.results[0])) for obs in params.observables if obs.results is not None]
 
     first = run_once()

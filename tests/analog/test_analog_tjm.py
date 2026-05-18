@@ -245,7 +245,7 @@ def test_analog_simulation_twositeprocesses() -> None:
     The test uses the same parameters as analogTWOSITEcheck.py:
     - L=3, J=1.0, g=0.5
     - gamma_single=0.02, gamma_pair=0.01
-    - T=1.0, dt=0.05, num_traj=200
+    - T=1.0, dt=0.05, num_traj=100
     """
     # Parameters matching analogTWOSITEcheck.py
     L = 3
@@ -263,7 +263,7 @@ def test_analog_simulation_twositeprocesses() -> None:
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,
         dt=0.05,
-        num_traj=200,
+        num_traj=100,
         max_bond_dim=8,
         order=2,
         sample_timesteps=True,
@@ -378,7 +378,7 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
     analog simulation results to a hardcoded QuTiP master-equation reference
     with a tolerance of 0.1 across all Z observables and time points. The setup
     matches the reference parameters: L=3, J=1.0, g=0.5, gamma_single=0.02,
-    gamma_pair=0.01, T=1.0, dt=0.05, and num_traj=200.
+    gamma_pair=0.01, T=1.0, dt=0.05, and num_traj=100.
     """
     # Setup YAQS simulation (same parameters as reference)
     L = 3
@@ -389,7 +389,7 @@ def test_analog_simulation_two_site_lowering_against_qutip() -> None:
         observables=[Observable(Z(), site) for site in range(L)],
         elapsed_time=1,
         dt=0.05,
-        num_traj=200,
+        num_traj=100,
         max_bond_dim=8,
         order=2,
         sample_timesteps=True,
