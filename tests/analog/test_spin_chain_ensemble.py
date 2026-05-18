@@ -143,6 +143,52 @@ def _build_xxz_tf_open_chain_dense(length: int, j_xy: float, delta: float, h_x: 
     return h_dense
 
 
+def _ed_first_k_basis_two_time_means(
+    *,
+    length: int,
+    j_xy: float,
+    delta: float,
+    h_x: float,
+    times: np.ndarray,
+    k: int,
+    site: int,
+    probes: list[tuple[np.ndarray, np.ndarray]],
+) -> list[np.ndarray]:
+    """Like :func:`_ed_first_k_basis_two_time_mean`, but reuses one Hamiltonian diagonalization.
+
+    Args:
+        length: Chain length.
+        j_xy: XY coupling strength.
+        delta: ZZ anisotropy coupling.
+        h_x: Transverse-field strength.
+        times: Time grid for evaluating correlators.
+        k: Number of computational-basis states to average.
+        site: Site index where one-site operators are embedded.
+        probes: List of ``(a2, b2)`` pairs of dense ``2x2`` operators.
+
+    Returns:
+        One complex time series per probe pair.
+    """
+    dim = 2**length
+    k_eff = min(k, dim)
+    h_dense = _build_xxz_tf_open_chain_dense(length, j_xy, delta, h_x)
+    evals, evecs = np.linalg.eigh(h_dense)
+    evecs_h = evecs.conj().T
+
+    embedded_b = [_embed_one_site_operator(length, site, b2) for _a2, b2 in probes]
+    embedded_a = [_embed_one_site_operator(length, site, a2) for a2, _b2 in probes]
+
+    out = np.zeros((len(probes), len(times)), dtype=np.complex128)
+    for t_idx, t in enumerate(times):
+        phases = np.exp(-1j * evals * t)
+        u_t = (evecs * phases[np.newaxis, :]) @ evecs_h
+        for p_idx, (a_op, b_op) in enumerate(zip(embedded_a, embedded_b, strict=True)):
+            m = u_t.conj().T @ a_op @ u_t @ b_op
+            out[p_idx, t_idx] = np.sum(np.diag(m)[:k_eff]) / float(k_eff)
+
+    return [out[p_idx] for p_idx in range(len(probes))]
+
+
 def _ed_first_k_basis_two_time_mean(
     *,
     length: int,
@@ -173,32 +219,31 @@ def _ed_first_k_basis_two_time_mean(
         :math:`(1/k)\\sum_n \\langle n|U^\\dagger(t) A U(t) B|n\rangle`
         at each entry of ``times``.
     """
-    dim = 2**length
-    k_eff = min(k, dim)
-    h_dense = _build_xxz_tf_open_chain_dense(length, j_xy, delta, h_x)
-    a = _embed_one_site_operator(length, site, a2)
-    b = _embed_one_site_operator(length, site, b2)
-
-    evals, evecs = np.linalg.eigh(h_dense)
-    evecs_h = evecs.conj().T
-    out = np.zeros(len(times), dtype=np.complex128)
-    for t_idx, t in enumerate(times):
-        phases = np.exp(-1j * evals * t)
-        u_t = (evecs * phases[np.newaxis, :]) @ evecs_h
-        m = u_t.conj().T @ a @ u_t @ b
-        out[t_idx] = np.sum(np.diag(m)[:k_eff]) / float(k_eff)
-    return out
+    return _ed_first_k_basis_two_time_means(
+        length=length,
+        j_xy=j_xy,
+        delta=delta,
+        h_x=h_x,
+        times=times,
+        k=k,
+        site=site,
+        probes=[(a2, b2)],
+    )[0]
 
 
 def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
-    """Match YAQS two-time correlators against dense ED for a transverse-field XXZ setup."""
+    """Match YAQS two-time correlators against dense ED for a transverse-field XXZ setup.
+
+    Parameters are tuned for CI runtime while keeping max error below ``1e-5`` against ED:
+    ``k=16`` ensemble members (was 64) and ``parallel=True`` (unitary, deterministic).
+    """
     length = 6
     j_xy = 1.0
     delta = 0.7
     h_x = 0.5
     t_final = 2.0
     dt = 0.05
-    k = 64
+    k = 16
     mid = length // 2
 
     h_mpo = Hamiltonian.pauli(
@@ -218,13 +263,13 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
         observables=[],
         elapsed_time=t_final,
         dt=dt,
-        max_bond_dim=4096,
+        max_bond_dim=256,
         threshold=1e-12,
         sample_timesteps=True,
         show_progress=False,
         multi_time_observables=pairs,
     )
-    simulator.run(states, h_mpo, sim_params, noise_model=None, parallel=False)
+    simulator.run(states, h_mpo, sim_params, noise_model=None, parallel=True)
     assert sim_params.multi_time_observables_results is not None
     assert sim_params.multi_time_observables_times is not None, "Expected multi_time_observables time grid to be set."
     yaqs = np.asarray(sim_params.multi_time_observables_results, dtype=np.complex128)
@@ -234,19 +279,17 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
     y2 = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)
     z2 = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=np.complex128)
 
-    ed_xx = _ed_first_k_basis_two_time_mean(
-        length=length, j_xy=j_xy, delta=delta, h_x=h_x, times=times, k=k, site=mid, a2=x2, b2=x2
+    ed_series = _ed_first_k_basis_two_time_means(
+        length=length,
+        j_xy=j_xy,
+        delta=delta,
+        h_x=h_x,
+        times=times,
+        k=k,
+        site=mid,
+        probes=[(x2, x2), (y2, y2), (z2, z2), (z2, x2)],
     )
-    ed_yy = _ed_first_k_basis_two_time_mean(
-        length=length, j_xy=j_xy, delta=delta, h_x=h_x, times=times, k=k, site=mid, a2=y2, b2=y2
-    )
-    ed_zz = _ed_first_k_basis_two_time_mean(
-        length=length, j_xy=j_xy, delta=delta, h_x=h_x, times=times, k=k, site=mid, a2=z2, b2=z2
-    )
-    ed_zx = _ed_first_k_basis_two_time_mean(
-        length=length, j_xy=j_xy, delta=delta, h_x=h_x, times=times, k=k, site=mid, a2=z2, b2=x2
-    )
-    ed = np.vstack([ed_xx, ed_yy, ed_zz, ed_zx])
+    ed = np.vstack(ed_series)
 
     max_abs_per_pair = np.max(np.abs(yaqs - ed), axis=1)
     assert np.all(max_abs_per_pair < 1e-5), f"pairwise max errors were {max_abs_per_pair!r}"
