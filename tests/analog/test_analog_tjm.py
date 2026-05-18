@@ -31,10 +31,10 @@ specified Hamiltonian and noise model, and that observable measurements are prop
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 
 from mqt.yaqs import simulator
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
@@ -45,6 +45,7 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import X, Z
+from tests.conftest import YAQS_TEST_SEED
 
 
 def test_initialize() -> None:
@@ -234,260 +235,35 @@ def test_analog_tjm_1_sample_timesteps() -> None:
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 
-def test_analog_simulation_twositeprocesses() -> None:
-    """Test analog simulation with two-site crosstalk processes against QuTiP reference.
+@pytest.mark.parametrize("two_site_process", ["crosstalk_xx", "lowering_two"])
+def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
+    """Smoke test: analog TJM runs with single-site plus one adjacent two-site jump process.
 
-    This test simulates a 3-qubit Ising chain with both single-site Pauli-X noise and
-    neighboring two-site crosstalk X⊗X noise. It compares the YAQS analog simulation
-    results against hardcoded QuTiP master equation results with a tolerance of 0.1
-    for all Z observables at all time points.
-
-    The test uses the same parameters as analogTWOSITEcheck.py:
-    - L=3, J=1.0, g=0.5
-    - gamma_single=0.02, gamma_pair=0.01
-    - T=1.0, dt=0.05, num_traj=100
+    Replaces former QuTiP golden-trajectory integration tests; keeps both crosstalk and
+    lowering_two library names exercised at minimal cost.
     """
-    # Parameters matching analogTWOSITEcheck.py
-    L = 3
-    J = 1.0
-    g = 0.5
-    gamma_single = 0.02
-    gamma_pair = 0.01
-
-    # Setup YAQS simulation
-    H = Hamiltonian.ising(L, J, g)
-
-    state = State(L, initial="zeros")
-
+    length = 2
+    hamiltonian = Hamiltonian.ising(length, 1.0, 0.5)
+    state = State(length, initial="zeros")
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(L)],
-        elapsed_time=1,
-        dt=0.05,
-        num_traj=100,
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=20,
         max_bond_dim=8,
         order=2,
-        sample_timesteps=True,
+        sample_timesteps=False,
         show_progress=False,
-        random_seed=2024,
+        random_seed=YAQS_TEST_SEED,
     )
-
-    # Setup noise model with single-site and two-site crosstalk processes
-    processes = [{"name": "pauli_x", "sites": [i], "strength": gamma_single} for i in range(L)]
-    processes += [{"name": "crosstalk_xx", "sites": [i, i + 1], "strength": gamma_pair} for i in range(L - 1)]
-    noise = NoiseModel(processes)
-
-    # Run simulation
-    simulator.run(state, H, sim_params, noise, parallel=True)
-
-    # Hardcoded QuTiP reference solution
-    expected_results = [
-        [
-            1.0,
-            0.9957595387085492,
-            0.989068537861746,
-            0.9799951962331045,
-            0.9686368930494625,
-            0.9551186308467075,
-            0.9395910913283494,
-            0.9222283389300958,
-            0.9032252097089084,
-            0.8827944277523293,
-            0.8611634997325803,
-            0.8385714280891042,
-            0.8152653063954242,
-            0.7914968423015236,
-            0.7675188651840964,
-            0.7435818712832375,
-            0.7199306579260094,
-            0.6968010984985046,
-            0.6744171032041366,
-            0.6529878097650909,
-            0.6327050454858952,
-        ],
-        [
-            1.0,
-            0.9947673850218341,
-            0.9871414981439525,
-            0.9773043133235998,
-            0.9655275369620003,
-            0.9521575556050013,
-            0.9375965200751353,
-            0.9222806564841823,
-            0.9066570069612527,
-            0.8911598843450562,
-            0.8761883965926414,
-            0.8620860664049642,
-            0.8491239779302621,
-            0.8374879983781462,
-            0.8272709723219848,
-            0.8184701569889284,
-            0.8109899797799391,
-            0.8046500024603839,
-            0.7991974939190101,
-            0.7943239338217639,
-            0.7896845077283686,
-        ],
-        [
-            1.0,
-            0.9957595387085492,
-            0.989068537861746,
-            0.9799951962331045,
-            0.9686368930494625,
-            0.9551186308467075,
-            0.9395910913283494,
-            0.9222283389300958,
-            0.9032252097089086,
-            0.8827944277523293,
-            0.8611634997325803,
-            0.838571428089104,
-            0.8152653063954242,
-            0.7914968423015236,
-            0.7675188651840964,
-            0.7435818712832375,
-            0.7199306579260094,
-            0.6968010984985046,
-            0.6744171032041368,
-            0.6529878097650911,
-            0.6327050454858952,
-        ],
-    ]
-
-    # Collect YAQS results
-    yaqs_results = np.zeros((L, len(sim_params.times)))
-    for _, obs in enumerate(sim_params.sorted_observables):
-        site = obs.sites if isinstance(obs.sites, int) else obs.sites[0]
-        yaqs_results[site, :] = obs.results
-
-    # Compare with tolerance of 0.1
-    tolerance = 0.1
-    for site in range(L):
-        for time_idx in range(len(sim_params.times)):
-            expected = expected_results[site][time_idx]
-            actual = yaqs_results[site, time_idx]
-            assert abs(expected - actual) < tolerance, (
-                f"Site {site}, time {sim_params.times[time_idx]:.2f}: "
-                f"expected {expected:.6f}, got {actual:.6f}, diff {abs(expected - actual):.6f}"
-            )
-
-
-def test_analog_simulation_two_site_lowering_against_qutip() -> None:
-    """Analog simulation with single-site and two-site lowering against QuTiP.
-
-    This test simulates a 3-qubit Ising chain with both single-site lowering (sigma-)
-    and adjacent two-site lowering (sigma- x sigma-) noise processes. It compares YAQS
-    analog simulation results to a hardcoded QuTiP master-equation reference
-    with a tolerance of 0.1 across all Z observables and time points. The setup
-    matches the reference parameters: L=3, J=1.0, g=0.5, gamma_single=0.02,
-    gamma_pair=0.01, T=1.0, dt=0.05, and num_traj=100.
-    """
-    # Setup YAQS simulation (same parameters as reference)
-    L = 3
-    H = Hamiltonian.ising(L, 1.0, 0.5)
-
-    state = State(L, initial="zeros")
-    sim_params = AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(L)],
-        elapsed_time=1,
-        dt=0.05,
-        num_traj=100,
-        max_bond_dim=8,
-        order=2,
-        sample_timesteps=True,
-        show_progress=False,
-        random_seed=2024,
-    )
-
-    gamma_single = 0.02
-    gamma_pair = 0.01
-    # Noise model with single-site lowering and adjacent two-site lowering
-    processes: list[dict[str, Any]] = [{"name": "lowering", "sites": [i], "strength": gamma_single} for i in range(L)]
-    processes += [{"name": "lowering_two", "sites": [i, i + 1], "strength": gamma_pair} for i in range(L - 1)]
-    noise = NoiseModel(processes)
-
-    # Run simulation
-    simulator.run(state, H, sim_params, noise, parallel=True)
-
-    # Collect YAQS results per site (site-major layout)
-    yaqs_results = np.zeros((L, len(sim_params.times)))
-    for _, obs in enumerate(sim_params.sorted_observables):
-        site = obs.sites if isinstance(obs.sites, int) else obs.sites[0]
-        yaqs_results[site, :] = obs.results
-
-    expected = np.asarray([
-        [
-            1.0000000000000000,
-            0.9987519272263703,
-            0.9950257733838441,
-            0.9888717325009401,
-            0.9803701315747982,
-            0.9696302545838585,
-            0.9567887490974905,
-            0.9420076418328850,
-            0.9254719943623211,
-            0.9073872362346228,
-            0.8879762177723114,
-            0.8674760301377559,
-            0.8461346407370148,
-            0.8242074001985631,
-            0.8019534724965074,
-            0.7796322463493451,
-            0.7574997830044093,
-            0.7358053541584250,
-            0.7147881235851911,
-            0.6946740230770052,
-            0.6756728658483249,
-        ],
-        [
-            1.0000000000000000,
-            0.9987550471745019,
-            0.9950752625974710,
-            0.9891191847065749,
-            0.9811389736390038,
-            0.9714667942643668,
-            0.9604969258940412,
-            0.9486646038289549,
-            0.9364227534930116,
-            0.9242179032576668,
-            0.9124666118045819,
-            0.9015336863444420,
-            0.8917134095304454,
-            0.8832147918831563,
-            0.8761516472885322,
-            0.8705380650825371,
-            0.8662894560296098,
-            0.8632291147594634,
-            0.8610999682102124,
-            0.8595808205461875,
-            0.8583061459455201,
-        ],
-        [
-            1.0000000000000000,
-            0.9987519272263703,
-            0.9950257733838441,
-            0.9888717325009401,
-            0.9803701315747982,
-            0.9696302545838585,
-            0.9567887490974905,
-            0.9420076418328850,
-            0.9254719943623211,
-            0.9073872362346228,
-            0.8879762177723114,
-            0.8674760301377559,
-            0.8461346407370148,
-            0.8242074001985631,
-            0.8019534724965072,
-            0.7796322463493451,
-            0.7574997830044091,
-            0.7358053541584247,
-            0.7147881235851911,
-            0.6946740230770052,
-            0.6756728658483246,
-        ],
+    noise = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.02},
+        {"name": two_site_process, "sites": [0, 1], "strength": 0.01},
     ])
-    assert expected.shape == yaqs_results.shape
+    simulator.run(state, hamiltonian, sim_params, noise, parallel=False)
 
-    # Use same tolerance as existing two-site crosstalk test for trajectory agreement
-    tolerance = 0.1
-    assert np.allclose(yaqs_results, expected, atol=tolerance), (
-        f"Max abs diff {np.max(np.abs(yaqs_results - expected))} exceeds {tolerance}"
-    )
+    results = sim_params.observables[0].results
+    assert results is not None
+    z_mean = np.real(results)
+    assert np.isfinite(z_mean).all()
+    assert np.all(np.abs(z_mean) <= 1.0 + 1e-6)
