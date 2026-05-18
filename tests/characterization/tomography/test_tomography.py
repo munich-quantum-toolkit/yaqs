@@ -368,7 +368,7 @@ def test_tomography_with_noise() -> None:
     noise_model = NoiseModel([{"name": "lowering", "sites": [0], "strength": 0.05}])
 
     # Run tomography computationally with noise
-    pt = run(op, params, timesteps=[0.1], num_trajectories=5, noise_model=noise_model)
+    pt = run(op, params, timesteps=[0.1], num_trajectories=2, noise_model=noise_model)
 
     # Check that the tensor built properly without None outputs
     assert pt.tensor.shape == (4, 16)

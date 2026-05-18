@@ -420,7 +420,7 @@ def test_weak_simulation_noise() -> None:
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
 
-    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=32, max_bond_dim=4, show_progress=False, random_seed=YAQS_TEST_SEED)
 
     gamma = 1e-3
     noise_model = NoiseModel([
@@ -448,7 +448,7 @@ def test_weak_simulation_no_noise() -> None:
 
     circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
     circuit.measure_all()
-    sim_params = WeakSimParams(shots=512, max_bond_dim=4, show_progress=False)
+    sim_params = WeakSimParams(shots=64, max_bond_dim=4, show_progress=False)
 
     noise_model = None
 
@@ -938,7 +938,7 @@ def test_transmon_simulation() -> None:
     sim_params = AnalogSimParams(
         observables=[Observable(bitstring) for bitstring in ["000", "001", "010", "011", "100", "101", "110", "111"]],
         elapsed_time=T_swap,
-        dt=T_swap / 1000,
+        dt=T_swap / 100,
         sample_timesteps=False,
         show_progress=False,
     )

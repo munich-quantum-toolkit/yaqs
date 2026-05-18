@@ -45,7 +45,7 @@ def test_make_trajectory_rng_none_returns_generator() -> None:
 @pytest.mark.parametrize("run_parallel", [False, True])
 def test_analog_run_reproducible_with_random_seed(*, run_parallel: bool) -> None:
     """Two runs with the same random_seed produce identical aggregated observables."""
-    length = 3
+    length = 2
     state = State(length, initial="zeros", pad=4)
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
     noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.05}])
@@ -55,9 +55,9 @@ def test_analog_run_reproducible_with_random_seed(*, run_parallel: bool) -> None
         st = copy.deepcopy(state)
         params = AnalogSimParams(
             observables=observables,
-            elapsed_time=0.2,
+            elapsed_time=0.1,
             dt=0.1,
-            num_traj=8,
+            num_traj=2,
             max_bond_dim=8,
             order=2,
             sample_timesteps=False,

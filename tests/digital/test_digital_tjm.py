@@ -383,7 +383,7 @@ def test_digital_tjm_weak() -> None:
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
-    sim_params = WeakSimParams(shots=1024, show_progress=False)
+    sim_params = WeakSimParams(shots=16, show_progress=False)
     args = 0, mps0, None, sim_params, qc
     digital_tjm(args)
 

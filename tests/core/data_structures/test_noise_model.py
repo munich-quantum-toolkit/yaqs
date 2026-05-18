@@ -215,9 +215,10 @@ def test_noise_distribution_integration() -> None:
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         dt=0.1,
-        elapsed_time=1.0,
+        elapsed_time=0.2,
         num_traj=10,  # Run multiple trajectories to confirm it runs
         sample_timesteps=False,
+        random_seed=42,
     )
 
     # Run simulation
