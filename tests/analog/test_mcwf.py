@@ -260,7 +260,7 @@ def test_mcwf_diagnostic_observables() -> None:
 
 
 def test_mcwf_trajectory_rng_seeding() -> None:
-    """Same traj_idx yields identical MCWF trajectories; different indices differ."""
+    """With random_seed set, same traj_idx is reproducible; different indices differ."""
     n_sites = 1
     psi = MPS(n_sites, state="x+")
     h = MPO()
@@ -275,6 +275,7 @@ def test_mcwf_trajectory_rng_seeding() -> None:
         elapsed_time=1.0,
         observables=[obs],
         sample_timesteps=True,
+        random_seed=YAQS_TEST_SEED,
     )
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
 
