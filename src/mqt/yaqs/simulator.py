@@ -7,23 +7,31 @@
 
 """High-level :class:`Simulator` class for YAQS.
 
-This module implements the common simulation routine for both circuit-based and
-Hamiltonian (analog) simulations as the public :class:`Simulator` class.
-The class owns the execution-side configuration (parallel vs. serial execution,
-worker count, progress reporting, multiprocessing context, and retry policy),
-while the physics inputs are passed to :meth:`Simulator.run` as a
-:class:`~mqt.yaqs.core.data_structures.state.State` and
-:class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` (or
-:class:`~qiskit.circuit.QuantumCircuit`) together with a simulation parameter object.
-Depending on the type of simulation parameters provided (``WeakSimParams``,
-``StrongSimParams``, or ``AnalogSimParams``), the simulation is dispatched to the
-appropriate backend:
-  - For circuit simulations, a ``QuantumCircuit`` is used and processed via the
-    circuit dispatch.
-  - For analog simulations, a ``Hamiltonian`` is validated and materialized, then
-    processed via the analog dispatch.
+This module implements the common simulation routine for Hamiltonian (analog) and
+circuit-based simulations as the public :class:`Simulator` class. Analog evolution is
+the primary mode supported by YAQS; circuit (strong/weak) simulation reuses the same
+execution machinery.
 
-The module supports both strong and weak simulation schemes, including functionality for:
+The :class:`Simulator` class owns the execution-side configuration (parallel vs.
+serial execution, worker count, progress reporting, multiprocessing context, and
+retry policy), while the physics inputs are passed to :meth:`Simulator.run` as a
+:class:`~mqt.yaqs.core.data_structures.state.State` and either a
+:class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` (analog) or a
+:class:`~qiskit.circuit.QuantumCircuit` (digital) together with a simulation
+parameter object. Depending on the type of simulation parameters provided
+(``AnalogSimParams``, ``StrongSimParams``, or ``WeakSimParams``), the simulation is
+dispatched to the appropriate backend:
+
+  - For analog simulations, a ``Hamiltonian`` is validated and materialized for the
+    selected state representation, then processed via the analog dispatch. Passing a
+    ``list[State]`` triggers the deterministic unitary ensemble path.
+  - For circuit simulations, a ``QuantumCircuit`` is used and processed via the
+    circuit dispatch (strong for observables/trajectories, weak for measurement
+    counts).
+
+The module supports analog (TJM / MCWF / Lindblad / unitary ensemble) and digital
+(strong / weak) simulation, including functionality for:
+
   - Initializing the state (``State``) to a canonical form (B normalized).
   - Running trajectories with noise (using a provided ``NoiseModel``) and aggregating results.
   - Parallel execution of trajectories using a ``ProcessPoolExecutor`` with progress reporting via tqdm.
@@ -289,8 +297,57 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
 # ---------------------------------------------------------------------------
 # 7) WORKER WRAPPERS
 # These functions are pickled and sent to workers. They retrieve large objects
-# from the global _WORKER_CTX instead of receiving them as arguments.
+# from the global _WORKER_CTX instead of receiving them as arguments. Analog
+# workers come first (primary simulation mode), followed by the digital
+# strong/weak workers, with the unitary ensemble worker last.
 # ---------------------------------------------------------------------------
+def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
+    """Execute a single analog simulation trajectory (TJM or Lindblad).
+
+    Retrieves the appropriate backend function and simulation arguments from
+    `WORKER_CTX` and executes the trajectory.
+
+    Args:
+        traj_idx: The integer index of the trajectory to execute.
+
+    Returns:
+        NDArray[np.float64]: The result of the simulation (typically observable values over time).
+    """
+    # backend is chosen by Simulator._run_analog and stored in context
+    backend = WORKER_CTX["backend"]
+    return backend((
+        traj_idx,
+        WORKER_CTX["initial_state"],
+        WORKER_CTX["noise_model"],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
+    ))
+
+
+def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
+    """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
+
+    Retrieves the preprocessed MCWF context from `WORKER_CTX` and executes
+    the trajectory.
+
+    Args:
+        traj_idx: The integer index of the trajectory to execute.
+
+    Returns:
+        NDArray[np.float64]: The result of the MCWF trajectory.
+    """
+    return mcwf((traj_idx, WORKER_CTX["ctx"]))
+
+
+def _lindblad_ctx_worker(_traj_idx: int) -> NDArray[np.float64]:
+    """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
+
+    Returns:
+        Observable expectation values over time for one trajectory.
+    """
+    return lindblad_evolve(WORKER_CTX["ctx"])
+
+
 def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64]:
     """Execute a single digital strong simulation trajectory.
 
@@ -339,30 +396,7 @@ def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
     )
 
 
-def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
-    """Execute a single analog simulation trajectory (TJM or Lindblad).
-
-    Retrieves the appropriate backend function and simulation arguments from
-    `WORKER_CTX` and executes the trajectory.
-
-    Args:
-        traj_idx: The integer index of the trajectory to execute.
-
-    Returns:
-        NDArray[np.float64]: The result of the simulation (typically observable values over time).
-    """
-    # backend is chosen by Simulator._run_analog and stored in context
-    backend = WORKER_CTX["backend"]
-    return backend((
-        traj_idx,
-        WORKER_CTX["initial_state"],
-        WORKER_CTX["noise_model"],
-        WORKER_CTX["sim_params"],
-        WORKER_CTX["operator"],
-    ))
-
-
-def _unitary_ensemble_worker(
+def _ensemble_worker(
     job_idx: int,
 ) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
     """Execute one deterministic unitary ensemble member trajectory.
@@ -382,30 +416,6 @@ def _unitary_ensemble_worker(
         WORKER_CTX["sim_params"],
         WORKER_CTX["operator"],
     ))
-
-
-def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
-    """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
-
-    Retrieves the preprocessed MCWF context from `WORKER_CTX` and executes
-    the trajectory.
-
-    Args:
-        traj_idx: The integer index of the trajectory to execute.
-
-    Returns:
-        NDArray[np.float64]: The result of the MCWF trajectory.
-    """
-    return mcwf((traj_idx, WORKER_CTX["ctx"]))
-
-
-def _lindblad_ctx_worker(_traj_idx: int) -> NDArray[np.float64]:
-    """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
-
-    Returns:
-        Observable expectation values over time for one trajectory.
-    """
-    return lindblad_evolve(WORKER_CTX["ctx"])
 
 
 def _materialized_mps(state: State) -> MPS | None:
@@ -684,13 +694,14 @@ class Simulator:
         sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
         noise_model: NoiseModel | None = None,
     ) -> Result:
-        """Execute the common simulation routine for both circuit and Hamiltonian simulations.
+        """Execute the common simulation routine for Hamiltonian (analog) and circuit simulations.
 
         Dispatches the simulation to the appropriate backend based on the type of simulation
-        parameters provided. For circuit-based simulations, the initial
-        :class:`~mqt.yaqs.core.data_structures.state.State` must use ``representation="mps"``;
-        for analog simulations, the :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`
-        and ``State`` are materialized as needed.
+        parameters provided. For analog simulations, the
+        :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` and ``State`` are
+        materialized for the active representation as needed (``list[State]`` triggers the
+        deterministic unitary ensemble path). For circuit-based simulations, the initial
+        :class:`~mqt.yaqs.core.data_structures.state.State` must use ``representation="mps"``.
 
         Args:
             initial_state: The initial state as a :class:`~mqt.yaqs.core.data_structures.state.State`,
@@ -721,9 +732,6 @@ class Simulator:
             noise_model = noise_model.sample(rng=sample_seed)
         sim_params.noise_model = noise_model
 
-        if isinstance(sim_params, StrongSimParams) and not sim_params.get_state and not sim_params.observables:
-            msg = "No output specified: either observables or get_state must be set."
-            raise ValueError(msg)
         if (
             isinstance(sim_params, AnalogSimParams)
             and not sim_params.get_state
@@ -732,8 +740,19 @@ class Simulator:
         ):
             msg = "No output specified: either observables or get_state must be set."
             raise ValueError(msg)
+        if isinstance(sim_params, StrongSimParams) and not sim_params.get_state and not sim_params.observables:
+            msg = "No output specified: either observables or get_state must be set."
+            raise ValueError(msg)
 
-        if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
+        if isinstance(sim_params, AnalogSimParams):
+            if not isinstance(operator, Hamiltonian):
+                msg = "Analog simulation requires a Hamiltonian operator."
+                raise TypeError(msg)
+            if not isinstance(initial_state, (State, list)):
+                msg = "Analog simulation requires initial_state to be a list or State."
+                raise TypeError(msg)
+            self._run_analog(initial_state, operator, sim_params, noise_model)
+        elif isinstance(sim_params, (StrongSimParams, WeakSimParams)):
             if isinstance(initial_state, list):
                 msg = "Circuit simulation requires a single State initial_state."
                 raise TypeError(msg)
@@ -744,16 +763,161 @@ class Simulator:
                 msg = "Circuit simulation requires a State initial_state."
                 raise TypeError(msg)
             self._run_circuit(initial_state, operator, sim_params, noise_model)
-        elif isinstance(sim_params, AnalogSimParams):
-            if not isinstance(operator, Hamiltonian):
-                msg = "Analog simulation requires a Hamiltonian operator."
-                raise TypeError(msg)
-            if not isinstance(initial_state, (State, list)):
-                msg = "Analog simulation requires initial_state to be a list or State."
-                raise TypeError(msg)
-            self._run_analog(initial_state, operator, sim_params, noise_model)
 
         return Result(sim_params=sim_params)
+
+    # -----------------------------------------------------------------------
+    # Analog (Hamiltonian) simulation -- primary YAQS simulation mode
+    # -----------------------------------------------------------------------
+    def _run_analog(
+        self,
+        initial_state: State | list[State],
+        operator: Hamiltonian,
+        sim_params: AnalogSimParams,
+        noise_model: NoiseModel | None,
+    ) -> None:
+        """Run analog simulation trajectories for Hamiltonian evolution.
+
+        Selects the appropriate analog simulation backend based on ``sim_params.order``
+        (either one-site or two-site evolution) and runs the simulation trajectories for the given
+        Hamiltonian. The trajectories are executed and the results are aggregated.
+
+        A ``list[State]`` ``initial_state`` triggers the deterministic unitary ensemble
+        path via :meth:`_run_ensemble`.
+
+        Args:
+            initial_state: The initial system state as a :class:`State`, or a list of
+                :class:`State` objects for deterministic unitary analog ensemble evolution.
+            operator: The Hamiltonian specification (materialized once per ``run`` call).
+            sim_params: Simulation parameters for analog simulation.
+            noise_model: The noise model applied during simulation.
+
+        Raises:
+            ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``.
+        """
+        if isinstance(initial_state, list):
+            initial_state_list = cast("list[State]", initial_state)
+            if any(spec.representation != "mps" for spec in initial_state_list):
+                msg = "list[State] analog ensemble currently supports only State.representation='mps'."
+                raise ValueError(msg)
+            operator.ensure_encoded("mpo")
+            for spec in initial_state_list:
+                spec.ensure_encoded("mps")
+                _validate_state_hamiltonian_pairing(spec, operator)
+            self._run_ensemble(
+                [spec.mps for spec in initial_state_list],
+                operator.mpo,
+                sim_params,
+                noise_model,
+            )
+            return
+
+        initial_state.ensure_encoded(initial_state.representation)
+        mps = _materialized_mps(initial_state)
+        state_rep = initial_state.representation
+        _validate_state_hamiltonian_pairing(initial_state, operator)
+        mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
+
+        backend: Callable[[Any], NDArray[np.float64]]
+        if state_rep == "density_matrix":
+            backend = lindblad_evolve
+        elif state_rep == "vector":
+            backend = mcwf
+        elif sim_params.order == 1:
+            backend = analog_tjm_1
+        else:
+            backend = analog_tjm_2
+
+        if state_rep == "density_matrix" and sim_params.get_state:
+            msg = "get_state=True is not supported for State.representation='density_matrix'."
+            raise ValueError(msg)
+
+        if (
+            noise_model is None
+            or all(proc["strength"] == 0 for proc in noise_model.processes)
+            or state_rep == "density_matrix"
+        ):
+            sim_params.num_traj = 1
+        else:
+            assert not sim_params.get_state, "Cannot return state in noisy analog simulation due to stochastics."
+
+        for observable in sim_params.sorted_observables:
+            observable.initialize(sim_params)
+
+        payload: dict[str, Any]
+        worker_fn: Callable[[int], Any]
+
+        if state_rep == "vector":
+            ctx = preprocess_mcwf(
+                mps,
+                mpo_op,
+                noise_model,
+                sim_params,
+                psi_initial=None if mps is not None else initial_state.vector,
+                num_sites=initial_state.length if mps is None else None,
+                h_sparse=h_sparse,
+            )
+            payload = {"ctx": ctx}
+            worker_fn = _mcwf_worker
+        elif state_rep == "density_matrix":
+            lindblad_ctx = preprocess_lindblad(
+                mps,
+                mpo_op,
+                noise_model,
+                sim_params,
+                rho_initial=initial_state.density_matrix,
+                num_sites=initial_state.length,
+                h_sparse=h_sparse,
+            )
+            payload = {"ctx": lindblad_ctx}
+            worker_fn = _lindblad_ctx_worker
+        else:
+            assert mps is not None, "MPS representation requires a materialized MPS."
+            assert mpo_op is not None
+            payload = {
+                "initial_state": mps,
+                "noise_model": noise_model,
+                "sim_params": sim_params,
+                "operator": mpo_op,
+                "backend": backend,
+            }
+            worker_fn = _analog_worker
+
+        if self.parallel and sim_params.num_traj > 1:
+            for i, result in run_backend_parallel(
+                worker_fn=worker_fn,
+                payload=payload,
+                n_jobs=sim_params.num_traj,
+                max_workers=self.max_workers,
+                show_progress=self.show_progress,
+                desc="Running trajectories",
+                max_retries=self.max_retries,
+                retry_exceptions=self.retry_exceptions,
+                mp_context=self.mp_context,
+            ):
+                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                    assert observable.trajectories is not None, "Trajectories should have been initialized"
+                    observable.trajectories[i] = result[obs_index]
+        else:
+            n_threads = available_cpus()
+
+            args: list[Any]
+            if state_rep == "vector":
+                args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
+            elif state_rep == "density_matrix":
+                args = [lindblad_ctx for _ in range(sim_params.num_traj)]
+            else:
+                args = [(i, mps, noise_model, sim_params, mpo_op) for i in range(sim_params.num_traj)]
+
+            iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
+
+            for i, arg in enumerate(iterator):
+                result = _call_backend(backend, arg, n_threads=n_threads)
+                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                    assert observable.trajectories is not None, "Trajectories should have been initialized"
+                    observable.trajectories[i] = result[obs_index]
+
+        sim_params.aggregate_trajectories()
 
     # -----------------------------------------------------------------------
     # Strong simulation (circuit): observable trajectories
@@ -1032,7 +1196,7 @@ class Simulator:
 
         if self.parallel and len(initial_states) > 1:
             for i, (obs_result, multi_time_result) in run_backend_parallel(
-                worker_fn=_unitary_ensemble_worker,
+                worker_fn=_ensemble_worker,
                 payload=payload,
                 n_jobs=len(initial_states),
                 max_workers=self.max_workers,
@@ -1064,153 +1228,3 @@ class Simulator:
         sim_params.aggregate_trajectories()
         if multi_time_matrix is not None:
             sim_params.multi_time_observables_results = np.mean(multi_time_matrix, axis=0)
-
-    # -----------------------------------------------------------------------
-    # Analog (Hamiltonian) simulation
-    # -----------------------------------------------------------------------
-    def _run_analog(
-        self,
-        initial_state: State | list[State],
-        operator: Hamiltonian,
-        sim_params: AnalogSimParams,
-        noise_model: NoiseModel | None,
-    ) -> None:
-        """Run analog simulation trajectories for Hamiltonian evolution.
-
-        Selects the appropriate analog simulation backend based on ``sim_params.order``
-        (either one-site or two-site evolution) and runs the simulation trajectories for the given
-        Hamiltonian. The trajectories are executed and the results are aggregated.
-
-        Args:
-            initial_state: The initial system state as a :class:`State`, or a list of
-                :class:`State` objects for deterministic unitary analog ensemble evolution.
-            operator: The Hamiltonian specification (materialized once per ``run`` call).
-            sim_params: Simulation parameters for analog simulation.
-            noise_model: The noise model applied during simulation.
-
-        Raises:
-            ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``.
-        """
-        if isinstance(initial_state, list):
-            initial_state_list = cast("list[State]", initial_state)
-            if any(spec.representation != "mps" for spec in initial_state_list):
-                msg = "list[State] analog ensemble currently supports only State.representation='mps'."
-                raise ValueError(msg)
-            operator.ensure_encoded("mpo")
-            for spec in initial_state_list:
-                spec.ensure_encoded("mps")
-                _validate_state_hamiltonian_pairing(spec, operator)
-            self._run_ensemble(
-                [spec.mps for spec in initial_state_list],
-                operator.mpo,
-                sim_params,
-                noise_model,
-            )
-            return
-
-        initial_state.ensure_encoded(initial_state.representation)
-        mps = _materialized_mps(initial_state)
-        state_rep = initial_state.representation
-        _validate_state_hamiltonian_pairing(initial_state, operator)
-        mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
-
-        backend: Callable[[Any], NDArray[np.float64]]
-        if state_rep == "density_matrix":
-            backend = lindblad_evolve
-        elif state_rep == "vector":
-            backend = mcwf
-        elif sim_params.order == 1:
-            backend = analog_tjm_1
-        else:
-            backend = analog_tjm_2
-
-        if state_rep == "density_matrix" and sim_params.get_state:
-            msg = "get_state=True is not supported for State.representation='density_matrix'."
-            raise ValueError(msg)
-
-        if (
-            noise_model is None
-            or all(proc["strength"] == 0 for proc in noise_model.processes)
-            or state_rep == "density_matrix"
-        ):
-            sim_params.num_traj = 1
-        else:
-            assert not sim_params.get_state, "Cannot return state in noisy analog simulation due to stochastics."
-
-        for observable in sim_params.sorted_observables:
-            observable.initialize(sim_params)
-
-        payload: dict[str, Any]
-        worker_fn: Callable[[int], Any]
-
-        if state_rep == "vector":
-            ctx = preprocess_mcwf(
-                mps,
-                mpo_op,
-                noise_model,
-                sim_params,
-                psi_initial=None if mps is not None else initial_state.vector,
-                num_sites=initial_state.length if mps is None else None,
-                h_sparse=h_sparse,
-            )
-            payload = {"ctx": ctx}
-            worker_fn = _mcwf_worker
-        elif state_rep == "density_matrix":
-            lindblad_ctx = preprocess_lindblad(
-                mps,
-                mpo_op,
-                noise_model,
-                sim_params,
-                rho_initial=initial_state.density_matrix,
-                num_sites=initial_state.length,
-                h_sparse=h_sparse,
-            )
-            payload = {"ctx": lindblad_ctx}
-            worker_fn = _lindblad_ctx_worker
-        else:
-            assert mps is not None, "MPS representation requires a materialized MPS."
-            assert mpo_op is not None
-            payload = {
-                "initial_state": mps,
-                "noise_model": noise_model,
-                "sim_params": sim_params,
-                "operator": mpo_op,
-                "backend": backend,
-            }
-            worker_fn = _analog_worker
-
-        if self.parallel and sim_params.num_traj > 1:
-            for i, result in run_backend_parallel(
-                worker_fn=worker_fn,
-                payload=payload,
-                n_jobs=sim_params.num_traj,
-                max_workers=self.max_workers,
-                show_progress=self.show_progress,
-                desc="Running trajectories",
-                max_retries=self.max_retries,
-                retry_exceptions=self.retry_exceptions,
-                mp_context=self.mp_context,
-            ):
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
-        else:
-            n_threads = available_cpus()
-
-            args: list[Any]
-            if state_rep == "vector":
-                args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
-            elif state_rep == "density_matrix":
-                args = [lindblad_ctx for _ in range(sim_params.num_traj)]
-            else:
-                args = [(i, mps, noise_model, sim_params, mpo_op) for i in range(sim_params.num_traj)]
-
-            iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
-
-            for i, arg in enumerate(iterator):
-                result = _call_backend(backend, arg, n_threads=n_threads)
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
-
-        sim_params.aggregate_trajectories()

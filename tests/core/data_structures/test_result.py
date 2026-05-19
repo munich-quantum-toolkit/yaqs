@@ -17,7 +17,7 @@ simulation kind, and can be pickled together with its wrapped parameters.
 
 from __future__ import annotations
 
-import pickle
+import pickle  # noqa: S403
 
 import numpy as np
 

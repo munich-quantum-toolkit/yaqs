@@ -9,9 +9,13 @@
 
 This module defines :class:`Result`, a thin wrapper around the populated simulation
 parameters that were used for a run. It exposes the parts of those parameters that
-are produced by the simulator (observables, output state, counts, multi-time
-correlator results, and the sampled noise model) through properties so user code
-does not need to reach into ``sim_params`` directly.
+are produced by the simulator -- observables, the sampled noise model, the final
+output state, analog multi-time correlator results, and (for weak digital simulations)
+measurement counts -- through properties so user code does not need to reach into
+``sim_params`` directly.
+
+Properties are ordered by primary simulation mode (analog first, digital weak last)
+to match the rest of the :class:`~mqt.yaqs.Simulator` surface.
 
 Future refactors will move these outputs off of the simulation parameter classes and
 onto :class:`Result` as first-class fields. The proxy properties here document that
@@ -23,14 +27,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from .simulation_parameters import AnalogSimParams, WeakSimParams
 
 if TYPE_CHECKING:
     from numpy import complex128, float64
     from numpy.typing import NDArray
 
     from .noise_model import NoiseModel
-    from .simulation_parameters import Observable
+    from .simulation_parameters import Observable, StrongSimParams
     from .state import State
 
 
@@ -69,13 +73,6 @@ class Result:
         return self.sim_params.output_state
 
     @property
-    def counts(self) -> dict[int, int] | None:
-        """Return the aggregated measurement counts for weak simulations, else ``None``."""
-        if isinstance(self.sim_params, WeakSimParams):
-            return getattr(self.sim_params, "results", None)
-        return None
-
-    @property
     def multi_time_times(self) -> NDArray[float64] | None:
         """Return the time grid for two-time correlators (analog ensembles only)."""
         if isinstance(self.sim_params, AnalogSimParams):
@@ -87,4 +84,11 @@ class Result:
         """Return the two-time correlator results (analog ensembles only)."""
         if isinstance(self.sim_params, AnalogSimParams):
             return self.sim_params.multi_time_observables_results
+        return None
+
+    @property
+    def counts(self) -> dict[int, int] | None:
+        """Return the aggregated measurement counts for weak simulations, else ``None``."""
+        if isinstance(self.sim_params, WeakSimParams):
+            return getattr(self.sim_params, "results", None)
         return None
