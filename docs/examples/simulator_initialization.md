@@ -105,10 +105,12 @@ Both modes produce identical results for a fixed `random_seed`:
 import numpy as np
 
 params_serial = make_params()
-result_serial = Simulator(parallel=False, show_progress=False).run(state, H, params_serial)
+sim_serial = Simulator(parallel=False, show_progress=False)
+result_serial = sim_serial.run(state, H, params_serial)
 
 params_parallel = make_params()
-result_parallel = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, H, params_parallel)
+sim_parallel = Simulator(parallel=True, max_workers=2, show_progress=False)
+result_parallel = sim_parallel.run(state, H, params_parallel)
 
 for vals_s, vals_p in zip(result_serial.expectation_values, result_parallel.expectation_values, strict=True):
     np.testing.assert_allclose(vals_s, vals_p, atol=1e-10)
@@ -221,7 +223,7 @@ Permanent errors (e.g. `ValueError` from your physics setup, `AssertionError` fr
 
 ## Inspecting the return value: `Result`
 
-{meth}`~mqt.yaqs.Simulator.run` returns a {class}`~mqt.yaqs.Result` that proxies the populated simulation parameters through a small, stable surface:
+{meth}`~mqt.yaqs.Simulator.run` returns a {class}`~mqt.yaqs.Result` that holds every simulation output through a small, stable surface. The {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` you passed in is referenced unchanged at `result.sim_params`:
 
 ```{code-cell} ipython3
 sim = Simulator(show_progress=False)

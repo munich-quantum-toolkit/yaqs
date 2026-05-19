@@ -107,7 +107,8 @@ from mqt.yaqs.core.data_structures.state import State
 psi = State(4, initial="zeros", representation="vector")
 H = Hamiltonian.ising(4, J=1.0, g=0.5)
 params = AnalogSimParams(...)
-Simulator().run(psi, H, params, noise_model)
+sim = Simulator()
+result = sim.run(psi, H, params, noise_model)
 ```
 
 ### End of support for x86 macOS systems

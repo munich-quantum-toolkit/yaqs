@@ -92,7 +92,8 @@ tags: [remove-output]
 ---
 from mqt.yaqs import Simulator
 
-result = Simulator(parallel=False).run(state, qc, sim_params, noise_model)
+sim = Simulator()
+result = sim.run(state, qc, sim_params, noise_model)
 ```
 
 Compare against the hardcoded Qiskit reference

@@ -114,7 +114,8 @@ single_state_params = AnalogSimParams(
     multi_time_observables=[(sz_mid, sz_mid), (sz_mid, sx_mid)],  # row 0: C_zz(t), row 1: C_zx(t)
 )
 
-result_single = Simulator(parallel=False, show_progress=False).run(
+sim = Simulator(show_progress=False)
+result_single = sim.run(
     [State(L, initial="haar-random", pad=2)], H_open, single_state_params
 )
 

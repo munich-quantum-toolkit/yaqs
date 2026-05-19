@@ -37,8 +37,10 @@ The module supports analog (TJM / MCWF / Lindblad / unitary ensemble) and digita
   - Parallel execution of trajectories using a ``ProcessPoolExecutor`` with progress reporting via tqdm.
 
 :meth:`Simulator.run` returns a :class:`~mqt.yaqs.core.data_structures.result.Result`
-that wraps the populated simulation parameters; observable data still lives on the
-individual :class:`Observable` instances referenced by the parameters.
+holding every simulation output (aggregated expectation values, per-trajectory data,
+shared time grid, optional output state, measurement counts, and the sampled noise
+model). The ``*SimParams`` object passed in is never mutated; ``Result.sim_params``
+references it unchanged.
 """
 
 from __future__ import annotations
@@ -783,8 +785,9 @@ class Simulator:
                 The sampled noise model is stored on the returned :class:`~mqt.yaqs.Result`.
 
         Returns:
-            A :class:`~mqt.yaqs.core.data_structures.result.Result` wrapping the populated
-            simulation parameters.
+            A :class:`~mqt.yaqs.core.data_structures.result.Result` holding all
+            simulation outputs. The supplied ``sim_params`` is not mutated;
+            ``Result.sim_params`` references the original configuration object.
 
         Raises:
             ValueError: If no output is specified (neither observables nor ``get_state``).

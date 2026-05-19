@@ -157,7 +157,8 @@ tags: [remove-output]
 ---
 from mqt.yaqs import Simulator
 
-result = Simulator().run(state, H_0, sim_params, noise_model)
+sim = Simulator()
+result = sim.run(state, H_0, sim_params, noise_model)
 ```
 
 Plot the results

@@ -114,7 +114,7 @@ def test_simulator_show_progress_disabled(capsys: pytest.CaptureFixture[str]) ->
 
 
 def test_simulator_run_returns_result() -> None:
-    """:meth:`Simulator.run` returns a :class:`Result` wrapping the populated parameters."""
+    """:meth:`Simulator.run` returns a :class:`Result` holding all simulation outputs."""
     length = 2
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
