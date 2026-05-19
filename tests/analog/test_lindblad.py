@@ -9,8 +9,9 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import pytest
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import Simulator
@@ -22,6 +23,9 @@ from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import Z
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_lindblad_amplitude_damping() -> None:
