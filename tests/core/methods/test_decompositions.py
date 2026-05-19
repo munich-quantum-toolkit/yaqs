@@ -7,7 +7,7 @@
 
 """Tests for decompositions.
 
-This module tests the left and right qr and svd decompositions.
+This module tests the left and right QR decompositions.
 """
 
 from __future__ import annotations
@@ -18,8 +18,7 @@ import numpy as np
 import scipy.linalg
 
 from mqt.yaqs.core import linalg
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, truncated_right_svd
+from mqt.yaqs.core.methods.decompositions import left_qr, right_qr
 
 if TYPE_CHECKING:
     import pytest
@@ -96,90 +95,6 @@ def test_left_qr() -> None:
     contr = np.tensordot(q_tensor, r_matrix, axes=(1, 1))
     contr = contr.transpose(0, 2, 1)
     assert np.allclose(contr, tensor)
-
-
-def test_right_svd() -> None:
-    """Test that the svd produces the correct shapes and tensors."""
-    tensor = crandn(2, 3, 4)
-    u_tensor, s_vec, v_matrix = right_svd(tensor)
-    # Check shapes
-    assert u_tensor.shape[0] == 2
-    assert u_tensor.shape[1] == 3
-    assert v_matrix.shape[1] == 4
-    assert u_tensor.shape[2] == s_vec.shape[0]
-    assert s_vec.shape[0] == v_matrix.shape[0]
-    # Check that u_tensor is unitary
-    iden = np.eye(u_tensor.shape[2])
-    result = np.tensordot(u_tensor, u_tensor.conj(), axes=([0, 1], [0, 1]))
-    assert np.allclose(result, iden)
-    # Check that v_matrix is unitary
-    iden = np.eye(v_matrix.shape[1])
-    result = v_matrix.conj().T @ v_matrix
-    assert np.allclose(result, iden)
-    # Check that svd = tensor
-    contr = np.tensordot(u_tensor, np.diag(s_vec) @ v_matrix, axes=(2, 0))
-    assert np.allclose(contr, tensor)
-
-
-def test_truncated_right_svd_thresh() -> None:
-    """Test that the tensor is correctly truncated."""
-    # Placeholder
-    sim_params = AnalogSimParams(
-        elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=True,
-        max_bond_dim=4,
-        threshold=0.2,
-        order=1,
-        show_progress=False,
-        get_state=True,
-    )
-    s_vector_i = np.array([1, 0.5, 0.1, 0.01])
-    u_tensor_i, _ = right_qr(crandn(2, 3, 4))
-    v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
-    tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
-
-    # Thus the values 0.1 and 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
-    # Check shapes
-    assert u_tensor.shape[0] == 2
-    assert u_tensor.shape[1] == 3
-    assert v_matrix.shape[1] == 4
-    assert u_tensor.shape[2] == 2
-    assert v_matrix.shape[0] == 2
-    assert s_vector.shape[0] == 2
-    assert np.allclose(s_vector, s_vector_i[:2])
-
-
-def test_truncated_right_svd_maxbd() -> None:
-    """Test that the tensor is correctly truncated."""
-    # Placeholder
-    sim_params = AnalogSimParams(
-        elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=True,
-        max_bond_dim=3,
-        threshold=1e-4,
-        order=1,
-        show_progress=False,
-        get_state=True,
-    )
-
-    s_vector_i = np.array([1, 0.5, 0.1, 0.01])
-    u_tensor_i, _ = right_qr(crandn(2, 3, 4))
-    v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
-    tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
-
-    # Thus the value 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
-    # Check shapes
-    assert u_tensor.shape[0] == 2
-    assert u_tensor.shape[1] == 3
-    assert v_matrix.shape[1] == 4
-    assert u_tensor.shape[2] == sim_params.max_bond_dim
-    assert sim_params.max_bond_dim == v_matrix.shape[0]
-    assert sim_params.max_bond_dim == s_vector.shape[0]
-    assert np.allclose(s_vector, s_vector_i[: sim_params.max_bond_dim])
 
 
 def test_linalg_svd_reduced_shapes_unitary_and_reconstruction() -> None:

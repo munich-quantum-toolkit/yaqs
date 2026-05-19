@@ -23,7 +23,7 @@ import opt_einsum as oe
 
 from mqt.yaqs.core.methods.dissipation import is_longrange, is_pauli
 
-from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
+from ..methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -119,17 +119,20 @@ def create_probability_distribution(
                         # merge the tensors at site and site+1
                         tensor_left = jumped_state.tensors[site]
                         tensor_right = jumped_state.tensors[site + 1]
-                        merged = merge_mps_tensors(tensor_left, tensor_right)
+                        merged = merge_two_site(tensor_left, tensor_right)
                         # apply the 2-site jump operator
                         merged = oe.contract("ab, bcd->acd", jump_op, merged)
                         dp_m = dt * gamma * jumped_state.norm(site)
                         # split the tensor (always contract singular values right for probabilities)
-                        tensor_left_new, tensor_right_new = split_mps_tensor(
+                        tensor_left_new, tensor_right_new = split_two_site(
                             merged,
-                            "right",
-                            sim_params,
                             [state.physical_dimensions[site], state.physical_dimensions[site + 1]],
-                            dynamic=False,
+                            svd_distribution="right",
+                            trunc_mode=sim_params.trunc_mode,
+                            threshold=sim_params.threshold,
+                            truncate_max_bond_dim=sim_params.max_bond_dim,
+                            min_bond_dim=sim_params.min_bond_dim,
+                            fallback_bond_cap=sim_params.max_bond_dim,
                         )
                         jumped_state.tensors[site], jumped_state.tensors[site + 1] = tensor_left_new, tensor_right_new
                         # compute the norm at `site`
@@ -217,11 +220,18 @@ def stochastic_process(
                 raise ValueError(msg)
 
             jump_op = chosen_process["matrix"]
-            merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
+            merged = merge_two_site(state.tensors[i], state.tensors[j])
             merged = oe.contract("ab, bcd->acd", jump_op, merged)
             # For stochastic jumps, always contract singular values to the right
-            tensor_left_new, tensor_right_new = split_mps_tensor(
-                merged, "right", sim_params, [state.physical_dimensions[i], state.physical_dimensions[j]], dynamic=False
+            tensor_left_new, tensor_right_new = split_two_site(
+                merged,
+                [state.physical_dimensions[i], state.physical_dimensions[j]],
+                svd_distribution="right",
+                trunc_mode=sim_params.trunc_mode,
+                threshold=sim_params.threshold,
+                truncate_max_bond_dim=sim_params.max_bond_dim,
+                min_bond_dim=sim_params.min_bond_dim,
+                fallback_bond_cap=sim_params.max_bond_dim,
             )
             state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
 

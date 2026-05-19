@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
-from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
+from ..methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
     from ..data_structures.mps import MPS
@@ -82,14 +82,17 @@ def apply_scheduled_jumps(
                     )
                     raise ValueError(msg)
 
-                merged = merge_mps_tensors(state.tensors[i], state.tensors[j])
+                merged = merge_two_site(state.tensors[i], state.tensors[j])
                 merged = oe.contract("ab, bcd->acd", jump_op, merged)
-                tensor_left_new, tensor_right_new = split_mps_tensor(
+                tensor_left_new, tensor_right_new = split_two_site(
                     merged,
-                    "right",
-                    sim_params,
                     [state.physical_dimensions[i], state.physical_dimensions[j]],
-                    dynamic=False,
+                    svd_distribution="right",
+                    trunc_mode=sim_params.trunc_mode,
+                    threshold=sim_params.threshold,
+                    truncate_max_bond_dim=sim_params.max_bond_dim,
+                    min_bond_dim=sim_params.min_bond_dim,
+                    fallback_bond_cap=sim_params.max_bond_dim,
                 )
                 state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
 

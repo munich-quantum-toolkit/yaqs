@@ -21,7 +21,7 @@ import numpy as np
 import opt_einsum as oe
 
 from .. import linalg
-from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
+from ..methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
     from ..data_structures.mps import MPS
@@ -132,17 +132,20 @@ def apply_dissipation(
                     mat = np.conj(jump_op_mat).T @ jump_op_mat
                     dissipative_op = linalg.expm(-0.5 * dt * gamma * mat)
 
-                    merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
+                    merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
                     merged_tensor = oe.contract("ab, bcd->acd", dissipative_op, merged_tensor)
 
                     # singular values always contracted right
                     # since ortho center is shifted to the left after loop
-                    tensor_left, tensor_right = split_mps_tensor(
+                    tensor_left, tensor_right = split_two_site(
                         merged_tensor,
-                        "right",
-                        sim_params,
                         [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
-                        dynamic=False,
+                        svd_distribution="right",
+                        trunc_mode=sim_params.trunc_mode,
+                        threshold=sim_params.threshold,
+                        truncate_max_bond_dim=sim_params.max_bond_dim,
+                        min_bond_dim=sim_params.min_bond_dim,
+                        fallback_bond_cap=sim_params.max_bond_dim,
                     )
                     state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
 
