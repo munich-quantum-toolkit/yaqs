@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for SciPy-style BLAS-thread-safe linalg helpers."""
+"""Tests for SciPy-style BLAS-thread-safe matrix exponential helpers."""
 
 from __future__ import annotations
 
