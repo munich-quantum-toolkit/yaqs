@@ -36,7 +36,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -69,7 +69,6 @@ def test_initialize() -> None:
         num_traj=1,
         max_bond_dim=2,
         sample_timesteps=False,
-        show_progress=False,
     )
     with (
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
@@ -102,7 +101,6 @@ def test_step_through() -> None:
         num_traj=1,
         max_bond_dim=2,
         sample_timesteps=False,
-        show_progress=False,
     )
     with (
         patch("mqt.yaqs.analog.analog_tjm.local_dynamic_tdvp") as mock_dynamic_tdvp,
@@ -138,7 +136,6 @@ def test_analog_tjm_2() -> None:
         max_bond_dim=2,
         order=2,
         sample_timesteps=False,
-        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_2(args)
@@ -168,7 +165,6 @@ def test_analog_tjm_2_sample_timesteps() -> None:
         max_bond_dim=2,
         order=2,
         sample_timesteps=True,
-        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_2(args)
@@ -198,7 +194,6 @@ def test_analog_tjm_1() -> None:
         max_bond_dim=2,
         order=1,
         sample_timesteps=False,
-        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_1(args)
@@ -228,7 +223,6 @@ def test_analog_tjm_1_sample_timesteps() -> None:
         max_bond_dim=2,
         order=1,
         sample_timesteps=True,
-        show_progress=False,
     )
     args = (0, state, noise_model, sim_params, H)
     results = analog_tjm_1(args)
@@ -253,14 +247,13 @@ def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
         max_bond_dim=8,
         order=2,
         sample_timesteps=False,
-        show_progress=False,
         random_seed=YAQS_TEST_SEED,
     )
     noise = NoiseModel([
         {"name": "pauli_x", "sites": [0], "strength": 0.02},
         {"name": two_site_process, "sites": [0, 1], "strength": 0.01},
     ])
-    simulator.run(state, hamiltonian, sim_params, noise, parallel=False)
+    Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
 
     results = sim_params.observables[0].results
     assert results is not None

@@ -1,0 +1,125 @@
+# Copyright (c) 2025 - 2026 Chair for Design Automation, TUM
+# All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Licensed under the MIT License
+
+"""Tests for the :class:`~mqt.yaqs.core.data_structures.result.Result` wrapper.
+
+These tests verify that ``Result`` correctly proxies attributes from the underlying
+``*SimParams`` object, returns ``None`` for fields that do not apply to the active
+simulation kind, and can be pickled together with its wrapped parameters.
+"""
+
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
+from __future__ import annotations
+
+import pickle
+
+import numpy as np
+
+from mqt.yaqs import Result, Simulator
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    AnalogSimParams,
+    Observable,
+    StrongSimParams,
+    WeakSimParams,
+)
+from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
+from mqt.yaqs.core.libraries.gate_library import Z
+
+
+def test_result_proxies_observables_for_analog_run() -> None:
+    """Result.observables / output_state / noise_model expose the populated sim_params."""
+    length = 2
+    state = State(length, initial="zeros")
+    H = Hamiltonian.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        get_state=True,
+        sample_timesteps=False,
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
+
+    assert isinstance(result, Result)
+    assert result.sim_params is sim_params
+    assert result.observables is sim_params.observables
+    assert result.output_state is sim_params.output_state
+    assert result.noise_model is sim_params.noise_model
+    assert result.counts is None
+    assert result.multi_time_times is None
+    assert result.multi_time_results is None
+
+
+def test_result_counts_only_set_for_weak_simulation() -> None:
+    """Result.counts is populated for weak simulations and None otherwise."""
+    num_qubits = 2
+    state = State(num_qubits, initial="zeros")
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
+    circuit.measure_all()
+
+    weak_params = WeakSimParams(shots=16, max_bond_dim=4)
+    weak_result = Simulator(parallel=False, show_progress=False).run(state, circuit, weak_params)
+
+    assert weak_result.counts is not None
+    assert sum(weak_result.counts.values()) == weak_params.shots
+    assert weak_result.multi_time_times is None
+    assert weak_result.multi_time_results is None
+
+    strong_state = State(num_qubits, initial="zeros")
+    strong_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    strong_result = Simulator(parallel=False, show_progress=False).run(strong_state, circuit, strong_params)
+
+    assert strong_result.counts is None
+
+
+def test_result_noise_model_reflects_sampled_noise() -> None:
+    """Result.noise_model reflects the noise model that was sampled at run time."""
+    num_qubits = 2
+    state = State(num_qubits, initial="zeros")
+    circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=1)
+    circuit.measure_all()
+
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [i], "strength": 1e-3} for i in range(num_qubits)])
+    weak_params = WeakSimParams(shots=4, max_bond_dim=4, random_seed=0)
+    result = Simulator(parallel=False, show_progress=False).run(state, circuit, weak_params, noise_model)
+
+    assert result.noise_model is not None
+    assert result.noise_model is weak_params.noise_model
+
+
+def test_result_is_pickleable() -> None:
+    """A populated :class:`Result` round-trips through pickle."""
+    length = 2
+    state = State(length, initial="zeros")
+    H = Hamiltonian.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        sample_timesteps=False,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
+
+    blob = pickle.dumps(result)
+    restored = pickle.loads(blob)  # noqa: S301
+
+    assert isinstance(restored, Result)
+    assert isinstance(restored.sim_params, AnalogSimParams)
+    assert len(restored.observables) == 1
+    restored_results = restored.observables[0].results
+    original_results = result.observables[0].results
+    assert restored_results is not None
+    assert original_results is not None
+    np.testing.assert_allclose(np.asarray(restored_results), np.asarray(original_results))

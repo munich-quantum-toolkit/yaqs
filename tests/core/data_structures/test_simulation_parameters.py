@@ -99,9 +99,7 @@ def test_observable_initialize_with_sample_timesteps() -> None:
     trajectories array has shape (num_traj, len(times)).
     """
     obs = Observable(X(), 1)
-    sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=1.0, dt=0.5, num_traj=10, sample_timesteps=True, show_progress=False
-    )
+    sim_params = AnalogSimParams(observables=[obs], elapsed_time=1.0, dt=0.5, num_traj=10, sample_timesteps=True)
     # sim_params.times => [0.0, 0.5, 1.0]
 
     obs.initialize(sim_params)
@@ -119,9 +117,7 @@ def test_observable_initialize_without_sample_timesteps() -> None:
     has shape (num_traj, 1), and that the observable's times attribute is set to elapsed_time.
     """
     obs = Observable(X(), 0)
-    sim_params = AnalogSimParams(
-        observables=[obs], elapsed_time=1.0, dt=0.25, num_traj=5, sample_timesteps=False, show_progress=False
-    )
+    sim_params = AnalogSimParams(observables=[obs], elapsed_time=1.0, dt=0.25, num_traj=5, sample_timesteps=False)
     # times => [0.0, 0.25, 0.5, 0.75, 1.0]
 
     obs.initialize(sim_params)
@@ -214,7 +210,7 @@ def test_aggregate_trajectories_regular_observable_mean() -> None:
     z_obs.trajectories = traj
 
     # Params (no PVM mixing, so just this observable)
-    sim = AnalogSimParams(observables=[z_obs], elapsed_time=0.2, dt=0.1, num_traj=2, show_progress=False)
+    sim = AnalogSimParams(observables=[z_obs], elapsed_time=0.2, dt=0.1, num_traj=2)
 
     sim.aggregate_trajectories()
 
@@ -237,7 +233,7 @@ def test_aggregate_trajectories_schmidt_concatenation() -> None:
     c = np.array([0.2, 0.1], dtype=np.float64)  # will ravel to [0.2, 0.1]
     ss_obs.trajectories = np.array([a, b, c])
 
-    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, num_traj=3, show_progress=False)
+    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, num_traj=3)
 
     sim.aggregate_trajectories()
 
@@ -255,7 +251,7 @@ def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
     ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[0, 1])
     ss_obs.trajectories = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
-    sim = AnalogSimParams(observables=[x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3, show_progress=False)
+    sim = AnalogSimParams(observables=[x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3)
 
     sim.aggregate_trajectories()
 
@@ -273,7 +269,7 @@ def test_aggregate_trajectories_schmidt_requires_array() -> None:
     ss_obs = Observable(GateLibrary.schmidt_spectrum(), sites=[2, 3])
     ss_obs.trajectories = [0.9, 0.1]  # ty: ignore[invalid-assignment]
 
-    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, show_progress=False)
+    sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1)
 
     with pytest.raises(AssertionError):
         sim.aggregate_trajectories()
@@ -301,7 +297,6 @@ def test_strong_params_sorting_and_fields() -> None:
         get_state=True,
         sample_layers=True,
         num_mid_measurements=2,
-        show_progress=False,
     )
 
     # Expect sortable by site: y@1, x@2, z@3 then diagnostics/meta in given order
@@ -358,7 +353,7 @@ def test_strong_aggregate_regular_mean() -> None:
     )
     x.trajectories = traj
 
-    params = StrongSimParams(observables=[x], num_traj=3, show_progress=False)
+    params = StrongSimParams(observables=[x], num_traj=3)
     params.aggregate_trajectories()
 
     assert isinstance(x.results, np.ndarray)

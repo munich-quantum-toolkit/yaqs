@@ -53,11 +53,12 @@ Run the simulations for a range of noise strengths
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 import numpy as np
 
+sim = Simulator()
 gammas = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 heatmap = np.empty((num_qubits, len(gammas)))
 for j, gamma in enumerate(gammas):
@@ -65,7 +66,7 @@ for j, gamma in enumerate(gammas):
     noise_model = NoiseModel([
         {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["lowering"]
     ])
-    simulator.run(state, circuit, sim_params, noise_model)
+    sim.run(state, circuit, sim_params, noise_model)
     for i, observable in enumerate(sim_params.observables):
         heatmap[i, j] = observable.results[0]
 ```

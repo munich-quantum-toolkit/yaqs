@@ -21,13 +21,13 @@ from typing import Any
 import numpy as np
 import pytest
 
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
-from mqt.yaqs.simulator import run
 
 
 def _allclose(a: np.ndarray, b: np.ndarray) -> bool:
@@ -221,8 +221,7 @@ def test_noise_distribution_integration() -> None:
         random_seed=42,
     )
 
-    # Run simulation
-    run(initial_state, hamiltonian, sim_params, noise_model)
+    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     # Verify that the noise model was sampled and stored
     assert sim_params.noise_model is not None, "Simulation parameters should store the sampled noise model."

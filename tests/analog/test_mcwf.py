@@ -14,6 +14,7 @@ import pytest
 import scipy.sparse
 
 import mqt.yaqs.analog.mcwf as mcwf_mod
+from mqt.yaqs import Simulator
 from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, mcwf, preprocess_mcwf
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -21,7 +22,6 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.simulator import run
 from tests.conftest import YAQS_TEST_SEED
 
 
@@ -54,11 +54,10 @@ def test_mcwf_amplitude_damping() -> None:
         elapsed_time=t_max,
         dt=dt,
         num_traj=num_traj,
-        show_progress=False,
         random_seed=YAQS_TEST_SEED,
     )
 
-    run(initial_state, hamiltonian, sim_params, noise_model, parallel=False)
+    Simulator(parallel=False, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
     sigma_z_sim = obs.results
@@ -98,7 +97,7 @@ def test_mcwf_unitary_rabi() -> None:
         num_traj=1,  # Deterministic
     )
 
-    run(initial_state, hamiltonian, sim_params, None)
+    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
 
     times = sim_params.times
     sigma_z_sim = obs.results
@@ -139,12 +138,11 @@ def test_mcwf_dephasing() -> None:
         elapsed_time=t_max,
         dt=dt,
         num_traj=num_traj,
-        show_progress=False,
         random_seed=YAQS_TEST_SEED,
     )
 
     # Use parallel=True to verify infrastructure
-    run(initial_state, hamiltonian, sim_params, noise_model, parallel=True)
+    Simulator(parallel=True, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
     x0_sim = obs0.results

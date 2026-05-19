@@ -19,7 +19,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
@@ -807,9 +807,8 @@ def test_convert_to_vector_fidelity() -> None:
     sim_params = StrongSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
-        show_progress=False,
     )
-    simulator.run(state, circ, sim_params)
+    Simulator(show_progress=False).run(state, circ, sim_params)
     assert sim_params.output_state is not None
     tdvp_state = sim_params.output_state.mps.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
@@ -833,9 +832,8 @@ def test_convert_to_vector_fidelity_long_range() -> None:
     sim_params = StrongSimParams(
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
-        show_progress=False,
     )
-    simulator.run(state, circ, sim_params)
+    Simulator(show_progress=False).run(state, circ, sim_params)
     assert sim_params.output_state is not None
     tdvp_state = sim_params.output_state.mps.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
@@ -1181,7 +1179,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
         Observable(GateLibrary.entropy(), [1, 2]),
         Observable(GateLibrary.schmidt_spectrum(), [1, 2]),
     ]
-    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1, show_progress=False)
+    sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1)
 
     results_diag = np.empty((len(diagnostics_and_meta), 2), dtype=object)
     mps.evaluate_observables(sim_diag, results_diag, column_index=0)
@@ -1205,7 +1203,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
 
     # ---- PVM ONLY (no mixing) ----
     pvm_only = [Observable(GateLibrary.pvm("0000"), 0)]
-    sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.1, dt=0.1, show_progress=False)
+    sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.1, dt=0.1)
 
     results_pvm = np.empty((len(pvm_only), 1), dtype=object)
     mps.evaluate_observables(sim_pvm, results_pvm, column_index=0)
@@ -1229,7 +1227,7 @@ def test_evaluate_observables_local_ops_and_center_shifts() -> None:
         Observable(GateLibrary.x(), 2),
         Observable(GateLibrary.z(), 3),
     ]
-    sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1, show_progress=False)
+    sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1)
 
     results = np.empty((len(obs_seq), 3), dtype=np.float64)
     mps.evaluate_observables(sim_params, results, column_index=2)
@@ -1250,7 +1248,6 @@ def test_evaluate_observables_meta_validation_errors() -> None:
         [Observable(GateLibrary.entropy(), [1])],
         elapsed_time=0.1,
         dt=0.1,
-        show_progress=False,
     )
     results_len = np.empty((1, 1), dtype=np.float64)
     with pytest.raises(AssertionError):
@@ -1261,7 +1258,6 @@ def test_evaluate_observables_meta_validation_errors() -> None:
         [Observable(GateLibrary.schmidt_spectrum(), [0, 2])],
         elapsed_time=0.1,
         dt=0.1,
-        show_progress=False,
     )
     results_adj = np.empty((1, 1), dtype=object)
     with pytest.raises(AssertionError):

@@ -21,7 +21,7 @@ YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.s
 | **`State`** | User-facing initial condition: length, preset name, optional raw data, and **which representation** to evolve in (`"mps"`, `"vector"`, or `"density_matrix"`). |
 | **`MPS`**   | Internal tensor network; used by the simulator when needed. Prefer [`State`](mqt.yaqs.core.data_structures.state.State) in application code.                   |
 
-**Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`run`](mqt.yaqs.simulator.run) — including in parameter loops.
+**Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`Simulator.run`](mqt.yaqs.Simulator) — including in parameter loops.
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.state import State
@@ -35,9 +35,9 @@ print("MCWF representation:", mcwf_state.representation)
 
 ## `State` versus `MPS`
 
-Use `State` in [`run`](mqt.yaqs.simulator.run). Use [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) directly only for low-level tensor-network code, or wrap an existing MPS with [`State.from_mps`](mqt.yaqs.core.data_structures.state.State.from_mps).
+Use `State` in [`Simulator.run`](mqt.yaqs.Simulator). Use [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) directly only for low-level tensor-network code, or wrap an existing MPS with [`State.from_mps`](mqt.yaqs.core.data_structures.state.State.from_mps).
 
-**Circuit simulation** requires `representation="mps"` (the preset default). `run` with `StrongSimParams` / `WeakSimParams` rejects vector and density-matrix states.
+**Circuit simulation** requires `representation="mps"` (the preset default). `Simulator.run` with `StrongSimParams` / `WeakSimParams` rejects vector and density-matrix states.
 
 ## How `representation` is chosen
 
@@ -63,7 +63,7 @@ print(lindblad_ready.representation)
 
 Presets match `MPS(..., state=...)` names: `"zeros"`, `"ones"`, `"x+"`, `"Neel"`, `"wall"`, `"basis"`, `"random"`, etc.
 
-For **MCWF** or **Lindblad**, set `representation` on the `State` and call `run` — no extra steps:
+For **MCWF** or **Lindblad**, set `representation` on the `State` and call `Simulator.run` — no extra steps:
 
 ```{code-cell} ipython3
 neel_mcwf = State(4, initial="Neel", representation="vector")
@@ -116,7 +116,7 @@ A `State` created only with `vector=` or `density_matrix=` cannot be used for ci
 
 ## Representation and backends (analog)
 
-Set **`representation` on `State`**, not on `AnalogSimParams`. [`run`](mqt.yaqs.simulator.run) materializes the correct internal form and dispatches:
+Set **`representation` on `State`**, not on `AnalogSimParams`. [`Simulator.run`](mqt.yaqs.Simulator) materializes the correct internal form and dispatches:
 
 | `representation`   | Backend (analog)                      |
 | ------------------ | ------------------------------------- |
@@ -127,9 +127,11 @@ Set **`representation` on `State`**, not on `AnalogSimParams`. [`run`](mqt.yaqs.
 ### Default: MPS / TJM
 
 ```{code-cell} ipython3
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.simulator import run
+
+sim = Simulator(show_progress=False)
 
 L = 3
 H = Hamiltonian.ising(L, J=1.0, g=0.5)
@@ -140,9 +142,8 @@ params = AnalogSimParams(
     observables=[obs],
     elapsed_time=0.2,
     dt=0.05,
-    show_progress=False,
 )
-run(state_mps, H, params, noise_model=None)
+sim.run(state_mps, H, params, noise_model=None)
 print("TJM Z_0:", obs.results[-1])
 ```
 
@@ -155,9 +156,8 @@ params_vec = AnalogSimParams(
     observables=[obs_vec],
     elapsed_time=0.2,
     dt=0.05,
-    show_progress=False,
 )
-run(state_vec, H, params_vec, None)
+sim.run(state_vec, H, params_vec, None)
 print("MCWF Z_0:", obs_vec.results[-1])
 ```
 
@@ -170,9 +170,8 @@ params_dm = AnalogSimParams(
     observables=[obs_dm],
     elapsed_time=0.2,
     dt=0.05,
-    show_progress=False,
 )
-run(state_dm, H, params_dm, None)
+sim.run(state_dm, H, params_dm, None)
 print("Lindblad Z_0:", obs_dm.results[-1])
 ```
 
@@ -186,7 +185,7 @@ If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or `density_matrix=
 psi = np.zeros(2**L, dtype=np.complex128)
 psi[0] = 1.0
 state_from_vec = State(vector=psi)
-run(state_from_vec, H, params_vec, None)
+sim.run(state_from_vec, H, params_vec, None)
 print("From vector=, MCWF Z_0:", obs_vec.results[-1])
 ```
 

@@ -61,4 +61,4 @@ print(f"orbitals={H_jw.length}, local dim={H_jw.mpo.physical_dimension}, matrix 
 {func}`~mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit` builds a **digital** Trotter circuit on separate ↑ and ↓ registers and can include a chemical potential $\mu$.
 The MPO factories above target the **analog** Hamiltonian without $\mu$ and use either fermionic operators or an interleaved JW layout.
 
-For digital simulation of the circuit model, use the circuit API; for tensor-network evolution of the Hubbard Hamiltonian, use `Hamiltonian.fermi_hubbard_1d` with {func}`~mqt.yaqs.simulator.run`.
+For digital simulation of the circuit model, use the circuit API; for tensor-network evolution of the Hubbard Hamiltonian, use `Hamiltonian.fermi_hubbard_1d` with {meth}`~mqt.yaqs.Simulator.run`.

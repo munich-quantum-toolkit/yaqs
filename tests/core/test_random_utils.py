@@ -17,7 +17,7 @@ import copy
 import numpy as np
 import pytest
 
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
@@ -58,10 +58,9 @@ def test_analog_run_reproducible_with_random_seed(*, run_parallel: bool) -> None
             max_bond_dim=8,
             order=2,
             sample_timesteps=False,
-            show_progress=False,
             random_seed=2025,
         )
-        simulator.run(st, H, params, copy.deepcopy(noise_model), parallel=run_parallel)
+        Simulator(parallel=run_parallel, show_progress=False).run(st, H, params, copy.deepcopy(noise_model))
         return [float(np.real(obs.results[0])) for obs in params.observables if obs.results is not None]
 
     first = run_once()

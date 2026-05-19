@@ -91,9 +91,10 @@ sim_params = AnalogSimParams(
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 
-simulator.run(state, H_0, sim_params, noise_model)
+sim = Simulator()
+sim.run(state, H_0, sim_params, noise_model)
 ```
 
 ## Plot the results

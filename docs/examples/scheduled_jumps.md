@@ -72,7 +72,6 @@ sim_params = AnalogSimParams(
     dt=0.1,
     num_traj=1, # Jumps are deterministic, so 1 trajectory is sufficient
     observables=[z_obs],
-    show_progress=False
 )
 ```
 
@@ -84,18 +83,20 @@ We run two simulations: one with the jump and a baseline without it.
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 import copy
+
+sim = Simulator(show_progress=False)
 
 # Baseline
 state_baseline = copy.deepcopy(state)
 sim_params_baseline = copy.deepcopy(sim_params)
-simulator.run(state_baseline, hamiltonian, sim_params_baseline)
+sim.run(state_baseline, hamiltonian, sim_params_baseline)
 
 # With Jump
 state_jump = copy.deepcopy(state)
 sim_params_jump = copy.deepcopy(sim_params)
-simulator.run(state_jump, hamiltonian, sim_params_jump, noise_model=noise_model)
+sim.run(state_jump, hamiltonian, sim_params_jump, noise_model=noise_model)
 ```
 
 ## 5. Visualize Results

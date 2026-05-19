@@ -24,7 +24,9 @@ from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, AnalogSimParams
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.simulator import run
+from mqt.yaqs import Simulator
+
+sim = Simulator()
 
 # 1. Define System
 L = 3
@@ -51,7 +53,7 @@ params_rho = AnalogSimParams(
     elapsed_time=t_max,
     dt=dt,
 )
-run(State(L, initial="zeros", representation="density_matrix"), H, params_rho, noise)
+sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho, noise)
 res_rho = obs.results.flatten()
 times = params_rho.times
 
@@ -63,7 +65,7 @@ params_vector = AnalogSimParams(
     dt=dt,
     num_traj=500,
 )
-run(State(L, initial="zeros", representation="vector"), H, params_vector, noise)
+sim.run(State(L, initial="zeros", representation="vector"), H, params_vector, noise)
 res_vector = obs.results.flatten()
 
 # 5. mps (default, stochastic trajectories)
@@ -75,7 +77,7 @@ params_mps = AnalogSimParams(
     num_traj=500,
     max_bond_dim=16,
 )
-run(State(L, initial="zeros", representation="mps"), H, params_mps, noise)
+sim.run(State(L, initial="zeros", representation="mps"), H, params_mps, noise)
 res_mps = obs.results.flatten()
 
 # 6. Plot Comparison
@@ -111,17 +113,16 @@ params_mps_unitary = AnalogSimParams(
     elapsed_time=1.0,
     dt=0.1,
     max_bond_dim=16,
-    show_progress=False,
 )
 params_rho_unitary = AnalogSimParams(
     observables=[obs_rho],
     elapsed_time=1.0,
     dt=0.1,
-    show_progress=False,
 )
-run(State(L, initial="zeros", representation="mps"), H, params_mps_unitary, None)
+quiet_sim = Simulator(show_progress=False)
+quiet_sim.run(State(L, initial="zeros", representation="mps"), H, params_mps_unitary, None)
 z_mps = obs_mps.results[-1]
-run(State(L, initial="zeros", representation="density_matrix"), H, params_rho_unitary, None)
+quiet_sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho_unitary, None)
 z_rho = obs_rho.results[-1]
 print(f"Noiseless <Z_0> at t=1: mps={z_mps:.6f}, density_matrix={z_rho:.6f}")
 ```

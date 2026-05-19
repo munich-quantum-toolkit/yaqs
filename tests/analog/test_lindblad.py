@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
+from mqt.yaqs import Simulator
 from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, preprocess_lindblad
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -21,7 +22,6 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.simulator import run
 
 if TYPE_CHECKING:
     import pytest
@@ -54,7 +54,7 @@ def test_lindblad_amplitude_damping() -> None:
         num_traj=1,  # Deterministic
     )
 
-    run(initial_state, hamiltonian, sim_params, noise_model)
+    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
     sigma_z_sim = obs.results
@@ -81,7 +81,7 @@ def test_lindblad_unitary_rabi() -> None:
 
     sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt)
 
-    run(initial_state, hamiltonian, sim_params, None)
+    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
 
     times = sim_params.times
     sigma_z_sim = obs.results
@@ -117,7 +117,7 @@ def test_lindblad_dephasing() -> None:
 
     sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt)
 
-    run(initial_state, hamiltonian, sim_params, noise_model)
+    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
     x0_sim = obs0.results
@@ -164,7 +164,7 @@ def test_lindblad_dephasing_both_qubits() -> None:
 
     sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt)
 
-    run(initial_state, hamiltonian, sim_params, noise_model)
+    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
     x0_sim = obs0.results
@@ -277,9 +277,9 @@ def test_noiseless_mps_matches_density_matrix() -> None:
         elapsed_time=t_max,
         dt=dt,
         max_bond_dim=32,
-        show_progress=False,
     )
-    run(psi_mps, h, params_mps, None)
+    sim = Simulator(show_progress=False)
+    sim.run(psi_mps, h, params_mps, None)
     assert obs.results is not None
     z_mps = obs.results[-1]
 
@@ -288,9 +288,8 @@ def test_noiseless_mps_matches_density_matrix() -> None:
         observables=[obs_rho],
         elapsed_time=t_max,
         dt=dt,
-        show_progress=False,
     )
-    run(psi_rho, h, params_rho, None)
+    sim.run(psi_rho, h, params_rho, None)
     assert obs_rho.results is not None
     z_rho = obs_rho.results[-1]
 
