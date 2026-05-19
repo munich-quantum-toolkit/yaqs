@@ -40,20 +40,25 @@ deleted.
 return value and read fields from `Result`. `result.sim_params` still references your original
 configuration object (unchanged).
 
-| Old (`sim_params`)                          | New (`result`)                  |
-| ------------------------------------------- | ------------------------------- |
-| `sim_params.observables[i].results`         | `result.observables[i].results` |
-| `sim_params.output_state`                   | `result.output_state`           |
-| `sim_params.noise_model`                    | `result.noise_model`            |
-| `sim_params.results` (weak)                 | `result.counts`                 |
-| `sim_params.measurements`                   | `result.measurements`           |
-| `sim_params.multi_time_observables_times`   | `result.multi_time_times`       |
-| `sim_params.multi_time_observables_results` | `result.multi_time_results`     |
+| Old (`sim_params`)                          | New (`result`)                 |
+| ------------------------------------------- | ------------------------------ |
+| `sim_params.observables[i].results`         | `result.expectation_values[i]` |
+| `sim_params.output_state`                   | `result.output_state`          |
+| `sim_params.noise_model`                    | `result.noise_model`           |
+| `sim_params.results` (weak)                 | `result.counts`                |
+| `sim_params.measurements`                   | `result.measurements`          |
+| `sim_params.multi_time_observables_times`   | `result.multi_time_times`      |
+| `sim_params.multi_time_observables_results` | `result.multi_time_results`    |
 
 Removed from `*SimParams`: `noise_model`, `output_state`, `multi_time_observables_times`,
 `multi_time_observables_results`, `measurements`, `results`, `aggregate_trajectories`,
 `aggregate_measurements`. Observable configuration (`observables`, `multi_time_observables`, etc.)
 remains on `*SimParams`.
+
+`Observable` no longer carries run outputs. After `Simulator.run`, read
+`result.expectation_values[i]` (aggregated expectations), `result.trajectories[i]` (per-trajectory
+data), and `result.times` (shared analog time grid). `result.observables[i]` is still the gate/sites
+metadata for observable _i_.
 
 **Before:**
 
@@ -68,7 +73,7 @@ print(sim_params.observables[0].results)
 ```python
 sim = Simulator()
 result = sim.run(state, op, sim_params, noise_model)
-print(result.observables[0].results)
+print(result.expectation_values[0])
 ```
 
 ### `simulator.run` uses `State` and `Hamiltonian`
