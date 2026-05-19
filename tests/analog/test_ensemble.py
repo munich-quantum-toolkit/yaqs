@@ -260,7 +260,7 @@ def test_unitary_ensemble_member_worker_uses_bug_evolution_mode() -> None:
         max_bond_dim=64,
         threshold=1e-10,
     )
-    obs_result, multi_time = ensemble_member_worker((0, mps, sim_params, hamiltonian.mpo))
+    obs_result, _, multi_time = ensemble_member_worker((0, mps, sim_params, hamiltonian.mpo))
     assert obs_result.shape == (1, len(sim_params.times))
     assert multi_time is None
 
@@ -282,7 +282,7 @@ def test_unitary_ensemble_member_worker_final_timestep_when_not_sampling() -> No
         threshold=1e-10,
     )
     assert len(sim_params.times) >= 3
-    obs_result, multi_time = ensemble_member_worker((0, mps, sim_params, hamiltonian.mpo))
+    obs_result, _, multi_time = ensemble_member_worker((0, mps, sim_params, hamiltonian.mpo))
     assert obs_result.shape == (1, 1)
     assert multi_time is not None
     assert multi_time.shape == (2, 1)
@@ -483,7 +483,7 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
         multi_time_observables=pairs,
     )
 
-    _, mat = ensemble_member_worker((0, mps, sim_params, h))
+    _, _, mat = ensemble_member_worker((0, mps, sim_params, h))
     assert mat is not None
     val_worker = float(np.real(mat[s_index, 0]))
 

@@ -85,6 +85,31 @@ remains on `*SimParams`.
 data), and `result.times` (shared analog time grid). `result.observables[i]` is still the gate/sites
 metadata for observable _i_.
 
+### MPS bond diagnostics are automatic on `Result`
+
+`runtime_cost`, `max_bond`, and `total_bond` are no longer configured as
+[`Observable`](src/mqt/yaqs/core/data_structures/simulation_parameters.py) instances. For MPS-backed
+analog and strong-digital runs, [`Simulator.run`](src/mqt/yaqs/simulator.py) fills
+`result.runtime_cost`, `result.max_bond`, and `result.total_bond` (1D arrays aligned with
+`result.times` or the strong-sim layer grid). MCWF, Lindblad, and weak digital runs leave these
+fields as `None`.
+
+**Before:**
+
+```python
+sim_params = AnalogSimParams(observables=[Observable(Z(), 0), Observable("max_bond")])
+result = sim.run(state, H, sim_params)
+max_bond_curve = result.expectation_values[-1]
+```
+
+**After:**
+
+```python
+sim_params = AnalogSimParams(observables=[Observable(Z(), 0)])
+result = sim.run(state, H, sim_params)
+max_bond_curve = result.max_bond
+```
+
 **Before:**
 
 ```python

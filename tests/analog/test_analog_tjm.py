@@ -138,7 +138,7 @@ def test_analog_tjm_2() -> None:
         sample_timesteps=False,
     )
     args = (0, state, noise_model, sim_params, H)
-    results, _ = analog_tjm_2(args)
+    results, _, _ = analog_tjm_2(args)
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
@@ -167,7 +167,7 @@ def test_analog_tjm_2_sample_timesteps() -> None:
         sample_timesteps=True,
     )
     args = (0, state, noise_model, sim_params, H)
-    results, _ = analog_tjm_2(args)
+    results, _, _ = analog_tjm_2(args)
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 
@@ -196,7 +196,7 @@ def test_analog_tjm_1() -> None:
         sample_timesteps=False,
     )
     args = (0, state, noise_model, sim_params, H)
-    results, _ = analog_tjm_1(args)
+    results, _, _ = analog_tjm_1(args)
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
@@ -225,7 +225,7 @@ def test_analog_tjm_1_sample_timesteps() -> None:
         sample_timesteps=True,
     )
     args = (0, state, noise_model, sim_params, H)
-    results, _ = analog_tjm_1(args)
+    results, _, _ = analog_tjm_1(args)
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 

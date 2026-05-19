@@ -79,20 +79,9 @@ class Observable:
             The gate that will act as the observable.
         sites :
             The qubit or site indices on which this observable is measured.
-
-        Raises:
-        ------
-        AssertionError
-            If the provided `name` is not a valid attribute in the GateLibrary.
         """
         if isinstance(gate, str):
-            if gate == "runtime_cost":
-                gate = GateLibrary.runtime_cost()
-            elif gate == "max_bond":
-                gate = GateLibrary.max_bond()
-            elif gate == "total_bond":
-                gate = GateLibrary.total_bond()
-            elif gate == "entropy":
+            if gate == "entropy":
                 gate = GateLibrary.entropy()
             elif gate == "schmidt_spectrum":
                 gate = GateLibrary.schmidt_spectrum()
@@ -108,7 +97,7 @@ class Observable:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
         self.gate = copy.deepcopy(gate)
-        if gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
+        if gate.name != "pvm":
             assert sites is not None
             self.sites = sites
             self.gate.set_sites(self.sites)
@@ -187,14 +176,8 @@ class AnalogSimParams:
         self.observables = obs_list
 
         if self.observables:
-            sortable = [
-                obs
-                for obs in self.observables
-                if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
-            unsorted = [
-                obs for obs in self.observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
+            sortable = [obs for obs in self.observables if obs.gate.name != "pvm"]
+            unsorted = [obs for obs in self.observables if obs.gate.name == "pvm"]
             sorted_obs = sorted(
                 sortable,
                 key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,
@@ -356,14 +339,8 @@ class StrongSimParams:
         self.observables = obs_list
 
         if self.observables:
-            sortable = [
-                obs
-                for obs in self.observables
-                if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
-            unsorted = [
-                obs for obs in self.observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
+            sortable = [obs for obs in self.observables if obs.gate.name != "pvm"]
+            unsorted = [obs for obs in self.observables if obs.gate.name == "pvm"]
             sorted_obs = sorted(
                 sortable,
                 key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,

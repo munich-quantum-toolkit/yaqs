@@ -127,26 +127,6 @@ def test_allocate_observable_buffers_without_sample_timesteps() -> None:
     assert trajectories[0].shape == (5, 1)
 
 
-def test_observable_from_string_runtime_cost() -> None:
-    """Constructor maps 'runtime_cost' string to the runtime_cost diagnostic gate."""
-    obs = Observable("runtime_cost", sites=0)
-    assert obs.gate.name == "runtime_cost"
-    # placeholder identity backing for diagnostics
-    assert obs.gate.matrix.shape == (2, 2)
-    assert np.allclose(obs.gate.matrix, np.eye(2))
-
-
-def test_observable_from_string_max_total_bond() -> None:
-    """Constructor maps 'max_bond' and 'total_bond' to their diagnostic gates."""
-    obs_max = Observable("max_bond", sites=1)
-    obs_tot = Observable("total_bond", sites=2)
-
-    assert obs_max.gate.name == "max_bond"
-    assert obs_tot.gate.name == "total_bond"
-    assert np.allclose(obs_max.gate.matrix, np.eye(2))
-    assert np.allclose(obs_tot.gate.matrix, np.eye(2))
-
-
 def test_observable_from_string_entropy_and_spectrum_with_list_sites() -> None:
     """Constructor maps 'entropy' and 'schmidt_spectrum' and accepts list[int] sites."""
     cut = [3, 4]
@@ -281,22 +261,14 @@ def test_aggregate_trajectories_schmidt_requires_array() -> None:
 
 
 def test_strong_params_sorting_and_fields() -> None:
-    """Constructor sorts non-diagnostic observables by site, diagnostics appended.
-
-    Sortable: gates NOT in {pvm, runtime_cost, max_bond, total_bond, schmidt_spectrum}
-    Unsorted tail: the listed diagnostics/meta that keep their relative order.
-    """
-    # Sortable by site:
+    """Constructor sorts non-PVM observables by site; PVM observables are appended."""
     obs_z3 = Observable(GateLibrary.z(), sites=3)
     obs_x2 = Observable(GateLibrary.x(), sites=2)
     obs_y1 = Observable(GateLibrary.y(), sites=1)
-    # Unsorted block (diagnostics/meta) — keep insertion order:
-    obs_cost = Observable(GateLibrary.runtime_cost(), sites=0)
-    obs_tot = Observable(GateLibrary.total_bond(), sites=0)
     obs_ssp = Observable(GateLibrary.schmidt_spectrum(), sites=[1, 2])
 
     params = StrongSimParams(
-        observables=[obs_z3, obs_x2, obs_y1, obs_cost, obs_tot, obs_ssp],
+        observables=[obs_z3, obs_x2, obs_y1, obs_ssp],
         num_traj=7,
         max_bond_dim=128,
         get_state=True,
@@ -304,20 +276,10 @@ def test_strong_params_sorting_and_fields() -> None:
         num_mid_measurements=2,
     )
 
-    # Expect sortable by site: y@1, x@2, z@3 then diagnostics/meta in given order
-    for j, o in enumerate(params.sorted_observables):
-        if j == 0:
-            assert o is obs_y1
-        elif j == 1:
-            assert o is obs_ssp
-        elif j == 2:
-            assert o is obs_x2
-        elif j == 3:
-            assert o is obs_z3
-        elif j == 4:
-            assert o is obs_cost
-        elif j == 5:
-            assert o is obs_tot
+    assert params.sorted_observables[0] is obs_y1
+    assert params.sorted_observables[1] is obs_ssp
+    assert params.sorted_observables[2] is obs_x2
+    assert params.sorted_observables[3] is obs_z3
 
     # Parameter fields are retained
     assert params.num_traj == 7

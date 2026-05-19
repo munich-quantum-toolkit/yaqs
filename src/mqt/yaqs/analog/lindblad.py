@@ -171,7 +171,7 @@ def preprocess_lindblad(
     # 5. Embed observables; MPS-only diagnostics are not traced on rho.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
-        if obs.gate.name in {"runtime_cost", "max_bond", "total_bond", "entropy", "schmidt_spectrum"}:
+        if obs.gate.name in {"entropy", "schmidt_spectrum"}:
             embedded_observables.append(None)
         else:
             embedded_observables.append(_embed_observable_sparse(obs, num_sites))
@@ -288,14 +288,20 @@ def _evolve_with_propagator(ctx: LindbladContext) -> NDArray[np.float64]:
 
     num_obs = len(sim_params.sorted_observables)
     num_steps = len(sim_params.times)
-    obs_results = np.zeros((num_obs, num_steps), dtype=np.float64)
+    num_cols = num_steps if sim_params.sample_timesteps else 1
+    obs_results = np.zeros((num_obs, num_cols), dtype=np.float64)
 
     rho_vec = ctx.rho_initial.copy()
-    _measure_rho(rho_vec, dim, ctx, obs_results, 0)
+    if sim_params.sample_timesteps:
+        _measure_rho(rho_vec, dim, ctx, obs_results, 0)
 
     for t_idx in range(1, num_steps):
         rho_vec = ctx.step_propagator @ rho_vec
-        _measure_rho(rho_vec, dim, ctx, obs_results, t_idx)
+        if sim_params.sample_timesteps:
+            _measure_rho(rho_vec, dim, ctx, obs_results, t_idx)
+
+    if not sim_params.sample_timesteps:
+        _measure_rho(rho_vec, dim, ctx, obs_results, 0)
 
     return obs_results
 
@@ -343,28 +349,30 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
 
     # result.y has shape (dim^2, num_time_points).
     num_obs = len(sim_params.sorted_observables)
-    obs_results = np.zeros((num_obs, len(result.t)), dtype=np.float64)
-
-    for t_idx, rho_flat_t in enumerate(result.y.T):
-        _measure_rho(rho_flat_t, dim, ctx, obs_results, t_idx)
+    if sim_params.sample_timesteps:
+        obs_results = np.zeros((num_obs, len(result.t)), dtype=np.float64)
+        for t_idx, rho_flat_t in enumerate(result.y.T):
+            _measure_rho(rho_flat_t, dim, ctx, obs_results, t_idx)
+    else:
+        obs_results = np.zeros((num_obs, 1), dtype=np.float64)
+        _measure_rho(result.y.T[-1], dim, ctx, obs_results, 0)
 
     return obs_results
 
 
-def lindblad_evolve(ctx: LindbladContext) -> tuple[NDArray[np.float64], None]:
+def lindblad_evolve(ctx: LindbladContext) -> tuple[NDArray[np.float64], None, None]:
     """Evolve a preprocessed Lindblad context and return observable trajectories.
 
     Returns:
-        tuple[NDArray[np.float64], None]: Observable data and no final state (density-matrix evolution).
+        tuple[NDArray[np.float64], None, None]: Observable data, no diagnostics, no final state.
     """
-    if ctx.step_propagator is not None:
-        return _evolve_with_propagator(ctx), None
-    return _evolve_with_ode(ctx), None
+    obs = _evolve_with_propagator(ctx) if ctx.step_propagator is not None else _evolve_with_ode(ctx)
+    return obs, None, None
 
 
 def lindblad(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
-) -> tuple[NDArray[np.float64], None]:
+) -> tuple[NDArray[np.float64], None, None]:
     """Run an exact Lindblad master-equation simulation.
 
     Args:
@@ -376,9 +384,9 @@ def lindblad(
             - MPO: The Hamiltonian.
 
     Returns:
-        tuple[NDArray[np.float64], None]: Observable data and no final state.
+        tuple[NDArray[np.float64], None, None]: Observable data, no diagnostics, no final state.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
     ctx = preprocess_lindblad(initial_state, hamiltonian, noise_model, sim_params)
-    obs_results, _ = lindblad_evolve(ctx)
-    return obs_results, None
+    obs_results, _, _ = lindblad_evolve(ctx)
+    return obs_results, None, None

@@ -1173,9 +1173,6 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
 
     # ---- diagnostics + meta (NO PVM here) ----
     diagnostics_and_meta: list[Observable] = [
-        Observable(GateLibrary.runtime_cost(), 0),
-        Observable(GateLibrary.max_bond(), 0),
-        Observable(GateLibrary.total_bond(), 0),
         Observable(GateLibrary.entropy(), [1, 2]),
         Observable(GateLibrary.schmidt_spectrum(), [1, 2]),
     ]
@@ -1183,12 +1180,6 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
 
     results_diag = np.empty((len(diagnostics_and_meta), 2), dtype=object)
     mps.evaluate_observables(sim_diag, results_diag, column_index=0)
-
-    # Diagnostics
-    # Ordering based on sorted_observables
-    assert results_diag[2, 0] == 3  # runtime_cost
-    assert results_diag[3, 0] == 2  # max_bond
-    assert results_diag[4, 0] == 3  # total_bond
 
     # Entropy
     assert isinstance(results_diag[0, 0], (float, np.floating))

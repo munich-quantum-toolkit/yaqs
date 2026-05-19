@@ -111,7 +111,9 @@ from .core.data_structures.hamiltonian import Hamiltonian
 from .core.data_structures.result import (
     Result,
     aggregate_counts,
+    aggregate_diagnostics,
     aggregate_trajectories,
+    allocate_diagnostic_buffers,
     allocate_observable_buffers,
 )
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
@@ -308,7 +310,7 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
 # workers come first (primary simulation mode), followed by the digital
 # strong/weak workers, with the unitary ensemble worker last.
 # ---------------------------------------------------------------------------
-def _analog_worker(traj_idx: int) -> tuple[NDArray[np.float64], MPS | None]:
+def _analog_worker(traj_idx: int) -> tuple[NDArray[np.float64], NDArray[np.float64] | None, MPS | None]:
     """Execute a single analog simulation trajectory (TJM or Lindblad).
 
     Retrieves the appropriate backend function and simulation arguments from
@@ -318,7 +320,8 @@ def _analog_worker(traj_idx: int) -> tuple[NDArray[np.float64], MPS | None]:
         traj_idx: The integer index of the trajectory to execute.
 
     Returns:
-        tuple[NDArray[np.float64], MPS | None]: Observable data and optional final MPS.
+        tuple[NDArray[np.float64], NDArray[np.float64] | None, MPS | None]:
+            Observable data, optional diagnostics, and optional final MPS.
     """
     # backend is chosen by Simulator._run_analog and stored in context
     backend = WORKER_CTX["backend"]
@@ -331,7 +334,7 @@ def _analog_worker(traj_idx: int) -> tuple[NDArray[np.float64], MPS | None]:
     ))
 
 
-def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], np.ndarray | None]:
+def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], None, np.ndarray | None]:
     """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
 
     Retrieves the preprocessed MCWF context from `WORKER_CTX` and executes
@@ -346,7 +349,7 @@ def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], np.ndarray | None]
     return mcwf((traj_idx, WORKER_CTX["ctx"]))
 
 
-def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None]:
+def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, None]:
     """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
 
     Returns:
@@ -355,7 +358,9 @@ def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None]:
     return lindblad_evolve(WORKER_CTX["ctx"])
 
 
-def _digital_strong_worker(traj_idx: int) -> tuple[dict[int, int] | NDArray[np.float64], MPS | None]:
+def _digital_strong_worker(
+    traj_idx: int,
+) -> tuple[NDArray[np.float64] | dict[int, int], NDArray[np.float64] | None, MPS | None]:
     """Execute a single digital strong simulation trajectory.
 
     Retrieves the required simulation objects (initial state, noise model,
@@ -366,8 +371,8 @@ def _digital_strong_worker(traj_idx: int) -> tuple[dict[int, int] | NDArray[np.f
         traj_idx: The integer index of the trajectory to execute.
 
     Returns:
-        dict[int, int] | NDArray[np.float64]: The result of the single-trajectory simulation
-        (typically an observable trajectory or final state).
+        tuple[NDArray[np.float64] | dict[int, int], NDArray[np.float64] | None, MPS | None]:
+            Observable data or shot counts, optional diagnostics, optional final MPS.
     """
     return digital_tjm((
         traj_idx,
@@ -378,7 +383,7 @@ def _digital_strong_worker(traj_idx: int) -> tuple[dict[int, int] | NDArray[np.f
     ))
 
 
-def _digital_weak_worker(traj_idx: int) -> tuple[dict[int, int], MPS | None]:
+def _digital_weak_worker(traj_idx: int) -> tuple[dict[int, int], None, MPS | None]:
     """Execute a single digital weak simulation trajectory.
 
     Retrieves simulation objects from `WORKER_CTX` and executes a 'shots=1'
@@ -391,7 +396,7 @@ def _digital_weak_worker(traj_idx: int) -> tuple[dict[int, int], MPS | None]:
         tuple[dict[int, int], MPS | None]: Shot counts and optional final MPS.
     """
     return cast(
-        "tuple[dict[int, int], MPS | None]",
+        "tuple[dict[int, int], None, MPS | None]",
         digital_tjm((
             traj_idx,
             WORKER_CTX["initial_state"],
@@ -404,7 +409,7 @@ def _digital_weak_worker(traj_idx: int) -> tuple[dict[int, int], MPS | None]:
 
 def _ensemble_worker(
     job_idx: int,
-) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128] | None]:
     """Execute one deterministic unitary ensemble member trajectory.
 
     Uses :data:`WORKER_CTX` keys ``initial_states``, ``sim_params``, and ``operator``.
@@ -413,8 +418,8 @@ def _ensemble_worker(
         job_idx: Index of this member; selects ``WORKER_CTX["initial_states"][job_idx]``.
 
     Returns:
-        tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
-            Observable trajectories and optional ``multi_time_observables`` block for one member.
+        tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128] | None]:
+            Observable trajectories, diagnostics, and optional multi-time block for one member.
     """
     return ensemble_member_worker((
         job_idx,
@@ -893,7 +898,7 @@ class Simulator:
         _validate_state_hamiltonian_pairing(initial_state, operator)
         mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
 
-        backend: Callable[..., tuple[NDArray[np.float64], Any]]
+        backend: Callable[..., tuple[NDArray[np.float64], Any, Any]]
         if state_rep == "density_matrix":
             backend = lindblad_evolve
         elif state_rep == "vector":
@@ -919,6 +924,10 @@ class Simulator:
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
         worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
+
+        diag_per_traj: NDArray[np.float64] | None = None
+        if state_rep == "mps":
+            diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
 
         payload: dict[str, Any]
         worker_fn: Callable[[int], Any]
@@ -974,9 +983,11 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                traj_data, traj_final = traj_payload
+                traj_data, traj_diag, traj_final = traj_payload
                 for obs_index in range(len(result.observables)):
                     result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None and diag_per_traj is not None:
+                    diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
@@ -996,9 +1007,11 @@ class Simulator:
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                traj_data, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
                 for obs_index in range(len(result.observables)):
                     result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None and diag_per_traj is not None:
+                    diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
@@ -1010,6 +1023,8 @@ class Simulator:
         else:
             _store_final_mps(result, final_mps)
 
+        if diag_per_traj is not None:
+            result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
         aggregate_trajectories(result)
 
     # -----------------------------------------------------------------------
@@ -1064,6 +1079,12 @@ class Simulator:
         if sim_params.sample_layers:
             worker_params.num_mid_measurements = effective_num_mid_measurements
 
+        diag_per_traj, _ = allocate_diagnostic_buffers(
+            sim_params,
+            num_traj=effective_num_traj,
+            num_mid_measurements=effective_num_mid_measurements,
+        )
+
         payload: dict[str, Any] = {
             "initial_state": initial_state,
             "noise_model": noise_model,
@@ -1085,9 +1106,11 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                traj_data, traj_final = traj_payload
+                traj_data, traj_diag, traj_final = traj_payload
                 for obs_index in range(len(result.observables)):
                     result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None:
+                    diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
                     final_mps = traj_final
         else:
@@ -1100,13 +1123,16 @@ class Simulator:
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                traj_data, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
                 for obs_index in range(len(result.observables)):
                     result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None:
+                    diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
                     final_mps = traj_final
 
         _store_final_mps(result, final_mps)
+        result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
         aggregate_trajectories(result)
 
     # -----------------------------------------------------------------------
@@ -1176,7 +1202,7 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                shot_counts, traj_final = traj_payload
+                shot_counts, _traj_diag, traj_final = traj_payload
                 result.measurements[i] = _expect_shot_counts(shot_counts)
                 if traj_final is not None:
                     final_mps = traj_final
@@ -1190,7 +1216,7 @@ class Simulator:
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                shot_counts, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                shot_counts, _traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
                 counts_dict = _expect_shot_counts(shot_counts)
                 if noisy:
                     result.measurements[i] = counts_dict
@@ -1301,6 +1327,7 @@ class Simulator:
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
         worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
+        diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
 
         n_pairs = len(sim_params.multi_time_observables)
         n_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
@@ -1320,7 +1347,7 @@ class Simulator:
         }
 
         if self.parallel and len(initial_states) > 1:
-            for i, (obs_result, multi_time_result) in run_backend_parallel(
+            for i, (obs_result, traj_diag, multi_time_result) in run_backend_parallel(
                 worker_fn=_ensemble_worker,
                 payload=payload,
                 n_jobs=len(initial_states),
@@ -1333,6 +1360,7 @@ class Simulator:
             ):
                 for obs_index in range(len(result.observables)):
                     result.trajectories[obs_index][i] = obs_result[obs_index]
+                diag_per_traj[:, i, :] = traj_diag
                 if multi_time_matrix is not None:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result
@@ -1341,13 +1369,17 @@ class Simulator:
             args = [(i, initial_states[i], worker_params, operator) for i in range(len(initial_states))]
             iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not self.show_progress)
             for i, arg in enumerate(iterator):
-                obs_result, multi_time_result = _call_backend(ensemble_member_worker, arg, n_threads=n_threads)
+                obs_result, traj_diag, multi_time_result = _call_backend(
+                    ensemble_member_worker, arg, n_threads=n_threads
+                )
                 for obs_index in range(len(result.observables)):
                     result.trajectories[obs_index][i] = obs_result[obs_index]
+                diag_per_traj[:, i, :] = traj_diag
                 if multi_time_matrix is not None:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result
 
+        result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
         aggregate_trajectories(result)
         if multi_time_matrix is not None:
             result.multi_time_results = np.mean(multi_time_matrix, axis=0)

@@ -401,6 +401,17 @@ class MPS:
         cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1:]]
         return sum(cost)
 
+    def record_diagnostics(self, diagnostics: NDArray[np.float64], column_index: int) -> None:
+        """Write runtime cost, max bond, and total bond into a diagnostics row buffer.
+
+        Args:
+            diagnostics: Array shaped ``(3, T)``; rows are cost, max bond, total bond.
+            column_index: Column (time or layer index) to fill.
+        """
+        diagnostics[0, column_index] = self.get_cost()
+        diagnostics[1, column_index] = self.get_max_bond()
+        diagnostics[2, column_index] = self.get_total_bond()
+
     def get_entropy(self, sites: list[int]) -> np.float64:
         """Compute bipartite entanglement entropy.
 
@@ -929,13 +940,7 @@ class MPS:
         temp_state = copy.deepcopy(self)
         last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.gate.name == "runtime_cost":
-                results[obs_index, column_index] = self.get_cost()
-            elif observable.gate.name == "max_bond":
-                results[obs_index, column_index] = self.get_max_bond()
-            elif observable.gate.name == "total_bond":
-                results[obs_index, column_index] = self.get_total_bond()
-            elif observable.gate.name in {"entropy", "schmidt_spectrum"}:
+            if observable.gate.name in {"entropy", "schmidt_spectrum"}:
                 assert isinstance(observable.sites, list), "Given metric requires a list of sites"
                 assert len(observable.sites) == 2, "Given metric requires 2 sites to act on."
                 max_site = max(observable.sites)

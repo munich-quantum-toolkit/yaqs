@@ -22,6 +22,7 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.core.libraries.gate_library import Z
 from tests.conftest import YAQS_TEST_SEED
 
 
@@ -222,39 +223,27 @@ def test_mcwf_noisy_system_has_propagator() -> None:
     assert ctx.step_propagator is not None
 
 
-def test_mcwf_diagnostic_observables() -> None:
-    """Test that diagnostic observables are handled (converted to None/0.0) in MCWF."""
-    n_sites = 2
-    psi = MPS(n_sites)
-    h = MPO.ising(n_sites, J=1.0, g=1.0)
+def test_mcwf_diagnostic_observable_string_removed() -> None:
+    """MPS bond diagnostics are no longer configurable as Observables."""
+    with pytest.raises(ValueError, match="no longer an Observable"):
+        Observable("runtime_cost", sites=0)
 
-    # "runtime_cost" is a special diagnostic observable name
-    obs_diag = Observable("runtime_cost", sites=[])
-    # Also add a real observable to verify mixing
-    obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs_diag, obs_real])
-
-    # MCWF Preprocess
-    ctx = preprocess_mcwf(psi, h, None, sim_params)
-
-    # Check that we have one None and one array in embedded_observables
-    assert any(op is None for op in ctx.embedded_observables)
-    assert any(op is not None for op in ctx.embedded_observables)
-
-    # Identify the index of the diagnostic observable
-    diag_idx = -1
-    for i, obs in enumerate(sim_params.sorted_observables):
-        if obs.gate.name == "runtime_cost":
-            diag_idx = i
-            break
-    assert diag_idx != -1
-    assert ctx.embedded_observables[diag_idx] is None
-
-    # Run MCWF
-    res_mcwf, _ = mcwf((0, ctx))
-    # Result for diagnostic should be 0.0
-    assert np.allclose(res_mcwf[diag_idx, :], 0.0)
+def test_mcwf_result_has_no_auto_diagnostics() -> None:
+    """Vector MCWF runs do not populate Result bond diagnostics."""
+    length = 2
+    state = State(length, initial="zeros", representation="vector")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
+    assert result.runtime_cost is None
+    assert result.max_bond is None
+    assert result.total_bond is None
 
 
 def test_mcwf_trajectory_rng_seeding() -> None:
@@ -277,9 +266,9 @@ def test_mcwf_trajectory_rng_seeding() -> None:
     )
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
 
-    res_a, _ = mcwf((3, ctx))
-    res_b, _ = mcwf((3, ctx))
-    res_c, _ = mcwf((7, ctx))
+    res_a, _, _ = mcwf((3, ctx))
+    res_b, _, _ = mcwf((3, ctx))
+    res_c, _, _ = mcwf((7, ctx))
 
     assert np.allclose(res_a, res_b)
     assert not np.allclose(res_a, res_c)
@@ -305,7 +294,7 @@ def test_mcwf_noisy_evolution_with_propagator() -> None:
     assert ctx.step_propagator is not None
     assert not ctx.is_unitary
 
-    res, _ = mcwf((0, ctx))
+    res, _, _ = mcwf((0, ctx))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))
 
@@ -327,7 +316,7 @@ def test_mcwf_unitary_krylov_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ctx.step_propagator is None
     assert ctx.is_unitary
 
-    res, _ = mcwf((0, ctx))
+    res, _, _ = mcwf((0, ctx))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))
 
@@ -353,6 +342,6 @@ def test_mcwf_noisy_arnoldi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ctx.step_propagator is None
     assert not ctx.is_unitary
 
-    res, _ = mcwf((0, ctx))
+    res, _, _ = mcwf((0, ctx))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))

@@ -9,9 +9,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
+import pytest
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import Simulator
@@ -22,9 +21,7 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-
-if TYPE_CHECKING:
-    import pytest
+from mqt.yaqs.core.libraries.gate_library import Z
 
 
 def test_lindblad_amplitude_damping() -> None:
@@ -200,33 +197,27 @@ def test_lindblad_zero_strength_noise() -> None:
     lindblad((0, psi, noise, sim_params, h))
 
 
-def test_lindblad_diagnostic_observables() -> None:
-    """Test that diagnostic observables are handled (converted to None/0.0) in Lindblad."""
-    n_sites = 2
-    psi = MPS(n_sites)
-    h = MPO.ising(n_sites, J=1.0, g=1.0)
+def test_lindblad_diagnostic_observable_string_removed() -> None:
+    """MPS bond diagnostics are no longer configurable as Observables."""
+    with pytest.raises(ValueError, match="no longer an Observable"):
+        Observable("runtime_cost", sites=0)
 
-    # "runtime_cost" is a special diagnostic observable name
-    obs_diag = Observable("runtime_cost", sites=[])
-    # Also add a real observable to verify mixing
-    obs_real = Observable("z", sites=[0])
 
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs_diag, obs_real])
-
-    # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
-    args = (0, psi, None, sim_params, h)
-    res_lindblad, _ = lindblad(args)
-
-    # Identify the index of the diagnostic observable
-    diag_idx = -1
-    for i, obs in enumerate(sim_params.sorted_observables):
-        if obs.gate.name == "runtime_cost":
-            diag_idx = i
-            break
-
-    assert diag_idx != -1
-    # Result for diagnostic should be 0.0
-    assert np.allclose(res_lindblad[diag_idx, :], 0.0)
+def test_lindblad_result_has_no_auto_diagnostics() -> None:
+    """Density-matrix Lindblad runs do not populate Result bond diagnostics."""
+    length = 2
+    state = State(length, initial="zeros", representation="density_matrix")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
+    assert result.runtime_cost is None
+    assert result.max_bond is None
+    assert result.total_bond is None
 
 
 def test_preprocess_lindblad_sets_propagator_small_system() -> None:
@@ -314,12 +305,12 @@ def test_lindblad_propagator_records_all_timepoints() -> None:
         observables=[obs],
         elapsed_time=0.2,
         dt=0.05,
-        sample_timesteps=False,
+        sample_timesteps=True,
     )
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert ctx.step_propagator is not None
 
-    res, _ = lindblad((0, psi, noise, sim_params, h))
+    res, _, _ = lindblad((0, psi, noise, sim_params, h))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))
     assert not np.allclose(res[0, 0], res[0, -1])
@@ -349,6 +340,6 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert ctx.step_propagator is None
 
-    res, _ = lindblad((0, psi, noise, sim_params, h))
+    res, _, _ = lindblad((0, psi, noise, sim_params, h))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))

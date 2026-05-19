@@ -310,13 +310,13 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
             dynamic_ctx.psi_initial = current_state
             dynamic_ctx.sim_params = step_params
 
-            _, psi_final = mcwf((traj_idx, dynamic_ctx))
+            _, _, psi_final = mcwf((traj_idx, dynamic_ctx))
             assert psi_final is not None
             current_state = psi_final
         else:
             backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
             assert isinstance(current_state, MPS)
-            _, final_mps = backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
+            _, _, final_mps = backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
             assert final_mps is not None
             current_state = final_mps
 

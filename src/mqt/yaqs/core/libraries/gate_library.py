@@ -542,42 +542,6 @@ class BaseGate:
         return PVM(bitstring)
 
     @classmethod
-    def runtime_cost(cls) -> RuntimeCost:
-        """Create a runtime cost diagnostic operator.
-
-        This is not a physical observable but a diagnostic metric that estimates
-        the computational cost of simulating the network.
-
-        Returns:
-            An instance of the runtime cost diagnostic gate.
-        """
-        return RuntimeCost()
-
-    @classmethod
-    def max_bond(cls) -> MaxBond:
-        """Create a maximum bond dimension diagnostic operator.
-
-        This is not a physical observable but a diagnostic metric that reports
-        the maximum bond dimension in the tensor network.
-
-        Returns:
-            An instance of the max bond dimension diagnostic gate.
-        """
-        return MaxBond()
-
-    @classmethod
-    def total_bond(cls) -> TotalBond:
-        """Create a total bond dimension diagnostic operator.
-
-        This is not a physical observable but a diagnostic metric that reports
-        the sum of internal bond dimensions in the tensor network.
-
-        Returns:
-            An instance of the total bond dimension diagnostic gate.
-        """
-        return TotalBond()
-
-    @classmethod
     def entropy(cls) -> Entropy:
         """Create an entropy diagnostic operator.
 
@@ -1543,51 +1507,6 @@ class PVM(BaseGate):
         super().__init__(mat)
 
 
-class RuntimeCost(BaseGate):
-    """Diagnostic gate representing an estimated runtime/contraction cost.
-
-    This is not a physical observable. It exposes a simulation-level metric
-    (e.g., sum of internal bond dimensions cubed) via the measurement interface.
-    """
-
-    name = "runtime_cost"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-
-class MaxBond(BaseGate):
-    """Diagnostic gate for the maximum bond dimension in the MPS.
-
-    Not a physical observable; provides simulation diagnostics through the
-    same interface used for operator expectation values.
-    """
-
-    name = "max_bond"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-
-class TotalBond(BaseGate):
-    """Diagnostic gate for the total (summed) internal bond dimension.
-
-    Not a physical observable; returns the sum of internal bond dimensions
-    as a scalar diagnostic of network complexity.
-    """
-
-    name = "total_bond"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-
 class Entropy(BaseGate):
     """Meta-observable for bipartite entanglement entropy across a cut.
 
@@ -1691,9 +1610,6 @@ class GateLibrary:
         p1: Class for projector |1⟩⟨1|.
         pvm: Class for projection-valued measurement onto a given bitstring.
 
-        runtime_cost: Class representing a diagnostic "runtime/contraction cost" metric.
-        max_bond:     Class representing a diagnostic for maximum bond dimension.
-        total_bond:   Class representing a diagnostic for the sum of internal bond dimensions.
         entropy:      Class representing a request for bipartite entanglement entropy across a cut.
         schmidt_spectrum: Class representing a request for the Schmidt spectrum across a cut.
 
@@ -1735,9 +1651,6 @@ class GateLibrary:
     p1 = P1
     pvm = PVM
 
-    runtime_cost = RuntimeCost
-    max_bond = MaxBond
-    total_bond = TotalBond
     entropy = Entropy
     schmidt_spectrum = SchmidtSpectrum
 

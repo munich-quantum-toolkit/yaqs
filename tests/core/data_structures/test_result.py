@@ -61,6 +61,11 @@ def test_result_holds_outputs_for_analog_run() -> None:
     assert result.counts is None
     assert result.multi_time_times is None
     assert result.multi_time_results is None
+    assert result.runtime_cost is not None
+    assert result.max_bond is not None
+    assert result.total_bond is not None
+    assert result.times is not None
+    assert len(result.runtime_cost) == len(result.times)
 
 
 def test_result_counts_only_set_for_weak_simulation() -> None:
@@ -77,12 +82,18 @@ def test_result_counts_only_set_for_weak_simulation() -> None:
     assert sum(weak_result.counts.values()) == weak_params.shots
     assert weak_result.multi_time_times is None
     assert weak_result.multi_time_results is None
+    assert weak_result.runtime_cost is None
+    assert weak_result.max_bond is None
+    assert weak_result.total_bond is None
 
     strong_state = State(num_qubits, initial="zeros")
     strong_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     strong_result = Simulator(parallel=False, show_progress=False).run(strong_state, circuit, strong_params)
 
     assert strong_result.counts is None
+    assert strong_result.runtime_cost is not None
+    assert strong_result.max_bond is not None
+    assert strong_result.total_bond is not None
 
 
 def test_result_noise_model_reflects_sampled_noise() -> None:

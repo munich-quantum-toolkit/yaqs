@@ -246,7 +246,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
-) -> tuple[NDArray[np.float64] | dict[int, int], MPS | None]:
+) -> tuple[NDArray[np.float64] | dict[int, int], NDArray[np.float64] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
     Simulates a quantum circuit using the Tensor Jump Method.
@@ -268,12 +268,15 @@ def digital_tjm(
 
     state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)
+    diagnostics: NDArray[np.float64] | None = None
 
     # Initialize results depending on simulation type
     if isinstance(sim_params, StrongSimParams):
+        num_cols = (sim_params.num_mid_measurements + 2) if sim_params.sample_layers else 1
+        diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         if sim_params.sample_layers:
             results = np.zeros((len(sim_params.sorted_observables), sim_params.num_mid_measurements + 2))
-            # Initial sampling (column 0)
+            state.record_diagnostics(diagnostics, 0)
             state.evaluate_observables(sim_params, results, 0)
         else:
             results = np.zeros((len(sim_params.sorted_observables), 1))
@@ -311,6 +314,8 @@ def digital_tjm(
             for measure_barrier in measure_barriers:
                 dag.remove_op_node(measure_barrier)
                 col_idx += 1
+                assert diagnostics is not None
+                state.record_diagnostics(diagnostics, col_idx)
                 state.evaluate_observables(sim_params, results, col_idx)
 
     if isinstance(sim_params, WeakSimParams):
@@ -318,16 +323,19 @@ def digital_tjm(
         if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
             counts = state.measure_shots(per_call_shots)
             final = state if sim_params.get_state else None
-            return counts, final
-        return state.measure_shots(shots=1), state if sim_params.get_state else None
+            return counts, None, final
+        return state.measure_shots(shots=1), None, state if sim_params.get_state else None
 
     if canonical_form_lost:
         state.normalize(form="B", decomposition="QR")
 
     assert isinstance(sim_params, StrongSimParams)
-    state.evaluate_observables(sim_params, results, results.shape[1] - 1)
+    assert diagnostics is not None
+    final_col = results.shape[1] - 1
+    state.record_diagnostics(diagnostics, final_col)
+    state.evaluate_observables(sim_params, results, final_col)
     final = state if sim_params.get_state else None
-    return results, final
+    return results, diagnostics, final
 
 
 def _per_call_shots(sim_params: WeakSimParams) -> int:
