@@ -39,7 +39,8 @@ __all__ = ["expm", "expm_hermitian", "ishermitian"]
 def ishermitian(a: NDArray[np.complex128], *, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
     """Return whether ``a`` is Hermitian within tolerance.
 
-    Mirrors :func:`scipy.linalg.ishermitian` keyword arguments.
+    Mirrors :func:`scipy.linalg.ishermitian` keyword arguments. Non-2-D or
+    non-square inputs return ``False`` rather than raising.
 
     Args:
         a: Square matrix.
@@ -47,8 +48,11 @@ def ishermitian(a: NDArray[np.complex128], *, rtol: float = 1e-5, atol: float = 
         atol: Absolute tolerance passed to :func:`numpy.allclose`.
 
     Returns:
-        True if ``a`` is Hermitian within tolerance.
+        True if ``a`` is Hermitian within tolerance, False otherwise (including
+        for non-2-D or non-square inputs).
     """
+    if a.ndim != 2 or a.shape[0] != a.shape[1]:
+        return False
     return bool(np.allclose(a, a.conj().T, rtol=rtol, atol=atol))
 
 
