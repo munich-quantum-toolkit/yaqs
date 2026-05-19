@@ -867,7 +867,9 @@ class Simulator:
             result: Output container populated during this run.
 
         Raises:
-            ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``.
+            ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``,
+                or if ``get_state=True`` is combined with a non-trivial noise model
+                (the trajectory ensemble has no single representative state).
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
@@ -914,7 +916,9 @@ class Simulator:
         ):
             effective_num_traj = 1
         else:
-            assert not sim_params.get_state, "Cannot return state in noisy analog simulation due to stochastics."
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy analog simulation due to stochastics."
+                raise ValueError(msg)
             effective_num_traj = sim_params.num_traj
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
@@ -1046,13 +1050,20 @@ class Simulator:
             sim_params: Simulation parameters for strong simulation.
             noise_model: The noise model applied during simulation.
             result: Output container populated during this run.
+
+        Raises:
+            ValueError: If ``sim_params.get_state`` is ``True`` while a non-trivial
+                noise model is supplied (the trajectory ensemble has no single
+                representative state).
         """
         backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
         if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
             effective_num_traj = 1
         else:
-            assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                raise ValueError(msg)
             effective_num_traj = sim_params.num_traj
 
         effective_num_mid_measurements = sim_params.num_mid_measurements
@@ -1156,14 +1167,21 @@ class Simulator:
             sim_params: Simulation parameters for weak simulation.
             noise_model: The noise model applied during simulation.
             result: Output container populated during this run.
+
+        Raises:
+            ValueError: If ``sim_params.get_state`` is ``True`` while a non-trivial
+                noise model is supplied (the trajectory ensemble has no single
+                representative state).
         """
         backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
 
         noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
         if noisy:
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                raise ValueError(msg)
             effective_num_traj = sim_params.shots
             per_call_shots = 1
-            assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
         else:
             effective_num_traj = 1
             per_call_shots = sim_params.shots

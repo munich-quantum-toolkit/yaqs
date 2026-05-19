@@ -621,7 +621,7 @@ def test_weak_simulation_get_state_noise() -> None:
         {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["lowering", "pauli_z"]
     ])
 
-    with pytest.raises(AssertionError, match=r"Cannot return state in noisy circuit simulation due to stochastics."):
+    with pytest.raises(ValueError, match=r"Cannot return state in noisy circuit simulation due to stochastics."):
         Simulator(show_progress=False).run(initial_state, circuit, sim_params, noise_model)
 
 
@@ -1214,7 +1214,7 @@ def test_analog_run_rejects_mpo_operator() -> None:
     )
     sim = Simulator(show_progress=False)
     with pytest.raises(TypeError, match="Analog simulation requires a Hamiltonian operator"):
-        sim.run(state, cast(Any, mpo), params, None)  # noqa: TC006
+        sim.run(state, cast(Any, mpo), params, None)  # noqa: TC006  # cast is required to exercise the runtime TypeError guard for non-Hamiltonian operators
 
 
 def test_analog_run_rejects_non_state_initial_state() -> None:
@@ -1227,7 +1227,7 @@ def test_analog_run_rejects_non_state_initial_state() -> None:
     )
     sim = Simulator(show_progress=False)
     with pytest.raises(TypeError, match="Analog simulation requires initial_state to be a list or State"):
-        sim.run(cast(Any, MPS(2, state="zeros")), h, params, None)  # noqa: TC006
+        sim.run(cast(Any, MPS(2, state="zeros")), h, params, None)  # noqa: TC006  # cast is required to exercise the runtime TypeError guard for non-State initial states
 
 
 def test_analog_run_rejects_matrix_hamiltonian_with_mps_state() -> None:

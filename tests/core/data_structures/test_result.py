@@ -16,13 +16,14 @@ read-only ``*SimParams`` configuration object and can be pickled.
 
 from __future__ import annotations
 
-import pickle  # noqa: S403
+import pickle  # noqa: S403  # test-only: controlled Result round-trip; no untrusted input deserialized
 
 import numpy as np
 
 from mqt.yaqs import Result, Simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs.core.data_structures.result import aggregate_counts
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
     Observable,
@@ -150,7 +151,7 @@ def test_result_is_pickleable() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
 
     blob = pickle.dumps(result)
-    restored = pickle.loads(blob)  # noqa: S301
+    restored = pickle.loads(blob)  # noqa: S301  # test-only: bytes are produced one line above (round-trip)
 
     assert isinstance(restored, Result)
     assert isinstance(restored.sim_params, AnalogSimParams)
@@ -160,3 +161,29 @@ def test_result_is_pickleable() -> None:
     assert restored_results is not None
     assert original_results is not None
     np.testing.assert_allclose(np.asarray(restored_results), np.asarray(original_results))
+
+
+def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:
+    """aggregate_counts must sum every non-None measurement, even after a None entry.
+
+    Regression: previously, the presence of any None short-circuited the aggregator
+    to ``result.measurements[0]`` alone, silently dropping later valid per-shot dicts.
+    """
+    weak_params = WeakSimParams(shots=1, max_bond_dim=4)
+    result = Result(sim_params=weak_params)
+    result.measurements = [{0: 2, 1: 1}, None, {1: 3, 2: 4}]
+
+    aggregate_counts(result)
+
+    assert result.counts == {0: 2, 1: 4, 2: 4}
+
+
+def test_aggregate_counts_handles_all_none() -> None:
+    """An all-None measurements list yields an empty counts dict."""
+    weak_params = WeakSimParams(shots=1, max_bond_dim=4)
+    result = Result(sim_params=weak_params)
+    result.measurements = [None, None, None]
+
+    aggregate_counts(result)
+
+    assert result.counts == {}

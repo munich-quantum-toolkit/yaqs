@@ -72,8 +72,10 @@ def create_probability_distribution(
       result, computes the probability, and records the operator and the site
       pair.
 
-    After all possible jumps are considered, the probabilities are normalized and
-    returned along with the associated jump operators and their target site(s).
+    After all possible jumps are considered, the per-process probabilities are
+    normalized and returned. The associated jump operators and target sites are
+    *not* returned; they must be recovered separately from ``noise_model.processes``
+    using the same iteration order.
 
     Args:
         state: The Matrix Product MPS, assumed left-canonical at site 0 on entry.

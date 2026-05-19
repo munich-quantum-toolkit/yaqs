@@ -143,17 +143,14 @@ def aggregate_trajectories(result: Result) -> None:
 def aggregate_counts(result: Result) -> None:
     """Aggregate per-shot measurements into ``result.counts``.
 
-    For noise-free weak simulations, ``result.measurements[0]`` holds all shots.
-    For noisy runs, counts from every shot dictionary are summed.
+    Sums counts across every non-``None`` entry in ``result.measurements`` so that
+    noise-free runs (only index 0 populated), noisy runs (every index populated),
+    and any mixed pattern produce a consistent total.
     """
     counts: dict[int, int] = {}
-    if None in result.measurements:
-        assert result.measurements[0] is not None
-        counts = dict(result.measurements[0])
-    else:
-        for measurement in filter(None, result.measurements):
-            for key, value in measurement.items():
-                counts[key] = counts.get(key, 0) + value
+    for measurement in filter(None, result.measurements):
+        for key, value in measurement.items():
+            counts[key] = counts.get(key, 0) + value
     result.counts = dict(sorted(counts.items()))
 
 

@@ -108,9 +108,10 @@ mystnb:
 ---
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 pvm_observables = result.observables
-leakage = [1 for _ in result.expectation_values[0]]
+leakage = np.ones_like(result.expectation_values[0])
 for measurement, values in zip(pvm_observables, result.expectation_values, strict=True):
     leakage -= values
     plt.plot(values, label=measurement.gate.bitstring)
