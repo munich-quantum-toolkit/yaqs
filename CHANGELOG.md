@@ -25,6 +25,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- capped BLAS threading for dense matrix exponentials and used an eigensolve for Hermitian MCWF Hamiltonians to avoid intermittent crashes from multi-threaded OpenBLAS under parallel tests ([#428]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
 
 ## [0.5.0] - 2026-05-12

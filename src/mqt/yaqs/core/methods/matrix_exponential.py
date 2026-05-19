@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import scipy.linalg
 
+from ..numerics.blas_safe import expm_dense
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -291,8 +293,8 @@ def expm_arnoldi(
             h_small = h[:k, :k]
 
             # Compute exponential of -i * dt * H applied to basis vector e_0
-            # We use scipy.linalg.expm which handles non-Hermitian matrices robustly
-            u_small = scipy.linalg.expm(-1j * dt * h_small)
+            # Dense exponential of small Hessenberg H (non-Hermitian); BLAS-capped.
+            u_small = expm_dense(-1j * dt * h_small)
 
             phi_last = u_small[k - 1, 0]
             err = h[k, k - 1].real * abs(phi_last)  # h is complex but norm is real
@@ -322,5 +324,5 @@ def _compute_arnoldi_result(
     Returns:
         Approximated vector.
     """
-    u_small = scipy.linalg.expm(-1j * dt * h_mat)
+    u_small = expm_dense(-1j * dt * h_mat)
     return np.asarray(v_mat @ (u_small[:, 0] * nrm), dtype=np.complex128)
