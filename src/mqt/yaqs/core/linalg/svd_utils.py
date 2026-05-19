@@ -48,8 +48,14 @@ def truncate(
         ``max_bond_dim`` when given).
 
     Raises:
-        ValueError: If ``mode`` is not recognized.
+        ValueError: If ``mode`` is not recognized, or if ``max_bond_dim`` is
+            smaller than ``min_keep`` (which would make the hard cap
+            unsatisfiable).
     """
+    if max_bond_dim is not None and max_bond_dim < min_keep:
+        msg = f"max_bond_dim ({max_bond_dim}) must be >= min_keep ({min_keep})"
+        raise ValueError(msg)
+
     n = int(s_vec.size)
     if n == 0:
         return 0
