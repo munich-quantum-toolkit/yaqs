@@ -71,10 +71,10 @@ def get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.com
 def get_choi_basis() -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]]]:
     r"""Generate the 16 basis CP maps (Choi matrices) from the 4 basis states.
 
-    A basis CP map is A_{p,m}(rho) = Tr(E_m rho) rho_p.
-    Its Choi matrix is B_{p,m} = rho_p \\otimes E_m^T,
-    because J(A) = sum_{ij} A(|i><j|) otimes |i><j| = rho_p otimes sum_{ij} Tr(E_m |i><j|) |i><j|
-    = rho_p otimes E_m^T.
+    A basis CP map is ``A_{p,m}(rho) = Tr(E_m rho) rho_p``.
+    Its Choi matrix is ``B_{p,m} = rho_p \otimes E_m^T``,
+    because ``J(A) = sum_{ij} A(|i><j|) otimes |i><j| = rho_p otimes sum_{ij} Tr(E_m |i><j|) |i><j|
+    = rho_p otimes E_m^T``.
 
     Returns:
         tuple containing:
@@ -299,7 +299,6 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         step_params.elapsed_time = duration
         step_params.dt = sim_params.dt
         step_params.num_traj = 1
-        step_params.show_progress = False
         step_params.get_state = True
 
         n_steps = int(np.round(duration / step_params.dt))
@@ -311,15 +310,15 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
             dynamic_ctx.psi_initial = current_state
             dynamic_ctx.sim_params = step_params
 
-            mcwf((traj_idx, dynamic_ctx))
-            assert dynamic_ctx.output_state is not None
-            current_state = cast("NDArray[np.complex128]", dynamic_ctx.output_state)
+            _, _, psi_final = mcwf((traj_idx, dynamic_ctx))
+            assert psi_final is not None
+            current_state = psi_final
         else:
             backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
             assert isinstance(current_state, MPS)
-            backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
-            assert step_params.output_state is not None
-            current_state = step_params.output_state.mps
+            _, _, final_mps = backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
+            assert final_mps is not None
+            current_state = final_mps
 
     sequence_results = [_get_rho_site_zero(current_state)]
     return (seq_idx, traj_idx, sequence_results, sequence_weight)
@@ -333,6 +332,7 @@ def run(
     noise_model: NoiseModel | None = None,
     *,
     representation: Literal["mps", "vector", "density_matrix"] = "mps",
+    show_progress: bool = True,
 ) -> ProcessTensor:
     """Run Process Tomography / Process Tensor Tomography using parallelized backend.
 
@@ -348,9 +348,10 @@ def run(
         timesteps: List of time durations for each evolution segment.
                    If None, defaults to [sim_params.elapsed_time] (standard 1-step tomography).
         num_trajectories: Number of trajectories to average per sequence (for noise unravelling).
-        noise_model: Noise model to apply. If None, uses sim_params.noise_model.
+        noise_model: Noise model to apply. If None, evolution is noise-free.
         representation: State representation for evolution inside tomography workers
             (``"mps"``, ``"vector"``, or ``"density_matrix"``).
+        show_progress: If ``True``, display a tqdm progress bar over tomography sequences.
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.
@@ -388,9 +389,6 @@ def run(
     num_worker_sequences = len(worker_sequences)
 
     # 2. Prepare Simulation Context
-    if noise_model is None:
-        noise_model = sim_params.noise_model
-
     if noise_model is None:
         num_trajectories = 1
 
@@ -440,7 +438,7 @@ def run(
         payload=payload,
         n_jobs=total_jobs,
         max_workers=max_workers,
-        show_progress=sim_params.show_progress,
+        show_progress=show_progress,
         desc="Simulating Tomography Sequences",
     )
 

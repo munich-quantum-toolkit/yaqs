@@ -327,7 +327,6 @@ def test_dynamic_tdvp_one_site() -> None:
         dt=0.1,
         max_bond_dim=0,
         sample_timesteps=False,
-        show_progress=False,
     )
 
     with patch("mqt.yaqs.core.methods.tdvp.single_site_tdvp") as mock_single_site:
@@ -361,7 +360,6 @@ def test_dynamic_tdvp_two_site() -> None:
         dt=0.1,
         max_bond_dim=8,
         sample_timesteps=False,
-        show_progress=False,
     )
     with patch("mqt.yaqs.core.methods.tdvp.two_site_tdvp") as mock_two_site:
         global_dynamic_tdvp(state, H, sim_params)
@@ -414,7 +412,6 @@ def test_split_truncation_discarded_weight_kept_count(
         threshold=threshold,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
-        show_progress=False,
     )
 
     A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
@@ -476,7 +473,6 @@ def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the:
         threshold=rel_the,
         trunc_mode="relative",
         sample_timesteps=True,
-        show_progress=False,
     )
 
     A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
@@ -508,7 +504,6 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         threshold=0.5,
         trunc_mode="relative",
         sample_timesteps=True,
-        show_progress=False,
     )
     A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=False)
     assert A0.shape[2] == 2
@@ -523,7 +518,6 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         threshold=2,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
-        show_progress=False,
     )
     A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     assert A0.shape[2] == 2
@@ -548,7 +542,6 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
         threshold=0.5,
         trunc_mode="relative",
         sample_timesteps=True,
-        show_progress=False,
     )
 
     A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], distr, dynamic=True)

@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-### Strong Circuit Simulation (Observable) with sampling
+# Strong Circuit Simulation (Observable) with sampling
 
 This example demonstrates how to use labelled barriers to sample observables at intermediate layers of a circuit using the digital Tensor Jump Method (TJM). Any `barrier` with label `"SAMPLE_OBSERVABLES"` (case-insensitive) is treated as a sampling point.
 
@@ -90,9 +90,10 @@ Run the simulation
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 
-simulator.run(state, qc, sim_params, noise_model, parallel=False)
+sim = Simulator()
+result = sim.run(state, qc, sim_params, noise_model)
 ```
 
 Compare against the hardcoded Qiskit reference
@@ -106,7 +107,7 @@ reference = np.array([
 ])
 
 # YAQS results collected at initial + each SAMPLE_OBSERVABLES barrier + final
-yaqs = np.vstack([np.real(obs.results) for obs in sim_params.observables])
+yaqs = np.vstack([np.real(v) for v in result.expectation_values])
 
 diff = np.abs(yaqs - reference)
 max_diff = float(diff.max())

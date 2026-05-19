@@ -80,7 +80,7 @@ def preprocess_mcwf(
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
-    Called once per ``simulator.run`` before trajectory workers start (see
+    Called once per :meth:`Simulator.run` before trajectory workers start (see
     ``preprocess_mcwf`` in ``simulator.py``).
 
     Args:
@@ -181,7 +181,7 @@ def preprocess_mcwf(
     # 6. Observables embedded on the full space; diagnostics are not defined on |psi>.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
     for obs in sim_params.sorted_observables:
-        if obs.gate.name in {"runtime_cost", "max_bond", "total_bond", "entropy", "schmidt_spectrum"}:
+        if obs.gate.name in {"entropy", "schmidt_spectrum"}:
             embedded_observables.append(None)
         else:
             op = _embed_observable_sparse(obs, num_sites)
@@ -242,7 +242,7 @@ def _apply_noisy_step(
     return jumped / np.linalg.norm(jumped)
 
 
-def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
+def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Run a single Monte Carlo wavefunction trajectory.
 
     Args:
@@ -265,9 +265,10 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
 
     num_obs = len(sim_params.sorted_observables)
     num_steps = len(sim_params.times)
-    results = np.zeros((num_obs, num_steps), dtype=np.float64)
+    num_cols = num_steps if sim_params.sample_timesteps else 1
+    results = np.zeros((num_obs, num_cols), dtype=np.float64)
 
-    def measure(current_psi: NDArray[np.complex128], t_idx: int) -> None:
+    def measure(current_psi: NDArray[np.complex128], col: int) -> None:
         for i, op_mat in enumerate(ctx.embedded_observables):
             if op_mat is not None:
                 if scipy.sparse.issparse(op_mat):
@@ -276,9 +277,9 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
                 else:
                     op_mat_dense = cast("NDArray[np.complex128]", op_mat)
                     val = np.vdot(current_psi, op_mat_dense @ current_psi)
-                results[i, t_idx] = val.real
+                results[i, col] = val.real
             else:
-                results[i, t_idx] = 0.0
+                results[i, col] = 0.0
 
     if sim_params.sample_timesteps:
         measure(psi, 0)
@@ -300,10 +301,9 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
             psi_next = expm_arnoldi(lambda v: ctx.heff @ v, psi, dt)  # ty: ignore[unsupported-operator]
             psi = _apply_noisy_step(psi, psi_next, ctx, rng)
 
-        if sim_params.sample_timesteps or t_idx == num_steps - 1:
+        if sim_params.sample_timesteps:
             measure(psi, t_idx)
+        elif t_idx == num_steps - 1:
+            measure(psi, 0)
 
-    if sim_params.get_state:
-        ctx.output_state = psi
-
-    return results
+    return results, None, psi if sim_params.get_state else None

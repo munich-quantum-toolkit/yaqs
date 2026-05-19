@@ -31,7 +31,7 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
@@ -44,7 +44,6 @@ from mqt.yaqs.digital.digital_tjm import (
     apply_window,
     construct_generator_mpo,
     create_local_noise_model,
-    digital_tjm,
     process_layer,
 )
 
@@ -202,7 +201,7 @@ def test_apply_two_qubit_gate() -> None:
     assert cx_nodes, "No CX gate found in the front layer."
     node = cx_nodes[0]
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], show_progress=False)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
     copy.deepcopy(mps0.tensors)
     apply_two_qubit_gate(mps0, node, sim_params)
     mps0.normalize(decomposition="SVD")
@@ -352,40 +351,35 @@ def test_create_local_noise_model() -> None:
         assert found, f"Expected process {expected_process} not found in local model"
 
 
-def test_digital_tjm_strong() -> None:
-    """Test the digital_tjm function for strong simulation.
-
-    This test creates a random MPS and a circuit with a CX gate, sets up strong simulation parameters,
-    and runs digital_tjm. The test verifies that the simulation completes without errors.
-    """
+def test_digital_tjm_strong_smoke_via_simulator() -> None:
+    """Strong simulation via the public ``Simulator`` API completes and yields an observable."""
     length = 4
-    mps0 = MPS(length, state="random")
-    mps0.normalize()
+    state = State(length, initial="random")
 
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], show_progress=False)
-    args = 0, mps0, None, sim_params, qc
-    digital_tjm(args)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    assert result.expectation_values[0] is not None
+    assert result.expectation_values[0].shape == (1,)
 
 
-def test_digital_tjm_weak() -> None:
-    """Test the digital_tjm function for weak simulation.
-
-    This test creates a random MPS and a circuit with a CX gate, sets up weak simulation parameters,
-    and runs digital_tjm. The test verifies that the simulation completes and measurements are obtained.
-    """
+def test_digital_tjm_weak_smoke_via_simulator() -> None:
+    """Weak simulation via the public ``Simulator`` API returns shot counts."""
     length = 4
-    mps0 = MPS(length, state="random")
-    mps0.normalize()
+    state = State(length, initial="random")
 
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
+    qc.measure_all()
 
-    sim_params = WeakSimParams(shots=16, show_progress=False)
-    args = 0, mps0, None, sim_params, qc
-    digital_tjm(args)
+    sim_params = WeakSimParams(shots=16)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
 
 
 def test_noisy_digital_tjm_matches_reference() -> None:
@@ -439,15 +433,14 @@ def test_noisy_digital_tjm_matches_reference() -> None:
         sample_layers=True,
         num_mid_measurements=4,
         num_traj=100,
-        show_progress=False,
         random_seed=7,
     )
     state = State(num_qubits, initial="zeros", pad=2)
-    simulator.run(state, qc, sim_params, noise_model, parallel=False)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
 
     tjm_results = np.empty((num_qubits, 6), dtype=float)
     for i in range(num_qubits):
-        res = sim_params.observables[i].results
+        res = result.expectation_values[i]
         assert res is not None
         tjm_results[i, :] = np.real(res[:6])
 
@@ -479,15 +472,14 @@ def test_digital_tjm_longrange_noise() -> None:
         sample_layers=True,
         num_mid_measurements=0,
         num_traj=20,
-        show_progress=False,
         random_seed=9,
     )
 
     state = State(num_qubits, initial="zeros", pad=2)
-    simulator.run(state, qc, sim_params, noise_model, parallel=False)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
 
     for i in range(num_qubits):
-        res = sim_params.observables[i].results
+        res = result.expectation_values[i]
         assert res is not None
         assert res.shape == (2,)  # initial and final layer samples
         z_vals = np.real(res)
@@ -510,16 +502,14 @@ def test_no_mid_measurements_results_have_two_columns() -> None:
     qc.cx(0, 1)
     qc.rzz(0.1, 1, 2)
 
-    sim_params = StrongSimParams(
-        observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True, show_progress=False
-    )
+    sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
-    simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in sim_params.observables:
-        assert obs.results is not None
-        assert obs.results.shape == (2,)
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None
+        assert result.expectation_values[i].shape == (2,)
 
 
 def test_counts_multiple_mid_measurement_barriers() -> None:
@@ -545,16 +535,14 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
     # Final segment
     qc.cx(2, 3)
 
-    sim_params = StrongSimParams(
-        observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True, show_progress=False
-    )
+    sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
-    simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in sim_params.observables:
-        assert obs.results is not None
-        assert obs.results.shape == (5,)
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None
+        assert result.expectation_values[i].shape == (5,)
 
 
 def test_ignores_non_mid_barriers_and_handles_measures() -> None:
@@ -576,14 +564,12 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
     qc.barrier(label="not-mid")  # ignored
     qc.rzz(0.2, 0, 1)
 
-    sim_params = StrongSimParams(
-        observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True, show_progress=False
-    )
+    sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
-    simulator.run(state, qc, sim_params, noise_model=None, parallel=False)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in sim_params.observables:
-        assert obs.results is not None
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None
         # Only one labelled barrier -> 1 mid + initial + final
-        assert obs.results.shape == (3,)
+        assert result.expectation_values[i].shape == (3,)

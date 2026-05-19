@@ -33,11 +33,11 @@ __all__ = ["Representation", "State"]
 
 
 class State:
-    """Initial quantum state for :func:`~mqt.yaqs.simulator.run`.
+    """Initial quantum state for :meth:`~mqt.yaqs.Simulator.run`.
 
     Specify *what* to simulate (length, preset, optional raw data) and *how* to represent it
     during evolution (:attr:`representation`). Materialization happens at construction;
-    pass the ``State`` to :func:`~mqt.yaqs.simulator.run` (including in parameter loops).
+    pass the ``State`` to :meth:`~mqt.yaqs.Simulator.run` (including in parameter loops).
 
     - **Presets** — ``State(L, initial="zeros")``; default ``representation="mps"`` (TJM).
       For MCWF or Lindblad, set ``representation="vector"`` or ``"density_matrix"``.
@@ -165,7 +165,7 @@ class State:
         self._encode(self.representation)
 
     def ensure_encoded(self, representation: Representation | None = None) -> State:
-        """Materialize ``representation`` if needed (used by :func:`~mqt.yaqs.simulator.run`).
+        """Materialize ``representation`` if needed (used by :meth:`~mqt.yaqs.Simulator.run`).
 
         Returns:
             ``self`` for chaining.

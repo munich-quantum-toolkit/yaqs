@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 def is_adjacent(proc: dict[str, Any]) -> bool:
     """Return True if the two-site process targets nearest neighbors.
 
-    Assumes the process is two-site and checks |i-j| == 1.
+    Assumes the process is two-site and checks ``|i-j| == 1``.
     """
     s = proc["sites"]
     return bool(abs(s[1] - s[0]) == 1)

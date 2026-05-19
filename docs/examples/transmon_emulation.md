@@ -91,9 +91,10 @@ sim_params = AnalogSimParams(
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 
-simulator.run(state, H_0, sim_params, noise_model)
+sim = Simulator()
+result = sim.run(state, H_0, sim_params, noise_model)
 ```
 
 ## Plot the results
@@ -107,12 +108,13 @@ mystnb:
 ---
 
 import matplotlib.pyplot as plt
+import numpy as np
 
-measurements = sim_params.observables
-leakage = [1 for _ in measurements[0].results]
-for measurement in measurements:
-    leakage -= measurement.results
-    plt.plot(measurement.results, label=measurement.gate.bitstring)
+pvm_observables = result.observables
+leakage = np.ones_like(result.expectation_values[0])
+for measurement, values in zip(pvm_observables, result.expectation_values, strict=True):
+    leakage -= values
+    plt.plot(values, label=measurement.gate.bitstring)
 plt.plot(leakage, label="Leakage")
 
 plt.xlabel("Timestep")

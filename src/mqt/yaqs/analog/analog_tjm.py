@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..core.data_structures.simulation_parameters import EvolutionMode
-from ..core.data_structures.state import State
 from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
@@ -107,7 +106,8 @@ def sample(
     results: NDArray[np.float64],
     j: int,
     rng: np.random.Generator | None = None,
-) -> None:
+    diagnostics: NDArray[np.float64] | None = None,
+) -> MPS | None:
     """Sample the quantum state and record observable measurements from the sampling MPS.
 
     This function evolves a deep copy of the sampling MPS, applies dissipation and a stochastic process,
@@ -122,6 +122,10 @@ def sample(
         results (NDArray[np.float64]): An array to store the measured observable values.
         j (int): The time step or shot index at which the measurement is recorded.
         rng: The random number generator to use.
+        diagnostics: Optional ``(3, T)`` buffer for runtime cost, max bond, and total bond.
+
+    Returns:
+        The evolved MPS when this is the final time step and ``get_state=True``, else ``None``.
     """
     psi = copy.deepcopy(phi)
     if sim_params.evolution_mode == EvolutionMode.TDVP:
@@ -135,16 +139,26 @@ def sample(
         psi = apply_scheduled_jumps(psi, noise_model, current_time, sim_params)
     else:
         psi = stochastic_process(psi, noise_model, sim_params.dt, sim_params, rng=rng)
-    if j == len(sim_params.times) - 1 and sim_params.get_state:
-        sim_params.output_state = State.from_mps(psi)
-
+    col = j if sim_params.sample_timesteps else 0
+    if diagnostics is not None:
+        psi.record_diagnostics(diagnostics, col)
     if sim_params.sample_timesteps:
         psi.evaluate_observables(sim_params, results, j)
     else:
         psi.evaluate_observables(sim_params, results)
 
+    if j == len(sim_params.times) - 1 and sim_params.get_state:
+        return psi
+    return None
 
-def analog_tjm_2(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]) -> NDArray[np.float64]:
+
+def _diagnostic_num_columns(sim_params: AnalogSimParams) -> int:
+    return len(sim_params.times) if sim_params.sample_timesteps else 1
+
+
+def analog_tjm_2(
+    args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
+) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a two-site evolution scheme.
 
     This function executes a full trajectory by evolving the initial state,
@@ -160,35 +174,50 @@ def analog_tjm_2(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
             - MPO: The Hamiltonian operator represented as an MPO.
 
     Returns:
-        NDArray[np.float64]: An array of expectation values for the trajectory, with dimensions
-        determined by the number of observables and time steps.
+        tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
+            Observable data, diagnostics ``(3, T)``, and optional final MPS.
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
     rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     state = copy.deepcopy(initial_state)
+    num_cols = _diagnostic_num_columns(sim_params)
+    diagnostics = np.zeros((3, num_cols), dtype=np.float64)
     if sim_params.sample_timesteps:
         results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)))
     else:
         results = np.zeros((len(sim_params.sorted_observables), 1))
 
+    final_state: MPS | None = None
+
     if sim_params.sample_timesteps:
+        state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results, 0)
 
     phi = initialize(state, noise_model, sim_params, rng=rng)
     if sim_params.sample_timesteps:
-        sample(phi, hamiltonian, noise_model, sim_params, results, j=1, rng=rng)
+        sampled_state = sample(
+            phi, hamiltonian, noise_model, sim_params, results, j=1, rng=rng, diagnostics=diagnostics
+        )
+        if sampled_state is not None:
+            final_state = sampled_state
 
     for j, _ in enumerate(sim_params.times[2:], start=2):
         phi = step_through(phi, hamiltonian, noise_model, sim_params, sim_params.times[j], rng=rng)
         if sim_params.sample_timesteps or j == len(sim_params.times) - 1:
-            sample(phi, hamiltonian, noise_model, sim_params, results, j, rng=rng)
+            sampled_state = sample(
+                phi, hamiltonian, noise_model, sim_params, results, j, rng=rng, diagnostics=diagnostics
+            )
+            if sampled_state is not None:
+                final_state = sampled_state
 
-    return results
+    return results, diagnostics, final_state
 
 
-def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO]) -> NDArray[np.float64]:
+def analog_tjm_1(
+    args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
+) -> tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
     """Run a single trajectory of the TJM using a one-site evolution scheme.
 
     This function evolves the state with a one-site TDVP update, applying noise (if provided)
@@ -203,14 +232,16 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
             - MPO: The Hamiltonian operator represented as an MPO.
 
     Returns:
-        NDArray[np.float64]: An array of expectation values for the trajectory, with shape determined
-        by the number of observables and time steps.
+        tuple[NDArray[np.float64], NDArray[np.float64], MPS | None]:
+            Observable data, diagnostics ``(3, T)``, and optional final MPS.
     """
     traj_idx, initial_state, noise_model, sim_params, hamiltonian = args
 
     rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     state = copy.deepcopy(initial_state)
+    num_cols = _diagnostic_num_columns(sim_params)
+    diagnostics = np.zeros((3, num_cols), dtype=np.float64)
 
     if sim_params.sample_timesteps:
         results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=object)
@@ -218,6 +249,7 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
         results = np.zeros((len(sim_params.sorted_observables), 1), dtype=object)
 
     if sim_params.sample_timesteps:
+        state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, results, 0)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
@@ -231,11 +263,11 @@ def analog_tjm_1(args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO])
                 state = stochastic_process(state, noise_model, sim_params.dt, sim_params, rng=rng)
 
         if sim_params.sample_timesteps:
+            state.record_diagnostics(diagnostics, j)
             state.evaluate_observables(sim_params, results, j)
         elif j == len(sim_params.times) - 1:
+            state.record_diagnostics(diagnostics, 0)
             state.evaluate_observables(sim_params, results)
 
-    if sim_params.get_state:
-        sim_params.output_state = State.from_mps(state)
-
-    return results
+    final_state = state if sim_params.get_state else None
+    return results, diagnostics, final_state

@@ -35,6 +35,7 @@ self
 
 installation
 examples/state_initialization
+examples/simulator_initialization
 examples/analog_simulation
 examples/ensemble_evolution
 examples/solver_comparison

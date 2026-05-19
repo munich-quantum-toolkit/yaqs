@@ -11,7 +11,8 @@ This module provides classes for representing observables and simulation paramet
 for quantum simulations. It defines the Observable class for measurement, as well as
 the PhysicsSimParams, WeakSimParams, and StrongSimParams classes for configuring simulation
 runs. These classes encapsulate settings such as simulation time, time steps, bond dimension limits,
-thresholds, and window sizes, and they include methods for aggregating simulation results.
+thresholds, and window sizes. Simulation outputs are stored on
+:class:`~mqt.yaqs.core.data_structures.result.Result`, not on these parameter objects.
 """
 
 from __future__ import annotations
@@ -25,10 +26,6 @@ import numpy as np
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
-    from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-    from mqt.yaqs.core.data_structures.state import State
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
@@ -60,52 +57,25 @@ class EvolutionMode(Enum):
 
 
 class Observable:
-    """Observable class.
+    """Measurement metadata for a quantum simulation.
 
-    A class to represent an observable in a quantum simulation.
+    Describes *what* to measure (gate and sites). Per-run expectation values and
+    trajectories are stored on :class:`~mqt.yaqs.core.data_structures.result.Result`.
 
     Attributes:
-    ----------
-    gate : BaseGate
-            The gate that will act as the observable.
-    site : int
-        The site (or qubit) on which the observable is measured.
-    results : NDArray[np.float64] | None
-        The results of the simulation, initialized to None.
-    trajectories : NDArray[np.float64] | None
-        The trajectories of the simulation, initialized to None.
-
-    Methods:
-    -------
-    __init__(name: str, site: int) -> None
-        Initializes the Observable with a name and site, and checks if the name is valid in the GateLibrary.
-    initialize(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None
-        Initializes the results and trajectories arrays based on the type of simulation parameters provided.
+        gate: The gate that acts as the observable.
+        sites: The site or site indices on which this observable is measured.
     """
 
     def __init__(self, gate: BaseGate | str, sites: int | list[int] | None = None) -> None:
         """Initializes an Observable instance.
 
-        Parameters
-        ----------
-        gate :
-            The gate that will act as the observable.
-        sites :
-            The qubit or site indices on which this observable is measured.
-
-        Raises:
-        ------
-        AssertionError
-            If the provided `name` is not a valid attribute in the GateLibrary.
+        Args:
+            gate: The gate that will act as the observable.
+            sites: The qubit or site indices on which this observable is measured.
         """
         if isinstance(gate, str):
-            if gate == "runtime_cost":
-                gate = GateLibrary.runtime_cost()
-            elif gate == "max_bond":
-                gate = GateLibrary.max_bond()
-            elif gate == "total_bond":
-                gate = GateLibrary.total_bond()
-            elif gate == "entropy":
+            if gate == "entropy":
                 gate = GateLibrary.entropy()
             elif gate == "schmidt_spectrum":
                 gate = GateLibrary.schmidt_spectrum()
@@ -121,41 +91,10 @@ class Observable:
                 gate = GateLibrary.pvm(gate)
         assert hasattr(GateLibrary, gate.name), f"Observable {gate.name} not found in GateLibrary."
         self.gate = copy.deepcopy(gate)
-        if gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}:
+        if gate.name != "pvm":
             assert sites is not None
             self.sites = sites
             self.gate.set_sites(self.sites)
-        self.results: NDArray[np.float64] | None = None
-        self.trajectories: NDArray[np.float64] | None = None
-
-    def initialize(self, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
-        """Observable initialization before simulation.
-
-        Initialize the observables based on the type of simulation.
-        Parameters:
-        sim_params (AnalogSimParams | StrongSimParams | WeakSimParams): The simulation parameters object
-        which can be of type AnalogSimParams, StrongSimParams, or WeakSimParams.
-        """
-        if isinstance(sim_params, AnalogSimParams):
-            if sim_params.sample_timesteps:
-                self.trajectories = np.empty((sim_params.num_traj, len(sim_params.times)), dtype=np.float64)
-                self.times = sim_params.times
-            else:
-                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
-                self.times = np.asarray(sim_params.elapsed_time, dtype=np.float64)
-            self.results = np.empty(len(sim_params.times), dtype=np.float64)
-        elif isinstance(sim_params, WeakSimParams):
-            self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
-            self.results = np.empty(1, dtype=np.float64)
-        elif isinstance(sim_params, StrongSimParams):
-            if sim_params.sample_layers:
-                self.trajectories = np.empty(
-                    (sim_params.num_traj, sim_params.num_mid_measurements + 2), dtype=np.complex128
-                )
-                self.results = np.empty(sim_params.num_mid_measurements + 2, dtype=np.float64)
-            else:
-                self.trajectories = np.empty((sim_params.num_traj, 1), dtype=np.complex128)
-                self.results = np.empty(1, dtype=np.float64)
 
 
 class AnalogSimParams:
@@ -176,17 +115,11 @@ class AnalogSimParams:
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
         order: Integration order.
-        get_state: If ``True``, store the output state as a :class:`~mqt.yaqs.core.data_structures.state.State`.
-        show_progress: If ``True``, show a progress bar as trajectories finish.
-        noise_model: Noise model used for the run, populated after simulation.
+        get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
             two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
             Autocorrelation is the special case ``(O, O)``. Results are indexed by pair position.
-        multi_time_observables_times: Time grid for ``multi_time_observables`` results, or ``None`` when unused.
-        multi_time_observables_results: Ensemble mean with shape ``(n_pairs, n_times)`` or ``(n_pairs, 1)``.
     """
-
-    output_state: State | None = None
 
     def __init__(
         self,
@@ -203,8 +136,6 @@ class AnalogSimParams:
         sample_timesteps: bool = True,
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
-        show_progress: bool = True,
-        num_threads: int = 1,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
@@ -225,17 +156,13 @@ class AnalogSimParams:
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
-            get_state: If ``True``, store the final state in :attr:`output_state` as a
-                :class:`~mqt.yaqs.core.data_structures.state.State`.
-            show_progress: If ``True``, print a progress bar as trajectories finish.
-            num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
+            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
                 case ``(O, O)``.
 
         """
         _validate_random_seed(random_seed)
-        self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -243,14 +170,8 @@ class AnalogSimParams:
         self.observables = obs_list
 
         if self.observables:
-            sortable = [
-                obs
-                for obs in self.observables
-                if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
-            unsorted = [
-                obs for obs in self.observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
+            sortable = [obs for obs in self.observables if obs.gate.name != "pvm"]
+            unsorted = [obs for obs in self.observables if obs.gate.name == "pvm"]
             sorted_obs = sorted(
                 sortable,
                 key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,
@@ -271,75 +192,33 @@ class AnalogSimParams:
         self.order = order
         self.evolution_mode = evolution_mode
         self.get_state = get_state
-        self.show_progress = show_progress
-        self.num_threads = num_threads
         self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
             [] if multi_time_observables is None else list(multi_time_observables)
         )
-        self.multi_time_observables_times: NDArray[np.float64] | None = None
-        self.multi_time_observables_results: NDArray[np.complex128] | None = None
-
-    def aggregate_trajectories(self) -> None:
-        """Aggregates trajectories for result.
-
-        Aggregates the trajectories of each observable by computing the mean
-        across all trajectories and storing the result in the observable's results.
-        This method iterates over all observables and updates their results
-        attribute with the mean value of their trajectories along the specified axis.
-        """
-        for observable in self.observables:
-            if observable.gate.name == "schmidt_spectrum":
-                assert isinstance(observable.trajectories, np.ndarray)
-                all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
-                observable.results = np.concatenate(all_values)
-            else:
-                assert observable.trajectories is not None
-                observable.results = np.mean(observable.trajectories, axis=0)
 
 
 class WeakSimParams:
     """A class to represent the parameters for a weak simulation.
 
     Attributes:
-    -----------
-    dt : int
-        A placeholder property for code compatibility.
-    num_traj : int
-        A placeholder property for code compatibility.
-    shots : int
-        The number of shots for the simulation.
-    max_bond_dim : int
-        The maximum bond dimension for the simulation.
-    min_bond_dim:
-        The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-    trunc_mode :
-        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-    threshold : float
-        The threshold value for the simulation.
-    window_size : int | None
-        The window size for the simulation.
-    get_state:
-        If True, store the final state in output_state as a State.
-    sample_layers:
-        If True, sample layers.
-    show_progress:
-        If True, a progress bar is printed as trajectories finish.
-    noise_model:
-        The noise model used for the verification, populated after a simulation run.
-
-    Methods:
-    --------
-    __init__(shots: int, max_bond_dim: int = 2, threshold: float = 1e-6, window_size: int | None = None) -> None
-        Initializes the WeakSimParams with the given parameters.
-    aggregate_measurements() -> None
-        Aggregates the measurements from the simulation.
+        dt: A placeholder property for code compatibility.
+        num_traj: A placeholder property for code compatibility.
+        shots: The number of shots for the simulation.
+        max_bond_dim: The maximum bond dimension for the simulation.
+        min_bond_dim: The minimum bond dimension if possible which gives TDVP
+            better accuracy. Default is 2.
+        trunc_mode: The type of truncation performed in TDVP. Options are
+            ``"discarded_weight"`` and ``"relative"``.
+        threshold: The threshold value for the simulation.
+        window_size: The window size for the simulation.
+        get_state: If ``True``, request the final state on the returned
+            :class:`~mqt.yaqs.Result`.
     """
 
     # Properties set as placeholders for code compatibility
     dt = 1
     num_traj = 0
-    output_state: State | None = None
 
     def __init__(
         self,
@@ -350,7 +229,6 @@ class WeakSimParams:
         threshold: float = 1e-9,
         *,
         get_state: bool = False,
-        show_progress: bool = True,
         random_seed: int | None = None,
     ) -> None:
         """Weak circuit simulation initialization.
@@ -363,47 +241,17 @@ class WeakSimParams:
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Accuracy threshold for truncating tensors.
-            get_state: If ``True``, store the final state in :attr:`output_state` as a
-                :class:`~mqt.yaqs.core.data_structures.state.State`.
-            show_progress: If ``True``, print a progress bar as trajectories finish.
+            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
         """
         _validate_random_seed(random_seed)
-        self.noise_model: NoiseModel | None = None
-        self.measurements: list[dict[int, int] | None] = [None] * shots
         self.shots = shots
         self.max_bond_dim = max_bond_dim
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.threshold = threshold
         self.get_state = get_state
-        self.show_progress = show_progress
         self.random_seed = random_seed
-
-    def aggregate_measurements(self) -> None:
-        """Aggregates shots into final result.
-
-        Aggregates measurement results from multiple simulations.
-        This method processes the `measurements` attribute, which is a list of dictionaries
-        containing measurement results. If the first element of `measurements` is `None`,
-        it assumes a noise-free simulation and directly uses the first element as the results.
-        Otherwise, it aggregates the results from all non-None dictionaries in the list.
-        The aggregated results are stored in the `results` attribute, which is a dictionary
-        mapping measurement outcomes to their respective counts. The results are sorted
-        by the measurement outcomes.
-        """
-        self.results: dict[int, int] = {}
-        # Noise-free simulation stores shots in first element
-        if None in self.measurements:
-            assert self.measurements[0] is not None
-            self.results = self.measurements[0]
-            self.results = dict(sorted(self.results.items()))
-
-        else:
-            for d in filter(None, self.measurements):
-                for key, value in d.items():
-                    self.results[key] = self.results.get(key, 0) + value
-            self.results = dict(sorted(self.results.items()))
 
 
 class StrongSimParams:
@@ -412,48 +260,25 @@ class StrongSimParams:
     A class to represent the parameters for a strong simulation.
 
     Attributes:
-    -----------
-    dt : int
-        A placeholder property for code compatibility.
-    output_state: State
-        Output state following simulation if get_state is True
-    observables : list[Observable]
-        A list of observables to be tracked during the simulation.
-    sorted_observables : list[Observable]
-        A list of observables sorted by site and name.
-    num_traj : int
-        The number of trajectories to simulate. Default is 1000.
-    random_seed : int | None
-        If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
-    max_bond_dim : int
-        The maximum bond dimension for the simulation. Default is 2.
-    min_bond_dim:
-        The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-    trunc_mode :
-        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-    threshold : float
-        The threshold value for the simulation. Default is 1e-6.
-    window_size : int or None
-        The size of the window for the simulation. Default is None.
-    get_state:
-        If True, store the final state in output_state as a State.
-    show_progress:
-        If True, a progress bar is printed as trajectories finish.
-    noise_model:
-        The noise model used for the verification, populated after a simulation run.
-
-    Methods:
-    --------
-    __init__(self, observables: list[Observable], num_traj: int = 1000, max_bond_dim: int = 2,
-             threshold: float = 1e-6, window_size: int | None = None, get_state: bool = False) -> None:
-        Initializes the StrongSimParams with the given parameters.
-    aggregate_trajectories(self) -> None:
-        Aggregates the trajectories of the observables by computing the mean across all trajectories.
+        dt: A placeholder property for code compatibility.
+        observables: A list of observables to be tracked during the simulation.
+        sorted_observables: A list of observables sorted by site and name.
+        num_traj: The number of trajectories to simulate. Default is 1000.
+        random_seed: If set, seeds per-trajectory jump RNG and static noise
+            sampling for reproducible runs.
+        max_bond_dim: The maximum bond dimension for the simulation. Default is 2.
+        min_bond_dim: The minimum bond dimension if possible which gives TDVP
+            better accuracy. Default is 2.
+        trunc_mode: The type of truncation performed in TDVP. Options are
+            ``"discarded_weight"`` and ``"relative"``.
+        threshold: The threshold value for the simulation. Default is ``1e-6``.
+        window_size: The size of the window for the simulation. Default is ``None``.
+        get_state: If ``True``, request the final state on the returned
+            :class:`~mqt.yaqs.Result`.
     """
 
     # Properties set as placeholders for code compatibility
     dt = 1
-    output_state: State | None = None
 
     def __init__(
         self,
@@ -467,8 +292,6 @@ class StrongSimParams:
         get_state: bool = False,
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
-        show_progress: bool = True,
-        num_threads: int = 1,
         random_seed: int | None = None,
     ) -> None:
         """Strong circuit simulation parameters initialization.
@@ -482,16 +305,12 @@ class StrongSimParams:
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Threshold for simulation accuracy.
-            get_state: If ``True``, store the final state in :attr:`output_state` as a
-                :class:`~mqt.yaqs.core.data_structures.state.State`.
+            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
-            show_progress: If ``True``, print a progress bar as trajectories finish.
-            num_threads: Number of threads for single-trajectory BLAS/LAPACK work.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
         """
         _validate_random_seed(random_seed)
-        self.noise_model: NoiseModel | None = None
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -499,14 +318,8 @@ class StrongSimParams:
         self.observables = obs_list
 
         if self.observables:
-            sortable = [
-                obs
-                for obs in self.observables
-                if obs.gate.name not in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
-            unsorted = [
-                obs for obs in self.observables if obs.gate.name in {"pvm", "runtime_cost", "max_bond", "total_bond"}
-            ]
+            sortable = [obs for obs in self.observables if obs.gate.name != "pvm"]
+            unsorted = [obs for obs in self.observables if obs.gate.name == "pvm"]
             sorted_obs = sorted(
                 sortable,
                 key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,
@@ -523,23 +336,4 @@ class StrongSimParams:
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
-        self.show_progress = show_progress
-        self.num_threads = num_threads
         self.random_seed = random_seed
-
-    def aggregate_trajectories(self) -> None:
-        """Aggregates trajectories for result.
-
-        Aggregates the trajectories of each observable by computing the mean
-        across all trajectories and storing the result in the observable's results.
-        This method iterates over all observables and updates their results
-        attribute with the mean value of their trajectories along the specified axis.
-        """
-        for observable in self.observables:
-            if observable.gate.name == "schmidt_spectrum":
-                assert isinstance(observable.trajectories, np.ndarray)
-                all_values = [np.asarray(trajectory).ravel() for trajectory in observable.trajectories]
-                observable.results = np.concatenate(all_values)
-            else:
-                assert observable.trajectories is not None
-                observable.results = np.mean(observable.trajectories, axis=0)

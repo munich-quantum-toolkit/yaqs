@@ -24,17 +24,19 @@ The focus is on compact, executable examples:
 ## 1. Unitary analog evolution primer
 
 In unitary analog evolution, we have no noise or tensor jumps.
-To trigger the backend to perform a unitary dynamics, you can avoid passing `noise_model=''` to `simulator.run` because `noise_model` is set to `None` by default.
+To trigger the backend to perform a unitary dynamics, you can avoid passing `noise_model=''` to `Simulator.run` because `noise_model` is set to `None` by default.
 
 ```{code-cell} ipython3
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import BaseGate, Z, X, Y
+
+sim = Simulator(show_progress=False)
 ```
 
 ```{code-cell} ipython3
@@ -62,12 +64,11 @@ primer_params = AnalogSimParams(
     max_bond_dim=64,
     threshold=1e-10,
     sample_timesteps=True,
-    show_progress=False,
 )
 
-simulator.run(psi0, H_open, primer_params, parallel=True)
+result_primer = sim.run(psi0, H_open, primer_params)
 times_primer = primer_params.times
-zexp_primer = primer_params.observables[0].results
+zexp_primer = result_primer.expectation_values[0]
 ```
 
 ```{code-cell} ipython3
@@ -110,15 +111,17 @@ single_state_params = AnalogSimParams(
     max_bond_dim=64,
     threshold=1e-10,
     sample_timesteps=True,
-    show_progress=False,
     multi_time_observables=[(sz_mid, sz_mid), (sz_mid, sx_mid)],  # row 0: C_zz(t), row 1: C_zx(t)
 )
 
-simulator.run([State(L, initial="haar-random", pad=2)], H_open, single_state_params, parallel=False)
+sim = Simulator(show_progress=False)
+result_single = sim.run(
+    [State(L, initial="haar-random", pad=2)], H_open, single_state_params
+)
 
-t_single = single_state_params.multi_time_observables_times
-czz_single = single_state_params.multi_time_observables_results[0]
-czx_single = single_state_params.multi_time_observables_results[1]
+t_single = result_single.multi_time_times
+czz_single = result_single.multi_time_results[0]
+czx_single = result_single.multi_time_results[1]
 ```
 
 ```{code-cell} ipython3
@@ -139,7 +142,7 @@ In dynamical typicality studies, one often averages correlations over an ensembl
 Under certain thermalisation guarantees, one can show that the typical relaxation behavior of _any_ state can be represented by an ensemble average of the expectation over randomly initialised states.
 For sufficiently rich ensembles, this can approximate high-temperature traces and reveal robust transport trends.
 
-YAQS supports this directly by passing `list[State]` into `simulator.run`.
+YAQS supports this directly by passing `list[State]` into `Simulator.run`.
 Each member evolves independently, which, when parallelized by the unitary backend, offers computational advantage to calculate these variables.
 
 ```{code-cell} ipython3
@@ -153,17 +156,16 @@ ensemble_params = AnalogSimParams(
     max_bond_dim=64,
     threshold=1e-10,
     sample_timesteps=True,
-    show_progress=False,
     multi_time_observables=[
         (Observable(Z(), mid), Observable(Z(), mid)),  # C_zz(t) autocorrelation
         (Observable(Z(), mid), Observable(X(), mid)),  # C_zx(t)
     ],
 )
 
-simulator.run(ensemble_states, H_open, ensemble_params, parallel=True)
-t_ens = ensemble_params.multi_time_observables_times
-czz_ens = ensemble_params.multi_time_observables_results[0]
-czx_ens = ensemble_params.multi_time_observables_results[1]
+result_ens = sim.run(ensemble_states, H_open, ensemble_params)
+t_ens = result_ens.multi_time_times
+czz_ens = result_ens.multi_time_results[0]
+czx_ens = result_ens.multi_time_results[1]
 ```
 
 ```{code-cell} ipython3
@@ -248,13 +250,12 @@ for d in deltas:
         max_bond_dim=64,
         threshold=1e-10,
         sample_timesteps=True,
-        show_progress=False,
         multi_time_observables=pairs_jj,
     )
-    simulator.run(states_transport, h_periodic, sp, parallel=True)
-    assert sp.multi_time_observables_results is not None
-    t_transport = sp.multi_time_observables_times
-    c_jj = np.real(np.sum(sp.multi_time_observables_results, axis=0) / Ltr)
+    result_transport = sim.run(states_transport, h_periodic, sp)
+    assert result_transport.multi_time_results is not None
+    t_transport = result_transport.multi_time_times
+    c_jj = np.real(np.sum(result_transport.multi_time_results, axis=0) / Ltr)
     transport_curves[d] = c_jj
 ```
 
@@ -277,7 +278,7 @@ The illustrative curves here use small $L$ and a handful of Haar-random states; 
 :::{tip} Practical notes: scaling runs and MPS entanglement
 
 - Scale gradually: `L`, ensemble size, `dt`, `elapsed_time`, and `max_bond_dim`.
-- Enable ensemble parallelization (`parallel=True` in `simulator.run`) when you have many initial states.
+- Enable ensemble parallelization (`Simulator(parallel=True)`) when you have many initial states.
 - **MPS entanglement:** under unitary evolution, entanglement entropy and required bond dimension typically **grow** with time (until truncation or saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten `threshold` only with care, or shorten the window so the MPS remains an accurate ansatz for your observable.
 
 :::

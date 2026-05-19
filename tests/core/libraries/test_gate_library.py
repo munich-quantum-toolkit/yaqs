@@ -629,46 +629,6 @@ def _assert_identity_gate_like(g: BaseGate) -> None:
     assert g.interaction == 1  # because matrix is 2x2
 
 
-def test_diagnostic_runtime_cost() -> None:
-    """Test the runtime_cost diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be assigned to a site, and that its BaseGate factory produces
-    the same matrix.
-    """
-    g = GateLibrary.runtime_cost()
-    _assert_identity_gate_like(g)
-    g.set_sites(0)
-    assert g.sites == [0]
-    assert_array_equal(BaseGate.runtime_cost().matrix, g.matrix)
-
-
-def test_diagnostic_max_bond() -> None:
-    """Test the max_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.max_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(1)
-    assert g.sites == [1]
-    assert_array_equal(BaseGate.max_bond().matrix, g.matrix)
-
-
-def test_diagnostic_total_bond() -> None:
-    """Test the total_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.total_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(3)
-    assert g.sites == [3]
-    assert_array_equal(BaseGate.total_bond().matrix, g.matrix)
-
-
 def test_meta_entropy_sites_len_flexible() -> None:
     """Test the entropy meta-observable operator.
 

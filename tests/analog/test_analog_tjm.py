@@ -36,8 +36,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from mqt.yaqs import simulator
-from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2, initialize, step_through
+from mqt.yaqs import Simulator
+from mqt.yaqs.analog.analog_tjm import initialize, step_through
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -69,7 +69,6 @@ def test_initialize() -> None:
         num_traj=1,
         max_bond_dim=2,
         sample_timesteps=False,
-        show_progress=False,
     )
     with (
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
@@ -102,7 +101,6 @@ def test_step_through() -> None:
         num_traj=1,
         max_bond_dim=2,
         sample_timesteps=False,
-        show_progress=False,
     )
     with (
         patch("mqt.yaqs.analog.analog_tjm.local_dynamic_tdvp") as mock_dynamic_tdvp,
@@ -115,124 +113,37 @@ def test_step_through() -> None:
         mock_stochastic_process.assert_called_once_with(state, noise_model, sim_params.dt, sim_params, rng=None)
 
 
-def test_analog_tjm_2() -> None:
-    """Test the analog_tjm_2 function for a two-site evolution (order=2) without sampling timesteps.
+@pytest.mark.parametrize("order", [1, 2])
+@pytest.mark.parametrize("sample_timesteps", [False, True])
+def test_analog_tjm_shape_via_simulator(order: int, *, sample_timesteps: bool) -> None:
+    """Simulator-driven analog TJM produces per-observable trajectories of the expected shape.
 
-    This test creates an Ising MPO and an MPS of length 5, with no noise model.
-    It calls analog_tjm_2 with sim_params configured for order 2 and sample_timesteps False.
-    The returned results array should have shape (num_observables, 1).
+    Covers both one-site (order=1) and two-site (order=2) evolution, with and without
+    intermediate time sampling. Per-trajectory rows on ``result.trajectories[i]`` must
+    have one column when ``sample_timesteps=False`` and ``len(sim_params.times)``
+    columns otherwise.
     """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
+    length = 5
+    state = State(length, initial="zeros")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    observables = [Observable(Z(), site) for site in range(length)]
     sim_params = AnalogSimParams(
-        observables=measurements,
+        observables=observables,
         elapsed_time=0.2,
         dt=0.2,
         num_traj=1,
         max_bond_dim=2,
-        order=2,
-        sample_timesteps=False,
-        show_progress=False,
+        order=order,
+        sample_timesteps=sample_timesteps,
     )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_2(args)
-    assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
 
-def test_analog_tjm_2_sample_timesteps() -> None:
-    """Test the analog_tjm_2 function for a two-site evolution (order=2) with sampling timesteps.
-
-    This test creates an Ising MPO and an MPS of length 5, with no noise model,
-    and sim_params with sample_timesteps True. The resulting results array should have shape
-    (num_observables, len(sim_params.times)).
-    """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = AnalogSimParams(
-        observables=measurements,
-        elapsed_time=0.2,
-        dt=0.2,
-        num_traj=1,
-        max_bond_dim=2,
-        order=2,
-        sample_timesteps=True,
-        show_progress=False,
-    )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_2(args)
-    assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
-
-
-def test_analog_tjm_1() -> None:
-    """Test the analog_tjm_1 function for a one-site evolution (order=1) without sampling timesteps.
-
-    This test creates an Ising MPO and an MPS of length 5, with no noise model,
-    and sim_params with order 1 and sample_timesteps False.
-    The resulting results array should have shape (num_observables, 1).
-    """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = AnalogSimParams(
-        observables=measurements,
-        elapsed_time=0.2,
-        dt=0.2,
-        num_traj=1,
-        max_bond_dim=2,
-        order=1,
-        sample_timesteps=False,
-        show_progress=False,
-    )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_1(args)
-    assert results.shape == (len(measurements), 1), "Results incorrect shape"
-
-
-def test_analog_tjm_1_sample_timesteps() -> None:
-    """Test the analog_tjm_1 function for a one-site evolution (order=1) with sampling timesteps.
-
-    This test creates an Ising MPO and an MPS of length 5, with no noise model,
-    and sim_params with sample_timesteps True.
-    The results array should have shape (num_observables, len(sim_params.times)).
-    """
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    state = MPS(L)
-    noise_model = None
-    measurements = [Observable(Z(), site) for site in range(L)]
-    sim_params = AnalogSimParams(
-        observables=measurements,
-        elapsed_time=0.2,
-        dt=0.2,
-        num_traj=1,
-        max_bond_dim=2,
-        order=1,
-        sample_timesteps=True,
-        show_progress=False,
-    )
-    args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_1(args)
-    assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
+    expected_cols = len(sim_params.times) if sample_timesteps else 1
+    assert result.expectation_values is not None
+    assert result.trajectories is not None
+    for traj in result.trajectories:
+        assert traj.shape == (sim_params.num_traj, expected_cols)
 
 
 @pytest.mark.parametrize("two_site_process", ["crosstalk_xx", "lowering_two"])
@@ -253,16 +164,15 @@ def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
         max_bond_dim=8,
         order=2,
         sample_timesteps=False,
-        show_progress=False,
         random_seed=YAQS_TEST_SEED,
     )
     noise = NoiseModel([
         {"name": "pauli_x", "sites": [0], "strength": 0.02},
         {"name": two_site_process, "sites": [0, 1], "strength": 0.01},
     ])
-    simulator.run(state, hamiltonian, sim_params, noise, parallel=False)
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
 
-    results = sim_params.observables[0].results
+    results = result.expectation_values[0]
     assert results is not None
     z_mean = np.real(results)
     assert np.isfinite(z_mean).all()

@@ -14,14 +14,15 @@ import pytest
 import scipy.sparse
 
 import mqt.yaqs.analog.mcwf as mcwf_mod
-from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, mcwf, preprocess_mcwf
+from mqt.yaqs import Simulator
+from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, preprocess_mcwf
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.simulator import run
+from mqt.yaqs.core.libraries.gate_library import Z
 from tests.conftest import YAQS_TEST_SEED
 
 
@@ -54,14 +55,13 @@ def test_mcwf_amplitude_damping() -> None:
         elapsed_time=t_max,
         dt=dt,
         num_traj=num_traj,
-        show_progress=False,
         random_seed=YAQS_TEST_SEED,
     )
 
-    run(initial_state, hamiltonian, sim_params, noise_model, parallel=False)
+    result = Simulator(parallel=False, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    sigma_z_sim = obs.results
+    sigma_z_sim = result.expectation_values[0]
     assert sigma_z_sim is not None
 
     # Analytical solution for <sigma_z>:
@@ -98,10 +98,10 @@ def test_mcwf_unitary_rabi() -> None:
         num_traj=1,  # Deterministic
     )
 
-    run(initial_state, hamiltonian, sim_params, None)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
 
     times = sim_params.times
-    sigma_z_sim = obs.results
+    sigma_z_sim = result.expectation_values[0]
     assert sigma_z_sim is not None
     sigma_z_exact = np.cos(2 * times)
 
@@ -139,16 +139,15 @@ def test_mcwf_dephasing() -> None:
         elapsed_time=t_max,
         dt=dt,
         num_traj=num_traj,
-        show_progress=False,
         random_seed=YAQS_TEST_SEED,
     )
 
     # Use parallel=True to verify infrastructure
-    run(initial_state, hamiltonian, sim_params, noise_model, parallel=True)
+    result = Simulator(parallel=True, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    x0_sim = obs0.results
-    x1_sim = obs1.results
+    x0_sim = result.expectation_values[0]
+    x1_sim = result.expectation_values[1]
     assert x0_sim is not None
     assert x1_sim is not None
 
@@ -224,137 +223,120 @@ def test_mcwf_noisy_system_has_propagator() -> None:
     assert ctx.step_propagator is not None
 
 
-def test_mcwf_diagnostic_observables() -> None:
-    """Test that diagnostic observables are handled (converted to None/0.0) in MCWF."""
-    n_sites = 2
-    psi = MPS(n_sites)
-    h = MPO.ising(n_sites, J=1.0, g=1.0)
-
-    # "runtime_cost" is a special diagnostic observable name
-    obs_diag = Observable("runtime_cost", sites=[])
-    # Also add a real observable to verify mixing
-    obs_real = Observable("z", sites=[0])
-
-    sim_params = AnalogSimParams(dt=0.1, elapsed_time=0.1, observables=[obs_diag, obs_real])
-
-    # MCWF Preprocess
-    ctx = preprocess_mcwf(psi, h, None, sim_params)
-
-    # Check that we have one None and one array in embedded_observables
-    assert any(op is None for op in ctx.embedded_observables)
-    assert any(op is not None for op in ctx.embedded_observables)
-
-    # Identify the index of the diagnostic observable
-    diag_idx = -1
-    for i, obs in enumerate(sim_params.sorted_observables):
-        if obs.gate.name == "runtime_cost":
-            diag_idx = i
-            break
-    assert diag_idx != -1
-    assert ctx.embedded_observables[diag_idx] is None
-
-    # Run MCWF
-    res_mcwf = mcwf((0, ctx))
-    # Result for diagnostic should be 0.0
-    assert np.allclose(res_mcwf[diag_idx, :], 0.0)
+def test_mcwf_result_has_no_auto_diagnostics() -> None:
+    """Vector MCWF runs do not populate Result bond diagnostics."""
+    length = 2
+    state = State(length, initial="zeros", representation="vector")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params)
+    assert result.runtime_cost is None
+    assert result.max_bond is None
+    assert result.total_bond is None
 
 
-def test_mcwf_trajectory_rng_seeding() -> None:
-    """With random_seed set, same traj_idx is reproducible; different indices differ."""
+def test_mcwf_trajectory_rng_seeding_reproducible() -> None:
+    """Two runs with the same ``random_seed`` produce identical MCWF trajectories."""
     n_sites = 1
-    psi = MPS(n_sites, state="x+")
-    h = MPO()
-    h.identity(n_sites)
-    for i in range(len(h.tensors)):
-        h.tensors[i] *= 0.0
+    state = State(n_sites, initial="x+", representation="vector")
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
     sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
     noise = NoiseModel(processes=[{"name": "dephasing", "sites": [0], "strength": 2.0, "matrix": sigma_z}])
-    obs = Observable("x", sites=[0])
-    sim_params = AnalogSimParams(
-        dt=0.02,
-        elapsed_time=1.0,
-        observables=[obs],
-        sample_timesteps=True,
-        random_seed=YAQS_TEST_SEED,
-    )
-    ctx = preprocess_mcwf(psi, h, noise, sim_params)
 
-    res_a = mcwf((3, ctx))
-    res_b = mcwf((3, ctx))
-    res_c = mcwf((7, ctx))
+    def _params() -> AnalogSimParams:
+        return AnalogSimParams(
+            dt=0.02,
+            elapsed_time=0.2,
+            observables=[Observable("x", sites=[0])],
+            num_traj=4,
+            sample_timesteps=True,
+            random_seed=YAQS_TEST_SEED,
+        )
 
-    assert np.allclose(res_a, res_b)
-    assert not np.allclose(res_a, res_c)
+    sim = Simulator(parallel=False, show_progress=False)
+    res_a = sim.run(state, hamiltonian, _params(), noise)
+    res_b = sim.run(state, hamiltonian, _params(), noise)
+    np.testing.assert_allclose(res_a.expectation_values[0], res_b.expectation_values[0])
 
 
-def test_mcwf_noisy_evolution_with_propagator() -> None:
-    """Noisy open-system evolution uses the precomputed step propagator path."""
+def test_mcwf_noisy_evolution_with_propagator_via_simulator() -> None:
+    """Noisy open-system evolution through the Simulator returns finite trajectories."""
     n_sites = 2
-    psi = MPS(n_sites, state="x+")
-    h = MPO()
-    h.identity(n_sites)
-    for i in range(len(h.tensors)):
-        h.tensors[i] *= 0.0
+    state = State(n_sites, initial="x+", representation="vector")
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.3}])
-    obs = Observable("z", sites=[0])
+
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.15,
-        observables=[obs],
+        observables=[Observable("z", sites=[0])],
+        num_traj=2,
         sample_timesteps=True,
+        random_seed=YAQS_TEST_SEED,
     )
-    ctx = preprocess_mcwf(psi, h, noise, sim_params)
-    assert ctx.step_propagator is not None
-    assert not ctx.is_unitary
-
-    res = mcwf((0, ctx))
-    assert res.shape == (1, len(sim_params.times))
-    assert np.all(np.isfinite(res))
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert expectation.shape == (len(sim_params.times),)
+    assert np.all(np.isfinite(expectation))
 
 
 def test_mcwf_unitary_krylov_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When U_step is not stored, unitary evolution uses expm_krylov per step."""
+    """When ``U_step`` is not precomputed, unitary evolution uses ``expm_krylov`` per step."""
     monkeypatch.setattr(mcwf_mod, "MAX_PRECOMPUTE_DIM", 4)
     n_sites = 3
-    psi = MPS(n_sites, state="zeros")
-    h = MPO.ising(n_sites, J=1.0, g=0.5)
-    obs = Observable("z", sites=[0])
+    state = State(n_sites, initial="zeros", representation="vector")
+    hamiltonian = Hamiltonian.ising(n_sites, J=1.0, g=0.5)
+
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.1,
-        observables=[obs],
+        observables=[Observable("z", sites=[0])],
+        num_traj=1,
         sample_timesteps=True,
     )
-    ctx = preprocess_mcwf(psi, h, None, sim_params)
-    assert ctx.step_propagator is None
-    assert ctx.is_unitary
-
-    res = mcwf((0, ctx))
-    assert res.shape == (1, len(sim_params.times))
-    assert np.all(np.isfinite(res))
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, None)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert expectation.shape == (len(sim_params.times),)
+    assert np.all(np.isfinite(expectation))
 
 
 def test_mcwf_noisy_arnoldi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When U_step is not stored, noisy evolution uses expm_arnoldi per step."""
+    """When ``U_step`` is not precomputed, noisy evolution falls back to ``expm_arnoldi``."""
     monkeypatch.setattr(mcwf_mod, "MAX_PRECOMPUTE_DIM", 4)
     n_sites = 3
-    psi = MPS(n_sites, state="x+")
-    h = MPO()
-    h.identity(n_sites)
-    for i in range(len(h.tensors)):
-        h.tensors[i] *= 0.0
+    state = State(n_sites, initial="x+", representation="vector")
+    mpo = MPO()
+    mpo.identity(n_sites)
+    for i in range(len(mpo.tensors)):
+        mpo.tensors[i] *= 0.0
+    hamiltonian = Hamiltonian.from_mpo(mpo)
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
-    obs = Observable("z", sites=[0])
+
     sim_params = AnalogSimParams(
         dt=0.05,
         elapsed_time=0.1,
-        observables=[obs],
+        observables=[Observable("z", sites=[0])],
+        num_traj=1,
         sample_timesteps=True,
+        random_seed=YAQS_TEST_SEED,
     )
-    ctx = preprocess_mcwf(psi, h, noise, sim_params)
-    assert ctx.step_propagator is None
-    assert not ctx.is_unitary
-
-    res = mcwf((0, ctx))
-    assert res.shape == (1, len(sim_params.times))
-    assert np.all(np.isfinite(res))
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert expectation.shape == (len(sim_params.times),)
+    assert np.all(np.isfinite(expectation))

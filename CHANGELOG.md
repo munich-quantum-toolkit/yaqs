@@ -18,8 +18,9 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
-- changed [`simulator.run`](src/mqt/yaqs/simulator.py) to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
+- changed `simulator.run` to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
 - changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
 
 ### Removed
@@ -118,6 +119,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#430]: https://github.com/munich-quantum-toolkit/yaqs/pull/430
 [#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
 [#428]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
 [#426]: https://github.com/munich-quantum-toolkit/yaqs/pull/426

@@ -36,9 +36,9 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
         mps_tensor: The tensor to be decomposed.
 
     Returns:
-        q_tensor: The Q tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        r_mat: The R matrix with the right virtual leg (new,right).
+        Tuple ``(q_tensor, r_mat)`` where ``q_tensor`` is the Q tensor with the
+        left virtual leg and the physical leg ``(phys, left, new)`` and
+        ``r_mat`` is the R matrix with the right virtual leg ``(new, right)``.
     """
     phys, left, right = mps_tensor.shape
     mat = mps_tensor.reshape(phys * left, right)
@@ -58,10 +58,9 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
         mps_tensor: The tensor to be decomposed.
 
     Returns:
-        q_tensor: The Q tensor with the physical leg and the right virtual
-            leg (phys,new,right).
-        r_mat: The R matrix with the left virtual leg (left,new).
-
+        Tuple ``(q_tensor, r_mat)`` where ``q_tensor`` is the Q tensor with the
+        physical leg and the right virtual leg ``(phys, new, right)`` and
+        ``r_mat`` is the R matrix with the left virtual leg ``(left, new)``.
     """
     old_shape = mps_tensor.shape
     mps_tensor_t = mps_tensor.transpose(0, 2, 1)

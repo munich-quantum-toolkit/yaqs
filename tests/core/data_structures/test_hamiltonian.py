@@ -15,11 +15,11 @@ import numpy as np
 import pytest
 import scipy.sparse
 
+from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.simulator import run
 
 
 def test_hamiltonian_requires_exactly_one_manual_source() -> None:
@@ -376,10 +376,10 @@ def test_run_rejects_mpo_hamiltonian_with_mps_state() -> None:
         observables=[Observable("z", sites=[0])],
         elapsed_time=0.1,
         dt=0.1,
-        show_progress=False,
     )
+    sim = Simulator(show_progress=False)
     with pytest.raises(ValueError, match=r"TJM simulation requires Hamiltonian\.representation='mpo'"):
-        run(state, h, params, None)
+        sim.run(state, h, params, None)
 
 
 def test_run_hamiltonian_length_mismatch() -> None:
@@ -390,10 +390,10 @@ def test_run_hamiltonian_length_mismatch() -> None:
         observables=[Observable("z", sites=[0])],
         elapsed_time=0.1,
         dt=0.1,
-        show_progress=False,
     )
+    sim = Simulator(show_progress=False)
     with pytest.raises(ValueError, match=r"does not match Hamiltonian\.length"):
-        run(state, h, params, None)
+        sim.run(state, h, params, None)
 
 
 def test_to_sparse_matrix_called_once_across_two_runs() -> None:
@@ -404,10 +404,10 @@ def test_to_sparse_matrix_called_once_across_two_runs() -> None:
         observables=[Observable("z", sites=[0])],
         elapsed_time=0.1,
         dt=0.1,
-        show_progress=False,
     )
     mpo = h.mpo
+    sim = Simulator(show_progress=False)
     with patch.object(MPO, "to_sparse_matrix", wraps=mpo.to_sparse_matrix) as mock_sparse:
-        run(state, h, params, None)
-        run(state, h, params, None)
+        sim.run(state, h, params, None)
+        sim.run(state, h, params, None)
     assert mock_sparse.call_count == 1
