@@ -483,19 +483,12 @@ def _prepare_hamiltonian_for_run(
 
 def _prepare_result_observables(
     result: Result,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    sim_params: AnalogSimParams | StrongSimParams,
     *,
-    num_traj: int | None = None,
+    num_traj: int,
     num_mid_measurements: int | None = None,
 ) -> None:
     """Deep-copy sorted observables onto ``result`` and allocate output buffers."""
-    if isinstance(sim_params, WeakSimParams):
-        result.observables = []
-        result.expectation_values = []
-        result.trajectories = []
-        result.times = None
-        return
-    assert num_traj is not None
     result.observables = [copy.deepcopy(obs) for obs in sim_params.sorted_observables]
     trajectories, expectation_values, times = allocate_observable_buffers(
         sim_params,
