@@ -106,7 +106,12 @@ from tqdm import tqdm
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
 from .core.data_structures.hamiltonian import Hamiltonian
-from .core.data_structures.result import Result, aggregate_counts, aggregate_trajectories
+from .core.data_structures.result import (
+    Result,
+    aggregate_counts,
+    aggregate_trajectories,
+    allocate_observable_buffers,
+)
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .core.data_structures.state import State
 
@@ -476,13 +481,24 @@ def _prepare_result_observables(
     num_traj: int | None = None,
     num_mid_measurements: int | None = None,
 ) -> None:
-    """Deep-copy sorted observables onto ``result`` and initialize trajectory buffers."""
+    """Deep-copy sorted observables onto ``result`` and allocate output buffers."""
     if isinstance(sim_params, WeakSimParams):
         result.observables = []
+        result.expectation_values = []
+        result.trajectories = []
+        result.times = None
         return
+    assert num_traj is not None
     result.observables = [copy.deepcopy(obs) for obs in sim_params.sorted_observables]
-    for observable in result.observables:
-        observable.initialize(sim_params, num_traj=num_traj, num_mid_measurements=num_mid_measurements)
+    trajectories, expectation_values, times = allocate_observable_buffers(
+        sim_params,
+        len(result.observables),
+        num_traj=num_traj,
+        num_mid_measurements=num_mid_measurements,
+    )
+    result.trajectories = trajectories
+    result.expectation_values = expectation_values
+    result.times = times
 
 
 def _worker_sim_params(
@@ -956,9 +972,8 @@ class Simulator:
                 mp_context=self.mp_context,
             ):
                 traj_data, traj_final = traj_payload
-                for obs_index, observable in enumerate(result.observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = traj_data[obs_index]
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
@@ -979,9 +994,8 @@ class Simulator:
 
             for i, arg in enumerate(iterator):
                 traj_data, traj_final = _call_backend(backend, arg, n_threads=n_threads)
-                for obs_index, observable in enumerate(result.observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = traj_data[obs_index]
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
@@ -1069,9 +1083,8 @@ class Simulator:
                 mp_context=self.mp_context,
             ):
                 traj_data, traj_final = traj_payload
-                for obs_index, observable in enumerate(result.observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = traj_data[obs_index]
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
                 if traj_final is not None:
                     final_mps = traj_final
         else:
@@ -1085,9 +1098,8 @@ class Simulator:
 
             for i, arg in enumerate(iterator):
                 traj_data, traj_final = _call_backend(backend, arg, n_threads=n_threads)
-                for obs_index, observable in enumerate(result.observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = traj_data[obs_index]
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
                 if traj_final is not None:
                     final_mps = traj_final
 
@@ -1316,9 +1328,8 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                for obs_index, observable in enumerate(result.observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = obs_result[obs_index]
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = obs_result[obs_index]
                 if multi_time_matrix is not None:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result
@@ -1328,9 +1339,8 @@ class Simulator:
             iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not self.show_progress)
             for i, arg in enumerate(iterator):
                 obs_result, multi_time_result = _call_backend(ensemble_member_worker, arg, n_threads=n_threads)
-                for obs_index, observable in enumerate(result.observables):
-                    assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = obs_result[obs_index]
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = obs_result[obs_index]
                 if multi_time_matrix is not None:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result

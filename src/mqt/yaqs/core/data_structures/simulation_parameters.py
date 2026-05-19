@@ -26,8 +26,6 @@ import numpy as np
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
@@ -59,27 +57,17 @@ class EvolutionMode(Enum):
 
 
 class Observable:
-    """Observable class.
+    """Measurement metadata for a quantum simulation.
 
-    A class to represent an observable in a quantum simulation.
+    Describes *what* to measure (gate and sites). Per-run expectation values and
+    trajectories are stored on :class:`~mqt.yaqs.core.data_structures.result.Result`.
 
     Attributes:
     ----------
     gate : BaseGate
-            The gate that will act as the observable.
-    site : int
-        The site (or qubit) on which the observable is measured.
-    results : NDArray[np.float64] | None
-        The results of the simulation, initialized to None.
-    trajectories : NDArray[np.float64] | None
-        The trajectories of the simulation, initialized to None.
-
-    Methods:
-    -------
-    __init__(name: str, site: int) -> None
-        Initializes the Observable with a name and site, and checks if the name is valid in the GateLibrary.
-    initialize(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None
-        Initializes the results and trajectories arrays based on the type of simulation parameters provided.
+        The gate that acts as the observable.
+    sites : int | list[int]
+        The site or site indices on which this observable is measured.
     """
 
     def __init__(self, gate: BaseGate | str, sites: int | list[int] | None = None) -> None:
@@ -124,45 +112,6 @@ class Observable:
             assert sites is not None
             self.sites = sites
             self.gate.set_sites(self.sites)
-        self.results: NDArray[np.float64] | None = None
-        self.trajectories: NDArray[np.float64] | None = None
-
-    def initialize(
-        self,
-        sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-        *,
-        num_traj: int | None = None,
-        num_mid_measurements: int | None = None,
-    ) -> None:
-        """Observable initialization before simulation.
-
-        Initialize the observables based on the type of simulation.
-
-        Args:
-            sim_params: The simulation parameters object.
-            num_traj: Override for trajectory count (e.g. effective value for noise-free runs).
-            num_mid_measurements: Override for strong-sim layer sampling barrier count.
-        """
-        traj_count = num_traj if num_traj is not None else getattr(sim_params, "num_traj", 1)
-        if isinstance(sim_params, AnalogSimParams):
-            if sim_params.sample_timesteps:
-                self.trajectories = np.empty((traj_count, len(sim_params.times)), dtype=np.float64)
-                self.times = sim_params.times
-            else:
-                self.trajectories = np.empty((traj_count, 1), dtype=np.complex128)
-                self.times = np.asarray(sim_params.elapsed_time, dtype=np.float64)
-            self.results = np.empty(len(sim_params.times), dtype=np.float64)
-        elif isinstance(sim_params, WeakSimParams):
-            self.trajectories = np.empty((sim_params.shots, 1), dtype=np.complex128)
-            self.results = np.empty(1, dtype=np.float64)
-        elif isinstance(sim_params, StrongSimParams):
-            mid = num_mid_measurements if num_mid_measurements is not None else sim_params.num_mid_measurements
-            if sim_params.sample_layers:
-                self.trajectories = np.empty((traj_count, mid + 2), dtype=np.complex128)
-                self.results = np.empty(mid + 2, dtype=np.float64)
-            else:
-                self.trajectories = np.empty((traj_count, 1), dtype=np.complex128)
-                self.results = np.empty(1, dtype=np.float64)
 
 
 class AnalogSimParams:
