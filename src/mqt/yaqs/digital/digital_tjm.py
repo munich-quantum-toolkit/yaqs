@@ -25,7 +25,6 @@ from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
-from ..core.data_structures.state import State
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
@@ -247,7 +246,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
-) -> NDArray[np.float64] | dict[int, int]:
+) -> tuple[NDArray[np.float64] | dict[int, int], MPS | None]:
     """Digital Tensor Jump Method.
 
     Simulates a quantum circuit using the Tensor Jump Method.
@@ -315,19 +314,31 @@ def digital_tjm(
                 state.evaluate_observables(sim_params, results, col_idx)
 
     if isinstance(sim_params, WeakSimParams):
+        per_call_shots = _per_call_shots(sim_params)
         if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
-            # All shots can be done at once in noise-free model
-            if sim_params.get_state:
-                sim_params.output_state = State.from_mps(state)
-            return state.measure_shots(sim_params.shots)
-        # Each shot is an individual trajectory
-        return state.measure_shots(shots=1)
+            counts = state.measure_shots(per_call_shots)
+            final = state if sim_params.get_state else None
+            return counts, final
+        return state.measure_shots(shots=1), state if sim_params.get_state else None
 
     if canonical_form_lost:
         state.normalize(form="B", decomposition="QR")
 
     assert isinstance(sim_params, StrongSimParams)
-    if sim_params.get_state:
-        sim_params.output_state = State.from_mps(state)
     state.evaluate_observables(sim_params, results, results.shape[1] - 1)
-    return results
+    final = state if sim_params.get_state else None
+    return results, final
+
+
+def _per_call_shots(sim_params: WeakSimParams) -> int:
+    """Return shots for this worker call (may differ from ``sim_params.shots`` when noisy).
+
+    Returns:
+        Number of shots for the current worker invocation.
+    """
+    try:
+        from mqt.yaqs.simulator import WORKER_CTX  # noqa: PLC0415
+
+        return int(WORKER_CTX["per_call_shots"])
+    except KeyError:
+        return sim_params.shots

@@ -92,7 +92,7 @@ tags: [remove-output]
 ---
 from mqt.yaqs import Simulator
 
-Simulator(parallel=False).run(state, qc, sim_params, noise_model)
+result = Simulator(parallel=False).run(state, qc, sim_params, noise_model)
 ```
 
 Compare against the hardcoded Qiskit reference
@@ -106,7 +106,7 @@ reference = np.array([
 ])
 
 # YAQS results collected at initial + each SAMPLE_OBSERVABLES barrier + final
-yaqs = np.vstack([np.real(obs.results) for obs in sim_params.observables])
+yaqs = np.vstack([np.real(obs.results) for obs in result.observables])
 
 diff = np.abs(yaqs - reference)
 max_diff = float(diff.max())

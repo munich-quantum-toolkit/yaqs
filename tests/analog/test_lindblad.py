@@ -54,10 +54,10 @@ def test_lindblad_amplitude_damping() -> None:
         num_traj=1,  # Deterministic
     )
 
-    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    sigma_z_sim = obs.results
+    sigma_z_sim = result.observables[0].results
     assert sigma_z_sim is not None
     delta_exact = 1 - 2 * np.exp(-gamma * times)
 
@@ -81,10 +81,10 @@ def test_lindblad_unitary_rabi() -> None:
 
     sim_params = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt)
 
-    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
 
     times = sim_params.times
-    sigma_z_sim = obs.results
+    sigma_z_sim = result.observables[0].results
     assert sigma_z_sim is not None
     sigma_z_exact = np.cos(2 * times)
 
@@ -117,11 +117,11 @@ def test_lindblad_dephasing() -> None:
 
     sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt)
 
-    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    x0_sim = obs0.results
-    x1_sim = obs1.results
+    x0_sim = result.observables[0].results
+    x1_sim = result.observables[1].results
     assert x0_sim is not None
     assert x1_sim is not None
 
@@ -164,11 +164,11 @@ def test_lindblad_dephasing_both_qubits() -> None:
 
     sim_params = AnalogSimParams(observables=[obs0, obs1], elapsed_time=t_max, dt=dt)
 
-    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    x0_sim = obs0.results
-    x1_sim = obs1.results
+    x0_sim = result.observables[0].results
+    x1_sim = result.observables[1].results
     assert x0_sim is not None
     assert x1_sim is not None
 
@@ -215,7 +215,7 @@ def test_lindblad_diagnostic_observables() -> None:
 
     # Lindblad args: (traj_idx, psi, noise_model, sim_params, hamiltonian)
     args = (0, psi, None, sim_params, h)
-    res_lindblad = lindblad(args)
+    res_lindblad, _ = lindblad(args)
 
     # Identify the index of the diagnostic observable
     diag_idx = -1
@@ -279,9 +279,9 @@ def test_noiseless_mps_matches_density_matrix() -> None:
         max_bond_dim=32,
     )
     sim = Simulator(show_progress=False)
-    sim.run(psi_mps, h, params_mps, None)
-    assert obs.results is not None
-    z_mps = obs.results[-1]
+    result_mps = sim.run(psi_mps, h, params_mps, None)
+    assert result_mps.observables[0].results is not None
+    z_mps = result_mps.observables[0].results[-1]
 
     obs_rho = Observable("z", sites=[0])
     params_rho = AnalogSimParams(
@@ -289,9 +289,9 @@ def test_noiseless_mps_matches_density_matrix() -> None:
         elapsed_time=t_max,
         dt=dt,
     )
-    sim.run(psi_rho, h, params_rho, None)
-    assert obs_rho.results is not None
-    z_rho = obs_rho.results[-1]
+    result_rho = sim.run(psi_rho, h, params_rho, None)
+    assert result_rho.observables[0].results is not None
+    z_rho = result_rho.observables[0].results[-1]
 
     assert z_mps is not None
     assert z_rho is not None
@@ -319,7 +319,7 @@ def test_lindblad_propagator_records_all_timepoints() -> None:
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert ctx.step_propagator is not None
 
-    res = lindblad((0, psi, noise, sim_params, h))
+    res, _ = lindblad((0, psi, noise, sim_params, h))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))
     assert not np.allclose(res[0, 0], res[0, -1])
@@ -349,6 +349,6 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert ctx.step_propagator is None
 
-    res = lindblad((0, psi, noise, sim_params, h))
+    res, _ = lindblad((0, psi, noise, sim_params, h))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))

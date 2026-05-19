@@ -242,7 +242,7 @@ def _apply_noisy_step(
     return jumped / np.linalg.norm(jumped)
 
 
-def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
+def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
     """Run a single Monte Carlo wavefunction trajectory.
 
     Args:
@@ -303,7 +303,4 @@ def mcwf(args: tuple[int, MCWFContext]) -> NDArray[np.float64]:
         if sim_params.sample_timesteps or t_idx == num_steps - 1:
             measure(psi, t_idx)
 
-    if sim_params.get_state:
-        ctx.output_state = psi
-
-    return results
+    return results, psi if sim_params.get_state else None

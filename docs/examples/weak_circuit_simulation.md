@@ -74,7 +74,7 @@ tags: [remove-output]
 from mqt.yaqs import Simulator
 
 sim = Simulator()
-sim.run(state, circuit, sim_params, noise_model)
+result = sim.run(state, circuit, sim_params, noise_model)
 ```
 
 Plot the measurement outcomes as a bar chart
@@ -88,7 +88,7 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-plt.bar(sim_params.results.keys(), sim_params.results.values())
+plt.bar(result.counts.keys(), result.counts.values())
 plt.xlabel("Bitstring")
 plt.ylabel("Counts")
 plt.title("Measurement Results")

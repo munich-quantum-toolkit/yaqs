@@ -143,8 +143,8 @@ params = AnalogSimParams(
     elapsed_time=0.2,
     dt=0.05,
 )
-sim.run(state_mps, H, params, noise_model=None)
-print("TJM Z_0:", obs.results[-1])
+result = sim.run(state_mps, H, params, noise_model=None)
+print("TJM Z_0:", result.observables[0].results[-1])
 ```
 
 ### MCWF (`representation="vector"`)
@@ -157,8 +157,8 @@ params_vec = AnalogSimParams(
     elapsed_time=0.2,
     dt=0.05,
 )
-sim.run(state_vec, H, params_vec, None)
-print("MCWF Z_0:", obs_vec.results[-1])
+result = sim.run(state_vec, H, params_vec, None)
+print("MCWF Z_0:", result.observables[0].results[-1])
 ```
 
 ### Lindblad (`representation="density_matrix"`)
@@ -171,8 +171,8 @@ params_dm = AnalogSimParams(
     elapsed_time=0.2,
     dt=0.05,
 )
-sim.run(state_dm, H, params_dm, None)
-print("Lindblad Z_0:", obs_dm.results[-1])
+result = sim.run(state_dm, H, params_dm, None)
+print("Lindblad Z_0:", result.observables[0].results[-1])
 ```
 
 See {doc}`solver_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
@@ -185,8 +185,8 @@ If you already have $|\psi\rangle$ or $\rho$, pass `vector=` or `density_matrix=
 psi = np.zeros(2**L, dtype=np.complex128)
 psi[0] = 1.0
 state_from_vec = State(vector=psi)
-sim.run(state_from_vec, H, params_vec, None)
-print("From vector=, MCWF Z_0:", obs_vec.results[-1])
+result = sim.run(state_from_vec, H, params_vec, None)
+print("From vector=, MCWF Z_0:", result.observables[0].results[-1])
 ```
 
 ## Practical limits
@@ -195,6 +195,6 @@ print("From vector=, MCWF Z_0:", obs_vec.results[-1])
 - **Entangled presets**: `"haar-random"` may need an internal MPS for dense representations.
 - **Circuits**: use `State(..., representation="mps")` (default); `vector=` / `density_matrix=` states cannot run circuits.
 - **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
-- **`get_state`**: when supported, `sim_params.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State) (use `.mps` for the underlying MPS). Not supported with `representation="density_matrix"` or with stochastic noise.
+- **`get_state`**: when supported, `result.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State) (use `.mps` for the underlying MPS). Not supported with `representation="density_matrix"` or with stochastic noise.
 
 For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) API reference.

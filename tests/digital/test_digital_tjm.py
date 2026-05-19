@@ -442,11 +442,11 @@ def test_noisy_digital_tjm_matches_reference() -> None:
         random_seed=7,
     )
     state = State(num_qubits, initial="zeros", pad=2)
-    Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
 
     tjm_results = np.empty((num_qubits, 6), dtype=float)
     for i in range(num_qubits):
-        res = sim_params.observables[i].results
+        res = result.observables[i].results
         assert res is not None
         tjm_results[i, :] = np.real(res[:6])
 
@@ -482,10 +482,10 @@ def test_digital_tjm_longrange_noise() -> None:
     )
 
     state = State(num_qubits, initial="zeros", pad=2)
-    Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
 
     for i in range(num_qubits):
-        res = sim_params.observables[i].results
+        res = result.observables[i].results
         assert res is not None
         assert res.shape == (2,)  # initial and final layer samples
         z_vals = np.real(res)
@@ -511,9 +511,9 @@ def test_no_mid_measurements_results_have_two_columns() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
-    Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in sim_params.observables:
+    for obs in result.observables:
         assert obs.results is not None
         assert obs.results.shape == (2,)
 
@@ -544,9 +544,9 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
-    Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in sim_params.observables:
+    for obs in result.observables:
         assert obs.results is not None
         assert obs.results.shape == (5,)
 
@@ -573,9 +573,9 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
 
-    Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in sim_params.observables:
+    for obs in result.observables:
         assert obs.results is not None
         # Only one labelled barrier -> 1 mid + initial + final
         assert obs.results.shape == (3,)

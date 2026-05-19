@@ -9,9 +9,9 @@ This document describes breaking changes and how to upgrade. For a complete list
 The free `mqt.yaqs.simulator.run` function has been replaced by a [`Simulator`](src/mqt/yaqs/simulator.py)
 class. `Simulator` owns the execution-side configuration (parallel vs. serial execution, worker count,
 progress reporting, multiprocessing context, retry policy); the physics inputs are passed to
-[`Simulator.run`](src/mqt/yaqs/simulator.py). `Simulator.run` now returns a
-[`Result`](src/mqt/yaqs/core/data_structures/result.py) wrapper around the populated simulation
-parameters.
+[`Simulator.run`](src/mqt/yaqs/simulator.py). `Simulator.run` returns a
+[`Result`](src/mqt/yaqs/core/data_structures/result.py) that holds all simulation outputs. The
+`*SimParams` object you pass in is never mutated.
 
 **Before:**
 
@@ -33,6 +33,43 @@ result = sim.run(state, op, sim_params, noise_model)
 `show_progress` and `num_threads` were removed from `AnalogSimParams`, `StrongSimParams`, and
 `WeakSimParams`. Pass `show_progress` to `Simulator` instead; `num_threads` was unused and has been
 deleted.
+
+### Read outputs from `Result`, not `*SimParams`
+
+`Simulator.run` no longer writes outputs onto the `*SimParams` instance you pass in. Capture the
+return value and read fields from `Result`. `result.sim_params` still references your original
+configuration object (unchanged).
+
+| Old (`sim_params`)                          | New (`result`)                  |
+| ------------------------------------------- | ------------------------------- |
+| `sim_params.observables[i].results`         | `result.observables[i].results` |
+| `sim_params.output_state`                   | `result.output_state`           |
+| `sim_params.noise_model`                    | `result.noise_model`            |
+| `sim_params.results` (weak)                 | `result.counts`                 |
+| `sim_params.measurements`                   | `result.measurements`           |
+| `sim_params.multi_time_observables_times`   | `result.multi_time_times`       |
+| `sim_params.multi_time_observables_results` | `result.multi_time_results`     |
+
+Removed from `*SimParams`: `noise_model`, `output_state`, `multi_time_observables_times`,
+`multi_time_observables_results`, `measurements`, `results`, `aggregate_trajectories`,
+`aggregate_measurements`. Observable configuration (`observables`, `multi_time_observables`, etc.)
+remains on `*SimParams`.
+
+**Before:**
+
+```python
+sim = Simulator()
+sim.run(state, op, sim_params, noise_model)
+print(sim_params.observables[0].results)
+```
+
+**After:**
+
+```python
+sim = Simulator()
+result = sim.run(state, op, sim_params, noise_model)
+print(result.observables[0].results)
+```
 
 ### `simulator.run` uses `State` and `Hamiltonian`
 

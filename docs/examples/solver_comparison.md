@@ -53,8 +53,8 @@ params_rho = AnalogSimParams(
     elapsed_time=t_max,
     dt=dt,
 )
-sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho, noise)
-res_rho = obs.results.flatten()
+result_rho = sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho, noise)
+res_rho = result_rho.observables[0].results.flatten()
 times = params_rho.times
 
 # 4. vector (stochastic trajectories)
@@ -65,8 +65,8 @@ params_vector = AnalogSimParams(
     dt=dt,
     num_traj=500,
 )
-sim.run(State(L, initial="zeros", representation="vector"), H, params_vector, noise)
-res_vector = obs.results.flatten()
+result_vector = sim.run(State(L, initial="zeros", representation="vector"), H, params_vector, noise)
+res_vector = result_vector.observables[0].results.flatten()
 
 # 5. mps (default, stochastic trajectories)
 print("Running mps...")
@@ -77,8 +77,8 @@ params_mps = AnalogSimParams(
     num_traj=500,
     max_bond_dim=16,
 )
-sim.run(State(L, initial="zeros", representation="mps"), H, params_mps, noise)
-res_mps = obs.results.flatten()
+result_mps = sim.run(State(L, initial="zeros", representation="mps"), H, params_mps, noise)
+res_mps = result_mps.observables[0].results.flatten()
 
 # 6. Plot Comparison
 plt.figure()
@@ -120,9 +120,9 @@ params_rho_unitary = AnalogSimParams(
     dt=0.1,
 )
 quiet_sim = Simulator(show_progress=False)
-quiet_sim.run(State(L, initial="zeros", representation="mps"), H, params_mps_unitary, None)
-z_mps = obs_mps.results[-1]
-quiet_sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho_unitary, None)
-z_rho = obs_rho.results[-1]
+result_mps_u = quiet_sim.run(State(L, initial="zeros", representation="mps"), H, params_mps_unitary, None)
+z_mps = result_mps_u.observables[0].results[-1]
+result_rho_u = quiet_sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho_unitary, None)
+z_rho = result_rho_u.observables[0].results[-1]
 print(f"Noiseless <Z_0> at t=1: mps={z_mps:.6f}, density_matrix={z_rho:.6f}")
 ```

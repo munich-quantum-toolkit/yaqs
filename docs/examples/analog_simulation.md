@@ -135,8 +135,8 @@ sim = Simulator(parallel=True, show_progress=False)
 def run_reproducible() -> list[np.ndarray]:
     st = copy.deepcopy(state)
     params = copy.deepcopy(repro_params)
-    sim.run(st, H_0, params, copy.deepcopy(noise_model))
-    return [np.asarray(obs.results) for obs in params.observables]
+    result = sim.run(st, H_0, params, copy.deepcopy(noise_model))
+    return [np.asarray(obs.results) for obs in result.observables]
 
 
 first_run = run_reproducible()
@@ -157,7 +157,7 @@ tags: [remove-output]
 ---
 from mqt.yaqs import Simulator
 
-Simulator().run(state, H_0, sim_params, noise_model)
+result = Simulator().run(state, H_0, sim_params, noise_model)
 ```
 
 Plot the results
@@ -171,7 +171,7 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-heatmap = [observable.results for observable in sim_params.observables]
+heatmap = [observable.results for observable in result.observables]
 
 fig, ax = plt.subplots(1, 1)
 im = plt.imshow(heatmap, aspect="auto", extent=(0, 10, L, 0), vmin=0, vmax=0.5)

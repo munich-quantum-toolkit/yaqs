@@ -351,20 +351,20 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
     return obs_results
 
 
-def lindblad_evolve(ctx: LindbladContext) -> NDArray[np.float64]:
+def lindblad_evolve(ctx: LindbladContext) -> tuple[NDArray[np.float64], None]:
     """Evolve a preprocessed Lindblad context and return observable trajectories.
 
     Returns:
-        An array of expectation values for each observable over time.
+        tuple[NDArray[np.float64], None]: Observable data and no final state (density-matrix evolution).
     """
     if ctx.step_propagator is not None:
-        return _evolve_with_propagator(ctx)
-    return _evolve_with_ode(ctx)
+        return _evolve_with_propagator(ctx), None
+    return _evolve_with_ode(ctx), None
 
 
 def lindblad(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
-) -> NDArray[np.float64]:
+) -> tuple[NDArray[np.float64], None]:
     """Run an exact Lindblad master-equation simulation.
 
     Args:
@@ -376,8 +376,9 @@ def lindblad(
             - MPO: The Hamiltonian.
 
     Returns:
-        An array of expectation values for each observable over time.
+        tuple[NDArray[np.float64], None]: Observable data and no final state.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
     ctx = preprocess_lindblad(initial_state, hamiltonian, noise_model, sim_params)
-    return lindblad_evolve(ctx)
+    obs_results, _ = lindblad_evolve(ctx)
+    return obs_results, None

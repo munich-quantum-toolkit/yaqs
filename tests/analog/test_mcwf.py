@@ -57,10 +57,10 @@ def test_mcwf_amplitude_damping() -> None:
         random_seed=YAQS_TEST_SEED,
     )
 
-    Simulator(parallel=False, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(parallel=False, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    sigma_z_sim = obs.results
+    sigma_z_sim = result.observables[0].results
     assert sigma_z_sim is not None
 
     # Analytical solution for <sigma_z>:
@@ -97,10 +97,10 @@ def test_mcwf_unitary_rabi() -> None:
         num_traj=1,  # Deterministic
     )
 
-    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
 
     times = sim_params.times
-    sigma_z_sim = obs.results
+    sigma_z_sim = result.observables[0].results
     assert sigma_z_sim is not None
     sigma_z_exact = np.cos(2 * times)
 
@@ -142,11 +142,11 @@ def test_mcwf_dephasing() -> None:
     )
 
     # Use parallel=True to verify infrastructure
-    Simulator(parallel=True, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(parallel=True, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    x0_sim = obs0.results
-    x1_sim = obs1.results
+    x0_sim = result.observables[0].results
+    x1_sim = result.observables[1].results
     assert x0_sim is not None
     assert x1_sim is not None
 
@@ -252,7 +252,7 @@ def test_mcwf_diagnostic_observables() -> None:
     assert ctx.embedded_observables[diag_idx] is None
 
     # Run MCWF
-    res_mcwf = mcwf((0, ctx))
+    res_mcwf, _ = mcwf((0, ctx))
     # Result for diagnostic should be 0.0
     assert np.allclose(res_mcwf[diag_idx, :], 0.0)
 
@@ -277,9 +277,9 @@ def test_mcwf_trajectory_rng_seeding() -> None:
     )
     ctx = preprocess_mcwf(psi, h, noise, sim_params)
 
-    res_a = mcwf((3, ctx))
-    res_b = mcwf((3, ctx))
-    res_c = mcwf((7, ctx))
+    res_a, _ = mcwf((3, ctx))
+    res_b, _ = mcwf((3, ctx))
+    res_c, _ = mcwf((7, ctx))
 
     assert np.allclose(res_a, res_b)
     assert not np.allclose(res_a, res_c)
@@ -305,7 +305,7 @@ def test_mcwf_noisy_evolution_with_propagator() -> None:
     assert ctx.step_propagator is not None
     assert not ctx.is_unitary
 
-    res = mcwf((0, ctx))
+    res, _ = mcwf((0, ctx))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))
 
@@ -327,7 +327,7 @@ def test_mcwf_unitary_krylov_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ctx.step_propagator is None
     assert ctx.is_unitary
 
-    res = mcwf((0, ctx))
+    res, _ = mcwf((0, ctx))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))
 
@@ -353,6 +353,6 @@ def test_mcwf_noisy_arnoldi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ctx.step_propagator is None
     assert not ctx.is_unitary
 
-    res = mcwf((0, ctx))
+    res, _ = mcwf((0, ctx))
     assert res.shape == (1, len(sim_params.times))
     assert np.all(np.isfinite(res))

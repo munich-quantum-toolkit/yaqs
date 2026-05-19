@@ -138,7 +138,7 @@ def test_analog_tjm_2() -> None:
         sample_timesteps=False,
     )
     args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_2(args)
+    results, _ = analog_tjm_2(args)
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
@@ -167,7 +167,7 @@ def test_analog_tjm_2_sample_timesteps() -> None:
         sample_timesteps=True,
     )
     args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_2(args)
+    results, _ = analog_tjm_2(args)
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 
@@ -196,7 +196,7 @@ def test_analog_tjm_1() -> None:
         sample_timesteps=False,
     )
     args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_1(args)
+    results, _ = analog_tjm_1(args)
     assert results.shape == (len(measurements), 1), "Results incorrect shape"
 
 
@@ -225,7 +225,7 @@ def test_analog_tjm_1_sample_timesteps() -> None:
         sample_timesteps=True,
     )
     args = (0, state, noise_model, sim_params, H)
-    results = analog_tjm_1(args)
+    results, _ = analog_tjm_1(args)
     assert results.shape == (len(measurements), len(sim_params.times)), "Results incorrect shape"
 
 
@@ -253,9 +253,9 @@ def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
         {"name": "pauli_x", "sites": [0], "strength": 0.02},
         {"name": two_site_process, "sites": [0, 1], "strength": 0.01},
     ])
-    Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
 
-    results = sim_params.observables[0].results
+    results = result.observables[0].results
     assert results is not None
     z_mean = np.real(results)
     assert np.isfinite(z_mean).all()

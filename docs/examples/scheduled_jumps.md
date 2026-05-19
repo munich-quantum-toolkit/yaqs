@@ -91,12 +91,12 @@ sim = Simulator(show_progress=False)
 # Baseline
 state_baseline = copy.deepcopy(state)
 sim_params_baseline = copy.deepcopy(sim_params)
-sim.run(state_baseline, hamiltonian, sim_params_baseline)
+result_baseline = sim.run(state_baseline, hamiltonian, sim_params_baseline)
 
 # With Jump
 state_jump = copy.deepcopy(state)
 sim_params_jump = copy.deepcopy(sim_params)
-sim.run(state_jump, hamiltonian, sim_params_jump, noise_model=noise_model)
+result_jump = sim.run(state_jump, hamiltonian, sim_params_jump, noise_model=noise_model)
 ```
 
 ## 5. Visualize Results
@@ -113,8 +113,8 @@ mystnb:
 import matplotlib.pyplot as plt
 
 times = sim_params_jump.times
-res_baseline = sim_params_baseline.observables[0].results
-res_jump = sim_params_jump.observables[0].results
+res_baseline = result_baseline.observables[0].results
+res_jump = result_jump.observables[0].results
 
 plt.figure(figsize=(8, 5))
 plt.plot(times, res_baseline, label="Baseline (No Jump)", color="black", linestyle="--")

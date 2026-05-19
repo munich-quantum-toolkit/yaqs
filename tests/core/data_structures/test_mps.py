@@ -808,9 +808,9 @@ def test_convert_to_vector_fidelity() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )
-    Simulator(show_progress=False).run(state, circ, sim_params)
-    assert sim_params.output_state is not None
-    tdvp_state = sim_params.output_state.mps.to_vec()
+    result = Simulator(show_progress=False).run(state, circ, sim_params)
+    assert result.output_state is not None
+    tdvp_state = result.output_state.mps.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 
@@ -833,9 +833,9 @@ def test_convert_to_vector_fidelity_long_range() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         get_state=True,
     )
-    Simulator(show_progress=False).run(state, circ, sim_params)
-    assert sim_params.output_state is not None
-    tdvp_state = sim_params.output_state.mps.to_vec()
+    result = Simulator(show_progress=False).run(state, circ, sim_params)
+    assert result.output_state is not None
+    tdvp_state = result.output_state.mps.to_vec()
     np.testing.assert_allclose(1, np.abs(np.vdot(state_vector, tdvp_state)) ** 2)
 
 

@@ -94,7 +94,7 @@ tags: [remove-output]
 from mqt.yaqs import Simulator
 
 sim = Simulator()
-sim.run(state, H_0, sim_params, noise_model)
+result = sim.run(state, H_0, sim_params, noise_model)
 ```
 
 ## Plot the results
@@ -109,7 +109,7 @@ mystnb:
 
 import matplotlib.pyplot as plt
 
-measurements = sim_params.observables
+measurements = result.observables
 leakage = [1 for _ in measurements[0].results]
 for measurement in measurements:
     leakage -= measurement.results

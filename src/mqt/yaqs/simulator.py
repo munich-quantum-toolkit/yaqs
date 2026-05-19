@@ -106,7 +106,7 @@ from tqdm import tqdm
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
 from .core.data_structures.hamiltonian import Hamiltonian
-from .core.data_structures.result import Result
+from .core.data_structures.result import Result, aggregate_counts, aggregate_trajectories
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .core.data_structures.state import State
 
@@ -301,7 +301,7 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
 # workers come first (primary simulation mode), followed by the digital
 # strong/weak workers, with the unitary ensemble worker last.
 # ---------------------------------------------------------------------------
-def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
+def _analog_worker(traj_idx: int) -> tuple[NDArray[np.float64], MPS | None]:
     """Execute a single analog simulation trajectory (TJM or Lindblad).
 
     Retrieves the appropriate backend function and simulation arguments from
@@ -311,7 +311,7 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
         traj_idx: The integer index of the trajectory to execute.
 
     Returns:
-        NDArray[np.float64]: The result of the simulation (typically observable values over time).
+        tuple[NDArray[np.float64], MPS | None]: Observable data and optional final MPS.
     """
     # backend is chosen by Simulator._run_analog and stored in context
     backend = WORKER_CTX["backend"]
@@ -324,7 +324,7 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
     ))
 
 
-def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
+def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], np.ndarray | None]:
     """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
 
     Retrieves the preprocessed MCWF context from `WORKER_CTX` and executes
@@ -339,7 +339,7 @@ def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
     return mcwf((traj_idx, WORKER_CTX["ctx"]))
 
 
-def _lindblad_ctx_worker(_traj_idx: int) -> NDArray[np.float64]:
+def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None]:
     """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
 
     Returns:
@@ -348,7 +348,7 @@ def _lindblad_ctx_worker(_traj_idx: int) -> NDArray[np.float64]:
     return lindblad_evolve(WORKER_CTX["ctx"])
 
 
-def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64]:
+def _digital_strong_worker(traj_idx: int) -> tuple[dict[int, int] | NDArray[np.float64], MPS | None]:
     """Execute a single digital strong simulation trajectory.
 
     Retrieves the required simulation objects (initial state, noise model,
@@ -371,7 +371,7 @@ def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64
     ))
 
 
-def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
+def _digital_weak_worker(traj_idx: int) -> tuple[dict[int, int], MPS | None]:
     """Execute a single digital weak simulation trajectory.
 
     Retrieves simulation objects from `WORKER_CTX` and executes a 'shots=1'
@@ -381,11 +381,10 @@ def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
         traj_idx: The integer index of the trajectory (effectively a shot index).
 
     Returns:
-        dict[int, int]: A dictionary mapping outcome bitstrings (as integers)
-        to counts (typically {outcome: 1} for a single shot).
+        tuple[dict[int, int], MPS | None]: Shot counts and optional final MPS.
     """
     return cast(
-        "dict[int, int]",
+        "tuple[dict[int, int], MPS | None]",
         digital_tjm((
             traj_idx,
             WORKER_CTX["initial_state"],
@@ -468,6 +467,59 @@ def _prepare_hamiltonian_for_run(
     if target == "mpo":
         return hamiltonian.mpo, None
     return None, hamiltonian.sparse_matrix
+
+
+def _prepare_result_observables(
+    result: Result,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    num_traj: int | None = None,
+    num_mid_measurements: int | None = None,
+) -> None:
+    """Deep-copy sorted observables onto ``result`` and initialize trajectory buffers."""
+    if isinstance(sim_params, WeakSimParams):
+        result.observables = []
+        return
+    result.observables = [copy.deepcopy(obs) for obs in sim_params.sorted_observables]
+    for observable in result.observables:
+        observable.initialize(sim_params, num_traj=num_traj, num_mid_measurements=num_mid_measurements)
+
+
+def _worker_sim_params(
+    sim_params: AnalogSimParams | StrongSimParams,
+    result: Result,
+) -> AnalogSimParams | StrongSimParams:
+    """Build worker-visible params that reference ``result.observables`` for measurement.
+
+    Returns:
+        A deep copy of ``sim_params`` whose observable lists alias ``result.observables``.
+    """
+    worker_params = copy.deepcopy(sim_params)
+    worker_params.observables = result.observables
+    worker_params.sorted_observables = result.observables
+    return worker_params
+
+
+def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
+    if final_mps is not None:
+        result.output_state = State.from_mps(final_mps)
+
+
+def _store_mcwf_final_state(result: Result, psi: np.ndarray | None) -> None:
+    if psi is not None:
+        result.output_state = State(vector=psi)
+
+
+def _expect_shot_counts(payload: NDArray[np.float64] | dict[int, int]) -> dict[int, int]:
+    """Return weak-simulation shot counts from a digital backend payload.
+
+    Raises:
+        TypeError: If ``payload`` is not a shot-count dictionary.
+    """
+    if not isinstance(payload, dict):
+        msg = f"Expected measurement result to be dict[int, int], got {type(payload).__name__}."
+        raise TypeError(msg)
+    return cast("dict[int, int]", payload)
 
 
 # ---------------------------------------------------------------------------
@@ -712,7 +764,7 @@ class Simulator:
             sim_params: Simulation parameters specifying the simulation mode and settings.
             noise_model: The noise model to apply. If provided, it is sampled once at the
                 beginning of the run to generate a concrete noise realization (static disorder).
-                The sampled noise model is then saved to ``sim_params.noise_model``.
+                The sampled noise model is stored on the returned :class:`~mqt.yaqs.Result`.
 
         Returns:
             A :class:`~mqt.yaqs.core.data_structures.result.Result` wrapping the populated
@@ -730,7 +782,8 @@ class Simulator:
         if noise_model is not None:
             sample_seed = getattr(sim_params, "random_seed", None)
             noise_model = noise_model.sample(rng=sample_seed)
-        sim_params.noise_model = noise_model
+
+        result = Result(sim_params=sim_params, noise_model=noise_model)
 
         if (
             isinstance(sim_params, AnalogSimParams)
@@ -751,7 +804,7 @@ class Simulator:
             if not isinstance(initial_state, (State, list)):
                 msg = "Analog simulation requires initial_state to be a list or State."
                 raise TypeError(msg)
-            self._run_analog(initial_state, operator, sim_params, noise_model)
+            self._run_analog(initial_state, operator, sim_params, noise_model, result)
         elif isinstance(sim_params, (StrongSimParams, WeakSimParams)):
             if isinstance(initial_state, list):
                 msg = "Circuit simulation requires a single State initial_state."
@@ -762,9 +815,9 @@ class Simulator:
             if not isinstance(initial_state, State):
                 msg = "Circuit simulation requires a State initial_state."
                 raise TypeError(msg)
-            self._run_circuit(initial_state, operator, sim_params, noise_model)
+            self._run_circuit(initial_state, operator, sim_params, noise_model, result)
 
-        return Result(sim_params=sim_params)
+        return result
 
     # -----------------------------------------------------------------------
     # Analog (Hamiltonian) simulation -- primary YAQS simulation mode
@@ -775,6 +828,7 @@ class Simulator:
         operator: Hamiltonian,
         sim_params: AnalogSimParams,
         noise_model: NoiseModel | None,
+        result: Result,
     ) -> None:
         """Run analog simulation trajectories for Hamiltonian evolution.
 
@@ -791,6 +845,7 @@ class Simulator:
             operator: The Hamiltonian specification (materialized once per ``run`` call).
             sim_params: Simulation parameters for analog simulation.
             noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
 
         Raises:
             ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``.
@@ -809,6 +864,7 @@ class Simulator:
                 operator.mpo,
                 sim_params,
                 noise_model,
+                result,
             )
             return
 
@@ -818,7 +874,7 @@ class Simulator:
         _validate_state_hamiltonian_pairing(initial_state, operator)
         mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
 
-        backend: Callable[[Any], NDArray[np.float64]]
+        backend: Callable[..., tuple[NDArray[np.float64], Any]]
         if state_rep == "density_matrix":
             backend = lindblad_evolve
         elif state_rep == "vector":
@@ -837,12 +893,13 @@ class Simulator:
             or all(proc["strength"] == 0 for proc in noise_model.processes)
             or state_rep == "density_matrix"
         ):
-            sim_params.num_traj = 1
+            effective_num_traj = 1
         else:
             assert not sim_params.get_state, "Cannot return state in noisy analog simulation due to stochastics."
+            effective_num_traj = sim_params.num_traj
 
-        for observable in sim_params.sorted_observables:
-            observable.initialize(sim_params)
+        _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
+        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
 
         payload: dict[str, Any]
         worker_fn: Callable[[int], Any]
@@ -852,7 +909,7 @@ class Simulator:
                 mps,
                 mpo_op,
                 noise_model,
-                sim_params,
+                worker_params,
                 psi_initial=None if mps is not None else initial_state.vector,
                 num_sites=initial_state.length if mps is None else None,
                 h_sparse=h_sparse,
@@ -864,7 +921,7 @@ class Simulator:
                 mps,
                 mpo_op,
                 noise_model,
-                sim_params,
+                worker_params,
                 rho_initial=initial_state.density_matrix,
                 num_sites=initial_state.length,
                 h_sparse=h_sparse,
@@ -877,17 +934,20 @@ class Simulator:
             payload = {
                 "initial_state": mps,
                 "noise_model": noise_model,
-                "sim_params": sim_params,
+                "sim_params": worker_params,
                 "operator": mpo_op,
                 "backend": backend,
             }
             worker_fn = _analog_worker
 
-        if self.parallel and sim_params.num_traj > 1:
-            for i, result in run_backend_parallel(
+        final_mps: MPS | None = None
+        final_psi: np.ndarray | None = None
+
+        if self.parallel and effective_num_traj > 1:
+            for i, traj_payload in run_backend_parallel(
                 worker_fn=worker_fn,
                 payload=payload,
-                n_jobs=sim_params.num_traj,
+                n_jobs=effective_num_traj,
                 max_workers=self.max_workers,
                 show_progress=self.show_progress,
                 desc="Running trajectories",
@@ -895,29 +955,45 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                traj_data, traj_final = traj_payload
+                for obs_index, observable in enumerate(result.observables):
                     assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
+                    observable.trajectories[i] = traj_data[obs_index]
+                if traj_final is not None:
+                    if state_rep == "vector":
+                        final_psi = cast("np.ndarray", traj_final)
+                    else:
+                        final_mps = cast("MPS", traj_final)
         else:
             n_threads = available_cpus()
 
             args: list[Any]
             if state_rep == "vector":
-                args = [(i, copy.copy(ctx)) for i in range(sim_params.num_traj)]
+                args = [(i, copy.copy(ctx)) for i in range(effective_num_traj)]
             elif state_rep == "density_matrix":
-                args = [lindblad_ctx for _ in range(sim_params.num_traj)]
+                args = [lindblad_ctx for _ in range(effective_num_traj)]
             else:
-                args = [(i, mps, noise_model, sim_params, mpo_op) for i in range(sim_params.num_traj)]
+                args = [(i, mps, noise_model, worker_params, mpo_op) for i in range(effective_num_traj)]
 
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                result = _call_backend(backend, arg, n_threads=n_threads)
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                traj_data, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                for obs_index, observable in enumerate(result.observables):
                     assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
+                    observable.trajectories[i] = traj_data[obs_index]
+                if traj_final is not None:
+                    if state_rep == "vector":
+                        final_psi = cast("np.ndarray", traj_final)
+                    else:
+                        final_mps = cast("MPS", traj_final)
 
-        sim_params.aggregate_trajectories()
+        if state_rep == "vector":
+            _store_mcwf_final_state(result, final_psi)
+        else:
+            _store_final_mps(result, final_mps)
+
+        aggregate_trajectories(result)
 
     # -----------------------------------------------------------------------
     # Strong simulation (circuit): observable trajectories
@@ -928,6 +1004,7 @@ class Simulator:
         operator: QuantumCircuit,
         sim_params: StrongSimParams,
         noise_model: NoiseModel | None,
+        result: Result,
     ) -> None:
         """Run strong circuit simulation trajectories.
 
@@ -941,37 +1018,49 @@ class Simulator:
             operator: The quantum circuit representing the operation to simulate.
             sim_params: Simulation parameters for strong simulation.
             noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
         """
         backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
         if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
-            sim_params.num_traj = 1
+            effective_num_traj = 1
         else:
             assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
+            effective_num_traj = sim_params.num_traj
 
+        effective_num_mid_measurements = sim_params.num_mid_measurements
         if sim_params.sample_layers:
             dag = circuit_to_dag(operator)
-            sim_params.num_mid_measurements = sum(
+            effective_num_mid_measurements = sum(
                 1
                 for n in dag.op_nodes()
                 if n.op.name == "barrier" and str(getattr(n.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
             )
 
-        for observable in sim_params.sorted_observables:
-            observable.initialize(sim_params)
+        _prepare_result_observables(
+            result,
+            sim_params,
+            num_traj=effective_num_traj,
+            num_mid_measurements=effective_num_mid_measurements,
+        )
+        worker_params = cast("StrongSimParams", _worker_sim_params(sim_params, result))
+        if sim_params.sample_layers:
+            worker_params.num_mid_measurements = effective_num_mid_measurements
 
         payload: dict[str, Any] = {
             "initial_state": initial_state,
             "noise_model": noise_model,
-            "sim_params": sim_params,
+            "sim_params": worker_params,
             "operator": operator,
         }
 
-        if self.parallel and sim_params.num_traj > 1:
-            for i, result in run_backend_parallel(
+        final_mps: MPS | None = None
+
+        if self.parallel and effective_num_traj > 1:
+            for i, traj_payload in run_backend_parallel(
                 worker_fn=_digital_strong_worker,
                 payload=payload,
-                n_jobs=sim_params.num_traj,
+                n_jobs=effective_num_traj,
                 max_workers=self.max_workers,
                 show_progress=self.show_progress,
                 desc="Running trajectories",
@@ -979,25 +1068,31 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                traj_data, traj_final = traj_payload
+                for obs_index, observable in enumerate(result.observables):
                     assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
+                    observable.trajectories[i] = traj_data[obs_index]
+                if traj_final is not None:
+                    final_mps = traj_final
         else:
             n_threads = available_cpus()
 
             args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
-                (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
+                (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
             ]
 
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                result = _call_backend(backend, arg, n_threads=n_threads)
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                traj_data, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                for obs_index, observable in enumerate(result.observables):
                     assert observable.trajectories is not None, "Trajectories should have been initialized"
-                    observable.trajectories[i] = result[obs_index]
+                    observable.trajectories[i] = traj_data[obs_index]
+                if traj_final is not None:
+                    final_mps = traj_final
 
-        sim_params.aggregate_trajectories()
+        _store_final_mps(result, final_mps)
+        aggregate_trajectories(result)
 
     # -----------------------------------------------------------------------
     # Weak simulation (circuit): measurement counts
@@ -1008,6 +1103,7 @@ class Simulator:
         operator: QuantumCircuit,
         sim_params: WeakSimParams,
         noise_model: NoiseModel | None,
+        result: Result,
     ) -> None:
         """Run weak circuit simulation trajectories.
 
@@ -1023,31 +1119,41 @@ class Simulator:
             operator: The quantum circuit representing the operation to simulate.
             sim_params: Simulation parameters for weak simulation.
             noise_model: The noise model applied during simulation.
-
-        Raises:
-            TypeError: If a measurement result is not of the expected type.
+            result: Output container populated during this run.
         """
         backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
 
-        if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
-            sim_params.num_traj = 1
-        else:
-            sim_params.num_traj = sim_params.shots
-            sim_params.shots = 1
+        noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
+        if noisy:
+            effective_num_traj = sim_params.shots
+            per_call_shots = 1
             assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
+        else:
+            effective_num_traj = 1
+            per_call_shots = sim_params.shots
 
+        if noisy:
+            result.measurements = [None] * effective_num_traj
+        else:
+            result.measurements = [None]
+
+        worker_params = copy.deepcopy(sim_params)
         payload: dict[str, Any] = {
             "initial_state": initial_state,
             "noise_model": noise_model,
-            "sim_params": sim_params,
+            "sim_params": worker_params,
             "operator": operator,
+            "per_call_shots": per_call_shots,
         }
+        WORKER_CTX["per_call_shots"] = per_call_shots
 
-        if self.parallel and sim_params.num_traj > 1:
-            for i, result in run_backend_parallel(
+        final_mps: MPS | None = None
+
+        if self.parallel and effective_num_traj > 1:
+            for i, traj_payload in run_backend_parallel(
                 worker_fn=_digital_weak_worker,
                 payload=payload,
-                n_jobs=sim_params.num_traj,
+                n_jobs=effective_num_traj,
                 max_workers=self.max_workers,
                 show_progress=self.show_progress,
                 desc="Running trajectories",
@@ -1055,30 +1161,32 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                if not isinstance(result, dict):
-                    msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
-                    raise TypeError(msg)
-                sim_params.measurements[i] = result
+                shot_counts, traj_final = traj_payload
+                result.measurements[i] = _expect_shot_counts(shot_counts)
+                if traj_final is not None:
+                    final_mps = traj_final
         else:
             n_threads = available_cpus()
 
-            args: list[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]] = [
-                (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
+            args: list[Any] = [
+                (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
             ]
 
             iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
             for i, arg in enumerate(iterator):
-                result = _call_backend(backend, arg, n_threads=n_threads)
-                if not isinstance(result, dict):
-                    msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
-                    raise TypeError(msg)
-                sim_params.measurements[i] = cast("dict[int, int]", result)
+                shot_counts, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                counts_dict = _expect_shot_counts(shot_counts)
+                if noisy:
+                    result.measurements[i] = counts_dict
+                else:
+                    result.measurements[0] = counts_dict
+                if traj_final is not None:
+                    final_mps = traj_final
 
-        if not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes)):
-            sim_params.shots = sim_params.num_traj
-
-        sim_params.aggregate_measurements()
+        WORKER_CTX.pop("per_call_shots", None)
+        _store_final_mps(result, final_mps)
+        aggregate_counts(result)
 
     # -----------------------------------------------------------------------
     # Circuit dispatcher
@@ -1089,6 +1197,7 @@ class Simulator:
         operator: QuantumCircuit,
         sim_params: WeakSimParams | StrongSimParams,
         noise_model: NoiseModel | None,
+        result: Result,
     ) -> None:
         """Run circuit-based simulation trajectories.
 
@@ -1103,6 +1212,7 @@ class Simulator:
             operator: The quantum circuit to simulate.
             sim_params: Simulation parameters for circuit simulation.
             noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
 
         Raises:
             ValueError: If ``initial_state.representation`` is not ``"mps"``.
@@ -1122,9 +1232,9 @@ class Simulator:
         operator = copy.deepcopy(operator.reverse_bits())
 
         if isinstance(sim_params, StrongSimParams):
-            self._run_strong_sim(mps, operator, sim_params, noise_model)
+            self._run_strong_sim(mps, operator, sim_params, noise_model, result)
         elif isinstance(sim_params, WeakSimParams):
-            self._run_weak_sim(mps, operator, sim_params, noise_model)
+            self._run_weak_sim(mps, operator, sim_params, noise_model, result)
 
     # -----------------------------------------------------------------------
     # Unitary ensemble (deterministic, no noise)
@@ -1135,6 +1245,7 @@ class Simulator:
         operator: MPO,
         sim_params: AnalogSimParams,
         noise_model: NoiseModel | None,
+        result: Result,
     ) -> None:
         """Run deterministic unitary evolution for an ensemble of initial MPS states.
 
@@ -1147,6 +1258,7 @@ class Simulator:
             operator: Hamiltonian as an MPO shared by all members.
             sim_params: Analog parameters; ``num_traj`` is set to ``len(initial_states)``.
             noise_model: Must be absent or contain only zero-strength processes.
+            result: Output container populated during this run.
 
         Raises:
             ValueError: If noisy simulation is requested with a list of states, if
@@ -1170,19 +1282,17 @@ class Simulator:
             msg = "get_state=True is not supported for list[State] analog ensemble mode."
             raise ValueError(msg)
 
-        sim_params.num_traj = len(initial_states)
+        effective_num_traj = len(initial_states)
 
-        for observable in sim_params.sorted_observables:
-            observable.initialize(sim_params)
+        _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
+        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
 
-        sim_params.multi_time_observables_times = None
-        sim_params.multi_time_observables_results = None
         n_pairs = len(sim_params.multi_time_observables)
         n_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
         multi_time_matrix: NDArray[np.complex128] | None = None
         if n_pairs > 0:
             multi_time_matrix = np.zeros((len(initial_states), n_pairs, n_cols), dtype=np.complex128)
-            sim_params.multi_time_observables_times = (
+            result.multi_time_times = (
                 sim_params.times
                 if sim_params.sample_timesteps
                 else np.array([sim_params.elapsed_time], dtype=np.float64)
@@ -1190,7 +1300,7 @@ class Simulator:
 
         payload: dict[str, Any] = {
             "initial_states": initial_states,
-            "sim_params": sim_params,
+            "sim_params": worker_params,
             "operator": operator,
         }
 
@@ -1206,7 +1316,7 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                for obs_index, observable in enumerate(result.observables):
                     assert observable.trajectories is not None, "Trajectories should have been initialized"
                     observable.trajectories[i] = obs_result[obs_index]
                 if multi_time_matrix is not None:
@@ -1214,17 +1324,17 @@ class Simulator:
                     multi_time_matrix[i] = multi_time_result
         else:
             n_threads = available_cpus()
-            args = [(i, initial_states[i], sim_params, operator) for i in range(len(initial_states))]
+            args = [(i, initial_states[i], worker_params, operator) for i in range(len(initial_states))]
             iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not self.show_progress)
             for i, arg in enumerate(iterator):
                 obs_result, multi_time_result = _call_backend(ensemble_member_worker, arg, n_threads=n_threads)
-                for obs_index, observable in enumerate(sim_params.sorted_observables):
+                for obs_index, observable in enumerate(result.observables):
                     assert observable.trajectories is not None, "Trajectories should have been initialized"
                     observable.trajectories[i] = obs_result[obs_index]
                 if multi_time_matrix is not None:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result
 
-        sim_params.aggregate_trajectories()
+        aggregate_trajectories(result)
         if multi_time_matrix is not None:
-            sim_params.multi_time_observables_results = np.mean(multi_time_matrix, axis=0)
+            result.multi_time_results = np.mean(multi_time_matrix, axis=0)

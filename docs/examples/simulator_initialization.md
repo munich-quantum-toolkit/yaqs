@@ -16,10 +16,10 @@ mystnb:
 
 YAQS draws a sharp line between **what** you simulate and **how** it runs:
 
-| Layer                                                                                                                                                                                                                                                                                        | Role                                                                                                                                                                |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.core.data_structures.state.State`, {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`, {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` / {class}`StrongSimParams <mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams>` / {class}`WeakSimParams <mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams>` | The physics: initial state, operator, time grid, observables, trajectory count, truncation, noise.                                                                  |
-| {class}`~mqt.yaqs.Simulator`                                                                                                                                                                                                                                                                 | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors.     |
+| Layer                                                                                                                                                                                                                                                                                                                                                                                             | Role                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| {class}`~mqt.yaqs.core.data_structures.state.State`, {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`, {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` / {class}`StrongSimParams <mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams>` / {class}`WeakSimParams <mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams>` | The physics: initial state, operator, time grid, observables, trajectory count, truncation, noise.                                                             |
+| {class}`~mqt.yaqs.Simulator`                                                                                                                                                                                                                                                                                                                                                                      | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors. |
 
 This page walks through every option on the {class}`~mqt.yaqs.Simulator` class so you can tune execution without touching the physics.
 
@@ -105,12 +105,12 @@ Both modes produce identical results for a fixed `random_seed`:
 import numpy as np
 
 params_serial = make_params()
-Simulator(parallel=False, show_progress=False).run(state, H, params_serial)
+result_serial = Simulator(parallel=False, show_progress=False).run(state, H, params_serial)
 
 params_parallel = make_params()
-Simulator(parallel=True, max_workers=2, show_progress=False).run(state, H, params_parallel)
+result_parallel = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, H, params_parallel)
 
-for obs_s, obs_p in zip(params_serial.observables, params_parallel.observables, strict=True):
+for obs_s, obs_p in zip(result_serial.observables, result_parallel.observables, strict=True):
     np.testing.assert_allclose(obs_s.results, obs_p.results, atol=1e-10)
 print("Serial and parallel results match.")
 ```
@@ -239,13 +239,13 @@ print("multi_time_results:   ", result.multi_time_results)
 
 The properties that don't apply to your simulation kind return `None` (or an empty list for `observables` in weak simulations), so you can branch on them safely. The full set is:
 
-| Property                              | Populated for                                                                          |
-| ------------------------------------- | -------------------------------------------------------------------------------------- |
-| `observables`                         | Analog and strong digital runs. Empty list for weak digital.                           |
-| `noise_model`                         | Any run that was given a `NoiseModel`; otherwise `None`.                               |
-| `output_state`                        | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams` (no noise).       |
+| Property                                 | Populated for                                                                       |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| `observables`                            | Analog and strong digital runs. Empty list for weak digital.                        |
+| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                            |
+| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams` (no noise).    |
 | `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                   |
-| `counts`                              | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes).    |
+| `counts`                                 | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes). |
 
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and resume analysis from disk:
 
@@ -259,14 +259,14 @@ print("restored observable count:", len(restored.observables))
 
 ## Choosing settings for common scenarios
 
-| Scenario                                              | Recommended `Simulator(...)`                                           |
-| ----------------------------------------------------- | ---------------------------------------------------------------------- |
-| Quick local run, want to see a progress bar           | `Simulator()`                                                          |
-| Notebook / docs build / CI logs                       | `Simulator(show_progress=False)`                                       |
-| Debugging a physics setup                             | `Simulator(parallel=False, show_progress=False)`                       |
-| Single-process benchmark, all cores in the worker     | `Simulator(parallel=False)` and let BLAS/OpenMP use all threads        |
-| Fixed core budget (e.g. SLURM job step)               | `YAQS_MAX_WORKERS=N` in the environment, or `Simulator(max_workers=N)` |
-| Mixing with GPU / non-fork-safe code                  | `Simulator(mp_context="spawn")`                                        |
-| Long unattended run on a flaky cluster                | `Simulator(max_retries=20)` with broadened `retry_exceptions`          |
+| Scenario                                          | Recommended `Simulator(...)`                                           |
+| ------------------------------------------------- | ---------------------------------------------------------------------- |
+| Quick local run, want to see a progress bar       | `Simulator()`                                                          |
+| Notebook / docs build / CI logs                   | `Simulator(show_progress=False)`                                       |
+| Debugging a physics setup                         | `Simulator(parallel=False, show_progress=False)`                       |
+| Single-process benchmark, all cores in the worker | `Simulator(parallel=False)` and let BLAS/OpenMP use all threads        |
+| Fixed core budget (e.g. SLURM job step)           | `YAQS_MAX_WORKERS=N` in the environment, or `Simulator(max_workers=N)` |
+| Mixing with GPU / non-fork-safe code              | `Simulator(mp_context="spawn")`                                        |
+| Long unattended run on a flaky cluster            | `Simulator(max_retries=20)` with broadened `retry_exceptions`          |
 
 For physics-side settings (`num_traj`, `max_bond_dim`, `threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`solver_comparison`, and {doc}`state_initialization`.

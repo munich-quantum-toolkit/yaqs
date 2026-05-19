@@ -310,15 +310,15 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
             dynamic_ctx.psi_initial = current_state
             dynamic_ctx.sim_params = step_params
 
-            mcwf((traj_idx, dynamic_ctx))
-            assert dynamic_ctx.output_state is not None
-            current_state = cast("NDArray[np.complex128]", dynamic_ctx.output_state)
+            _, psi_final = mcwf((traj_idx, dynamic_ctx))
+            assert psi_final is not None
+            current_state = psi_final
         else:
             backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
             assert isinstance(current_state, MPS)
-            backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
-            assert step_params.output_state is not None
-            current_state = step_params.output_state.mps
+            _, final_mps = backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
+            assert final_mps is not None
+            current_state = final_mps
 
     sequence_results = [_get_rho_site_zero(current_state)]
     return (seq_idx, traj_idx, sequence_results, sequence_weight)
@@ -348,7 +348,7 @@ def run(
         timesteps: List of time durations for each evolution segment.
                    If None, defaults to [sim_params.elapsed_time] (standard 1-step tomography).
         num_trajectories: Number of trajectories to average per sequence (for noise unravelling).
-        noise_model: Noise model to apply. If None, uses sim_params.noise_model.
+        noise_model: Noise model to apply. If None, evolution is noise-free.
         representation: State representation for evolution inside tomography workers
             (``"mps"``, ``"vector"``, or ``"density_matrix"``).
         show_progress: If ``True``, display a tqdm progress bar over tomography sequences.
@@ -389,9 +389,6 @@ def run(
     num_worker_sequences = len(worker_sequences)
 
     # 2. Prepare Simulation Context
-    if noise_model is None:
-        noise_model = sim_params.noise_model
-
     if noise_model is None:
         num_trajectories = 1
 

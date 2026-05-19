@@ -5,11 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Tests for the :class:`~mqt.yaqs.core.data_structures.result.Result` wrapper.
+"""Tests for the :class:`~mqt.yaqs.core.data_structures.result.Result` container.
 
-These tests verify that ``Result`` correctly proxies attributes from the underlying
-``*SimParams`` object, returns ``None`` for fields that do not apply to the active
-simulation kind, and can be pickled together with its wrapped parameters.
+These tests verify that ``Result`` holds simulation outputs separately from the
+read-only ``*SimParams`` configuration object and can be pickled.
 """
 
 # ignore non-lowercase variable names for physics notation
@@ -35,8 +34,8 @@ from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import Z
 
 
-def test_result_proxies_observables_for_analog_run() -> None:
-    """Result.observables / output_state / noise_model expose the populated sim_params."""
+def test_result_holds_outputs_for_analog_run() -> None:
+    """Result exposes observables, output_state, and noise_model from the run."""
     length = 2
     state = State(length, initial="zeros")
     H = Hamiltonian.ising(length, J=1.0, g=0.5)
@@ -53,9 +52,10 @@ def test_result_proxies_observables_for_analog_run() -> None:
 
     assert isinstance(result, Result)
     assert result.sim_params is sim_params
-    assert result.observables is sim_params.observables
-    assert result.output_state is sim_params.output_state
-    assert result.noise_model is sim_params.noise_model
+    assert result.observables is not sim_params.observables
+    assert len(result.observables) == 1
+    assert result.output_state is not None
+    assert result.noise_model is None
     assert result.counts is None
     assert result.multi_time_times is None
     assert result.multi_time_results is None
@@ -95,7 +95,31 @@ def test_result_noise_model_reflects_sampled_noise() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, circuit, weak_params, noise_model)
 
     assert result.noise_model is not None
-    assert result.noise_model is weak_params.noise_model
+    assert not hasattr(weak_params, "noise_model")
+
+
+def test_sim_params_not_mutated_after_analog_run() -> None:
+    """User-supplied sim_params are unchanged after Simulator.run."""
+    length = 2
+    state = State(length, initial="zeros")
+    H = Hamiltonian.ising(length, J=1.0, g=0.5)
+    user_obs = Observable(Z(), 0)
+    sim_params = AnalogSimParams(
+        observables=[user_obs],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1000,
+        get_state=True,
+        sample_timesteps=False,
+    )
+    original_num_traj = sim_params.num_traj
+
+    result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
+
+    assert sim_params.num_traj == original_num_traj
+    assert user_obs.results is None
+    assert result.observables[0].results is not None
+    assert result.observables[0] is not user_obs
 
 
 def test_result_is_pickleable() -> None:

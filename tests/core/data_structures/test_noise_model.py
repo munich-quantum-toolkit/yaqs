@@ -221,12 +221,12 @@ def test_noise_distribution_integration() -> None:
         random_seed=42,
     )
 
-    Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     # Verify that the noise model was sampled and stored
-    assert sim_params.noise_model is not None, "Simulation parameters should store the sampled noise model."
-    assert len(sim_params.noise_model.processes) == 1, "Sampled noise model should have one process."
-    assert isinstance(sim_params.noise_model.processes[0]["strength"], float), "Process strength should be a float."
+    assert result.noise_model is not None, "Simulation parameters should store the sampled noise model."
+    assert len(result.noise_model.processes) == 1, "Sampled noise model should have one process."
+    assert isinstance(result.noise_model.processes[0]["strength"], float), "Process strength should be a float."
 
 
 def test_static_noise_strength() -> None:

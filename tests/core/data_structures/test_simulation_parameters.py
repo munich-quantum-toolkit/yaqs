@@ -24,6 +24,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories
 from mqt.yaqs.core.data_structures.simulation_parameters import (
     AnalogSimParams,
     Observable,
@@ -211,8 +212,9 @@ def test_aggregate_trajectories_regular_observable_mean() -> None:
 
     # Params (no PVM mixing, so just this observable)
     sim = AnalogSimParams(observables=[z_obs], elapsed_time=0.2, dt=0.1, num_traj=2)
+    run_result = Result(sim_params=sim, observables=[z_obs])
 
-    sim.aggregate_trajectories()
+    aggregate_trajectories(run_result)
 
     expected = traj.mean(axis=0)
     assert isinstance(z_obs.results, np.ndarray)
@@ -234,8 +236,9 @@ def test_aggregate_trajectories_schmidt_concatenation() -> None:
     ss_obs.trajectories = np.array([a, b, c])
 
     sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1, num_traj=3)
+    run_result = Result(sim_params=sim, observables=[ss_obs])
 
-    sim.aggregate_trajectories()
+    aggregate_trajectories(run_result)
 
     assert isinstance(ss_obs.results, np.ndarray)
     np.testing.assert_allclose(ss_obs.results, np.array([0.8, 0.6, 0.4, 0.3, 0.2, 0.1], dtype=np.float64))
@@ -252,8 +255,9 @@ def test_aggregate_trajectories_mixed_regular_and_schmidt() -> None:
     ss_obs.trajectories = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
     sim = AnalogSimParams(observables=[x_obs, ss_obs], elapsed_time=0.2, dt=0.1, num_traj=3)
+    run_result = Result(sim_params=sim, observables=[x_obs, ss_obs])
 
-    sim.aggregate_trajectories()
+    aggregate_trajectories(run_result)
 
     # Regular → column-wise mean over axis=0
     assert x_obs.results is not None
@@ -271,8 +275,10 @@ def test_aggregate_trajectories_schmidt_requires_array() -> None:
 
     sim = AnalogSimParams(observables=[ss_obs], elapsed_time=0.1, dt=0.1)
 
+    run_result = Result(sim_params=sim, observables=[ss_obs])
+
     with pytest.raises(AssertionError):
-        sim.aggregate_trajectories()
+        aggregate_trajectories(run_result)
 
 
 def test_strong_params_sorting_and_fields() -> None:
@@ -354,7 +360,8 @@ def test_strong_aggregate_regular_mean() -> None:
     x.trajectories = traj
 
     params = StrongSimParams(observables=[x], num_traj=3)
-    params.aggregate_trajectories()
+    run_result = Result(sim_params=params, observables=[x])
+    aggregate_trajectories(run_result)
 
     assert isinstance(x.results, np.ndarray)
     np.testing.assert_allclose(x.results, traj.mean(axis=0))
@@ -370,7 +377,8 @@ def test_strong_aggregate_schmidt_concat() -> None:
     ])
 
     params = StrongSimParams(observables=[ssp], num_traj=3)
-    params.aggregate_trajectories()
+    run_result = Result(sim_params=params, observables=[ssp])
+    aggregate_trajectories(run_result)
 
     assert isinstance(ssp.results, np.ndarray)
     np.testing.assert_allclose(ssp.results, np.array([0.9, 0.8, 0.6, 0.4, 0.2, 0.1], dtype=np.float64))
@@ -385,7 +393,8 @@ def test_strong_aggregate_mixed_regular_and_schmidt() -> None:
     ssp.trajectories = np.array([np.array([1.0, 0.5], dtype=np.float64), np.array([0.5, 0.25], dtype=np.float64)])
 
     params = StrongSimParams(observables=[z, ssp], num_traj=2)
-    params.aggregate_trajectories()
+    run_result = Result(sim_params=params, observables=[z, ssp])
+    aggregate_trajectories(run_result)
 
     assert z.results is not None
     np.testing.assert_allclose(z.results, np.array([2.0, 3.0], dtype=np.float64))
@@ -401,8 +410,10 @@ def test_strong_aggregate_schmidt_requires_array() -> None:
 
     params = StrongSimParams(observables=[ssp], num_traj=1)
 
+    run_result = Result(sim_params=params, observables=[ssp])
+
     with pytest.raises(AssertionError):
-        params.aggregate_trajectories()
+        aggregate_trajectories(run_result)
 
 
 @pytest.mark.parametrize(

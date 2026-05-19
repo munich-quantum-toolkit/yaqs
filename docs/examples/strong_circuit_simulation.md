@@ -66,8 +66,8 @@ for j, gamma in enumerate(gammas):
     noise_model = NoiseModel([
         {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["lowering"]
     ])
-    sim.run(state, circuit, sim_params, noise_model)
-    for i, observable in enumerate(sim_params.observables):
+    result = sim.run(state, circuit, sim_params, noise_model)
+    for i, observable in enumerate(result.observables):
         heatmap[i, j] = observable.results[0]
 ```
 

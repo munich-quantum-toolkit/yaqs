@@ -40,12 +40,15 @@ def test_unitary_ensemble_observable_average() -> None:
         sample_timesteps=True,
     )
 
-    Simulator(parallel=False, show_progress=False).run(initial_states, hamiltonian, sim_params, noise_model=None)
+    result = Simulator(parallel=False, show_progress=False).run(
+        initial_states, hamiltonian, sim_params, noise_model=None
+    )
 
-    assert observable.trajectories is not None
-    assert observable.results is not None
-    assert observable.trajectories.shape == (len(initial_states), len(sim_params.times))
-    np.testing.assert_allclose(observable.results, np.mean(observable.trajectories, axis=0))
+    result_obs = result.observables[0]
+    assert result_obs.trajectories is not None
+    assert result_obs.results is not None
+    assert result_obs.trajectories.shape == (len(initial_states), len(sim_params.times))
+    np.testing.assert_allclose(result_obs.results, np.mean(result_obs.trajectories, axis=0))
 
 
 def test_unitary_ensemble_autocorrelator_outputs_mean_matrix_row() -> None:
@@ -63,13 +66,15 @@ def test_unitary_ensemble_autocorrelator_outputs_mean_matrix_row() -> None:
         multi_time_observables=[(correlator_op, correlator_op)],
     )
 
-    Simulator(parallel=False, show_progress=False).run(initial_states, hamiltonian, sim_params, noise_model=None)
+    result = Simulator(parallel=False, show_progress=False).run(
+        initial_states, hamiltonian, sim_params, noise_model=None
+    )
 
-    assert sim_params.multi_time_observables_times is not None
-    assert sim_params.multi_time_observables_results is not None
-    assert sim_params.multi_time_observables_results.shape == (1, len(sim_params.times))
-    assert np.iscomplexobj(sim_params.multi_time_observables_results)
-    np.testing.assert_allclose(sim_params.multi_time_observables_results[0, 0], 1.0 + 0.0j, atol=1e-10)
+    assert result.multi_time_times is not None
+    assert result.multi_time_results is not None
+    assert result.multi_time_results.shape == (1, len(sim_params.times))
+    assert np.iscomplexobj(result.multi_time_results)
+    np.testing.assert_allclose(result.multi_time_results[0, 0], 1.0 + 0.0j, atol=1e-10)
 
 
 def test_unitary_ensemble_multi_time_observables_mean_matrix() -> None:
@@ -89,12 +94,14 @@ def test_unitary_ensemble_multi_time_observables_mean_matrix() -> None:
         multi_time_observables=pairs,
     )
 
-    Simulator(parallel=False, show_progress=False).run(initial_states, hamiltonian, sim_params, noise_model=None)
+    result = Simulator(parallel=False, show_progress=False).run(
+        initial_states, hamiltonian, sim_params, noise_model=None
+    )
 
-    assert sim_params.multi_time_observables_times is not None
-    assert sim_params.multi_time_observables_results is not None
-    assert sim_params.multi_time_observables_results.shape == (len(pairs), len(sim_params.times))
-    assert np.iscomplexobj(sim_params.multi_time_observables_results)
+    assert result.multi_time_times is not None
+    assert result.multi_time_results is not None
+    assert result.multi_time_results.shape == (len(pairs), len(sim_params.times))
+    assert np.iscomplexobj(result.multi_time_results)
 
 
 def test_unitary_ensemble_t0_only_records_when_not_sampling_timesteps() -> None:
@@ -113,16 +120,18 @@ def test_unitary_ensemble_t0_only_records_when_not_sampling_timesteps() -> None:
         multi_time_observables=[(z0, z0), (z0, z1)],
     )
 
-    Simulator(parallel=False, show_progress=False).run(initial_states, hamiltonian, sim_params, noise_model=None)
+    result = Simulator(parallel=False, show_progress=False).run(
+        initial_states, hamiltonian, sim_params, noise_model=None
+    )
 
-    assert z0.results is not None
-    assert z0.results.shape == (1,)
-    np.testing.assert_allclose(z0.results[0], 1.0, atol=1e-10)
+    assert result.observables[0].results is not None
+    assert result.observables[0].results.shape == (1,)
+    np.testing.assert_allclose(result.observables[0].results[0], 1.0, atol=1e-10)
 
-    assert sim_params.multi_time_observables_results is not None
-    assert sim_params.multi_time_observables_results.shape == (2, 1)
+    assert result.multi_time_results is not None
+    assert result.multi_time_results.shape == (2, 1)
     # (Z0, Z0) autocorrelator at t=0: <0|Z0^2|0> = 1
-    np.testing.assert_allclose(sim_params.multi_time_observables_results[0, 0], 1.0 + 0.0j, atol=1e-10)
+    np.testing.assert_allclose(result.multi_time_results[0, 0], 1.0 + 0.0j, atol=1e-10)
 
 
 def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> None:
@@ -141,9 +150,11 @@ def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> N
         multi_time_observables=[(z0, z0), (z0, z1)],
     )
 
-    Simulator(parallel=False, show_progress=False).run(initial_states, hamiltonian, sim_params, noise_model=None)
-    assert sim_params.multi_time_observables_results is not None
-    assert sim_params.multi_time_observables_times is not None
+    result = Simulator(parallel=False, show_progress=False).run(
+        initial_states, hamiltonian, sim_params, noise_model=None
+    )
+    assert result.multi_time_results is not None
+    assert result.multi_time_times is not None
 
     sim_params_off = AnalogSimParams(
         observables=[Observable(Z(), 0)],
@@ -151,13 +162,12 @@ def test_unitary_ensemble_clears_multi_time_outputs_when_feature_disabled() -> N
         dt=0.1,
         sample_timesteps=True,
     )
-    # Seed stale fields to verify they are cleared on next run.
-    sim_params_off.multi_time_observables_times = np.array([0.0], dtype=np.float64)
-    sim_params_off.multi_time_observables_results = np.array([[1.0 + 0.0j]], dtype=np.complex128)
 
-    Simulator(parallel=False, show_progress=False).run(initial_states, hamiltonian, sim_params_off, noise_model=None)
-    assert sim_params_off.multi_time_observables_results is None
-    assert sim_params_off.multi_time_observables_times is None
+    result_off = Simulator(parallel=False, show_progress=False).run(
+        initial_states, hamiltonian, sim_params_off, noise_model=None
+    )
+    assert result_off.multi_time_results is None
+    assert result_off.multi_time_times is None
 
 
 def test_list_mps_analog_ensemble_rejects_non_mps_representation() -> None:
@@ -233,9 +243,9 @@ def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
         dt=0.05,
         multi_time_observables=[(z0, z0), (z0, z1)],
     )
-    Simulator(parallel=True, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
-    assert z0.results is not None
-    assert sim_params.multi_time_observables_results is not None
+    result = Simulator(parallel=True, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
+    assert result.observables[0].results is not None
+    assert result.multi_time_results is not None
 
 
 def test_unitary_ensemble_member_worker_uses_bug_evolution_mode() -> None:
@@ -418,11 +428,11 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
         sample_timesteps=True,
         multi_time_observables=pairs,
     )
-    Simulator(parallel=True, show_progress=False).run(states, h_mpo, sim_params, noise_model=None)
-    assert sim_params.multi_time_observables_results is not None
-    assert sim_params.multi_time_observables_times is not None
-    yaqs = np.asarray(sim_params.multi_time_observables_results, dtype=np.complex128)
-    times = np.asarray(sim_params.multi_time_observables_times, dtype=np.float64)
+    result = Simulator(parallel=True, show_progress=False).run(states, h_mpo, sim_params, noise_model=None)
+    assert result.multi_time_results is not None
+    assert result.multi_time_times is not None
+    yaqs = np.asarray(result.multi_time_results, dtype=np.complex128)
+    times = np.asarray(result.multi_time_times, dtype=np.float64)
 
     x2 = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex128)
     y2 = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=np.complex128)

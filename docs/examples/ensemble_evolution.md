@@ -66,9 +66,9 @@ primer_params = AnalogSimParams(
     sample_timesteps=True,
 )
 
-sim.run(psi0, H_open, primer_params)
+result_primer = sim.run(psi0, H_open, primer_params)
 times_primer = primer_params.times
-zexp_primer = primer_params.observables[0].results
+zexp_primer = result_primer.observables[0].results
 ```
 
 ```{code-cell} ipython3
@@ -114,13 +114,13 @@ single_state_params = AnalogSimParams(
     multi_time_observables=[(sz_mid, sz_mid), (sz_mid, sx_mid)],  # row 0: C_zz(t), row 1: C_zx(t)
 )
 
-Simulator(parallel=False, show_progress=False).run(
+result_single = Simulator(parallel=False, show_progress=False).run(
     [State(L, initial="haar-random", pad=2)], H_open, single_state_params
 )
 
-t_single = single_state_params.multi_time_observables_times
-czz_single = single_state_params.multi_time_observables_results[0]
-czx_single = single_state_params.multi_time_observables_results[1]
+t_single = result_single.multi_time_times
+czz_single = result_single.multi_time_results[0]
+czx_single = result_single.multi_time_results[1]
 ```
 
 ```{code-cell} ipython3
@@ -161,10 +161,10 @@ ensemble_params = AnalogSimParams(
     ],
 )
 
-sim.run(ensemble_states, H_open, ensemble_params)
-t_ens = ensemble_params.multi_time_observables_times
-czz_ens = ensemble_params.multi_time_observables_results[0]
-czx_ens = ensemble_params.multi_time_observables_results[1]
+result_ens = sim.run(ensemble_states, H_open, ensemble_params)
+t_ens = result_ens.multi_time_times
+czz_ens = result_ens.multi_time_results[0]
+czx_ens = result_ens.multi_time_results[1]
 ```
 
 ```{code-cell} ipython3
@@ -251,10 +251,10 @@ for d in deltas:
         sample_timesteps=True,
         multi_time_observables=pairs_jj,
     )
-    sim.run(states_transport, h_periodic, sp)
-    assert sp.multi_time_observables_results is not None
-    t_transport = sp.multi_time_observables_times
-    c_jj = np.real(np.sum(sp.multi_time_observables_results, axis=0) / Ltr)
+    result_transport = sim.run(states_transport, h_periodic, sp)
+    assert result_transport.multi_time_results is not None
+    t_transport = result_transport.multi_time_times
+    c_jj = np.real(np.sum(result_transport.multi_time_results, axis=0) / Ltr)
     transport_curves[d] = c_jj
 ```
 
