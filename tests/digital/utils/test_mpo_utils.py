@@ -11,7 +11,7 @@ This module contains unit tests for the MPO utility functions used in the equiva
 It verifies the correct functionality of tensor operations including:
   - SVD-based splitting of MPS tensors (decompose_theta)
   - Gate application routines (apply_gate, apply_temporal_zone)
-  - MPO tensor merging (merge_mps_tensors, merge_mpo_tensors)
+  - MPO tensor merging (merge_two_site for MPS, merge_mpo_tensors for MPO)
   - Environment updates for MPOs (update_mpo, update_right_environment, update_left_environment)
   - Layer and long-range updates (apply_layer, apply_long_range_layer)
   - Generator MPO construction (construct_generator_mpo)

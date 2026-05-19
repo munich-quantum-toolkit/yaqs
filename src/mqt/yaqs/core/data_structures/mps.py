@@ -18,7 +18,8 @@ import numpy as np
 import opt_einsum as oe
 from tqdm import tqdm
 
-from ..methods.decompositions import right_qr, two_site_svd
+from .. import linalg
+from ..methods.decompositions import merge_two_site, right_qr, split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -428,7 +429,7 @@ class MPS:
         phys_j, right = b.shape[0], b.shape[2]
         theta_mat = theta.reshape(left * phys_i, phys_j * right)
 
-        s = np.linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
+        s = linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
         s2 = (s.astype(np.float64)) ** 2
         norm: np.float64 = np.sum(s2, dtype=np.float64)
         if norm == np.float64(0.0):
@@ -470,7 +471,7 @@ class MPS:
         phys_j, right = b.shape[0], b.shape[2]
         theta_mat = theta.reshape(left * phys_i, phys_j * right)
 
-        _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
+        _, s_vec, _ = linalg.svd(theta_mat, full_matrices=False)
 
         padded = np.full(top_schmidt_vals, np.nan)
         padded[: min(top_schmidt_vals, len(s_vec))] = s_vec[:top_schmidt_vals]
@@ -539,7 +540,16 @@ class MPS:
                 self.tensors[current_orthogonality_center],
                 self.tensors[current_orthogonality_center + 1],
             )
-            a_new, b_new = two_site_svd(a, b, threshold=1e-12, max_bond_dim=None)
+            merged = merge_two_site(a, b)
+            a_new, b_new = split_two_site(
+                merged,
+                [a.shape[0], b.shape[0]],
+                svd_distribution="right",
+                trunc_mode="discarded_weight",
+                threshold=1e-12,
+                max_bond_dim=None,
+                min_bond_dim=2,
+            )
             (
                 self.tensors[current_orthogonality_center],
                 self.tensors[current_orthogonality_center + 1],
@@ -616,7 +626,16 @@ class MPS:
         # ——— left­-to-­center sweep ———
         for i in range(orth_center):
             a, b = self.tensors[i], self.tensors[i + 1]
-            a_new, b_new = two_site_svd(a, b, threshold, max_bond_dim)
+            merged = merge_two_site(a, b)
+            a_new, b_new = split_two_site(
+                merged,
+                [a.shape[0], b.shape[0]],
+                svd_distribution="right",
+                trunc_mode="discarded_weight",
+                threshold=threshold,
+                max_bond_dim=max_bond_dim,
+                min_bond_dim=2,
+            )
             self.tensors[i], self.tensors[i + 1] = a_new, b_new
 
         # flip the network and sweep back
@@ -624,7 +643,16 @@ class MPS:
         orth_flipped = self.length - 1 - orth_center
         for i in range(orth_flipped):
             a, b = self.tensors[i], self.tensors[i + 1]
-            a_new, b_new = two_site_svd(a, b, threshold, max_bond_dim)
+            merged = merge_two_site(a, b)
+            a_new, b_new = split_two_site(
+                merged,
+                [a.shape[0], b.shape[0]],
+                svd_distribution="right",
+                trunc_mode="discarded_weight",
+                threshold=threshold,
+                max_bond_dim=max_bond_dim,
+                min_bond_dim=2,
+            )
             self.tensors[i], self.tensors[i + 1] = a_new, b_new
 
         self.flip_network()
@@ -750,7 +778,7 @@ class MPS:
 
             # 3) split via SVD
             theta_mat = theta.reshape(left * d_i, d_j * right)
-            u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+            u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
             chi_new = len(s_vec)  # keep all singular values
 
@@ -807,7 +835,7 @@ class MPS:
             theta = oe.contract("ab, cbd->cad", mat4, theta).reshape(left, d_i, d_j, right)
 
             theta_mat = theta.reshape(left * d_i, d_j * right)
-            u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+            u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
             u_tensor = u_mat.reshape(left, d_i, len(s_vec)).transpose(1, 0, 2)
             v_tensor = (np.diag(s_vec) @ v_mat).reshape(len(s_vec), d_j, right).transpose(1, 0, 2)

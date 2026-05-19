@@ -29,7 +29,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-import scipy.linalg
 import scipy.sparse
 from scipy.integrate import solve_ivp
 
@@ -41,6 +40,7 @@ if TYPE_CHECKING:
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
+from ..core import linalg
 from .utils import _embed_observable_sparse, _embed_operator_sparse
 
 # Maximum length of vec(rho) = dim**2 for storing dense exp(L * dt).
@@ -181,7 +181,7 @@ def preprocess_lindblad(
     vec_dim = dim * dim
     if vec_dim <= MAX_LIOUVILLIAN_VECTOR_DIM:
         liouvillian = _build_liouvillian_superoperator(dim, h_mat, jump_ops, l_dag_l_sum)
-        step_propagator = scipy.linalg.expm(liouvillian * sim_params.dt)
+        step_propagator = linalg.expm(liouvillian * sim_params.dt)
 
     return LindbladContext(
         rho_initial=rho_vec,

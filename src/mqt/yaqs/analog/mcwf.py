@@ -31,9 +31,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-import scipy.linalg
 import scipy.sparse
 
+from ..core import linalg
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
 from ..core.random_utils import make_trajectory_rng
 
@@ -172,7 +172,11 @@ def preprocess_mcwf(
     # 5. Fixed-step propagator U_step = exp(-i H_eff dt) (time-independent H in YAQS).
     step_propagator: NDArray[np.complex128] | None = None
     if dim <= MAX_PRECOMPUTE_DIM:
-        step_propagator = scipy.linalg.expm(-1j * sim_params.dt * heff.toarray())
+        h_dense = heff.toarray()
+        if linalg.ishermitian(h_dense):
+            step_propagator = linalg.expm_hermitian(h_dense, sim_params.dt)
+        else:
+            step_propagator = linalg.expm(-1j * sim_params.dt * h_dense)
 
     # 6. Observables embedded on the full space; diagnostics are not defined on |psi>.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []

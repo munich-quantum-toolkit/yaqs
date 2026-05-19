@@ -17,6 +17,7 @@ import opt_einsum as oe
 import scipy.sparse
 from numpy.typing import NDArray
 
+from .. import linalg
 from ..libraries.gate_library import Destroy
 from .mps import MPS
 
@@ -887,11 +888,8 @@ class MPO:
                 phys_dim * phys_dim * bond_dim_right,
             )
 
-            u, s, vh = np.linalg.svd(matrix, full_matrices=False)
-            keep = int(np.sum(tol < s))
-            if max_bond_dim is not None:
-                keep = min(keep, max_bond_dim)
-            keep = max(1, keep)
+            u, s, vh = linalg.svd(matrix, full_matrices=False)
+            keep = linalg.truncate(s, mode="hard_cutoff", threshold=tol, max_bond_dim=max_bond_dim, min_keep=1)
 
             u = u[:, :keep]
             s = s[:keep]
@@ -1107,12 +1105,18 @@ class MPO:
         tensors: list[np.ndarray] = []
 
         def _truncate(s: np.ndarray) -> int:
-            r = s.size
-            if cutoff > 0.0:
-                r = max(int(np.sum(s > cutoff)), 1)
-            if max_bond is not None:
-                r = min(r, max_bond)
-            return r
+            if cutoff <= 0.0:
+                r = int(s.size)
+                if max_bond is not None:
+                    r = min(r, max_bond)
+                return r
+            return linalg.truncate(
+                s,
+                mode="hard_cutoff",
+                threshold=cutoff,
+                max_bond_dim=max_bond,
+                min_keep=1,
+            )
 
         for k in range(n - 1):
             rest = d ** (n - k - 1)
@@ -1121,7 +1125,7 @@ class MPO:
             rem_perm = np.transpose(rem, (1, 3, 0, 2, 4))
             x = rem_perm.reshape(d * d * left_rank, rest * rest)
 
-            u, s, vh = np.linalg.svd(x, full_matrices=False)
+            u, s, vh = linalg.svd(x, full_matrices=False)
 
             r_keep = _truncate(s)
 
