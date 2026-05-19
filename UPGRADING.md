@@ -34,6 +34,31 @@ result = sim.run(state, op, sim_params, noise_model)
 `WeakSimParams`. Pass `show_progress` to `Simulator` instead; `num_threads` was unused and has been
 deleted.
 
+### `digital.equivalence_checker.run` becomes `EquivalenceChecker(...).check(...)`
+
+The free `mqt.yaqs.digital.equivalence_checker.run` function has been replaced by
+[`EquivalenceChecker`](src/mqt/yaqs/equivalence_checker.py). `EquivalenceChecker` owns the
+numerical thresholds (`threshold`, `fidelity`); the two circuits are passed to
+[`EquivalenceChecker.check`](src/mqt/yaqs/equivalence_checker.py). The return value is unchanged:
+a `dict` with keys `equivalent` and `elapsed_time`.
+
+**Before:**
+
+```python
+from mqt.yaqs.digital.equivalence_checker import run
+
+result = run(circuit1, circuit2, threshold=1e-6, fidelity=1 - 1e-13)
+```
+
+**After:**
+
+```python
+from mqt.yaqs import EquivalenceChecker
+
+checker = EquivalenceChecker(threshold=1e-6, fidelity=1 - 1e-13)
+result = checker.check(circuit1, circuit2)
+```
+
 ### Read outputs from `Result`, not `*SimParams`
 
 `Simulator.run` no longer writes outputs onto the `*SimParams` instance you pass in. Capture the

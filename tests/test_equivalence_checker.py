@@ -7,10 +7,9 @@
 
 """Tests for MPO-based equivalence checking implementation.
 
-This module provides unit tests for the equivalence checker implemented in
-mqt.yaqs.circuits.equivalence_checker. It verifies the correctness of the
-MPO-based equivalence algorithm by comparing quantum circuits. Tests include
-checks for:
+This module provides unit tests for :class:`~mqt.yaqs.EquivalenceChecker`. It verifies
+the correctness of the MPO-based equivalence algorithm by comparing quantum circuits.
+Tests include checks for:
   - Identity circuits (empty circuits) which should be equivalent.
   - Two-qubit circuits that implement the same operation (e.g., Bell state preparation).
   - Two-qubit circuits that differ by an extra gate, which should be non-equivalent.
@@ -26,7 +25,7 @@ import pytest
 from qiskit import QuantumCircuit
 from qiskit.qasm2 import load
 
-from mqt.yaqs.digital.equivalence_checker import run
+from mqt.yaqs import EquivalenceChecker
 
 
 @pytest.mark.parametrize(("threshold", "fidelity"), [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
@@ -45,7 +44,8 @@ def test_identity_vs_identity(threshold: float, fidelity: float) -> None:
     qc1 = QuantumCircuit(num_qubits)
     qc2 = QuantumCircuit(num_qubits)
 
-    result = run(qc1, qc2, threshold=threshold, fidelity=fidelity)
+    checker = EquivalenceChecker(threshold=threshold, fidelity=fidelity)
+    result = checker.check(qc1, qc2)
     assert result["equivalent"] is True, "Empty circuits (identities) should be equivalent."
     assert result["elapsed_time"] >= 0
 
@@ -64,7 +64,8 @@ def test_two_qubit_equivalence() -> None:
     qc2.h(0)
     qc2.cx(0, 1)
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    checker = EquivalenceChecker(threshold=1e-13, fidelity=1 - 1e-13)
+    result = checker.check(qc1, qc2)
     assert result["equivalent"] is True, "Identical 2-qubit circuits must be equivalent."
 
 
@@ -83,7 +84,8 @@ def test_two_qubit_non_equivalence() -> None:
     qc2.cx(0, 1)
     qc2.x(1)  # An extra gate after entangling
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    checker = EquivalenceChecker(threshold=1e-13, fidelity=1 - 1e-13)
+    result = checker.check(qc1, qc2)
     assert result["equivalent"] is False, "Extra gate should break equivalence."
 
 
@@ -101,7 +103,8 @@ def test_long_range_equivalence() -> None:
     qc2.h(0)
     qc2.cx(0, 2)
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    checker = EquivalenceChecker(threshold=1e-13, fidelity=1 - 1e-13)
+    result = checker.check(qc1, qc2)
     assert result["equivalent"] is True, "Long-range circuits with identical operations must be equivalent."
 
 
@@ -120,7 +123,8 @@ def test_long_range_non_equivalence() -> None:
     qc2.cx(0, 2)
     qc2.x(1)  # An extra gate after entangling
 
-    result = run(qc1, qc2, threshold=1e-13, fidelity=1 - 1e-13)
+    checker = EquivalenceChecker(threshold=1e-13, fidelity=1 - 1e-13)
+    result = checker.check(qc1, qc2)
     assert result["equivalent"] is False, "Extra gate should break equivalence."
 
 
@@ -133,5 +137,6 @@ def test_large_equivalence() -> None:
     qasm_path = Path(__file__).parent / "circuit.qasm"
     qc = load(filename=str(qasm_path))
 
-    result = run(qc, qc)
+    checker = EquivalenceChecker()
+    result = checker.check(qc, qc)
     assert result["equivalent"] is True, "Large scale test fails. Circuits should be equivalent."
