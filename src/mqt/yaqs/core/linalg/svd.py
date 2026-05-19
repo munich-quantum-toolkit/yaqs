@@ -63,8 +63,20 @@ def svd(
 
     Mirrors :func:`scipy.linalg.svd` for the supported keyword arguments.
 
+    Args:
+        a: Complex matrix to decompose.
+        full_matrices: If ``True`` (default), return full-size ``U`` and ``Vh``;
+            otherwise return reduced (thin) factors.
+        compute_uv: If ``True`` (default), compute and return ``U`` and ``Vh``;
+            if ``False``, return only the singular values.
+        lapack_driver: LAPACK driver to use (``"gesdd"`` or ``"gesvd"``).
+            Defaults to ``"gesdd"``.
+        check_finite: Whether to check input arrays for finite values.
+            Defaults to ``False``.
+
     Returns:
-        ``(U, s, Vh)`` when ``compute_uv`` is True, else the 1D singular values ``s``.
+        ``(U, s, Vh)`` when ``compute_uv`` is ``True``, else the 1D array of
+        singular values ``s``.
     """
     if lapack_driver != "gesdd":
         return scipy.linalg.svd(

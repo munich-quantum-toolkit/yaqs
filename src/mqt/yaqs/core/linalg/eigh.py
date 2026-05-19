@@ -40,6 +40,14 @@ def eigh_tridiagonal(
 
     Mirrors :func:`scipy.linalg.eigh_tridiagonal` for the supported arguments.
 
+    Args:
+        d: Diagonal elements of the symmetric tridiagonal matrix.
+        e: Off-diagonal elements of the symmetric tridiagonal matrix.
+        lapack_driver: LAPACK driver to use (``"stemr"`` or ``"stebz"``).
+            Defaults to ``"stemr"``.
+        check_finite: Whether to check input arrays for finite values.
+            Defaults to ``False``.
+
     Returns:
         Tuple ``(w, v)`` of eigenvalues (ascending) and the corresponding
         orthonormal eigenvectors as columns.
