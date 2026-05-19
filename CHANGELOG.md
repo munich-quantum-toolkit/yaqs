@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#428]) ([**@aaronleesander**])
+- added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
 - added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])
 - added Fermionic and Jordan-Wigner MPO encodings of 1D Fermi-Hubbard model ([#220]) ([**@thilomueller**])
 - added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
@@ -118,6 +118,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
 [#428]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
 [#426]: https://github.com/munich-quantum-toolkit/yaqs/pull/426
 [#422]: https://github.com/munich-quantum-toolkit/yaqs/pull/422
