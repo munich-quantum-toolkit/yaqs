@@ -33,8 +33,8 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import scipy.sparse
 
+from ..core import linalg
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
-from ..core.numerics.blas_safe import expm_dense, is_hermitian_matrix, unitary_propagator_from_hermitian
 from ..core.random_utils import make_trajectory_rng
 
 if TYPE_CHECKING:
@@ -173,10 +173,10 @@ def preprocess_mcwf(
     step_propagator: NDArray[np.complex128] | None = None
     if dim <= MAX_PRECOMPUTE_DIM:
         h_dense = heff.toarray()
-        if is_hermitian_matrix(h_dense):
-            step_propagator = unitary_propagator_from_hermitian(h_dense, sim_params.dt)
+        if linalg.ishermitian(h_dense):
+            step_propagator = linalg.expm_hermitian(h_dense, sim_params.dt)
         else:
-            step_propagator = expm_dense(-1j * sim_params.dt * h_dense)
+            step_propagator = linalg.expm(-1j * sim_params.dt * h_dense)
 
     # 6. Observables embedded on the full space; diagnostics are not defined on |psi>.
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []

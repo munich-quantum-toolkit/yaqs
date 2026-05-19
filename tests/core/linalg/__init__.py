@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""Tests for core numerics helpers."""
+"""Tests for core linalg helpers."""

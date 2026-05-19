@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
-from scipy.linalg import expm
 
+from .. import linalg
 from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
 
 if TYPE_CHECKING:
@@ -110,7 +110,7 @@ def apply_dissipation(
                 else:
                     jump_op_mat = process["matrix"]
                     mat = np.conj(jump_op_mat).T @ jump_op_mat
-                    dissipative_op = expm(-0.5 * dt * gamma * mat)
+                    dissipative_op = linalg.expm(-0.5 * dt * gamma * mat)
                     state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
 
         processes_here = [
@@ -130,7 +130,7 @@ def apply_dissipation(
                 else:
                     jump_op_mat = process["matrix"]
                     mat = np.conj(jump_op_mat).T @ jump_op_mat
-                    dissipative_op = expm(-0.5 * dt * gamma * mat)
+                    dissipative_op = linalg.expm(-0.5 * dt * gamma * mat)
 
                     merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
                     merged_tensor = oe.contract("ab, bcd->acd", dissipative_op, merged_tensor)

@@ -25,7 +25,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
-- capped BLAS threading for dense matrix exponentials and used an eigensolve for Hermitian MCWF Hamiltonians to avoid intermittent crashes from multi-threaded OpenBLAS under parallel tests ([#428]) ([**@aaronleesander**])
+- introduced `mqt.yaqs.core.linalg` (SciPy-style `expm`, `ishermitian`, and `expm_hermitian`) that caps BLAS threads and uses an eigensolve for Hermitian Hamiltonians, replacing scattered `scipy.linalg.expm` calls and avoiding intermittent OpenBLAS crashes under parallel tests ([#428]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
 
 ## [0.5.0] - 2026-05-12

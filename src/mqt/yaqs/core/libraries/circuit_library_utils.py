@@ -20,7 +20,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.linalg import expm
+
+from .. import linalg
 
 if TYPE_CHECKING:
     from numpy.random import Generator
@@ -99,7 +100,7 @@ def add_random_single_qubit_rotation(
     z = np.array([[1, 0], [0, -1]])
 
     h = nx * x + ny * y + nz * z
-    u_mat = expm(-1j * theta * h)
+    u_mat = linalg.expm(-1j * theta * h)
 
     th_u3, ph_u3, lam_u3 = extract_u_parameters(u_mat)
     qc.u(th_u3, ph_u3, lam_u3, qubit)
