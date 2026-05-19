@@ -299,7 +299,6 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         step_params.elapsed_time = duration
         step_params.dt = sim_params.dt
         step_params.num_traj = 1
-        step_params.show_progress = False
         step_params.get_state = True
 
         n_steps = int(np.round(duration / step_params.dt))
@@ -333,6 +332,7 @@ def run(
     noise_model: NoiseModel | None = None,
     *,
     representation: Literal["mps", "vector", "density_matrix"] = "mps",
+    show_progress: bool = True,
 ) -> ProcessTensor:
     """Run Process Tomography / Process Tensor Tomography using parallelized backend.
 
@@ -351,6 +351,7 @@ def run(
         noise_model: Noise model to apply. If None, uses sim_params.noise_model.
         representation: State representation for evolution inside tomography workers
             (``"mps"``, ``"vector"``, or ``"density_matrix"``).
+        show_progress: If ``True``, display a tqdm progress bar over tomography sequences.
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.
@@ -440,7 +441,7 @@ def run(
         payload=payload,
         n_jobs=total_jobs,
         max_workers=max_workers,
-        show_progress=sim_params.show_progress,
+        show_progress=show_progress,
         desc="Simulating Tomography Sequences",
     )
 

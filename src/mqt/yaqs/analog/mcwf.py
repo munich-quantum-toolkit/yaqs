@@ -80,7 +80,7 @@ def preprocess_mcwf(
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
 
-    Called once per ``simulator.run`` before trajectory workers start (see
+    Called once per :meth:`Simulator.run` before trajectory workers start (see
     ``preprocess_mcwf`` in ``simulator.py``).
 
     Args:

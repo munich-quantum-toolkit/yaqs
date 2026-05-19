@@ -30,7 +30,7 @@ __all__ = ["Hamiltonian", "Representation"]
 
 
 class Hamiltonian:
-    """Hamiltonian for :func:`~mqt.yaqs.simulator.run` (analog evolution).
+    """Hamiltonian for :meth:`~mqt.yaqs.Simulator.run` (analog evolution).
 
     Build via classmethods (``ising``, ``pauli``, …) or pass ``tensors`` / ``matrix`` /
     ``sparse_matrix``. Materialization happens at construction; reuse the same instance across
@@ -394,7 +394,7 @@ class Hamiltonian:
         return self
 
     def ensure_encoded(self, representation: Representation | None = None) -> Hamiltonian:
-        """Materialize ``representation`` if needed (used by :func:`~mqt.yaqs.simulator.run`).
+        """Materialize ``representation`` if needed (used by :meth:`~mqt.yaqs.Simulator.run`).
 
         Returns:
             ``self`` for chaining.
