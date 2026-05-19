@@ -25,8 +25,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
+from .. import linalg
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
-from .decompositions import robust_svd
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
@@ -95,27 +95,28 @@ def split_mps_tensor(
         shape_transposed[0] * shape_transposed[1],
         shape_transposed[2] * shape_transposed[3],
     )
-    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
+    u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
     # Handled by dynamic TDVP
     keep = min(len(s_vec), sim_params.max_bond_dim) if not dynamic else len(s_vec)
 
     if sim_params.trunc_mode == "discarded_weight":
-        discard = 0.0
-        min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
-        # iterate from smallest to largest
-        for idx, s in enumerate(reversed(s_vec)):
-            next_discard = discard + s * s
-            if next_discard > sim_params.threshold:
-                # don't discard this one; discard only the ones already counted
-                keep = max(len(s_vec) - idx, min_keep)
-                break
-            discard = next_discard
+        keep = linalg.truncate(
+            s_vec,
+            mode="discarded_weight",
+            threshold=sim_params.threshold,
+            max_bond_dim=None if dynamic else sim_params.max_bond_dim,
+            min_keep=min(len(s_vec), sim_params.min_bond_dim),
+            discarded_cmp="gt",
+        )
     elif sim_params.trunc_mode == "relative":
-        smax = s_vec[0]
-        keep = 0 if smax == 0 else int(np.sum((s_vec / smax) >= sim_params.threshold))
-        keep = min(keep, sim_params.max_bond_dim)
-        keep = max(keep, sim_params.min_bond_dim)
+        keep = linalg.truncate(
+            s_vec,
+            mode="relative",
+            threshold=sim_params.threshold,
+            max_bond_dim=sim_params.max_bond_dim,
+            min_keep=sim_params.min_bond_dim,
+        )
 
     left_tensor = u_mat[:, :keep]
     s_vec = s_vec[:keep]

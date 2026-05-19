@@ -17,8 +17,9 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import scipy.linalg
 
+from mqt.yaqs.core import linalg
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, robust_svd, truncated_right_svd
+from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, truncated_right_svd
 
 if TYPE_CHECKING:
     import pytest
@@ -181,10 +182,10 @@ def test_truncated_right_svd_maxbd() -> None:
     assert np.allclose(s_vector, s_vector_i[: sim_params.max_bond_dim])
 
 
-def test_robust_svd_reduced_shapes_unitary_and_reconstruction() -> None:
-    """robust_svd: reduced SVD has correct shapes, unitary factors, and reconstructs A."""
+def test_linalg_svd_reduced_shapes_unitary_and_reconstruction() -> None:
+    """linalg.svd: reduced SVD has correct shapes, unitary factors, and reconstructs A."""
     a = crandn(7, 5)  # m > n (k = 5)
-    u, s, vh = robust_svd(a, full_matrices=False)
+    u, s, vh = linalg.svd(a, full_matrices=False)
 
     k = min(a.shape)
     assert u.shape == (a.shape[0], k)
@@ -207,15 +208,15 @@ def test_robust_svd_reduced_shapes_unitary_and_reconstruction() -> None:
     assert np.allclose(a_rec, a)
 
 
-def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
-    """robust_svd: full SVD has correct shapes, unitary factors, and reconstructs A.
+def test_linalg_svd_full_shapes_unitary_and_reconstruction() -> None:
+    """linalg.svd: full SVD has correct shapes, unitary factors, and reconstructs A.
 
     Reconstruction uses the standard full-SVD identity:
         A = U[:, :k] @ diag(s) @ Vh[:k, :]
     where k = min(m, n).
     """
     a = crandn(4, 6)
-    u, s, vh = robust_svd(a, full_matrices=True)
+    u, s, vh = linalg.svd(a, full_matrices=True)
 
     m, n = a.shape
     k = min(m, n)
@@ -237,8 +238,8 @@ def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
 LapackDriver = Literal["gesdd", "gesvd"]
 
 
-def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None:
-    """robust_svd: if the fast driver fails, it retries with the robust driver."""
+def test_linalg_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """linalg.svd: if the fast driver fails, it retries with the robust driver."""
     calls: list[tuple[LapackDriver, bool]] = []
     real_svd = scipy.linalg.svd
 
@@ -246,6 +247,7 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
         a_mat: NDArray[np.complex128],
         *,
         full_matrices: bool,
+        compute_uv: bool = True,
         lapack_driver: LapackDriver,
         check_finite: bool,
     ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
@@ -257,6 +259,7 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
         u, s, vh = real_svd(
             a_mat,
             full_matrices=full_matrices,
+            compute_uv=compute_uv,
             lapack_driver=lapack_driver,
             check_finite=check_finite,
         )
@@ -266,7 +269,7 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(scipy.linalg, "svd", fake_svd)
 
     a = crandn(6, 6)
-    u, s, vh = robust_svd(a, full_matrices=False)
+    u, s, vh = linalg.svd(a, full_matrices=False)
 
     assert calls[0] == ("gesdd", False)
     assert calls[1] == ("gesvd", True)

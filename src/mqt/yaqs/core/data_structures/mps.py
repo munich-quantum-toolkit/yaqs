@@ -18,6 +18,7 @@ import numpy as np
 import opt_einsum as oe
 from tqdm import tqdm
 
+from .. import linalg
 from ..methods.decompositions import right_qr, two_site_svd
 
 if TYPE_CHECKING:
@@ -428,7 +429,7 @@ class MPS:
         phys_j, right = b.shape[0], b.shape[2]
         theta_mat = theta.reshape(left * phys_i, phys_j * right)
 
-        s = np.linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
+        s = linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
         s2 = (s.astype(np.float64)) ** 2
         norm: np.float64 = np.sum(s2, dtype=np.float64)
         if norm == np.float64(0.0):
@@ -470,7 +471,7 @@ class MPS:
         phys_j, right = b.shape[0], b.shape[2]
         theta_mat = theta.reshape(left * phys_i, phys_j * right)
 
-        _, s_vec, _ = np.linalg.svd(theta_mat, full_matrices=False)
+        _, s_vec, _ = linalg.svd(theta_mat, full_matrices=False)
 
         padded = np.full(top_schmidt_vals, np.nan)
         padded[: min(top_schmidt_vals, len(s_vec))] = s_vec[:top_schmidt_vals]
@@ -750,7 +751,7 @@ class MPS:
 
             # 3) split via SVD
             theta_mat = theta.reshape(left * d_i, d_j * right)
-            u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+            u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
             chi_new = len(s_vec)  # keep all singular values
 
@@ -807,7 +808,7 @@ class MPS:
             theta = oe.contract("ab, cbd->cad", mat4, theta).reshape(left, d_i, d_j, right)
 
             theta_mat = theta.reshape(left * d_i, d_j * right)
-            u_mat, s_vec, v_mat = np.linalg.svd(theta_mat, full_matrices=False)
+            u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
             u_tensor = u_mat.reshape(left, d_i, len(s_vec)).transpose(1, 0, 2)
             v_tensor = (np.diag(s_vec) @ v_mat).reshape(len(s_vec), d_j, right).transpose(1, 0, 2)

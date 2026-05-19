@@ -15,74 +15,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-import scipy.linalg
+
+from .. import linalg
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-
-def robust_svd(
-    a_mat: NDArray[np.complex128],
-    *,
-    full_matrices: bool = False,
-) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
-    """Robust SVD with fast-path + fallback LAPACK drivers.
-
-    Computes the singular value decomposition (SVD) of `a` using SciPy/LAPACK:
-
-        a = U @ np.diag(s) @ Vh
-
-    where `U` and `Vh` are unitary (up to numerical precision) and `s` contains the
-    non-negative singular values in descending order.
-
-    This routine is intended for performance-critical tensor network code where rare
-    numerical pathologies can cause the default fast SVD to fail to converge. We try
-    a fast divide-and-conquer driver first and fall back to a more robust driver if
-    needed:
-
-        1) 'gesdd' (fast, divide-and-conquer)
-        2) 'gesvd' (more robust, typically slower)
-
-    The fallback also enables finite checks to catch NaNs/Infs early, producing a
-    clearer failure mode when upstream numerics are broken.
-
-    Args:
-        a_mat: Input matrix of shape (m, n). Must be finite (no NaNs/Infs) for reliable
-            results; if not, the fallback path uses `check_finite=True` to detect it.
-        full_matrices: If False, compute the reduced/economy SVD with:
-            - U shape: (m, k)
-            - s shape: (k,)
-            - Vh shape: (k, n)
-            where k = min(m, n).
-            If True, compute the full SVD with:
-            - U shape: (m, m)
-            - Vh shape: (n, n)
-
-    Returns:
-        u_mat: Left singular vectors (complex128), shape depends on `full_matrices`.
-        s_vec: Singular values (float64), sorted in non-increasing order.
-        v_mat: Right singular vectors conjugate-transposed (complex128), shape depends
-            on `full_matrices`.
-    """
-    try:
-        u_mat, s_vec, v_mat = scipy.linalg.svd(
-            a_mat,
-            full_matrices=full_matrices,
-            lapack_driver="gesdd",  # fast
-            check_finite=False,
-        )
-    except (scipy.linalg.LinAlgError, ValueError, FloatingPointError):
-        # Retry with more robust driver
-        u_mat, s_vec, v_mat = scipy.linalg.svd(
-            a_mat,
-            full_matrices=full_matrices,
-            lapack_driver="gesvd",  # robust
-            check_finite=True,  # Adds safety
-        )
-    else:
-        return u_mat, s_vec, v_mat
-
-    return u_mat, s_vec, v_mat
 
 
 def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -154,7 +91,7 @@ def right_svd(
     old_shape = mps_tensor.shape
     svd_shape = (old_shape[0] * old_shape[1], old_shape[2])
     mps_tensor = mps_tensor.reshape(svd_shape)
-    u_mat, s_vec, v_mat = np.linalg.svd(mps_tensor, full_matrices=False)
+    u_mat, s_vec, v_mat = linalg.svd(mps_tensor, full_matrices=False)
     new_shape = (old_shape[0], old_shape[1], -1)
     u_tensor = u_mat.reshape(new_shape)
     return u_tensor, s_vec, v_mat
@@ -181,18 +118,17 @@ def truncated_right_svd(
 
     """
     u_tensor, s_vec, v_mat = right_svd(mps_tensor)
-    cut_sum = 0
-    cut_index = 1
-    for i, s_val in enumerate(np.flip(s_vec)):
-        cut_sum += s_val**2
-        if cut_sum >= threshold:
-            cut_index = len(s_vec) - i
-            break
-    if max_bond_dim is not None:
-        cut_index = min(cut_index, max_bond_dim)
-    u_tensor = u_tensor[:, :, :cut_index]
-    s_vec = s_vec[:cut_index]
-    v_mat = v_mat[:cut_index, :]
+    keep = linalg.truncate(
+        s_vec,
+        mode="discarded_weight",
+        threshold=threshold,
+        max_bond_dim=max_bond_dim,
+        min_keep=1,
+        discarded_cmp="gte",
+    )
+    u_tensor = u_tensor[:, :, :keep]
+    s_vec = s_vec[:keep]
+    v_mat = v_mat[:keep, :]
     return u_tensor, s_vec, v_mat
 
 
@@ -227,20 +163,16 @@ def two_site_svd(
     theta_mat = theta.reshape(left * phys_i, phys_j * right)
 
     # 3) full SVD
-    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
+    u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
-    # 4) decide how many singular values to keep:
-    #    sum of squares of discarded values ≤ threshold
-    discard = 0.0
-    keep = len(s_vec)
-    min_keep = 2  # Prevents pathological dimension-1 truncation
-    for idx, s in enumerate(reversed(s_vec)):
-        discard += s**2
-        if discard >= threshold:
-            keep = max(len(s_vec) - idx, min_keep)
-            break
-    if max_bond_dim is not None:
-        keep = min(keep, max_bond_dim)
+    keep = linalg.truncate(
+        s_vec,
+        mode="discarded_weight",
+        threshold=threshold,
+        max_bond_dim=max_bond_dim,
+        min_keep=2,
+        discarded_cmp="gte",
+    )
 
     # 5) build the truncated A' of shape (phys_i, L, keep)
     a_new = u_mat[:, :keep].reshape(phys_i, left, keep)

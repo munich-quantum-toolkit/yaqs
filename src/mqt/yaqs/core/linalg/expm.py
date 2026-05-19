@@ -18,24 +18,17 @@ computes ``exp(-1j * dt * H)`` for Hermitian ``H`` via an eigensolve.
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 import numpy as np
 import scipy.linalg
 
+from ._threading import threadpool_limits_one
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 __all__ = ["expm", "expm_hermitian", "ishermitian"]
-
-
-def _threadpool_limits_one() -> contextlib.AbstractContextManager[None]:
-    try:
-        from threadpoolctl import threadpool_limits  # noqa: PLC0415
-    except ImportError:
-        return contextlib.nullcontext()
-    return threadpool_limits(limits=1)
 
 
 def ishermitian(a: NDArray[np.complex128], *, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
@@ -67,7 +60,7 @@ def expm_hermitian(h: NDArray[np.complex128], dt: float) -> NDArray[np.complex12
     Returns:
         Dense unitary propagator of shape ``h.shape``.
     """
-    with _threadpool_limits_one():
+    with threadpool_limits_one():
         evals, evecs = np.linalg.eigh(h)
         phases = np.exp(-1j * dt * evals)
         return (evecs * phases) @ evecs.conj().T
@@ -84,5 +77,5 @@ def expm(a: NDArray[np.complex128]) -> NDArray[np.complex128]:
     Returns:
         Matrix exponential of ``a``.
     """
-    with _threadpool_limits_one():
+    with threadpool_limits_one():
         return scipy.linalg.expm(a)

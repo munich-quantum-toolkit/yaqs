@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability([#428]) ([**@aaronleesander**])
 - added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])
 - added Fermionic and Jordan-Wigner MPO encodings of 1D Fermi-Hubbard model ([#220]) ([**@thilomueller**])
 - added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
@@ -25,7 +26,6 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
-- introduced `mqt.yaqs.core.linalg` (SciPy-style `expm`, `ishermitian`, and `expm_hermitian`) that caps BLAS threads and uses an eigensolve for Hermitian Hamiltonians, replacing scattered `scipy.linalg.expm` calls and avoiding intermittent OpenBLAS crashes under parallel tests ([#428]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
 
 ## [0.5.0] - 2026-05-12
