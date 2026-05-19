@@ -1308,11 +1308,21 @@ def test_circuit_simulation_rejects_non_state_initial_state() -> None:
 
 
 def test_get_parallel_context_explicit_fork_and_spawn() -> None:
-    """Explicit ``mp_context`` overrides platform auto-detection."""
-    fork_ctx = _get_parallel_context("fork")
-    assert fork_ctx.get_start_method() == "fork"
+    """Explicit ``mp_context`` overrides platform auto-detection.
+
+    ``spawn`` is available on all supported platforms. ``fork`` is only
+    registered where the interpreter exposes it (e.g. Linux); on Windows
+    :func:`multiprocessing.get_context` raises ``ValueError``.
+    """
     spawn_ctx = _get_parallel_context("spawn")
     assert spawn_ctx.get_start_method() == "spawn"
+
+    try:
+        fork_ctx = _get_parallel_context("fork")
+    except ValueError as exc:
+        assert "cannot find context" in str(exc)
+    else:
+        assert fork_ctx.get_start_method() == "fork"
 
 
 def test_expect_shot_counts_rejects_non_dict() -> None:
