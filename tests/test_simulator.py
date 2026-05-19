@@ -1318,10 +1318,12 @@ def test_get_parallel_context_explicit_fork_and_spawn() -> None:
     assert spawn_ctx.get_start_method() == "spawn"
 
     try:
-        fork_ctx = _get_parallel_context("fork")
-    except ValueError as exc:
-        assert "cannot find context" in str(exc)
+        multiprocessing.get_context("fork")
+    except ValueError:
+        with pytest.raises(ValueError, match="cannot find context"):
+            _get_parallel_context("fork")
     else:
+        fork_ctx = _get_parallel_context("fork")
         assert fork_ctx.get_start_method() == "fork"
 
 
