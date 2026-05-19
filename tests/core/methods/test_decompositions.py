@@ -7,7 +7,10 @@
 
 """Tests for decompositions.
 
-This module tests the left and right QR decompositions.
+This module covers the left and right QR decompositions, ``split_two_site``
+behavior (full-rank reconstruction, ``max_bond_dim`` truncation, error
+handling), and ``linalg.svd`` edge-cases (reduced/full shapes, unitarity,
+reconstruction, and the gesdd-to-gesvd fallback path).
 """
 
 from __future__ import annotations
@@ -161,6 +164,17 @@ def test_split_two_site_unknown_mode_raises() -> None:
 
 
 def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    """Build a random complex matrix with orthonormal columns via QR.
+
+    Args:
+        m: Number of rows.
+        n: Number of columns (``n <= m``); the first ``n`` columns of the
+            Q factor are returned.
+        seed: Seed for the random number generator.
+
+    Returns:
+        Complex matrix of shape ``(m, n)`` whose columns are orthonormal.
+    """
     rng_local = np.random.default_rng(seed)
     mat = rng_local.normal(size=(m, n)) + 1j * rng_local.normal(size=(m, n))
     q, _ = np.linalg.qr(mat)
@@ -169,6 +183,22 @@ def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
 
 
 def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    """Construct a complex matrix with a prescribed singular spectrum.
+
+    Builds ``theta = U @ diag(s) @ V^H`` where ``U`` and ``V`` are random
+    orthonormal factors, so ``theta``'s singular values match ``s`` (truncated
+    to ``min(len(s), m, n)`` if needed).
+
+    Args:
+        s: Target singular values (non-increasing, non-negative).
+        m: Number of rows of the output matrix.
+        n: Number of columns of the output matrix.
+        seed: Seed for the random number generator; ``seed + 1`` is used for
+            the right factor so ``U`` and ``V`` are independent.
+
+    Returns:
+        Complex matrix of shape ``(m, n)`` with singular values ``s``.
+    """
     r = min(len(s), m, n)
     u = _rand_unitary_like(m, r, seed=seed)
     v = _rand_unitary_like(n, r, seed=seed + 1)
@@ -179,6 +209,22 @@ def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) 
 def _as_merged_two_site(
     theta: NDArray[np.complex128], d0: int, d1: int, d_left: int, d_right: int
 ) -> NDArray[np.complex128]:
+    """Reshape a flat ``theta`` matrix into a merged two-site MPS tensor.
+
+    Interprets ``theta`` as having combined physical/bond indices
+    ``(d0 * d_left, d1 * d_right)`` and converts it to the canonical merged
+    two-site layout expected by ``split_two_site``.
+
+    Args:
+        theta: Matrix of shape ``(d0 * d_left, d1 * d_right)``.
+        d0: Physical dimension of the left site.
+        d1: Physical dimension of the right site.
+        d_left: Left bond dimension.
+        d_right: Right bond dimension.
+
+    Returns:
+        Merged two-site tensor of shape ``(d0 * d1, d_left, d_right)``.
+    """
     tensor = theta.reshape(d0, d_left, d1, d_right).transpose(0, 2, 1, 3)
     return cast("NDArray[np.complex128]", tensor.reshape(d0 * d1, d_left, d_right))
 
