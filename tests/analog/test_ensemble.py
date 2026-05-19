@@ -44,11 +44,10 @@ def test_unitary_ensemble_observable_average() -> None:
         initial_states, hamiltonian, sim_params, noise_model=None
     )
 
-    result_obs = result.observables[0]
-    assert result_obs.trajectories is not None
-    assert result_obs.results is not None
-    assert result_obs.trajectories.shape == (len(initial_states), len(sim_params.times))
-    np.testing.assert_allclose(result_obs.results, np.mean(result_obs.trajectories, axis=0))
+    assert result.trajectories[0] is not None
+    assert result.expectation_values[0] is not None
+    assert result.trajectories[0].shape == (len(initial_states), len(sim_params.times))
+    np.testing.assert_allclose(result.expectation_values[0], np.mean(result.trajectories[0], axis=0))
 
 
 def test_unitary_ensemble_autocorrelator_outputs_mean_matrix_row() -> None:
@@ -124,9 +123,9 @@ def test_unitary_ensemble_t0_only_records_when_not_sampling_timesteps() -> None:
         initial_states, hamiltonian, sim_params, noise_model=None
     )
 
-    assert result.observables[0].results is not None
-    assert result.observables[0].results.shape == (1,)
-    np.testing.assert_allclose(result.observables[0].results[0], 1.0, atol=1e-10)
+    assert result.expectation_values[0] is not None
+    assert result.expectation_values[0].shape == (1,)
+    np.testing.assert_allclose(result.expectation_values[0][0], 1.0, atol=1e-10)
 
     assert result.multi_time_results is not None
     assert result.multi_time_results.shape == (2, 1)
@@ -244,7 +243,7 @@ def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
         multi_time_observables=[(z0, z0), (z0, z1)],
     )
     result = Simulator(parallel=True, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
-    assert result.observables[0].results is not None
+    assert result.expectation_values[0] is not None
     assert result.multi_time_results is not None
 
 

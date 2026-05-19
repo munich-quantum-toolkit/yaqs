@@ -446,7 +446,7 @@ def test_noisy_digital_tjm_matches_reference() -> None:
 
     tjm_results = np.empty((num_qubits, 6), dtype=float)
     for i in range(num_qubits):
-        res = result.observables[i].results
+        res = result.expectation_values[i]
         assert res is not None
         tjm_results[i, :] = np.real(res[:6])
 
@@ -485,7 +485,7 @@ def test_digital_tjm_longrange_noise() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
 
     for i in range(num_qubits):
-        res = result.observables[i].results
+        res = result.expectation_values[i]
         assert res is not None
         assert res.shape == (2,)  # initial and final layer samples
         z_vals = np.real(res)
@@ -513,9 +513,9 @@ def test_no_mid_measurements_results_have_two_columns() -> None:
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in result.observables:
-        assert obs.results is not None
-        assert obs.results.shape == (2,)
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None
+        assert result.expectation_values[i].shape == (2,)
 
 
 def test_counts_multiple_mid_measurement_barriers() -> None:
@@ -546,9 +546,9 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in result.observables:
-        assert obs.results is not None
-        assert obs.results.shape == (5,)
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None
+        assert result.expectation_values[i].shape == (5,)
 
 
 def test_ignores_non_mid_barriers_and_handles_measures() -> None:
@@ -575,7 +575,7 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
 
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model=None)
 
-    for obs in result.observables:
-        assert obs.results is not None
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None
         # Only one labelled barrier -> 1 mid + initial + final
-        assert obs.results.shape == (3,)
+        assert result.expectation_values[i].shape == (3,)

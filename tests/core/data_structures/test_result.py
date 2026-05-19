@@ -54,6 +54,8 @@ def test_result_holds_outputs_for_analog_run() -> None:
     assert result.sim_params is sim_params
     assert result.observables is not sim_params.observables
     assert len(result.observables) == 1
+    assert len(result.expectation_values) == 1
+    assert len(result.trajectories) == 1
     assert result.output_state is not None
     assert result.noise_model is None
     assert result.counts is None
@@ -117,8 +119,8 @@ def test_sim_params_not_mutated_after_analog_run() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
 
     assert sim_params.num_traj == original_num_traj
-    assert user_obs.results is None
-    assert result.observables[0].results is not None
+    assert not hasattr(user_obs, "results")
+    assert result.expectation_values[0] is not None
     assert result.observables[0] is not user_obs
 
 
@@ -142,8 +144,8 @@ def test_result_is_pickleable() -> None:
     assert isinstance(restored, Result)
     assert isinstance(restored.sim_params, AnalogSimParams)
     assert len(restored.observables) == 1
-    restored_results = restored.observables[0].results
-    original_results = result.observables[0].results
+    restored_results = restored.expectation_values[0]
+    original_results = result.expectation_values[0]
     assert restored_results is not None
     assert original_results is not None
     np.testing.assert_allclose(np.asarray(restored_results), np.asarray(original_results))

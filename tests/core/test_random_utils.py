@@ -60,8 +60,10 @@ def test_analog_run_reproducible_with_random_seed(*, run_parallel: bool) -> None
             sample_timesteps=False,
             random_seed=2025,
         )
-        Simulator(parallel=run_parallel, show_progress=False).run(st, H, params, copy.deepcopy(noise_model))
-        return [float(np.real(obs.results[0])) for obs in params.observables if obs.results is not None]
+        run_result = Simulator(parallel=run_parallel, show_progress=False).run(
+            st, H, params, copy.deepcopy(noise_model)
+        )
+        return [float(np.real(vals[0])) for vals in run_result.expectation_values]
 
     first = run_once()
     second = run_once()

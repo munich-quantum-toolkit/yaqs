@@ -57,7 +57,7 @@ def test_lindblad_amplitude_damping() -> None:
     result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    sigma_z_sim = result.observables[0].results
+    sigma_z_sim = result.expectation_values[0]
     assert sigma_z_sim is not None
     delta_exact = 1 - 2 * np.exp(-gamma * times)
 
@@ -84,7 +84,7 @@ def test_lindblad_unitary_rabi() -> None:
     result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
 
     times = sim_params.times
-    sigma_z_sim = result.observables[0].results
+    sigma_z_sim = result.expectation_values[0]
     assert sigma_z_sim is not None
     sigma_z_exact = np.cos(2 * times)
 
@@ -120,8 +120,8 @@ def test_lindblad_dephasing() -> None:
     result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    x0_sim = result.observables[0].results
-    x1_sim = result.observables[1].results
+    x0_sim = result.expectation_values[0]
+    x1_sim = result.expectation_values[1]
     assert x0_sim is not None
     assert x1_sim is not None
 
@@ -167,8 +167,8 @@ def test_lindblad_dephasing_both_qubits() -> None:
     result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    x0_sim = result.observables[0].results
-    x1_sim = result.observables[1].results
+    x0_sim = result.expectation_values[0]
+    x1_sim = result.expectation_values[1]
     assert x0_sim is not None
     assert x1_sim is not None
 
@@ -280,8 +280,8 @@ def test_noiseless_mps_matches_density_matrix() -> None:
     )
     sim = Simulator(show_progress=False)
     result_mps = sim.run(psi_mps, h, params_mps, None)
-    assert result_mps.observables[0].results is not None
-    z_mps = result_mps.observables[0].results[-1]
+    assert result_mps.expectation_values[0] is not None
+    z_mps = result_mps.expectation_values[0][-1]
 
     obs_rho = Observable("z", sites=[0])
     params_rho = AnalogSimParams(
@@ -290,8 +290,8 @@ def test_noiseless_mps_matches_density_matrix() -> None:
         dt=dt,
     )
     result_rho = sim.run(psi_rho, h, params_rho, None)
-    assert result_rho.observables[0].results is not None
-    z_rho = result_rho.observables[0].results[-1]
+    assert result_rho.expectation_values[0] is not None
+    z_rho = result_rho.expectation_values[0][-1]
 
     assert z_mps is not None
     assert z_rho is not None

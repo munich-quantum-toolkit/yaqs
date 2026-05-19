@@ -255,7 +255,7 @@ def test_analog_two_site_jump_operators_smoke(two_site_process: str) -> None:
     ])
     result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
 
-    results = result.observables[0].results
+    results = result.expectation_values[0]
     assert results is not None
     z_mean = np.real(results)
     assert np.isfinite(z_mean).all()

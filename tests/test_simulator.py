@@ -90,10 +90,12 @@ def test_simulator_parallel_serial_equivalence() -> None:
     params_parallel = _build_params()
     result_parallel = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, H, params_parallel)
 
-    for serial_obs, parallel_obs in zip(result_serial.observables, result_parallel.observables, strict=False):
-        assert serial_obs.results is not None
-        assert parallel_obs.results is not None
-        np.testing.assert_allclose(serial_obs.results, parallel_obs.results, atol=1e-10)
+    for serial_vals, parallel_vals in zip(
+        result_serial.expectation_values, result_parallel.expectation_values, strict=False
+    ):
+        assert serial_vals is not None
+        assert parallel_vals is not None
+        np.testing.assert_allclose(serial_vals, parallel_vals, atol=1e-10)
 
 
 def test_simulator_show_progress_disabled(capsys: pytest.CaptureFixture[str]) -> None:
@@ -245,14 +247,14 @@ def test_analog_simulation() -> None:
         0.8642160639619357,
         0.6873260499377838,
     ]
-    for i, observable in enumerate(result.observables):
-        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
-        assert len(observable.trajectories) == sim_params.num_traj, (
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
+        assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(result.trajectories[i]) == sim_params.num_traj, (
             "Trajectories was not initialized for AnalogSimParams 2."
         )
-        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
+        assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
 
 
 def test_analog_simulation_parallel_off() -> None:
@@ -295,14 +297,14 @@ def test_analog_simulation_parallel_off() -> None:
         0.8642160639619357,
         0.6873260499377838,
     ]
-    for i, observable in enumerate(result.observables):
-        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
-        assert len(observable.trajectories) == sim_params.num_traj, (
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
+        assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(result.trajectories[i]) == sim_params.num_traj, (
             "Trajectories was not initialized for AnalogSimParams 2."
         )
-        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
+        assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
 
 
 def test_analog_simulation_get_state() -> None:
@@ -408,14 +410,14 @@ def test_strong_simulation() -> None:
         0.862819175965271,
         0.6731226287649416,
     ]
-    for i, observable in enumerate(result.observables):
-        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
-        assert len(observable.trajectories) == sim_params.num_traj, (
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
+        assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(result.trajectories[i]) == sim_params.num_traj, (
             "Trajectories was not initialized for AnalogSimParams 2."
         )
-        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
+        assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
 
 
 def test_strong_simulation_no_noise() -> None:
@@ -476,14 +478,14 @@ def test_strong_simulation_parallel_off() -> None:
         0.862819175965271,
         0.6731226287649416,
     ]
-    for i, observable in enumerate(result.observables):
-        assert observable.results is not None, "Results was not initialized for AnalogSimParams."
-        assert observable.trajectories is not None, "Trajectories was not initialized for AnalogSimParams 1."
-        assert len(observable.trajectories) == sim_params.num_traj, (
+    for i in range(len(result.observables)):
+        assert result.expectation_values[i] is not None, "Results was not initialized for AnalogSimParams."
+        assert result.trajectories[i] is not None, "Trajectories was not initialized for AnalogSimParams 1."
+        assert len(result.trajectories[i]) == sim_params.num_traj, (
             "Trajectories was not initialized for AnalogSimParams 2."
         )
-        assert len(observable.results) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(observable.results[0]), expected_z[i], atol=1e-5)
+        assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
 
 
 def test_weak_simulation_noise() -> None:
@@ -706,15 +708,15 @@ def test_two_site_correlator_left_boundary() -> None:
         9.80920548e-01,
     ])
 
-    results_xx = result.observables[0].results
+    results_xx = result.expectation_values[0]
     assert results_xx is not None
     np.testing.assert_allclose(results_xx, expected_xx, atol=1e-3)
 
-    results_yy = result.observables[1].results
+    results_yy = result.expectation_values[1]
     assert results_yy is not None
     np.testing.assert_allclose(results_yy, expected_yy, atol=1e-3)
 
-    results_zz = result.observables[2].results
+    results_zz = result.expectation_values[2]
     assert results_zz is not None
     np.testing.assert_allclose(results_zz, expected_zz, atol=1e-3)
 
@@ -818,15 +820,15 @@ def test_two_site_correlator_center() -> None:
         9.80920548e-01,
     ])
 
-    results_xx = result.observables[0].results
+    results_xx = result.expectation_values[0]
     assert results_xx is not None
     np.testing.assert_allclose(results_xx, expected_xx, atol=1e-3)
 
-    results_yy = result.observables[1].results
+    results_yy = result.expectation_values[1]
     assert results_yy is not None
     np.testing.assert_allclose(results_yy, expected_yy, atol=1e-3)
 
-    results_zz = result.observables[2].results
+    results_zz = result.expectation_values[2]
     assert results_zz is not None
     np.testing.assert_allclose(results_zz, expected_zz, atol=1e-3)
 
@@ -929,15 +931,15 @@ def test_two_site_correlator_right_boundary() -> None:
         9.80920548e-01,
     ])
 
-    results_xx = result.observables[0].results
+    results_xx = result.expectation_values[0]
     assert results_xx is not None
     np.testing.assert_allclose(results_xx, expected_xx, atol=1e-3)
 
-    results_yy = result.observables[1].results
+    results_yy = result.expectation_values[1]
     assert results_yy is not None
     np.testing.assert_allclose(results_yy, expected_yy, atol=1e-3)
 
-    results_zz = result.observables[2].results
+    results_zz = result.expectation_values[2]
     assert results_zz is not None
     np.testing.assert_allclose(results_zz, expected_zz, atol=1e-3)
 
@@ -969,15 +971,15 @@ def test_two_site_correlator_center_circuit() -> None:
     expected_yy = np.array([-2.52988868e-02])
     expected_zz = np.array([9.80920787e-01])
 
-    results_xx = result.observables[0].results
+    results_xx = result.expectation_values[0]
     assert results_xx is not None
     np.testing.assert_allclose(results_xx, expected_xx, atol=2e-3)
 
-    results_yy = result.observables[1].results
+    results_yy = result.expectation_values[1]
     assert results_yy is not None
     np.testing.assert_allclose(results_yy, expected_yy, atol=2e-3)
 
-    results_zz = result.observables[2].results
+    results_zz = result.expectation_values[2]
     assert results_zz is not None
     np.testing.assert_allclose(results_zz, expected_zz, atol=2e-3)
 
@@ -1018,14 +1020,12 @@ def test_transmon_simulation() -> None:
     )
     result = Simulator(show_progress=False).run(state, H_0, sim_params)
 
-    res0 = result.observables[0].results
+    res0 = result.expectation_values[0]
     assert res0 is not None, "Expected results to be set by Simulator.run"
     # Initialize leakage as a numpy array of ones:
     leakage = np.ones_like(res0)
 
-    for meas in result.observables:
-        # Narrow results from Optional[...] to actual array
-        res = meas.results
+    for meas, res in zip(result.observables, result.expectation_values, strict=True):
         assert hasattr(meas.gate, "bitstring")
         assert res is not None, f"No results for bitstring {meas.gate.bitstring!r}"
 
@@ -1075,7 +1075,7 @@ def test_scheduled_jump_single_site() -> None:
 
     result = Simulator(show_progress=False).run(state, hamiltonian, sim_params, noise_model=noise_model)
 
-    results = result.observables[0].results
+    results = result.expectation_values[0]
     assert results is not None
 
     np.testing.assert_allclose(results[:5], 1.0, atol=1e-10)
@@ -1110,7 +1110,7 @@ def test_scheduled_jump_two_site() -> None:
 
     result = Simulator(show_progress=False).run(state, hamiltonian, sim_params, noise_model=noise_model)
 
-    results = result.observables[0].results
+    results = result.expectation_values[0]
     assert results is not None
 
     # Reset state for second run to verify dynamics again with a different observable
@@ -1124,7 +1124,7 @@ def test_scheduled_jump_two_site() -> None:
     )
     result = Simulator(show_progress=False).run(state, hamiltonian, sim_params, noise_model=noise_model)
 
-    results = result.observables[0].results
+    results = result.expectation_values[0]
     assert results is not None
     # t=0.0 (0), 0.1 (1), 0.2 (2) -> flip.
     np.testing.assert_allclose(results[:2], 1.0, atol=1e-10)
@@ -1145,7 +1145,7 @@ def test_run_vector_preset_without_materialized_mps() -> None:
         dt=0.1,
     )
     result = Simulator(show_progress=False).run(state, hamiltonian, params, None)
-    assert result.observables[0].results is not None
+    assert result.expectation_values[0] is not None
     assert state.representation == "vector"
     with pytest.raises(RuntimeError, match="MPS is not available"):
         _ = state.mps
@@ -1165,7 +1165,7 @@ def test_run_density_matrix_preset_without_materialized_mps() -> None:
         dt=0.1,
     )
     result = Simulator(show_progress=False).run(state, hamiltonian, params, None)
-    assert result.observables[0].results is not None
+    assert result.expectation_values[0] is not None
     assert state.representation == "density_matrix"
     with pytest.raises(RuntimeError, match="MPS is not available"):
         _ = state.mps

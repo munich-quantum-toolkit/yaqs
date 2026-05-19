@@ -60,7 +60,7 @@ def test_mcwf_amplitude_damping() -> None:
     result = Simulator(parallel=False, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    sigma_z_sim = result.observables[0].results
+    sigma_z_sim = result.expectation_values[0]
     assert sigma_z_sim is not None
 
     # Analytical solution for <sigma_z>:
@@ -100,7 +100,7 @@ def test_mcwf_unitary_rabi() -> None:
     result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
 
     times = sim_params.times
-    sigma_z_sim = result.observables[0].results
+    sigma_z_sim = result.expectation_values[0]
     assert sigma_z_sim is not None
     sigma_z_exact = np.cos(2 * times)
 
@@ -145,8 +145,8 @@ def test_mcwf_dephasing() -> None:
     result = Simulator(parallel=True, show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     times = sim_params.times
-    x0_sim = result.observables[0].results
-    x1_sim = result.observables[1].results
+    x0_sim = result.expectation_values[0]
+    x1_sim = result.expectation_values[1]
     assert x0_sim is not None
     assert x1_sim is not None
 
