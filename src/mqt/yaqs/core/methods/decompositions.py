@@ -123,9 +123,13 @@ def split_two_site(
         Left tensor ``(d_left, D0, keep)`` and right tensor ``(d_right, keep, D2)``.
 
     Raises:
-        ValueError: If ``physical_dimensions`` do not match the first axis of ``merged``,
+        ValueError: If ``physical_dimensions`` does not have exactly two
+            elements, if it does not match the first axis of ``merged``,
             ``trunc_mode`` is not recognized, or ``svd_distribution`` is invalid.
     """
+    if len(physical_dimensions) != 2:
+        msg = f"physical_dimensions must have exactly 2 elements (d_left, d_right); got {len(physical_dimensions)}."
+        raise ValueError(msg)
     d_left = physical_dimensions[0]
     d_right = physical_dimensions[1]
     if merged.shape[0] != d_left * d_right:
