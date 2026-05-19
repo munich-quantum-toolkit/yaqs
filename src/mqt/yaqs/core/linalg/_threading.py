@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import contextlib
 
+try:
+    from threadpoolctl import threadpool_limits
+except ImportError:
+    threadpool_limits = None  # ty: ignore[invalid-assignment]
+
 
 def threadpool_limits_one() -> contextlib.AbstractContextManager[None]:
     """Return a context manager that caps BLAS/OpenMP pools to one thread."""
-    try:
-        from threadpoolctl import threadpool_limits  # noqa: PLC0415
-    except ImportError:
+    if threadpool_limits is None:
         return contextlib.nullcontext()
     return threadpool_limits(limits=1)
