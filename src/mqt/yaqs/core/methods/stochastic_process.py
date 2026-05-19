@@ -123,7 +123,6 @@ def create_probability_distribution(
                         merged = merge_two_site(tensor_left, tensor_right)
                         # apply the 2-site jump operator
                         merged = oe.contract("ab, bcd->acd", jump_op, merged)
-                        dp_m = dt * gamma * jumped_state.norm(site)
                         # split the tensor (always contract singular values right for probabilities)
                         tensor_left_new, tensor_right_new = split_two_site(
                             merged,
@@ -135,8 +134,8 @@ def create_probability_distribution(
                             min_bond_dim=sim_params.min_bond_dim,
                         )
                         jumped_state.tensors[site], jumped_state.tensors[site + 1] = tensor_left_new, tensor_right_new
-                        # compute the norm at `site`
-
+                        # compute the norm at `site` from the updated post-jump tensors
+                        dp_m = dt * gamma * jumped_state.norm(site)
                         dp_m_list.append(float(dp_m.real))
 
     # Normalize the probabilities
