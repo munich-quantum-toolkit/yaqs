@@ -43,7 +43,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _get_parallel_context, worker_init  # noqa: PLC2701
+from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init  # noqa: PLC2701
 from tests.conftest import YAQS_TEST_SEED
 
 
@@ -156,12 +156,44 @@ def test_available_cpus_with_slurm(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setenv("SLURM_CPUS_ON_NODE", "8")
     monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
 
     # Reload the module only if available_cpus caches anything at import;
     # here it's not necessary, but harmless:
     importlib.reload(simulator)
 
     assert simulator.available_cpus() == 8
+
+
+def test_available_cpus_yaqs_max_workers_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ``YAQS_MAX_WORKERS`` env var takes priority over xdist/SLURM/affinity."""
+    monkeypatch.setenv("YAQS_MAX_WORKERS", "4")
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "1")
+    assert simulator.available_cpus() == 4
+
+
+def test_available_cpus_yaqs_max_workers_malformed_falls_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A malformed ``YAQS_MAX_WORKERS`` is ignored; later detection logic runs."""
+    monkeypatch.setenv("YAQS_MAX_WORKERS", "not-a-number")
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    assert simulator.available_cpus() == 1
+
+
+def test_available_cpus_xdist_worker_returns_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Running inside an xdist worker pins ``available_cpus`` to 1."""
+    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    assert simulator.available_cpus() == 1
+
+
+def test_available_cpus_slurm_malformed_falls_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Malformed SLURM_* values are ignored; the function falls back to affinity/cpu_count."""
+    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "not-a-number")
+    monkeypatch.setenv("SLURM_CPUS_ON_NODE", "0")
+    assert simulator.available_cpus() >= 1
 
 
 def test_threading_config() -> None:
@@ -1236,3 +1268,120 @@ def test_no_output_error() -> None:
     )
     with pytest.raises(ValueError, match=r"No output specified: either observables or get_state must be set."):
         sim.run(state, circ, sim_params_strong)
+
+
+def test_simulator_rejects_initial_state_list_with_non_state_elements() -> None:
+    """``initial_state=[...]`` must contain only :class:`State` instances."""
+    H = Hamiltonian.ising(2, J=1.0, g=0.5)
+    params = AnalogSimParams(observables=[Observable(Z(), 0)], elapsed_time=0.1, dt=0.1)
+    sim = Simulator(show_progress=False)
+    bad_list = cast("Any", [State(2, initial="zeros"), MPS(2, state="zeros")])
+    with pytest.raises(TypeError, match="initial_state list must contain only State objects"):
+        sim.run(bad_list, H, params, None)
+
+
+def test_circuit_simulation_rejects_state_list() -> None:
+    """Circuit simulation does not support ``list[State]`` initial states."""
+    circuit = create_ising_circuit(L=2, J=1.0, g=0.5, dt=0.1, timesteps=1)
+    params = StrongSimParams(observables=[Observable(Z(), 0)])
+    states = [State(2, initial="zeros"), State(2, initial="ones")]
+    with pytest.raises(TypeError, match="Circuit simulation requires a single State initial_state"):
+        Simulator(show_progress=False).run(states, circuit, params, None)
+
+
+def test_circuit_simulation_rejects_non_circuit_operator() -> None:
+    """Circuit simulation requires a :class:`QuantumCircuit`."""
+    state = State(2, initial="zeros")
+    params = StrongSimParams(observables=[Observable(Z(), 0)])
+    bad_operator = cast("Any", Hamiltonian.ising(2, J=1.0, g=0.5))
+    with pytest.raises(TypeError, match="Circuit simulation requires a QuantumCircuit operator"):
+        Simulator(show_progress=False).run(state, bad_operator, params, None)
+
+
+def test_circuit_simulation_rejects_non_state_initial_state() -> None:
+    """Circuit simulation requires a :class:`State` initial state."""
+    circuit = create_ising_circuit(L=2, J=1.0, g=0.5, dt=0.1, timesteps=1)
+    params = StrongSimParams(observables=[Observable(Z(), 0)])
+    bad_state = cast("Any", MPS(2, state="zeros"))
+    with pytest.raises(TypeError, match="Circuit simulation requires a State initial_state"):
+        Simulator(show_progress=False).run(bad_state, circuit, params, None)
+
+
+def test_get_parallel_context_explicit_fork_and_spawn() -> None:
+    """Explicit ``mp_context`` overrides platform auto-detection."""
+    fork_ctx = _get_parallel_context("fork")
+    assert fork_ctx.get_start_method() == "fork"
+    spawn_ctx = _get_parallel_context("spawn")
+    assert spawn_ctx.get_start_method() == "spawn"
+
+
+def test_expect_shot_counts_rejects_non_dict() -> None:
+    """``_expect_shot_counts`` raises ``TypeError`` for non-dict payloads."""
+    with pytest.raises(TypeError, match="Expected measurement result to be dict"):
+        _expect_shot_counts(np.zeros(2, dtype=np.float64))
+
+
+def test_weak_simulation_parallel_returns_counts() -> None:
+    """Parallel weak simulation aggregates per-shot counts via the worker pool."""
+    num_qubits = 2
+    state = State(num_qubits, initial="zeros")
+    circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=1)
+    circuit.measure_all()
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [i], "strength": 1e-3} for i in range(num_qubits)])
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4, random_seed=YAQS_TEST_SEED)
+    result = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, circuit, sim_params, noise_model)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_strong_simulation_parallel_records_final_mps() -> None:
+    """Noiseless parallel strong simulation with ``get_state=True`` returns the output MPS."""
+    num_qubits = 2
+    state = State(num_qubits, initial="zeros")
+    circuit = create_ising_circuit(L=num_qubits, J=1.0, g=0.5, dt=0.1, timesteps=2)
+    circuit.measure_all()
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        num_traj=1,
+        max_bond_dim=4,
+        get_state=True,
+    )
+    result = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, circuit, sim_params, None)
+    assert result.output_state is not None
+    assert isinstance(result.output_state, State)
+
+
+def test_analog_simulation_vector_serial_get_state() -> None:
+    """Deterministic vector MCWF runs return the final state vector through the serial path."""
+    n_sites = 1
+    state = State(n_sites, initial="zeros", representation="vector")
+    hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=-1.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        get_state=True,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, None)
+    assert result.output_state is not None
+    assert result.output_state.representation == "vector"
+
+
+def test_analog_simulation_parallel_observables_no_state() -> None:
+    """Noisy parallel analog runs aggregate trajectory observables without ``get_state``."""
+    length = 2
+    state = State(length, initial="zeros")
+    hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
+    noise = NoiseModel([{"name": "pauli_z", "sites": [i], "strength": 0.05} for i in range(length)])
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=2,
+        max_bond_dim=4,
+        random_seed=YAQS_TEST_SEED,
+    )
+    result = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, hamiltonian, sim_params, noise)
+    assert result.expectation_values[0] is not None
+    assert result.runtime_cost is not None

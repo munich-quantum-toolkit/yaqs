@@ -14,7 +14,7 @@ import pytest
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import Simulator
-from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, lindblad, preprocess_lindblad
+from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, preprocess_lindblad
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -176,8 +176,8 @@ def test_lindblad_dephasing_both_qubits() -> None:
     assert np.allclose(x1_sim, x_exact, atol=1e-4), f"Qubit 1 failed. Max diff: {np.max(np.abs(x1_sim - x_exact))}"
 
 
-def test_lindblad_zero_strength_noise() -> None:
-    """Test Lindblad with zero strength noise process."""
+def test_lindblad_zero_strength_noise_runs_via_simulator() -> None:
+    """Zero-strength noise processes are pruned; the Simulator path still produces results."""
     n_sites = 2
     psi = MPS(n_sites)
     h = MPO.ising(n_sites, J=1.0, g=1.0)
@@ -194,13 +194,10 @@ def test_lindblad_zero_strength_noise() -> None:
     assert ctx.step_propagator is not None
     assert ctx.step_propagator.shape == (dim * dim, dim * dim)
 
-    lindblad((0, psi, noise, sim_params, h))
-
-
-def test_lindblad_diagnostic_observable_string_removed() -> None:
-    """MPS bond diagnostics are no longer configurable as Observables."""
-    with pytest.raises(ValueError, match="no longer an Observable"):
-        Observable("runtime_cost", sites=0)
+    state = State(n_sites, initial="zeros", representation="density_matrix")
+    hamiltonian = Hamiltonian.from_mpo(h)
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
+    assert result.expectation_values[0] is not None
 
 
 def test_lindblad_result_has_no_auto_diagnostics() -> None:
@@ -290,7 +287,7 @@ def test_noiseless_mps_matches_density_matrix() -> None:
 
 
 def test_lindblad_propagator_records_all_timepoints() -> None:
-    """Propagator path records observables at every entry in sim_params.times."""
+    """Propagator path records observables at every entry in ``sim_params.times``."""
     n_sites = 1
     psi = MPS(n_sites, state="ones")
     h = MPO()
@@ -310,14 +307,18 @@ def test_lindblad_propagator_records_all_timepoints() -> None:
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert ctx.step_propagator is not None
 
-    res, _, _ = lindblad((0, psi, noise, sim_params, h))
-    assert res.shape == (1, len(sim_params.times))
-    assert np.all(np.isfinite(res))
-    assert not np.allclose(res[0, 0], res[0, -1])
+    state = State(n_sites, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.from_mpo(h)
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert expectation.shape == (len(sim_params.times),)
+    assert np.all(np.isfinite(expectation))
+    assert not np.isclose(expectation[0], expectation[-1])
 
 
 def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When vec(rho) is too large to store exp(L dt), evolution uses RK45 ODE integration."""
+    """When ``vec(rho)`` is too large for ``exp(L dt)``, the Simulator falls back to RK45."""
     monkeypatch.setattr(lindblad_mod, "MAX_LIOUVILLIAN_VECTOR_DIM", 4)
     n_sites = 2
     psi = MPS(n_sites, state="ones")
@@ -340,6 +341,10 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
     assert ctx.step_propagator is None
 
-    res, _, _ = lindblad((0, psi, noise, sim_params, h))
-    assert res.shape == (1, len(sim_params.times))
-    assert np.all(np.isfinite(res))
+    state = State(n_sites, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.from_mpo(h)
+    result = Simulator(parallel=False, show_progress=False).run(state, hamiltonian, sim_params, noise)
+    expectation = result.expectation_values[0]
+    assert expectation is not None
+    assert expectation.shape == (len(sim_params.times),)
+    assert np.all(np.isfinite(expectation))

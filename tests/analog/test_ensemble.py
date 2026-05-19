@@ -247,11 +247,11 @@ def test_list_mps_unitary_ensemble_parallel_worker_path() -> None:
     assert result.multi_time_results is not None
 
 
-def test_unitary_ensemble_member_worker_uses_bug_evolution_mode() -> None:
-    """BUG tensor evolution should exercise the non-TDVP branch in ``_unitary_step``."""
+def test_unitary_ensemble_uses_bug_evolution_mode_via_simulator() -> None:
+    """BUG tensor evolution should be exercised by the high-level Simulator path."""
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
-    mps = MPS(length, state="zeros")
+    states = [State(length, initial="zeros"), State(length, initial="ones")]
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         elapsed_time=0.05,
@@ -260,16 +260,17 @@ def test_unitary_ensemble_member_worker_uses_bug_evolution_mode() -> None:
         max_bond_dim=64,
         threshold=1e-10,
     )
-    obs_result, _, multi_time = ensemble_member_worker((0, mps, sim_params, hamiltonian.mpo))
-    assert obs_result.shape == (1, len(sim_params.times))
-    assert multi_time is None
+    result = Simulator(parallel=False, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
+    assert result.expectation_values[0] is not None
+    assert result.expectation_values[0].shape == (len(sim_params.times),)
+    assert result.multi_time_results is None
 
 
-def test_unitary_ensemble_member_worker_final_timestep_when_not_sampling() -> None:
-    """With ``sample_timesteps=False`` and multiple time slices, record correlators on the last step."""
+def test_unitary_ensemble_final_timestep_when_not_sampling_via_simulator() -> None:
+    """``sample_timesteps=False`` with multi-time pairs records correlators on the last step."""
     length = 2
     hamiltonian = Hamiltonian.ising(length, J=0.2, g=0.1)
-    mps = MPS(length, state="zeros")
+    states = [State(length, initial="zeros"), State(length, initial="ones")]
     z0 = Observable(Z(), 0)
     z1 = Observable(Z(), 1)
     sim_params = AnalogSimParams(
@@ -282,10 +283,11 @@ def test_unitary_ensemble_member_worker_final_timestep_when_not_sampling() -> No
         threshold=1e-10,
     )
     assert len(sim_params.times) >= 3
-    obs_result, _, multi_time = ensemble_member_worker((0, mps, sim_params, hamiltonian.mpo))
-    assert obs_result.shape == (1, 1)
-    assert multi_time is not None
-    assert multi_time.shape == (2, 1)
+    result = Simulator(parallel=False, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
+    assert result.expectation_values[0] is not None
+    assert result.expectation_values[0].shape == (1,)
+    assert result.multi_time_results is not None
+    assert result.multi_time_results.shape == (2, 1)
 
 
 def test_list_initial_states_with_noise_raises() -> None:

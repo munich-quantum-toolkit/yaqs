@@ -44,7 +44,6 @@ from mqt.yaqs.digital.digital_tjm import (
     apply_window,
     construct_generator_mpo,
     create_local_noise_model,
-    digital_tjm,
     process_layer,
 )
 
@@ -352,40 +351,35 @@ def test_create_local_noise_model() -> None:
         assert found, f"Expected process {expected_process} not found in local model"
 
 
-def test_digital_tjm_strong() -> None:
-    """Test the digital_tjm function for strong simulation.
-
-    This test creates a random MPS and a circuit with a CX gate, sets up strong simulation parameters,
-    and runs digital_tjm. The test verifies that the simulation completes without errors.
-    """
+def test_digital_tjm_strong_smoke_via_simulator() -> None:
+    """Strong simulation via the public ``Simulator`` API completes and yields an observable."""
     length = 4
-    mps0 = MPS(length, state="random")
-    mps0.normalize()
+    state = State(length, initial="random")
 
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
 
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
-    args = 0, mps0, None, sim_params, qc
-    digital_tjm(args)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    assert result.expectation_values[0] is not None
+    assert result.expectation_values[0].shape == (1,)
 
 
-def test_digital_tjm_weak() -> None:
-    """Test the digital_tjm function for weak simulation.
-
-    This test creates a random MPS and a circuit with a CX gate, sets up weak simulation parameters,
-    and runs digital_tjm. The test verifies that the simulation completes and measurements are obtained.
-    """
+def test_digital_tjm_weak_smoke_via_simulator() -> None:
+    """Weak simulation via the public ``Simulator`` API returns shot counts."""
     length = 4
-    mps0 = MPS(length, state="random")
-    mps0.normalize()
+    state = State(length, initial="random")
 
     qc = QuantumCircuit(length)
     qc.cx(1, 3)
+    qc.measure_all()
 
     sim_params = WeakSimParams(shots=16)
-    args = 0, mps0, None, sim_params, qc
-    digital_tjm(args)
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
 
 
 def test_noisy_digital_tjm_matches_reference() -> None:
