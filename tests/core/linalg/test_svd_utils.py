@@ -9,28 +9,20 @@
 
 from __future__ import annotations
 
-import numpy as np
 from typing import Any, cast
 
+import numpy as np
 import pytest
 
 from mqt.yaqs.core import linalg
 
 
-def test_truncate_discarded_weight_gte() -> None:
-    """``discarded_cmp='gte'`` accumulates from smallest until cumulative >= threshold."""
+def test_truncate_discarded_weight() -> None:
+    """Discarded-weight mode accumulates from smallest until cumulative >= threshold."""
     s = np.array([10.0, 3.0, 1.0, 0.5], dtype=np.float64)
     # Discarded from smallest: 0.5^2 + 1^2 = 1.25 < 10 -> need more; + 3^2 = 10.25 >= 10
-    keep = linalg.truncate(s, mode="discarded_weight", threshold=10.0, discarded_cmp="gte", min_keep=1)
+    keep = linalg.truncate(s, mode="discarded_weight", threshold=10.0, min_keep=1)
     assert keep == 2  # keep 10 and 3
-
-
-def test_truncate_discarded_weight_gt_tdvp_style() -> None:
-    """``discarded_cmp='gt'`` matches TDVP strict inequality on the next partial sum."""
-    s = np.array([5.0, 4.0, 3.0], dtype=np.float64)
-    # reversed: 3^2=9, next 9+16=25 > 10 -> keep max(3-1, 1)=2
-    keep = linalg.truncate(s, mode="discarded_weight", threshold=10.0, discarded_cmp="gt", min_keep=1)
-    assert keep == 2
 
 
 def test_truncate_relative_and_zero_smax() -> None:
@@ -56,4 +48,4 @@ def test_truncate_unknown_mode_raises() -> None:
     """Invalid ``mode`` should raise ``ValueError``."""
     s = np.ones(3, dtype=np.float64)
     with pytest.raises(ValueError, match="Unknown truncation mode"):
-        linalg.truncate(s, mode=cast(Any, "invalid"), threshold=1.0)
+        linalg.truncate(s, mode=cast("Any", "invalid"), threshold=1.0)

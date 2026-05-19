@@ -9,13 +9,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
-from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 TruncMode = Literal["discarded_weight", "relative", "hard_cutoff"]
-DiscardedCmp = Literal["gt", "gte"]
 
 
 def truncate(
@@ -25,15 +26,15 @@ def truncate(
     threshold: float,
     max_bond_dim: int | None = None,
     min_keep: int = 1,
-    discarded_cmp: DiscardedCmp = "gte",
 ) -> int:
-    """Return how many leading singular values to keep after truncation.
+    r"""Return how many leading singular values to keep after truncation.
 
     Args:
         s_vec: Singular values in non-increasing order (as returned by SVD).
         mode:
             - ``discarded_weight``: accumulate squared singular values from the
-              smallest upward until the comparison with ``threshold`` fires.
+              smallest upward and stop once the cumulative discarded weight is
+              ``>= threshold``.
             - ``relative``: keep those with ``s / s[0] >= threshold`` (unless
               ``s[0] == 0``, then keep is ``0`` before caps).
             - ``hard_cutoff``: count singular values strictly greater than
@@ -41,10 +42,6 @@ def truncate(
         threshold: Mode-dependent cutoff (see above).
         max_bond_dim: Optional hard cap on the returned keep count.
         min_keep: Minimum number of singular values to retain (applied last).
-        discarded_cmp: For ``discarded_weight`` only: ``\"gt\"`` matches TDVP
-            (strict inequality on the *next* partial sum), ``\"gte\"`` matches
-            two-site / truncated-right SVD (inequality after including the
-            current singular value).
 
     Returns:
         Integer ``keep`` in ``[min_keep, len(s_vec)]`` (also capped by
@@ -61,22 +58,15 @@ def truncate(
         keep = int(np.sum(s_vec > threshold))
     elif mode == "relative":
         smax = float(s_vec[0])
-        keep = 0 if smax == 0.0 else int(np.sum((s_vec / smax) >= threshold))
+        keep = 0 if smax <= 0.0 else int(np.sum((s_vec / smax) >= threshold))
     elif mode == "discarded_weight":
         keep = n
         discard = 0.0
         for idx, s in enumerate(reversed(s_vec)):
-            next_discard = discard + float(s) ** 2
-            if discarded_cmp == "gt":
-                if next_discard > threshold:
-                    keep = max(n - idx, min_keep)
-                    break
-                discard = next_discard
-            else:
-                discard = next_discard
-                if discard >= threshold:
-                    keep = max(n - idx, min_keep)
-                    break
+            discard += float(s) ** 2
+            if discard >= threshold:
+                keep = max(n - idx, min_keep)
+                break
     else:
         msg = f"Unknown truncation mode: {mode!r}"
         raise ValueError(msg)

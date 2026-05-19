@@ -107,7 +107,6 @@ def split_mps_tensor(
             threshold=sim_params.threshold,
             max_bond_dim=None if dynamic else sim_params.max_bond_dim,
             min_keep=min(len(s_vec), sim_params.min_bond_dim),
-            discarded_cmp="gt",
         )
     elif sim_params.trunc_mode == "relative":
         keep = linalg.truncate(

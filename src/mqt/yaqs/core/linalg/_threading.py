@@ -5,7 +5,13 @@
 #
 # Licensed under the MIT License
 
-"""Shared BLAS thread-pool limiter for dense linear algebra."""
+"""BLAS thread-pool limiter for dense matrix exponentials.
+
+Used by :mod:`mqt.yaqs.core.linalg.expm` to avoid intermittent segmentation
+faults observed when multi-threaded OpenBLAS ``expm`` runs concurrently across
+many processes (pytest-xdist, nested parallelism). Other linalg helpers in this
+package do not need the cap.
+"""
 
 from __future__ import annotations
 

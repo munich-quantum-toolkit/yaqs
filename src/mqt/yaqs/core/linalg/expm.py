@@ -9,11 +9,16 @@
 
 Dense matrix exponentials call multi-threaded LAPACK/OpenBLAS; when many
 processes run concurrently (pytest-xdist, nested parallelism), some platform
-wheels have shown intermittent segmentation faults. Callers should use
-:func:`expm` here instead of :func:`scipy.linalg.expm` directly.
+wheels have shown intermittent segmentation faults specifically in
+``scipy.linalg.expm``. Callers should use :func:`expm` here instead of
+:func:`scipy.linalg.expm` directly so the BLAS thread cap is applied.
 
 :func:`expm_hermitian` is a YAQS-specific shortcut (no SciPy analogue) that
 computes ``exp(-1j * dt * H)`` for Hermitian ``H`` via an eigensolve.
+
+Other linalg helpers in this package (``svd``, ``eigh_tridiagonal``) keep the
+default multi-threaded BLAS for performance; only the matrix-exponential calls
+have shown the crash signature that motivated the cap.
 """
 
 from __future__ import annotations

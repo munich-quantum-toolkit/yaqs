@@ -9,11 +9,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import pytest
 import scipy.linalg
 
 from mqt.yaqs.core import linalg
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_eigh_tridiagonal_matches_scipy_stemr() -> None:
@@ -55,7 +59,8 @@ def test_eigh_tridiagonal_stemr_fallback(monkeypatch: pytest.MonkeyPatch) -> Non
     ) -> tuple[np.ndarray, np.ndarray]:
         calls.append(lapack_driver)
         if lapack_driver == "stemr":
-            raise scipy.linalg.LinAlgError("forced")
+            msg = "forced"
+            raise scipy.linalg.LinAlgError(msg)
         return real_eigh(d, e, lapack_driver=lapack_driver, check_finite=check_finite)
 
     monkeypatch.setattr(scipy.linalg, "eigh_tridiagonal", fake_eigh)

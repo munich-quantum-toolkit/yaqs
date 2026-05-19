@@ -5,19 +5,47 @@
 #
 # Licensed under the MIT License
 
-"""SciPy-style SVD with gesdd-to-gesvd fallback and BLAS thread cap."""
+"""SciPy-style SVD with gesdd-to-gesvd fallback.
+
+Uses multi-threaded LAPACK/OpenBLAS by default; the BLAS pool is *not* capped
+here. The wrapper retries with the more robust ``gesvd`` driver (and
+``check_finite=True``) when ``gesdd`` fails to converge on ill-conditioned
+inputs.
+"""
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal, overload
 
-import numpy as np
 import scipy.linalg
-from numpy.typing import NDArray
 
-from ._threading import threadpool_limits_one
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
 
 LapackDriver = Literal["gesdd", "gesvd"]
+
+
+@overload
+def svd(
+    a: NDArray[np.complex128],
+    *,
+    full_matrices: bool = ...,
+    compute_uv: Literal[True] = ...,
+    lapack_driver: LapackDriver = ...,
+    check_finite: bool = ...,
+) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]: ...
+
+
+@overload
+def svd(
+    a: NDArray[np.complex128],
+    *,
+    full_matrices: bool = ...,
+    compute_uv: Literal[False],
+    lapack_driver: LapackDriver = ...,
+    check_finite: bool = ...,
+) -> NDArray[np.float64]: ...
 
 
 def svd(
@@ -27,39 +55,38 @@ def svd(
     compute_uv: bool = True,
     lapack_driver: LapackDriver = "gesdd",
     check_finite: bool = False,
-) -> Any:
-    """Singular value decomposition with BLAS limited to one thread.
+) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]] | NDArray[np.float64]:
+    """Singular value decomposition with automatic driver fallback.
 
-    When ``lapack_driver`` is ``\"gesdd\"`` (default), retries with ``\"gesvd\"``
-    and ``check_finite=True`` on failure, matching the former ``robust_svd`` path.
+    When ``lapack_driver`` is ``"gesdd"`` (default), retries with ``"gesvd"``
+    and ``check_finite=True`` on failure for ill-conditioned inputs.
 
     Mirrors :func:`scipy.linalg.svd` for the supported keyword arguments.
 
     Returns:
         ``(U, s, Vh)`` when ``compute_uv`` is True, else the 1D singular values ``s``.
     """
-    with threadpool_limits_one():
-        if lapack_driver != "gesdd":
-            return scipy.linalg.svd(
-                a,
-                full_matrices=full_matrices,
-                compute_uv=compute_uv,
-                lapack_driver=lapack_driver,
-                check_finite=check_finite,
-            )
-        try:
-            return scipy.linalg.svd(
-                a,
-                full_matrices=full_matrices,
-                compute_uv=compute_uv,
-                lapack_driver="gesdd",
-                check_finite=check_finite,
-            )
-        except (scipy.linalg.LinAlgError, ValueError, FloatingPointError):
-            return scipy.linalg.svd(
-                a,
-                full_matrices=full_matrices,
-                compute_uv=compute_uv,
-                lapack_driver="gesvd",
-                check_finite=True,
-            )
+    if lapack_driver != "gesdd":
+        return scipy.linalg.svd(
+            a,
+            full_matrices=full_matrices,
+            compute_uv=compute_uv,
+            lapack_driver=lapack_driver,
+            check_finite=check_finite,
+        )
+    try:
+        return scipy.linalg.svd(
+            a,
+            full_matrices=full_matrices,
+            compute_uv=compute_uv,
+            lapack_driver="gesdd",
+            check_finite=check_finite,
+        )
+    except (scipy.linalg.LinAlgError, ValueError, FloatingPointError):
+        return scipy.linalg.svd(
+            a,
+            full_matrices=full_matrices,
+            compute_uv=compute_uv,
+            lapack_driver="gesvd",
+            check_finite=True,
+        )

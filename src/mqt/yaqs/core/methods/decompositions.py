@@ -73,7 +73,7 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
 
 def right_svd(
     mps_tensor: NDArray[np.complex128],
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
+) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
     """Right SVD.
 
     Performs the singular value decomposition of an MPS tensor.
@@ -84,7 +84,7 @@ def right_svd(
     Returns:
         NDArray[np.complex128]: The U tensor with the left virtual leg and the physical
             leg (phys,left,new).
-        NDArray[np.complex128]: The S vector with the singular values.
+        NDArray[np.float64]: The S vector with the singular values.
         NDArray[np.complex128]: The V matrix with the right virtual leg (new,right).
 
     """
@@ -101,7 +101,7 @@ def truncated_right_svd(
     mps_tensor: NDArray[np.complex128],
     threshold: float,
     max_bond_dim: int | None,
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
+) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
     """Truncated right SVD.
 
     Performs the truncated singular value decomposition of an MPS tensor.
@@ -124,7 +124,6 @@ def truncated_right_svd(
         threshold=threshold,
         max_bond_dim=max_bond_dim,
         min_keep=1,
-        discarded_cmp="gte",
     )
     u_tensor = u_tensor[:, :, :keep]
     s_vec = s_vec[:keep]
@@ -171,7 +170,6 @@ def two_site_svd(
         threshold=threshold,
         max_bond_dim=max_bond_dim,
         min_keep=2,
-        discarded_cmp="gte",
     )
 
     # 5) build the truncated A' of shape (phys_i, L, keep)

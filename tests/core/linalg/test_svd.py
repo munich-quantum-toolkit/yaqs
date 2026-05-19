@@ -9,11 +9,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import pytest
 import scipy.linalg
 
 from mqt.yaqs.core import linalg
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_svd_matches_scipy_reduced() -> None:
@@ -64,7 +68,8 @@ def test_svd_gesdd_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | np.ndarray:
         calls.append((lapack_driver, check_finite))
         if lapack_driver == "gesdd":
-            raise scipy.linalg.LinAlgError("forced failure")
+            msg = "forced failure"
+            raise scipy.linalg.LinAlgError(msg)
         return real_svd(
             a_mat,
             full_matrices=full_matrices,
