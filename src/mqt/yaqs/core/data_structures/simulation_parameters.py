@@ -63,22 +63,16 @@ class Observable:
     trajectories are stored on :class:`~mqt.yaqs.core.data_structures.result.Result`.
 
     Attributes:
-    ----------
-    gate : BaseGate
-        The gate that acts as the observable.
-    sites : int | list[int]
-        The site or site indices on which this observable is measured.
+        gate: The gate that acts as the observable.
+        sites: The site or site indices on which this observable is measured.
     """
 
     def __init__(self, gate: BaseGate | str, sites: int | list[int] | None = None) -> None:
         """Initializes an Observable instance.
 
-        Parameters
-        ----------
-        gate :
-            The gate that will act as the observable.
-        sites :
-            The qubit or site indices on which this observable is measured.
+        Args:
+            gate: The gate that will act as the observable.
+            sites: The qubit or site indices on which this observable is measured.
         """
         if isinstance(gate, str):
             if gate == "entropy":
@@ -208,25 +202,18 @@ class WeakSimParams:
     """A class to represent the parameters for a weak simulation.
 
     Attributes:
-    -----------
-    dt : int
-        A placeholder property for code compatibility.
-    num_traj : int
-        A placeholder property for code compatibility.
-    shots : int
-        The number of shots for the simulation.
-    max_bond_dim : int
-        The maximum bond dimension for the simulation.
-    min_bond_dim:
-        The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-    trunc_mode :
-        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-    threshold : float
-        The threshold value for the simulation.
-    window_size : int | None
-        The window size for the simulation.
-    get_state:
-        If True, request the final state on the returned :class:`~mqt.yaqs.Result`.
+        dt: A placeholder property for code compatibility.
+        num_traj: A placeholder property for code compatibility.
+        shots: The number of shots for the simulation.
+        max_bond_dim: The maximum bond dimension for the simulation.
+        min_bond_dim: The minimum bond dimension if possible which gives TDVP
+            better accuracy. Default is 2.
+        trunc_mode: The type of truncation performed in TDVP. Options are
+            ``"discarded_weight"`` and ``"relative"``.
+        threshold: The threshold value for the simulation.
+        window_size: The window size for the simulation.
+        get_state: If ``True``, request the final state on the returned
+            :class:`~mqt.yaqs.Result`.
     """
 
     # Properties set as placeholders for code compatibility
@@ -273,29 +260,21 @@ class StrongSimParams:
     A class to represent the parameters for a strong simulation.
 
     Attributes:
-    -----------
-    dt : int
-        A placeholder property for code compatibility.
-    observables : list[Observable]
-        A list of observables to be tracked during the simulation.
-    sorted_observables : list[Observable]
-        A list of observables sorted by site and name.
-    num_traj : int
-        The number of trajectories to simulate. Default is 1000.
-    random_seed : int | None
-        If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
-    max_bond_dim : int
-        The maximum bond dimension for the simulation. Default is 2.
-    min_bond_dim:
-        The minimum bond dimension if possible which gives TDVP better accuracy. Default is 2.
-    trunc_mode :
-        The type of truncation performed in TDVP. Options are "discarded_weight" and "relative".
-    threshold : float
-        The threshold value for the simulation. Default is 1e-6.
-    window_size : int or None
-        The size of the window for the simulation. Default is None.
-    get_state:
-        If True, request the final state on the returned :class:`~mqt.yaqs.Result`.
+        dt: A placeholder property for code compatibility.
+        observables: A list of observables to be tracked during the simulation.
+        sorted_observables: A list of observables sorted by site and name.
+        num_traj: The number of trajectories to simulate. Default is 1000.
+        random_seed: If set, seeds per-trajectory jump RNG and static noise
+            sampling for reproducible runs.
+        max_bond_dim: The maximum bond dimension for the simulation. Default is 2.
+        min_bond_dim: The minimum bond dimension if possible which gives TDVP
+            better accuracy. Default is 2.
+        trunc_mode: The type of truncation performed in TDVP. Options are
+            ``"discarded_weight"`` and ``"relative"``.
+        threshold: The threshold value for the simulation. Default is ``1e-6``.
+        window_size: The size of the window for the simulation. Default is ``None``.
+        get_state: If ``True``, request the final state on the returned
+            :class:`~mqt.yaqs.Result`.
     """
 
     # Properties set as placeholders for code compatibility

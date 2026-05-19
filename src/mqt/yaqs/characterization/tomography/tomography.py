@@ -71,10 +71,10 @@ def get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.com
 def get_choi_basis() -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]]]:
     r"""Generate the 16 basis CP maps (Choi matrices) from the 4 basis states.
 
-    A basis CP map is A_{p,m}(rho) = Tr(E_m rho) rho_p.
-    Its Choi matrix is B_{p,m} = rho_p \\otimes E_m^T,
-    because J(A) = sum_{ij} A(|i><j|) otimes |i><j| = rho_p otimes sum_{ij} Tr(E_m |i><j|) |i><j|
-    = rho_p otimes E_m^T.
+    A basis CP map is ``A_{p,m}(rho) = Tr(E_m rho) rho_p``.
+    Its Choi matrix is ``B_{p,m} = rho_p \otimes E_m^T``,
+    because ``J(A) = sum_{ij} A(|i><j|) otimes |i><j| = rho_p otimes sum_{ij} Tr(E_m |i><j|) |i><j|
+    = rho_p otimes E_m^T``.
 
     Returns:
         tuple containing:

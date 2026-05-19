@@ -1446,7 +1446,7 @@ class ZZ(BaseGate):
 
 
 class P0(BaseGate):
-    """Class representing the projector onto |0⟩⟨0|.
+    """Class representing the projector onto ``|0⟩⟨0|``.
 
     Attributes:
         name: The name of the gate ("p0").
@@ -1462,13 +1462,13 @@ class P0(BaseGate):
     name = "p0"
 
     def __init__(self) -> None:
-        """Initializes the |0⟩⟨0| projector."""
+        """Initializes the ``|0⟩⟨0|`` projector."""
         mat = np.array([[1, 0], [0, 0]], dtype=complex)
         super().__init__(mat)
 
 
 class P1(BaseGate):
-    """Class representing the projector onto |1⟩⟨1|.
+    """Class representing the projector onto ``|1⟩⟨1|``.
 
     Attributes:
         name: The name of the gate ("p1").
@@ -1484,7 +1484,7 @@ class P1(BaseGate):
     name = "p1"
 
     def __init__(self) -> None:
-        """Initializes the |1⟩⟨1| projector."""
+        """Initializes the ``|1⟩⟨1|`` projector."""
         mat = np.array([[0, 0], [0, 1]], dtype=complex)
         super().__init__(mat)
 
@@ -1606,8 +1606,8 @@ class GateLibrary:
         yy: Class for the YY interaction (non-parameterized).
         zz: Class for the ZZ interaction (non-parameterized).
 
-        p0: Class for projector |0⟩⟨0|.
-        p1: Class for projector |1⟩⟨1|.
+        p0: Class for projector ``|0⟩⟨0|``.
+        p1: Class for projector ``|1⟩⟨1|``.
         pvm: Class for projection-valued measurement onto a given bitstring.
 
         entropy:      Class representing a request for bipartite entanglement entropy across a cut.

@@ -6,12 +6,12 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ### `simulator.run` becomes `Simulator(...).run(...)`
 
-The free `mqt.yaqs.simulator.run` function has been replaced by a [`Simulator`](src/mqt/yaqs/simulator.py)
-class. `Simulator` owns the execution-side configuration (parallel vs. serial execution, worker count,
+The free `mqt.yaqs.simulator.run` function has been replaced by a `Simulator` class.
+`Simulator` owns the execution-side configuration (parallel vs. serial execution, worker count,
 progress reporting, multiprocessing context, retry policy); the physics inputs are passed to
-[`Simulator.run`](src/mqt/yaqs/simulator.py). `Simulator.run` returns a
-[`Result`](src/mqt/yaqs/core/data_structures/result.py) that holds all simulation outputs. The
-`*SimParams` object you pass in is never mutated.
+`Simulator.run`. `Simulator.run` returns a `Result` (from
+`mqt.yaqs.core.data_structures.result`) that holds all simulation outputs. The `*SimParams`
+object you pass in is never mutated.
 
 **Before:**
 
@@ -37,10 +37,10 @@ deleted.
 ### `digital.equivalence_checker.run` becomes `EquivalenceChecker(...).check(...)`
 
 The free `mqt.yaqs.digital.equivalence_checker.run` function has been replaced by
-[`EquivalenceChecker`](src/mqt/yaqs/equivalence_checker.py). `EquivalenceChecker` owns the
+`EquivalenceChecker` (now exposed at `mqt.yaqs.EquivalenceChecker`). `EquivalenceChecker` owns the
 numerical thresholds (`threshold`, `fidelity`); the two circuits are passed to
-[`EquivalenceChecker.check`](src/mqt/yaqs/equivalence_checker.py). The return value is unchanged:
-a `dict` with keys `equivalent` and `elapsed_time`.
+`EquivalenceChecker.check`. The return value is unchanged: a `dict` with keys `equivalent` and
+`elapsed_time`.
 
 **Before:**
 
@@ -87,12 +87,10 @@ metadata for observable _i_.
 
 ### MPS bond diagnostics are automatic on `Result`
 
-`runtime_cost`, `max_bond`, and `total_bond` are no longer configured as
-[`Observable`](src/mqt/yaqs/core/data_structures/simulation_parameters.py) instances. For MPS-backed
-analog and strong-digital runs, [`Simulator.run`](src/mqt/yaqs/simulator.py) fills
-`result.runtime_cost`, `result.max_bond`, and `result.total_bond` (1D arrays aligned with
-`result.times` or the strong-sim layer grid). MCWF, Lindblad, and weak digital runs leave these
-fields as `None`.
+`runtime_cost`, `max_bond`, and `total_bond` are no longer configured as `Observable` instances.
+For MPS-backed analog and strong-digital runs, `Simulator.run` fills `result.runtime_cost`,
+`result.max_bond`, and `result.total_bond` (1D arrays aligned with `result.times` or the
+strong-sim layer grid). MCWF, Lindblad, and weak digital runs leave these fields as `None`.
 
 **Before:**
 
@@ -128,9 +126,9 @@ print(result.expectation_values[0])
 
 ### `simulator.run` uses `State` and `Hamiltonian`
 
-Analog and circuit entry points no longer accept raw [`MPS`](src/mqt/yaqs/core/data_structures/mps.py) /
-[`MPO`](src/mqt/yaqs/core/data_structures/mpo.py) objects. Use [`State`](src/mqt/yaqs/core/data_structures/state.py)
-and [`Hamiltonian`](src/mqt/yaqs/core/data_structures/hamiltonian.py) instead.
+Analog and circuit entry points no longer accept raw `MPS` / `MPO` objects. Use `State` (from
+`mqt.yaqs.core.data_structures.state`) and `Hamiltonian` (from
+`mqt.yaqs.core.data_structures.hamiltonian`) instead.
 
 **Before:**
 

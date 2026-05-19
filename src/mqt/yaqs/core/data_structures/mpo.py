@@ -35,8 +35,8 @@ class MPO:
     where ``phys_out``/``phys_in`` are the physical operator legs and
     ``chi_left``/``chi_right`` are the virtual (bond) dimensions.
 
-    Construction
-    -----------
+    **Construction**
+
     Use classmethod factories to build common Hamiltonians or custom operators:
 
     - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
@@ -46,19 +46,19 @@ class MPO:
     - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
     - ``identity(...)``, ``custom(...)``, ``finite_state_machine(...)``: in-place builders.
 
-    Operations
-    ----------
+    **Operations**
+
     - ``compress(...)``: SVD-based bond compression sweeps.
     - ``rotate(...)``: swap physical legs (optionally conjugating).
 
-    Conversion / checks
-    -------------------
+    **Conversion / checks**
+
     - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix.
     - ``check_if_valid_mpo()``: structural bond-dimension consistency check.
     - ``check_if_identity(...)``: heuristic identity check (qubit systems).
 
-    Notes:
-    -----
+    **Notes**
+
     Some constructors (e.g. Pauli-string builders) currently require
     ``physical_dimension == 2``.
     """

@@ -20,7 +20,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 - refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
-- changed [`simulator.run`](src/mqt/yaqs/simulator.py) to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
+- changed `simulator.run` to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
 - changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
 
 ### Removed

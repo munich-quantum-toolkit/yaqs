@@ -619,12 +619,14 @@ def run_backend_parallel(
 ) -> Iterator[tuple[int, TRes]]:
     """Execute backend calls in parallel with bounded submission and retry logic.
 
-    This function manages the parallel execution of tasks using a `ProcessPoolExecutor`.
-    refactored to prevent task flooding and memory exhaustion:
-    1.  **Worker-Global State**: Uses `_worker_init` to initialize large objects
-        once per worker, avoiding per-task pickling overhead.
-    2.  **Bounded In-Flight**: Submits tasks in a queue-like manner, keeping
-        only a limited number of futures active (2 * max_workers) at any time.
+    This function manages the parallel execution of tasks using a
+    ``ProcessPoolExecutor``, refactored to prevent task flooding and memory
+    exhaustion:
+
+    1. **Worker-Global State**: Uses ``_worker_init`` to initialize large objects
+       once per worker, avoiding per-task pickling overhead.
+    2. **Bounded In-Flight**: Submits tasks in a queue-like manner, keeping only
+       a limited number of futures active (``2 * max_workers``) at any time.
 
     Args:
         worker_fn: The worker function to execute. It must accept a single

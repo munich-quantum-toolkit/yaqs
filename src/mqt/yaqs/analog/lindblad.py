@@ -78,7 +78,7 @@ def preprocess_lindblad(
     """Pre-compute operators and optional fixed-step propagator for Lindblad evolution.
 
     Args:
-        initial_state: The initial MPS state (converted to rho = |psi><psi| when no
+        initial_state: The initial MPS state (converted to ``rho = |psi><psi|`` when no
             ``rho_initial`` is passed), or ``None`` when ``rho_initial`` is supplied.
         hamiltonian: The Hamiltonian MPO (ignored if ``h_sparse`` is set).
         noise_model: The noise model.

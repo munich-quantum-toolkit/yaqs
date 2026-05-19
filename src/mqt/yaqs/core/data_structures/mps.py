@@ -34,39 +34,10 @@ class MPS:
     The index order is (sigma, chi_l-1, chi_l).
 
     Attributes:
-    length (int): The number of sites in the MPS.
-    tensors (list[NDArray[np.complex128]]): List of rank-3 tensors representing the MPS.
-    physical_dimensions (list[int]): List of physical dimensions for each site.
-    flipped (bool): Indicates if the network has been flipped.
-
-    Methods:
-    __init__(length: int, tensors: list[NDArray[np.complex128]] | None = None,
-                physical_dimensions: list[int] | None = None, state: str = "zeros") -> None:
-        Initializes the MPS with given length, tensors, physical dimensions, and initial state.
-    pad_bond_dimension():
-        Pads bond dimension with zeros
-    get_max_bond() -> int:
-        Returns the maximum bond dimension in the MPS.
-    flip_network() -> None:
-        Flips the bond dimensions in the network to allow operations from right to left.
-    shift_orthogonality_center_right(current_orthogonality_center: int) -> None:
-        Left and right normalizes the MPS around a selected site, shifting the orthogonality center to the right.
-    shift_orthogonality_center_left(current_orthogonality_center: int) -> None:
-        Left and right normalizes the MPS around a selected site, shifting the orthogonality center to the left.
-    set_canonical_form(orthogonality_center: int) -> None:
-        Left and right normalizes the MPS around a selected site to set it in canonical form.
-    normalize(form: str = "B") -> None:
-        Normalizes the MPS in the specified form.
-    measure(observable: Observable) -> np.float64:
-        Measures the expectation value of an observable at a specified site.
-    norm(site: int | None = None) -> np.float64:
-        Computes the norm of the MPS, optionally at a specified site.
-    write_tensor_shapes() -> None:
-        Writes the shapes of the tensors in the MPS.
-    check_if_valid_mps() -> None:
-        Checks if the MPS is valid by verifying bond dimensions.
-    check_canonical_form() -> list[int]:
-        Checks the canonical form of the MPS and returns the orthogonality center(s).
+        length: The number of sites in the MPS.
+        tensors: List of rank-3 tensors representing the MPS.
+        physical_dimensions: List of physical dimensions for each site.
+        flipped: Indicates if the network has been flipped.
     """
 
     def __init__(
@@ -313,18 +284,16 @@ class MPS:
     def pad_bond_dimension(self, target_dim: int) -> None:
         """Pad MPS with extra zeros to increase bond dims.
 
-        Enlarge every internal bond up to
-            min(target_dim, 2**exp)
-        where exp = min(bond_index+1, L-1-bond_index).
+        Enlarge every internal bond up to ``min(target_dim, 2**exp)``
+        where ``exp = min(bond_index+1, L-1-bond_index)``.
         The first tensor keeps a left bond of 1, the last tensor a right bond of 1.
         After padding the state is renormalised (canonicalised).
 
         Args:
-        target_dim : int
-            The desired bond dimension for the internal bonds.
+            target_dim: The desired bond dimension for the internal bonds.
 
         Raises:
-        ValueError: target_dim must be at least current bond dim.
+            ValueError: target_dim must be at least current bond dim.
         """
         length = self.length
 
@@ -1211,12 +1180,12 @@ class MPS:
 
         Calculate the norm of the state.
 
-        Parameters:
-        site (int | None): The specific site to calculate the norm from. If None, the norm is calculated for
-                           the entire network.
+        Args:
+            site: The specific site to calculate the norm from. If ``None``, the
+                norm is calculated for the entire network.
 
         Returns:
-        np.float64: The norm of the state or the specified site.
+            The norm of the state or the specified site.
         """
         if site is not None:
             return self.scalar_product(self, site).real
@@ -1240,18 +1209,18 @@ class MPS:
         """Checks canonical form of MPS.
 
         Checks what canonical form a Matrix Product State (MPS) is in, if any.
-        This method verifies if the MPS is in left-canonical form, right-canonical form, or mixed-canonical form.
-        It returns a list indicating the canonical form status:
-        - [0] if the MPS is in left-canonical form.
-        - [self.length - 1] if the MPS is in right-canonical form.
-        - [index] if the MPS is in mixed-canonical form, where `index` is the position where the form changes.
-        - [-1] if the MPS is not in any canonical form.
+        This method verifies if the MPS is in left-canonical form, right-canonical
+        form, or mixed-canonical form. It returns a list indicating the canonical
+        form status:
 
-        Parameters:
-        epsilon (float): Tolerance for numerical comparisons. Default is 1e-12.
+        - ``[0]`` if the MPS is in left-canonical form.
+        - ``[self.length - 1]`` if the MPS is in right-canonical form.
+        - ``[index]`` if the MPS is in mixed-canonical form, where ``index`` is the
+          position where the form changes.
+        - ``[-1]`` if the MPS is not in any canonical form.
 
         Returns:
-            list[int]: A list indicating the canonical form status of the MPS.
+            A list indicating the canonical form status of the MPS.
         """
         a = copy.deepcopy(self.tensors)
         for i, tensor in enumerate(self.tensors):
@@ -1292,8 +1261,8 @@ class MPS:
         r"""Converts the MPS to a full state vector representation.
 
         Returns:
-                A one-dimensional NumPy array of length \(\prod_{\ell=1}^L d_\ell\)
-                representing the state vector.
+            A one-dimensional NumPy array of length :math:`\prod_{\ell=1}^L d_\ell`
+            representing the state vector.
         """
         # Start with the first tensor.
         # Assume each tensor has shape (d, chi_left, chi_right) with chi_left=1 for the first tensor.

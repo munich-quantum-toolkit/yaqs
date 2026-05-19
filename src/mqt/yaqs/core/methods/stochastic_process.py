@@ -59,18 +59,21 @@ def create_probability_distribution(
 ) -> list[float]:
     """Create a probability distribution for potential quantum jumps in the system.
 
-    The function sweeps from left to right over the sites of the MPS. For each site,
-    it shifts the orthogonality center to that site if necessary and then considers all
-    relevant jump operators in the noise model:
-      - For each 1-site jump operator acting on the current site, it constructs a candidate
-        post-jump state, computes the corresponding quantum jump probability (proportional to the
-        time step, jump strength, and post-jump norm at that site), and records the operator and
-        site.
-      - For each 2-site jump operator acting on the current site and its right neighbor,
-        it merges the two tensors, applies the operator, splits the result, computes the probability,
-        and records the operator and the site pair.
-    After all possible jumps are considered, the probabilities are normalized and returned along with
-    the associated jump operators and their target site(s).
+    The function sweeps from left to right over the sites of the MPS. For each
+    site, it shifts the orthogonality center to that site if necessary and then
+    considers all relevant jump operators in the noise model:
+
+    - For each 1-site jump operator acting on the current site, it constructs a
+      candidate post-jump state, computes the corresponding quantum jump
+      probability (proportional to the time step, jump strength, and post-jump
+      norm at that site), and records the operator and site.
+    - For each 2-site jump operator acting on the current site and its right
+      neighbor, it merges the two tensors, applies the operator, splits the
+      result, computes the probability, and records the operator and the site
+      pair.
+
+    After all possible jumps are considered, the probabilities are normalized and
+    returned along with the associated jump operators and their target site(s).
 
     Args:
         state: The Matrix Product MPS, assumed left-canonical at site 0 on entry.
