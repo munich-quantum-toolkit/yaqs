@@ -177,7 +177,6 @@ class AnalogSimParams:
         threshold: Truncation threshold.
         order: Integration order.
         get_state: If ``True``, store the output state as a :class:`~mqt.yaqs.core.data_structures.state.State`.
-        show_progress: If ``True``, show a progress bar as trajectories finish.
         noise_model: Noise model used for the run, populated after simulation.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
             two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
@@ -203,8 +202,6 @@ class AnalogSimParams:
         sample_timesteps: bool = True,
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
-        show_progress: bool = True,
-        num_threads: int = 1,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
     ) -> None:
@@ -227,8 +224,6 @@ class AnalogSimParams:
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
             get_state: If ``True``, store the final state in :attr:`output_state` as a
                 :class:`~mqt.yaqs.core.data_structures.state.State`.
-            show_progress: If ``True``, print a progress bar as trajectories finish.
-            num_threads: Number of threads for single-trajectory simulations (BLAS/LAPACK).
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
                 case ``(O, O)``.
@@ -271,8 +266,6 @@ class AnalogSimParams:
         self.order = order
         self.evolution_mode = evolution_mode
         self.get_state = get_state
-        self.show_progress = show_progress
-        self.num_threads = num_threads
         self.random_seed = random_seed
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
             [] if multi_time_observables is None else list(multi_time_observables)
@@ -323,8 +316,6 @@ class WeakSimParams:
         If True, store the final state in output_state as a State.
     sample_layers:
         If True, sample layers.
-    show_progress:
-        If True, a progress bar is printed as trajectories finish.
     noise_model:
         The noise model used for the verification, populated after a simulation run.
 
@@ -350,7 +341,6 @@ class WeakSimParams:
         threshold: float = 1e-9,
         *,
         get_state: bool = False,
-        show_progress: bool = True,
         random_seed: int | None = None,
     ) -> None:
         """Weak circuit simulation initialization.
@@ -365,7 +355,6 @@ class WeakSimParams:
             threshold: Accuracy threshold for truncating tensors.
             get_state: If ``True``, store the final state in :attr:`output_state` as a
                 :class:`~mqt.yaqs.core.data_structures.state.State`.
-            show_progress: If ``True``, print a progress bar as trajectories finish.
             random_seed: If set, makes per-shot jump RNG reproducible.
         """
         _validate_random_seed(random_seed)
@@ -377,7 +366,6 @@ class WeakSimParams:
         self.trunc_mode = trunc_mode
         self.threshold = threshold
         self.get_state = get_state
-        self.show_progress = show_progress
         self.random_seed = random_seed
 
     def aggregate_measurements(self) -> None:
@@ -437,8 +425,6 @@ class StrongSimParams:
         The size of the window for the simulation. Default is None.
     get_state:
         If True, store the final state in output_state as a State.
-    show_progress:
-        If True, a progress bar is printed as trajectories finish.
     noise_model:
         The noise model used for the verification, populated after a simulation run.
 
@@ -467,8 +453,6 @@ class StrongSimParams:
         get_state: bool = False,
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
-        show_progress: bool = True,
-        num_threads: int = 1,
         random_seed: int | None = None,
     ) -> None:
         """Strong circuit simulation parameters initialization.
@@ -486,8 +470,6 @@ class StrongSimParams:
                 :class:`~mqt.yaqs.core.data_structures.state.State`.
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
-            show_progress: If ``True``, print a progress bar as trajectories finish.
-            num_threads: Number of threads for single-trajectory BLAS/LAPACK work.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
         """
         _validate_random_seed(random_seed)
@@ -523,8 +505,6 @@ class StrongSimParams:
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
-        self.show_progress = show_progress
-        self.num_threads = num_threads
         self.random_seed = random_seed
 
     def aggregate_trajectories(self) -> None:
