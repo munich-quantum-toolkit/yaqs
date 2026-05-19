@@ -15,7 +15,7 @@ noise strengths are zero, the MPS is simply shifted to its canonical form.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ..methods.decompositions import TruncMode
 
 
 def is_adjacent(proc: dict[str, Any]) -> bool:
@@ -141,11 +142,10 @@ def apply_dissipation(
                         merged_tensor,
                         [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
                         svd_distribution="right",
-                        trunc_mode=sim_params.trunc_mode,
+                        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
                         threshold=sim_params.threshold,
-                        truncate_max_bond_dim=sim_params.max_bond_dim,
+                        max_bond_dim=sim_params.max_bond_dim,
                         min_bond_dim=sim_params.min_bond_dim,
-                        fallback_bond_cap=sim_params.max_bond_dim,
                     )
                     state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
 

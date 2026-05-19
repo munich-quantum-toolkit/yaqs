@@ -16,7 +16,7 @@ to simulate noise-induced evolution in quantum many-body systems.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ..methods.decompositions import TruncMode
 
 
 def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
@@ -128,11 +129,10 @@ def create_probability_distribution(
                             merged,
                             [state.physical_dimensions[site], state.physical_dimensions[site + 1]],
                             svd_distribution="right",
-                            trunc_mode=sim_params.trunc_mode,
+                            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
                             threshold=sim_params.threshold,
-                            truncate_max_bond_dim=sim_params.max_bond_dim,
+                            max_bond_dim=sim_params.max_bond_dim,
                             min_bond_dim=sim_params.min_bond_dim,
-                            fallback_bond_cap=sim_params.max_bond_dim,
                         )
                         jumped_state.tensors[site], jumped_state.tensors[site + 1] = tensor_left_new, tensor_right_new
                         # compute the norm at `site`
@@ -227,11 +227,10 @@ def stochastic_process(
                 merged,
                 [state.physical_dimensions[i], state.physical_dimensions[j]],
                 svd_distribution="right",
-                trunc_mode=sim_params.trunc_mode,
+                trunc_mode=cast("TruncMode", sim_params.trunc_mode),
                 threshold=sim_params.threshold,
-                truncate_max_bond_dim=sim_params.max_bond_dim,
+                max_bond_dim=sim_params.max_bond_dim,
                 min_bond_dim=sim_params.min_bond_dim,
-                fallback_bond_cap=sim_params.max_bond_dim,
             )
             state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
 

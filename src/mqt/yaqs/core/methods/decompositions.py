@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 SvdDistribution = Literal["left", "right", "sqrt"]
+TruncMode = Literal["discarded_weight", "relative"]
 
 
 def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -98,11 +99,10 @@ def split_two_site(
     physical_dimensions: list[int],
     *,
     svd_distribution: SvdDistribution,
-    trunc_mode: str,
+    trunc_mode: TruncMode,
     threshold: float,
-    truncate_max_bond_dim: int | None,
+    max_bond_dim: int | None,
     min_bond_dim: int,
-    fallback_bond_cap: int | None,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a merged two-site MPS tensor back into two sites via truncated SVD.
 
@@ -115,18 +115,16 @@ def split_two_site(
         svd_distribution: How to absorb singular values: ``"left"``, ``"right"``, or ``"sqrt"``.
         trunc_mode: ``"discarded_weight"`` or ``"relative"`` (see :func:`mqt.yaqs.core.linalg.truncate`).
         threshold: Truncation threshold for the chosen mode.
-        truncate_max_bond_dim: ``max_bond_dim`` passed to :func:`mqt.yaqs.core.linalg.truncate`
-            (use ``None`` for no cap in discarded-weight dynamic sweeps).
+        max_bond_dim: Optional hard cap on bond dimension passed to
+            :func:`mqt.yaqs.core.linalg.truncate` (``None`` for no cap).
         min_bond_dim: Minimum bond dimension (capped by the number of singular values internally).
-        fallback_bond_cap: If ``trunc_mode`` is unknown, bond dimension is
-            ``min(n_sv, cap)`` when ``cap`` is set, else ``n_sv``.
 
     Returns:
         Left tensor ``(d_left, D0, keep)`` and right tensor ``(d_right, keep, D2)``.
 
     Raises:
         ValueError: If ``physical_dimensions`` do not match the first axis of ``merged``,
-            or if ``svd_distribution`` is invalid.
+            ``trunc_mode`` is not recognized, or ``svd_distribution`` is invalid.
     """
     d_left = physical_dimensions[0]
     d_right = physical_dimensions[1]
@@ -143,27 +141,26 @@ def split_two_site(
         shape_transposed[2] * shape_transposed[3],
     )
     u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
-    n_sv = int(s_vec.size)
-    min_keep = min(n_sv, min_bond_dim)
-
-    keep = n_sv if fallback_bond_cap is None else min(n_sv, fallback_bond_cap)
 
     if trunc_mode == "discarded_weight":
         keep = linalg.truncate(
             s_vec,
             mode="discarded_weight",
             threshold=threshold,
-            max_bond_dim=truncate_max_bond_dim,
-            min_keep=min_keep,
+            max_bond_dim=max_bond_dim,
+            min_keep=min_bond_dim,
         )
     elif trunc_mode == "relative":
         keep = linalg.truncate(
             s_vec,
             mode="relative",
             threshold=threshold,
-            max_bond_dim=truncate_max_bond_dim,
+            max_bond_dim=max_bond_dim,
             min_keep=min_bond_dim,
         )
+    else:
+        msg = f"Unknown truncation mode: {trunc_mode!r}"
+        raise ValueError(msg)
 
     left_tensor = u_mat[:, :keep]
     s_vec = s_vec[:keep]

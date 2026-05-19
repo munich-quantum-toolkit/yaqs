@@ -61,6 +61,8 @@ from mqt.yaqs.core.methods.tdvp import (
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from mqt.yaqs.core.methods.decompositions import TruncMode
+
 rng = np.random.default_rng()
 
 
@@ -113,11 +115,10 @@ def test_split_two_site_invalid_shape() -> None:
             A,
             physical_dimensions,
             svd_distribution="left",
-            trunc_mode=sim_params.trunc_mode,
+            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
             threshold=sim_params.threshold,
-            truncate_max_bond_dim=sim_params.max_bond_dim,
+            max_bond_dim=sim_params.max_bond_dim,
             min_bond_dim=sim_params.min_bond_dim,
-            fallback_bond_cap=sim_params.max_bond_dim,
         )
 
 
@@ -509,7 +510,7 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         sample_timesteps=True,
         show_progress=False,
     )
-    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
+    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=False)
     assert A0.shape[2] == 2
     assert A1.shape[1] == 2
 

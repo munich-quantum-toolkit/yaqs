@@ -547,9 +547,8 @@ class MPS:
                 svd_distribution="right",
                 trunc_mode="discarded_weight",
                 threshold=1e-12,
-                truncate_max_bond_dim=None,
+                max_bond_dim=None,
                 min_bond_dim=2,
-                fallback_bond_cap=None,
             )
             (
                 self.tensors[current_orthogonality_center],
@@ -634,9 +633,8 @@ class MPS:
                 svd_distribution="right",
                 trunc_mode="discarded_weight",
                 threshold=threshold,
-                truncate_max_bond_dim=max_bond_dim,
+                max_bond_dim=max_bond_dim,
                 min_bond_dim=2,
-                fallback_bond_cap=max_bond_dim,
             )
             self.tensors[i], self.tensors[i + 1] = a_new, b_new
 
@@ -652,9 +650,8 @@ class MPS:
                 svd_distribution="right",
                 trunc_mode="discarded_weight",
                 threshold=threshold,
-                truncate_max_bond_dim=max_bond_dim,
+                max_bond_dim=max_bond_dim,
                 min_bond_dim=2,
-                fallback_bond_cap=max_bond_dim,
             )
             self.tensors[i], self.tensors[i + 1] = a_new, b_new
 

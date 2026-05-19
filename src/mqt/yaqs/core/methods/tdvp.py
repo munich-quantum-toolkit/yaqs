@@ -9,10 +9,11 @@
 
 This module implements functions for performing time evolution on Matrix Product States (MPS)
 using the Time-Dependent Variational Principle (TDVP). It provides utilities for:
-  - Splitting and merging MPS tensors via singular value decomposition (SVD).
   - Updating local MPS tensors and bond tensors using Lanczos-based approximations of the matrix exponential.
   - Constructing effective local operators through contractions with MPO tensors and environment blocks.
   - Performing single-site and two-site TDVP integration schemes to evolve the MPS in time.
+
+Two-site MPS merge/split with SVD truncation lives in :mod:`mqt.yaqs.core.methods.decompositions`.
 
 These methods are designed for simulating the dynamics of quantum many-body systems and are based on
 techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     from ..data_structures.mpo import MPO
     from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
-    from .decompositions import SvdDistribution
+    from .decompositions import SvdDistribution, TruncMode
 
 
 DENSE_THRESHOLD = 128
@@ -51,21 +52,31 @@ def _split_two_site_tdvp(
     *,
     dynamic: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    truncate_max = (
-        sim_params.max_bond_dim
-        if sim_params.trunc_mode == "relative"
-        else (None if dynamic else sim_params.max_bond_dim)
-    )
-    fallback = None if dynamic else sim_params.max_bond_dim
+    """Split a merged two-site tensor using TDVP simulation truncation policy.
+
+    Thin adapter around :func:`mqt.yaqs.core.methods.decompositions.split_two_site`.
+    When ``dynamic`` is True, no ``max_bond_dim`` cap is applied during truncation
+    (bond growth is handled by the dynamic TDVP sweep). Otherwise the cap is
+    ``sim_params.max_bond_dim``.
+
+    Args:
+        merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
+        sim_params: Simulation parameters (threshold, trunc_mode, bond limits).
+        physical_dimensions: ``[d_left, d_right]`` physical dimensions.
+        svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
+        dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
+
+    Returns:
+        Left and right MPS site tensors after split and truncation.
+    """
     return split_two_site(
         merged,
         physical_dimensions,
         svd_distribution=cast("SvdDistribution", svd_distribution),
-        trunc_mode=sim_params.trunc_mode,
+        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.threshold,
-        truncate_max_bond_dim=truncate_max,
+        max_bond_dim=None if dynamic else sim_params.max_bond_dim,
         min_bond_dim=sim_params.min_bond_dim,
-        fallback_bond_cap=fallback,
     )
 
 

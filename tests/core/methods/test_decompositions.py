@@ -12,17 +12,26 @@ This module tests the left and right QR decompositions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
+import pytest
 import scipy.linalg
 
 from mqt.yaqs.core import linalg
-from mqt.yaqs.core.methods.decompositions import left_qr, right_qr
+from mqt.yaqs.core.methods.decompositions import (
+    left_qr,
+    merge_two_site,
+    right_qr,
+    split_two_site,
+)
 
 if TYPE_CHECKING:
-    import pytest
     from numpy.typing import NDArray
+
+    from mqt.yaqs.core.methods.decompositions import (
+        SvdDistribution,
+    )
 
 
 def crandn(
@@ -95,6 +104,83 @@ def test_left_qr() -> None:
     contr = np.tensordot(q_tensor, r_matrix, axes=(1, 1))
     contr = contr.transpose(0, 2, 1)
     assert np.allclose(contr, tensor)
+
+
+@pytest.mark.parametrize("distr", ["left", "right", "sqrt"])
+def test_split_two_site_reconstructs_full_rank(distr: str) -> None:
+    """``split_two_site`` with no truncation reconstructs the merged tensor for each distribution."""
+    a = crandn(2, 3, 4)
+    b = crandn(2, 4, 5)
+    merged = merge_two_site(a, b)
+    a_new, b_new = split_two_site(
+        merged,
+        [a.shape[0], b.shape[0]],
+        svd_distribution=cast("SvdDistribution", distr),
+        trunc_mode="discarded_weight",
+        threshold=0.0,
+        max_bond_dim=None,
+        min_bond_dim=1,
+    )
+    merged_back = merge_two_site(a_new, b_new)
+    np.testing.assert_allclose(merged_back, merged, atol=1e-10, rtol=1e-8)
+
+
+def test_split_two_site_truncates_to_max_bond_dim() -> None:
+    """``max_bond_dim`` caps the bond dimension returned by ``split_two_site``."""
+    svs = np.array([1.0, 0.9, 0.8, 0.7], dtype=np.float64)
+    d0, d1, d_left, d_right = 2, 2, 3, 4
+    theta = _theta_from_singulars(svs, d0 * d_left, d1 * d_right, seed=21)
+    merged = _as_merged_two_site(theta, d0, d1, d_left, d_right)
+    k = 2
+    a_new, b_new = split_two_site(
+        merged,
+        [d0, d1],
+        svd_distribution="sqrt",
+        trunc_mode="discarded_weight",
+        threshold=0.0,
+        max_bond_dim=k,
+        min_bond_dim=1,
+    )
+    assert a_new.shape[2] == k
+    assert b_new.shape[1] == k
+
+
+def test_split_two_site_unknown_mode_raises() -> None:
+    """Invalid ``trunc_mode`` raises ``ValueError``."""
+    merged = crandn(4, 3, 5)
+    with pytest.raises(ValueError, match="Unknown truncation mode"):
+        split_two_site(
+            merged,
+            [2, 2],
+            svd_distribution="right",
+            trunc_mode=cast("Any", "invalid"),
+            threshold=1e-9,
+            max_bond_dim=None,
+            min_bond_dim=1,
+        )
+
+
+def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    rng_local = np.random.default_rng(seed)
+    mat = rng_local.normal(size=(m, n)) + 1j * rng_local.normal(size=(m, n))
+    q, _ = np.linalg.qr(mat)
+    q = np.asarray(q, dtype=np.complex128)
+    return cast("NDArray[np.complex128]", q[:, :n])
+
+
+def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    r = min(len(s), m, n)
+    u = _rand_unitary_like(m, r, seed=seed)
+    v = _rand_unitary_like(n, r, seed=seed + 1)
+    sigma = np.diag(s[:r].astype(np.complex128))
+    return cast("NDArray[np.complex128]", (u @ sigma @ v.conj().T).astype(np.complex128, copy=False))
+
+
+def _as_merged_two_site(
+    theta: NDArray[np.complex128], d0: int, d1: int, d_left: int, d_right: int
+) -> NDArray[np.complex128]:
+    tensor = theta.reshape(d0, d_left, d1, d_right).transpose(0, 2, 1, 3)
+    return cast("NDArray[np.complex128]", tensor.reshape(d0 * d1, d_left, d_right))
 
 
 def test_linalg_svd_reduced_shapes_unitary_and_reconstruction() -> None:
