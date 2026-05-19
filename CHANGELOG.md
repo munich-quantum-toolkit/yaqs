@@ -11,7 +11,6 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added [`Simulator`](src/mqt/yaqs/simulator.py) class that owns execution-side configuration and dispatches to all simulation backends, and a [`Result`](src/mqt/yaqs/core/data_structures/result.py) dataclass returned by `Simulator.run` ([**@aaronleesander**])
 - added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
 - added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])
 - added Fermionic and Jordan-Wigner MPO encodings of 1D Fermi-Hubbard model ([#220]) ([**@thilomueller**])
@@ -19,14 +18,12 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
 - changed [`simulator.run`](src/mqt/yaqs/simulator.py) to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
 - changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
 
 ### Removed
-
-- removed the free `mqt.yaqs.simulator.run` function; call sites must migrate to `Simulator(...).run(...)` ([**@aaronleesander**])
-- removed `show_progress` and (unused) `num_threads` keyword arguments from `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`; pass `show_progress` to `Simulator` instead ([**@aaronleesander**])
 
 ### Fixed
 
@@ -122,6 +119,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#430]: https://github.com/munich-quantum-toolkit/yaqs/pull/430
 [#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
 [#428]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
 [#426]: https://github.com/munich-quantum-toolkit/yaqs/pull/426
