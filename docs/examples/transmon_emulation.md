@@ -109,11 +109,11 @@ mystnb:
 
 import matplotlib.pyplot as plt
 
-measurements = result.observables
-leakage = [1 for _ in measurements[0].results]
-for measurement in measurements:
-    leakage -= measurement.results
-    plt.plot(measurement.results, label=measurement.gate.bitstring)
+pvm_observables = result.observables
+leakage = [1 for _ in result.expectation_values[0]]
+for measurement, values in zip(pvm_observables, result.expectation_values, strict=True):
+    leakage -= values
+    plt.plot(values, label=measurement.gate.bitstring)
 plt.plot(leakage, label="Leakage")
 
 plt.xlabel("Timestep")

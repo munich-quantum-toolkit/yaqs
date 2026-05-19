@@ -86,7 +86,7 @@ for noise_strength in (0.0, 0.05, 0.1):
     params = make_params()
     # ... build a NoiseModel from `noise_strength` here in real code ...
     result = sim.run(state, H, params, noise_model=None)
-    print(f"gamma={noise_strength}: <Z_0>={float(result.observables[0].results[0]):+.4f}")
+    print(f"gamma={noise_strength}: <Z_0>={float(result.expectation_values[0][0]):+.4f}")
 ```
 
 Each call constructs a short-lived `ProcessPoolExecutor` when `parallel=True`; pools are not persisted across {meth}`~mqt.yaqs.Simulator.run` calls, so you can safely change `sim.max_workers` (or replace `sim` entirely) between calls.
@@ -110,8 +110,8 @@ result_serial = Simulator(parallel=False, show_progress=False).run(state, H, par
 params_parallel = make_params()
 result_parallel = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, H, params_parallel)
 
-for obs_s, obs_p in zip(result_serial.observables, result_parallel.observables, strict=True):
-    np.testing.assert_allclose(obs_s.results, obs_p.results, atol=1e-10)
+for vals_s, vals_p in zip(result_serial.expectation_values, result_parallel.expectation_values, strict=True):
+    np.testing.assert_allclose(vals_s, vals_p, atol=1e-10)
 print("Serial and parallel results match.")
 ```
 
@@ -230,6 +230,9 @@ result = sim.run(state, H, params)
 
 print("type:                 ", type(result).__name__)
 print("len(observables):     ", len(result.observables))
+print("len(expectation_values):", len(result.expectation_values))
+print("len(trajectories):    ", len(result.trajectories))
+print("times:                ", result.times)
 print("noise_model:          ", result.noise_model)
 print("output_state:         ", result.output_state)
 print("counts (weak only):   ", result.counts)
@@ -242,6 +245,9 @@ The properties that don't apply to your simulation kind return `None` (or an emp
 | Property                                 | Populated for                                                                       |
 | ---------------------------------------- | ----------------------------------------------------------------------------------- |
 | `observables`                            | Analog and strong digital runs. Empty list for weak digital.                        |
+| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                  |
+| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                     |
+| `times`                                  | Shared analog time grid; `None` for digital circuits.                               |
 | `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                            |
 | `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams` (no noise).    |
 | `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                   |

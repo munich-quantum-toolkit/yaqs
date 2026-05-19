@@ -106,7 +106,7 @@ reference = np.array([
 ])
 
 # YAQS results collected at initial + each SAMPLE_OBSERVABLES barrier + final
-yaqs = np.vstack([np.real(obs.results) for obs in result.observables])
+yaqs = np.vstack([np.real(v) for v in result.expectation_values])
 
 diff = np.abs(yaqs - reference)
 max_diff = float(diff.max())

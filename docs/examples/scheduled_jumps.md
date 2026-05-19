@@ -113,8 +113,8 @@ mystnb:
 import matplotlib.pyplot as plt
 
 times = sim_params_jump.times
-res_baseline = result_baseline.observables[0].results
-res_jump = result_jump.observables[0].results
+res_baseline = result_baseline.expectation_values[0]
+res_jump = result_jump.expectation_values[0]
 
 plt.figure(figsize=(8, 5))
 plt.plot(times, res_baseline, label="Baseline (No Jump)", color="black", linestyle="--")

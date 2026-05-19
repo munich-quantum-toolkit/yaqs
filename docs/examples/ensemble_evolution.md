@@ -68,7 +68,7 @@ primer_params = AnalogSimParams(
 
 result_primer = sim.run(psi0, H_open, primer_params)
 times_primer = primer_params.times
-zexp_primer = result_primer.observables[0].results
+zexp_primer = result_primer.expectation_values[0]
 ```
 
 ```{code-cell} ipython3

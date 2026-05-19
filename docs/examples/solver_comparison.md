@@ -54,7 +54,7 @@ params_rho = AnalogSimParams(
     dt=dt,
 )
 result_rho = sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho, noise)
-res_rho = result_rho.observables[0].results.flatten()
+res_rho = result_rho.expectation_values[0].flatten()
 times = params_rho.times
 
 # 4. vector (stochastic trajectories)
@@ -66,7 +66,7 @@ params_vector = AnalogSimParams(
     num_traj=500,
 )
 result_vector = sim.run(State(L, initial="zeros", representation="vector"), H, params_vector, noise)
-res_vector = result_vector.observables[0].results.flatten()
+res_vector = result_vector.expectation_values[0].flatten()
 
 # 5. mps (default, stochastic trajectories)
 print("Running mps...")
@@ -78,7 +78,7 @@ params_mps = AnalogSimParams(
     max_bond_dim=16,
 )
 result_mps = sim.run(State(L, initial="zeros", representation="mps"), H, params_mps, noise)
-res_mps = result_mps.observables[0].results.flatten()
+res_mps = result_mps.expectation_values[0].flatten()
 
 # 6. Plot Comparison
 plt.figure()
@@ -121,8 +121,8 @@ params_rho_unitary = AnalogSimParams(
 )
 quiet_sim = Simulator(show_progress=False)
 result_mps_u = quiet_sim.run(State(L, initial="zeros", representation="mps"), H, params_mps_unitary, None)
-z_mps = result_mps_u.observables[0].results[-1]
+z_mps = result_mps_u.expectation_values[0][-1]
 result_rho_u = quiet_sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho_unitary, None)
-z_rho = result_rho_u.observables[0].results[-1]
+z_rho = result_rho_u.expectation_values[0][-1]
 print(f"Noiseless <Z_0> at t=1: mps={z_mps:.6f}, density_matrix={z_rho:.6f}")
 ```

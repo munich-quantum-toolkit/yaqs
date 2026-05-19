@@ -136,7 +136,7 @@ def run_reproducible() -> list[np.ndarray]:
     st = copy.deepcopy(state)
     params = copy.deepcopy(repro_params)
     result = sim.run(st, H_0, params, copy.deepcopy(noise_model))
-    return [np.asarray(obs.results) for obs in result.observables]
+    return result.expectation_values
 
 
 first_run = run_reproducible()
@@ -171,7 +171,7 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-heatmap = [observable.results for observable in result.observables]
+heatmap = result.expectation_values
 
 fig, ax = plt.subplots(1, 1)
 im = plt.imshow(heatmap, aspect="auto", extent=(0, 10, L, 0), vmin=0, vmax=0.5)

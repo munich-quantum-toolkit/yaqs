@@ -144,7 +144,7 @@ params = AnalogSimParams(
     dt=0.05,
 )
 result = sim.run(state_mps, H, params, noise_model=None)
-print("TJM Z_0:", result.observables[0].results[-1])
+print("TJM Z_0:", result.expectation_values[0][-1])
 ```
 
 ### MCWF (`representation="vector"`)
@@ -158,7 +158,7 @@ params_vec = AnalogSimParams(
     dt=0.05,
 )
 result = sim.run(state_vec, H, params_vec, None)
-print("MCWF Z_0:", result.observables[0].results[-1])
+print("MCWF Z_0:", result.expectation_values[0][-1])
 ```
 
 ### Lindblad (`representation="density_matrix"`)
@@ -172,7 +172,7 @@ params_dm = AnalogSimParams(
     dt=0.05,
 )
 result = sim.run(state_dm, H, params_dm, None)
-print("Lindblad Z_0:", result.observables[0].results[-1])
+print("Lindblad Z_0:", result.expectation_values[0][-1])
 ```
 
 See {doc}`solver_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
@@ -186,7 +186,7 @@ psi = np.zeros(2**L, dtype=np.complex128)
 psi[0] = 1.0
 state_from_vec = State(vector=psi)
 result = sim.run(state_from_vec, H, params_vec, None)
-print("From vector=, MCWF Z_0:", result.observables[0].results[-1])
+print("From vector=, MCWF Z_0:", result.expectation_values[0][-1])
 ```
 
 ## Practical limits
