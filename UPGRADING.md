@@ -37,8 +37,8 @@ deleted.
 ### `threshold` renamed to `svd_threshold` on `*SimParams`
 
 The SVD bond-truncation setting on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams` is now
-`svd_threshold` (attribute and constructor keyword). Accuracy presets use the key `svd_threshold`
-in `ACCURACY_PRESETS`. This distinguishes SVD truncation from `krylov_tol` (Krylov/Lanczos matrix
+`svd_threshold` (attribute and constructor keyword). Simulation presets use the key `svd_threshold`
+in `SIMULATION_PRESETS`. This distinguishes SVD truncation from `krylov_tol` (Krylov/Lanczos matrix
 exponential) and from unrelated `threshold` parameters elsewhere (for example
 `EquivalenceChecker(threshold=...)`).
 

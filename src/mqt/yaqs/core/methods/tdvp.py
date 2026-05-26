@@ -71,7 +71,8 @@ def _split_two_site_tdvp(
 
     Args:
         merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
-        sim_params: Simulation parameters (threshold, trunc_mode, bond limits).
+        sim_params: Simulation parameters with ``svd_threshold``, ``trunc_mode``,
+            ``max_bond_dim``, and ``min_bond_dim``.
         physical_dimensions: ``[d_left, d_right]`` physical dimensions.
         svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
         dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
@@ -459,8 +460,8 @@ def _evolve_local_tensor_krylov(
         tensor: Tensor to evolve (arbitrary shape).
         dt: Time step for evolution.
         proj_args: Extra arguments passed to `projector` before the tensor.
-        dense_threshold: Maximum size of flattened tensor to use dense operator.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
+        dense_threshold: int, optional. Maximum size of flattened tensor to use dense operator.
+        krylov_tol: float. Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
         The evolved tensor with the same shape as `tensor`.
@@ -502,15 +503,15 @@ def update_site(
     to evolve it by time dt, and then reshapes the result back to the original tensor shape.
 
     Args:
-        left_env (NDArray[np.complex128]): Left operator block.
-        right_env (NDArray[np.complex128]): Right operator block.
-        op (NDArray[np.complex128]): Local MPO tensor.
-        ket (NDArray[np.complex128]): Local MPS tensor.
-        dt (float): Time step for evolution.
-        krylov_tol (float): Tolerance for the adaptive Krylov/Lanczos matrix exponential.
+        left_env: Left operator block.
+        right_env: Right operator block.
+        op: Local MPO tensor.
+        ket: Local MPS tensor.
+        dt: Time step for evolution.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
-        NDArray[np.complex128]: The updated MPS tensor after evolution.
+        The updated MPS tensor after evolution.
     """
     proj_args = (left_env, right_env, op)
     return _evolve_local_tensor_krylov(
@@ -536,14 +537,14 @@ def update_bond(
     and then reshaped back to its original form.
 
     Args:
-        left_env (NDArray[np.complex128]): Left operator block.
-        right_env (NDArray[np.complex128]): Right operator block.
-        bond_tensor (NDArray[np.complex128]): Bond tensor.
-        dt (float): Time step for the bond evolution.
-        krylov_tol (float): Tolerance for the adaptive Krylov/Lanczos matrix exponential.
+        left_env: Left operator block.
+        right_env: Right operator block.
+        bond_tensor: Bond tensor.
+        dt: Time step for the bond evolution.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
-        NDArray[np.complex128]: The updated bond tensor after evolution.
+        The updated bond tensor after evolution.
     """
     proj_args = (left_env, right_env)
     return _evolve_local_tensor_krylov(
@@ -567,10 +568,10 @@ def single_site_tdvp(
     an optional right-to-left sweep for full integration.
 
     Args:
-        state (MPS): The initial state represented as an MPS.
-        hamiltonian (MPO): Hamiltonian represented as an MPO.
-        sim_params (AnalogSimParams | StrongSimParams | WeakSimParams):
-            Simulation parameters containing the time step 'dt' (and possibly a threshold for SVD truncation).
+        state: The initial state represented as an MPS.
+        hamiltonian: Hamiltonian represented as an MPO.
+        sim_params: Simulation parameters with ``dt``, ``svd_threshold``, ``krylov_tol``,
+            ``trunc_mode``, and bond limits.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -685,11 +686,11 @@ def two_site_tdvp(
       - Updating the operator blocks via left-to-right and right-to-left sweeps.
 
     Args:
-        state (MPS): The initial state represented as an MPS.
-        hamiltonian (MPO): Hamiltonian represented as an MPO.
-        sim_params (AnalogSimParams | StrongSimParams | WeakSimParams):
-            Simulation parameters containing the time step 'dt' and SVD threshold.
-        dynamic: Determines if bond dimension is handled by dynamic TDVP (True) or truncation (False).
+        state: The initial state represented as an MPS.
+        hamiltonian: Hamiltonian represented as an MPO.
+        sim_params: Simulation parameters with ``dt``, ``svd_threshold``, ``krylov_tol``,
+            ``trunc_mode``, ``max_bond_dim``, and related truncation settings.
+        dynamic: If True, bond growth is handled by dynamic TDVP without an intermediate cap.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -831,7 +832,8 @@ def local_dynamic_tdvp(
     Args:
         state: MPS state to evolve.
         hamiltonian: MPO Hamiltonian.
-        sim_params: Simulation parameters including dt and threshold.
+        sim_params: Simulation parameters including ``dt``, ``svd_threshold``, ``krylov_tol``,
+            and ``max_bond_dim``.
 
     Raises:
         ValueError: If Hamiltonian is invalid length.
@@ -1043,10 +1045,10 @@ def global_dynamic_tdvp(
     `sim_params`.
 
     Args:
-        state (MPS): The Matrix Product MPS representing the current state of the system.
-        hamiltonian (MPO): The Matrix Product Operator representing the Hamiltonian of the system.
-        sim_params (AnalogSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
-            such as the maximum allowable bond dimension for the MPS.
+        state: The MPS representing the current state of the system.
+        hamiltonian: The MPO representing the Hamiltonian of the system.
+        sim_params: Simulation parameters including ``max_bond_dim``, ``svd_threshold``,
+            and ``krylov_tol``.
     """
     current_max_bond_dim = state.get_max_bond()
     if state.length == 1:

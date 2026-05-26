@@ -47,9 +47,15 @@ SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
     "exact": {"svd_threshold": 1e-13, "max_bond_dim": None, "num_traj": 1024, "krylov_tol": 1e-12},
 }
 
+_USE_PRESET = object()
+
 
 def _validate_preset(preset: SimulationPreset) -> SimulationPreset:
     """Validate ``preset`` names at runtime.
+
+    Args:
+        preset: Built-in simulation preset name. Must be one of ``"fast"``, ``"balanced"``,
+            ``"accurate"``, or ``"exact"`` (see ``SIMULATION_PRESETS``).
 
     Returns:
         The validated preset name.
@@ -121,6 +127,29 @@ def _validate_svd_threshold(svd_threshold: float) -> float:
     return svd_threshold
 
 
+def _resolve_max_bond_dim(max_bond_dim: int | object | None, preset_value: int | None) -> int | None:
+    """Resolve ``max_bond_dim`` from an explicit value or the preset default.
+
+    Args:
+        max_bond_dim: Explicit cap, ``None`` for no cap, or ``_USE_PRESET`` to keep the preset value.
+        preset_value: ``max_bond_dim`` from the selected preset.
+
+    Returns:
+        The resolved maximum bond dimension.
+
+    Raises:
+        TypeError: If ``max_bond_dim`` is not an ``int``, ``None``, or ``_USE_PRESET``.
+    """
+    if max_bond_dim is _USE_PRESET:
+        return preset_value
+    if isinstance(max_bond_dim, int):
+        return max_bond_dim
+    if max_bond_dim is None:
+        return None
+    msg = f"max_bond_dim must be int, None, or omitted, got {type(max_bond_dim).__name__}."
+    raise TypeError(msg)
+
+
 class EvolutionMode(Enum):
     """Enumerates the different modes of tensor evolution in the simulation."""
 
@@ -183,7 +212,8 @@ class AnalogSimParams:
         sample_timesteps: If ``True``, record values at all sampled timesteps.
         num_traj: Number of trajectories (for stochastic open-system evolution).
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
-        max_bond_dim: Maximum allowed bond dimension, or ``None`` for no cap.
+        max_bond_dim: Maximum allowed bond dimension, or ``None`` for no cap. Omit the
+            constructor argument to use the preset value; pass ``None`` explicitly for no cap.
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -207,7 +237,7 @@ class AnalogSimParams:
         elapsed_time: float = 0.1,
         dt: float = 0.1,
         num_traj: int | None = None,
-        max_bond_dim: int | None = None,
+        max_bond_dim: int | object | None = _USE_PRESET,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
@@ -231,7 +261,8 @@ class AnalogSimParams:
             dt: Time step interval.
             num_traj: Number of simulation samples.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            max_bond_dim: Maximum bond dimension allowed, or ``None`` for no cap.
+            max_bond_dim: Maximum bond dimension allowed, or ``None`` for no cap. Omit to use
+                the preset value; pass ``None`` explicitly for no cap.
             min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
@@ -277,7 +308,7 @@ class AnalogSimParams:
         self.times = np.arange(0, elapsed_time + dt, dt)
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
-        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]
+        self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
@@ -305,7 +336,8 @@ class StrongSimParams:
         num_traj: The number of trajectories to simulate.
         random_seed: If set, seeds per-trajectory jump RNG and static noise
             sampling for reproducible runs.
-        max_bond_dim: The maximum bond dimension for the simulation, or ``None`` for no cap.
+        max_bond_dim: The maximum bond dimension for the simulation, or ``None`` for no cap. Omit
+            the constructor argument to use the preset value; pass ``None`` explicitly for no cap.
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -331,7 +363,7 @@ class StrongSimParams:
         self,
         observables: list[Observable] | None = None,
         num_traj: int | None = None,
-        max_bond_dim: int | None = None,
+        max_bond_dim: int | object | None = _USE_PRESET,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
@@ -350,7 +382,8 @@ class StrongSimParams:
         Args:
             observables: List of observables to measure during simulation.
             num_traj: Number of trajectories to simulate.
-            max_bond_dim: Maximum bond dimension allowed in simulation, or ``None`` for no cap.
+            max_bond_dim: Maximum bond dimension allowed in simulation, or ``None`` for no cap. Omit
+                to use the preset value; pass ``None`` explicitly for no cap.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
@@ -388,7 +421,7 @@ class StrongSimParams:
             self.sorted_observables = []
 
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
-        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]
+        self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
@@ -408,7 +441,8 @@ class WeakSimParams:
         dt: A placeholder property for code compatibility.
         num_traj: A placeholder property for code compatibility.
         shots: The number of shots for the simulation.
-        max_bond_dim: The maximum bond dimension for the simulation, or ``None`` for no cap.
+        max_bond_dim: The maximum bond dimension for the simulation, or ``None`` for no cap. Omit
+            the constructor argument to use the preset value; pass ``None`` explicitly for no cap.
         preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol``.
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -434,7 +468,7 @@ class WeakSimParams:
     def __init__(
         self,
         shots: int,
-        max_bond_dim: int | None = None,
+        max_bond_dim: int | object | None = _USE_PRESET,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
@@ -450,7 +484,8 @@ class WeakSimParams:
 
         Args:
             shots: Number of measurement shots to simulate.
-            max_bond_dim: Maximum bond dimension for simulation, or ``None`` for no cap.
+            max_bond_dim: Maximum bond dimension for simulation, or ``None`` for no cap. Omit to
+                use the preset value; pass ``None`` explicitly for no cap.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
@@ -469,7 +504,7 @@ class WeakSimParams:
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         self.shots = shots
-        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]
+        self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(

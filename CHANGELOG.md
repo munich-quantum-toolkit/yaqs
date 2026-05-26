@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
-- added Krylov threshold as high-level parameter ([#439]) ([**@aaronleesander**])
+- added Krylov tolerance as high-level parameter ([#439]) ([**@aaronleesander**])
 - added accuracy presets to simulation parameters ([#438]) ([**@aaronleesander**])
 - added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
 - added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])

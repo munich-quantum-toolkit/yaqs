@@ -40,6 +40,10 @@ from mqt.yaqs.core.methods import tdvp
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from mqt.yaqs.core.data_structures.simulation_parameters import (
+        SimulationPreset,
+    )
+
 
 def test_observable_creation_valid() -> None:
     """Test that an Observable is created correctly with valid parameters.
@@ -108,9 +112,9 @@ def test_analog_simparams_defaults() -> None:
         ("exact", SIMULATION_PRESETS["exact"]),
     ],
 )
-def test_analog_simparams_presets(preset: str, expected: dict[str, float | int | None]) -> None:
+def test_analog_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """AnalogSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
-    params = AnalogSimParams(preset=preset)  # ty: ignore[invalid-argument-type]
+    params = AnalogSimParams(preset=preset)
     assert params.preset == preset
     assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
@@ -127,9 +131,9 @@ def test_analog_simparams_presets(preset: str, expected: dict[str, float | int |
         ("exact", SIMULATION_PRESETS["exact"]),
     ],
 )
-def test_strong_simparams_presets(preset: str, expected: dict[str, float | int | None]) -> None:
+def test_strong_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """StrongSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
-    params = StrongSimParams(preset=preset)  # ty: ignore[invalid-argument-type]
+    params = StrongSimParams(preset=preset)
     assert params.preset == preset
     assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
@@ -167,9 +171,9 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
         ("exact", SIMULATION_PRESETS["exact"]),
     ],
 )
-def test_weak_simparams_presets(preset: str, expected: dict[str, float | int | None]) -> None:
+def test_weak_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """WeakSimParams resolves svd_threshold, max_bond_dim, and krylov_tol from the shared presets."""
-    params = WeakSimParams(shots=100, preset=preset)  # ty: ignore[invalid-argument-type]
+    params = WeakSimParams(shots=100, preset=preset)
     assert params.preset == preset
     assert params.shots == 100
     assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
@@ -195,6 +199,17 @@ def test_analog_simparams_krylov_tol_overrides_preset_only() -> None:
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.num_traj == balanced["num_traj"]
     assert params.krylov_tol == pytest.approx(1e-8)
+
+
+def test_analog_simparams_max_bond_dim_none_overrides_preset() -> None:
+    """Explicit ``max_bond_dim=None`` removes the bond cap without changing other preset fields."""
+    params = AnalogSimParams(preset="balanced", max_bond_dim=None)
+    balanced = SIMULATION_PRESETS["balanced"]
+    assert params.preset == "balanced"
+    assert params.max_bond_dim is None
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
+    assert params.num_traj == balanced["num_traj"]
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
 
 
 def test_strong_simparams_preset_explicit_overrides() -> None:

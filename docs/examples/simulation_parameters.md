@@ -60,7 +60,7 @@ Overridable preset fields:
 
 `WeakSimParams` always requires `shots` separately; `shots` is **not** part of any preset.
 
-If you omit an overridable argument, the preset supplies it. If you pass a value explicitly, **that value wins** for that field only — the other preset fields are unchanged.
+If you omit an overridable argument, the preset supplies it. If you pass a value explicitly, **that value wins** for that field only — the other preset fields are unchanged. For `max_bond_dim`, omit the argument to keep the preset cap; pass `None` explicitly to remove the cap.
 
 ## Recommended usage
 
