@@ -89,7 +89,7 @@ sim_params = AnalogSimParams(
     dt=0.1,
     num_traj=100,
     max_bond_dim=4,
-    threshold=1e-6,
+    svd_threshold=1e-6,
     order=2,
     sample_timesteps=True,
 )
@@ -123,7 +123,7 @@ repro_params = AnalogSimParams(
     dt=0.1,
     num_traj=50,
     max_bond_dim=4,
-    threshold=1e-6,
+    svd_threshold=1e-6,
     order=2,
     sample_timesteps=True,
     random_seed=42,

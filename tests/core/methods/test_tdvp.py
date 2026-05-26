@@ -116,7 +116,7 @@ def test_split_two_site_invalid_shape() -> None:
             physical_dimensions,
             svd_distribution="left",
             trunc_mode=cast("TruncMode", sim_params.trunc_mode),
-            threshold=sim_params.threshold,
+            threshold=sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
             min_bond_dim=sim_params.min_bond_dim,
         )
@@ -410,7 +410,7 @@ def test_split_truncation_discarded_weight_kept_count(
         elapsed_time=0.2,
         dt=0.1,
         min_bond_dim=1,
-        threshold=threshold,
+        svd_threshold=threshold,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
     )
@@ -471,7 +471,7 @@ def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the:
         elapsed_time=0.2,
         dt=0.1,
         min_bond_dim=1,
-        threshold=rel_the,
+        svd_threshold=rel_the,
         trunc_mode="relative",
         sample_timesteps=True,
     )
@@ -502,7 +502,7 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         elapsed_time=0.2,
         dt=0.1,
         max_bond_dim=2,
-        threshold=0.5,
+        svd_threshold=0.5,
         trunc_mode="relative",
         sample_timesteps=True,
     )
@@ -516,7 +516,7 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         elapsed_time=0.2,
         dt=0.1,
         min_bond_dim=2,
-        threshold=2,
+        svd_threshold=2,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
     )
@@ -540,7 +540,7 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
         elapsed_time=0.2,
         dt=0.1,
         max_bond_dim=2,
-        threshold=0.5,
+        svd_threshold=0.5,
         trunc_mode="relative",
         sample_timesteps=True,
     )

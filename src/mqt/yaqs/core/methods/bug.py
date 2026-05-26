@@ -220,4 +220,4 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
     )
     state.tensors[0] = updated_tensor
     # Truncation
-    state.truncate(sim_params.threshold, sim_params.max_bond_dim)
+    state.truncate(sim_params.svd_threshold, sim_params.max_bond_dim)

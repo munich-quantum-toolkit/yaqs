@@ -258,7 +258,7 @@ def test_unitary_ensemble_uses_bug_evolution_mode_via_simulator() -> None:
         dt=0.05,
         evolution_mode=EvolutionMode.BUG,
         max_bond_dim=64,
-        threshold=1e-10,
+        svd_threshold=1e-10,
     )
     result = Simulator(parallel=False, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
     assert result.expectation_values[0] is not None
@@ -280,7 +280,7 @@ def test_unitary_ensemble_final_timestep_when_not_sampling_via_simulator() -> No
         sample_timesteps=False,
         multi_time_observables=[(z0, z0), (z0, z1)],
         max_bond_dim=64,
-        threshold=1e-10,
+        svd_threshold=1e-10,
     )
     assert len(sim_params.times) >= 3
     result = Simulator(parallel=False, show_progress=False).run(states, hamiltonian, sim_params, noise_model=None)
@@ -425,7 +425,7 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
         elapsed_time=t_final,
         dt=dt,
         max_bond_dim=256,
-        threshold=1e-12,
+        svd_threshold=1e-12,
         krylov_tol=1e-12,
         sample_timesteps=True,
         multi_time_observables=pairs,
@@ -480,7 +480,7 @@ def test_two_time_correlator_probe_row_diagonal_matches_expectation_at_t0() -> N
         elapsed_time=0.0,
         dt=0.5,
         max_bond_dim=32,
-        threshold=1e-10,
+        svd_threshold=1e-10,
         order=1,
         sample_timesteps=True,
         multi_time_observables=pairs,

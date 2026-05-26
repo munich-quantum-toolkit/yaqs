@@ -31,9 +31,9 @@ if TYPE_CHECKING:
 AccuracyPreset = Literal["fast", "balanced", "accurate"]
 
 ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
-    "fast": {"threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64, "krylov_tol": 1e-3},
-    "balanced": {"threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
-    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
+    "fast": {"svd_threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64, "krylov_tol": 1e-3},
+    "balanced": {"svd_threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
+    "accurate": {"svd_threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
 }
 
 
@@ -94,6 +94,25 @@ def _validate_krylov_tol(krylov_tol: float) -> float:
         msg = f"krylov_tol must be a finite positive float, got {krylov_tol!r}."
         raise ValueError(msg)
     return krylov_tol
+
+
+def _validate_svd_threshold(svd_threshold: float) -> float:
+    """Validate the SVD truncation threshold.
+
+    Args:
+        svd_threshold: Tolerance for SVD-based bond truncation during simulation.
+
+    Returns:
+        The validated threshold as a float.
+
+    Raises:
+        ValueError: If ``svd_threshold`` is non-finite or not strictly positive.
+    """
+    svd_threshold = float(svd_threshold)
+    if not np.isfinite(svd_threshold) or svd_threshold <= 0.0:
+        msg = f"svd_threshold must be a finite positive float, got {svd_threshold!r}."
+        raise ValueError(msg)
+    return svd_threshold
 
 
 class EvolutionMode(Enum):
@@ -159,15 +178,15 @@ class AnalogSimParams:
         num_traj: Number of trajectories (for stochastic open-system evolution).
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
         max_bond_dim: Maximum allowed bond dimension.
-        accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+        accuracy: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``num_traj``.
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, while ``"accurate"`` uses the strictest built-in settings.
-            Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+            Explicit ``svd_threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
-        threshold: Truncation threshold.
+        svd_threshold: SVD truncation threshold for bond dimension control.
         order: Integration order.
         get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
@@ -184,7 +203,7 @@ class AnalogSimParams:
         max_bond_dim: int | None = None,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
-        threshold: float | None = None,
+        svd_threshold: float | None = None,
         krylov_tol: float | None = None,
         order: int = 1,
         *,
@@ -207,15 +226,15 @@ class AnalogSimParams:
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed.
             min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
-            accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+            accuracy: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``num_traj``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, while ``"accurate"`` uses the strictest built-in settings.
-                Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+                Explicit ``svd_threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
             krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
                 Smaller values are more accurate but may require more Krylov vectors. Explicit values
                 override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
-            threshold: Threshold for simulation accuracy.
+            svd_threshold: SVD truncation threshold for bond dimension control.
             order: Order of approximation or numerical scheme.
             sample_timesteps: Whether to sample at intermediate time steps.
             evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
@@ -253,7 +272,9 @@ class AnalogSimParams:
         self.max_bond_dim = max_bond_dim if max_bond_dim is not None else int(preset["max_bond_dim"])
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
-        self.threshold = threshold if threshold is not None else float(preset["threshold"])
+        self.svd_threshold = _validate_svd_threshold(
+            svd_threshold if svd_threshold is not None else float(preset["svd_threshold"])
+        )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else float(preset["krylov_tol"]))
         self.order = order
         self.evolution_mode = evolution_mode
@@ -277,10 +298,10 @@ class StrongSimParams:
         random_seed: If set, seeds per-trajectory jump RNG and static noise
             sampling for reproducible runs.
         max_bond_dim: The maximum bond dimension for the simulation.
-        accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+        accuracy: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``num_traj``.
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, while ``"accurate"`` uses the strictest built-in settings.
-            Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+            Explicit ``svd_threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
@@ -288,7 +309,7 @@ class StrongSimParams:
             better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
             ``"discarded_weight"`` and ``"relative"``.
-        threshold: The threshold value for the simulation.
+        svd_threshold: SVD truncation threshold for bond dimension control.
         window_size: The size of the window for the simulation. Default is ``None``.
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
@@ -304,7 +325,7 @@ class StrongSimParams:
         max_bond_dim: int | None = None,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
-        threshold: float | None = None,
+        svd_threshold: float | None = None,
         krylov_tol: float | None = None,
         *,
         accuracy: AccuracyPreset = "balanced",
@@ -322,15 +343,15 @@ class StrongSimParams:
             num_traj: Number of trajectories to simulate.
             max_bond_dim: Maximum bond dimension allowed in simulation.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
-            accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+            accuracy: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``num_traj``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, while ``"accurate"`` uses the strictest built-in settings.
-                Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+                Explicit ``svd_threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
             krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
                 Smaller values are more accurate but may require more Krylov vectors. Explicit values
                 override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
-            threshold: Threshold for simulation accuracy.
+            svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
@@ -360,7 +381,9 @@ class StrongSimParams:
         self.max_bond_dim = max_bond_dim if max_bond_dim is not None else int(preset["max_bond_dim"])
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
-        self.threshold = threshold if threshold is not None else float(preset["threshold"])
+        self.svd_threshold = _validate_svd_threshold(
+            svd_threshold if svd_threshold is not None else float(preset["svd_threshold"])
+        )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else float(preset["krylov_tol"]))
         self.get_state = get_state
         self.sample_layers = sample_layers
@@ -376,10 +399,10 @@ class WeakSimParams:
         num_traj: A placeholder property for code compatibility.
         shots: The number of shots for the simulation.
         max_bond_dim: The maximum bond dimension for the simulation.
-        accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
+        accuracy: Preset controlling ``svd_threshold`` and ``max_bond_dim``.
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, while ``"accurate"`` uses the strictest built-in settings.
-            Explicit ``threshold`` and ``max_bond_dim`` override the preset.
+            Explicit ``svd_threshold`` and ``max_bond_dim`` override the preset.
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
@@ -387,7 +410,7 @@ class WeakSimParams:
             better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
             ``"discarded_weight"`` and ``"relative"``.
-        threshold: The threshold value for the simulation.
+        svd_threshold: SVD truncation threshold for bond dimension control.
         window_size: The window size for the simulation.
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
@@ -403,7 +426,7 @@ class WeakSimParams:
         max_bond_dim: int | None = None,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
-        threshold: float | None = None,
+        svd_threshold: float | None = None,
         krylov_tol: float | None = None,
         *,
         accuracy: AccuracyPreset = "balanced",
@@ -418,15 +441,15 @@ class WeakSimParams:
             shots: Number of measurement shots to simulate.
             max_bond_dim: Maximum bond dimension for simulation.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
-            accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
+            accuracy: Preset controlling ``svd_threshold`` and ``max_bond_dim``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, while ``"accurate"`` uses the strictest built-in settings.
-                Explicit ``threshold`` and ``max_bond_dim`` override the preset.
+                Explicit ``svd_threshold`` and ``max_bond_dim`` override the preset.
             krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
                 Smaller values are more accurate but may require more Krylov vectors. Explicit values
                 override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
-            threshold: Accuracy threshold for truncating tensors.
+            svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
         """
@@ -437,7 +460,9 @@ class WeakSimParams:
         self.max_bond_dim = max_bond_dim if max_bond_dim is not None else int(preset["max_bond_dim"])
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
-        self.threshold = threshold if threshold is not None else float(preset["threshold"])
+        self.svd_threshold = _validate_svd_threshold(
+            svd_threshold if svd_threshold is not None else float(preset["svd_threshold"])
+        )
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else float(preset["krylov_tol"]))
         self.get_state = get_state
         self.random_seed = random_seed

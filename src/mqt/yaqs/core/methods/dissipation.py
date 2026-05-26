@@ -143,7 +143,7 @@ def apply_dissipation(
                         [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
                         svd_distribution="right",
                         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
-                        threshold=sim_params.threshold,
+                        threshold=sim_params.svd_threshold,
                         max_bond_dim=sim_params.max_bond_dim,
                         min_bond_dim=sim_params.min_bond_dim,
                     )

@@ -80,7 +80,7 @@ def test_analog_simparams_defaults() -> None:
 
     This test constructs a AnalogSimParams instance with an empty observable list and total time elapsed_time,
     and verifies that default values for dt, sample_timesteps, number of trajectories (num_traj), max_bond_dim,
-    threshold, and order are correctly assigned.
+    svd_threshold, and order are correctly assigned.
     """
     obs_list = [Observable(X(), 0)]
     params = AnalogSimParams(observables=obs_list)
@@ -94,7 +94,7 @@ def test_analog_simparams_defaults() -> None:
     assert params.accuracy == "balanced"
     assert params.num_traj == balanced["num_traj"]
     assert params.max_bond_dim == balanced["max_bond_dim"]
-    assert params.threshold == pytest.approx(balanced["threshold"])
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
     assert params.order == 1
 
@@ -108,10 +108,10 @@ def test_analog_simparams_defaults() -> None:
     ],
 )
 def test_analog_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
-    """AnalogSimParams resolves threshold, max_bond_dim, and num_traj from accuracy presets."""
+    """AnalogSimParams resolves svd_threshold, max_bond_dim, and num_traj from accuracy presets."""
     params = AnalogSimParams(accuracy=accuracy)  # ty: ignore[invalid-argument-type]
     assert params.accuracy == accuracy
-    assert params.threshold == pytest.approx(expected["threshold"])
+    assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
     assert params.num_traj == expected["num_traj"]
     assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
@@ -126,10 +126,10 @@ def test_analog_simparams_accuracy_presets(accuracy: str, expected: dict[str, fl
     ],
 )
 def test_strong_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
-    """StrongSimParams resolves threshold, max_bond_dim, and num_traj from accuracy presets."""
+    """StrongSimParams resolves svd_threshold, max_bond_dim, and num_traj from accuracy presets."""
     params = StrongSimParams(accuracy=accuracy)  # ty: ignore[invalid-argument-type]
     assert params.accuracy == accuracy
-    assert params.threshold == pytest.approx(expected["threshold"])
+    assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
     assert params.num_traj == expected["num_traj"]
     assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
@@ -140,7 +140,7 @@ def test_analog_simparams_default_constructor_uses_balanced() -> None:
     params = AnalogSimParams()
     balanced = ACCURACY_PRESETS["balanced"]
     assert params.accuracy == "balanced"
-    assert params.threshold == pytest.approx(balanced["threshold"])
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.num_traj == balanced["num_traj"]
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
@@ -151,7 +151,7 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
     params = WeakSimParams(shots=100)
     balanced = ACCURACY_PRESETS["balanced"]
     assert params.accuracy == "balanced"
-    assert params.threshold == pytest.approx(balanced["threshold"])
+    assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
 
@@ -165,19 +165,19 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
     ],
 )
 def test_weak_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
-    """WeakSimParams resolves threshold and max_bond_dim from the shared accuracy presets."""
+    """WeakSimParams resolves svd_threshold and max_bond_dim from the shared accuracy presets."""
     params = WeakSimParams(shots=100, accuracy=accuracy)  # ty: ignore[invalid-argument-type]
     assert params.accuracy == accuracy
     assert params.shots == 100
-    assert params.threshold == pytest.approx(expected["threshold"])
+    assert params.svd_threshold == pytest.approx(expected["svd_threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
     assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
 
 
 def test_analog_simparams_accuracy_explicit_overrides() -> None:
     """Explicit numerical arguments override accuracy presets."""
-    params = AnalogSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
-    assert params.threshold == pytest.approx(1e-8)
+    params = AnalogSimParams(accuracy="fast", svd_threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
+    assert params.svd_threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.num_traj == 10
     assert params.krylov_tol == pytest.approx(1e-12)
@@ -185,8 +185,8 @@ def test_analog_simparams_accuracy_explicit_overrides() -> None:
 
 def test_strong_simparams_accuracy_explicit_overrides() -> None:
     """Explicit numerical arguments override accuracy presets."""
-    params = StrongSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
-    assert params.threshold == pytest.approx(1e-8)
+    params = StrongSimParams(accuracy="fast", svd_threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
+    assert params.svd_threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.num_traj == 10
     assert params.krylov_tol == pytest.approx(1e-12)
@@ -194,9 +194,9 @@ def test_strong_simparams_accuracy_explicit_overrides() -> None:
 
 def test_weak_simparams_accuracy_explicit_overrides() -> None:
     """Explicit numerical arguments override accuracy presets."""
-    params = WeakSimParams(shots=100, accuracy="fast", threshold=1e-8, max_bond_dim=512, krylov_tol=1e-12)
+    params = WeakSimParams(shots=100, accuracy="fast", svd_threshold=1e-8, max_bond_dim=512, krylov_tol=1e-12)
     assert params.shots == 100
-    assert params.threshold == pytest.approx(1e-8)
+    assert params.svd_threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.krylov_tol == pytest.approx(1e-12)
 
@@ -218,6 +218,13 @@ def test_simparams_rejects_invalid_krylov_tol(bad_tol: float) -> None:
     """krylov_tol must be finite and strictly positive."""
     with pytest.raises(ValueError, match="krylov_tol must be a finite positive float"):
         _ = AnalogSimParams(krylov_tol=bad_tol)
+
+
+@pytest.mark.parametrize("bad_threshold", [0.0, -1.0, float("inf"), float("nan")])
+def test_simparams_rejects_invalid_svd_threshold(bad_threshold: float) -> None:
+    """svd_threshold must be finite and strictly positive."""
+    with pytest.raises(ValueError, match="svd_threshold must be a finite positive float"):
+        _ = AnalogSimParams(svd_threshold=bad_threshold)
 
 
 def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -440,7 +447,7 @@ def test_strong_params_sorting_and_fields() -> None:
     # Parameter fields are retained
     assert params.num_traj == 7
     assert params.max_bond_dim == 128
-    assert params.threshold == pytest.approx(ACCURACY_PRESETS["balanced"]["threshold"])
+    assert params.svd_threshold == pytest.approx(ACCURACY_PRESETS["balanced"]["svd_threshold"])
     assert params.get_state is True
     assert params.sample_layers is True
     assert params.num_mid_measurements == 2
