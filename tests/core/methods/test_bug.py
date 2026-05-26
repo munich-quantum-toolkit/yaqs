@@ -253,7 +253,8 @@ def test_bug_single_site() -> None:
     ref_mps = deepcopy(mps)
     mpo = MPO.ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, svd_threshold=1e-16, max_bond_dim=10)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+
     # Perform BUG
     bug(mps, mpo, sim_params)
     # Check against exact evolution
@@ -270,7 +271,8 @@ def test_bug_three_sites() -> None:
     ref_mps = deepcopy(mps)
     mpo = MPO.ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, svd_threshold=1e-16, max_bond_dim=10)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+
     # Perform BUG
     bug(mps, mpo, sim_params)
     # Check against exact evolution
@@ -280,4 +282,5 @@ def test_bug_three_sites() -> None:
     new_state_vec = time_evo_op @ state_vec
     # Check the result
     assert mps.check_canonical_form() == [0]
-    assert np.allclose(mps.to_vec(), new_state_vec)
+    np.testing.assert_allclose(mps.to_vec(), new_state_vec, rtol=1e-10, atol=1e-12)
+
