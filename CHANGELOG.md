@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added Krylov threshold as high-level parameter ([#439]) ([**@aaronleesander**])
 - added accuracy presets to simulation parameters ([#438]) ([**@aaronleesander**])
 - added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
 - added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])
@@ -120,6 +121,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#439]: https://github.com/munich-quantum-toolkit/yaqs/pull/439
 [#438]: https://github.com/munich-quantum-toolkit/yaqs/pull/438
 [#430]: https://github.com/munich-quantum-toolkit/yaqs/pull/430
 [#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
