@@ -31,9 +31,9 @@ if TYPE_CHECKING:
 AccuracyPreset = Literal["fast", "balanced", "accurate"]
 
 ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
-    "fast": {"threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64},
-    "balanced": {"threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256},
-    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024},
+    "fast": {"threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64, "krylov_tol": 1e-3},
+    "balanced": {"threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
+    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
 }
 
 
@@ -75,6 +75,25 @@ def _validate_random_seed(random_seed: int | None) -> None:
     if random_seed < 0:
         msg = f"random_seed must be non-negative, got {random_seed}."
         raise ValueError(msg)
+
+
+def _validate_krylov_tol(krylov_tol: float) -> float:
+    """Validate the Krylov/Lanczos matrix exponential tolerance.
+
+    Args:
+        krylov_tol: Tolerance for adaptive Krylov/Lanczos matrix exponentials.
+
+    Returns:
+        The validated tolerance as a float.
+
+    Raises:
+        ValueError: If ``krylov_tol`` is non-finite or not strictly positive.
+    """
+    krylov_tol = float(krylov_tol)
+    if not np.isfinite(krylov_tol) or krylov_tol <= 0.0:
+        msg = f"krylov_tol must be a finite positive float, got {krylov_tol!r}."
+        raise ValueError(msg)
+    return krylov_tol
 
 
 class EvolutionMode(Enum):
@@ -144,6 +163,9 @@ class AnalogSimParams:
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, while ``"accurate"`` uses the strictest built-in settings.
             Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
+            Smaller values are more accurate but may require more Krylov vectors. Explicit values
+            override the preset.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
         order: Integration order.
@@ -163,6 +185,7 @@ class AnalogSimParams:
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         threshold: float | None = None,
+        krylov_tol: float | None = None,
         order: int = 1,
         *,
         accuracy: AccuracyPreset = "balanced",
@@ -188,6 +211,9 @@ class AnalogSimParams:
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, while ``"accurate"`` uses the strictest built-in settings.
                 Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
+                Smaller values are more accurate but may require more Krylov vectors. Explicit values
+                override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Threshold for simulation accuracy.
             order: Order of approximation or numerical scheme.
@@ -228,6 +254,7 @@ class AnalogSimParams:
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.threshold = threshold if threshold is not None else float(preset["threshold"])
+        self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else float(preset["krylov_tol"]))
         self.order = order
         self.evolution_mode = evolution_mode
         self.get_state = get_state
@@ -254,6 +281,9 @@ class StrongSimParams:
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, while ``"accurate"`` uses the strictest built-in settings.
             Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
+            Smaller values are more accurate but may require more Krylov vectors. Explicit values
+            override the preset.
         min_bond_dim: The minimum bond dimension if possible which gives TDVP
             better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
@@ -275,6 +305,7 @@ class StrongSimParams:
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         threshold: float | None = None,
+        krylov_tol: float | None = None,
         *,
         accuracy: AccuracyPreset = "balanced",
         get_state: bool = False,
@@ -295,6 +326,9 @@ class StrongSimParams:
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, while ``"accurate"`` uses the strictest built-in settings.
                 Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
+            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
+                Smaller values are more accurate but may require more Krylov vectors. Explicit values
+                override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Threshold for simulation accuracy.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
@@ -327,6 +361,7 @@ class StrongSimParams:
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.threshold = threshold if threshold is not None else float(preset["threshold"])
+        self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else float(preset["krylov_tol"]))
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
@@ -345,6 +380,9 @@ class WeakSimParams:
             Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
             examples, while ``"accurate"`` uses the strictest built-in settings.
             Explicit ``threshold`` and ``max_bond_dim`` override the preset.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
+            Smaller values are more accurate but may require more Krylov vectors. Explicit values
+            override the preset.
         min_bond_dim: The minimum bond dimension if possible which gives TDVP
             better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
@@ -366,6 +404,7 @@ class WeakSimParams:
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         threshold: float | None = None,
+        krylov_tol: float | None = None,
         *,
         accuracy: AccuracyPreset = "balanced",
         get_state: bool = False,
@@ -383,6 +422,9 @@ class WeakSimParams:
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, while ``"accurate"`` uses the strictest built-in settings.
                 Explicit ``threshold`` and ``max_bond_dim`` override the preset.
+            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
+                Smaller values are more accurate but may require more Krylov vectors. Explicit values
+                override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Accuracy threshold for truncating tensors.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
@@ -396,5 +438,6 @@ class WeakSimParams:
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.threshold = threshold if threshold is not None else float(preset["threshold"])
+        self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else float(preset["krylov_tol"]))
         self.get_state = get_state
         self.random_seed = random_seed

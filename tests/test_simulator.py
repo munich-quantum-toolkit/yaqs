@@ -425,6 +425,7 @@ def test_strong_simulation() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
+        krylov_tol=1e-12,
         random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
@@ -493,6 +494,7 @@ def test_strong_simulation_parallel_off() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
+        krylov_tol=1e-12,
         random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.

@@ -21,20 +21,20 @@ This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` ex
 
 ## Accuracy presets
 
-All three classes accept a keyword-only `accuracy` argument (default `"balanced"`) that sets truncation and, for analog/strong simulations, trajectory counts:
+All three classes accept a keyword-only `accuracy` argument (default `"balanced"`) that sets SVD truncation and, for analog/strong simulations, trajectory counts. It also controls `krylov_tol`, the tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates:
 
-| `accuracy`             | `threshold` | `max_bond_dim` | `num_traj` (analog / strong) |
-| ---------------------- | ----------- | -------------- | ---------------------------- |
-| `"fast"`               | `1e-3`      | `16`           | `64`                         |
-| `"balanced"` (default) | `1e-6`      | `128`          | `256`                        |
-| `"accurate"`           | `1e-9`      | `4096`         | `1024`                       |
+| `accuracy`             | `threshold` | `max_bond_dim` | `num_traj` (analog / strong) | `krylov_tol` |
+| ---------------------- | ----------- | -------------- | ---------------------------- | ------------ |
+| `"fast"`               | `1e-3`      | `16`           | `64`                         | `1e-3`       |
+| `"balanced"` (default) | `1e-6`      | `128`          | `256`                        | `1e-4`       |
+| `"accurate"`           | `1e-9`      | `4096`         | `1024`                       | `1e-6`       |
 
 - **`"fast"`** — quick tests, examples, and CI-style runs.
 - **`"balanced"`** — default tradeoff for exploratory work.
-- **`"accurate"`** — strictest built-in preset (`threshold=1e-9`, `max_bond_dim=4096`, `num_traj=1024` for stochastic runs).
+- **`"accurate"`** — strictest built-in preset (`threshold=1e-9`, `max_bond_dim=4096`, `num_traj=1024`, `krylov_tol=1e-6`).
 - **Overrides** — pass `threshold`, `max_bond_dim`, and/or `num_traj` explicitly; any non-`None` value wins over the preset.
 
-`min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset is stored on the object as `params.accuracy`.
+`threshold` controls **SVD truncation** (bond truncation), while `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. `min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset is stored on the object as `params.accuracy`.
 
 ## Recommended usage
 
@@ -55,6 +55,7 @@ def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) ->
         "accuracy": params.accuracy,
         "threshold": params.threshold,
         "max_bond_dim": params.max_bond_dim,
+        "krylov_tol": params.krylov_tol,
     }
     if isinstance(params, WeakSimParams):
         out["shots"] = params.shots
@@ -87,6 +88,7 @@ Explicit numerical values override the preset (advanced control):
 custom_params = StrongSimParams(
     accuracy="balanced",
     threshold=1e-8,
+    krylov_tol=1e-12,
     max_bond_dim=512,
     num_traj=512,
 )

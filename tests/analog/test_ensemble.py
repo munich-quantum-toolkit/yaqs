@@ -426,6 +426,7 @@ def test_xxz_transverse_unitary_ensemble_pauli_and_two_time_vs_ed() -> None:
         dt=dt,
         max_bond_dim=256,
         threshold=1e-12,
+        krylov_tol=1e-12,
         sample_timesteps=True,
         multi_time_observables=pairs,
     )

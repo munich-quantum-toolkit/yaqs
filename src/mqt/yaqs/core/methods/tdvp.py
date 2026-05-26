@@ -442,6 +442,8 @@ def _evolve_local_tensor_krylov(
     dt: float,
     proj_args: tuple[NDArray[np.complex128], ...],
     dense_threshold: int = DENSE_THRESHOLD,
+    *,
+    krylov_tol: float,
 ) -> NDArray[np.complex128]:
     """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
 
@@ -453,6 +455,7 @@ def _evolve_local_tensor_krylov(
         dt: Time step for evolution.
         proj_args: Extra arguments passed to `projector` before the tensor.
         dense_threshold: Maximum size of flattened tensor to use dense operator.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
         The evolved tensor with the same shape as `tensor`.
@@ -475,7 +478,7 @@ def _evolve_local_tensor_krylov(
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
 
-    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt)
+    evolved_flat = expm_krylov(apply_effective_operator, tensor_flat, dt, tol=krylov_tol)
     return evolved_flat.reshape(tensor_shape)
 
 
@@ -485,6 +488,8 @@ def update_site(
     op: NDArray[np.complex128],
     ket: NDArray[np.complex128],
     dt: float,
+    *,
+    krylov_tol: float,
 ) -> NDArray[np.complex128]:
     """Evolve the local MPS tensor A forward in time using the local Hamiltonian.
 
@@ -497,12 +502,19 @@ def update_site(
         op (NDArray[np.complex128]): Local MPO tensor.
         ket (NDArray[np.complex128]): Local MPS tensor.
         dt (float): Time step for evolution.
+        krylov_tol (float): Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
         NDArray[np.complex128]: The updated MPS tensor after evolution.
     """
     proj_args = (left_env, right_env, op)
-    return _evolve_local_tensor_krylov(projector=project_site, tensor=ket, dt=dt, proj_args=proj_args)
+    return _evolve_local_tensor_krylov(
+        projector=project_site,
+        tensor=ket,
+        dt=dt,
+        proj_args=proj_args,
+        krylov_tol=krylov_tol,
+    )
 
 
 def update_bond(
@@ -510,6 +522,8 @@ def update_bond(
     right_env: NDArray[np.complex128],
     bond_tensor: NDArray[np.complex128],
     dt: float,
+    *,
+    krylov_tol: float,
 ) -> NDArray[np.complex128]:
     """Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
 
@@ -521,6 +535,7 @@ def update_bond(
         right_env (NDArray[np.complex128]): Right operator block.
         bond_tensor (NDArray[np.complex128]): Bond tensor.
         dt (float): Time step for the bond evolution.
+        krylov_tol (float): Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
         NDArray[np.complex128]: The updated bond tensor after evolution.
@@ -531,6 +546,7 @@ def update_bond(
         tensor=bond_tensor,
         dt=dt,
         proj_args=proj_args,
+        krylov_tol=krylov_tol,
     )
 
 
@@ -581,6 +597,7 @@ def single_site_tdvp(
             hamiltonian.tensors[i],
             state.tensors[i],
             0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
         )
         tensor_shape = state.tensors[i].shape
         reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
@@ -589,7 +606,13 @@ def single_site_tdvp(
         left_blocks[i + 1] = update_left_environment(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
         )
-        bond_tensor = update_bond(left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt)
+        bond_tensor = update_bond(
+            left_blocks[i + 1],
+            right_blocks[i],
+            bond_tensor,
+            -0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
         state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -602,6 +625,7 @@ def single_site_tdvp(
         hamiltonian.tensors[last],
         state.tensors[last],
         sim_params.dt,
+        krylov_tol=sim_params.krylov_tol,
     )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -622,7 +646,13 @@ def single_site_tdvp(
             state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
         )
         bond_tensor = bond_tensor.transpose()
-        bond_tensor = update_bond(left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt)
+        bond_tensor = update_bond(
+            left_blocks[i],
+            right_blocks[i - 1],
+            bond_tensor,
+            -0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
         state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
         state.tensors[i - 1] = update_site(
             left_blocks[i - 1],
@@ -630,6 +660,7 @@ def single_site_tdvp(
             hamiltonian.tensors[i - 1],
             state.tensors[i - 1],
             0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
         )
 
 
@@ -685,7 +716,14 @@ def two_site_tdvp(
     for i in range(num_sites - 2):
         merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
+        merged_tensor = update_site(
+            left_blocks[i],
+            right_blocks[i + 1],
+            merged_mpo,
+            merged_tensor,
+            0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
         state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
             merged_tensor,
             sim_params,
@@ -702,6 +740,7 @@ def two_site_tdvp(
             hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
         )
 
     # Guarantees unit time at final site for circuits
@@ -711,7 +750,14 @@ def two_site_tdvp(
     i = num_sites - 2
     merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
     merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-    merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt)
+    merged_tensor = update_site(
+        left_blocks[i],
+        right_blocks[i + 1],
+        merged_mpo,
+        merged_tensor,
+        sim_params.dt,
+        krylov_tol=sim_params.krylov_tol,
+    )
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
@@ -742,10 +788,18 @@ def two_site_tdvp(
             hamiltonian.tensors[i + 1],
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
         )
         merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
+        merged_tensor = update_site(
+            left_blocks[i],
+            right_blocks[i + 1],
+            merged_mpo,
+            merged_tensor,
+            0.5 * sim_params.dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
         state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
             merged_tensor,
             sim_params,
@@ -812,6 +866,7 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i],
                 state.tensors[i],
                 0.5 * sim_params.dt,
+                krylov_tol=sim_params.krylov_tol,
             )
             if i != num_sites - 1:
                 tensor_shape = state.tensors[i].shape
@@ -821,7 +876,13 @@ def local_dynamic_tdvp(
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
                 )
-                bond_tensor = update_bond(left_blocks[i + 1], right_blocks[i], bond_tensor, -0.5 * sim_params.dt)
+                bond_tensor = update_bond(
+                    left_blocks[i + 1],
+                    right_blocks[i],
+                    bond_tensor,
+                    -0.5 * sim_params.dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
             if i == num_sites - 2:
                 # Guarantees final site is 1TDVP
@@ -833,7 +894,12 @@ def local_dynamic_tdvp(
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
-                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                0.5 * sim_params.dt,
+                krylov_tol=sim_params.krylov_tol,
             )
 
             state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
@@ -854,7 +920,12 @@ def local_dynamic_tdvp(
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
-                left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                0.5 * sim_params.dt,
+                krylov_tol=sim_params.krylov_tol,
             )
             state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
                 merged_tensor,
@@ -872,6 +943,7 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i + 1],
                 state.tensors[i + 1],
                 -0.5 * sim_params.dt,
+                krylov_tol=sim_params.krylov_tol,
             )
 
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
@@ -888,6 +960,7 @@ def local_dynamic_tdvp(
                 hamiltonian.tensors[i],
                 state.tensors[i],
                 0.5 * sim_params.dt,
+                krylov_tol=sim_params.krylov_tol,
             )
             if i != 0:
                 state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
@@ -907,7 +980,13 @@ def local_dynamic_tdvp(
                     state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
                 )
                 bond_tensor = bond_tensor.transpose()
-                bond_tensor = update_bond(left_blocks[i], right_blocks[i - 1], bond_tensor, -0.5 * sim_params.dt)
+                bond_tensor = update_bond(
+                    left_blocks[i],
+                    right_blocks[i - 1],
+                    bond_tensor,
+                    -0.5 * sim_params.dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
 
                 if i == 1:
@@ -919,7 +998,12 @@ def local_dynamic_tdvp(
             merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
             merged_tensor = update_site(
-                left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt
+                left_blocks[i - 1],
+                right_blocks[i],
+                merged_mpo,
+                merged_tensor,
+                0.5 * sim_params.dt,
+                krylov_tol=sim_params.krylov_tol,
             )
             state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
                 merged_tensor,
@@ -939,6 +1023,7 @@ def local_dynamic_tdvp(
                     hamiltonian.tensors[i - 1],
                     state.tensors[i - 1],
                     -0.5 * sim_params.dt,
+                    krylov_tol=sim_params.krylov_tol,
                 )
 
 

@@ -35,6 +35,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     WeakSimParams,
 )
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
+from mqt.yaqs.core.methods import tdvp
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -94,6 +95,7 @@ def test_analog_simparams_defaults() -> None:
     assert params.num_traj == balanced["num_traj"]
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.threshold == pytest.approx(balanced["threshold"])
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
     assert params.order == 1
 
 
@@ -112,6 +114,7 @@ def test_analog_simparams_accuracy_presets(accuracy: str, expected: dict[str, fl
     assert params.threshold == pytest.approx(expected["threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
     assert params.num_traj == expected["num_traj"]
+    assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
 
 
 @pytest.mark.parametrize(
@@ -129,6 +132,7 @@ def test_strong_simparams_accuracy_presets(accuracy: str, expected: dict[str, fl
     assert params.threshold == pytest.approx(expected["threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
     assert params.num_traj == expected["num_traj"]
+    assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
 
 
 def test_analog_simparams_default_constructor_uses_balanced() -> None:
@@ -139,6 +143,7 @@ def test_analog_simparams_default_constructor_uses_balanced() -> None:
     assert params.threshold == pytest.approx(balanced["threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.num_traj == balanced["num_traj"]
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
 
 
 def test_weak_simparams_default_constructor_uses_balanced() -> None:
@@ -148,6 +153,7 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
     assert params.accuracy == "balanced"
     assert params.threshold == pytest.approx(balanced["threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
+    assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
 
 
 @pytest.mark.parametrize(
@@ -165,30 +171,34 @@ def test_weak_simparams_accuracy_presets(accuracy: str, expected: dict[str, floa
     assert params.shots == 100
     assert params.threshold == pytest.approx(expected["threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
+    assert params.krylov_tol == pytest.approx(expected["krylov_tol"])
 
 
 def test_analog_simparams_accuracy_explicit_overrides() -> None:
     """Explicit numerical arguments override accuracy presets."""
-    params = AnalogSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10)
+    params = AnalogSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
     assert params.threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.num_traj == 10
+    assert params.krylov_tol == pytest.approx(1e-12)
 
 
 def test_strong_simparams_accuracy_explicit_overrides() -> None:
     """Explicit numerical arguments override accuracy presets."""
-    params = StrongSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10)
+    params = StrongSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10, krylov_tol=1e-12)
     assert params.threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.num_traj == 10
+    assert params.krylov_tol == pytest.approx(1e-12)
 
 
 def test_weak_simparams_accuracy_explicit_overrides() -> None:
     """Explicit numerical arguments override accuracy presets."""
-    params = WeakSimParams(shots=100, accuracy="fast", threshold=1e-8, max_bond_dim=512)
+    params = WeakSimParams(shots=100, accuracy="fast", threshold=1e-8, max_bond_dim=512, krylov_tol=1e-12)
     assert params.shots == 100
     assert params.threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
+    assert params.krylov_tol == pytest.approx(1e-12)
 
 
 def test_strong_simparams_rejects_invalid_accuracy() -> None:
@@ -201,6 +211,43 @@ def test_strong_simparams_rejects_none_accuracy() -> None:
     """accuracy=None is not supported."""
     with pytest.raises(ValueError, match="accuracy must be one of"):
         StrongSimParams(accuracy=None)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("bad_tol", [0.0, -1.0, float("inf"), float("nan")])
+def test_simparams_rejects_invalid_krylov_tol(bad_tol: float) -> None:
+    """krylov_tol must be finite and strictly positive."""
+    with pytest.raises(ValueError, match="krylov_tol must be a finite positive float"):
+        _ = AnalogSimParams(krylov_tol=bad_tol)
+
+
+def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TDVP Krylov helper must pass krylov_tol down to expm_krylov(tol=...)."""
+    seen: dict[str, float] = {}
+
+    def fake_expm_krylov(
+        _matrix_free_operator: object,
+        vec: np.ndarray,
+        _dt: float,
+        max_lanczos_iterations: int = 25,
+        tol: float = 1e-12,
+    ) -> np.ndarray:
+        _ = max_lanczos_iterations
+        seen["tol"] = float(tol)
+        return vec
+
+    monkeypatch.setattr(tdvp, "expm_krylov", fake_expm_krylov)
+
+    tensor = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
+
+    _ = tdvp._evolve_local_tensor_krylov(  # noqa: SLF001
+        projector=lambda x: x,
+        tensor=tensor,
+        dt=0.1,
+        proj_args=(),
+        krylov_tol=1e-7,
+    )
+
+    assert seen["tol"] == pytest.approx(1e-7)
 
 
 def test_allocate_observable_buffers_with_sample_timesteps() -> None:

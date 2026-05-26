@@ -215,7 +215,7 @@ def test_update_site() -> None:
     W = rng.random(size=(2, 2, 1, 1)).astype(np.complex128)
     L_arr = rng.random(size=(2, 1, 2)).astype(np.complex128)
     dt = 0.05
-    out = update_site(L_arr, R, W, A, dt)
+    out = update_site(L_arr, R, W, A, dt, krylov_tol=1e-12)
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
 
 
@@ -229,7 +229,7 @@ def test_update_bond() -> None:
     R = rng.random(size=(2, 2, 2)).astype(np.complex128)
     L_arr = rng.random(size=(2, 2, 2)).astype(np.complex128)
     dt = 0.05
-    out = update_bond(L_arr, R, C, dt)
+    out = update_bond(L_arr, R, C, dt, krylov_tol=1e-12)
     assert out.shape == C.shape, f"Expected shape {C.shape}, got {out.shape}"
 
 
@@ -283,6 +283,7 @@ def test_two_site_tdvp() -> None:
         elapsed_time=0.2,
         dt=0.1,
         sample_timesteps=True,
+        krylov_tol=1e-12,
     )
     two_site_tdvp(state, H, sim_params)
     assert state.length == L
