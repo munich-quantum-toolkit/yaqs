@@ -33,12 +33,12 @@ AccuracyPreset = Literal["fast", "balanced", "accurate"]
 ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
     "fast": {"threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64},
     "balanced": {"threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256},
-    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1000},
+    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024},
 }
 
 _EXPERT_DEFAULT_THRESHOLD = 1e-9
 _EXPERT_DEFAULT_MAX_BOND_DIM = 4096
-_EXPERT_DEFAULT_NUM_TRAJ = 1000
+_EXPERT_DEFAULT_NUM_TRAJ = 1024
 
 
 def _validate_accuracy(accuracy: AccuracyPreset | None) -> AccuracyPreset | None:
