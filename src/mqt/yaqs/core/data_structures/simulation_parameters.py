@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import copy
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, TypeVar
 
 import numpy as np
 
@@ -27,6 +27,67 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.libraries.gate_library import BaseGate
+
+AccuracyPreset = Literal["fast", "balanced", "accurate"]
+
+STOCHASTIC_ACCURACY_PRESETS: dict[
+    AccuracyPreset,
+    dict[str, float | int],
+] = {
+    "fast": {"threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64},
+    "balanced": {"threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256},
+    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024},
+}
+
+WEAK_ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
+    "fast": {"threshold": 1e-3, "max_bond_dim": 16},
+    "balanced": {"threshold": 1e-6, "max_bond_dim": 128},
+    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096},
+}
+
+_EXPERT_DEFAULT_THRESHOLD = 1e-9
+_EXPERT_DEFAULT_MAX_BOND_DIM = 4096
+_EXPERT_DEFAULT_NUM_TRAJ = 1000
+
+_T = TypeVar("_T")
+
+
+def _validate_accuracy(accuracy: AccuracyPreset | None) -> AccuracyPreset | None:
+    """Validate ``accuracy`` preset names at runtime.
+
+    Args:
+        accuracy: Preset name or ``None`` for expert defaults.
+
+    Returns:
+        The validated preset name, or ``None``.
+
+    Raises:
+        ValueError: If ``accuracy`` is not a supported preset name.
+    """
+    if accuracy is None:
+        return None
+    if accuracy not in STOCHASTIC_ACCURACY_PRESETS:
+        msg = f"accuracy must be one of {sorted(STOCHASTIC_ACCURACY_PRESETS)!r}, got {accuracy!r}."
+        raise ValueError(msg)
+    return accuracy
+
+
+def _resolve_accuracy_setting(
+    value: _T | None,
+    preset_value: _T,
+    fallback_value: _T,
+    accuracy: AccuracyPreset | None,
+) -> _T:
+    """Resolve a simulation parameter from explicit value, preset, or expert default.
+
+    Returns:
+        The resolved parameter value.
+    """
+    if value is not None:
+        return value
+    if accuracy is None:
+        return fallback_value
+    return preset_value
 
 
 def _validate_random_seed(random_seed: int | None) -> None:
@@ -112,6 +173,10 @@ class AnalogSimParams:
         num_traj: Number of trajectories (for stochastic open-system evolution).
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
         max_bond_dim: Maximum allowed bond dimension.
+        accuracy: Optional preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+            ``"fast"`` is for quick tests. ``"balanced"`` is the default tradeoff.
+            ``"accurate"`` corresponds approximately to the old high-accuracy defaults.
+            Explicit numerical arguments override the preset. ``None`` selects expert defaults.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
         order: Integration order.
@@ -126,13 +191,14 @@ class AnalogSimParams:
         observables: list[Observable] | None = None,
         elapsed_time: float = 0.1,
         dt: float = 0.1,
-        num_traj: int = 1000,
-        max_bond_dim: int = 4096,
+        num_traj: int | None = None,
+        max_bond_dim: int | None = None,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
-        threshold: float = 1e-9,
+        threshold: float | None = None,
         order: int = 1,
         *,
+        accuracy: AccuracyPreset | None = "balanced",
         sample_timesteps: bool = True,
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
@@ -151,6 +217,10 @@ class AnalogSimParams:
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed.
             min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
+            accuracy: Optional preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+                ``"fast"`` is for quick tests. ``"balanced"`` is the default tradeoff.
+                ``"accurate"`` corresponds approximately to the old high-accuracy defaults.
+                Explicit numerical arguments override the preset. ``None`` selects expert defaults.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Threshold for simulation accuracy.
             order: Order of approximation or numerical scheme.
@@ -163,6 +233,16 @@ class AnalogSimParams:
 
         """
         _validate_random_seed(random_seed)
+        accuracy = _validate_accuracy(accuracy)
+        if accuracy is not None:
+            stochastic_preset = STOCHASTIC_ACCURACY_PRESETS[accuracy]
+            preset_num_traj = int(stochastic_preset["num_traj"])
+            preset_max_bond_dim = int(stochastic_preset["max_bond_dim"])
+            preset_threshold = float(stochastic_preset["threshold"])
+        else:
+            preset_num_traj = _EXPERT_DEFAULT_NUM_TRAJ
+            preset_max_bond_dim = _EXPERT_DEFAULT_MAX_BOND_DIM
+            preset_threshold = _EXPERT_DEFAULT_THRESHOLD
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -184,11 +264,13 @@ class AnalogSimParams:
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
         self.sample_timesteps = sample_timesteps
-        self.num_traj = num_traj
-        self.max_bond_dim = max_bond_dim
+        self.num_traj = _resolve_accuracy_setting(num_traj, preset_num_traj, _EXPERT_DEFAULT_NUM_TRAJ, accuracy)
+        self.max_bond_dim = _resolve_accuracy_setting(
+            max_bond_dim, preset_max_bond_dim, _EXPERT_DEFAULT_MAX_BOND_DIM, accuracy
+        )
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
-        self.threshold = threshold
+        self.threshold = _resolve_accuracy_setting(threshold, preset_threshold, _EXPERT_DEFAULT_THRESHOLD, accuracy)
         self.order = order
         self.evolution_mode = evolution_mode
         self.get_state = get_state
@@ -206,6 +288,10 @@ class WeakSimParams:
         num_traj: A placeholder property for code compatibility.
         shots: The number of shots for the simulation.
         max_bond_dim: The maximum bond dimension for the simulation.
+        accuracy: Optional preset controlling ``threshold`` and ``max_bond_dim``.
+            ``"fast"`` is for quick tests. ``"balanced"`` is the default tradeoff.
+            ``"accurate"`` corresponds approximately to the old high-accuracy defaults.
+            Explicit numerical arguments override the preset. ``None`` selects expert defaults.
         min_bond_dim: The minimum bond dimension if possible which gives TDVP
             better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
@@ -223,11 +309,12 @@ class WeakSimParams:
     def __init__(
         self,
         shots: int,
-        max_bond_dim: int = 4096,
+        max_bond_dim: int | None = None,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
-        threshold: float = 1e-9,
+        threshold: float | None = None,
         *,
+        accuracy: AccuracyPreset | None = "balanced",
         get_state: bool = False,
         random_seed: int | None = None,
     ) -> None:
@@ -239,17 +326,31 @@ class WeakSimParams:
             shots: Number of measurement shots to simulate.
             max_bond_dim: Maximum bond dimension for simulation.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
+            accuracy: Optional preset controlling ``threshold`` and ``max_bond_dim``.
+                ``"fast"`` is for quick tests. ``"balanced"`` is the default tradeoff.
+                ``"accurate"`` corresponds approximately to the old high-accuracy defaults.
+                Explicit numerical arguments override the preset. ``None`` selects expert defaults.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Accuracy threshold for truncating tensors.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
         """
         _validate_random_seed(random_seed)
+        accuracy = _validate_accuracy(accuracy)
+        if accuracy is not None:
+            weak_preset = WEAK_ACCURACY_PRESETS[accuracy]
+            preset_max_bond_dim = int(weak_preset["max_bond_dim"])
+            preset_threshold = float(weak_preset["threshold"])
+        else:
+            preset_max_bond_dim = _EXPERT_DEFAULT_MAX_BOND_DIM
+            preset_threshold = _EXPERT_DEFAULT_THRESHOLD
         self.shots = shots
-        self.max_bond_dim = max_bond_dim
+        self.max_bond_dim = _resolve_accuracy_setting(
+            max_bond_dim, preset_max_bond_dim, _EXPERT_DEFAULT_MAX_BOND_DIM, accuracy
+        )
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
-        self.threshold = threshold
+        self.threshold = _resolve_accuracy_setting(threshold, preset_threshold, _EXPERT_DEFAULT_THRESHOLD, accuracy)
         self.get_state = get_state
         self.random_seed = random_seed
 
@@ -263,15 +364,19 @@ class StrongSimParams:
         dt: A placeholder property for code compatibility.
         observables: A list of observables to be tracked during the simulation.
         sorted_observables: A list of observables sorted by site and name.
-        num_traj: The number of trajectories to simulate. Default is 1000.
+        num_traj: The number of trajectories to simulate.
         random_seed: If set, seeds per-trajectory jump RNG and static noise
             sampling for reproducible runs.
-        max_bond_dim: The maximum bond dimension for the simulation. Default is 2.
+        max_bond_dim: The maximum bond dimension for the simulation.
+        accuracy: Optional preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+            ``"fast"`` is for quick tests. ``"balanced"`` is the default tradeoff.
+            ``"accurate"`` corresponds approximately to the old high-accuracy defaults.
+            Explicit numerical arguments override the preset. ``None`` selects expert defaults.
         min_bond_dim: The minimum bond dimension if possible which gives TDVP
             better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
             ``"discarded_weight"`` and ``"relative"``.
-        threshold: The threshold value for the simulation. Default is ``1e-6``.
+        threshold: The threshold value for the simulation.
         window_size: The size of the window for the simulation. Default is ``None``.
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
@@ -283,12 +388,13 @@ class StrongSimParams:
     def __init__(
         self,
         observables: list[Observable] | None = None,
-        num_traj: int = 1000,
-        max_bond_dim: int = 4096,
+        num_traj: int | None = None,
+        max_bond_dim: int | None = None,
         min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
-        threshold: float = 1e-9,
+        threshold: float | None = None,
         *,
+        accuracy: AccuracyPreset | None = "balanced",
         get_state: bool = False,
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
@@ -303,6 +409,10 @@ class StrongSimParams:
             num_traj: Number of trajectories to simulate.
             max_bond_dim: Maximum bond dimension allowed in simulation.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
+            accuracy: Optional preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
+                ``"fast"`` is for quick tests. ``"balanced"`` is the default tradeoff.
+                ``"accurate"`` corresponds approximately to the old high-accuracy defaults.
+                Explicit numerical arguments override the preset. ``None`` selects expert defaults.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Threshold for simulation accuracy.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
@@ -311,6 +421,16 @@ class StrongSimParams:
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
         """
         _validate_random_seed(random_seed)
+        accuracy = _validate_accuracy(accuracy)
+        if accuracy is not None:
+            stochastic_preset = STOCHASTIC_ACCURACY_PRESETS[accuracy]
+            preset_num_traj = int(stochastic_preset["num_traj"])
+            preset_max_bond_dim = int(stochastic_preset["max_bond_dim"])
+            preset_threshold = float(stochastic_preset["threshold"])
+        else:
+            preset_num_traj = _EXPERT_DEFAULT_NUM_TRAJ
+            preset_max_bond_dim = _EXPERT_DEFAULT_MAX_BOND_DIM
+            preset_threshold = _EXPERT_DEFAULT_THRESHOLD
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -328,11 +448,13 @@ class StrongSimParams:
         else:
             self.sorted_observables = []
 
-        self.num_traj = num_traj
-        self.max_bond_dim = max_bond_dim
+        self.num_traj = _resolve_accuracy_setting(num_traj, preset_num_traj, _EXPERT_DEFAULT_NUM_TRAJ, accuracy)
+        self.max_bond_dim = _resolve_accuracy_setting(
+            max_bond_dim, preset_max_bond_dim, _EXPERT_DEFAULT_MAX_BOND_DIM, accuracy
+        )
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
-        self.threshold = threshold
+        self.threshold = _resolve_accuracy_setting(threshold, preset_threshold, _EXPERT_DEFAULT_THRESHOLD, accuracy)
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
