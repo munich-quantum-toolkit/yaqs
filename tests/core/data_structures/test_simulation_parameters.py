@@ -90,6 +90,7 @@ def test_analog_simparams_defaults() -> None:
     # times should be np.arange(0, elapsed_time+dt, dt)
     assert np.isclose(params.times[-1], 0.1)
     balanced = ACCURACY_PRESETS["balanced"]
+    assert params.accuracy == "balanced"
     assert params.num_traj == balanced["num_traj"]
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.threshold == pytest.approx(balanced["threshold"])
@@ -107,6 +108,7 @@ def test_analog_simparams_defaults() -> None:
 def test_analog_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
     """AnalogSimParams resolves threshold, max_bond_dim, and num_traj from accuracy presets."""
     params = AnalogSimParams(accuracy=accuracy)  # ty: ignore[invalid-argument-type]
+    assert params.accuracy == accuracy
     assert params.threshold == pytest.approx(expected["threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
     assert params.num_traj == expected["num_traj"]
@@ -171,16 +173,19 @@ def test_weak_simparams_accuracy_explicit_overrides() -> None:
 def test_simparams_accuracy_none_expert_defaults() -> None:
     """accuracy=None preserves the previous expert defaults."""
     analog = AnalogSimParams(accuracy=None)
+    assert analog.accuracy is None
     assert analog.threshold == pytest.approx(1e-9)
     assert analog.max_bond_dim == 4096
     assert analog.num_traj == 1000
 
     strong = StrongSimParams(accuracy=None)
+    assert strong.accuracy is None
     assert strong.threshold == pytest.approx(1e-9)
     assert strong.max_bond_dim == 4096
     assert strong.num_traj == 1000
 
     weak = WeakSimParams(shots=100, accuracy=None)
+    assert weak.accuracy is None
     assert weak.threshold == pytest.approx(1e-9)
     assert weak.max_bond_dim == 4096
 

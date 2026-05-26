@@ -33,12 +33,12 @@ AccuracyPreset = Literal["fast", "balanced", "accurate"]
 ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
     "fast": {"threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64},
     "balanced": {"threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256},
-    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024},
+    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1000},
 }
 
 _EXPERT_DEFAULT_THRESHOLD = 1e-9
 _EXPERT_DEFAULT_MAX_BOND_DIM = 4096
-_EXPERT_DEFAULT_NUM_TRAJ = 1024
+_EXPERT_DEFAULT_NUM_TRAJ = 1000
 
 
 def _validate_accuracy(accuracy: AccuracyPreset | None) -> AccuracyPreset | None:
@@ -221,6 +221,7 @@ class AnalogSimParams:
         """
         _validate_random_seed(random_seed)
         preset = _get_accuracy_preset(accuracy)
+        self.accuracy = accuracy
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -323,6 +324,7 @@ class StrongSimParams:
         """
         _validate_random_seed(random_seed)
         preset = _get_accuracy_preset(accuracy)
+        self.accuracy = accuracy
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -408,6 +410,7 @@ class WeakSimParams:
         """
         _validate_random_seed(random_seed)
         preset = _get_accuracy_preset(accuracy)
+        self.accuracy = accuracy
         self.shots = shots
         self.max_bond_dim = max_bond_dim if max_bond_dim is not None else int(preset["max_bond_dim"])
         self.min_bond_dim = min_bond_dim
