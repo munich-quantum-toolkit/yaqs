@@ -19,9 +19,11 @@ YAQS separates **what you evolve** ({class}`~mqt.yaqs.core.data_structures.state
 
 This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` execution options (parallelism, progress bars), see {doc}`simulator_initialization`.
 
-## Simulation presets
+## Start with a preset
 
-All three classes accept a keyword-only `preset` argument (default `"balanced"`) that sets SVD truncation, bond-dimension limits, trajectory counts (analog/strong), and `krylov_tol` for the adaptive Krylov/Lanczos matrix exponential in TDVP updates:
+You do **not** need to tune every numerical knob before running a simulation. Pick a **preset** and let it fill in the truncation and sampling settings you may be unfamiliar with (`svd_threshold`, `max_bond_dim`, `num_traj` on analog/strong runs, and `krylov_tol`).
+
+All three `*SimParams` classes accept a keyword-only `preset` argument (default `"balanced"`):
 
 | `preset`               | `svd_threshold` | `max_bond_dim` | `num_traj` (analog / strong) | `krylov_tol` |
 | ---------------------- | --------------- | -------------- | ---------------------------- | ------------ |
@@ -31,12 +33,34 @@ All three classes accept a keyword-only `preset` argument (default `"balanced"`)
 | `"exact"`              | `1e-13`         | `None`         | `1024`                       | `1e-12`      |
 
 - **`"fast"`** — qualitative exploration and quick tests; not intended for strict dense comparisons.
-- **`"balanced"`** — recommended default tradeoff for exploratory work.
+- **`"balanced"`** — recommended default for exploratory work.
 - **`"accurate"`** — high-quality production settings.
 - **`"exact"`** — strict reference/debug preset with minimal internal numerical relaxation. Stochastic trajectory sampling, finite time steps, and model error still apply; this is not mathematically exact.
-- **Overrides** — pass `svd_threshold`, `max_bond_dim`, `num_traj`, and/or `krylov_tol` explicitly; any value you pass (including `max_bond_dim=None`) wins over the preset.
 
-`svd_threshold` controls **tensor-network SVD truncation** (bond truncation). `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. These are independent: tightening one does not change the other. `min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset is stored on the object as `params.preset`.
+`svd_threshold` controls **tensor-network SVD truncation** (bond truncation). `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. These are independent: tightening one does not change the other. `min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset name is stored on the object as `params.preset`.
+
+## Override only what you need
+
+**Explicit constructor arguments override the preset; everything you omit keeps the preset value.**
+
+That is the intended workflow when you know *some* settings but not all:
+
+1. Choose the closest preset (`"fast"`, `"balanced"`, `"accurate"`, or `"exact"`).
+2. Pass **only** the fields you want to change.
+3. Leave the rest unset — they stay at the preset defaults.
+
+Overridable preset fields:
+
+| Argument         | What it controls                                      |
+| ---------------- | ----------------------------------------------------- |
+| `svd_threshold`  | SVD bond truncation during MPS/MPO updates            |
+| `max_bond_dim`   | Hard cap on bond dimension (`None` = no cap)        |
+| `num_traj`       | Trajectory count (analog / strong only)               |
+| `krylov_tol`     | Adaptive Krylov/Lanczos matrix exponential in TDVP  |
+
+`WeakSimParams` always requires `shots` separately; `shots` is **not** part of any preset.
+
+If you omit an overridable argument, the preset supplies it. If you pass a value explicitly, **that value wins** for that field only — the other preset fields are unchanged.
 
 ## Recommended usage
 
@@ -66,8 +90,10 @@ def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) ->
     return out
 ```
 
+Pick a preset — no other truncation arguments required:
+
 ```{code-cell} ipython3
-# Default: balanced preset
+# Default: balanced preset fills in all truncation settings
 analog_params = AnalogSimParams()
 print("default", _trunc_summary(analog_params))
 
@@ -76,17 +102,32 @@ for name in ("fast", "balanced", "accurate", "exact"):
     print(name, _trunc_summary(params))
 ```
 
-Explicit numerical values override the preset (advanced control):
+Override **one** field; the rest stay from `"balanced"`:
+
+```{code-cell} ipython3
+balanced = AnalogSimParams(preset="balanced")
+tighter_krylov = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
+
+print("balanced preset only", _trunc_summary(balanced))
+print("override krylov_tol only", _trunc_summary(tighter_krylov))
+# svd_threshold, max_bond_dim, and num_traj still come from "balanced"
+assert tighter_krylov.svd_threshold == balanced.svd_threshold
+assert tighter_krylov.max_bond_dim == balanced.max_bond_dim
+assert tighter_krylov.num_traj == balanced.num_traj
+```
+
+Override **several** fields when you know exactly what you want; the remaining preset fields still apply:
 
 ```{code-cell} ipython3
 custom_params = AnalogSimParams(
-    preset="balanced",
-    krylov_tol=1e-8,
+    preset="fast",  # start from fast defaults for everything else
+    max_bond_dim=512,
+    num_traj=32,
 )
 _trunc_summary(custom_params)
 ```
 
-Weak simulation: `shots` remain explicit and are **not** controlled by `preset`:
+Weak simulation: set `shots` yourself, use a preset for truncation:
 
 ```{code-cell} ipython3
 weak_params = WeakSimParams(
@@ -98,7 +139,7 @@ _trunc_summary(weak_params)
 
 ## `AnalogSimParams`
 
-Besides truncation settings, you typically set the time grid (`elapsed_time`, `dt`), observables, and whether to record intermediate times (`sample_timesteps`).
+Besides the preset (and any overrides), you typically set the time grid (`elapsed_time`, `dt`), observables, and whether to record intermediate times (`sample_timesteps`).
 
 ```{code-cell} ipython3
 L = 4
@@ -111,6 +152,19 @@ analog = AnalogSimParams(
     preset="accurate",
 )
 _trunc_summary(analog)
+```
+
+Need a smaller bond cap for a quick test, but keep the rest of `"accurate"`?
+
+```{code-cell} ipython3
+analog_quick = AnalogSimParams(
+    observables=observables,
+    elapsed_time=0.2,
+    dt=0.05,
+    preset="accurate",
+    max_bond_dim=256,
+)
+_trunc_summary(analog_quick)
 ```
 
 Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a {class}`~mqt.yaqs.core.data_structures.state.State` and {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` (see {doc}`analog_simulation`).
