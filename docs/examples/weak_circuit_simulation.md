@@ -15,8 +15,8 @@ mystnb:
 # Weak Circuit Simulation (Shots)
 
 This module demonstrates how to run a weak simulation using the YAQS simulator
-with a TwoLocal circuit generated via Qiskit's circuit library. An MPS is initialized
-in the $\ket{0}$ state, a noise model is applied, and weak simulation parameters are set.
+with a TwoLocal circuit generated via Qiskit's circuit library. A [`State`](mqt.yaqs.core.data_structures.state.State) is initialized
+in the $\ket{0}$ state (MPS representation), a noise model is applied, and weak simulation parameters are set.
 After running the simulation, the measurement results (bitstring counts) are displayed
 as a bar chart.
 
@@ -40,9 +40,10 @@ circuit.draw(output="mpl")
 Define the initial state
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.state import State
 
-state = MPS(num_qubits, state="zeros")
+# Circuit simulation requires representation="mps" (the default for presets).
+state = State(num_qubits, initial="zeros")
 ```
 
 Define the noise model
@@ -70,9 +71,10 @@ Run the simulation
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 
-simulator.run(state, circuit, sim_params, noise_model)
+sim = Simulator()
+result = sim.run(state, circuit, sim_params, noise_model)
 ```
 
 Plot the measurement outcomes as a bar chart
@@ -86,7 +88,7 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-plt.bar(sim_params.results.keys(), sim_params.results.values())
+plt.bar(result.counts.keys(), result.counts.values())
 plt.xlabel("Bitstring")
 plt.ylabel("Counts")
 plt.title("Measurement Results")

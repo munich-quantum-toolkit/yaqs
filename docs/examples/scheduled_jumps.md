@@ -24,17 +24,18 @@ In this notebook, we simulate a 10-site Ising chain and apply a scheduled Pauli-
 First, we define the Hamiltonian and the initial state. We'll use a standard transverse-field Ising model.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.state import State
 
 L = 10
 J = 1.0
 g = 1.0
 
 # Hamiltonian: H = -J Σ Z_i Z_{i+1} - g Σ X_i
-hamiltonian = MPO.ising(length=L, J=J, g=g)
+hamiltonian = Hamiltonian.ising(length=L, J=J, g=g)
 
 # Initial state: all zeros |00...0>
-state = MPS(L, state="zeros")
+state = State(L, initial="zeros")
 ```
 
 ## 2. Define the Scheduled Jump
@@ -71,7 +72,6 @@ sim_params = AnalogSimParams(
     dt=0.1,
     num_traj=1, # Jumps are deterministic, so 1 trajectory is sufficient
     observables=[z_obs],
-    show_progress=False
 )
 ```
 
@@ -83,18 +83,20 @@ We run two simulations: one with the jump and a baseline without it.
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 import copy
+
+sim = Simulator(show_progress=False)
 
 # Baseline
 state_baseline = copy.deepcopy(state)
 sim_params_baseline = copy.deepcopy(sim_params)
-simulator.run(state_baseline, hamiltonian, sim_params_baseline)
+result_baseline = sim.run(state_baseline, hamiltonian, sim_params_baseline)
 
 # With Jump
 state_jump = copy.deepcopy(state)
 sim_params_jump = copy.deepcopy(sim_params)
-simulator.run(state_jump, hamiltonian, sim_params_jump, noise_model=noise_model)
+result_jump = sim.run(state_jump, hamiltonian, sim_params_jump, noise_model=noise_model)
 ```
 
 ## 5. Visualize Results
@@ -111,8 +113,8 @@ mystnb:
 import matplotlib.pyplot as plt
 
 times = sim_params_jump.times
-res_baseline = sim_params_baseline.observables[0].results
-res_jump = sim_params_jump.observables[0].results
+res_baseline = result_baseline.expectation_values[0]
+res_jump = result_jump.expectation_values[0]
 
 plt.figure(figsize=(8, 5))
 plt.plot(times, res_baseline, label="Baseline (No Jump)", color="black", linestyle="--")

@@ -36,20 +36,21 @@ import numpy as np
 import pytest
 from scipy.linalg import expm
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X, Z
+from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.tdvp import (
     _build_dense_effective_hamiltonian,  # noqa: PLC2701
+    _split_two_site_tdvp,  # noqa: PLC2701
     build_dense_heff_bond,
     build_dense_heff_site,
     global_dynamic_tdvp,
     merge_mpo_tensors,
-    merge_mps_tensors,
     project_bond,
     project_site,
     single_site_tdvp,
-    split_mps_tensor,
     two_site_tdvp,
     update_bond,
     update_left_environment,
@@ -60,17 +61,19 @@ from mqt.yaqs.core.methods.tdvp import (
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from mqt.yaqs.core.methods.decompositions import TruncMode
+
 rng = np.random.default_rng()
 
 
-def test_split_mps_tensor_left_right_sqrt() -> None:
+def test_split_two_site_tdvp_left_right_sqrt() -> None:
     """Test splitting of an MPS tensor using different singular value distribution options.
 
     This test creates a random tensor A with shape (4, 3, 5), corresponding to (d0*d1, D0, D2)
     with d0 = d1 = 2, D0 = 3, and D2 = 5. For each SVD distribution option ("left", "right", "sqrt"),
-    the function split_mps_tensor is called to decompose A into two tensors A0 and A1. The test then
-    reconstructs A from A0 and A1 by undoing the transpose on A1 and contracting over the singular value index.
-    The reconstructed tensor is compared to the original A.
+    :func:`mqt.yaqs.core.methods.tdvp._split_two_site_tdvp` decomposes A into two tensors A0 and A1.
+    The test then reconstructs A from A0 and A1 by undoing the transpose on A1 and contracting
+    over the singular value index.
     """
     A = rng.random(size=(4, 3, 5)).astype(np.complex128)
     # Placeholder
@@ -79,9 +82,7 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
     )
     physical_dimensions = [A.shape[0] // 2, A.shape[0] // 2]
     for distr in ["left", "right", "sqrt"]:
-        A0, A1 = split_mps_tensor(
-            A, svd_distribution=distr, sim_params=sim_params, physical_dimensions=physical_dimensions, dynamic=False
-        )
+        A0, A1 = _split_two_site_tdvp(A, sim_params, physical_dimensions, distr, dynamic=False)
         # A0 should have shape (2, 3, r) and A1 should have shape (2, r, 5), where r is the effective rank.
         assert A0.ndim == 3
         assert A1.ndim == 3
@@ -96,11 +97,8 @@ def test_split_mps_tensor_left_right_sqrt() -> None:
         np.testing.assert_allclose(A, A_recon, atol=1e-6)
 
 
-def test_split_mps_tensor_invalid_shape() -> None:
-    """Test that split_mps_tensor raises a ValueError when the input tensor's first dimension is not divisible by 2.
-
-    This test creates a tensor A with shape (3, 3, 5) and expects the function to raise an error.
-    """
+def test_split_two_site_invalid_shape() -> None:
+    """``split_two_site`` raises when the first axis does not match ``physical_dimensions``."""
     A = rng.random(size=(3, 3, 5)).astype(np.complex128)
     # Placeholder
     sim_params = AnalogSimParams(
@@ -113,21 +111,27 @@ def test_split_mps_tensor_invalid_shape() -> None:
     with pytest.raises(
         ValueError, match=r"The first dimension of the tensor must be a combination of the given physical dimensions."
     ):
-        split_mps_tensor(
-            A, svd_distribution="left", sim_params=sim_params, physical_dimensions=physical_dimensions, dynamic=False
+        split_two_site(
+            A,
+            physical_dimensions,
+            svd_distribution="left",
+            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+            threshold=sim_params.threshold,
+            max_bond_dim=sim_params.max_bond_dim,
+            min_bond_dim=sim_params.min_bond_dim,
         )
 
 
-def test_merge_mps_tensors() -> None:
-    """Test the merge_mps_tensors function.
+def test_merge_two_site() -> None:
+    """Test :func:`mqt.yaqs.core.methods.decompositions.merge_two_site`.
 
     This test creates two tensors A0 and A1 with shapes (2, 3, 4) and (5, 4, 7), respectively.
-    It then merges them via merge_mps_tensors. The expected shape is (10, 3, 7) because
-    the contraction is performed over the third axis of A0 and the second axis of A1.
+    After merging, the expected shape is (10, 3, 7) because the contraction is over the bond
+    between the two site tensors.
     """
     A0 = rng.random(size=(2, 3, 4)).astype(np.complex128)
     A1 = rng.random(size=(5, 4, 7)).astype(np.complex128)
-    merged = merge_mps_tensors(A0, A1)
+    merged = merge_two_site(A0, A1)
     assert merged.shape == (10, 3, 7)
 
 
@@ -264,7 +268,8 @@ def test_two_site_tdvp() -> None:
 
     This test initializes an Ising MPO and an MPS of length 5, sets up AnalogSimParams,
     and runs two_site_TDVP. It checks that the MPS retains the correct number of tensors,
-    that all tensors remain numpy arrays, and that the MPS is in canonical form with the orthogonality center at site 0.
+    that all tensors remain numpy arrays, and that the MPS is in canonical form with
+    the orthogonality center at site 0.
     """
     L = 5
     J = 1
@@ -322,7 +327,6 @@ def test_dynamic_tdvp_one_site() -> None:
         dt=0.1,
         max_bond_dim=0,
         sample_timesteps=False,
-        show_progress=False,
     )
 
     with patch("mqt.yaqs.core.methods.tdvp.single_site_tdvp") as mock_single_site:
@@ -356,7 +360,6 @@ def test_dynamic_tdvp_two_site() -> None:
         dt=0.1,
         max_bond_dim=8,
         sample_timesteps=False,
-        show_progress=False,
     )
     with patch("mqt.yaqs.core.methods.tdvp.two_site_tdvp") as mock_two_site:
         global_dynamic_tdvp(state, H, sim_params)
@@ -409,12 +412,9 @@ def test_split_truncation_discarded_weight_kept_count(
         threshold=threshold,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
-        show_progress=False,
     )
 
-    A0, A1 = split_mps_tensor(
-        A_in, svd_distribution="sqrt", sim_params=sim_params, physical_dimensions=[d0, d1], dynamic=True
-    )
+    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     keep = A0.shape[2]
     assert A1.shape[1] == keep
 
@@ -427,11 +427,12 @@ def test_split_truncation_discarded_weight_kept_count(
     boundary_case = np.isclose(np.sum(tail_at_expected**2), threshold, rtol=0.0, atol=tol)
 
     if boundary_case:
-        # Accept either expected_keep or its immediate neighbor (usually one less),
-        # since tiny SVD differences can flip the decision at the boundary.
+        # Accept ±1 around expected_keep; SVD numerics can flip the decision at the boundary.
         acceptable = {expected_keep}
-        if expected_keep > 0:
+        if expected_keep > sim_params.min_bond_dim:
             acceptable.add(expected_keep - 1)
+        if expected_keep < len(svs):
+            acceptable.add(expected_keep + 1)
         assert keep in acceptable
     else:
         assert keep == expected_keep
@@ -472,12 +473,9 @@ def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the:
         threshold=rel_the,
         trunc_mode="relative",
         sample_timesteps=True,
-        show_progress=False,
     )
 
-    A0, A1 = split_mps_tensor(
-        A_in, svd_distribution="sqrt", sim_params=sim_params, physical_dimensions=[d0, d1], dynamic=True
-    )
+    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     keep = A0.shape[2]
     assert keep == expected_keep
     assert A1.shape[1] == keep
@@ -506,9 +504,8 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         threshold=0.5,
         trunc_mode="relative",
         sample_timesteps=True,
-        show_progress=False,
     )
-    A0, A1 = split_mps_tensor(A_in, "sqrt", sim_params, [d0, d1], dynamic=True)
+    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=False)
     assert A0.shape[2] == 2
     assert A1.shape[1] == 2
 
@@ -521,9 +518,8 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         threshold=2,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
-        show_progress=False,
     )
-    A0, A1 = split_mps_tensor(A_in, "sqrt", sim_params, [d0, d1], dynamic=True)
+    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     assert A0.shape[2] == 2
     assert A1.shape[1] == 2
 
@@ -546,10 +542,9 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
         threshold=0.5,
         trunc_mode="relative",
         sample_timesteps=True,
-        show_progress=False,
     )
 
-    A0, A1 = split_mps_tensor(A_in, distr, sim_params, [d0, d1], dynamic=True)
+    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], distr, dynamic=True)
     k = A0.shape[2]
 
     L = A0.reshape(d0 * D0, k)

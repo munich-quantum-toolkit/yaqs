@@ -5,21 +5,42 @@
 #
 # Licensed under the MIT License
 
-"""High-level simulator module for using YAQS.
+"""High-level :class:`Simulator` class for YAQS.
 
-This module implements the common simulation routine for both circuit-based and Hamiltonian (analog) simulations.
-It provides functions to run simulation trajectories in parallel using an MPS representation of the quantum state.
-Depending on the type of simulation parameters provided (WeakSimParams, StrongSimParams, or AnalogSimParams),
-the simulation is dispatched to the appropriate backend:
-  - For circuit simulations, a QuantumCircuit is used and processed via the _run_circuit function.
-  - For analog simulations, an MPO is used to represent the Hamiltonian and processed via the _run_analog function.
+This module implements the common simulation routine for Hamiltonian (analog) and
+circuit-based simulations as the public :class:`Simulator` class. Analog evolution is
+the primary mode supported by YAQS; circuit (strong/weak) simulation reuses the same
+execution machinery.
 
-The module supports both strong and weak simulation schemes, including functionality for:
-  - Initializing the state (MPS) to a canonical form (B normalized).
-  - Running trajectories with noise (using a provided NoiseModel) and aggregating results.
-  - Parallel execution of trajectories using a ProcessPoolExecutor with progress reporting via tqdm.
+The :class:`Simulator` class owns the execution-side configuration (parallel vs.
+serial execution, worker count, progress reporting, multiprocessing context, and
+retry policy), while the physics inputs are passed to :meth:`Simulator.run` as a
+:class:`~mqt.yaqs.core.data_structures.state.State` and either a
+:class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` (analog) or a
+:class:`~qiskit.circuit.QuantumCircuit` (digital) together with a simulation
+parameter object. Depending on the type of simulation parameters provided
+(``AnalogSimParams``, ``StrongSimParams``, or ``WeakSimParams``), the simulation is
+dispatched to the appropriate backend:
 
-All simulation results (e.g., observables, measurements) are aggregated and returned as part of the simulation process.
+  - For analog simulations, a ``Hamiltonian`` is validated and materialized for the
+    selected state representation, then processed via the analog dispatch. Passing a
+    ``list[State]`` triggers the deterministic unitary ensemble path.
+  - For circuit simulations, a ``QuantumCircuit`` is used and processed via the
+    circuit dispatch (strong for observables/trajectories, weak for measurement
+    counts).
+
+The module supports analog (TJM / MCWF / Lindblad / unitary ensemble) and digital
+(strong / weak) simulation, including functionality for:
+
+  - Initializing the state (``State``) to a canonical form (B normalized).
+  - Running trajectories with noise (using a provided ``NoiseModel``) and aggregating results.
+  - Parallel execution of trajectories using a ``ProcessPoolExecutor`` with progress reporting via tqdm.
+
+:meth:`Simulator.run` returns a :class:`~mqt.yaqs.core.data_structures.result.Result`
+holding every simulation output (aggregated expectation values, per-trajectory data,
+shared time grid, optional output state, measurement counts, and the sampled noise
+model). The ``*SimParams`` object passed in is never mutated; ``Result.sim_params``
+references it unchanged.
 """
 
 from __future__ import annotations
@@ -50,10 +71,16 @@ from concurrent.futures import (
     ProcessPoolExecutor,
     wait,
 )
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
+
+import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from .core.data_structures.hamiltonian import Representation
+    from .core.data_structures.mpo import MPO
+    from .core.data_structures.mps import MPS
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
@@ -80,31 +107,41 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # 3) LOCAL IMPORTS
 # ---------------------------------------------------------------------------
-from .core.data_structures.networks import MPO
+from .core.data_structures.hamiltonian import Hamiltonian
+from .core.data_structures.result import (
+    Result,
+    aggregate_counts,
+    aggregate_diagnostics,
+    aggregate_trajectories,
+    allocate_diagnostic_buffers,
+    allocate_observable_buffers,
+)
 from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from .core.data_structures.state import State
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from concurrent.futures import Future
 
-    import numpy as np
     from numpy.typing import NDArray
 
-    from .core.data_structures.networks import MPS
     from .core.data_structures.noise_model import NoiseModel
 
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
-from .analog.lindblad import lindblad
+from .analog.ensemble import ensemble_member_worker
+from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 
-__all__ = ["available_cpus", "run", "run_backend_parallel"]  # public API of this module
+__all__ = ["Simulator", "available_cpus", "run_backend_parallel"]
 
 # ---------------------------------------------------------------------------
 # 4) TYPE VARS FOR GENERIC PARALLEL RUNNERS
 # ---------------------------------------------------------------------------
 TArg = TypeVar("TArg")
 TRes = TypeVar("TRes")
+
+MPContext = Literal["fork", "spawn", "auto"]
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +214,7 @@ def available_cpus() -> int:
 #   - Set environment caps (no-ops if already set)
 #   - Try to cap numexpr and MKL explicitly if present
 #   - Optionally use threadpoolctl to cap vendored OpenMP pools (OpenBLAS, MKL)
-#   - Initialize the worker-global context with large objects (e.g. MPS, NoiseModel)
+#   - Initialize the worker-global context with large objects (e.g. State, NoiseModel)
 # ---------------------------------------------------------------------------
 THREAD_ENV_VARS: dict[str, str] = {
     # OpenMP default thread count (covers any library compiled with OpenMP,
@@ -211,7 +248,7 @@ def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
     strategy avoids repeated pickling of large objects for every task.
 
     Args:
-        payload: A dictionary containing large, read-only objects (e.g., MPS,
+        payload: A dictionary containing large, read-only objects (e.g., State,
             MPO, NoiseModel, SimParams) to be stored in the global worker context.
         n_threads: The maximum number of threads allowed for this worker process.
             Defaults to 1 to prevent thread oversubscription.
@@ -249,7 +286,6 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
     os.environ.setdefault("OMP_DYNAMIC", "FALSE")
     os.environ.setdefault("MKL_DYNAMIC", "FALSE")
 
-    # Import optional libs safely without inline `import` statements
     with contextlib.suppress(Exception):
         numexpr = importlib.import_module("numexpr")
         numexpr.set_num_threads(n_threads)
@@ -270,57 +306,11 @@ def _limit_worker_threads(n_threads: int = 1) -> None:
 # ---------------------------------------------------------------------------
 # 7) WORKER WRAPPERS
 # These functions are pickled and sent to workers. They retrieve large objects
-# from the global _WORKER_CTX instead of receiving them as arguments.
+# from the global _WORKER_CTX instead of receiving them as arguments. Analog
+# workers come first (primary simulation mode), followed by the digital
+# strong/weak workers, with the unitary ensemble worker last.
 # ---------------------------------------------------------------------------
-def _digital_strong_worker(traj_idx: int) -> dict[int, int] | NDArray[np.float64]:
-    """Execute a single digital strong simulation trajectory.
-
-    Retrieves the required simulation objects (initial state, noise model,
-    parameters, circuit) from the global `WORKER_CTX` and delegates to the
-    `digital_tjm` backend.
-
-    Args:
-        traj_idx: The integer index of the trajectory to execute.
-
-    Returns:
-        dict[int, int] | NDArray[np.float64]: The result of the single-trajectory simulation
-        (typically an observable trajectory or final state).
-    """
-    return digital_tjm((
-        traj_idx,
-        WORKER_CTX["initial_state"],
-        WORKER_CTX["noise_model"],
-        WORKER_CTX["sim_params"],
-        WORKER_CTX["operator"],
-    ))
-
-
-def _digital_weak_worker(traj_idx: int) -> dict[int, int]:
-    """Execute a single digital weak simulation trajectory.
-
-    Retrieves simulation objects from `WORKER_CTX` and executes a 'shots=1'
-    weak simulation using `digital_tjm`.
-
-    Args:
-        traj_idx: The integer index of the trajectory (effectively a shot index).
-
-    Returns:
-        dict[int, int]: A dictionary mapping outcome bitstrings (as integers)
-        to counts (typically {outcome: 1} for a single shot).
-    """
-    return cast(
-        "dict[int, int]",
-        digital_tjm((
-            traj_idx,
-            WORKER_CTX["initial_state"],
-            WORKER_CTX["noise_model"],
-            WORKER_CTX["sim_params"],
-            WORKER_CTX["operator"],
-        )),
-    )
-
-
-def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
+def _analog_worker(traj_idx: int) -> tuple[NDArray[np.float64], NDArray[np.float64] | None, MPS | None]:
     """Execute a single analog simulation trajectory (TJM or Lindblad).
 
     Retrieves the appropriate backend function and simulation arguments from
@@ -330,9 +320,10 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
         traj_idx: The integer index of the trajectory to execute.
 
     Returns:
-        NDArray[np.float64]: The result of the simulation (typically observable values over time).
+        tuple[NDArray[np.float64], NDArray[np.float64] | None, MPS | None]:
+            Observable data, optional diagnostics, and optional final MPS.
     """
-    # backend is chosen in _run_analog and stored in context
+    # backend is chosen by Simulator._run_analog and stored in context
     backend = WORKER_CTX["backend"]
     return backend((
         traj_idx,
@@ -343,7 +334,7 @@ def _analog_worker(traj_idx: int) -> NDArray[np.float64]:
     ))
 
 
-def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
+def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], None, np.ndarray | None]:
     """Execute a single Monte Carlo Wavefunction (MCWF) trajectory.
 
     Retrieves the preprocessed MCWF context from `WORKER_CTX` and executes
@@ -356,6 +347,195 @@ def _mcwf_worker(traj_idx: int) -> NDArray[np.float64]:
         NDArray[np.float64]: The result of the MCWF trajectory.
     """
     return mcwf((traj_idx, WORKER_CTX["ctx"]))
+
+
+def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, None]:
+    """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
+
+    Returns:
+        Observable expectation values over time for one trajectory.
+    """
+    return lindblad_evolve(WORKER_CTX["ctx"])
+
+
+def _digital_strong_worker(
+    traj_idx: int,
+) -> tuple[NDArray[np.float64] | dict[int, int], NDArray[np.float64] | None, MPS | None]:
+    """Execute a single digital strong simulation trajectory.
+
+    Retrieves the required simulation objects (initial state, noise model,
+    parameters, circuit) from the global `WORKER_CTX` and delegates to the
+    `digital_tjm` backend.
+
+    Args:
+        traj_idx: The integer index of the trajectory to execute.
+
+    Returns:
+        tuple[NDArray[np.float64] | dict[int, int], NDArray[np.float64] | None, MPS | None]:
+            Observable data or shot counts, optional diagnostics, optional final MPS.
+    """
+    return digital_tjm((
+        traj_idx,
+        WORKER_CTX["initial_state"],
+        WORKER_CTX["noise_model"],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
+    ))
+
+
+def _digital_weak_worker(traj_idx: int) -> tuple[dict[int, int], None, MPS | None]:
+    """Execute a single digital weak simulation trajectory.
+
+    Retrieves simulation objects from `WORKER_CTX` and executes a 'shots=1'
+    weak simulation using `digital_tjm`.
+
+    Args:
+        traj_idx: The integer index of the trajectory (effectively a shot index).
+
+    Returns:
+        tuple[dict[int, int], MPS | None]: Shot counts and optional final MPS.
+    """
+    return cast(
+        "tuple[dict[int, int], None, MPS | None]",
+        digital_tjm((
+            traj_idx,
+            WORKER_CTX["initial_state"],
+            WORKER_CTX["noise_model"],
+            WORKER_CTX["sim_params"],
+            WORKER_CTX["operator"],
+        )),
+    )
+
+
+def _ensemble_worker(
+    job_idx: int,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128] | None]:
+    """Execute one deterministic unitary ensemble member trajectory.
+
+    Uses :data:`WORKER_CTX` keys ``initial_states``, ``sim_params``, and ``operator``.
+
+    Args:
+        job_idx: Index of this member; selects ``WORKER_CTX["initial_states"][job_idx]``.
+
+    Returns:
+        tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128] | None]:
+            Observable trajectories, diagnostics, and optional multi-time block for one member.
+    """
+    return ensemble_member_worker((
+        job_idx,
+        WORKER_CTX["initial_states"][job_idx],
+        WORKER_CTX["sim_params"],
+        WORKER_CTX["operator"],
+    ))
+
+
+def _materialized_mps(state: State) -> MPS | None:
+    """Return the encoded MPS if present, else ``None``."""
+    try:
+        return state.mps
+    except RuntimeError:
+        return None
+
+
+def _hamiltonian_backend_target(state_rep: str) -> str:
+    """Internal storage target for ``Hamiltonian`` given ``State.representation``.
+
+    Returns:
+        ``"sparse"`` for vector or density-matrix states, otherwise ``"mpo"``.
+    """
+    if state_rep in {"vector", "density_matrix"}:
+        return "sparse"
+    return "mpo"
+
+
+def _validate_state_hamiltonian_pairing(state: State, hamiltonian: Hamiltonian) -> None:
+    """Check ``State`` and ``Hamiltonian`` can be evolved together.
+
+    Raises:
+        ValueError: If representations or lengths are incompatible.
+    """
+    if state.length != hamiltonian.length:
+        msg = f"State.length={state.length} does not match Hamiltonian.length={hamiltonian.length}."
+        raise ValueError(msg)
+    if state.representation == "mps" and hamiltonian.representation != "mpo":
+        msg = (
+            "TJM simulation requires Hamiltonian.representation='mpo'. "
+            "Use State.representation='vector' or 'density_matrix' for matrix Hamiltonians."
+        )
+        raise ValueError(msg)
+
+
+def _prepare_hamiltonian_for_run(
+    hamiltonian: Hamiltonian,
+    state_rep: str,
+) -> tuple[MPO | None, Any]:
+    """Ensure ``hamiltonian`` is encoded for the backend matching ``state_rep``.
+
+    Returns:
+        ``(mpo, h_sparse)`` with one entry set for the active backend.
+    """
+    target = _hamiltonian_backend_target(state_rep)
+    hamiltonian.ensure_encoded(cast("Representation", target))
+    if target == "mpo":
+        return hamiltonian.mpo, None
+    return None, hamiltonian.sparse_matrix
+
+
+def _prepare_result_observables(
+    result: Result,
+    sim_params: AnalogSimParams | StrongSimParams,
+    *,
+    num_traj: int,
+    num_mid_measurements: int | None = None,
+) -> None:
+    """Deep-copy sorted observables onto ``result`` and allocate output buffers."""
+    result.observables = [copy.deepcopy(obs) for obs in sim_params.sorted_observables]
+    trajectories, expectation_values, times = allocate_observable_buffers(
+        sim_params,
+        len(result.observables),
+        num_traj=num_traj,
+        num_mid_measurements=num_mid_measurements,
+    )
+    result.trajectories = trajectories
+    result.expectation_values = expectation_values
+    result.times = times
+
+
+def _worker_sim_params(
+    sim_params: AnalogSimParams | StrongSimParams,
+    result: Result,
+) -> AnalogSimParams | StrongSimParams:
+    """Build worker-visible params that reference ``result.observables`` for measurement.
+
+    Returns:
+        A deep copy of ``sim_params`` whose observable lists alias ``result.observables``.
+    """
+    worker_params = copy.deepcopy(sim_params)
+    worker_params.observables = result.observables
+    worker_params.sorted_observables = result.observables
+    return worker_params
+
+
+def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
+    if final_mps is not None:
+        result.output_state = State.from_mps(final_mps)
+
+
+def _store_mcwf_final_state(result: Result, psi: np.ndarray | None) -> None:
+    if psi is not None:
+        result.output_state = State(vector=psi)
+
+
+def _expect_shot_counts(payload: NDArray[np.float64] | dict[int, int]) -> dict[int, int]:
+    """Return weak-simulation shot counts from a digital backend payload.
+
+    Raises:
+        TypeError: If ``payload`` is not a shot-count dictionary.
+    """
+    if not isinstance(payload, dict):
+        msg = f"Expected measurement result to be dict[int, int], got {type(payload).__name__}."
+        raise TypeError(msg)
+    return cast("dict[int, int]", payload)
 
 
 # ---------------------------------------------------------------------------
@@ -401,24 +581,28 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
 
 
 # ---------------------------------------------------------------------------
-# 8) MULTIPROCESS "spawn" CONTEXT
-# On Linux, using "fork" with heavy numerical libs can hang/crash due to
-# non-fork-safe OpenMP/BLAS state. "spawn" is the robust cross-platform choice.
+# 9) MULTIPROCESS CONTEXT
+# On Linux, using "fork" with heavy numerical libs is safe as long as
+# threading libraries are properly capped (which we do). On Windows/macOS,
+# "spawn" is the standard/required option.
 # ---------------------------------------------------------------------------
-def _get_parallel_context() -> multiprocessing.context.BaseContext:
+def _get_parallel_context(mp_context: MPContext = "auto") -> multiprocessing.context.BaseContext:
     """Return the appropriate multiprocessing context for the OS.
 
-    On Windows and macOS, 'spawn' is the standard/required option.
-    On Linux, 'fork' is faster and avoids the OOM issues associated with 'spawn'
-    in some environments, provided that threading libraries are properly capped (which we do).
+    Args:
+        mp_context: ``"auto"`` (default) selects ``"fork"`` on Linux and ``"spawn"`` elsewhere.
+            Pass ``"fork"`` or ``"spawn"`` to force a specific context.
+
+    Returns:
+        The selected :class:`multiprocessing.context.BaseContext`.
     """
-    if sys.platform == "linux":
+    if mp_context == "auto":
         # On Linux, 'fork' is generally safe if we ensure OpenMP/etc are single-threaded
         # BEFORE forking or strictly cap them in the worker.
-        return multiprocessing.get_context("fork")
-
-    # On Windows (win32) and macOS (darwin), use 'spawn'
-    return multiprocessing.get_context("spawn")
+        if sys.platform == "linux":
+            return multiprocessing.get_context("fork")
+        return multiprocessing.get_context("spawn")
+    return multiprocessing.get_context(mp_context)
 
 
 def run_backend_parallel(
@@ -431,20 +615,23 @@ def run_backend_parallel(
     desc: str,
     max_retries: int = 10,
     retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
+    mp_context: MPContext = "auto",
 ) -> Iterator[tuple[int, TRes]]:
     """Execute backend calls in parallel with bounded submission and retry logic.
 
-    This function manages the parallel execution of tasks using a `ProcessPoolExecutor`.
-    refactored to prevent task flooding and memory exhaustion:
-    1.  **Worker-Global State**: Uses `_worker_init` to initialize large objects
-        once per worker, avoiding per-task pickling overhead.
-    2.  **Bounded In-Flight**: Submits tasks in a queue-like manner, keeping
-        only a limited number of futures active (2 * max_workers) at any time.
+    This function manages the parallel execution of tasks using a
+    ``ProcessPoolExecutor``, refactored to prevent task flooding and memory
+    exhaustion:
+
+    1. **Worker-Global State**: Uses ``_worker_init`` to initialize large objects
+       once per worker, avoiding per-task pickling overhead.
+    2. **Bounded In-Flight**: Submits tasks in a queue-like manner, keeping only
+       a limited number of futures active (``2 * max_workers``) at any time.
 
     Args:
         worker_fn: The worker function to execute. It must accept a single
             integer argument (the job index) and return a result of type `TRes`.
-        payload: A dictionary of large objects (e.g., MPS, NoiseModel) to be
+        payload: A dictionary of large objects (e.g., State, NoiseModel) to be
             initialized in the global worker context. passed to `_worker_init`.
         n_jobs: The total number of jobs to execute (indices 0 to n_jobs-1).
         max_workers: The maximum number of worker processes to use.
@@ -454,33 +641,29 @@ def run_backend_parallel(
             (e.g., TimeoutError). Defaults to 10.
         retry_exceptions: A tuple of exception types that trigger a retry.
             Defaults to (CancelledError, TimeoutError, OSError).
+        mp_context: Multiprocessing context selector; see :func:`_get_parallel_context`.
 
     Yields:
         tuple[int, TRes]: A tuple containing the job index and its result,
         yielded in the order of completion.
     """
-    # Use appropriate context (fork on Linux, spawn on Windows)
-    ctx = _get_parallel_context()
+    ctx = _get_parallel_context(mp_context)
 
     # Bounded in-flight factor (keep 2-4x workers busy to hide latency)
     inflight_factor = 2
     max_inflight = max_workers * inflight_factor
 
-    # Create a pool of worker processes with per-worker thread caps
-    # and global context initialization
     with (
         ProcessPoolExecutor(
             max_workers=max_workers,
             mp_context=ctx,
             initializer=worker_init,
-            initargs=(payload or {}, 1),  # enforce 1 thread per worker
+            initargs=(payload or {}, 1),
         ) as ex,
         tqdm(total=n_jobs, desc=desc, ncols=80, disable=(not show_progress)) as pbar,
     ):
-        # Retry bookkeeping per index
         retries = dict.fromkeys(range(n_jobs), 0)
 
-        # In-flight tracking
         futures: dict[Future[TRes], int] = {}
         next_job_idx = 0
 
@@ -488,12 +671,10 @@ def run_backend_parallel(
             """Submit a job for the given index."""
             futures[ex.submit(worker_fn, idx)] = idx
 
-        # Initial batch submission (up to max_inflight)
         while next_job_idx < n_jobs and len(futures) < max_inflight:
             submit_job(next_job_idx)
             next_job_idx += 1
 
-        # Drain as futures complete
         while futures:
             done, _ = wait(futures, return_when=FIRST_COMPLETED)
             for fut in done:
@@ -501,428 +682,717 @@ def run_backend_parallel(
                 try:
                     res = fut.result()
                 except retry_exceptions:
-                    # Retry a bounded number of times on selected transient errors
                     if retries[i] < max_retries:
                         retries[i] += 1
                         submit_job(i)
                         continue
-                    # Exceeded retry budget → propagate
                     raise
 
-                # Yield in completion order and update progress
                 yield i, res
                 pbar.update(1)
 
-                # Submit next job if available
                 if next_job_idx < n_jobs:
                     submit_job(next_job_idx)
                     next_job_idx += 1
 
 
 # ---------------------------------------------------------------------------
-# 10) STRONG SIMULATION (circuit): returns observable trajectories
-# - If noise is zero/absent → only 1 trajectory (deterministic).
-# - If noise is present → multiple trajectories; cannot request final state.
-# - Optionally count SAMPLE_OBSERVABLES layers (barriers with specific label).
+# 10) SIMULATOR — public entry point
+# Owns the execution-side configuration (parallel/serial, workers, progress,
+# multiprocessing context, retry policy) and dispatches to circuit or analog
+# engines based on the sim_params type.
 # ---------------------------------------------------------------------------
-def _run_strong_sim(
-    initial_state: MPS,
-    operator: QuantumCircuit,
-    sim_params: StrongSimParams,
-    noise_model: NoiseModel | None,
-    *,
-    parallel: bool,
-) -> None:
-    """Run strong simulation trajectories for a quantum circuit using a strong simulation scheme.
+class Simulator:
+    """Public entry point for running YAQS simulations.
 
-    This function executes circuit-based simulation trajectories using the 'digital_tjm' backend.
-    If the noise model is absent or its strengths are all zero, only a single trajectory is executed.
-    For each observable in sim_params.sorted_observables, the function initializes the observable,
-    runs the simulation trajectories (in parallel if specified), and aggregates the results.
+    A :class:`Simulator` owns the execution-side configuration: how trajectories
+    are parallelized, how many workers to use, whether to display a progress bar,
+    which multiprocessing context to use, and the retry policy for transient
+    worker errors. The physics inputs (initial state, operator, simulation
+    parameters, optional noise model) are passed per call to :meth:`run`.
 
-    Args:
-        initial_state: The initial system state as an MPS.
-        operator: The quantum circuit representing the operation to simulate.
-        sim_params: Simulation parameters for strong simulation,
-                                      including the number of trajectories (num_traj),
-                                      time step (dt), and sorted observables.
-        noise_model: The noise model applied during simulation.
-        parallel: Flag indicating whether to run trajectories in parallel.
+    Multiple :meth:`run` calls share the same configuration. Each call constructs
+    its own short-lived process pool when ``parallel=True``; the pool is not
+    persisted across runs in the current implementation.
+
+    Attributes:
+        parallel: Whether to execute trajectories in parallel via a process pool.
+        max_workers: Maximum number of worker processes when ``parallel=True``.
+            Defaults to ``max(1, available_cpus() - 1)``.
+        show_progress: Whether to display a tqdm progress bar.
+        mp_context: Multiprocessing context: ``"auto"`` (default), ``"fork"``,
+            or ``"spawn"``. ``"auto"`` selects ``"fork"`` on Linux and ``"spawn"`` elsewhere.
+        max_retries: Maximum retry attempts for transient worker errors.
+        retry_exceptions: Exception types that trigger a retry.
     """
-    # digital_tjm signature: (traj_idx, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit) -> NDArray[np.float64]
-    # We type as Any to keep ty happy without over-constraining element types.
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
 
-    # If there's no noise at all, we don't need multiple trajectories
-    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
-        sim_params.num_traj = 1
-    else:
-        # With stochastic noise, returning a final state is ill-defined
-        assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
+    def __init__(
+        self,
+        *,
+        parallel: bool = True,
+        max_workers: int | None = None,
+        show_progress: bool = True,
+        mp_context: MPContext = "auto",
+        max_retries: int = 10,
+        retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
+    ) -> None:
+        """Initialize the simulator with execution-side configuration.
 
-    # If requested, count mid-measurement sampling barriers (optional feature)
-    if sim_params.sample_layers:
-        dag = circuit_to_dag(operator)
-        sim_params.num_mid_measurements = sum(
-            1
-            for n in dag.op_nodes()
-            if n.op.name == "barrier" and str(getattr(n.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
+        Args:
+            parallel: If ``True`` (default), use a process pool for multi-trajectory runs.
+            max_workers: Maximum worker processes when running in parallel. ``None`` (default)
+                resolves to ``max(1, available_cpus() - 1)``.
+            show_progress: Show a tqdm progress bar during trajectory execution.
+            mp_context: Multiprocessing start method (``"auto"``, ``"fork"``, or ``"spawn"``).
+            max_retries: Maximum retries for transient worker errors.
+            retry_exceptions: Exception types that trigger a retry.
+        """
+        self.parallel = parallel
+        self.max_workers = max_workers if max_workers is not None else max(1, available_cpus() - 1)
+        self.show_progress = show_progress
+        self.mp_context: MPContext = mp_context
+        self.max_retries = max_retries
+        self.retry_exceptions = retry_exceptions
+
+    # -----------------------------------------------------------------------
+    # Public API
+    # -----------------------------------------------------------------------
+    def run(
+        self,
+        initial_state: State | list[State],
+        operator: Hamiltonian | QuantumCircuit,
+        sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+        noise_model: NoiseModel | None = None,
+    ) -> Result:
+        """Execute the common simulation routine for Hamiltonian (analog) and circuit simulations.
+
+        Dispatches the simulation to the appropriate backend based on the type of simulation
+        parameters provided. For analog simulations, the
+        :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` and ``State`` are
+        materialized for the active representation as needed (``list[State]`` triggers the
+        deterministic unitary ensemble path). For circuit-based simulations, the initial
+        :class:`~mqt.yaqs.core.data_structures.state.State` must use ``representation="mps"``.
+
+        Args:
+            initial_state: The initial state as a :class:`~mqt.yaqs.core.data_structures.state.State`,
+                or a list of states for deterministic analog unitary ensemble evolution
+                (``AnalogSimParams`` only).
+            operator: :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` for analog
+                simulations or a :class:`~qiskit.circuit.QuantumCircuit` for circuit simulations.
+            sim_params: Simulation parameters specifying the simulation mode and settings.
+            noise_model: The noise model to apply. If provided, it is sampled once at the
+                beginning of the run to generate a concrete noise realization (static disorder).
+                The sampled noise model is stored on the returned :class:`~mqt.yaqs.Result`.
+
+        Returns:
+            A :class:`~mqt.yaqs.core.data_structures.result.Result` holding all
+            simulation outputs. The supplied ``sim_params`` is not mutated;
+            ``Result.sim_params`` references the original configuration object.
+
+        Raises:
+            ValueError: If no output is specified (neither observables nor ``get_state``).
+            TypeError: If the provided ``initial_state`` type is incompatible with the
+                selected simulation mode.
+        """
+        if isinstance(initial_state, list) and any(not isinstance(state, State) for state in initial_state):
+            msg = "initial_state list must contain only State objects."
+            raise TypeError(msg)
+
+        if noise_model is not None:
+            sample_seed = getattr(sim_params, "random_seed", None)
+            noise_model = noise_model.sample(rng=sample_seed)
+
+        result = Result(sim_params=sim_params, noise_model=noise_model)
+
+        if (
+            isinstance(sim_params, AnalogSimParams)
+            and not sim_params.get_state
+            and not sim_params.observables
+            and not sim_params.multi_time_observables
+        ):
+            msg = "No output specified: either observables or get_state must be set."
+            raise ValueError(msg)
+        if isinstance(sim_params, StrongSimParams) and not sim_params.get_state and not sim_params.observables:
+            msg = "No output specified: either observables or get_state must be set."
+            raise ValueError(msg)
+
+        if isinstance(sim_params, AnalogSimParams):
+            if not isinstance(operator, Hamiltonian):
+                msg = "Analog simulation requires a Hamiltonian operator."
+                raise TypeError(msg)
+            if not isinstance(initial_state, (State, list)):
+                msg = "Analog simulation requires initial_state to be a list or State."
+                raise TypeError(msg)
+            self._run_analog(initial_state, operator, sim_params, noise_model, result)
+        elif isinstance(sim_params, (StrongSimParams, WeakSimParams)):
+            if isinstance(initial_state, list):
+                msg = "Circuit simulation requires a single State initial_state."
+                raise TypeError(msg)
+            if not isinstance(operator, QuantumCircuit):
+                msg = "Circuit simulation requires a QuantumCircuit operator."
+                raise TypeError(msg)
+            if not isinstance(initial_state, State):
+                msg = "Circuit simulation requires a State initial_state."
+                raise TypeError(msg)
+            self._run_circuit(initial_state, operator, sim_params, noise_model, result)
+
+        return result
+
+    # -----------------------------------------------------------------------
+    # Analog (Hamiltonian) simulation -- primary YAQS simulation mode
+    # -----------------------------------------------------------------------
+    def _run_analog(
+        self,
+        initial_state: State | list[State],
+        operator: Hamiltonian,
+        sim_params: AnalogSimParams,
+        noise_model: NoiseModel | None,
+        result: Result,
+    ) -> None:
+        """Run analog simulation trajectories for Hamiltonian evolution.
+
+        Selects the appropriate analog simulation backend based on ``sim_params.order``
+        (either one-site or two-site evolution) and runs the simulation trajectories for the given
+        Hamiltonian. The trajectories are executed and the results are aggregated.
+
+        A ``list[State]`` ``initial_state`` triggers the deterministic unitary ensemble
+        path via :meth:`_run_ensemble`.
+
+        Args:
+            initial_state: The initial system state as a :class:`State`, or a list of
+                :class:`State` objects for deterministic unitary analog ensemble evolution.
+            operator: The Hamiltonian specification (materialized once per ``run`` call).
+            sim_params: Simulation parameters for analog simulation.
+            noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
+
+        Raises:
+            ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``,
+                or if ``get_state=True`` is combined with a non-trivial noise model
+                (the trajectory ensemble has no single representative state).
+        """
+        if isinstance(initial_state, list):
+            initial_state_list = cast("list[State]", initial_state)
+            if any(spec.representation != "mps" for spec in initial_state_list):
+                msg = "list[State] analog ensemble currently supports only State.representation='mps'."
+                raise ValueError(msg)
+            operator.ensure_encoded("mpo")
+            for spec in initial_state_list:
+                spec.ensure_encoded("mps")
+                _validate_state_hamiltonian_pairing(spec, operator)
+            self._run_ensemble(
+                [spec.mps for spec in initial_state_list],
+                operator.mpo,
+                sim_params,
+                noise_model,
+                result,
+            )
+            return
+
+        initial_state.ensure_encoded(initial_state.representation)
+        mps = _materialized_mps(initial_state)
+        state_rep = initial_state.representation
+        _validate_state_hamiltonian_pairing(initial_state, operator)
+        mpo_op, h_sparse = _prepare_hamiltonian_for_run(operator, state_rep)
+
+        backend: Callable[..., tuple[NDArray[np.float64], Any, Any]]
+        if state_rep == "density_matrix":
+            backend = lindblad_evolve
+        elif state_rep == "vector":
+            backend = mcwf
+        elif sim_params.order == 1:
+            backend = analog_tjm_1
+        else:
+            backend = analog_tjm_2
+
+        if state_rep == "density_matrix" and sim_params.get_state:
+            msg = "get_state=True is not supported for State.representation='density_matrix'."
+            raise ValueError(msg)
+
+        if (
+            noise_model is None
+            or all(proc["strength"] == 0 for proc in noise_model.processes)
+            or state_rep == "density_matrix"
+        ):
+            effective_num_traj = 1
+        else:
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy analog simulation due to stochastics."
+                raise ValueError(msg)
+            effective_num_traj = sim_params.num_traj
+
+        _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
+        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
+
+        diag_per_traj: NDArray[np.float64] | None = None
+        if state_rep == "mps":
+            diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
+
+        payload: dict[str, Any]
+        worker_fn: Callable[[int], Any]
+
+        if state_rep == "vector":
+            ctx = preprocess_mcwf(
+                mps,
+                mpo_op,
+                noise_model,
+                worker_params,
+                psi_initial=None if mps is not None else initial_state.vector,
+                num_sites=initial_state.length if mps is None else None,
+                h_sparse=h_sparse,
+            )
+            payload = {"ctx": ctx}
+            worker_fn = _mcwf_worker
+        elif state_rep == "density_matrix":
+            lindblad_ctx = preprocess_lindblad(
+                mps,
+                mpo_op,
+                noise_model,
+                worker_params,
+                rho_initial=initial_state.density_matrix,
+                num_sites=initial_state.length,
+                h_sparse=h_sparse,
+            )
+            payload = {"ctx": lindblad_ctx}
+            worker_fn = _lindblad_ctx_worker
+        else:
+            assert mps is not None, "MPS representation requires a materialized MPS."
+            assert mpo_op is not None
+            payload = {
+                "initial_state": mps,
+                "noise_model": noise_model,
+                "sim_params": worker_params,
+                "operator": mpo_op,
+                "backend": backend,
+            }
+            worker_fn = _analog_worker
+
+        final_mps: MPS | None = None
+        final_psi: np.ndarray | None = None
+
+        if self.parallel and effective_num_traj > 1:
+            for i, traj_payload in run_backend_parallel(
+                worker_fn=worker_fn,
+                payload=payload,
+                n_jobs=effective_num_traj,
+                max_workers=self.max_workers,
+                show_progress=self.show_progress,
+                desc="Running trajectories",
+                max_retries=self.max_retries,
+                retry_exceptions=self.retry_exceptions,
+                mp_context=self.mp_context,
+            ):
+                traj_data, traj_diag, traj_final = traj_payload
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None and diag_per_traj is not None:
+                    diag_per_traj[:, i, :] = traj_diag
+                if traj_final is not None:
+                    if state_rep == "vector":
+                        final_psi = cast("np.ndarray", traj_final)
+                    else:
+                        final_mps = cast("MPS", traj_final)
+        else:
+            n_threads = available_cpus()
+
+            args: list[Any]
+            if state_rep == "vector":
+                args = [(i, copy.copy(ctx)) for i in range(effective_num_traj)]
+            elif state_rep == "density_matrix":
+                args = [lindblad_ctx for _ in range(effective_num_traj)]
+            else:
+                args = [(i, mps, noise_model, worker_params, mpo_op) for i in range(effective_num_traj)]
+
+            iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
+
+            for i, arg in enumerate(iterator):
+                traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None and diag_per_traj is not None:
+                    diag_per_traj[:, i, :] = traj_diag
+                if traj_final is not None:
+                    if state_rep == "vector":
+                        final_psi = cast("np.ndarray", traj_final)
+                    else:
+                        final_mps = cast("MPS", traj_final)
+
+        if state_rep == "vector":
+            _store_mcwf_final_state(result, final_psi)
+        else:
+            _store_final_mps(result, final_mps)
+
+        if diag_per_traj is not None:
+            result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
+        aggregate_trajectories(result)
+
+    # -----------------------------------------------------------------------
+    # Strong simulation (circuit): observable trajectories
+    # -----------------------------------------------------------------------
+    def _run_strong_sim(
+        self,
+        initial_state: MPS,
+        operator: QuantumCircuit,
+        sim_params: StrongSimParams,
+        noise_model: NoiseModel | None,
+        result: Result,
+    ) -> None:
+        """Run strong circuit simulation trajectories.
+
+        Executes circuit-based simulation trajectories using the ``digital_tjm`` backend.
+        If the noise model is absent or its strengths are all zero, only a single trajectory
+        is executed. For each observable in ``sim_params.sorted_observables``, the function
+        initializes the observable, runs the simulation trajectories, and aggregates the results.
+
+        Args:
+            initial_state: The initial system state as an MPS.
+            operator: The quantum circuit representing the operation to simulate.
+            sim_params: Simulation parameters for strong simulation.
+            noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
+
+        Raises:
+            ValueError: If ``sim_params.get_state`` is ``True`` while a non-trivial
+                noise model is supplied (the trajectory ensemble has no single
+                representative state).
+        """
+        backend: Callable[[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]], Any] = digital_tjm
+
+        if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
+            effective_num_traj = 1
+        else:
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                raise ValueError(msg)
+            effective_num_traj = sim_params.num_traj
+
+        effective_num_mid_measurements = sim_params.num_mid_measurements
+        if sim_params.sample_layers:
+            dag = circuit_to_dag(operator)
+            effective_num_mid_measurements = sum(
+                1
+                for n in dag.op_nodes()
+                if n.op.name == "barrier" and str(getattr(n.op, "label", "")).strip().upper() == "SAMPLE_OBSERVABLES"
+            )
+
+        _prepare_result_observables(
+            result,
+            sim_params,
+            num_traj=effective_num_traj,
+            num_mid_measurements=effective_num_mid_measurements,
+        )
+        worker_params = cast("StrongSimParams", _worker_sim_params(sim_params, result))
+        if sim_params.sample_layers:
+            worker_params.num_mid_measurements = effective_num_mid_measurements
+
+        diag_per_traj, _ = allocate_diagnostic_buffers(
+            sim_params,
+            num_traj=effective_num_traj,
+            num_mid_measurements=effective_num_mid_measurements,
         )
 
-    # Observables set up their own trajectory storage
-    for observable in sim_params.sorted_observables:
-        observable.initialize(sim_params)
-
-    # Create worker-global payload
-    payload: dict[str, Any] = {
-        "initial_state": initial_state,
-        "noise_model": noise_model,
-        "sim_params": sim_params,
-        "operator": operator,
-    }
-
-    if parallel and sim_params.num_traj > 1:
-        max_workers = max(1, available_cpus() - 1)
-        for i, result in run_backend_parallel(
-            worker_fn=_digital_strong_worker,
-            payload=payload,
-            n_jobs=sim_params.num_traj,
-            max_workers=max_workers,
-            show_progress=sim_params.show_progress,
-            desc="Running trajectories",
-            max_retries=10,
-            retry_exceptions=(CancelledError, TimeoutError, OSError),
-        ):
-            for obs_index, observable in enumerate(sim_params.sorted_observables):
-                assert observable.trajectories is not None, "Trajectories should have been initialized"
-                observable.trajectories[i] = result[obs_index]
-    else:
-        # Serial path (debugging/single-core/short runs)
-        # Use all available cores for multithreading in serial mode
-        n_threads = available_cpus()
-
-        # Reconstruct args locally for serial execution
-        args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
-            (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
-        ]
-
-        # Use tqdm if show_progress is True
-        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
-
-        for i, arg in enumerate(iterator):
-            result = _call_backend(backend, arg, n_threads=n_threads)
-            for obs_index, observable in enumerate(sim_params.sorted_observables):
-                assert observable.trajectories is not None, "Trajectories should have been initialized"
-                observable.trajectories[i] = result[obs_index]
-
-    # Reduce per-trajectory results into final arrays/statistics per observable
-    sim_params.aggregate_trajectories()
-
-
-# ---------------------------------------------------------------------------
-# 11) WEAK SIMULATION (circuit): returns measurement results per trajectory
-# - With noise: trajectories = shots; we set shots=1 so each trajectory
-#   measures once and we aggregate externally.
-# ---------------------------------------------------------------------------
-def _run_weak_sim(
-    initial_state: MPS,
-    operator: QuantumCircuit,
-    sim_params: WeakSimParams,
-    noise_model: NoiseModel | None,
-    *,
-    parallel: bool,
-) -> None:
-    """Run weak simulation trajectories for a quantum circuit using a weak simulation scheme.
-
-    This function executes circuit-based simulation trajectories using the 'digital_tjm' backend
-    in weak simulation mode. In this mode, the outputs are raw measurement results rather than
-    observable expectation values. If the noise model is absent or its strengths are all zero,
-    only a single trajectory is executed. If noise is present, the number of trajectories is set
-    equal to the number of shots, and each trajectory corresponds to one measurement sample
-    (with sim_params.shots forced to 1 internally).
-
-    The trajectories are executed (in parallel if specified) and the measurement results
-    are aggregated into the requested statistics or histograms.
-
-    Args:
-        initial_state : The initial system state as an MPS.
-        operator: The quantum circuit representing the operation to simulate.
-        sim_params: Simulation parameters for weak simulation, including number of shots,
-            trajectory count, and storage for measurements.
-        noise_model: The noise model applied during simulation.
-        parallel: Flag indicating whether to run trajectories in parallel.
-
-    Raises:
-        TypeError: If a measurement result is not of the expected type.
-    """
-    # digital_tjm returns a measurement outcome structure for weak sim
-    backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
-
-    # Trajectory count policy
-    if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
-        sim_params.num_traj = 1
-    else:
-        # Map "shots" to "independent trajectories of length 1"
-        sim_params.num_traj = sim_params.shots
-        sim_params.shots = 1
-        assert not sim_params.get_state, "Cannot return state in noisy circuit simulation due to stochastics."
-
-    # Create worker-global payload
-    payload: dict[str, Any] = {
-        "initial_state": initial_state,
-        "noise_model": noise_model,
-        "sim_params": sim_params,
-        "operator": operator,
-    }
-
-    if parallel and sim_params.num_traj > 1:
-        max_workers = max(1, available_cpus() - 1)
-        for i, result in run_backend_parallel(
-            worker_fn=_digital_weak_worker,
-            payload=payload,
-            n_jobs=sim_params.num_traj,
-            max_workers=max_workers,
-            show_progress=sim_params.show_progress,
-            desc="Running trajectories",
-            max_retries=10,
-            retry_exceptions=(CancelledError, TimeoutError, OSError),
-        ):
-            # For weak sim, write the raw per-trajectory measurement structure
-            if not isinstance(result, dict):
-                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
-                raise TypeError(msg)
-            sim_params.measurements[i] = result
-    else:
-        # Serial path
-        # Use all available cores for multithreading in serial mode
-        n_threads = available_cpus()
-
-        # Reconstruct args locally
-        args: list[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]] = [
-            (i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)
-        ]
-
-        # Use tqdm if show_progress is True
-        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
-
-        for i, arg in enumerate(iterator):
-            result = _call_backend(backend, arg, n_threads=n_threads)
-            if not isinstance(result, dict):
-                msg = f"Expected measurement result to be dict[int, int], got {type(result).__name__}."
-                raise TypeError(msg)
-            sim_params.measurements[i] = cast("dict[int, int]", result)
-
-    # Reset shots back from trajectories
-    if not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes)):
-        sim_params.shots = sim_params.num_traj
-
-    # Aggregate individual measurements into the requested statistics/histograms
-    sim_params.aggregate_measurements()
-
-
-# ---------------------------------------------------------------------------
-# 12) CIRCUIT DISPATCHER — reverse bits for internal convention, then route
-#     to strong or weak simulation path based on the sim params type.
-# ---------------------------------------------------------------------------
-def _run_circuit(
-    initial_state: MPS,
-    operator: QuantumCircuit,
-    sim_params: WeakSimParams | StrongSimParams,
-    noise_model: NoiseModel | None,
-    *,
-    parallel: bool,
-) -> None:
-    """Run circuit-based simulation trajectories.
-
-    This function validates that the number of qubits in the quantum circuit matches the length of the MPS,
-    reverses the bit order of the circuit, and dispatches the simulation to the appropriate backend based on
-    whether the simulation parameters indicate strong or weak simulation.
-
-    Args:
-        initial_state: The initial system state as an MPS.
-        operator: The quantum circuit to simulate.
-        sim_params: Simulation parameters for circuit simulation.
-        noise_model: The noise model applied during simulation.
-        parallel: Flag indicating whether to run trajectories in parallel.
-    """
-    # Sanity check: MPS length must equal circuit qubit count
-    assert initial_state.length == operator.num_qubits, "State and circuit qubit counts do not match."
-    # Internal convention expects qubit order reversed (if applicable)
-    operator = copy.deepcopy(operator.reverse_bits())
-
-    if isinstance(sim_params, StrongSimParams):
-        _run_strong_sim(initial_state, operator, sim_params, noise_model, parallel=parallel)
-    elif isinstance(sim_params, WeakSimParams):
-        _run_weak_sim(initial_state, operator, sim_params, noise_model, parallel=parallel)
-
-
-# ---------------------------------------------------------------------------
-# 13) ANALOG (HAMILTONIAN) SIMULATION — similar to strong sim:
-#     choose 1st/2nd-order integrator backend, run trajectories, collect
-#     observable trajectories, and aggregate.
-# ---------------------------------------------------------------------------
-def _run_analog(
-    initial_state: MPS,
-    operator: MPO,
-    sim_params: AnalogSimParams,
-    noise_model: NoiseModel | None,
-    *,
-    parallel: bool,
-) -> None:
-    """Run analog simulation trajectories for Hamiltonian evolution.
-
-    This function selects the appropriate analog simulation backend based on sim_params.order
-    (either one-site or two-site evolution) and runs the simulation trajectories for the given Hamiltonian
-    (represented as an MPO). The trajectories are executed (in parallel if specified) and the results are aggregated.
-
-    Args:
-        initial_state: The initial system state as an MPS.
-        operator: The Hamiltonian operator represented as an MPO.
-        sim_params: Simulation parameters for analog simulation, including time step and evolution order.
-        noise_model: The noise model applied during simulation.
-        parallel: Flag indicating whether to run trajectories in parallel.
-    """
-    # Choose integrator order (1 or 2) for the analog TJM backend
-
-    backend: Callable[[Any], NDArray[np.float64]]
-    if sim_params.solver == "Lindblad":
-        backend = lindblad
-    elif sim_params.solver == "MCWF":
-        backend = mcwf
-    elif sim_params.order == 1:
-        backend = analog_tjm_1
-    else:
-        backend = analog_tjm_2
-
-    # If no noise, determinism implies a single trajectory suffices
-    if (
-        noise_model is None
-        or all(proc["strength"] == 0 for proc in noise_model.processes)
-        or sim_params.solver == "Lindblad"
-    ):
-        sim_params.num_traj = 1
-    else:
-        # With stochastic noise, returning final state is ill-defined
-        assert not sim_params.get_state, "Cannot return state in noisy analog simulation due to stochastics."
-
-    # Observable storage preparation
-    for observable in sim_params.sorted_observables:
-        observable.initialize(sim_params)
-
-    payload: dict[str, Any]
-    worker_fn: Callable[[int], Any]
-
-    if sim_params.solver == "MCWF":
-        # Optimization: Pre-compute dense operators once
-        ctx = preprocess_mcwf(initial_state, operator, noise_model, sim_params)
-        payload = {"ctx": ctx}
-        worker_fn = _mcwf_worker
-    else:
-        # Standard TJM/Lindblad arguments
-        payload = {
+        payload: dict[str, Any] = {
             "initial_state": initial_state,
             "noise_model": noise_model,
-            "sim_params": sim_params,
+            "sim_params": worker_params,
             "operator": operator,
-            "backend": backend,
         }
-        worker_fn = _analog_worker
 
-    if parallel and sim_params.num_traj > 1:
-        max_workers = max(1, available_cpus() - 1)
-        for i, result in run_backend_parallel(
-            worker_fn=worker_fn,
-            payload=payload,
-            n_jobs=sim_params.num_traj,
-            max_workers=max_workers,
-            show_progress=sim_params.show_progress,
-            desc="Running trajectories",
-            max_retries=10,
-            retry_exceptions=(CancelledError, TimeoutError, OSError),
-        ):
-            # Stitch each observable's i-th trajectory back into place
-            for obs_index, observable in enumerate(sim_params.sorted_observables):
-                assert observable.trajectories is not None, "Trajectories should have been initialized"
-                observable.trajectories[i] = result[obs_index]
-    else:
-        # Serial fallback
-        # Use all available cores for multithreading in serial mode
-        n_threads = available_cpus()
+        final_mps: MPS | None = None
 
-        # Reconstruct args locally for serial execution
-        args: list[Any]
-        if sim_params.solver == "MCWF":
-            # For MCWF serial, we still use the pre-computed ctx
-            # ctx is already in local scope from above if block
-            args = [(i, ctx) for i in range(sim_params.num_traj)]
+        if self.parallel and effective_num_traj > 1:
+            for i, traj_payload in run_backend_parallel(
+                worker_fn=_digital_strong_worker,
+                payload=payload,
+                n_jobs=effective_num_traj,
+                max_workers=self.max_workers,
+                show_progress=self.show_progress,
+                desc="Running trajectories",
+                max_retries=self.max_retries,
+                retry_exceptions=self.retry_exceptions,
+                mp_context=self.mp_context,
+            ):
+                traj_data, traj_diag, traj_final = traj_payload
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None:
+                    diag_per_traj[:, i, :] = traj_diag
+                if traj_final is not None:
+                    final_mps = traj_final
         else:
-            args = [(i, initial_state, noise_model, sim_params, operator) for i in range(sim_params.num_traj)]
+            n_threads = available_cpus()
 
-        # Use tqdm if show_progress is True
-        iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not sim_params.show_progress)
+            args: list[tuple[int, MPS, NoiseModel | None, StrongSimParams, QuantumCircuit]] = [
+                (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
+            ]
 
-        for i, arg in enumerate(iterator):
-            result = _call_backend(backend, arg, n_threads=n_threads)
-            for obs_index, observable in enumerate(sim_params.sorted_observables):
-                assert observable.trajectories is not None, "Trajectories should have been initialized"
-                observable.trajectories[i] = result[obs_index]
+            iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
 
-    # Aggregate per-trajectory data into final arrays/statistics
-    sim_params.aggregate_trajectories()
+            for i, arg in enumerate(iterator):
+                traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                if traj_diag is not None:
+                    diag_per_traj[:, i, :] = traj_diag
+                if traj_final is not None:
+                    final_mps = traj_final
 
+        _store_final_mps(result, final_mps)
+        result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
+        aggregate_trajectories(result)
 
-# ---------------------------------------------------------------------------
-# 14) PUBLIC ENTRY POINT — normalize MPS to B-canonical, then dispatch to
-#     circuit or analog engines based on sim_params type.
-# ---------------------------------------------------------------------------
-def run(
-    initial_state: MPS,
-    operator: MPO | QuantumCircuit,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    noise_model: NoiseModel | None = None,
-    *,
-    parallel: bool = True,
-) -> None:
-    """Execute the common simulation routine for both circuit and Hamiltonian simulations.
+    # -----------------------------------------------------------------------
+    # Weak simulation (circuit): measurement counts
+    # -----------------------------------------------------------------------
+    def _run_weak_sim(
+        self,
+        initial_state: MPS,
+        operator: QuantumCircuit,
+        sim_params: WeakSimParams,
+        noise_model: NoiseModel | None,
+        result: Result,
+    ) -> None:
+        """Run weak circuit simulation trajectories.
 
-    This function first normalizes the initial state (MPS) to B normalization, then dispatches the simulation
-    to the appropriate backend based on the type of simulation parameters provided. For circuit-based simulations,
-    the operator must be a QuantumCircuit; for Hamiltonian simulations, the operator must be an MPO.
+        Executes circuit-based simulation trajectories using the ``digital_tjm`` backend in weak
+        simulation mode. The outputs are raw measurement results rather than observable
+        expectation values. If the noise model is absent or its strengths are all zero, only a
+        single trajectory is executed. If noise is present, the number of trajectories is set
+        equal to the number of shots, and each trajectory corresponds to one measurement sample
+        (with ``sim_params.shots`` forced to 1 internally).
 
-    Args:
-        initial_state: The initial state of the system as an MPS. Must be B normalized.
-        operator: The operator representing the evolution; an MPO for analog simulations
-            or a QuantumCircuit for circuit simulations.
-        sim_params: Simulation parameters specifying the simulation mode and settings.
-        noise_model: The noise model to apply during simulation. If provided, it is sampled once
-            at the beginning of the run to generate a concrete noise realization (static disorder).
-            The sampled noise model is then saved to `sim_params.noise_model`.
-        parallel: Whether to run trajectories in parallel. Defaults to True.
+        Args:
+            initial_state: The initial system state as an MPS.
+            operator: The quantum circuit representing the operation to simulate.
+            sim_params: Simulation parameters for weak simulation.
+            noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
 
-    Raises:
-        ValueError: If no output is specified (neither observables nor get_state is set).
+        Raises:
+            ValueError: If ``sim_params.get_state`` is ``True`` while a non-trivial
+                noise model is supplied (the trajectory ensemble has no single
+                representative state).
+        """
+        backend: Callable[[tuple[int, MPS, NoiseModel | None, WeakSimParams, QuantumCircuit]], Any] = digital_tjm
 
-    """
-    # Ensure the state is in B-normalization before any evolution
-    initial_state.normalize("B")
+        noisy = not (noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes))
+        if noisy:
+            if sim_params.get_state:
+                msg = "Cannot return state in noisy circuit simulation due to stochastics."
+                raise ValueError(msg)
+            effective_num_traj = sim_params.shots
+            per_call_shots = 1
+        else:
+            effective_num_traj = 1
+            per_call_shots = sim_params.shots
 
-    # Sample a concrete noise model once for this run (static disorder)
-    if noise_model is not None:
-        noise_model = noise_model.sample()
-    sim_params.noise_model = noise_model
+        if noisy:
+            result.measurements = [None] * effective_num_traj
+        else:
+            result.measurements = [None]
 
-    # Deferred output validation
-    if (
-        isinstance(sim_params, (StrongSimParams, AnalogSimParams))
-        and not sim_params.get_state
-        and not sim_params.observables
-    ):
-        msg = "No output specified: either observables or get_state must be set."
-        raise ValueError(msg)
+        worker_params = copy.deepcopy(sim_params)
+        payload: dict[str, Any] = {
+            "initial_state": initial_state,
+            "noise_model": noise_model,
+            "sim_params": worker_params,
+            "operator": operator,
+            "per_call_shots": per_call_shots,
+        }
+        WORKER_CTX["per_call_shots"] = per_call_shots
 
-    if isinstance(sim_params, (StrongSimParams, WeakSimParams)):
-        assert isinstance(operator, QuantumCircuit)
-        _run_circuit(initial_state, operator, sim_params, noise_model, parallel=parallel)
-    elif isinstance(sim_params, AnalogSimParams):
-        assert isinstance(operator, MPO)
-        _run_analog(initial_state, operator, sim_params, noise_model, parallel=parallel)
+        final_mps: MPS | None = None
+
+        if self.parallel and effective_num_traj > 1:
+            for i, traj_payload in run_backend_parallel(
+                worker_fn=_digital_weak_worker,
+                payload=payload,
+                n_jobs=effective_num_traj,
+                max_workers=self.max_workers,
+                show_progress=self.show_progress,
+                desc="Running trajectories",
+                max_retries=self.max_retries,
+                retry_exceptions=self.retry_exceptions,
+                mp_context=self.mp_context,
+            ):
+                shot_counts, _traj_diag, traj_final = traj_payload
+                result.measurements[i] = _expect_shot_counts(shot_counts)
+                if traj_final is not None:
+                    final_mps = traj_final
+        else:
+            n_threads = available_cpus()
+
+            args: list[Any] = [
+                (i, initial_state, noise_model, worker_params, operator) for i in range(effective_num_traj)
+            ]
+
+            iterator = tqdm(args, desc="Running trajectories", ncols=80, disable=not self.show_progress)
+
+            for i, arg in enumerate(iterator):
+                shot_counts, _traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
+                counts_dict = _expect_shot_counts(shot_counts)
+                if noisy:
+                    result.measurements[i] = counts_dict
+                else:
+                    result.measurements[0] = counts_dict
+                if traj_final is not None:
+                    final_mps = traj_final
+
+        WORKER_CTX.pop("per_call_shots", None)
+        _store_final_mps(result, final_mps)
+        aggregate_counts(result)
+
+    # -----------------------------------------------------------------------
+    # Circuit dispatcher
+    # -----------------------------------------------------------------------
+    def _run_circuit(
+        self,
+        initial_state: State,
+        operator: QuantumCircuit,
+        sim_params: WeakSimParams | StrongSimParams,
+        noise_model: NoiseModel | None,
+        result: Result,
+    ) -> None:
+        """Run circuit-based simulation trajectories.
+
+        Requires :attr:`~mqt.yaqs.core.data_structures.state.State.representation` ``"mps"``,
+        materializes the state, validates that the number of qubits in the quantum circuit
+        matches the MPS length, reverses the bit order of the circuit, and dispatches the
+        simulation to the appropriate backend based on whether the simulation parameters
+        indicate strong or weak simulation.
+
+        Args:
+            initial_state: The initial system state (must use MPS representation).
+            operator: The quantum circuit to simulate.
+            sim_params: Simulation parameters for circuit simulation.
+            noise_model: The noise model applied during simulation.
+            result: Output container populated during this run.
+
+        Raises:
+            ValueError: If ``initial_state.representation`` is not ``"mps"``.
+        """
+        if initial_state.representation != "mps":
+            msg = (
+                "Circuit simulation requires State.representation='mps'. "
+                "Use representation='vector' or 'density_matrix' only for analog Hamiltonian runs."
+            )
+            raise ValueError(msg)
+        initial_state.ensure_encoded("mps")
+        mps = initial_state.mps
+
+        if mps.length != operator.num_qubits:
+            msg = "State and circuit qubit counts do not match."
+            raise ValueError(msg)
+        operator = copy.deepcopy(operator.reverse_bits())
+
+        if isinstance(sim_params, StrongSimParams):
+            self._run_strong_sim(mps, operator, sim_params, noise_model, result)
+        elif isinstance(sim_params, WeakSimParams):
+            self._run_weak_sim(mps, operator, sim_params, noise_model, result)
+
+    # -----------------------------------------------------------------------
+    # Unitary ensemble (deterministic, no noise)
+    # -----------------------------------------------------------------------
+    def _run_ensemble(
+        self,
+        initial_states: list[MPS],
+        operator: MPO,
+        sim_params: AnalogSimParams,
+        noise_model: NoiseModel | None,
+        result: Result,
+    ) -> None:
+        """Run deterministic unitary evolution for an ensemble of initial MPS states.
+
+        This mode is intentionally separate from stochastic-noise trajectories: users may either
+        provide a list of initial states with no noise (this mode), or a single initial state with
+        noise (standard TJM / Lindblad / MCWF paths).
+
+        Args:
+            initial_states: One MPS per ensemble member; lengths must match ``operator.length``.
+            operator: Hamiltonian as an MPO shared by all members.
+            sim_params: Analog parameters; ``num_traj`` is set to ``len(initial_states)``.
+            noise_model: Must be absent or contain only zero-strength processes.
+            result: Output container populated during this run.
+
+        Raises:
+            ValueError: If noisy simulation is requested with a list of states, if
+                ``representation`` is unsupported in list mode, if the list is empty, or if state
+                lengths do not match the MPO.
+        """
+        if noise_model is not None and any(proc["strength"] > 0 for proc in noise_model.processes):
+            msg = (
+                "list[State] with noisy analog simulation is not supported yet. "
+                "Use list[State] with no noise for unitary ensembles, or use a single State for noisy simulation."
+            )
+            raise ValueError(msg)
+        if not initial_states:
+            msg = "initial_state list must not be empty."
+            raise ValueError(msg)
+
+        if any(state.length != operator.length for state in initial_states):
+            msg = "All initial states in the list must match the MPO length."
+            raise ValueError(msg)
+        if sim_params.get_state:
+            msg = "get_state=True is not supported for list[State] analog ensemble mode."
+            raise ValueError(msg)
+
+        effective_num_traj = len(initial_states)
+
+        _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
+        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
+        diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
+
+        n_pairs = len(sim_params.multi_time_observables)
+        n_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
+        multi_time_matrix: NDArray[np.complex128] | None = None
+        if n_pairs > 0:
+            multi_time_matrix = np.zeros((len(initial_states), n_pairs, n_cols), dtype=np.complex128)
+            result.multi_time_times = (
+                sim_params.times
+                if sim_params.sample_timesteps
+                else np.array([sim_params.elapsed_time], dtype=np.float64)
+            )
+
+        payload: dict[str, Any] = {
+            "initial_states": initial_states,
+            "sim_params": worker_params,
+            "operator": operator,
+        }
+
+        if self.parallel and len(initial_states) > 1:
+            for i, (obs_result, traj_diag, multi_time_result) in run_backend_parallel(
+                worker_fn=_ensemble_worker,
+                payload=payload,
+                n_jobs=len(initial_states),
+                max_workers=self.max_workers,
+                show_progress=self.show_progress,
+                desc="Running unitary ensemble",
+                max_retries=self.max_retries,
+                retry_exceptions=self.retry_exceptions,
+                mp_context=self.mp_context,
+            ):
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = obs_result[obs_index]
+                diag_per_traj[:, i, :] = traj_diag
+                if multi_time_matrix is not None:
+                    assert multi_time_result is not None
+                    multi_time_matrix[i] = multi_time_result
+        else:
+            n_threads = available_cpus()
+            args = [(i, initial_states[i], worker_params, operator) for i in range(len(initial_states))]
+            iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not self.show_progress)
+            for i, arg in enumerate(iterator):
+                obs_result, traj_diag, multi_time_result = _call_backend(
+                    ensemble_member_worker, arg, n_threads=n_threads
+                )
+                for obs_index in range(len(result.observables)):
+                    result.trajectories[obs_index][i] = obs_result[obs_index]
+                diag_per_traj[:, i, :] = traj_diag
+                if multi_time_matrix is not None:
+                    assert multi_time_result is not None
+                    multi_time_matrix[i] = multi_time_result
+
+        result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
+        aggregate_trajectories(result)
+        if multi_time_matrix is not None:
+            result.multi_time_results = np.mean(multi_time_matrix, axis=0)

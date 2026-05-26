@@ -21,12 +21,14 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
-from ..core.data_structures.networks import MPO, MPS
+from ..core.data_structures.mpo import MPO
+from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
+from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -217,10 +219,10 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
     """Apply two-qubit gate.
 
-    Applies a two-qubit gate to the given Matrix Product State (MPS) with dynamic TDVP.
+    Applies a two-qubit gate to the given Matrix Product MPS (MPS) with dynamic TDVP.
 
     Args:
-        state (MPS): The Matrix Product State to which the gate will be applied.
+        state (MPS): The Matrix Product MPS to which the gate will be applied.
         node (DAGOpNode): The node representing the two-qubit gate in the Directed Acyclic Graph (DAG).
         sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior
         of the algorithm.
@@ -244,7 +246,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
 
 def digital_tjm(
     args: tuple[int, MPS, NoiseModel | None, StrongSimParams | WeakSimParams, QuantumCircuit],
-) -> NDArray[np.float64] | dict[int, int]:
+) -> tuple[NDArray[np.float64] | dict[int, int], NDArray[np.float64] | None, MPS | None]:
     """Digital Tensor Jump Method.
 
     Simulates a quantum circuit using the Tensor Jump Method.
@@ -252,7 +254,7 @@ def digital_tjm(
     Args:
         args: A tuple containing the following elements:
             - An index or identifier, primarily for parallelization
-            - The initial state of the system represented as a Matrix Product State.
+            - The initial state of the system represented as a Matrix Product MPS.
             - The noise model to be applied during the simulation, or None if no noise is to be applied.
             - Parameters for the simulation, either for strong or weak simulation.
             - The quantum circuit to be simulated.
@@ -262,22 +264,24 @@ def digital_tjm(
         If StrongSimParams are used, the results are the measured observables.
         If WeakSimParams are used, the results are the measurement outcomes for each shot.
     """
-    _, initial_state, noise_model, sim_params, circuit = args
+    traj_idx, initial_state, noise_model, sim_params, circuit = args
 
     state = copy.deepcopy(initial_state)
     dag = circuit_to_dag(circuit)
+    diagnostics: NDArray[np.float64] | None = None
 
     # Initialize results depending on simulation type
     if isinstance(sim_params, StrongSimParams):
+        num_cols = (sim_params.num_mid_measurements + 2) if sim_params.sample_layers else 1
+        diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         if sim_params.sample_layers:
             results = np.zeros((len(sim_params.sorted_observables), sim_params.num_mid_measurements + 2))
-            # Initial sampling (column 0)
+            state.record_diagnostics(diagnostics, 0)
             state.evaluate_observables(sim_params, results, 0)
         else:
             results = np.zeros((len(sim_params.sorted_observables), 1))
 
-    # Instantiate a fresh RNG for this trajectory
-    rng = np.random.default_rng()
+    rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
 
     col_idx = 0
     canonical_form_lost = False
@@ -310,22 +314,39 @@ def digital_tjm(
             for measure_barrier in measure_barriers:
                 dag.remove_op_node(measure_barrier)
                 col_idx += 1
+                assert diagnostics is not None
+                state.record_diagnostics(diagnostics, col_idx)
                 state.evaluate_observables(sim_params, results, col_idx)
 
     if isinstance(sim_params, WeakSimParams):
+        per_call_shots = _per_call_shots(sim_params)
         if not noise_model or all(proc["strength"] == 0 for proc in noise_model.processes):
-            # All shots can be done at once in noise-free model
-            if sim_params.get_state:
-                sim_params.output_state = state
-            return state.measure_shots(sim_params.shots)
-        # Each shot is an individual trajectory
-        return state.measure_shots(shots=1)
+            counts = state.measure_shots(per_call_shots)
+            final = state if sim_params.get_state else None
+            return counts, None, final
+        return state.measure_shots(shots=1), None, state if sim_params.get_state else None
 
     if canonical_form_lost:
         state.normalize(form="B", decomposition="QR")
 
     assert isinstance(sim_params, StrongSimParams)
-    if sim_params.get_state:
-        sim_params.output_state = state
-    state.evaluate_observables(sim_params, results, results.shape[1] - 1)
-    return results
+    assert diagnostics is not None
+    final_col = results.shape[1] - 1
+    state.record_diagnostics(diagnostics, final_col)
+    state.evaluate_observables(sim_params, results, final_col)
+    final = state if sim_params.get_state else None
+    return results, diagnostics, final
+
+
+def _per_call_shots(sim_params: WeakSimParams) -> int:
+    """Return shots for this worker call (may differ from ``sim_params.shots`` when noisy).
+
+    Returns:
+        Number of shots for the current worker invocation.
+    """
+    try:
+        from mqt.yaqs.simulator import WORKER_CTX  # noqa: PLC0415
+
+        return int(WORKER_CTX["per_call_shots"])
+    except KeyError:
+        return sim_params.shots

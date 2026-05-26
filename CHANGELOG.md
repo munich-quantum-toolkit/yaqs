@@ -11,6 +11,29 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added accuracy presets to simulation parameters ([#438]) ([**@aaronleesander**])
+- added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
+- added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])
+- added Fermionic and Jordan-Wigner MPO encodings of 1D Fermi-Hubbard model ([#220]) ([**@thilomueller**])
+- added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
+
+### Changed
+
+- refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
+- sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
+- changed `simulator.run` to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
+- changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
+
+### Removed
+
+### Fixed
+
+- minor cleanup ([#420]) ([**@aaronleesander**])
+
+## [0.5.0] - 2026-05-12
+
+### Added
+
 - added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad` ([#400]) ([**@Gauthameshwar**])
 - added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
 - added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
@@ -88,7 +111,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Version links -->
 
-[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0
 [0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
 [0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
@@ -96,6 +120,15 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#438]: https://github.com/munich-quantum-toolkit/yaqs/pull/438
+[#430]: https://github.com/munich-quantum-toolkit/yaqs/pull/430
+[#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
+[#428]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
+[#426]: https://github.com/munich-quantum-toolkit/yaqs/pull/426
+[#422]: https://github.com/munich-quantum-toolkit/yaqs/pull/422
+[#220]: https://github.com/munich-quantum-toolkit/yaqs/pull/220
+[#420]: https://github.com/munich-quantum-toolkit/yaqs/pull/420
+[#409]: https://github.com/munich-quantum-toolkit/yaqs/pull/409
 [#344]: https://github.com/munich-quantum-toolkit/yaqs/pull/344
 [#400]: https://github.com/munich-quantum-toolkit/yaqs/pull/400
 [#339]: https://github.com/munich-quantum-toolkit/yaqs/pull/339
@@ -127,8 +160,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Contributor -->
 
-[**@denialhaag**]: https://github.com/denialhaag
 [**@aaronleesander**]: https://github.com/aaronleesander
+[**@denialhaag**]: https://github.com/denialhaag
 [**@Gauthameshwar**]: https://github.com/Gauthameshwar
 [**@thilomueller**]: https://github.com/thilomueller
 [**@lucello**]: https://github.com/lucello

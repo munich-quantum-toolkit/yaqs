@@ -15,24 +15,25 @@ noise strengths are zero, the MPS is simply shifted to its canonical form.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import opt_einsum as oe
-from scipy.linalg import expm
 
-from ..methods.tdvp import merge_mps_tensors, split_mps_tensor
+from .. import linalg
+from ..methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
-    from ..data_structures.networks import MPS
+    from ..data_structures.mps import MPS
     from ..data_structures.noise_model import NoiseModel
     from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ..methods.decompositions import TruncMode
 
 
 def is_adjacent(proc: dict[str, Any]) -> bool:
     """Return True if the two-site process targets nearest neighbors.
 
-    Assumes the process is two-site and checks |i-j| == 1.
+    Assumes the process is two-site and checks ``|i-j| == 1``.
     """
     s = proc["sites"]
     return bool(abs(s[1] - s[0]) == 1)
@@ -79,7 +80,7 @@ def apply_dissipation(
     each tensor in the state using an Einstein summation contraction.
 
     Args:
-        state: The Matrix Product State representing the current state of the system.
+        state: The Matrix Product State (MPS) representing the current state of the system.
         noise_model: The noise model containing jump operators and their
             corresponding strengths. If None or if all strengths are zero, no dissipation is applied.
         dt: The time step for the evolution, used in the exponentiation of the dissipative operator.
@@ -110,7 +111,7 @@ def apply_dissipation(
                 else:
                     jump_op_mat = process["matrix"]
                     mat = np.conj(jump_op_mat).T @ jump_op_mat
-                    dissipative_op = expm(-0.5 * dt * gamma * mat)
+                    dissipative_op = linalg.expm(-0.5 * dt * gamma * mat)
                     state.tensors[i] = oe.contract("ab, bcd->acd", dissipative_op, state.tensors[i])
 
         processes_here = [
@@ -130,19 +131,21 @@ def apply_dissipation(
                 else:
                     jump_op_mat = process["matrix"]
                     mat = np.conj(jump_op_mat).T @ jump_op_mat
-                    dissipative_op = expm(-0.5 * dt * gamma * mat)
+                    dissipative_op = linalg.expm(-0.5 * dt * gamma * mat)
 
-                    merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
+                    merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
                     merged_tensor = oe.contract("ab, bcd->acd", dissipative_op, merged_tensor)
 
                     # singular values always contracted right
                     # since ortho center is shifted to the left after loop
-                    tensor_left, tensor_right = split_mps_tensor(
+                    tensor_left, tensor_right = split_two_site(
                         merged_tensor,
-                        "right",
-                        sim_params,
                         [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
-                        dynamic=False,
+                        svd_distribution="right",
+                        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+                        threshold=sim_params.threshold,
+                        max_bond_dim=sim_params.max_bond_dim,
+                        min_bond_dim=sim_params.min_bond_dim,
                     )
                     state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
 

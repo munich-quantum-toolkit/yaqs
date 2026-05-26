@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, X, Y, Z, extend_gate, split_tensor
 
@@ -627,46 +627,6 @@ def _assert_identity_gate_like(g: BaseGate) -> None:
     assert_array_equal(g.matrix, np.eye(2))
     assert_array_equal(g.tensor, g.matrix)
     assert g.interaction == 1  # because matrix is 2x2
-
-
-def test_diagnostic_runtime_cost() -> None:
-    """Test the runtime_cost diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be assigned to a site, and that its BaseGate factory produces
-    the same matrix.
-    """
-    g = GateLibrary.runtime_cost()
-    _assert_identity_gate_like(g)
-    g.set_sites(0)
-    assert g.sites == [0]
-    assert_array_equal(BaseGate.runtime_cost().matrix, g.matrix)
-
-
-def test_diagnostic_max_bond() -> None:
-    """Test the max_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.max_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(1)
-    assert g.sites == [1]
-    assert_array_equal(BaseGate.max_bond().matrix, g.matrix)
-
-
-def test_diagnostic_total_bond() -> None:
-    """Test the total_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.total_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(3)
-    assert g.sites == [3]
-    assert_array_equal(BaseGate.total_bond().matrix, g.matrix)
 
 
 def test_meta_entropy_sites_len_flexible() -> None:

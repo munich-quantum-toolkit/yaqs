@@ -7,12 +7,18 @@
 
 """1TDVP + 2TDVP implementation with helper functions.
 
-This module implements functions for performing time evolution on Matrix Product States (MPS)
-using the Time-Dependent Variational Principle (TDVP). It provides utilities for:
-  - Splitting and merging MPS tensors via singular value decomposition (SVD).
-  - Updating local MPS tensors and bond tensors using Lanczos-based approximations of the matrix exponential.
-  - Constructing effective local operators through contractions with MPO tensors and environment blocks.
-  - Performing single-site and two-site TDVP integration schemes to evolve the MPS in time.
+This module implements functions for performing time evolution on Matrix Product
+States (MPS) using the Time-Dependent Variational Principle (TDVP). It provides
+utilities for:
+
+- Updating local MPS tensors and bond tensors using Lanczos-based approximations
+  of the matrix exponential.
+- Constructing effective local operators through contractions with MPO tensors
+  and environment blocks.
+- Performing single-site and two-site TDVP integration schemes to evolve the
+  MPS in time.
+
+Two-site MPS merge/split with SVD truncation lives in :mod:`mqt.yaqs.core.methods.decompositions`.
 
 These methods are designed for simulating the dynamics of quantum many-body systems and are based on
 techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
@@ -20,13 +26,13 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import opt_einsum as oe
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
-from .decompositions import robust_svd
+from .decompositions import merge_two_site, split_two_site
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
@@ -34,136 +40,49 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from ..data_structures.networks import MPO, MPS
+    from ..data_structures.mpo import MPO
+    from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
+    from .decompositions import SvdDistribution, TruncMode
 
 
 DENSE_THRESHOLD = 128
 
 
-def split_mps_tensor(
-    tensor: NDArray[np.complex128],
-    svd_distribution: str,
+def _split_two_site_tdvp(
+    merged: NDArray[np.complex128],
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     physical_dimensions: list[int],
+    svd_distribution: str,
     *,
     dynamic: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Split a Matrix Product State (MPS) tensor into two tensors using singular value decomposition (SVD).
+    """Split a merged two-site tensor using TDVP simulation truncation policy.
 
-    The input tensor is assumed to have a composite physical index of dimension d0*d1 and virtual dimensions D0 and D2,
-    i.e. its shape is (d0*d1, D0, D2). The function reshapes and splits it into two tensors:
-      - A left tensor of shape (d0, D0, num_sv)
-      - A right tensor of shape (d1, num_sv, D2)
-    where num_sv is the number of singular values retained after truncation.
-
-    The parameter `svd_distribution` determines how the singular values are distributed between
-    the left and right tensors.
-    It can be:
-        - "left"  : Multiply the left tensor by the singular values.
-        - "right" : Multiply the right tensor by the singular values.
-        - "sqrt"  : Multiply both tensors by the square root of the singular values.
+    Thin adapter around :func:`mqt.yaqs.core.methods.decompositions.split_two_site`.
+    When ``dynamic`` is True, no ``max_bond_dim`` cap is applied during truncation
+    (bond growth is handled by the dynamic TDVP sweep). Otherwise the cap is
+    ``sim_params.max_bond_dim``.
 
     Args:
-        tensor: Input MPS tensor of shape (d0*d1, D0, D2).
-        svd_distribution: How to distribute singular values ("left", "right", or "sqrt").
-        sim_params: Simulation parameters containing threshold and max bond dimension
-        physical_dimensions: Physical dimensions of left and right tensor
-        dynamic: Determines if bond dimension is handled by dynamic TDVP (True) or truncation (False).
+        merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
+        sim_params: Simulation parameters (threshold, trunc_mode, bond limits).
+        physical_dimensions: ``[d_left, d_right]`` physical dimensions.
+        svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
+        dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
 
     Returns:
-        tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-            A tuple (A0, A1) of MPS tensors after splitting.
-
-    Raises:
-        ValueError: If physical dimension can not be split properly.
+        Left and right MPS site tensors after split and truncation.
     """
-    # Reshape the tensor from (d0*d1, D0, D2) to (d0, d1, D0, D2) and then transpose to bring
-    # the left virtual dimension next to the first physical index: (d0, D0, d1, D2)
-    d_left = physical_dimensions[0]
-    d_right = physical_dimensions[1]
-    if tensor.shape[0] != d_left * d_right:
-        msg = "The first dimension of the tensor must be a combination of the given physical dimensions."
-        raise ValueError(msg)
-    tensor_reshaped = tensor.reshape(d_left, d_right, tensor.shape[1], tensor.shape[2])
-    tensor_transposed = tensor_reshaped.transpose((0, 2, 1, 3))
-    shape_transposed = tensor_transposed.shape  # (d0, D0, d1, D2)
-
-    # Merge the first two and last two indices for SVD: matrix of shape (d0*D0) x (d1*D2)
-    theta_mat = tensor_transposed.reshape(
-        shape_transposed[0] * shape_transposed[1],
-        shape_transposed[2] * shape_transposed[3],
+    return split_two_site(
+        merged,
+        physical_dimensions,
+        svd_distribution=cast("SvdDistribution", svd_distribution),
+        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        threshold=sim_params.threshold,
+        max_bond_dim=None if dynamic else sim_params.max_bond_dim,
+        min_bond_dim=sim_params.min_bond_dim,
     )
-    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
-
-    # Handled by dynamic TDVP
-    keep = min(len(s_vec), sim_params.max_bond_dim) if not dynamic else len(s_vec)
-
-    if sim_params.trunc_mode == "discarded_weight":
-        discard = 0.0
-        min_keep = min(len(s_vec), sim_params.min_bond_dim)  # Prevents pathological dimension-1 truncation
-        # iterate from smallest to largest
-        for idx, s in enumerate(reversed(s_vec)):
-            next_discard = discard + s * s
-            if next_discard > sim_params.threshold:
-                # don't discard this one; discard only the ones already counted
-                keep = max(len(s_vec) - idx, min_keep)
-                break
-            discard = next_discard
-    elif sim_params.trunc_mode == "relative":
-        smax = s_vec[0]
-        keep = 0 if smax == 0 else int(np.sum((s_vec / smax) >= sim_params.threshold))
-        keep = min(keep, sim_params.max_bond_dim)
-        keep = max(keep, sim_params.min_bond_dim)
-
-    left_tensor = u_mat[:, :keep]
-    s_vec = s_vec[:keep]
-    right_tensor = v_mat[:keep, :]
-
-    # Reshape U and Vh back to tensor form:
-    # U to shape (d0, D0, num_sv)
-    left_tensor = left_tensor.reshape((shape_transposed[0], shape_transposed[1], keep))
-    # Vh reshaped to (num_sv, d1, D2)
-    right_tensor = right_tensor.reshape((keep, shape_transposed[2], shape_transposed[3]))
-
-    # Distribute the singular values according to the chosen option
-    if svd_distribution == "left":
-        left_tensor *= s_vec
-    elif svd_distribution == "right":
-        right_tensor *= s_vec[:, None, None]
-    elif svd_distribution == "sqrt":
-        sqrt_sigma = np.sqrt(s_vec)
-        left_tensor *= sqrt_sigma
-        right_tensor *= sqrt_sigma[:, None, None]
-    else:
-        msg = "svd_distribution parameter must be left, right, or sqrt."
-        raise ValueError(msg)
-
-    # Adjust the ordering of indices in A1 so that the physical dimension comes first:
-    right_tensor = right_tensor.transpose((1, 0, 2))
-    return left_tensor, right_tensor
-
-
-def merge_mps_tensors(
-    left_tensor: NDArray[np.complex128], right_tensor: NDArray[np.complex128]
-) -> NDArray[np.complex128]:
-    """Merge two neighboring MPS tensors into one.
-
-    The tensors left_tensor and right_tensor are contracted using opt_einsum. The contraction is performed
-    over the common bond, and the resulting tensor is reshaped to combine the two physical dimensions into one.
-
-    Args:
-        left_tensor (NDArray[np.complex128]): Left MPS tensor.
-        right_tensor (NDArray[np.complex128]): Right MPS tensor.
-
-    Returns:
-        NDArray[np.complex128]: The merged MPS tensor.
-    """
-    # Contract over the common bond (index 2 in A0 and index 0 in A1) using specified contraction pattern.
-    merged_tensor = np.asarray(oe.contract("abc,dce->adbe", left_tensor, right_tensor), dtype=np.complex128)
-    merged_shape = merged_tensor.shape
-    # Reshape to combine the two physical dimensions.
-    return merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
 
 
 def merge_mpo_tensors(
@@ -255,7 +174,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex1
     the network is contracted site-by-site moving to the left to produce a list of right operator blocks.
 
     Args:
-        psi (MPS): The Matrix Product State representing the quantum state.
+        psi (MPS): The Matrix Product MPS representing the quantum state.
         op (MPO): The Matrix Product Operator representing the Hamiltonian.
 
     Returns:
@@ -741,7 +660,7 @@ def two_site_tdvp(
     """
     num_sites = hamiltonian.length
     if num_sites != state.length:
-        msg = "State and Hamiltonian must have the same number of sites"
+        msg = "MPS and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
     if num_sites < 2:
         msg = "Hamiltonian is too short for a two-site update (2TDVP)."
@@ -764,14 +683,14 @@ def two_site_tdvp(
 
     # Left-to-right sweep for sites 0 to L-2.
     for i in range(num_sites - 2):
-        merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
         merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
             merged_tensor,
-            "right",
             sim_params,
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+            "right",
             dynamic=dynamic,
         )
         left_blocks[i + 1] = update_left_environment(
@@ -790,25 +709,25 @@ def two_site_tdvp(
         sim_params.dt = 1
 
     i = num_sites - 2
-    merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+    merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
     merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
     merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, sim_params.dt)
     # Only a single sweep is needed for circuits
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
             merged_tensor,
-            "right",
             sim_params,
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+            "right",
             dynamic=dynamic,
         )
         return
 
-    state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+    state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
         merged_tensor,
-        "left",
         sim_params,
         [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+        "left",
         dynamic=dynamic,
     )
     right_blocks[i] = update_right_environment(
@@ -824,14 +743,14 @@ def two_site_tdvp(
             state.tensors[i + 1],
             -0.5 * sim_params.dt,
         )
-        merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
         merged_tensor = update_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt)
-        state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
             merged_tensor,
-            "left",
             sim_params,
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+            "left",
             dynamic=dynamic,
         )
         right_blocks[i] = update_right_environment(
@@ -860,7 +779,7 @@ def local_dynamic_tdvp(
     """
     num_sites = hamiltonian.length
     if num_sites != state.length:
-        msg = "State and Hamiltonian must have the same length"
+        msg = "MPS and Hamiltonian must have the same length"
         raise ValueError(msg)
 
     if num_sites == 1:
@@ -911,17 +830,17 @@ def local_dynamic_tdvp(
         elif i == num_sites - 1:
             continue
         elif i == num_sites - 2:
-            merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
                 left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
 
-            state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
                 merged_tensor,
-                "right",
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                "right",
                 dynamic=True,
             )
             right_blocks[i] = update_right_environment(
@@ -932,16 +851,16 @@ def local_dynamic_tdvp(
             )
 
         else:
-            merged_tensor = merge_mps_tensors(state.tensors[i], state.tensors[i + 1])
+            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
             merged_tensor = update_site(
                 left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
-            state.tensors[i], state.tensors[i + 1] = split_mps_tensor(
+            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
                 merged_tensor,
-                "right",
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                "right",
                 dynamic=True,
             )
             left_blocks[i + 1] = update_left_environment(
@@ -997,16 +916,16 @@ def local_dynamic_tdvp(
             # Will be encountered at final site in loop due to dummy dimension
             continue
         else:
-            merged_tensor = merge_mps_tensors(state.tensors[i - 1], state.tensors[i])
+            merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
             merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
             merged_tensor = update_site(
                 left_blocks[i - 1], right_blocks[i], merged_mpo, merged_tensor, 0.5 * sim_params.dt
             )
-            state.tensors[i - 1], state.tensors[i] = split_mps_tensor(
+            state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
                 merged_tensor,
-                "left",
                 sim_params,
                 [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
+                "left",
                 dynamic=True,
             )
             right_blocks[i - 1] = update_right_environment(
@@ -1034,7 +953,7 @@ def global_dynamic_tdvp(
     `sim_params`.
 
     Args:
-        state (MPS): The Matrix Product State representing the current state of the system.
+        state (MPS): The Matrix Product MPS representing the current state of the system.
         hamiltonian (MPO): The Matrix Product Operator representing the Hamiltonian of the system.
         sim_params (AnalogSimParams | StrongSimParams | WeakSimParams): Simulation parameters containing settings
             such as the maximum allowable bond dimension for the MPS.

@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.linalg import expm
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.methods.bug import (
     bug,
@@ -230,7 +231,7 @@ def test_local_update() -> None:
     right_block = np.eye(5, dtype=np.complex128).reshape(5, 1, 5)
     site = 2
     right_m_block = np.eye(5, dtype=np.complex128)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, show_progress=False)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=1)
     # Perform the local update
     result = local_update(mps, mpo, left_envs, right_block, canon_sites, site, right_m_block, sim_params)
     # General Change Check
@@ -252,7 +253,7 @@ def test_bug_single_site() -> None:
     ref_mps = deepcopy(mps)
     mpo = MPO.ising(1, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10)
     # Perform BUG
     bug(mps, mpo, sim_params)
     # Check against exact evolution
@@ -269,7 +270,7 @@ def test_bug_three_sites() -> None:
     ref_mps = deepcopy(mps)
     mpo = MPO.ising(3, 1, 0.5)
     ref_mpo = deepcopy(mpo)
-    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10, show_progress=False)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=1, threshold=1e-16, max_bond_dim=10)
     # Perform BUG
     bug(mps, mpo, sim_params)
     # Check against exact evolution

@@ -15,5 +15,8 @@ from __future__ import annotations
 
 from ._version import version as __version__
 from ._version import version_tuple as version_info
+from .core.data_structures.result import Result
+from .equivalence_checker import EquivalenceChecker
+from .simulator import Simulator
 
-__all__ = ["__version__", "version_info"]
+__all__ = ["EquivalenceChecker", "Result", "Simulator", "__version__", "version_info"]

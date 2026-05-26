@@ -55,10 +55,9 @@ transpiled_circuit.draw(output="mpl")
 Define parameters for equivalence checking.
 
 ```{code-cell} ipython3
-from mqt.yaqs.digital.equivalence_checker import run
+from mqt.yaqs import EquivalenceChecker
 
-threshold = 1e-6
-fidelity = 1 - 1e-13
-result = run(circuit, transpiled_circuit, threshold, fidelity)
+checker = EquivalenceChecker(threshold=1e-6, fidelity=1 - 1e-13)
+result = checker.check(circuit, transpiled_circuit)
 print(f"Equivalence: {result}")
 ```

@@ -34,9 +34,14 @@ self
 :maxdepth: 1
 
 installation
+examples/state_initialization
+examples/simulator_initialization
 examples/analog_simulation
+examples/ensemble_evolution
+examples/solver_comparison
 examples/scheduled_jumps
 examples/transmon_emulation
+examples/fermi_hubbard_mpo
 examples/process_tomography
 examples/strong_circuit_simulation
 examples/sample_observable_digital_tjm

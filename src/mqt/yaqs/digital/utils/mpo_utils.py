@@ -22,7 +22,8 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
-from ...core.data_structures.networks import MPO
+from ...core import linalg
+from ...core.data_structures.mpo import MPO
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
 if TYPE_CHECKING:
@@ -59,10 +60,11 @@ def decompose_theta(
     theta = np.transpose(theta, (0, 3, 2, 1, 4, 5))
     theta_matrix = np.reshape(theta, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
 
-    u_mat, s_list, v_mat = np.linalg.svd(theta_matrix, full_matrices=False)
-    s_list = s_list[s_list > threshold]
-    u_mat = u_mat[:, : len(s_list)]
-    v_mat = v_mat[: len(s_list), :]
+    u_mat, s_list, v_mat = linalg.svd(theta_matrix, full_matrices=False)
+    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=threshold, min_keep=1)
+    s_list = s_list[:keep]
+    u_mat = u_mat[:, :keep]
+    v_mat = v_mat[:keep, :]
 
     # Reshape U into a tensor of shape (dims[0], dims[1], dims[2], num_sv)
     u_tensor = np.reshape(u_mat, (dims[0], dims[1], dims[2], len(s_list)))
