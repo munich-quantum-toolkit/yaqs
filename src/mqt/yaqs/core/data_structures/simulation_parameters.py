@@ -36,45 +36,25 @@ ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
     "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024},
 }
 
-_EXPERT_DEFAULT_THRESHOLD = 1e-9
-_EXPERT_DEFAULT_MAX_BOND_DIM = 4096
-_EXPERT_DEFAULT_NUM_TRAJ = 1000
 
-
-def _validate_accuracy(accuracy: AccuracyPreset | None) -> AccuracyPreset | None:
+def _validate_accuracy(accuracy: AccuracyPreset) -> AccuracyPreset:
     """Validate ``accuracy`` preset names at runtime.
 
-    Args:
-        accuracy: Preset name or ``None`` for expert defaults.
-
     Returns:
-        The validated preset name, or ``None``.
+        The validated preset name.
 
     Raises:
         ValueError: If ``accuracy`` is not a supported preset name.
     """
-    if accuracy is None:
-        return None
     if accuracy not in ACCURACY_PRESETS:
         msg = f"accuracy must be one of {sorted(ACCURACY_PRESETS)!r}, got {accuracy!r}."
         raise ValueError(msg)
     return accuracy
 
 
-def _get_accuracy_preset(accuracy: AccuracyPreset | None) -> dict[str, float | int]:
-    """Return the preset values for ``accuracy`` or expert defaults for ``None``.
-
-    Returns:
-        Mapping with ``threshold``, ``max_bond_dim``, and ``num_traj`` keys.
-    """
-    accuracy = _validate_accuracy(accuracy)
-    if accuracy is None:
-        return {
-            "threshold": _EXPERT_DEFAULT_THRESHOLD,
-            "max_bond_dim": _EXPERT_DEFAULT_MAX_BOND_DIM,
-            "num_traj": _EXPERT_DEFAULT_NUM_TRAJ,
-        }
-    return ACCURACY_PRESETS[accuracy]
+def _get_accuracy_preset(accuracy: AccuracyPreset) -> dict[str, float | int]:
+    """Return the preset values for ``accuracy``."""
+    return ACCURACY_PRESETS[_validate_accuracy(accuracy)]
 
 
 def _validate_random_seed(random_seed: int | None) -> None:
@@ -161,8 +141,8 @@ class AnalogSimParams:
         random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
         max_bond_dim: Maximum allowed bond dimension.
         accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
-            Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-            defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+            Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
+            examples, while ``"accurate"`` uses the strictest built-in settings.
             Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
         trunc_mode: Truncation mode used in TDVP (``"discarded_weight"`` or ``"relative"``).
         threshold: Truncation threshold.
@@ -185,7 +165,7 @@ class AnalogSimParams:
         threshold: float | None = None,
         order: int = 1,
         *,
-        accuracy: AccuracyPreset | None = "balanced",
+        accuracy: AccuracyPreset = "balanced",
         sample_timesteps: bool = True,
         evolution_mode: EvolutionMode = EvolutionMode.TDVP,
         get_state: bool = False,
@@ -205,8 +185,8 @@ class AnalogSimParams:
             max_bond_dim: Maximum bond dimension allowed.
             min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
             accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
-                Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-                defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+                Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
+                examples, while ``"accurate"`` uses the strictest built-in settings.
                 Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Threshold for simulation accuracy.
@@ -271,8 +251,8 @@ class StrongSimParams:
             sampling for reproducible runs.
         max_bond_dim: The maximum bond dimension for the simulation.
         accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
-            Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-            defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+            Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
+            examples, while ``"accurate"`` uses the strictest built-in settings.
             Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
         min_bond_dim: The minimum bond dimension if possible which gives TDVP
             better accuracy. Default is 2.
@@ -296,7 +276,7 @@ class StrongSimParams:
         trunc_mode: str = "discarded_weight",
         threshold: float | None = None,
         *,
-        accuracy: AccuracyPreset | None = "balanced",
+        accuracy: AccuracyPreset = "balanced",
         get_state: bool = False,
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
@@ -312,8 +292,8 @@ class StrongSimParams:
             max_bond_dim: Maximum bond dimension allowed in simulation.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             accuracy: Preset controlling ``threshold``, ``max_bond_dim``, and ``num_traj``.
-                Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-                defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+                Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
+                examples, while ``"accurate"`` uses the strictest built-in settings.
                 Explicit ``threshold``, ``max_bond_dim``, and ``num_traj`` override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Threshold for simulation accuracy.
@@ -362,8 +342,8 @@ class WeakSimParams:
         shots: The number of shots for the simulation.
         max_bond_dim: The maximum bond dimension for the simulation.
         accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
-            Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-            defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+            Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
+            examples, while ``"accurate"`` uses the strictest built-in settings.
             Explicit ``threshold`` and ``max_bond_dim`` override the preset.
         min_bond_dim: The minimum bond dimension if possible which gives TDVP
             better accuracy. Default is 2.
@@ -387,7 +367,7 @@ class WeakSimParams:
         trunc_mode: str = "discarded_weight",
         threshold: float | None = None,
         *,
-        accuracy: AccuracyPreset | None = "balanced",
+        accuracy: AccuracyPreset = "balanced",
         get_state: bool = False,
         random_seed: int | None = None,
     ) -> None:
@@ -400,8 +380,8 @@ class WeakSimParams:
             max_bond_dim: Maximum bond dimension for simulation.
             min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
-                Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-                defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+                Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
+                examples, while ``"accurate"`` uses the strictest built-in settings.
                 Explicit ``threshold`` and ``max_bond_dim`` override the preset.
             trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
             threshold: Accuracy threshold for truncating tensors.
