@@ -43,7 +43,7 @@ All three `*SimParams` classes accept a keyword-only `preset` argument (default 
 
 **Explicit constructor arguments override the preset; everything you omit keeps the preset value.**
 
-That is the intended workflow when you know *some* settings but not all:
+That is the intended workflow when you know _some_ settings but not all:
 
 1. Choose the closest preset (`"fast"`, `"balanced"`, `"accurate"`, or `"exact"`).
 2. Pass **only** the fields you want to change.
@@ -51,12 +51,12 @@ That is the intended workflow when you know *some* settings but not all:
 
 Overridable preset fields:
 
-| Argument         | What it controls                                      |
-| ---------------- | ----------------------------------------------------- |
-| `svd_threshold`  | SVD bond truncation during MPS/MPO updates            |
-| `max_bond_dim`   | Hard cap on bond dimension (`None` = no cap)        |
-| `num_traj`       | Trajectory count (analog / strong only)               |
-| `krylov_tol`     | Adaptive Krylov/Lanczos matrix exponential in TDVP  |
+| Argument        | What it controls                                   |
+| --------------- | -------------------------------------------------- |
+| `svd_threshold` | SVD bond truncation during MPS/MPO updates         |
+| `max_bond_dim`  | Hard cap on bond dimension (`None` = no cap)       |
+| `num_traj`      | Trajectory count (analog / strong only)            |
+| `krylov_tol`    | Adaptive Krylov/Lanczos matrix exponential in TDVP |
 
 `WeakSimParams` always requires `shots` separately; `shots` is **not** part of any preset.
 
