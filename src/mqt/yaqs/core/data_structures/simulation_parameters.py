@@ -256,72 +256,6 @@ class AnalogSimParams:
         )
 
 
-class WeakSimParams:
-    """A class to represent the parameters for a weak simulation.
-
-    Attributes:
-        dt: A placeholder property for code compatibility.
-        num_traj: A placeholder property for code compatibility.
-        shots: The number of shots for the simulation.
-        max_bond_dim: The maximum bond dimension for the simulation.
-        accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
-            Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-            defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
-            Explicit ``threshold`` and ``max_bond_dim`` override the preset.
-        min_bond_dim: The minimum bond dimension if possible which gives TDVP
-            better accuracy. Default is 2.
-        trunc_mode: The type of truncation performed in TDVP. Options are
-            ``"discarded_weight"`` and ``"relative"``.
-        threshold: The threshold value for the simulation.
-        window_size: The window size for the simulation.
-        get_state: If ``True``, request the final state on the returned
-            :class:`~mqt.yaqs.Result`.
-    """
-
-    # Properties set as placeholders for code compatibility
-    dt = 1
-    num_traj = 0
-
-    def __init__(
-        self,
-        shots: int,
-        max_bond_dim: int | None = None,
-        min_bond_dim: int = 2,
-        trunc_mode: str = "discarded_weight",
-        threshold: float | None = None,
-        *,
-        accuracy: AccuracyPreset | None = "balanced",
-        get_state: bool = False,
-        random_seed: int | None = None,
-    ) -> None:
-        """Weak circuit simulation initialization.
-
-        Initializes parameters for a weak circuit simulation.
-
-        Args:
-            shots: Number of measurement shots to simulate.
-            max_bond_dim: Maximum bond dimension for simulation.
-            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
-            accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
-                Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
-                defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
-                Explicit ``threshold`` and ``max_bond_dim`` override the preset.
-            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
-            threshold: Accuracy threshold for truncating tensors.
-            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
-            random_seed: If set, makes per-shot jump RNG reproducible.
-        """
-        _validate_random_seed(random_seed)
-        preset = _get_accuracy_preset(accuracy)
-        self.shots = shots
-        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else int(preset["max_bond_dim"])
-        self.min_bond_dim = min_bond_dim
-        self.trunc_mode = trunc_mode
-        self.threshold = threshold if threshold is not None else float(preset["threshold"])
-        self.get_state = get_state
-        self.random_seed = random_seed
-
-
 class StrongSimParams:
     """Strong Circuit Simulation Parameters.
 
@@ -414,4 +348,70 @@ class StrongSimParams:
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
+        self.random_seed = random_seed
+
+
+class WeakSimParams:
+    """A class to represent the parameters for a weak simulation.
+
+    Attributes:
+        dt: A placeholder property for code compatibility.
+        num_traj: A placeholder property for code compatibility.
+        shots: The number of shots for the simulation.
+        max_bond_dim: The maximum bond dimension for the simulation.
+        accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
+            Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
+            defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+            Explicit ``threshold`` and ``max_bond_dim`` override the preset.
+        min_bond_dim: The minimum bond dimension if possible which gives TDVP
+            better accuracy. Default is 2.
+        trunc_mode: The type of truncation performed in TDVP. Options are
+            ``"discarded_weight"`` and ``"relative"``.
+        threshold: The threshold value for the simulation.
+        window_size: The window size for the simulation.
+        get_state: If ``True``, request the final state on the returned
+            :class:`~mqt.yaqs.Result`.
+    """
+
+    # Properties set as placeholders for code compatibility
+    dt = 1
+    num_traj = 0
+
+    def __init__(
+        self,
+        shots: int,
+        max_bond_dim: int | None = None,
+        min_bond_dim: int = 2,
+        trunc_mode: str = "discarded_weight",
+        threshold: float | None = None,
+        *,
+        accuracy: AccuracyPreset | None = "balanced",
+        get_state: bool = False,
+        random_seed: int | None = None,
+    ) -> None:
+        """Weak circuit simulation initialization.
+
+        Initializes parameters for a weak circuit simulation.
+
+        Args:
+            shots: Number of measurement shots to simulate.
+            max_bond_dim: Maximum bond dimension for simulation.
+            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
+            accuracy: Preset controlling ``threshold`` and ``max_bond_dim``.
+                Default is ``"balanced"``. ``"accurate"`` matches the previous high-accuracy
+                defaults. ``accuracy=None`` selects the same expert defaults as ``"accurate"``.
+                Explicit ``threshold`` and ``max_bond_dim`` override the preset.
+            trunc_mode: TDVP truncation mode (``"discarded_weight"`` or ``"relative"``).
+            threshold: Accuracy threshold for truncating tensors.
+            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
+            random_seed: If set, makes per-shot jump RNG reproducible.
+        """
+        _validate_random_seed(random_seed)
+        preset = _get_accuracy_preset(accuracy)
+        self.shots = shots
+        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else int(preset["max_bond_dim"])
+        self.min_bond_dim = min_bond_dim
+        self.trunc_mode = trunc_mode
+        self.threshold = threshold if threshold is not None else float(preset["threshold"])
+        self.get_state = get_state
         self.random_seed = random_seed
