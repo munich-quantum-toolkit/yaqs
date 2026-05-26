@@ -138,18 +138,34 @@ def test_strong_simparams_accuracy_presets(accuracy: str, expected: dict[str, fl
 )
 def test_weak_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
     """WeakSimParams resolves threshold and max_bond_dim from the shared accuracy presets."""
-    params = WeakSimParams(shots=42, accuracy=accuracy)  # ty: ignore[invalid-argument-type]
-    assert params.shots == 42
+    params = WeakSimParams(shots=100, accuracy=accuracy)  # ty: ignore[invalid-argument-type]
+    assert params.shots == 100
     assert params.threshold == pytest.approx(expected["threshold"])
     assert params.max_bond_dim == expected["max_bond_dim"]
 
 
-def test_strong_simparams_accuracy_explicit_overrides() -> None:
+def test_analog_simparams_accuracy_explicit_overrides() -> None:
     """Explicit numerical arguments override accuracy presets."""
-    params = StrongSimParams(accuracy="fast", max_bond_dim=512, num_traj=10)
-    assert params.threshold == pytest.approx(ACCURACY_PRESETS["fast"]["threshold"])
+    params = AnalogSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10)
+    assert params.threshold == pytest.approx(1e-8)
     assert params.max_bond_dim == 512
     assert params.num_traj == 10
+
+
+def test_strong_simparams_accuracy_explicit_overrides() -> None:
+    """Explicit numerical arguments override accuracy presets."""
+    params = StrongSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10)
+    assert params.threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
+    assert params.num_traj == 10
+
+
+def test_weak_simparams_accuracy_explicit_overrides() -> None:
+    """Explicit numerical arguments override accuracy presets."""
+    params = WeakSimParams(shots=100, accuracy="fast", threshold=1e-8, max_bond_dim=512)
+    assert params.shots == 100
+    assert params.threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
 
 
 def test_simparams_accuracy_none_expert_defaults() -> None:
@@ -164,24 +180,15 @@ def test_simparams_accuracy_none_expert_defaults() -> None:
     assert strong.max_bond_dim == 4096
     assert strong.num_traj == 1000
 
-    weak = WeakSimParams(shots=1, accuracy=None)
+    weak = WeakSimParams(shots=100, accuracy=None)
     assert weak.threshold == pytest.approx(1e-9)
     assert weak.max_bond_dim == 4096
 
 
-@pytest.mark.parametrize(
-    "param_cls",
-    [AnalogSimParams, StrongSimParams, WeakSimParams],
-)
-def test_simparams_rejects_invalid_accuracy(
-    param_cls: type[AnalogSimParams | StrongSimParams | WeakSimParams],
-) -> None:
+def test_strong_simparams_rejects_invalid_accuracy() -> None:
     """Invalid accuracy preset names raise ValueError."""
-    kwargs: dict[str, object] = {"accuracy": "ultra"}
-    if param_cls is WeakSimParams:
-        kwargs["shots"] = 1
     with pytest.raises(ValueError, match="accuracy must be one of"):
-        param_cls(**kwargs)  # ty: ignore[invalid-argument-type]
+        StrongSimParams(accuracy="invalid")  # ty: ignore[invalid-argument-type]
 
 
 def test_allocate_observable_buffers_with_sample_timesteps() -> None:
