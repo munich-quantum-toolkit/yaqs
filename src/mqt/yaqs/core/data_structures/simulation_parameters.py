@@ -30,19 +30,10 @@ if TYPE_CHECKING:
 
 AccuracyPreset = Literal["fast", "balanced", "accurate"]
 
-STOCHASTIC_ACCURACY_PRESETS: dict[
-    AccuracyPreset,
-    dict[str, float | int],
-] = {
+ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
     "fast": {"threshold": 1e-3, "max_bond_dim": 16, "num_traj": 64},
     "balanced": {"threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256},
     "accurate": {"threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024},
-}
-
-WEAK_ACCURACY_PRESETS: dict[AccuracyPreset, dict[str, float | int]] = {
-    "fast": {"threshold": 1e-3, "max_bond_dim": 16},
-    "balanced": {"threshold": 1e-6, "max_bond_dim": 128},
-    "accurate": {"threshold": 1e-9, "max_bond_dim": 4096},
 }
 
 _EXPERT_DEFAULT_THRESHOLD = 1e-9
@@ -66,10 +57,20 @@ def _validate_accuracy(accuracy: AccuracyPreset | None) -> AccuracyPreset | None
     """
     if accuracy is None:
         return None
-    if accuracy not in STOCHASTIC_ACCURACY_PRESETS:
-        msg = f"accuracy must be one of {sorted(STOCHASTIC_ACCURACY_PRESETS)!r}, got {accuracy!r}."
+    if accuracy not in ACCURACY_PRESETS:
+        msg = f"accuracy must be one of {sorted(ACCURACY_PRESETS)!r}, got {accuracy!r}."
         raise ValueError(msg)
     return accuracy
+
+
+def _preset_bond_trunc_and_traj(
+    accuracy: AccuracyPreset | None,
+) -> tuple[int, int, float]:
+    """Return preset ``(num_traj, max_bond_dim, threshold)`` or expert defaults."""
+    if accuracy is None:
+        return _EXPERT_DEFAULT_NUM_TRAJ, _EXPERT_DEFAULT_MAX_BOND_DIM, _EXPERT_DEFAULT_THRESHOLD
+    preset = ACCURACY_PRESETS[accuracy]
+    return int(preset["num_traj"]), int(preset["max_bond_dim"]), float(preset["threshold"])
 
 
 def _resolve_accuracy_setting(
@@ -234,15 +235,7 @@ class AnalogSimParams:
         """
         _validate_random_seed(random_seed)
         accuracy = _validate_accuracy(accuracy)
-        if accuracy is not None:
-            stochastic_preset = STOCHASTIC_ACCURACY_PRESETS[accuracy]
-            preset_num_traj = int(stochastic_preset["num_traj"])
-            preset_max_bond_dim = int(stochastic_preset["max_bond_dim"])
-            preset_threshold = float(stochastic_preset["threshold"])
-        else:
-            preset_num_traj = _EXPERT_DEFAULT_NUM_TRAJ
-            preset_max_bond_dim = _EXPERT_DEFAULT_MAX_BOND_DIM
-            preset_threshold = _EXPERT_DEFAULT_THRESHOLD
+        preset_num_traj, preset_max_bond_dim, preset_threshold = _preset_bond_trunc_and_traj(accuracy)
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
@@ -337,13 +330,7 @@ class WeakSimParams:
         """
         _validate_random_seed(random_seed)
         accuracy = _validate_accuracy(accuracy)
-        if accuracy is not None:
-            weak_preset = WEAK_ACCURACY_PRESETS[accuracy]
-            preset_max_bond_dim = int(weak_preset["max_bond_dim"])
-            preset_threshold = float(weak_preset["threshold"])
-        else:
-            preset_max_bond_dim = _EXPERT_DEFAULT_MAX_BOND_DIM
-            preset_threshold = _EXPERT_DEFAULT_THRESHOLD
+        _, preset_max_bond_dim, preset_threshold = _preset_bond_trunc_and_traj(accuracy)
         self.shots = shots
         self.max_bond_dim = _resolve_accuracy_setting(
             max_bond_dim, preset_max_bond_dim, _EXPERT_DEFAULT_MAX_BOND_DIM, accuracy
@@ -422,15 +409,7 @@ class StrongSimParams:
         """
         _validate_random_seed(random_seed)
         accuracy = _validate_accuracy(accuracy)
-        if accuracy is not None:
-            stochastic_preset = STOCHASTIC_ACCURACY_PRESETS[accuracy]
-            preset_num_traj = int(stochastic_preset["num_traj"])
-            preset_max_bond_dim = int(stochastic_preset["max_bond_dim"])
-            preset_threshold = float(stochastic_preset["threshold"])
-        else:
-            preset_num_traj = _EXPERT_DEFAULT_NUM_TRAJ
-            preset_max_bond_dim = _EXPERT_DEFAULT_MAX_BOND_DIM
-            preset_threshold = _EXPERT_DEFAULT_THRESHOLD
+        preset_num_traj, preset_max_bond_dim, preset_threshold = _preset_bond_trunc_and_traj(accuracy)
         obs_list: list[Observable] = [] if observables is None else list(observables)
         assert all(n.gate.name == "pvm" for n in obs_list) or all(n.gate.name != "pvm" for n in obs_list), (
             "We currently have not implemented mixed observable and projective-measurement simulation."
