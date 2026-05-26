@@ -11,11 +11,11 @@ mystnb:
 
 YAQS separates **what you evolve** ({class}`~mqt.yaqs.core.data_structures.state.State`, circuits, Hamiltonians) from **how you truncate and sample** via parameter objects passed to {meth}`~mqt.yaqs.Simulator.run`:
 
-| Class | Use when |
-| ----- | -------- |
+| Class                                                                         | Use when                                                                                     |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` | Open-system or unitary time evolution (TDVP / BUG, MCWF trajectories, Lindblad-style paths). |
-| {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` | Noisy **strong** digital simulation (per-trajectory MPS evolution with observables). |
-| {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` | Noisy **weak** digital simulation (shot-based sampling; you set `shots` explicitly). |
+| {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` | Noisy **strong** digital simulation (per-trajectory MPS evolution with observables).         |
+| {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`   | Noisy **weak** digital simulation (shot-based sampling; you set `shots` explicitly).         |
 
 This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` execution options (parallelism, progress bars), see {doc}`simulator_initialization`.
 
@@ -23,11 +23,11 @@ This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` ex
 
 All three classes accept a keyword-only `accuracy` argument (default `"balanced"`) that sets truncation and, for analog/strong simulations, trajectory counts:
 
-| `accuracy` | `threshold` | `max_bond_dim` | `num_traj` (analog / strong) |
-| ---------- | ----------- | -------------- | ---------------------------- |
-| `"fast"` | `1e-3` | `16` | `64` |
-| `"balanced"` (default) | `1e-6` | `128` | `256` |
-| `"accurate"` | `1e-9` | `4096` | `1024` |
+| `accuracy`             | `threshold` | `max_bond_dim` | `num_traj` (analog / strong) |
+| ---------------------- | ----------- | -------------- | ---------------------------- |
+| `"fast"`               | `1e-3`      | `16`           | `64`                         |
+| `"balanced"` (default) | `1e-6`      | `128`          | `256`                        |
+| `"accurate"`           | `1e-9`      | `4096`         | `1024`                       |
 
 - **`"fast"`** — quick tests, examples, and CI-style runs.
 - **`"balanced"`** — default tradeoff for exploratory work.
