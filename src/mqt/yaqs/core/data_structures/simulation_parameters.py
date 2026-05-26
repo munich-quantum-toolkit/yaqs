@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import copy
 from enum import Enum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 import numpy as np
 
@@ -30,7 +30,17 @@ if TYPE_CHECKING:
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 
-SIMULATION_PRESETS: dict[SimulationPreset, dict[str, float | int | None]] = {
+
+class PresetTypes(TypedDict):
+    """Built-in numerical settings for a simulation preset."""
+
+    svd_threshold: float
+    max_bond_dim: int | None
+    num_traj: int
+    krylov_tol: float
+
+
+SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
     "fast": {"svd_threshold": 1e-3, "max_bond_dim": 16, "num_traj": 128, "krylov_tol": 1e-3},
     "balanced": {"svd_threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
     "accurate": {"svd_threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
@@ -266,16 +276,14 @@ class AnalogSimParams:
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
         self.sample_timesteps = sample_timesteps
-        self.num_traj = num_traj if num_traj is not None else int(preset_values["num_traj"])
-        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]  # ty: ignore[assignment]
+        self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
+        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
-            svd_threshold if svd_threshold is not None else float(preset_values["svd_threshold"])
+            svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
-        self.krylov_tol = _validate_krylov_tol(
-            krylov_tol if krylov_tol is not None else float(preset_values["krylov_tol"])
-        )
+        self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.order = order
         self.evolution_mode = evolution_mode
         self.get_state = get_state
@@ -379,16 +387,14 @@ class StrongSimParams:
         else:
             self.sorted_observables = []
 
-        self.num_traj = num_traj if num_traj is not None else int(preset_values["num_traj"])
-        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]  # ty: ignore[assignment]
+        self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
+        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
-            svd_threshold if svd_threshold is not None else float(preset_values["svd_threshold"])
+            svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
-        self.krylov_tol = _validate_krylov_tol(
-            krylov_tol if krylov_tol is not None else float(preset_values["krylov_tol"])
-        )
+        self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.get_state = get_state
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
@@ -463,14 +469,12 @@ class WeakSimParams:
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         self.shots = shots
-        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]  # ty: ignore[assignment]
+        self.max_bond_dim = max_bond_dim if max_bond_dim is not None else preset_values["max_bond_dim"]
         self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
-            svd_threshold if svd_threshold is not None else float(preset_values["svd_threshold"])
+            svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
         )
-        self.krylov_tol = _validate_krylov_tol(
-            krylov_tol if krylov_tol is not None else float(preset_values["krylov_tol"])
-        )
+        self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.get_state = get_state
         self.random_seed = random_seed
