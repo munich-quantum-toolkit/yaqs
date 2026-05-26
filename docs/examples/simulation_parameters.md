@@ -19,28 +19,30 @@ YAQS separates **what you evolve** ({class}`~mqt.yaqs.core.data_structures.state
 
 This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` execution options (parallelism, progress bars), see {doc}`simulator_initialization`.
 
-## Accuracy presets
+## Simulation presets
 
-All three classes accept a keyword-only `accuracy` argument (default `"balanced"`) that sets SVD truncation and, for analog/strong simulations, trajectory counts. It also controls `krylov_tol`, the tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates:
+All three classes accept a keyword-only `preset` argument (default `"balanced"`) that sets SVD truncation, bond-dimension limits, trajectory counts (analog/strong), and `krylov_tol` for the adaptive Krylov/Lanczos matrix exponential in TDVP updates:
 
-| `accuracy`             | `svd_threshold` | `max_bond_dim` | `num_traj` (analog / strong) | `krylov_tol` |
+| `preset`               | `svd_threshold` | `max_bond_dim` | `num_traj` (analog / strong) | `krylov_tol` |
 | ---------------------- | --------------- | -------------- | ---------------------------- | ------------ |
-| `"fast"`               | `1e-3`          | `16`           | `64`                         | `1e-3`       |
+| `"fast"`               | `1e-3`          | `16`           | `128`                        | `1e-3`       |
 | `"balanced"` (default) | `1e-6`          | `128`          | `256`                        | `1e-4`       |
 | `"accurate"`           | `1e-9`          | `4096`         | `1024`                       | `1e-6`       |
+| `"exact"`              | `1e-13`         | `None`         | `1024`                       | `1e-12`      |
 
-- **`"fast"`** — quick tests, examples, and CI-style runs.
-- **`"balanced"`** — default tradeoff for exploratory work.
-- **`"accurate"`** — strictest built-in preset (`svd_threshold=1e-9`, `max_bond_dim=4096`, `num_traj=1024`, `krylov_tol=1e-6`).
-- **Overrides** — pass `svd_threshold`, `max_bond_dim`, and/or `num_traj` explicitly; any non-`None` value wins over the preset.
+- **`"fast"`** — qualitative exploration and quick tests; not intended for strict dense comparisons.
+- **`"balanced"`** — recommended default tradeoff for exploratory work.
+- **`"accurate"`** — high-quality production settings.
+- **`"exact"`** — strict reference/debug preset with minimal internal numerical relaxation. Stochastic trajectory sampling, finite time steps, and model error still apply; this is not mathematically exact.
+- **Overrides** — pass `svd_threshold`, `max_bond_dim`, `num_traj`, and/or `krylov_tol` explicitly; any value you pass (including `max_bond_dim=None`) wins over the preset.
 
-`svd_threshold` controls **SVD truncation** (bond truncation), while `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. `min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset is stored on the object as `params.accuracy`.
+`svd_threshold` controls **tensor-network SVD truncation** (bond truncation). `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. These are independent: tightening one does not change the other. `min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset is stored on the object as `params.preset`.
 
 ## Recommended usage
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import (
-    ACCURACY_PRESETS,
+    SIMULATION_PRESETS,
     AnalogSimParams,
     Observable,
     StrongSimParams,
@@ -50,9 +52,9 @@ from mqt.yaqs.core.libraries.gate_library import Z
 
 
 def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) -> dict[str, object]:
-    """Collect accuracy-related fields for display."""
+    """Collect preset-related fields for display."""
     out: dict[str, object] = {
-        "accuracy": params.accuracy,
+        "preset": params.preset,
         "svd_threshold": params.svd_threshold,
         "max_bond_dim": params.max_bond_dim,
         "krylov_tol": params.krylov_tol,
@@ -69,38 +71,27 @@ def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) ->
 analog_params = AnalogSimParams()
 print("default", _trunc_summary(analog_params))
 
-# Fast preset for quick tests, examples, and CI-style runs
-fast_params = AnalogSimParams(accuracy="fast")
-print("fast", _trunc_summary(fast_params))
-
-# Balanced preset for normal exploratory use
-balanced_params = StrongSimParams(accuracy="balanced")
-print("balanced", _trunc_summary(balanced_params))
-
-# Accurate preset for stricter built-in settings
-accurate_params = StrongSimParams(accuracy="accurate")
-print("accurate", _trunc_summary(accurate_params))
+for name in ("fast", "balanced", "accurate", "exact"):
+    params = AnalogSimParams(preset=name)
+    print(name, _trunc_summary(params))
 ```
 
 Explicit numerical values override the preset (advanced control):
 
 ```{code-cell} ipython3
-custom_params = StrongSimParams(
-    accuracy="balanced",
-    svd_threshold=1e-8,
-    krylov_tol=1e-12,
-    max_bond_dim=512,
-    num_traj=512,
+custom_params = AnalogSimParams(
+    preset="balanced",
+    krylov_tol=1e-8,
 )
 _trunc_summary(custom_params)
 ```
 
-Weak simulation: `shots` remain explicit and are **not** controlled by `accuracy`:
+Weak simulation: `shots` remain explicit and are **not** controlled by `preset`:
 
 ```{code-cell} ipython3
 weak_params = WeakSimParams(
     shots=1024,
-    accuracy="fast",
+    preset="fast",
 )
 _trunc_summary(weak_params)
 ```
@@ -117,7 +108,7 @@ analog = AnalogSimParams(
     observables=observables,
     elapsed_time=0.2,
     dt=0.05,
-    accuracy="accurate",
+    preset="accurate",
 )
 _trunc_summary(analog)
 ```
@@ -131,28 +122,28 @@ Used for noisy strong circuit simulation. Provide observables and optionally ena
 ```{code-cell} ipython3
 strong = StrongSimParams(
     observables=[Observable(Z(), 0)],
-    accuracy="accurate",
+    preset="accurate",
 )
 _trunc_summary(strong)
 ```
 
 ## `WeakSimParams`
 
-Used for noisy weak simulation. **`shots` is always required** and is not part of the accuracy preset.
+Used for noisy weak simulation. **`shots` is always required** and is not part of the preset.
 
 ```{code-cell} ipython3
 weak_balanced = WeakSimParams(shots=1000)
-weak_accurate = WeakSimParams(shots=1000, accuracy="accurate")
+weak_exact = WeakSimParams(shots=1000, preset="exact")
 print("balanced", _trunc_summary(weak_balanced))
-print("accurate", _trunc_summary(weak_accurate))
+print("exact", _trunc_summary(weak_exact))
 ```
 
 See {doc}`weak_circuit_simulation` for a full example with measurement histograms.
 
 ## Reference: preset table in code
 
-The built-in values are defined in {data}`~mqt.yaqs.core.data_structures.simulation_parameters.ACCURACY_PRESETS`:
+The built-in values are defined in {data}`~mqt.yaqs.core.data_structures.simulation_parameters.SIMULATION_PRESETS`:
 
 ```{code-cell} ipython3
-ACCURACY_PRESETS
+SIMULATION_PRESETS
 ```

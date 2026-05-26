@@ -46,6 +46,11 @@ if TYPE_CHECKING:
     from .decompositions import SvdDistribution, TruncMode
 
 
+def _bond_dim_at_or_above_cap(bond_dim: int, max_bond_dim: int | None) -> bool:
+    """Return True when a finite ``max_bond_dim`` cap is reached."""
+    return max_bond_dim is not None and bond_dim >= max_bond_dim
+
+
 DENSE_THRESHOLD = 128
 
 
@@ -859,7 +864,7 @@ def local_dynamic_tdvp(
     for i in range(num_sites):
         # current bond dimension between i and i+1
         bond_dim = state.tensors[i].shape[2]
-        if bond_dim >= sim_params.max_bond_dim or lock_final_site:
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -953,7 +958,7 @@ def local_dynamic_tdvp(
     lock_final_site = False
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i].shape[1]
-        if bond_dim >= sim_params.max_bond_dim or lock_final_site:
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -1048,7 +1053,7 @@ def global_dynamic_tdvp(
         single_site_tdvp(state, hamiltonian, sim_params)
         return
 
-    if current_max_bond_dim < sim_params.max_bond_dim:
+    if sim_params.max_bond_dim is None or current_max_bond_dim < sim_params.max_bond_dim:
         # Perform 2TDVP when the current bond dimension is within the allowed limit
         two_site_tdvp(state, hamiltonian, sim_params, dynamic=True)
     else:
