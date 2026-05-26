@@ -1966,10 +1966,17 @@ class MPO:
         sites: list[int],
         decomposition: str = "QR",
     ) -> NDArray[np.float64]:
-        """Return the complete operator Schmidt values across a nearest-neighbor bond."""
+        """Return the complete operator Schmidt values across a nearest-neighbor bond.
+
+        Raises:
+            ValueError: If ``decomposition`` is unsupported.
+        """
         assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
         i, j = sites
         assert i + 1 == j, "Schmidt spectrum is only defined for nearest-neighbor cut."
+        if decomposition not in {"QR", "SVD"}:
+            msg = f"Unsupported decomposition: {decomposition!r}"
+            raise ValueError(msg)
 
         mps = self.to_mps()
         mps.set_canonical_form(orthogonality_center=j, decomposition=decomposition)
@@ -2287,7 +2294,7 @@ class MPO:
             msg = f"Entropy base must be finite, >0, and !=1; got {base!r}"
             raise ValueError(msg)
 
-        probs = np.asarray(probabilities, dtype=np.float64).reshape(-1)
+        probs = np.array(probabilities, dtype=np.float64, copy=True).reshape(-1)
         if probs.size == 0:
             return 0.0
         if not np.all(np.isfinite(probs)):
@@ -2303,7 +2310,7 @@ class MPO:
             msg = f"Invalid probability normalization while computing entropy: sum={normalization!r}"
             raise RuntimeError(msg)
 
-        probs /= normalization
+        probs = np.divide(probs, normalization)
         nonzero = probs > np.finfo(np.float64).tiny
         entropy = -np.sum(probs[nonzero] * np.log(probs[nonzero]), dtype=np.float64) / math.log(base_float)
         if not np.isfinite(entropy):

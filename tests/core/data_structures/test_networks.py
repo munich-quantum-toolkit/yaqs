@@ -779,6 +779,27 @@ def test_mpo_operator_entanglement_entropy_rejects_invalid_base(invalid_base: fl
         _ = mpo.operator_entanglement_entropy(cut=2, base=invalid_base)
 
 
+def test_mpo_entropy_from_probabilities_does_not_mutate_input() -> None:
+    """Test entropy normalization does not modify caller-owned arrays."""
+    probabilities = np.array([2.0, 2.0], dtype=np.float64)
+    original = probabilities.copy()
+
+    entropy = MPO.entropy_from_probabilities(probabilities)
+
+    assert entropy == pytest.approx(np.log(2.0), abs=1e-12)
+    np.testing.assert_allclose(probabilities, original)
+
+
+def test_mpo_full_schmidt_values_rejects_invalid_decomposition() -> None:
+    """Test unsupported Schmidt canonicalization decompositions are rejected."""
+    mpo = MPO()
+    mpo.identity(length=2, physical_dimension=2)
+    full_schmidt_values_for_bond = attrgetter("_full_schmidt_values_for_bond")(mpo)
+
+    with pytest.raises(ValueError, match="Unsupported decomposition"):
+        _ = full_schmidt_values_for_bond([0, 1], decomposition="LU")
+
+
 def test_mpo_dense_cut_and_legacy_schmidt_helpers_edge_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test dense-cut boundaries and legacy MPO Schmidt helper edge paths."""
     channel = np.diag(np.arange(1.0, 17.0, dtype=np.float64)).astype(np.complex128)
