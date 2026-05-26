@@ -176,13 +176,13 @@ def test_simparams_accuracy_none_expert_defaults() -> None:
     assert analog.accuracy is None
     assert analog.threshold == pytest.approx(1e-9)
     assert analog.max_bond_dim == 4096
-    assert analog.num_traj == 1000
+    assert analog.num_traj == 1024
 
     strong = StrongSimParams(accuracy=None)
     assert strong.accuracy is None
     assert strong.threshold == pytest.approx(1e-9)
     assert strong.max_bond_dim == 4096
-    assert strong.num_traj == 1000
+    assert strong.num_traj == 1024
 
     weak = WeakSimParams(shots=100, accuracy=None)
     assert weak.accuracy is None
