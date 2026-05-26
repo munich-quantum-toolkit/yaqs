@@ -28,6 +28,7 @@ import pytest
 
 from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories, allocate_observable_buffers
 from mqt.yaqs.core.data_structures.simulation_parameters import (
+    ACCURACY_PRESETS,
     AnalogSimParams,
     Observable,
     StrongSimParams,
@@ -88,10 +89,118 @@ def test_analog_simparams_defaults() -> None:
     assert params.sample_timesteps is True
     # times should be np.arange(0, elapsed_time+dt, dt)
     assert np.isclose(params.times[-1], 0.1)
-    assert params.num_traj == 1000
-    assert params.max_bond_dim == 4096
-    assert params.threshold == pytest.approx(1e-9)
+    balanced = ACCURACY_PRESETS["balanced"]
+    assert params.accuracy == "balanced"
+    assert params.num_traj == balanced["num_traj"]
+    assert params.max_bond_dim == balanced["max_bond_dim"]
+    assert params.threshold == pytest.approx(balanced["threshold"])
     assert params.order == 1
+
+
+@pytest.mark.parametrize(
+    ("accuracy", "expected"),
+    [
+        ("fast", ACCURACY_PRESETS["fast"]),
+        ("balanced", ACCURACY_PRESETS["balanced"]),
+        ("accurate", ACCURACY_PRESETS["accurate"]),
+    ],
+)
+def test_analog_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
+    """AnalogSimParams resolves threshold, max_bond_dim, and num_traj from accuracy presets."""
+    params = AnalogSimParams(accuracy=accuracy)  # ty: ignore[invalid-argument-type]
+    assert params.accuracy == accuracy
+    assert params.threshold == pytest.approx(expected["threshold"])
+    assert params.max_bond_dim == expected["max_bond_dim"]
+    assert params.num_traj == expected["num_traj"]
+
+
+@pytest.mark.parametrize(
+    ("accuracy", "expected"),
+    [
+        ("fast", ACCURACY_PRESETS["fast"]),
+        ("balanced", ACCURACY_PRESETS["balanced"]),
+        ("accurate", ACCURACY_PRESETS["accurate"]),
+    ],
+)
+def test_strong_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
+    """StrongSimParams resolves threshold, max_bond_dim, and num_traj from accuracy presets."""
+    params = StrongSimParams(accuracy=accuracy)  # ty: ignore[invalid-argument-type]
+    assert params.accuracy == accuracy
+    assert params.threshold == pytest.approx(expected["threshold"])
+    assert params.max_bond_dim == expected["max_bond_dim"]
+    assert params.num_traj == expected["num_traj"]
+
+
+def test_analog_simparams_default_constructor_uses_balanced() -> None:
+    """AnalogSimParams() uses the balanced accuracy preset by default."""
+    params = AnalogSimParams()
+    balanced = ACCURACY_PRESETS["balanced"]
+    assert params.accuracy == "balanced"
+    assert params.threshold == pytest.approx(balanced["threshold"])
+    assert params.max_bond_dim == balanced["max_bond_dim"]
+    assert params.num_traj == balanced["num_traj"]
+
+
+def test_weak_simparams_default_constructor_uses_balanced() -> None:
+    """WeakSimParams(shots=...) uses the balanced accuracy preset by default."""
+    params = WeakSimParams(shots=100)
+    balanced = ACCURACY_PRESETS["balanced"]
+    assert params.accuracy == "balanced"
+    assert params.threshold == pytest.approx(balanced["threshold"])
+    assert params.max_bond_dim == balanced["max_bond_dim"]
+
+
+@pytest.mark.parametrize(
+    ("accuracy", "expected"),
+    [
+        ("fast", ACCURACY_PRESETS["fast"]),
+        ("balanced", ACCURACY_PRESETS["balanced"]),
+        ("accurate", ACCURACY_PRESETS["accurate"]),
+    ],
+)
+def test_weak_simparams_accuracy_presets(accuracy: str, expected: dict[str, float | int]) -> None:
+    """WeakSimParams resolves threshold and max_bond_dim from the shared accuracy presets."""
+    params = WeakSimParams(shots=100, accuracy=accuracy)  # ty: ignore[invalid-argument-type]
+    assert params.accuracy == accuracy
+    assert params.shots == 100
+    assert params.threshold == pytest.approx(expected["threshold"])
+    assert params.max_bond_dim == expected["max_bond_dim"]
+
+
+def test_analog_simparams_accuracy_explicit_overrides() -> None:
+    """Explicit numerical arguments override accuracy presets."""
+    params = AnalogSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10)
+    assert params.threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
+    assert params.num_traj == 10
+
+
+def test_strong_simparams_accuracy_explicit_overrides() -> None:
+    """Explicit numerical arguments override accuracy presets."""
+    params = StrongSimParams(accuracy="fast", threshold=1e-8, max_bond_dim=512, num_traj=10)
+    assert params.threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
+    assert params.num_traj == 10
+
+
+def test_weak_simparams_accuracy_explicit_overrides() -> None:
+    """Explicit numerical arguments override accuracy presets."""
+    params = WeakSimParams(shots=100, accuracy="fast", threshold=1e-8, max_bond_dim=512)
+    assert params.shots == 100
+    assert params.threshold == pytest.approx(1e-8)
+    assert params.max_bond_dim == 512
+
+
+def test_strong_simparams_rejects_invalid_accuracy() -> None:
+    """Invalid accuracy preset names raise ValueError."""
+    with pytest.raises(ValueError, match="accuracy must be one of"):
+        StrongSimParams(accuracy="invalid")  # ty: ignore[invalid-argument-type]
+
+
+def test_strong_simparams_rejects_none_accuracy() -> None:
+    """accuracy=None is not supported."""
+    with pytest.raises(ValueError, match="accuracy must be one of"):
+        StrongSimParams(accuracy=None)  # ty: ignore[invalid-argument-type]
 
 
 def test_allocate_observable_buffers_with_sample_timesteps() -> None:
@@ -284,7 +393,7 @@ def test_strong_params_sorting_and_fields() -> None:
     # Parameter fields are retained
     assert params.num_traj == 7
     assert params.max_bond_dim == 128
-    assert np.isclose(params.threshold, 1e-10)
+    assert params.threshold == pytest.approx(ACCURACY_PRESETS["balanced"]["threshold"])
     assert params.get_state is True
     assert params.sample_layers is True
     assert params.num_mid_measurements == 2
