@@ -78,7 +78,7 @@ def test_simulator_parallel_serial_equivalence() -> None:
             dt=0.1,
             num_traj=4,
             max_bond_dim=4,
-            threshold=1e-9,
+            svd_threshold=1e-9,
             order=1,
             sample_timesteps=False,
             random_seed=YAQS_TEST_SEED,
@@ -260,7 +260,7 @@ def test_analog_simulation() -> None:
         dt=0.1,
         num_traj=10,
         max_bond_dim=4,
-        threshold=1e-6,
+        svd_threshold=1e-6,
         order=2,
         sample_timesteps=False,
         random_seed=YAQS_TEST_SEED,
@@ -310,7 +310,7 @@ def test_analog_simulation_parallel_off() -> None:
         dt=0.1,
         num_traj=10,
         max_bond_dim=4,
-        threshold=1e-6,
+        svd_threshold=1e-6,
         order=2,
         sample_timesteps=False,
         random_seed=YAQS_TEST_SEED,
@@ -358,7 +358,7 @@ def test_analog_simulation_get_state() -> None:
             dt=0.1,
             num_traj=1,
             max_bond_dim=4,
-            threshold=1e-6,
+            svd_threshold=1e-6,
             order=order,
             get_state=True,
             sample_timesteps=False,
@@ -425,6 +425,7 @@ def test_strong_simulation() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
+        krylov_tol=1e-12,
         random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
@@ -493,6 +494,7 @@ def test_strong_simulation_parallel_off() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
+        krylov_tol=1e-12,
         random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.

@@ -46,7 +46,7 @@ def make_params(num_traj: int = 8) -> AnalogSimParams:
         dt=0.05,
         num_traj=num_traj,
         max_bond_dim=8,
-        threshold=1e-9,
+        svd_threshold=1e-9,
         sample_timesteps=False,
         random_seed=0,
     )
@@ -283,4 +283,4 @@ print("restored observable count:", len(restored.observables))
 | Mixing with GPU / non-fork-safe code              | `Simulator(mp_context="spawn")`                                        |
 | Long unattended run on a flaky cluster            | `Simulator(max_retries=20)` with broadened `retry_exceptions`          |
 
-For physics-side settings (`num_traj`, `max_bond_dim`, `threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`solver_comparison`, and {doc}`state_initialization`.
+For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`solver_comparison`, and {doc}`state_initialization`.

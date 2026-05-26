@@ -310,7 +310,7 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
     """Adaptive RK45 integration when ``vec(rho)`` is too large to store ``exp(L dt)``.
 
     Uses the same ``_lindblad_rhs_flat`` as the propagator path; tolerances come from
-    ``sim_params.threshold``.
+    ``sim_params.svd_threshold``.
 
     Returns:
         Observable expectation values at each sampled time.
@@ -336,14 +336,14 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
         ctx.rho_initial,
         t_eval=t_eval,
         method="RK45",
-        rtol=sim_params.threshold,
-        atol=sim_params.threshold * 1e-2,
+        rtol=sim_params.svd_threshold,
+        atol=sim_params.svd_threshold * 1e-2,
     )
 
     if not result.success:
         msg = (
             f"Lindblad integration failed: {result.message} "
-            f"(rtol={sim_params.threshold}, atol={sim_params.threshold * 1e-2}, t_span={t_span})"
+            f"(rtol={sim_params.svd_threshold}, atol={sim_params.svd_threshold * 1e-2}, t_span={t_span})"
         )
         raise RuntimeError(msg)
 

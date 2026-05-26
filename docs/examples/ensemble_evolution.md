@@ -62,7 +62,7 @@ primer_params = AnalogSimParams(
     elapsed_time=5.0,
     dt=0.15,
     max_bond_dim=64,
-    threshold=1e-10,
+    svd_threshold=1e-10,
     sample_timesteps=True,
 )
 
@@ -109,7 +109,7 @@ single_state_params = AnalogSimParams(
     elapsed_time=5.0,
     dt=0.15,
     max_bond_dim=64,
-    threshold=1e-10,
+    svd_threshold=1e-10,
     sample_timesteps=True,
     multi_time_observables=[(sz_mid, sz_mid), (sz_mid, sx_mid)],  # row 0: C_zz(t), row 1: C_zx(t)
 )
@@ -154,7 +154,7 @@ ensemble_params = AnalogSimParams(
     elapsed_time=5.0,
     dt=0.15,
     max_bond_dim=64,
-    threshold=1e-10,
+    svd_threshold=1e-10,
     sample_timesteps=True,
     multi_time_observables=[
         (Observable(Z(), mid), Observable(Z(), mid)),  # C_zz(t) autocorrelation
@@ -248,7 +248,7 @@ for d in deltas:
         elapsed_time=t_final,
         dt=dt,
         max_bond_dim=64,
-        threshold=1e-10,
+        svd_threshold=1e-10,
         sample_timesteps=True,
         multi_time_observables=pairs_jj,
     )
@@ -279,6 +279,6 @@ The illustrative curves here use small $L$ and a handful of Haar-random states; 
 
 - Scale gradually: `L`, ensemble size, `dt`, `elapsed_time`, and `max_bond_dim`.
 - Enable ensemble parallelization (`Simulator(parallel=True)`) when you have many initial states.
-- **MPS entanglement:** under unitary evolution, entanglement entropy and required bond dimension typically **grow** with time (until truncation or saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten `threshold` only with care, or shorten the window so the MPS remains an accurate ansatz for your observable.
+- **MPS entanglement:** under unitary evolution, entanglement entropy and required bond dimension typically **grow** with time (until truncation or saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten `svd_threshold` only with care, or shorten the window so the MPS remains an accurate ansatz for your observable.
 
 :::

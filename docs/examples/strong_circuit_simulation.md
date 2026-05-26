@@ -44,7 +44,7 @@ Define the simulation parameters
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 
-sim_params = StrongSimParams(observables=[Observable(Z(), site) for site in range(num_qubits)], num_traj=100, max_bond_dim=4, threshold=1e-6)
+sim_params = StrongSimParams(observables=[Observable(Z(), site) for site in range(num_qubits)], num_traj=100, max_bond_dim=4, svd_threshold=1e-6)
 ```
 
 Run the simulations for a range of noise strengths
