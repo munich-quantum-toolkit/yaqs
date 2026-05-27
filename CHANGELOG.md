@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added tebd/hybrid/tdvp options for circuit simulation ([#441]) ([**@aaronleesander**])
 - added Krylov tolerance as high-level parameter ([#439]) ([**@aaronleesander**])
 - added accuracy presets to simulation parameters ([#438]) ([**@aaronleesander**])
 - added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
@@ -121,6 +122,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#441]: https://github.com/munich-quantum-toolkit/yaqs/pull/441
 [#439]: https://github.com/munich-quantum-toolkit/yaqs/pull/439
 [#438]: https://github.com/munich-quantum-toolkit/yaqs/pull/438
 [#430]: https://github.com/munich-quantum-toolkit/yaqs/pull/430

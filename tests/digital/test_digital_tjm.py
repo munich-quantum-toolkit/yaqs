@@ -25,27 +25,105 @@ the Tensor Jump Method.
 from __future__ import annotations
 
 import copy
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
+from qiskit.quantum_info import Statevector
 
 from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import (
+    Observable,
+    StrongSimParams,
+    WeakSimParams,
+)
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Z
 from mqt.yaqs.digital.digital_tjm import (
     apply_single_qubit_gate,
     apply_two_qubit_gate,
+    apply_two_qubit_gate_tebd,
     apply_window,
     construct_generator_mpo,
     create_local_noise_model,
     process_layer,
 )
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
+
+if TYPE_CHECKING:
+    from mqt.yaqs.core.data_structures.simulation_parameters import (
+        GateMode,
+    )
+
+
+def _phase_align(reference: np.ndarray, state: np.ndarray) -> np.ndarray:
+    """Align ``state``'s global phase to ``reference``.
+
+    Args:
+        reference: Reference vector to align against.
+        state: State vector to be phase-aligned.
+
+    Returns:
+        ``state`` with global phase aligned to ``reference``.
+    """
+    phase = np.vdot(state, reference)
+    if abs(phase) > 0.0:
+        return state * (phase / abs(phase))
+    return state
+
+
+def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
+    r"""Squared overlap fidelity \\(|\\langle a|b\\rangle|^2\\).
+
+    Args:
+        a: First state vector.
+        b: Second state vector.
+
+    Returns:
+        Fidelity as a float in ``[0, 1]`` (up to numerical error).
+    """
+    return float(abs(np.vdot(a, b)) ** 2)
+
+
+def _expect_mps(mps: MPS, obs: Observable) -> float:
+    """Expectation value computed directly from an MPS.
+
+    Args:
+        mps: State in MPS form.
+        obs: Observable to evaluate.
+
+    Returns:
+        Real expectation value ``<obs>``.
+    """
+    return float(mps.expect(obs))
+
+
+def _expect_mps_like_evaluate_observables(mps: MPS, observables: list[Observable]) -> list[float]:
+    """Compute expectations using the same center-shifting scheme as ``evaluate_observables``.
+
+    Args:
+        mps: State in MPS form.
+        observables: Observables to evaluate.
+
+    Returns:
+        Expectation values in the same order as ``observables``.
+    """
+    temp = copy.deepcopy(mps)
+    last_site = 0
+    values: list[float] = []
+    for obs in observables:
+        idx = obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        if idx > last_site:
+            for site in range(last_site, idx):
+                temp.shift_orthogonality_center_right(site)
+            last_site = idx
+        values.append(float(temp.expect(obs)))
+    return values
 
 
 def test_process_layer() -> None:
@@ -573,3 +651,300 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
         assert result.expectation_values[i] is not None
         # Only one labelled barrier -> 1 mid + initial + final
         assert result.expectation_values[i].shape == (3,)
+
+
+def _run_strong_noiseless(
+    qc: QuantumCircuit,
+    *,
+    gate_mode: GateMode = "hybrid",
+    max_bond_dim: int | None = None,
+    svd_threshold: float = 1e-12,
+    get_state: bool = False,
+) -> float | np.ndarray:
+    """Run a noiseless strong simulation.
+
+    Returns:
+        Final state vector if ``get_state=True``, otherwise ``<Z_0>``.
+    """
+    num_qubits = qc.num_qubits
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode=gate_mode,
+        preset="exact",
+        svd_threshold=svd_threshold,
+        max_bond_dim=max_bond_dim,
+        get_state=get_state,
+    )
+    state = State(num_qubits, initial="zeros")
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+    if get_state:
+        assert result.output_state is not None
+        return result.output_state.mps.to_vec()
+    exp = result.expectation_values[0]
+    assert exp is not None
+    return float(np.real(exp[0]))
+
+
+@pytest.mark.parametrize("gate_mode", ["hybrid", "tebd"])
+def test_nearest_neighbor_gate_modes_agree(gate_mode: str) -> None:
+    """Hybrid and TEBD agree on a purely nearest-neighbor circuit."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.cz(1, 2)
+    qc.rx(0.3, 2)
+
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
+    other_z = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode))
+    assert hybrid_z == pytest.approx(other_z, abs=1e-12)
+
+
+def test_long_range_hybrid_matches_tdvp() -> None:
+    """Long-range gates use TDVP in hybrid mode and match an all-TDVP run."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 2)
+
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def test_long_range_tebd_matches_tdvp() -> None:
+    """TEBD with SWAP insertion matches all-TDVP on a long-range gate."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 2)
+
+    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def test_long_range_tebd_matches_qiskit_statevector() -> None:
+    """TEBD with SWAP insertion matches Qiskit Statevector on small circuits."""
+    qc = QuantumCircuit(4)
+    qc.rx(0.37, 0)
+    qc.ry(0.51, 1)
+    qc.rz(0.23, 2)
+    qc.h(0)
+    qc.cx(0, 3)
+    qc.rzz(0.2, 1, 3)
+
+    # Use a stricter SVD threshold than the helper default to reduce purely numerical drift
+    # from repeated TEBD split/merge operations (including SWAP insertion).
+    tebd_vec = _run_strong_noiseless(qc, gate_mode="tebd", get_state=True, svd_threshold=1e-14)
+    assert isinstance(tebd_vec, np.ndarray)
+
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, tebd_vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_mixed_circuit_tebd_matches_tdvp() -> None:
+    """TEBD with SWAPs on a circuit mixing NN and long-range gates."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.cx(0, 3)
+    qc.rzz(0.2, 2, 3)
+
+    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
+    """Lock down YAQS dense-vector convention against Qiskit on non-symmetric circuits.
+
+    The simulator reverses qubit order internally; this test ensures the resulting MPS dense
+    vector remains consistent with a single documented Qiskit reference convention.
+    """
+    n = 3
+    circuits: list[QuantumCircuit] = []
+
+    # Product basis states distinguish sites 0/1/2
+    for site in range(n):
+        qc = QuantumCircuit(n)
+        qc.x(site)
+        circuits.append(qc)
+
+    # Non-symmetric single-qubit rotations + asymmetry
+    qc = QuantumCircuit(n)
+    qc.rx(0.37, 0)
+    qc.ry(0.51, 1)
+    qc.rz(0.23, 2)
+    qc.x(0)
+    qc.h(2)
+    circuits.append(qc)
+
+    # Directional CNOT checks (avoid patterns that are ambiguous under bit reversal)
+    for h_site, ctrl, tgt in [(0, 0, 1), (1, 1, 2), (0, 0, 2), (2, 2, 0)]:
+        qc = QuantumCircuit(n)
+        qc.h(h_site)
+        qc.cx(ctrl, tgt)
+        circuits.append(qc)
+
+    for qc in circuits:
+        vec = _run_strong_noiseless(qc, gate_mode="hybrid", get_state=True)
+        assert isinstance(vec, np.ndarray)
+        ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+        assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_expectation_values_align_with_result_observables_order() -> None:
+    """Ensure expectation_values[i] corresponds to result.observables[i] (sorted order)."""
+    qc = QuantumCircuit(3)
+    qc.rx(0.37, 0)
+    qc.cx(0, 2)
+    qc.ry(0.51, 1)
+
+    # Intentionally not sorted by site to ensure sorting doesn't break interpretation.
+    requested = [Observable(Z(), 2), Observable(X(), 0), Observable(Z(), 0)]
+    sim_params = StrongSimParams(observables=requested, gate_mode="hybrid", preset="exact", get_state=True)
+    state = State(3, initial="zeros")
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    assert result.output_state is not None
+    mps = result.output_state.mps
+
+    # result.observables defines the canonical order for expectation_values.
+    expected_vals = _expect_mps_like_evaluate_observables(mps, result.observables)
+    for i, expected in enumerate(expected_vals):
+        got = float(np.real(result.expectation_values[i][-1]))
+        assert got == pytest.approx(expected, abs=1e-10)
+
+
+def test_mixed_circuit_hybrid_matches_tdvp() -> None:
+    """Circuits with both NN and long-range gates: hybrid vs all-TDVP."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.cx(0, 3)
+    qc.rzz(0.2, 2, 3)
+
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def test_bell_state_sanity() -> None:
+    """|00> + H(0) + CNOT(0,1) yields (|00> + |11>)/sqrt(2) under TEBD/hybrid."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.cx(0, 1)
+
+    vec = _run_strong_noiseless(qc, gate_mode="hybrid", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    probs = np.abs(vec) ** 2
+    np.testing.assert_allclose(probs[0], 0.5, atol=1e-10)
+    np.testing.assert_allclose(probs[3], 0.5, atol=1e-10)
+    np.testing.assert_allclose(probs[1] + probs[2], 0.0, atol=1e-10)
+
+
+def test_tebd_truncation_respects_max_bond_dim() -> None:
+    """TEBD updates honor max_bond_dim on a circuit that grows entanglement."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.cx(1, 2)
+    qc.cx(2, 3)
+
+    state = State(4, initial="zeros")
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="tebd",
+        max_bond_dim=2,
+        svd_threshold=1e-6,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+    assert result.max_bond is not None
+    assert int(np.max(result.max_bond)) <= 2
+
+
+def test_weak_simulation_nearest_neighbor_counts() -> None:
+    """Weak simulation with NN gates returns valid shot counts."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.measure_all()
+
+    state = State(3, initial="zeros")
+    sim_params = WeakSimParams(shots=32, gate_mode="hybrid", preset="exact")
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == 32
+
+
+def test_noisy_nearest_neighbor_smoke() -> None:
+    """Noisy digital simulation still runs with hybrid TEBD on a NN gate."""
+    qc = QuantumCircuit(2)
+    qc.cx(0, 1)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
+    state = State(2, initial="zeros")
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="hybrid",
+        num_traj=4,
+        random_seed=0,
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
+    assert result.expectation_values[0] is not None
+
+
+def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
+    """TEBD applies CX(1, 3) on |1111> via SWAP insertion."""
+    length = 4
+    mps = MPS(length, state="ones")
+    mps.normalize()
+
+    qc = QuantumCircuit(length)
+    qc.cx(1, 3)
+    dag = circuit_to_dag(qc)
+    node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
+
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
+    apply_two_qubit_gate_tebd(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
+    mps.normalize(decomposition="SVD")
+    for i, element in enumerate(mps.to_vec()):
+        if i == 7:
+            np.testing.assert_allclose(np.abs(element), 1, atol=1e-10)
+        else:
+            np.testing.assert_allclose(np.abs(element), 0, atol=1e-10)
+
+
+def test_apply_two_qubit_gate_tebd_direct_cnot() -> None:
+    """Direct TEBD helper matches CX on |11> (same check as apply_two_qubit_gate)."""
+    length = 4
+    mps = MPS(length, state="ones")
+    mps.normalize()
+
+    qc = QuantumCircuit(length)
+    qc.cx(1, 2)
+    dag = circuit_to_dag(qc)
+    node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
+
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
+    apply_two_qubit_gate_tebd(
+        mps,
+        convert_dag_to_tensor_algorithm(node)[0],
+        sim_params,
+    )
+    mps.normalize(decomposition="SVD")
+    for i, element in enumerate(mps.to_vec()):
+        if i == 11:
+            np.testing.assert_allclose(np.abs(element), 1, atol=1e-10)
+        else:
+            np.testing.assert_allclose(np.abs(element), 0, atol=1e-10)
+
+
+def test_unknown_gate_mode_raises() -> None:
+    """Invalid gate_mode names are rejected at gate-application time."""
+    mps = MPS(2, state="zeros")
+    qc = QuantumCircuit(2)
+    qc.cx(0, 1)
+    dag = circuit_to_dag(qc)
+    node = next(n for n in dag.front_layer() if n.op.name == "cx")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
+    sim_params.gate_mode = cast("GateMode", "invalid")
+    with pytest.raises(ValueError, match="Unknown gate_mode"):
+        apply_two_qubit_gate(mps, node, sim_params)

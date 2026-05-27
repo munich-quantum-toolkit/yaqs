@@ -15,7 +15,7 @@ matrix product states (MPS) and constructing generator MPOs.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -24,7 +24,12 @@ from qiskit.converters import circuit_to_dag
 from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
-from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+from ..core.data_structures.simulation_parameters import (
+    StrongSimParams,
+    WeakSimParams,
+)
+from ..core.libraries.gate_library import GateLibrary
+from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
@@ -36,7 +41,9 @@ if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
+    from ..core.data_structures.simulation_parameters import GateMode
     from ..core.libraries.gate_library import BaseGate
+    from ..core.methods.decompositions import TruncMode
 
 
 def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site: int) -> NoiseModel:
@@ -216,32 +223,158 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     return short_state, short_mpo, window
 
 
-def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
-    """Apply two-qubit gate.
-
-    Applies a two-qubit gate to the given Matrix Product MPS (MPS) with dynamic TDVP.
+def _gate_tensor_left_right_order(
+    gate: BaseGate,
+    left_site: int,
+    right_site: int,
+) -> NDArray[np.complex128]:
+    """Return ``gate.tensor`` with axes ordered as (left site, right site).
 
     Args:
-        state (MPS): The Matrix Product MPS to which the gate will be applied.
-        node (DAGOpNode): The node representing the two-qubit gate in the Directed Acyclic Graph (DAG).
-        sim_params (StrongSimParams | WeakSimParams): Simulation parameters that determine the behavior
-        of the algorithm.
+        gate: Two-qubit gate with ``sites`` and ``tensor`` already set.
+        left_site: Lower MPS site index.
+        right_site: Higher MPS site index.
 
     Returns:
-        tuple[int, int]: A tuple containing the first site and last site indices of the quantum gate.
+        Gate tensor ``U[out_l, out_r, in_l, in_r]`` for the left/right ordering.
+
+    Raises:
+        ValueError: If ``gate.sites`` does not match ``(left_site, right_site)``.
     """
-    # Construct the MPO for the two-qubit gate.
-    gate = convert_dag_to_tensor_algorithm(node)[0]
+    if gate.sites[0] == left_site and gate.sites[1] == right_site:
+        return gate.tensor
+    if gate.sites[0] == right_site and gate.sites[1] == left_site:
+        return np.transpose(gate.tensor, (1, 0, 3, 2))
+    msg = f"Gate sites {gate.sites!r} are not consistent with MPS sites ({left_site}, {right_site})."
+    raise ValueError(msg)
+
+
+def apply_two_qubit_gate_tdvp(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+) -> tuple[int, int]:
+    """Apply a two-qubit gate via generator MPO and two-site TDVP.
+
+    Args:
+        state: MPS updated in place.
+        gate: Internal gate object from the gate library.
+        sim_params: Truncation and Krylov settings for TDVP.
+
+    Returns:
+        ``(first_site, last_site)`` spanning the gate support in MPS order.
+    """
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
     two_site_tdvp(short_state, short_mpo, sim_params)
-    # Replace the updated tensors back into the full state.
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 
     return first_site, last_site
+
+
+def apply_two_qubit_gate_tebd(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+) -> tuple[int, int]:
+    """Apply a two-qubit gate via TEBD/SVD, inserting adjacent SWAPs if needed.
+
+    Args:
+        state: MPS updated in place.
+        gate: Internal gate object from the gate library.
+        sim_params: Truncation settings shared with TDVP/MPS splitting.
+
+    Returns:
+        ``(left_site, right_site)`` spanning the gate support in MPS order.
+    """
+
+    def apply_swap(site_left: int) -> None:
+        swap_gate = GateLibrary.swap()
+        swap_gate.set_sites(site_left, site_left + 1)
+        apply_two_qubit_gate_tebd(state, swap_gate, sim_params)
+
+    site0, site1 = gate.sites[0], gate.sites[1]
+    if abs(site0 - site1) != 1:
+        left = min(site0, site1)
+        right = max(site0, site1)
+
+        for i in range(right - 1, left, -1):
+            apply_swap(i)
+
+        gate_adj = copy.deepcopy(gate)
+        if site0 == left:
+            gate_adj.set_sites(left, left + 1)
+        else:
+            gate_adj.set_sites(left + 1, left)
+        apply_two_qubit_gate_tebd(state, gate_adj, sim_params)
+
+        for i in range(left + 1, right):
+            apply_swap(i)
+
+        return left, right
+
+    left_site = min(site0, site1)
+    right_site = max(site0, site1)
+    u_gate = _gate_tensor_left_right_order(gate, left_site, right_site)
+
+    left_tensor = state.tensors[left_site]
+    right_tensor = state.tensors[right_site]
+    d_left, d_right = left_tensor.shape[0], right_tensor.shape[0]
+
+    merged = merge_two_site(left_tensor, right_tensor)
+    theta_4 = merged.reshape(d_left, d_right, merged.shape[1], merged.shape[2])
+    theta_new = np.asarray(oe.contract("ijkl,klab->ijab", u_gate, theta_4), dtype=np.complex128)
+    merged_new = theta_new.reshape(d_left * d_right, merged.shape[1], merged.shape[2])
+
+    new_left, new_right = split_two_site(
+        merged_new,
+        [d_left, d_right],
+        svd_distribution="right",
+        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        threshold=sim_params.svd_threshold,
+        max_bond_dim=sim_params.max_bond_dim,
+        min_bond_dim=sim_params.min_bond_dim,
+    )
+    state.tensors[left_site] = new_left
+    state.tensors[right_site] = new_right
+    return left_site, right_site
+
+
+def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
+    """Apply a two-qubit gate using the configured two-qubit gate mode.
+
+    Args:
+        state: MPS updated in place.
+        node: DAG node for the two-qubit gate.
+        sim_params: Simulation parameters including ``gate_mode``.
+
+    Returns:
+        ``(first_site, last_site)`` for downstream local noise handling.
+
+    Raises:
+        ValueError: If ``gate_mode`` is unknown.
+    """
+    gate = convert_dag_to_tensor_algorithm(node)[0]
+    site0, site1 = gate.sites[0], gate.sites[1]
+    is_nearest_neighbor = abs(site0 - site1) == 1
+    gate_mode: GateMode = getattr(sim_params, "gate_mode", "hybrid")
+
+    if gate_mode == "tdvp":
+        return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+
+    if gate_mode == "tebd":
+        return apply_two_qubit_gate_tebd(state, gate, sim_params)
+
+    if gate_mode == "hybrid":
+        if is_nearest_neighbor:
+            return apply_two_qubit_gate_tebd(state, gate, sim_params)
+        return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+
+    msg = f"Unknown gate_mode: {gate_mode!r}"
+    raise ValueError(msg)
 
 
 def digital_tjm(

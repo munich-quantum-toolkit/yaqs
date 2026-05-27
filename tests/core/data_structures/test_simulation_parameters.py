@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import (
+        GateMode,
         SimulationPreset,
     )
 
@@ -160,6 +161,16 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
+    assert params.gate_mode == "hybrid"
+
+
+def test_gate_mode_defaults_and_validation() -> None:
+    """Strong and weak digital params default to hybrid and validate gate_mode names."""
+    assert StrongSimParams().gate_mode == "hybrid"
+    assert WeakSimParams(shots=1).gate_mode == "hybrid"
+    assert StrongSimParams(gate_mode="tdvp").gate_mode == "tdvp"
+    with pytest.raises(ValueError, match="gate_mode"):
+        StrongSimParams(gate_mode=cast("GateMode", "invalid"))
 
 
 @pytest.mark.parametrize(
