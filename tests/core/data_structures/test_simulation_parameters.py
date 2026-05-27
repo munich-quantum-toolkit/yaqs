@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from mqt.yaqs.core.data_structures.simulation_parameters import (
+        GateMode,
         SimulationPreset,
     )
 
@@ -169,7 +170,7 @@ def test_gate_mode_defaults_and_validation() -> None:
     assert WeakSimParams(shots=1).gate_mode == "hybrid"
     assert StrongSimParams(gate_mode="tdvp").gate_mode == "tdvp"
     with pytest.raises(ValueError, match="gate_mode"):
-        StrongSimParams(gate_mode="invalid")  # ty: ignore[invalid-argument-type]
+        StrongSimParams(gate_mode=cast("GateMode", "invalid"))
 
 
 @pytest.mark.parametrize(

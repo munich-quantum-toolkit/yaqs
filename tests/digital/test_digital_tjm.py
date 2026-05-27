@@ -64,6 +64,10 @@ if TYPE_CHECKING:
 def _phase_align(reference: np.ndarray, state: np.ndarray) -> np.ndarray:
     """Align ``state``'s global phase to ``reference``.
 
+    Args:
+        reference: Reference vector to align against.
+        state: State vector to be phase-aligned.
+
     Returns:
         ``state`` with global phase aligned to ``reference``.
     """
@@ -76,6 +80,10 @@ def _phase_align(reference: np.ndarray, state: np.ndarray) -> np.ndarray:
 def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
     r"""Squared overlap fidelity \\(|\\langle a|b\\rangle|^2\\).
 
+    Args:
+        a: First state vector.
+        b: Second state vector.
+
     Returns:
         Fidelity as a float in ``[0, 1]`` (up to numerical error).
     """
@@ -85,6 +93,10 @@ def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
 def _expect_mps(mps: MPS, obs: Observable) -> float:
     """Expectation value computed directly from an MPS.
 
+    Args:
+        mps: State in MPS form.
+        obs: Observable to evaluate.
+
     Returns:
         Real expectation value ``<obs>``.
     """
@@ -93,6 +105,10 @@ def _expect_mps(mps: MPS, obs: Observable) -> float:
 
 def _expect_mps_like_evaluate_observables(mps: MPS, observables: list[Observable]) -> list[float]:
     """Compute expectations using the same center-shifting scheme as ``evaluate_observables``.
+
+    Args:
+        mps: State in MPS form.
+        observables: Observables to evaluate.
 
     Returns:
         Expectation values in the same order as ``observables``.
@@ -929,6 +945,6 @@ def test_unknown_gate_mode_raises() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name == "cx")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
-    sim_params.gate_mode = "invalid"  # ty: ignore[invalid-assignment]
+    sim_params.gate_mode = cast("GateMode", "invalid")
     with pytest.raises(ValueError, match="Unknown gate_mode"):
         apply_two_qubit_gate(mps, node, sim_params)
