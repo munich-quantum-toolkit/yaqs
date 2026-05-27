@@ -173,6 +173,15 @@ Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a {cl
 
 Used for noisy strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`strong_circuit_simulation`).
 
+### MPS two-qubit gate strategy (`mps_gate_strategy`)
+
+Digital circuit simulation on an MPS uses a **hybrid** two-qubit update by default (`mps_gate_strategy="hybrid"`):
+
+- **Nearest-neighbor** gates (adjacent in the internal MPS site order after bit reversal) use a direct **TEBD/SVD** update.
+- **Long-range** gates keep the existing **generator MPO + two-site TDVP** path.
+
+Set `mps_gate_strategy="tdvp"` to apply TDVP to every two-qubit gate (legacy behavior, useful for regression tests and reproducibility). Set `mps_gate_strategy="tebd"` to use TEBD/SVD for all two-qubit gates; long-range gates are implemented by adjacent SWAP insertion before and after the update.
+
 ```{code-cell} ipython3
 strong = StrongSimParams(
     observables=[Observable(Z(), 0)],

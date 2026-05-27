@@ -160,6 +160,16 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
+    assert params.mps_gate_strategy == "hybrid"
+
+
+def test_mps_gate_strategy_defaults_and_validation() -> None:
+    """Strong and weak digital params default to hybrid and validate strategy names."""
+    assert StrongSimParams().mps_gate_strategy == "hybrid"
+    assert WeakSimParams(shots=1).mps_gate_strategy == "hybrid"
+    assert StrongSimParams(mps_gate_strategy="tdvp").mps_gate_strategy == "tdvp"
+    with pytest.raises(ValueError, match="mps_gate_strategy"):
+        StrongSimParams(mps_gate_strategy="invalid")  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize(

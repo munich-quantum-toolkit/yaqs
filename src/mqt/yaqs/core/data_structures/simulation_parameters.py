@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
+DigitalMPSGateStrategy = Literal["hybrid", "tdvp", "tebd"]
 
 
 class PresetTypes(TypedDict):
@@ -87,6 +88,25 @@ def _validate_random_seed(random_seed: int | None) -> None:
     if random_seed < 0:
         msg = f"random_seed must be non-negative, got {random_seed}."
         raise ValueError(msg)
+
+
+def _validate_mps_gate_strategy(strategy: DigitalMPSGateStrategy) -> DigitalMPSGateStrategy:
+    """Validate ``mps_gate_strategy`` for digital MPS circuit simulation.
+
+    Args:
+        strategy: Two-qubit gate dispatch mode for the MPS digital backend.
+
+    Returns:
+        The validated strategy name.
+
+    Raises:
+        ValueError: If ``strategy`` is not a supported value.
+    """
+    allowed = ("hybrid", "tdvp", "tebd")
+    if strategy not in allowed:
+        msg = f"mps_gate_strategy must be one of {allowed!r}, got {strategy!r}."
+        raise ValueError(msg)
+    return strategy
 
 
 def _validate_krylov_tol(krylov_tol: float) -> float:
@@ -354,6 +374,8 @@ class StrongSimParams:
         window_size: The size of the window for the simulation. Default is ``None``.
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
+        mps_gate_strategy: How nearest-neighbor vs long-range two-qubit gates are
+            applied on the MPS digital backend (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -374,6 +396,7 @@ class StrongSimParams:
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
         random_seed: int | None = None,
+        mps_gate_strategy: DigitalMPSGateStrategy = "hybrid",
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -399,6 +422,7 @@ class StrongSimParams:
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
+            mps_gate_strategy: MPS two-qubit gate dispatch (default ``"hybrid"``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -432,6 +456,7 @@ class StrongSimParams:
         self.sample_layers = sample_layers
         self.num_mid_measurements = num_mid_measurements
         self.random_seed = random_seed
+        self.mps_gate_strategy = _validate_mps_gate_strategy(mps_gate_strategy)
 
 
 class WeakSimParams:
@@ -459,6 +484,8 @@ class WeakSimParams:
         window_size: The window size for the simulation.
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
+        mps_gate_strategy: How nearest-neighbor vs long-range two-qubit gates are
+            applied on the MPS digital backend (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -477,6 +504,7 @@ class WeakSimParams:
         preset: SimulationPreset = "balanced",
         get_state: bool = False,
         random_seed: int | None = None,
+        mps_gate_strategy: DigitalMPSGateStrategy = "hybrid",
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -499,6 +527,7 @@ class WeakSimParams:
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
+            mps_gate_strategy: MPS two-qubit gate dispatch (default ``"hybrid"``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -513,3 +542,4 @@ class WeakSimParams:
         self.krylov_tol = _validate_krylov_tol(krylov_tol if krylov_tol is not None else preset_values["krylov_tol"])
         self.get_state = get_state
         self.random_seed = random_seed
+        self.mps_gate_strategy = _validate_mps_gate_strategy(mps_gate_strategy)
