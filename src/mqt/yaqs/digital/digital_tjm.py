@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
-    from ..core.data_structures.simulation_parameters import DigitalMPSGateStrategy
+    from ..core.data_structures.simulation_parameters import GateMode
     from ..core.libraries.gate_library import BaseGate
     from ..core.methods.decompositions import TruncMode
 
@@ -387,18 +387,18 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     Args:
         state: MPS updated in place.
         node: DAG node for the two-qubit gate.
-        sim_params: Simulation parameters including ``mps_gate_strategy``.
+        sim_params: Simulation parameters including ``gate_mode``.
 
     Returns:
         ``(first_site, last_site)`` for downstream local noise handling.
 
     Raises:
-        ValueError: If ``mps_gate_strategy`` is unknown.
+        ValueError: If ``gate_mode`` is unknown.
     """
     gate = convert_dag_to_tensor_algorithm(node)[0]
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
-    strategy: DigitalMPSGateStrategy = getattr(sim_params, "mps_gate_strategy", "hybrid")
+    strategy: GateMode = getattr(sim_params, "gate_mode", "hybrid")
 
     if strategy == "tdvp":
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
@@ -411,7 +411,7 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
-    msg = f"Unknown mps_gate_strategy: {strategy!r}"
+    msg = f"Unknown gate_mode: {strategy!r}"
     raise ValueError(msg)
 
 

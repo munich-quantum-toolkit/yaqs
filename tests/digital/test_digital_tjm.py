@@ -57,7 +57,7 @@ from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import (
-        DigitalMPSGateStrategy,
+        GateMode,
     )
 
 
@@ -591,7 +591,7 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
 def _run_strong_noiseless(
     qc: QuantumCircuit,
     *,
-    mps_gate_strategy: DigitalMPSGateStrategy = "hybrid",
+    gate_mode: GateMode = "hybrid",
     max_bond_dim: int | None = None,
     svd_threshold: float = 1e-12,
     get_state: bool = False,
@@ -604,7 +604,7 @@ def _run_strong_noiseless(
     num_qubits = qc.num_qubits
     sim_params = StrongSimParams(
         observables=[Observable(Z(), 0)],
-        mps_gate_strategy=mps_gate_strategy,
+        gate_mode=gate_mode,
         preset="exact",
         svd_threshold=svd_threshold,
         max_bond_dim=max_bond_dim,
@@ -629,8 +629,8 @@ def test_nearest_neighbor_strategies_agree(strategy: str) -> None:
     qc.cz(1, 2)
     qc.rx(0.3, 2)
 
-    hybrid_z = _run_strong_noiseless(qc, mps_gate_strategy="hybrid")
-    other_z = _run_strong_noiseless(qc, mps_gate_strategy=cast("DigitalMPSGateStrategy", strategy))
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
+    other_z = _run_strong_noiseless(qc, gate_mode=cast("GateMode", strategy))
     assert hybrid_z == pytest.approx(other_z, abs=1e-12)
 
 
@@ -640,8 +640,8 @@ def test_long_range_hybrid_matches_tdvp() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    hybrid_z = _run_strong_noiseless(qc, mps_gate_strategy="hybrid")
-    tdvp_z = _run_strong_noiseless(qc, mps_gate_strategy="tdvp")
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -651,8 +651,8 @@ def test_long_range_tebd_matches_tdvp() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    tebd_z = _run_strong_noiseless(qc, mps_gate_strategy="tebd")
-    tdvp_z = _run_strong_noiseless(qc, mps_gate_strategy="tdvp")
+    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -664,8 +664,8 @@ def test_mixed_circuit_tebd_matches_tdvp() -> None:
     qc.cx(0, 3)
     qc.rzz(0.2, 2, 3)
 
-    tebd_z = _run_strong_noiseless(qc, mps_gate_strategy="tebd")
-    tdvp_z = _run_strong_noiseless(qc, mps_gate_strategy="tdvp")
+    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -677,8 +677,8 @@ def test_mixed_circuit_hybrid_matches_tdvp() -> None:
     qc.cx(0, 3)
     qc.rzz(0.2, 2, 3)
 
-    hybrid_z = _run_strong_noiseless(qc, mps_gate_strategy="hybrid")
-    tdvp_z = _run_strong_noiseless(qc, mps_gate_strategy="tdvp")
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -688,7 +688,7 @@ def test_bell_state_sanity() -> None:
     qc.h(0)
     qc.cx(0, 1)
 
-    vec = _run_strong_noiseless(qc, mps_gate_strategy="hybrid", get_state=True)
+    vec = _run_strong_noiseless(qc, gate_mode="hybrid", get_state=True)
     assert isinstance(vec, np.ndarray)
     probs = np.abs(vec) ** 2
     np.testing.assert_allclose(probs[0], 0.5, atol=1e-10)
@@ -707,7 +707,7 @@ def test_tebd_truncation_respects_max_bond_dim() -> None:
     state = State(4, initial="zeros")
     sim_params = StrongSimParams(
         observables=[Observable(Z(), 0)],
-        mps_gate_strategy="tebd",
+        gate_mode="tebd",
         max_bond_dim=2,
         svd_threshold=1e-6,
     )
@@ -724,7 +724,7 @@ def test_weak_simulation_nearest_neighbor_counts() -> None:
     qc.measure_all()
 
     state = State(3, initial="zeros")
-    sim_params = WeakSimParams(shots=32, mps_gate_strategy="hybrid", preset="exact")
+    sim_params = WeakSimParams(shots=32, gate_mode="hybrid", preset="exact")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
     assert result.counts is not None
     assert sum(result.counts.values()) == 32
@@ -738,7 +738,7 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     state = State(2, initial="zeros")
     sim_params = StrongSimParams(
         observables=[Observable(Z(), 0)],
-        mps_gate_strategy="hybrid",
+        gate_mode="hybrid",
         num_traj=4,
         random_seed=0,
     )
@@ -757,7 +757,7 @@ def test_apply_two_qubit_gate_tebd_with_swaps_direct_cx() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", mps_gate_strategy="tebd")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
     apply_two_qubit_gate_tebd_with_swaps(
         mps,
         convert_dag_to_tensor_algorithm(node)[0],
@@ -782,7 +782,7 @@ def test_apply_two_qubit_gate_tebd_direct_cnot() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", mps_gate_strategy="tebd")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
     apply_two_qubit_gate_tebd(
         mps,
         convert_dag_to_tensor_algorithm(node)[0],
@@ -796,7 +796,7 @@ def test_apply_two_qubit_gate_tebd_direct_cnot() -> None:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-10)
 
 
-def test_unknown_mps_gate_strategy_raises() -> None:
+def test_unknown_gate_mode_raises() -> None:
     """Invalid strategy names are rejected at gate-application time."""
     mps = MPS(2, state="zeros")
     qc = QuantumCircuit(2)
@@ -804,6 +804,6 @@ def test_unknown_mps_gate_strategy_raises() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name == "cx")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)])
-    sim_params.mps_gate_strategy = "invalid"  # ty: ignore[invalid-assignment]
-    with pytest.raises(ValueError, match="Unknown mps_gate_strategy"):
+    sim_params.gate_mode = "invalid"  # ty: ignore[invalid-assignment]
+    with pytest.raises(ValueError, match="Unknown gate_mode"):
         apply_two_qubit_gate(mps, node, sim_params)
