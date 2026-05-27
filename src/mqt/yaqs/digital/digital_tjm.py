@@ -290,6 +290,7 @@ def apply_two_qubit_gate_tebd(
     Returns:
         ``(left_site, right_site)`` spanning the gate support in MPS order.
     """
+
     def apply_swap(site_left: int) -> None:
         swap_gate = GateLibrary.swap()
         swap_gate.set_sites(site_left, site_left + 1)
