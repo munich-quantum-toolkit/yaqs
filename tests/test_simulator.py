@@ -286,7 +286,9 @@ def test_analog_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets
+        # due to floating-point reduction order and BLAS/LAPACK differences.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_analog_simulation_parallel_off() -> None:
@@ -336,7 +338,9 @@ def test_analog_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets
+        # due to floating-point reduction order and BLAS/LAPACK differences.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_analog_simulation_get_state() -> None:
@@ -450,7 +454,8 @@ def test_strong_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_strong_simulation_no_noise() -> None:
@@ -519,7 +524,8 @@ def test_strong_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_weak_simulation_noise() -> None:
