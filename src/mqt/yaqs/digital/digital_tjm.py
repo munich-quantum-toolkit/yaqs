@@ -244,6 +244,9 @@ def _gate_tensor_left_right_order(
     if gate.sites[0] == left_site and gate.sites[1] == right_site:
         return gate.tensor
     if gate.sites[0] == right_site and gate.sites[1] == left_site:
+        # CX/CZ already transpose ``tensor`` in ``set_sites`` when ``sites[1] < sites[0]``.
+        if gate.name in {"cx", "cz"}:
+            return gate.tensor
         return np.transpose(gate.tensor, (1, 0, 3, 2))
     msg = f"Gate sites {gate.sites!r} are not consistent with MPS sites ({left_site}, {right_site})."
     raise ValueError(msg)
