@@ -164,7 +164,7 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
 
 
 def test_gate_mode_defaults_and_validation() -> None:
-    """Strong and weak digital params default to hybrid and validate strategy names."""
+    """Strong and weak digital params default to hybrid and validate gate_mode names."""
     assert StrongSimParams().gate_mode == "hybrid"
     assert WeakSimParams(shots=1).gate_mode == "hybrid"
     assert StrongSimParams(gate_mode="tdvp").gate_mode == "tdvp"
