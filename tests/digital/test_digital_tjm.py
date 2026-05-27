@@ -47,7 +47,6 @@ from mqt.yaqs.digital.digital_tjm import (
     apply_single_qubit_gate,
     apply_two_qubit_gate,
     apply_two_qubit_gate_tebd,
-    apply_two_qubit_gate_tebd_with_swaps,
     apply_window,
     construct_generator_mpo,
     create_local_noise_model,
@@ -620,8 +619,8 @@ def _run_strong_noiseless(
     return float(np.real(exp[0]))
 
 
-@pytest.mark.parametrize("strategy", ["hybrid", "tebd"])
-def test_nearest_neighbor_strategies_agree(strategy: str) -> None:
+@pytest.mark.parametrize("gate_mode", ["hybrid", "tebd"])
+def test_nearest_neighbor_gate_modes_agree(gate_mode: str) -> None:
     """Hybrid and TEBD agree on a purely nearest-neighbor circuit."""
     qc = QuantumCircuit(3)
     qc.h(0)
@@ -630,7 +629,7 @@ def test_nearest_neighbor_strategies_agree(strategy: str) -> None:
     qc.rx(0.3, 2)
 
     hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
-    other_z = _run_strong_noiseless(qc, gate_mode=cast("GateMode", strategy))
+    other_z = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode))
     assert hybrid_z == pytest.approx(other_z, abs=1e-12)
 
 
@@ -746,8 +745,8 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     assert result.expectation_values[0] is not None
 
 
-def test_apply_two_qubit_gate_tebd_with_swaps_direct_cx() -> None:
-    """SWAP-assisted TEBD applies CX(1, 3) on |1111>."""
+def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
+    """TEBD applies CX(1, 3) on |1111> via SWAP insertion."""
     length = 4
     mps = MPS(length, state="ones")
     mps.normalize()
@@ -758,11 +757,7 @@ def test_apply_two_qubit_gate_tebd_with_swaps_direct_cx() -> None:
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
-    apply_two_qubit_gate_tebd_with_swaps(
-        mps,
-        convert_dag_to_tensor_algorithm(node)[0],
-        sim_params,
-    )
+    apply_two_qubit_gate_tebd(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
         if i == 7:
@@ -797,7 +792,7 @@ def test_apply_two_qubit_gate_tebd_direct_cnot() -> None:
 
 
 def test_unknown_gate_mode_raises() -> None:
-    """Invalid strategy names are rejected at gate-application time."""
+    """Invalid gate_mode names are rejected at gate-application time."""
     mps = MPS(2, state="zeros")
     qc = QuantumCircuit(2)
     qc.cx(0, 1)

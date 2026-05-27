@@ -280,7 +280,7 @@ def apply_two_qubit_gate_tebd(
     gate: BaseGate,
     sim_params: StrongSimParams | WeakSimParams,
 ) -> tuple[int, int]:
-    """Apply a nearest-neighbor two-qubit gate via a direct TEBD/SVD update.
+    """Apply a two-qubit gate via TEBD/SVD, inserting adjacent SWAPs if needed.
 
     Args:
         state: MPS updated in place.
@@ -288,15 +288,32 @@ def apply_two_qubit_gate_tebd(
         sim_params: Truncation settings shared with TDVP/MPS splitting.
 
     Returns:
-        ``(left_site, right_site)`` for the updated bond.
-
-    Raises:
-        ValueError: If the gate does not act on neighboring MPS sites.
+        ``(left_site, right_site)`` spanning the gate support in MPS order.
     """
+    def apply_swap(site_left: int) -> None:
+        swap_gate = GateLibrary.swap()
+        swap_gate.set_sites(site_left, site_left + 1)
+        apply_two_qubit_gate_tebd(state, swap_gate, sim_params)
+
     site0, site1 = gate.sites[0], gate.sites[1]
     if abs(site0 - site1) != 1:
-        msg = "TEBD two-qubit updates require neighboring MPS sites."
-        raise ValueError(msg)
+        left = min(site0, site1)
+        right = max(site0, site1)
+
+        for i in range(right - 1, left, -1):
+            apply_swap(i)
+
+        gate_adj = copy.deepcopy(gate)
+        if site0 == left:
+            gate_adj.set_sites(left, left + 1)
+        else:
+            gate_adj.set_sites(left + 1, left)
+        apply_two_qubit_gate_tebd(state, gate_adj, sim_params)
+
+        for i in range(left + 1, right):
+            apply_swap(i)
+
+        return left, right
 
     left_site = min(site0, site1)
     right_site = max(site0, site1)
@@ -325,64 +342,8 @@ def apply_two_qubit_gate_tebd(
     return left_site, right_site
 
 
-def apply_swap_tebd(
-    state: MPS,
-    site_left: int,
-    sim_params: StrongSimParams | WeakSimParams,
-) -> tuple[int, int]:
-    """Apply a nearest-neighbor SWAP on ``(site_left, site_left + 1)`` via TEBD.
-
-    Returns:
-        ``(site_left, site_left + 1)`` for downstream local noise handling.
-    """
-    swap_gate = GateLibrary.swap()
-    swap_gate.set_sites(site_left, site_left + 1)
-    return apply_two_qubit_gate_tebd(state, swap_gate, sim_params)
-
-
-def apply_two_qubit_gate_tebd_with_swaps(
-    state: MPS,
-    gate: BaseGate,
-    sim_params: StrongSimParams | WeakSimParams,
-) -> tuple[int, int]:
-    """Apply a two-qubit gate via TEBD, using SWAPs when sites are not neighbors.
-
-    Non-nearest-neighbor gates are implemented by bubbling the right-index qubit left
-    with adjacent SWAPs, applying the gate, then undoing the SWAP chain.
-
-    Args:
-        state: MPS updated in place.
-        gate: Internal gate object from the gate library.
-        sim_params: Truncation settings shared with TDVP/MPS splitting.
-
-    Returns:
-        ``(left_site, right_site)`` spanning the gate support in MPS order.
-    """
-    site0, site1 = gate.sites[0], gate.sites[1]
-    if abs(site0 - site1) == 1:
-        return apply_two_qubit_gate_tebd(state, gate, sim_params)
-
-    left = min(site0, site1)
-    right = max(site0, site1)
-
-    for i in range(right - 1, left, -1):
-        apply_swap_tebd(state, i, sim_params)
-
-    gate_adj = copy.deepcopy(gate)
-    if site0 == left:
-        gate_adj.set_sites(left, left + 1)
-    else:
-        gate_adj.set_sites(left + 1, left)
-    apply_two_qubit_gate_tebd(state, gate_adj, sim_params)
-
-    for i in range(left + 1, right):
-        apply_swap_tebd(state, i, sim_params)
-
-    return left, right
-
-
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
-    """Apply a two-qubit gate using the configured MPS digital strategy.
+    """Apply a two-qubit gate using the configured two-qubit gate mode.
 
     Args:
         state: MPS updated in place.
@@ -398,20 +359,20 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     gate = convert_dag_to_tensor_algorithm(node)[0]
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
-    strategy: GateMode = getattr(sim_params, "gate_mode", "hybrid")
+    gate_mode: GateMode = getattr(sim_params, "gate_mode", "hybrid")
 
-    if strategy == "tdvp":
+    if gate_mode == "tdvp":
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
-    if strategy == "tebd":
-        return apply_two_qubit_gate_tebd_with_swaps(state, gate, sim_params)
+    if gate_mode == "tebd":
+        return apply_two_qubit_gate_tebd(state, gate, sim_params)
 
-    if strategy == "hybrid":
+    if gate_mode == "hybrid":
         if is_nearest_neighbor:
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
-    msg = f"Unknown gate_mode: {strategy!r}"
+    msg = f"Unknown gate_mode: {gate_mode!r}"
     raise ValueError(msg)
 
 
