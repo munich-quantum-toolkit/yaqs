@@ -211,9 +211,19 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     window[0] = max(window[0], 0)
     window[1] = min(window[1], state.length - 1)
 
-    # Shift the orthogonality center for sites before the window.
-    for i in range(window[0]):
-        state.shift_orthogonality_center_right(i)
+    # Ensure the extracted window is a *standalone* MPS segment.
+    #
+    # 2TDVP on a cropped state assumes open-boundary conditions (left/right virtual dims = 1)
+    # for the first/last tensors. We therefore move the orthogonality center to the window start,
+    # then sweep it to the window end so that:
+    #   - tensor at window[0] has left bond dimension 1
+    #   - tensor at window[1] has right bond dimension 1
+    #
+    # Note: we cannot assume the orthogonality center is at site 0 on entry (the circuit
+    # simulator normalizes after each two-qubit gate).
+    state.set_canonical_form(orthogonality_center=window[0], decomposition="QR")
+    for i in range(window[0], window[1]):
+        state.shift_orthogonality_center_right(i, decomposition="QR")
 
     short_mpo = MPO()
     short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
@@ -268,10 +278,44 @@ def apply_two_qubit_gate_tdvp(
         ``(first_site, last_site)`` spanning the gate support in MPS order.
     """
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
+    debug_lr = False
+    try:
+        import os
 
+        debug_lr = os.environ.get("YAQS_DEBUG_LR_TDVP", "").lower() in {"1", "true", "yes", "on"}
+    except Exception:
+        debug_lr = False
+    if debug_lr:
+        print(f"[lr-tdvp] gate={gate.name} sites={gate.sites} first={first_site} last={last_site} L={state.length}")
+
+    # Default: 2TDVP uses a ±1 padding window around the generator interval for circuit gates.
     window_size = 1
+    # Debug-only: allow forcing boundary-anchored window [first_site, last_site]
+    # to test whether the partial circuit integrator assumes boundary support.
+    try:
+        import os
+
+        if os.environ.get("YAQS_DEBUG_TDVP_WINDOW_ANCHOR", "").lower() in {"1", "true", "yes", "on"}:
+            window_size = 0
+    except Exception:
+        pass
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
+    if debug_lr:
+        print(f"[lr-tdvp] window={window} short_L={short_state.length}")
+        # Identify nontrivial MPO sites (not close to identity).
+        nontrivial: list[int] = []
+        for idx, tensor in enumerate(short_mpo.tensors):
+            eye = np.eye(tensor.shape[0], dtype=tensor.dtype)
+            if not np.allclose(tensor[:, :, 0, 0], eye, atol=1e-12, rtol=0.0):
+                nontrivial.append(idx)
+        print(f"[lr-tdvp] nontrivial_mpo_sites={nontrivial}")
+        # Window state-change proxy (tensor Frobenius norms).
+        norms_before = [float(np.linalg.norm(t)) for t in short_state.tensors]
     two_site_tdvp(short_state, short_mpo, sim_params)
+    if debug_lr:
+        norms_after = [float(np.linalg.norm(t)) for t in short_state.tensors]
+        delta = float(np.linalg.norm(np.asarray(norms_after) - np.asarray(norms_before)))
+        print(f"[lr-tdvp] window_tensor_norm_delta={delta:.3e}")
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 

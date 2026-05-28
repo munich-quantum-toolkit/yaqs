@@ -173,6 +173,17 @@ def test_gate_mode_defaults_and_validation() -> None:
         StrongSimParams(gate_mode=cast("GateMode", "invalid"))
 
 
+def test_tdvp_sweeps_defaults_and_validation() -> None:
+    """Digital params default to four TDVP sweeps and reject non-positive values."""
+    assert StrongSimParams().tdvp_sweeps == 4
+    assert WeakSimParams(shots=1).tdvp_sweeps == 4
+    assert StrongSimParams(tdvp_sweeps=8).tdvp_sweeps == 8
+    assert StrongSimParams().tdvp_circuit_full_sweep is False
+    assert StrongSimParams(tdvp_circuit_full_sweep=True).tdvp_circuit_full_sweep is True
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        StrongSimParams(tdvp_sweeps=0)
+
+
 @pytest.mark.parametrize(
     ("preset", "expected"),
     [

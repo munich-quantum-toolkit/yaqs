@@ -437,6 +437,36 @@ def _materialized_mps(state: State) -> MPS | None:
         return None
 
 
+_CIRCUIT_MIN_INITIAL_BOND_DIM = 2
+
+
+def _max_virtual_bond_dim(mps: MPS) -> int:
+    """Return the largest left or right virtual bond dimension in an MPS."""
+    bond_max = 1
+    for tensor in mps.tensors:
+        _, chi_l, chi_r = tensor.shape
+        bond_max = max(bond_max, chi_l, chi_r)
+    return bond_max
+
+
+def _prepare_circuit_initial_mps(state: State) -> MPS:
+    """Return a circuit-ready MPS copy with bond dimension at least two.
+
+    Product-state initializations have bond dimension one; long-range TDVP benefits
+    from a slightly enlarged variational manifold before the first gate is applied.
+
+    Args:
+        state: User state already encoded as an MPS.
+
+    Returns:
+        Deep copy of the MPS, padded to :data:`_CIRCUIT_MIN_INITIAL_BOND_DIM` when needed.
+    """
+    mps = copy.deepcopy(state.mps)
+    if _max_virtual_bond_dim(mps) < _CIRCUIT_MIN_INITIAL_BOND_DIM:
+        mps.pad_bond_dimension(_CIRCUIT_MIN_INITIAL_BOND_DIM)
+    return mps
+
+
 def _hamiltonian_backend_target(state_rep: str) -> str:
     """Internal storage target for ``Hamiltonian`` given ``State.representation``.
 
@@ -1263,6 +1293,10 @@ class Simulator:
         Qiskit qubit indices are preserved: site ``i`` in the MPS corresponds to qubit ``i``
         in the input circuit, and dense state vectors use Qiskit's little-endian indexing.
 
+        The initial MPS is deep-copied and padded to bond dimension at least two when it
+        starts as a product state (bond dimension one), so TDVP has room to explore
+        entanglement during long-range gate updates.
+
         Args:
             initial_state: The initial system state (must use MPS representation).
             operator: The quantum circuit to simulate.
@@ -1280,7 +1314,7 @@ class Simulator:
             )
             raise ValueError(msg)
         initial_state.ensure_encoded("mps")
-        mps = initial_state.mps
+        mps = _prepare_circuit_initial_mps(initial_state)
 
         if mps.length != operator.num_qubits:
             msg = "State and circuit qubit counts do not match."

@@ -659,6 +659,7 @@ def _run_strong_noiseless(
     gate_mode: GateMode = "hybrid",
     max_bond_dim: int | None = None,
     svd_threshold: float = 1e-12,
+    tdvp_sweeps: int = 4,
     get_state: bool = False,
 ) -> float | np.ndarray:
     """Run a noiseless strong simulation.
@@ -673,6 +674,7 @@ def _run_strong_noiseless(
         preset="exact",
         svd_threshold=svd_threshold,
         max_bond_dim=max_bond_dim,
+        tdvp_sweeps=tdvp_sweeps,
         get_state=get_state,
     )
     state = State(num_qubits, initial="zeros")
@@ -699,6 +701,33 @@ def test_nearest_neighbor_gate_modes_agree(gate_mode: str) -> None:
     assert hybrid_z == pytest.approx(other_z, abs=1e-12)
 
 
+def _max_virtual_bond_dim(mps: MPS) -> int:
+    """Largest virtual bond dimension in an MPS.
+
+    Returns:
+        Maximum of left and right bond dimensions across all sites.
+    """
+    bond_max = 1
+    for tensor in mps.tensors:
+        _, chi_l, chi_r = tensor.shape
+        bond_max = max(bond_max, chi_l, chi_r)
+    return bond_max
+
+
+def test_circuit_simulation_pads_initial_bond_dimension() -> None:
+    """Product-state inputs are padded to chi=2 so interior long-range TDVP matches Qiskit."""
+    state = State(4, initial="zeros")
+    assert _max_virtual_bond_dim(state.mps) == 1
+
+    qc = QuantumCircuit(4)
+    qc.h(1)
+    qc.cx(1, 3)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    vec = _tdvp_statevector(qc, tdvp_sweeps=4)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-8)
+    assert _max_virtual_bond_dim(state.mps) == 1
+
+
 def test_long_range_hybrid_matches_tdvp() -> None:
     """Long-range gates use TDVP in hybrid mode and match an all-TDVP run."""
     qc = QuantumCircuit(4)
@@ -708,6 +737,37 @@ def test_long_range_hybrid_matches_tdvp() -> None:
     hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
     tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def _tdvp_statevector(qc: QuantumCircuit, *, tdvp_sweeps: int) -> np.ndarray:
+    """Run a noiseless TDVP circuit simulation and return the final state vector.
+
+    Returns:
+        Final state vector from the simulation.
+    """
+    vec = _run_strong_noiseless(qc, gate_mode="tdvp", tdvp_sweeps=tdvp_sweeps, get_state=True, svd_threshold=1e-14)
+    assert isinstance(vec, np.ndarray)
+    return vec
+
+
+def test_long_range_tdvp_fidelity_vs_sweep_count() -> None:
+    """TDVP statevector fidelity vs Qiskit stays high as ``tdvp_sweeps`` increases."""
+    sweep_counts = [1, 2, 4, 8, 16]
+
+    qc_endpoint = QuantumCircuit(4)
+    qc_endpoint.h(0)
+    qc_endpoint.cx(0, 3)
+    ref_endpoint = np.asarray(Statevector(qc_endpoint).data, dtype=np.complex128)
+    endpoint_fidelities = [_fidelity(ref_endpoint, _tdvp_statevector(qc_endpoint, tdvp_sweeps=n)) for n in sweep_counts]
+    assert all(f == pytest.approx(1.0, abs=1e-8) for f in endpoint_fidelities)
+
+    qc_interior = QuantumCircuit(4)
+    qc_interior.h(1)
+    qc_interior.cx(1, 3)
+    ref_interior = np.asarray(Statevector(qc_interior).data, dtype=np.complex128)
+    interior_fidelities = [_fidelity(ref_interior, _tdvp_statevector(qc_interior, tdvp_sweeps=n)) for n in sweep_counts]
+    assert all(f == pytest.approx(1.0, abs=1e-8) for f in interior_fidelities)
+    assert max(interior_fidelities) - min(interior_fidelities) < 0.02
 
 
 def test_long_range_tebd_matches_tdvp() -> None:
@@ -753,23 +813,22 @@ def test_mixed_circuit_tebd_matches_tdvp() -> None:
     assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
-def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
-    """Lock down YAQS dense-vector convention against Qiskit on non-symmetric circuits.
+def test_tebd_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
+    """TEBD dense vectors match Qiskit Statevector on non-symmetric circuits.
 
-    The simulator reverses qubit order internally; this test ensures the resulting MPS dense
-    vector remains consistent with a single documented Qiskit reference convention.
+    MPS site ``i`` corresponds to Qiskit qubit ``i`` (little-endian indexing).
     """
-    n = 3
     circuits: list[QuantumCircuit] = []
 
-    # Product basis states distinguish sites 0/1/2
-    for site in range(n):
-        qc = QuantumCircuit(n)
-        qc.x(site)
-        circuits.append(qc)
+    # Product basis states distinguish individual qubits
+    for n in (3, 4):
+        for site in range(n):
+            qc = QuantumCircuit(n)
+            qc.x(site)
+            circuits.append(qc)
 
-    # Non-symmetric single-qubit rotations + asymmetry
-    qc = QuantumCircuit(n)
+    # Non-symmetric single-qubit rotations
+    qc = QuantumCircuit(3)
     qc.rx(0.37, 0)
     qc.ry(0.51, 1)
     qc.rz(0.23, 2)
@@ -777,15 +836,19 @@ def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
     qc.h(2)
     circuits.append(qc)
 
-    # Directional CNOT checks (avoid patterns that are ambiguous under bit reversal)
-    for h_site, ctrl, tgt in [(0, 0, 1), (1, 1, 2), (0, 0, 2), (2, 2, 0)]:
-        qc = QuantumCircuit(n)
-        qc.h(h_site)
-        qc.cx(ctrl, tgt)
-        circuits.append(qc)
+    # Directional nearest-neighbor and long-range CNOT checks
+    for n, probes in [
+        (3, [(0, 0, 1), (1, 1, 2), (0, 0, 2), (2, 2, 0)]),
+        (4, [(1, 1, 2), (1, 1, 3), (0, 0, 3), (3, 3, 1), (1, 0, 1)]),
+    ]:
+        for h_site, ctrl, tgt in probes:
+            qc = QuantumCircuit(n)
+            qc.h(h_site)
+            qc.cx(ctrl, tgt)
+            circuits.append(qc)
 
     for qc in circuits:
-        vec = _run_strong_noiseless(qc, gate_mode="hybrid", get_state=True)
+        vec = _run_strong_noiseless(qc, gate_mode="hybrid", get_state=True, svd_threshold=1e-14)
         assert isinstance(vec, np.ndarray)
         ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
         assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)

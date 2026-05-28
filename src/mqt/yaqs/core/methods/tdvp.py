@@ -27,6 +27,7 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+import os
 
 import numpy as np
 import opt_einsum as oe
@@ -670,6 +671,404 @@ def single_site_tdvp(
         )
 
 
+def _two_site_tdvp_symmetric_sweep(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    dt: float,
+    dynamic: bool = False,
+) -> None:
+    """One full left-to-right then right-to-left two-site TDVP sweep.
+
+    Args:
+        state: MPS updated in place.
+        hamiltonian: MPO Hamiltonian or gate generator.
+        sim_params: Simulation parameters with truncation and Krylov settings.
+        dt: Total evolution time for this symmetric sweep.
+        dynamic: If True, bond growth is uncapped during splitting.
+    """
+    num_sites = hamiltonian.length
+    debug_projector = os.environ.get("YAQS_DEBUG_TDVP_PROJECTOR", "").lower() in {"1", "true", "yes", "on"}
+    nontrivial_sites: list[int] = []
+    if debug_projector:
+        for idx, w in enumerate(hamiltonian.tensors):
+            eye = np.eye(w.shape[0], dtype=w.dtype)
+            is_nontrivial = False
+            for a in range(w.shape[2]):
+                for b in range(w.shape[3]):
+                    if not np.allclose(w[:, :, a, b], eye if (a == 0 and b == 0) else 0.0, atol=1e-12, rtol=0.0):
+                        is_nontrivial = True
+                        break
+                if is_nontrivial:
+                    break
+            if is_nontrivial:
+                nontrivial_sites.append(idx)
+        print(f"[tdvp-debug] sweep=symmetric num_sites={num_sites} nontrivial_mpo_sites={nontrivial_sites}")
+        left_gen_site = nontrivial_sites[0] if nontrivial_sites else None
+        right_gen_site = nontrivial_sites[-1] if nontrivial_sites else None
+    right_blocks = initialize_right_environments(state, hamiltonian)
+
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    left_virtual_dim = state.tensors[0].shape[1]
+    mpo_left_dim = hamiltonian.tensors[0].shape[2]
+    left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
+    for i in range(left_virtual_dim):
+        for a in range(mpo_left_dim):
+            left_identity[i, a, i] = 1
+    left_blocks[0] = left_identity
+
+    for i in range(num_sites - 2):
+        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+        if debug_projector:
+            pair = (i, i + 1)
+            contains_left = left_gen_site is not None and i <= left_gen_site <= i + 1
+            contains_right = right_gen_site is not None and i <= right_gen_site <= i + 1
+            projected = project_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor)
+            updated_dbg = update_site(
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                0.5 * dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            print(
+                "[tdvp-debug] pair",
+                pair,
+                "contains_left",
+                contains_left,
+                "contains_right",
+                contains_right,
+                "merged_tensor_norm",
+                float(np.linalg.norm(merged_tensor)),
+                "merged_mpo_norm",
+                float(np.linalg.norm(merged_mpo)),
+                "left_block_norm",
+                float(np.linalg.norm(left_blocks[i])),
+                "right_block_norm",
+                float(np.linalg.norm(right_blocks[i + 1])),
+                "project_site_norm",
+                float(np.linalg.norm(projected)),
+                "update_delta_norm",
+                float(np.linalg.norm(updated_dbg - merged_tensor)),
+            )
+        merged_tensor = update_site(
+            left_blocks[i],
+            right_blocks[i + 1],
+            merged_mpo,
+            merged_tensor,
+            0.5 * dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+            merged_tensor,
+            sim_params,
+            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+            "right",
+            dynamic=dynamic,
+        )
+        left_blocks[i + 1] = update_left_environment(
+            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+        )
+        state.tensors[i + 1] = update_site(
+            left_blocks[i + 1],
+            right_blocks[i + 1],
+            hamiltonian.tensors[i + 1],
+            state.tensors[i + 1],
+            -0.5 * dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+
+    i = num_sites - 2
+    merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+    merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+    if debug_projector:
+        pair = (i, i + 1)
+        contains_left = left_gen_site is not None and i <= left_gen_site <= i + 1
+        contains_right = right_gen_site is not None and i <= right_gen_site <= i + 1
+        projected = project_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor)
+        updated_dbg = update_site(
+            left_blocks[i],
+            right_blocks[i + 1],
+            merged_mpo,
+            merged_tensor,
+            dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+        print(
+            "[tdvp-debug] pair",
+            pair,
+            "contains_left",
+            contains_left,
+            "contains_right",
+            contains_right,
+            "merged_tensor_norm",
+            float(np.linalg.norm(merged_tensor)),
+            "merged_mpo_norm",
+            float(np.linalg.norm(merged_mpo)),
+            "left_block_norm",
+            float(np.linalg.norm(left_blocks[i])),
+            "right_block_norm",
+            float(np.linalg.norm(right_blocks[i + 1])),
+            "project_site_norm",
+            float(np.linalg.norm(projected)),
+            "update_delta_norm",
+            float(np.linalg.norm(updated_dbg - merged_tensor)),
+        )
+    merged_tensor = update_site(
+        left_blocks[i],
+        right_blocks[i + 1],
+        merged_mpo,
+        merged_tensor,
+        dt,
+        krylov_tol=sim_params.krylov_tol,
+    )
+    state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+        merged_tensor,
+        sim_params,
+        [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+        "left",
+        dynamic=dynamic,
+    )
+    right_blocks[i] = update_right_environment(
+        state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+    )
+
+    for i in reversed(range(num_sites - 2)):
+        state.tensors[i + 1] = update_site(
+            left_blocks[i + 1],
+            right_blocks[i + 1],
+            hamiltonian.tensors[i + 1],
+            state.tensors[i + 1],
+            -0.5 * dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+        if debug_projector:
+            pair = (i, i + 1)
+            contains_left = left_gen_site is not None and i <= left_gen_site <= i + 1
+            contains_right = right_gen_site is not None and i <= right_gen_site <= i + 1
+            projected = project_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor)
+            updated_dbg = update_site(
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                0.5 * dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            print(
+                "[tdvp-debug] pair",
+                pair,
+                "contains_left",
+                contains_left,
+                "contains_right",
+                contains_right,
+                "merged_tensor_norm",
+                float(np.linalg.norm(merged_tensor)),
+                "merged_mpo_norm",
+                float(np.linalg.norm(merged_mpo)),
+                "left_block_norm",
+                float(np.linalg.norm(left_blocks[i])),
+                "right_block_norm",
+                float(np.linalg.norm(right_blocks[i + 1])),
+                "project_site_norm",
+                float(np.linalg.norm(projected)),
+                "update_delta_norm",
+                float(np.linalg.norm(updated_dbg - merged_tensor)),
+            )
+        merged_tensor = update_site(
+            left_blocks[i],
+            right_blocks[i + 1],
+            merged_mpo,
+            merged_tensor,
+            0.5 * dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+            merged_tensor,
+            sim_params,
+            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+            "left",
+            dynamic=dynamic,
+        )
+        right_blocks[i] = update_right_environment(
+            state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+        )
+
+
+def _two_site_tdvp_circuit_lr_sweep(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: StrongSimParams | WeakSimParams,
+    *,
+    dt_sub: float,
+    dynamic: bool = False,
+) -> None:
+    """One partial left-to-right circuit TDVP sweep with total evolution time ``dt_sub``.
+
+    Uses ``dt_lr = 2 * dt_sub`` on the forward pass. This path matches the legacy circuit
+    integrator and remains appropriate for skip-site gate generator MPOs.
+
+    Args:
+        state: MPS updated in place.
+        hamiltonian: Generator MPO for the gate window.
+        sim_params: Circuit simulation parameters.
+        dt_sub: Total evolution time for this sweep (typically ``1 / num_sweeps``).
+        dynamic: If True, bond growth is uncapped during splitting.
+    """
+    num_sites = hamiltonian.length
+    debug_projector = os.environ.get("YAQS_DEBUG_TDVP_PROJECTOR", "").lower() in {"1", "true", "yes", "on"}
+    nontrivial_sites: list[int] = []
+    if debug_projector:
+        # Identify "nontrivial" MPO sites by checking whether any (alpha,beta) block differs from identity.
+        for idx, w in enumerate(hamiltonian.tensors):
+            eye = np.eye(w.shape[0], dtype=w.dtype)
+            is_nontrivial = False
+            for a in range(w.shape[2]):
+                for b in range(w.shape[3]):
+                    if not np.allclose(w[:, :, a, b], eye if (a == 0 and b == 0) else 0.0, atol=1e-12, rtol=0.0):
+                        is_nontrivial = True
+                        break
+                if is_nontrivial:
+                    break
+            if is_nontrivial:
+                nontrivial_sites.append(idx)
+        print(f"[tdvp-debug] sweep=circuit_lr num_sites={num_sites} nontrivial_mpo_sites={nontrivial_sites}")
+        left_gen_site = nontrivial_sites[0] if nontrivial_sites else None
+        right_gen_site = nontrivial_sites[-1] if nontrivial_sites else None
+    right_blocks = initialize_right_environments(state, hamiltonian)
+
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    left_virtual_dim = state.tensors[0].shape[1]
+    mpo_left_dim = hamiltonian.tensors[0].shape[2]
+    left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
+    for i in range(left_virtual_dim):
+        for a in range(mpo_left_dim):
+            left_identity[i, a, i] = 1
+    left_blocks[0] = left_identity
+
+    dt_lr = 2.0 * dt_sub
+
+    for i in range(num_sites - 2):
+        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+        if debug_projector:
+            pair = (i, i + 1)
+            contains_left = left_gen_site is not None and i <= left_gen_site <= i + 1
+            contains_right = right_gen_site is not None and i <= right_gen_site <= i + 1
+            projected = project_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor)
+            updated_dbg = update_site(
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                0.5 * dt_lr,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            print(
+                "[tdvp-debug] pair",
+                pair,
+                "contains_left",
+                contains_left,
+                "contains_right",
+                contains_right,
+                "merged_tensor_norm",
+                float(np.linalg.norm(merged_tensor)),
+                "merged_mpo_norm",
+                float(np.linalg.norm(merged_mpo)),
+                "left_block_norm",
+                float(np.linalg.norm(left_blocks[i])),
+                "right_block_norm",
+                float(np.linalg.norm(right_blocks[i + 1])),
+                "project_site_norm",
+                float(np.linalg.norm(projected)),
+                "update_delta_norm",
+                float(np.linalg.norm(updated_dbg - merged_tensor)),
+            )
+        merged_tensor = update_site(
+            left_blocks[i],
+            right_blocks[i + 1],
+            merged_mpo,
+            merged_tensor,
+            0.5 * dt_lr,
+            krylov_tol=sim_params.krylov_tol,
+        )
+        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+            merged_tensor,
+            sim_params,
+            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+            "right",
+            dynamic=dynamic,
+        )
+        left_blocks[i + 1] = update_left_environment(
+            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+        )
+        state.tensors[i + 1] = update_site(
+            left_blocks[i + 1],
+            right_blocks[i + 1],
+            hamiltonian.tensors[i + 1],
+            state.tensors[i + 1],
+            -0.5 * dt_lr,
+            krylov_tol=sim_params.krylov_tol,
+        )
+
+    i = num_sites - 2
+    merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+    merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+    if debug_projector:
+        pair = (i, i + 1)
+        contains_left = left_gen_site is not None and i <= left_gen_site <= i + 1
+        contains_right = right_gen_site is not None and i <= right_gen_site <= i + 1
+        projected = project_site(left_blocks[i], right_blocks[i + 1], merged_mpo, merged_tensor)
+        updated_dbg = update_site(
+            left_blocks[i],
+            right_blocks[i + 1],
+            merged_mpo,
+            merged_tensor,
+            dt_sub,
+            krylov_tol=sim_params.krylov_tol,
+        )
+        print(
+            "[tdvp-debug] pair",
+            pair,
+            "contains_left",
+            contains_left,
+            "contains_right",
+            contains_right,
+            "merged_tensor_norm",
+            float(np.linalg.norm(merged_tensor)),
+            "merged_mpo_norm",
+            float(np.linalg.norm(merged_mpo)),
+            "left_block_norm",
+            float(np.linalg.norm(left_blocks[i])),
+            "right_block_norm",
+            float(np.linalg.norm(right_blocks[i + 1])),
+            "project_site_norm",
+            float(np.linalg.norm(projected)),
+            "update_delta_norm",
+            float(np.linalg.norm(updated_dbg - merged_tensor)),
+        )
+    merged_tensor = update_site(
+        left_blocks[i],
+        right_blocks[i + 1],
+        merged_mpo,
+        merged_tensor,
+        dt_sub,
+        krylov_tol=sim_params.krylov_tol,
+    )
+    state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+        merged_tensor,
+        sim_params,
+        [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+        "right",
+        dynamic=dynamic,
+    )
+
+
 def two_site_tdvp(
     state: MPS,
     hamiltonian: MPO,
@@ -684,6 +1083,11 @@ def two_site_tdvp(
       - Applying the local Hamiltonian evolution on the merged tensor.
       - Splitting the merged tensor back into two tensors via SVD, using a specified singular value distribution.
       - Updating the operator blocks via left-to-right and right-to-left sweeps.
+
+    For circuit simulation parameters, performs ``tdvp_sweeps`` updates with
+    ``dt = 1 / tdvp_sweeps`` each. By default each update is a full symmetric LR+RL sweep;
+    set ``tdvp_circuit_full_sweep=True`` to use a full symmetric LR+RL sweep instead of the
+    default partial left-to-right integrator for skip-site gate generator MPOs.
 
     Args:
         state: The initial state represented as an MPS.
@@ -703,119 +1107,17 @@ def two_site_tdvp(
         msg = "Hamiltonian is too short for a two-site update (2TDVP)."
         raise ValueError(msg)
 
-    right_blocks = initialize_right_environments(state, hamiltonian)
-
-    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
-    left_virtual_dim = state.tensors[0].shape[1]
-    mpo_left_dim = hamiltonian.tensors[0].shape[2]
-    left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
-    for i in range(left_virtual_dim):
-        for a in range(mpo_left_dim):
-            left_identity[i, a, i] = 1
-    left_blocks[0] = left_identity
-
-    # Adjust simulation time step if simulation parameters require a unit time step.
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 2
-
-    # Left-to-right sweep for sites 0 to L-2.
-    for i in range(num_sites - 2):
-        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i],
-            right_blocks[i + 1],
-            merged_mpo,
-            merged_tensor,
-            0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-            merged_tensor,
-            sim_params,
-            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-            "right",
-            dynamic=dynamic,
-        )
-        left_blocks[i + 1] = update_left_environment(
-            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-        )
-        state.tensors[i + 1] = update_site(
-            left_blocks[i + 1],
-            right_blocks[i + 1],
-            hamiltonian.tensors[i + 1],
-            state.tensors[i + 1],
-            -0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-
-    # Guarantees unit time at final site for circuits
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 1
-
-    i = num_sites - 2
-    merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-    merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-    merged_tensor = update_site(
-        left_blocks[i],
-        right_blocks[i + 1],
-        merged_mpo,
-        merged_tensor,
-        sim_params.dt,
-        krylov_tol=sim_params.krylov_tol,
-    )
-    # Only a single sweep is needed for circuits
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-            merged_tensor,
-            sim_params,
-            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-            "right",
-            dynamic=dynamic,
-        )
+        num_sweeps = sim_params.tdvp_sweeps
+        dt_sub = 1.0 / num_sweeps
+        for _ in range(num_sweeps):
+            if sim_params.tdvp_circuit_full_sweep:
+                _two_site_tdvp_symmetric_sweep(state, hamiltonian, sim_params, dt=dt_sub, dynamic=dynamic)
+            else:
+                _two_site_tdvp_circuit_lr_sweep(state, hamiltonian, sim_params, dt_sub=dt_sub, dynamic=dynamic)
         return
 
-    state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-        merged_tensor,
-        sim_params,
-        [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-        "left",
-        dynamic=dynamic,
-    )
-    right_blocks[i] = update_right_environment(
-        state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
-    )
-
-    # Right-to-left sweep.
-    for i in reversed(range(num_sites - 2)):
-        state.tensors[i + 1] = update_site(
-            left_blocks[i + 1],
-            right_blocks[i + 1],
-            hamiltonian.tensors[i + 1],
-            state.tensors[i + 1],
-            -0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i],
-            right_blocks[i + 1],
-            merged_mpo,
-            merged_tensor,
-            0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-            merged_tensor,
-            sim_params,
-            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-            "left",
-            dynamic=dynamic,
-        )
-        right_blocks[i] = update_right_environment(
-            state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
-        )
+    _two_site_tdvp_symmetric_sweep(state, hamiltonian, sim_params, dt=sim_params.dt, dynamic=dynamic)
 
 
 def local_dynamic_tdvp(

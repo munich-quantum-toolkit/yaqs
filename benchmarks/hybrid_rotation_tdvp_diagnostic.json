@@ -1,0 +1,5433 @@
+{
+  "meta": {
+    "generated_at": "2026-05-28T07:22:19.077752+00:00",
+    "title": "Hybrid TDVP Rotation Diagnostic Benchmark",
+    "description": "Minimal diagnostic probes for long-range Pauli rotations",
+    "basename": "hybrid_rotation_tdvp_diagnostic",
+    "probe_ids": [
+      "rzz_one_active_lr_6q",
+      "rzz_both_active_lr_6q",
+      "rxx_vacuum_lr_6q",
+      "ryy_vacuum_lr_6q",
+      "rxx_one_active_lr_6q",
+      "ryy_one_active_lr_6q",
+      "rxx_both_active_lr_6q",
+      "ryy_both_active_lr_6q",
+      "rzz_repeated_same_pair_6q",
+      "rxx_repeated_same_pair_6q",
+      "mixed_axes_same_pair_6q",
+      "mixed_axes_disjoint_pairs_8q",
+      "stack_core_rxx_ryy_vacuum_10q",
+      "stack_core_rxx_ryy_active_10q",
+      "minimal_mixed_stack_10q",
+      "lr_stack_mixed_12q"
+    ],
+    "settings": {
+      "gate_family": "Minimal RX/RY/RZ/RXX/RYY/RZZ probes for TDVP padding/sweep/failure diagnosis",
+      "pass_tol": 1e-10,
+      "warn_tol": 1e-06,
+      "study_sweep_counts": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32
+      ],
+      "study_pad_values": [
+        "None",
+        2,
+        4,
+        8,
+        16
+      ],
+      "required_paths_per_probe": [
+        "simulator/hybrid (auto-padding, 4 sweeps)",
+        "direct_mps/hybrid (pad=None, 4 sweeps)",
+        "direct_mps/hybrid (pad=2, 4 sweeps)",
+        "direct_mps/hybrid (pad=4, 4 sweeps)",
+        "simulator/tebd reference"
+      ]
+    }
+  },
+  "rows": [
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 2.886579864025407e-15,
+      "obs_l2_error": 3.967397163063965e-15,
+      "obs_mean_error": 5.366077952354923e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865477,
+        "simulated": 0.7071067811865448,
+        "abs_error": 2.886579864025407e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 5.20740757162067e-16,
+      "obs_mean_error": 7.401486830834377e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 1.0,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999993,
+      "fidelity_error": 6.661338147750939e-16,
+      "obs_max_error": 3.3306690738754696e-15,
+      "obs_l2_error": 4.327378194157055e-15,
+      "obs_mean_error": 5.952028993129311e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.5367002131469369,
+        "simulated": 0.5367002131469336,
+        "abs_error": 3.3306690738754696e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 5.606351459942525e-16,
+      "obs_mean_error": 8.635067969306773e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865475,
+        "simulated": 0.7071067811865472,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 7.243500591455985e-16,
+      "obs_l2_error": 7.292599455056421e-16,
+      "obs_mean_error": 4.493506560614021e-17,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": 7.243500591455985e-16,
+        "abs_error": 7.243500591455985e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 5.438959822042073e-16,
+      "obs_mean_error": 7.401486830834377e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.9130889403123084,
+        "simulated": 0.9130889403123081,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 7.276474409565837e-16,
+      "obs_l2_error": 7.32535226637821e-16,
+      "obs_mean_error": 4.5118253484527845e-17,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": -7.276474409565837e-16,
+        "abs_error": 7.276474409565837e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 5.438959822042073e-16,
+      "obs_mean_error": 7.401486830834377e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.9130889403123084,
+        "simulated": 0.9130889403123081,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 4.440892098500626e-16,
+      "obs_l2_error": 5.874748045952207e-16,
+      "obs_mean_error": 6.167905692361981e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.7071067811865476,
+        "simulated": 0.707106781186548,
+        "abs_error": 4.440892098500626e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 2.7755575615628914e-16,
+      "obs_l2_error": 3.3766115072321297e-16,
+      "obs_mean_error": 3.39234813079909e-17,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.28833018145812095,
+        "simulated": -0.28833018145812067,
+        "abs_error": 2.7755575615628914e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 9.992007221626409e-16,
+      "obs_l2_error": 1.4518049907399379e-15,
+      "obs_mean_error": 1.9120507646322142e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.6456513815212721,
+        "simulated": 0.6456513815212711,
+        "abs_error": 9.992007221626409e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 5.551115123125783e-16,
+      "obs_l2_error": 8.54583310691029e-16,
+      "obs_mean_error": 1.1410625530869663e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.6456513815212725,
+        "abs_error": 5.551115123125783e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 1.4876988529977098e-14,
+      "obs_l2_error": 1.86661353383865e-14,
+      "obs_mean_error": 1.8889211182858567e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845191102,
+        "abs_error": 1.4876988529977098e-14
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 3.925231146709438e-16,
+      "obs_mean_error": 4.9343245538895844e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.587785252292473,
+        "simulated": 0.5877852522924728,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 2.603703785810335e-16,
+      "obs_mean_error": 2.4671622769447922e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.5367002131469369,
+        "simulated": 0.5367002131469372,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 7.771561172376096e-16,
+      "obs_l2_error": 1.5152231144963516e-15,
+      "obs_mean_error": 2.135637345980336e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.5367002131469369,
+        "simulated": 0.5367002131469377,
+        "abs_error": 7.771561172376096e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 4.3298697960381105e-15,
+      "obs_l2_error": 7.173836463283643e-15,
+      "obs_mean_error": 8.665907497768583e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.4300759263905931,
+        "simulated": 0.43007592639059744,
+        "abs_error": 4.3298697960381105e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999991,
+      "fidelity_error": 8.881784197001252e-16,
+      "obs_max_error": 9.992007221626409e-16,
+      "obs_l2_error": 2.3512101803899033e-15,
+      "obs_mean_error": 3.7007434154171886e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865476,
+        "simulated": 0.7071067811865466,
+        "abs_error": 9.992007221626409e-16
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 6.8833827526759706e-15,
+      "obs_l2_error": 1.0576294775109601e-14,
+      "obs_mean_error": 1.2274132327800342e-15,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.7071067811865476,
+        "simulated": 0.7071067811865407,
+        "abs_error": 6.8833827526759706e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.3322676295501878e-15,
+      "obs_l2_error": 1.9397156336316165e-15,
+      "obs_mean_error": 1.881211236170404e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.5877852522924731,
+        "simulated": 0.5877852522924745,
+        "abs_error": 1.3322676295501878e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999989,
+      "fidelity_error": 1.1102230246251565e-15,
+      "obs_max_error": 1.1830814106161824e-14,
+      "obs_l2_error": 2.0100367198585267e-14,
+      "obs_mean_error": 2.4494295480792516e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.020583000067726953,
+        "simulated": 0.020583000067715122,
+        "abs_error": 1.1830814106161824e-14
+      },
+      "meta": {}
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 1.5543122344752192e-15,
+      "obs_l2_error": 3.962886082234892e-15,
+      "obs_mean_error": 6.418476861114186e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.9999999999999998,
+        "simulated": 1.0000000000000013,
+        "abs_error": 1.5543122344752192e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.97364240963201,
+      "fidelity_error": 0.026357590367990014,
+      "obs_max_error": 0.03108757828935449,
+      "obs_l2_error": 0.053834528543572395,
+      "obs_mean_error": 0.004421388630435415,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 0.999999999999999,
+        "abs_error": 0.03108757828935449
+      },
+      "meta": {}
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999991,
+      "fidelity_error": 8.881784197001252e-16,
+      "obs_max_error": 5.10702591327572e-15,
+      "obs_l2_error": 6.2105066992988106e-15,
+      "obs_mean_error": 5.871452951134307e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 7,
+        "reference": 0.5772076070906816,
+        "simulated": 0.5772076070906765,
+        "abs_error": 5.10702591327572e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553223,
+      "fidelity_error": 0.015543789144677689,
+      "obs_max_error": 0.03108757828935549,
+      "obs_l2_error": 0.04396447483814191,
+      "obs_mean_error": 0.0020725052192905095,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 1.0000000000000002,
+        "abs_error": 0.03108757828935549
+      },
+      "meta": {}
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 4,
+      "fidelity": 1.0000000000000013,
+      "fidelity_error": -1.3322676295501878e-15,
+      "obs_max_error": 1.6653345369377348e-15,
+      "obs_l2_error": 5.32655265102377e-15,
+      "obs_mean_error": 6.02754207539695e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.9999999999999999,
+        "simulated": 1.0000000000000016,
+        "abs_error": 1.6653345369377348e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553219,
+      "fidelity_error": 0.015543789144678133,
+      "obs_max_error": 0.02198223741907135,
+      "obs_l2_error": 0.04396447483814109,
+      "obs_mean_error": 0.002930964989209968,
+      "worst_observable": {
+        "name": "x",
+        "site": 3,
+        "reference": 0.6851245437674767,
+        "simulated": 0.707106781186548,
+        "abs_error": 0.02198223741907135
+      },
+      "meta": {}
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 4,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 2.220446049250313e-15,
+      "obs_l2_error": 4.429807926365594e-15,
+      "obs_mean_error": 5.169475958410885e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 8,
+        "reference": 0.6851245437674766,
+        "simulated": 0.6851245437674788,
+        "abs_error": 2.220446049250313e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320113,
+      "fidelity_error": 0.02635759036798868,
+      "obs_max_error": 0.031087578289356266,
+      "obs_l2_error": 0.0538345285435759,
+      "obs_mean_error": 0.0035371109043475504,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 1.0000000000000007,
+        "abs_error": 0.031087578289356266
+      },
+      "meta": {}
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 1.181261408585197e-15,
+      "obs_l2_error": 2.0054563651067616e-15,
+      "obs_mean_error": 2.5280985464379413e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 9,
+        "reference": 0.0,
+        "simulated": -1.181261408585197e-15,
+        "abs_error": 1.181261408585197e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320111,
+      "fidelity_error": 0.026357590367988903,
+      "obs_max_error": 0.031087578289355378,
+      "obs_l2_error": 0.05383452854357433,
+      "obs_mean_error": 0.002947592420289754,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 1.0,
+        "abs_error": 0.031087578289355378
+      },
+      "meta": {}
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "tebd",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 4,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.1735133845437006e-15,
+      "obs_l2_error": 2.8462208535931338e-15,
+      "obs_mean_error": 3.442135070392559e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 8,
+        "reference": 0.0,
+        "simulated": 1.1735133845437006e-15,
+        "abs_error": 1.1735133845437006e-15
+      },
+      "meta": {}
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 5.551115123125783e-16,
+      "obs_mean_error": 8.018277400070575e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865477,
+        "simulated": 0.7071067811865475,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 9.992007221626409e-16,
+      "obs_l2_error": 1.3414875847488985e-15,
+      "obs_mean_error": 1.7270135938613546e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.645651381521271,
+        "abs_error": 9.992007221626409e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 2.886579864025407e-15,
+      "obs_l2_error": 3.967397163063965e-15,
+      "obs_mean_error": 5.366077952354923e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865477,
+        "simulated": 0.7071067811865448,
+        "abs_error": 2.886579864025407e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 3.1086244689504383e-15,
+      "obs_l2_error": 4.555974381910842e-15,
+      "obs_mean_error": 4.3175339846533865e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865477,
+        "simulated": 0.7071067811865508,
+        "abs_error": 3.1086244689504383e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 6.328271240363392e-15,
+      "obs_l2_error": 9.278170416749356e-15,
+      "obs_mean_error": 9.62193288008469e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865477,
+        "simulated": 0.707106781186554,
+        "abs_error": 6.328271240363392e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 8.104628079763643e-15,
+      "obs_l2_error": 1.2141089560312637e-14,
+      "obs_mean_error": 1.2027416100105863e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.28833018145812095,
+        "simulated": 0.28833018145811284,
+        "abs_error": 8.104628079763643e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 4.440892098500626e-16,
+      "obs_l2_error": 1.1963908787133885e-15,
+      "obs_mean_error": 2.0045693500176438e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.6456513815212719,
+        "simulated": 0.6456513815212723,
+        "abs_error": 4.440892098500626e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999993,
+      "fidelity_error": 6.661338147750939e-16,
+      "obs_max_error": 3.885780586188048e-15,
+      "obs_l2_error": 5.3720484601943135e-15,
+      "obs_mean_error": 6.800116025829084e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.6456513815212719,
+        "simulated": 0.645651381521268,
+        "abs_error": 3.885780586188048e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999993,
+      "fidelity_error": 6.661338147750939e-16,
+      "obs_max_error": 3.3306690738754696e-15,
+      "obs_l2_error": 4.327378194157055e-15,
+      "obs_mean_error": 5.952028993129311e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.5367002131469369,
+        "simulated": 0.5367002131469336,
+        "abs_error": 3.3306690738754696e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999993,
+      "fidelity_error": 6.661338147750939e-16,
+      "obs_max_error": 1.3655743202889425e-14,
+      "obs_l2_error": 1.7290119680662453e-14,
+      "obs_mean_error": 1.9043408825167617e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": 0.16947622845189614,
+        "simulated": 0.16947622845188248,
+        "abs_error": 1.3655743202889425e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 1.2601031329495527e-14,
+      "obs_l2_error": 1.8513197803274088e-14,
+      "obs_mean_error": 2.291376964712476e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": 0.16947622845189614,
+        "simulated": 0.16947622845188354,
+        "abs_error": 1.2601031329495527e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 3.391731340229853e-14,
+      "obs_l2_error": 4.15043035002678e-14,
+      "obs_mean_error": 4.823302251427069e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": 0.16947622845189614,
+        "simulated": 0.16947622845186222,
+        "abs_error": 3.391731340229853e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 5.438959822042073e-16,
+      "obs_mean_error": 7.401486830834377e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.9130889403123084,
+        "simulated": 0.9130889403123081,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 4.2479107793809336e-16,
+      "obs_l2_error": 4.3483210229402346e-16,
+      "obs_mean_error": 2.9786694750562024e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.0,
+        "simulated": -4.2479107793809336e-16,
+        "abs_error": 4.2479107793809336e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 7.243500591455985e-16,
+      "obs_l2_error": 7.292599455056421e-16,
+      "obs_mean_error": 4.493506560614021e-17,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": 7.243500591455985e-16,
+        "abs_error": 7.243500591455985e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 6.134677375285615e-16,
+      "obs_l2_error": 8.198570024377979e-16,
+      "obs_mean_error": 1.0809640928217486e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": 6.134677375285615e-16,
+        "abs_error": 6.134677375285615e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 4.72375103888059e-16,
+      "obs_l2_error": 5.829226831867495e-16,
+      "obs_mean_error": 5.651885849288929e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": -4.72375103888059e-16,
+        "abs_error": 4.72375103888059e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 2.6466013317565524e-15,
+      "obs_l2_error": 3.221046328554492e-15,
+      "obs_mean_error": 2.972703077306036e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": 2.6466013317565524e-15,
+        "abs_error": 2.6466013317565524e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 5.438959822042073e-16,
+      "obs_mean_error": 7.401486830834377e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.9130889403123084,
+        "simulated": 0.9130889403123081,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 5.153320866417574e-16,
+      "obs_l2_error": 5.269077683368585e-16,
+      "obs_mean_error": 3.473173484763281e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.0,
+        "simulated": -5.153320866417574e-16,
+        "abs_error": 5.153320866417574e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 7.276474409565837e-16,
+      "obs_l2_error": 7.32535226637821e-16,
+      "obs_mean_error": 4.5118253484527845e-17,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": -7.276474409565837e-16,
+        "abs_error": 7.276474409565837e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 6.117581346724736e-16,
+      "obs_l2_error": 8.1857855749819375e-16,
+      "obs_mean_error": 1.0800143134572676e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": -6.117581346724736e-16,
+        "abs_error": 6.117581346724736e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 1.6749290444916933e-15,
+      "obs_l2_error": 1.7985840461994206e-15,
+      "obs_mean_error": 1.8507737179896194e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": -1.6749290444916933e-15,
+        "abs_error": 1.6749290444916933e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 1.392018769528117e-15,
+      "obs_l2_error": 1.7797783205057287e-15,
+      "obs_mean_error": 1.7679008313723653e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.0,
+        "simulated": -1.392018769528117e-15,
+        "abs_error": 1.392018769528117e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 2.9373740229761033e-16,
+      "obs_mean_error": 3.0839528461809905e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.7071067811865476,
+        "simulated": 0.7071067811865478,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 7.771561172376096e-16,
+      "obs_l2_error": 1.0295784775289034e-15,
+      "obs_mean_error": 1.356939252319636e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.28833018145812095,
+        "simulated": -0.2883301814581217,
+        "abs_error": 7.771561172376096e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 4.440892098500626e-16,
+      "obs_l2_error": 5.874748045952207e-16,
+      "obs_mean_error": 6.167905692361981e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.7071067811865476,
+        "simulated": 0.707106781186548,
+        "abs_error": 4.440892098500626e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 1.4432899320127035e-15,
+      "obs_l2_error": 1.880837080092392e-15,
+      "obs_mean_error": 2.528841333868412e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.6456513815212721,
+        "simulated": 0.6456513815212735,
+        "abs_error": 1.4432899320127035e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 3.3306690738754696e-16,
+      "obs_l2_error": 5.661048867003676e-16,
+      "obs_mean_error": 7.401486830834377e-17,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.28833018145812095,
+        "simulated": -0.2883301814581206,
+        "abs_error": 3.3306690738754696e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 2.55351295663786e-15,
+      "obs_l2_error": 3.6826116135695276e-15,
+      "obs_mean_error": 3.793262000802618e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.7071067811865476,
+        "simulated": 0.707106781186545,
+        "abs_error": 2.55351295663786e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 3.3306690738754696e-16,
+      "obs_l2_error": 5.775561153410717e-16,
+      "obs_mean_error": 8.172475042379625e-17,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.6456513815212721,
+        "simulated": 0.6456513815212718,
+        "abs_error": 3.3306690738754696e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 3.3306690738754696e-16,
+      "obs_l2_error": 6.804363002006077e-16,
+      "obs_mean_error": 1.0331242034706318e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.6456513815212721,
+        "simulated": 0.6456513815212718,
+        "abs_error": 3.3306690738754696e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 9.992007221626409e-16,
+      "obs_l2_error": 1.4518049907399379e-15,
+      "obs_mean_error": 1.9120507646322142e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.6456513815212721,
+        "simulated": 0.6456513815212711,
+        "abs_error": 9.992007221626409e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 2.498001805406602e-16,
+      "obs_l2_error": 3.521787733787174e-16,
+      "obs_mean_error": 3.23815048849004e-17,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -2.7755575615628914e-17,
+        "simulated": 2.220446049250313e-16,
+        "abs_error": 2.498001805406602e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.7763568394002505e-15,
+      "obs_l2_error": 2.0242227370796538e-15,
+      "obs_mean_error": 1.8463710991047255e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.6456513815212738,
+        "abs_error": 1.7763568394002505e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 1.6653345369377348e-15,
+      "obs_l2_error": 2.477478402725902e-15,
+      "obs_mean_error": 3.616506240584933e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.6456513815212703,
+        "abs_error": 1.6653345369377348e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 6.661338147750939e-16,
+      "obs_l2_error": 1.227537204523176e-15,
+      "obs_mean_error": 1.881211236170404e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.587785252292473,
+        "simulated": 0.5877852522924737,
+        "abs_error": 6.661338147750939e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 2.55351295663786e-15,
+      "obs_l2_error": 3.90516115821561e-15,
+      "obs_mean_error": 5.643633708511212e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.1694762284518987,
+        "abs_error": 2.55351295663786e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 1.4876988529977098e-14,
+      "obs_l2_error": 1.86661353383865e-14,
+      "obs_mean_error": 1.8889211182858567e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845191102,
+        "abs_error": 1.4876988529977098e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.2073675392798577e-14,
+      "obs_l2_error": 1.742548443045231e-14,
+      "obs_mean_error": 1.9629359865942006e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.1694762284519082,
+        "abs_error": 1.2073675392798577e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.0186296250935811e-14,
+      "obs_l2_error": 1.4948612952892467e-14,
+      "obs_mean_error": 1.8889211182858567e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845188595,
+        "abs_error": 1.0186296250935811e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 2.3425705819590803e-14,
+      "obs_l2_error": 2.7813925889907462e-14,
+      "obs_mean_error": 3.1348380681429767e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.1694762284518727,
+        "abs_error": 2.3425705819590803e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 4.440892098500626e-16,
+      "obs_l2_error": 9.02483115344194e-16,
+      "obs_mean_error": 1.3800688986659932e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.6456513815212718,
+        "simulated": 0.6456513815212722,
+        "abs_error": 4.440892098500626e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 5.551115123125783e-16,
+      "obs_l2_error": 7.180330397081064e-16,
+      "obs_mean_error": 9.483155002006545e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.6456513815212718,
+        "simulated": 0.6456513815212723,
+        "abs_error": 5.551115123125783e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999998,
+      "fidelity_error": 2.220446049250313e-16,
+      "obs_max_error": 2.220446049250313e-16,
+      "obs_l2_error": 2.603703785810335e-16,
+      "obs_mean_error": 2.4671622769447922e-17,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.5367002131469369,
+        "simulated": 0.5367002131469372,
+        "abs_error": 2.220446049250313e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.3322676295501878e-15,
+      "obs_l2_error": 2.16795743414916e-15,
+      "obs_mean_error": 3.284409781182755e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.6456513815212718,
+        "simulated": 0.6456513815212731,
+        "abs_error": 1.3322676295501878e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 2.3314683517128287e-15,
+      "obs_l2_error": 3.7324799859770865e-15,
+      "obs_mean_error": 4.780126911580535e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.6456513815212719,
+        "simulated": 0.6456513815212742,
+        "abs_error": 2.3314683517128287e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 9.992007221626409e-16,
+      "obs_l2_error": 1.6091054089879258e-15,
+      "obs_mean_error": 2.3592239273284576e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.6456513815212719,
+        "simulated": 0.6456513815212729,
+        "abs_error": 9.992007221626409e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 8.881784197001252e-16,
+      "obs_l2_error": 1.6279065094399114e-15,
+      "obs_mean_error": 2.528841333868412e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.4300759263905931,
+        "simulated": 0.4300759263905922,
+        "abs_error": 8.881784197001252e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999984,
+      "fidelity_error": 1.5543122344752192e-15,
+      "obs_max_error": 8.992806499463768e-15,
+      "obs_l2_error": 1.4898618012905532e-14,
+      "obs_mean_error": 1.958310057324929e-15,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.4300759263905931,
+        "simulated": 0.4300759263905841,
+        "abs_error": 8.992806499463768e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 4.3298697960381105e-15,
+      "obs_l2_error": 7.173836463283643e-15,
+      "obs_mean_error": 8.665907497768583e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.4300759263905931,
+        "simulated": 0.43007592639059744,
+        "abs_error": 4.3298697960381105e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 6.217248937900877e-15,
+      "obs_l2_error": 7.378808162556126e-15,
+      "obs_mean_error": 9.3443771239284e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.4300759263905931,
+        "simulated": 0.4300759263905869,
+        "abs_error": 6.217248937900877e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.1657341758564144e-14,
+      "obs_l2_error": 1.6226071878474584e-14,
+      "obs_mean_error": 2.0508286427103585e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.38993922527385544,
+        "simulated": 0.3899392252738438,
+        "abs_error": 1.1657341758564144e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 9.769962616701378e-15,
+      "obs_l2_error": 1.544657008731501e-14,
+      "obs_mean_error": 1.8041124150158794e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.38993922527385544,
+        "simulated": 0.38993922527384567,
+        "abs_error": 9.769962616701378e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999991,
+      "fidelity_error": 8.881784197001252e-16,
+      "obs_max_error": 1.3322676295501878e-15,
+      "obs_l2_error": 3.2292034762291225e-15,
+      "obs_mean_error": 5.181040781584064e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 5,
+        "reference": 0.5919487295139038,
+        "simulated": 0.5919487295139024,
+        "abs_error": 1.3322676295501878e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 1.0325074129013956e-14,
+      "obs_l2_error": 1.456223724475859e-14,
+      "obs_mean_error": 1.6684184897839159e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.2833074304989188,
+        "simulated": -0.2833074304989085,
+        "abs_error": 1.0325074129013956e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 6.8833827526759706e-15,
+      "obs_l2_error": 1.0576294775109601e-14,
+      "obs_mean_error": 1.2274132327800342e-15,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.7071067811865476,
+        "simulated": 0.7071067811865407,
+        "abs_error": 6.8833827526759706e-15
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0,
+      "fidelity_error": 0.0,
+      "obs_max_error": 2.0317081350640365e-14,
+      "obs_l2_error": 2.9983422238171803e-14,
+      "obs_mean_error": 3.231982582797678e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.2833074304989188,
+        "simulated": -0.28330743049893914,
+        "abs_error": 2.0317081350640365e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 1.63202784619898e-14,
+      "obs_l2_error": 2.2976856102509523e-14,
+      "obs_mean_error": 2.7169624574854524e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 5,
+        "reference": 0.5919487295139038,
+        "simulated": 0.5919487295139201,
+        "abs_error": 1.63202784619898e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.5210055437364645e-14,
+      "obs_l2_error": 2.63317776340794e-14,
+      "obs_mean_error": 3.191891195797325e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.2833074304989188,
+        "simulated": -0.2833074304989036,
+        "abs_error": 1.5210055437364645e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 9.992007221626409e-16,
+      "obs_l2_error": 1.8220774369887044e-15,
+      "obs_mean_error": 2.7023136814660927e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.5923027876258449,
+        "simulated": 0.5923027876258459,
+        "abs_error": 9.992007221626409e-16
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 1.7950918529408e-14,
+      "obs_l2_error": 2.5282992114009073e-14,
+      "obs_mean_error": 2.9831461375214494e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.04033544998818034,
+        "simulated": -0.04033544998816239,
+        "abs_error": 1.7950918529408e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999989,
+      "fidelity_error": 1.1102230246251565e-15,
+      "obs_max_error": 1.1830814106161824e-14,
+      "obs_l2_error": 2.0100367198585267e-14,
+      "obs_mean_error": 2.4494295480792516e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.020583000067726953,
+        "simulated": 0.020583000067715122,
+        "abs_error": 1.1830814106161824e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000009,
+      "fidelity_error": -8.881784197001252e-16,
+      "obs_max_error": 1.0068335054569388e-14,
+      "obs_l2_error": 1.5033169291584193e-14,
+      "obs_mean_error": 1.9771992685077876e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.04033544998818034,
+        "simulated": -0.04033544998819041,
+        "abs_error": 1.0068335054569388e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999989,
+      "fidelity_error": 1.1102230246251565e-15,
+      "obs_max_error": 2.433470092100265e-14,
+      "obs_l2_error": 3.959459528407003e-14,
+      "obs_mean_error": 4.896353384470981e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.04033544998818034,
+        "simulated": -0.040335449988156004,
+        "abs_error": 2.433470092100265e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 2.9531932455029164e-14,
+      "obs_l2_error": 4.8358044235209034e-14,
+      "obs_mean_error": 6.155569880977257e-15,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.7002591393507076,
+        "simulated": 0.7002591393507371,
+        "abs_error": 2.9531932455029164e-14
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320104,
+      "fidelity_error": 0.02635759036798957,
+      "obs_max_error": 0.03108757828935471,
+      "obs_l2_error": 0.05383452854357284,
+      "obs_mean_error": 0.004421388630433959,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 0.9999999999999992,
+        "abs_error": 0.03108757828935471
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.973642409632012,
+      "fidelity_error": 0.026357590367988015,
+      "obs_max_error": 0.031087578289356377,
+      "obs_l2_error": 0.05383452854357612,
+      "obs_mean_error": 0.004421388630436135,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 1.0000000000000009,
+        "abs_error": 0.031087578289356377
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.97364240963201,
+      "fidelity_error": 0.026357590367990014,
+      "obs_max_error": 0.03108757828935449,
+      "obs_l2_error": 0.053834528543572395,
+      "obs_mean_error": 0.004421388630435415,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 0.999999999999999,
+        "abs_error": 0.03108757828935449
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320115,
+      "fidelity_error": 0.02635759036798846,
+      "obs_max_error": 0.031087578289355933,
+      "obs_l2_error": 0.05383452854357525,
+      "obs_mean_error": 0.004421388630435235,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 1.0000000000000004,
+        "abs_error": 0.031087578289355933
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.973642409632012,
+      "fidelity_error": 0.026357590367988015,
+      "obs_max_error": 0.0310875782893566,
+      "obs_l2_error": 0.05383452854357656,
+      "obs_mean_error": 0.004421388630437536,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 1.000000000000001,
+        "abs_error": 0.0310875782893566
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320122,
+      "fidelity_error": 0.026357590367987793,
+      "obs_max_error": 0.03108757828935682,
+      "obs_l2_error": 0.053834528543576995,
+      "obs_mean_error": 0.004421388630439451,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 1.0000000000000013,
+        "abs_error": 0.03108757828935682
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553219,
+      "fidelity_error": 0.015543789144678133,
+      "obs_max_error": 0.031087578289355045,
+      "obs_l2_error": 0.04396447483814129,
+      "obs_mean_error": 0.0020725052192903807,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 0.9999999999999998,
+        "abs_error": 0.031087578289355045
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553223,
+      "fidelity_error": 0.015543789144677689,
+      "obs_max_error": 0.03108757828935549,
+      "obs_l2_error": 0.04396447483814191,
+      "obs_mean_error": 0.002072505219290498,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 1.0000000000000002,
+        "abs_error": 0.03108757828935549
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553223,
+      "fidelity_error": 0.015543789144677689,
+      "obs_max_error": 0.03108757828935549,
+      "obs_l2_error": 0.04396447483814191,
+      "obs_mean_error": 0.0020725052192905095,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 1.0000000000000002,
+        "abs_error": 0.03108757828935549
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553212,
+      "fidelity_error": 0.015543789144678799,
+      "obs_max_error": 0.031087578289354267,
+      "obs_l2_error": 0.043964474838140186,
+      "obs_mean_error": 0.002072505219290543,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 0.999999999999999,
+        "abs_error": 0.031087578289354267
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553228,
+      "fidelity_error": 0.015543789144677245,
+      "obs_max_error": 0.031087578289355933,
+      "obs_l2_error": 0.043964474838142545,
+      "obs_mean_error": 0.0020725052192906543,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 1.0000000000000007,
+        "abs_error": 0.031087578289355933
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553221,
+      "fidelity_error": 0.01554378914467791,
+      "obs_max_error": 0.031087578289355267,
+      "obs_l2_error": 0.0439644748381416,
+      "obs_mean_error": 0.002072505219290501,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 1.0,
+        "abs_error": 0.031087578289355267
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553221,
+      "fidelity_error": 0.01554378914467791,
+      "obs_max_error": 0.02198223741907135,
+      "obs_l2_error": 0.04396447483814225,
+      "obs_mean_error": 0.0029309649892096455,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.6851245437674766,
+        "simulated": 0.7071067811865479,
+        "abs_error": 0.02198223741907135
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553214,
+      "fidelity_error": 0.015543789144678577,
+      "obs_max_error": 0.02198223741907046,
+      "obs_l2_error": 0.04396447483814048,
+      "obs_mean_error": 0.002930964989209889,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.6851245437674766,
+        "simulated": 0.707106781186547,
+        "abs_error": 0.02198223741907046
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553219,
+      "fidelity_error": 0.015543789144678133,
+      "obs_max_error": 0.02198223741907135,
+      "obs_l2_error": 0.04396447483814109,
+      "obs_mean_error": 0.002930964989209968,
+      "worst_observable": {
+        "name": "x",
+        "site": 3,
+        "reference": 0.6851245437674767,
+        "simulated": 0.707106781186548,
+        "abs_error": 0.02198223741907135
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553216,
+      "fidelity_error": 0.015543789144678355,
+      "obs_max_error": 0.021982237419071127,
+      "obs_l2_error": 0.04396447483814142,
+      "obs_mean_error": 0.002930964989210176,
+      "worst_observable": {
+        "name": "x",
+        "site": 3,
+        "reference": 0.6851245437674767,
+        "simulated": 0.7071067811865478,
+        "abs_error": 0.021982237419071127
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553216,
+      "fidelity_error": 0.015543789144678355,
+      "obs_max_error": 0.02198223741907146,
+      "obs_l2_error": 0.04396447483814153,
+      "obs_mean_error": 0.0029309649892112666,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.6851245437674766,
+        "simulated": 0.707106781186548,
+        "abs_error": 0.02198223741907146
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9844562108553208,
+      "fidelity_error": 0.015543789144679243,
+      "obs_max_error": 0.02198223741907246,
+      "obs_l2_error": 0.043964474838140144,
+      "obs_mean_error": 0.0029309649892114644,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.6851245437674766,
+        "simulated": 0.707106781186549,
+        "abs_error": 0.02198223741907246
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320109,
+      "fidelity_error": 0.026357590367989125,
+      "obs_max_error": 0.03108757828935582,
+      "obs_l2_error": 0.053834528543575025,
+      "obs_mean_error": 0.0035371109043473253,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 1.0000000000000002,
+        "abs_error": 0.03108757828935582
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320113,
+      "fidelity_error": 0.02635759036798868,
+      "obs_max_error": 0.031087578289356044,
+      "obs_l2_error": 0.05383452854357546,
+      "obs_mean_error": 0.0035371109043474238,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 1.0000000000000004,
+        "abs_error": 0.031087578289356044
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320113,
+      "fidelity_error": 0.02635759036798868,
+      "obs_max_error": 0.031087578289356266,
+      "obs_l2_error": 0.0538345285435759,
+      "obs_mean_error": 0.0035371109043475504,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 1.0000000000000007,
+        "abs_error": 0.031087578289356266
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320115,
+      "fidelity_error": 0.02635759036798846,
+      "obs_max_error": 0.031087578289356266,
+      "obs_l2_error": 0.0538345285435759,
+      "obs_mean_error": 0.0035371109043481593,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 1.0000000000000007,
+        "abs_error": 0.031087578289356266
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320109,
+      "fidelity_error": 0.026357590367989125,
+      "obs_max_error": 0.03108757828935582,
+      "obs_l2_error": 0.053834528543575025,
+      "obs_mean_error": 0.0035371109043488085,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 1.0000000000000002,
+        "abs_error": 0.03108757828935582
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320104,
+      "fidelity_error": 0.02635759036798957,
+      "obs_max_error": 0.031087578289355156,
+      "obs_l2_error": 0.05383452854357371,
+      "obs_mean_error": 0.003537110904349719,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 0.9999999999999996,
+        "abs_error": 0.031087578289355156
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 1,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320098,
+      "fidelity_error": 0.026357590367990236,
+      "obs_max_error": 0.031087578289354267,
+      "obs_l2_error": 0.053834528543572145,
+      "obs_mean_error": 0.002947592420289408,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 0.9999999999999989,
+        "abs_error": 0.031087578289354267
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 2,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320109,
+      "fidelity_error": 0.026357590367989125,
+      "obs_max_error": 0.031087578289355378,
+      "obs_l2_error": 0.05383452854357433,
+      "obs_mean_error": 0.002947592420289606,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 1.0,
+        "abs_error": 0.031087578289355378
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320111,
+      "fidelity_error": 0.026357590367988903,
+      "obs_max_error": 0.031087578289355378,
+      "obs_l2_error": 0.05383452854357433,
+      "obs_mean_error": 0.002947592420289754,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 1.0,
+        "abs_error": 0.031087578289355378
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 8,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320111,
+      "fidelity_error": 0.026357590367988903,
+      "obs_max_error": 0.031087578289355378,
+      "obs_l2_error": 0.05383452854357433,
+      "obs_mean_error": 0.0029475924202898105,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 1.0,
+        "abs_error": 0.031087578289355378
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 16,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320118,
+      "fidelity_error": 0.026357590367988237,
+      "obs_max_error": 0.031087578289356266,
+      "obs_l2_error": 0.053834528543576086,
+      "obs_mean_error": 0.0029475924202914997,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 1.0000000000000009,
+        "abs_error": 0.031087578289356266
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 32,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "simulator",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320122,
+      "fidelity_error": 0.026357590367987793,
+      "obs_max_error": 0.03108757828935671,
+      "obs_l2_error": 0.05383452854357696,
+      "obs_mean_error": 0.002947592420291046,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 1.0000000000000013,
+        "abs_error": 0.03108757828935671
+      },
+      "meta": {
+        "study": "sweeps"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 1.0000000000000004,
+      "fidelity_error": -4.440892098500626e-16,
+      "obs_max_error": 2.4424906541753444e-15,
+      "obs_l2_error": 3.66205343881779e-15,
+      "obs_mean_error": 3.9474596431116675e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.6456513815212696,
+        "abs_error": 2.4424906541753444e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999987,
+      "fidelity_error": 1.3322676295501878e-15,
+      "obs_max_error": 3.552713678800501e-15,
+      "obs_l2_error": 5.46834149340858e-15,
+      "obs_mean_error": 7.648203058528857e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.7071067811865477,
+        "simulated": 0.7071067811865441,
+        "abs_error": 3.552713678800501e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 1.0000000000000018,
+      "fidelity_error": -1.7763568394002505e-15,
+      "obs_max_error": 2.1094237467877974e-15,
+      "obs_l2_error": 4.092794678981884e-15,
+      "obs_mean_error": 5.859510407743882e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.6456513815212741,
+        "abs_error": 2.1094237467877974e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 1.0000000000000018,
+      "fidelity_error": -1.7763568394002505e-15,
+      "obs_max_error": 2.1094237467877974e-15,
+      "obs_l2_error": 4.092794678981884e-15,
+      "obs_mean_error": 5.859510407743882e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.6456513815212741,
+        "abs_error": 2.1094237467877974e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 1.0000000000000018,
+      "fidelity_error": -1.7763568394002505e-15,
+      "obs_max_error": 2.1094237467877974e-15,
+      "obs_l2_error": 4.092794678981884e-15,
+      "obs_mean_error": 5.859510407743882e-16,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.645651381521272,
+        "simulated": 0.6456513815212741,
+        "abs_error": 2.1094237467877974e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 1.0000000000000027,
+      "fidelity_error": -2.6645352591003757e-15,
+      "obs_max_error": 3.1086244689504383e-15,
+      "obs_l2_error": 7.920217762449813e-15,
+      "obs_mean_error": 1.2366650913185772e-15,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.6456513815212719,
+        "simulated": 0.645651381521275,
+        "abs_error": 3.1086244689504383e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000027,
+      "fidelity_error": -2.6645352591003757e-15,
+      "obs_max_error": 3.4416913763379853e-15,
+      "obs_l2_error": 7.757472359879945e-15,
+      "obs_mean_error": 1.298344148242197e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 5,
+        "reference": 0.8090169943749475,
+        "simulated": 0.8090169943749509,
+        "abs_error": 3.4416913763379853e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 1.0000000000000044,
+      "fidelity_error": -4.440892098500626e-15,
+      "obs_max_error": 5.551115123125783e-15,
+      "obs_l2_error": 1.492065501214669e-14,
+      "obs_mean_error": 2.5982302729074845e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": 0.16947622845189614,
+        "simulated": 0.1694762284518906,
+        "abs_error": 5.551115123125783e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 1.0000000000000044,
+      "fidelity_error": -4.440892098500626e-15,
+      "obs_max_error": 5.551115123125783e-15,
+      "obs_l2_error": 1.492065501214669e-14,
+      "obs_mean_error": 2.5982302729074845e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": 0.16947622845189614,
+        "simulated": 0.1694762284518906,
+        "abs_error": 5.551115123125783e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 1.0000000000000044,
+      "fidelity_error": -4.440892098500626e-15,
+      "obs_max_error": 5.551115123125783e-15,
+      "obs_l2_error": 1.492065501214669e-14,
+      "obs_mean_error": 2.5982302729074845e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": 0.16947622845189614,
+        "simulated": 0.1694762284518906,
+        "abs_error": 5.551115123125783e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999889,
+      "fidelity_error": 1.1102230246251565e-14,
+      "obs_max_error": 1.1102230246251565e-14,
+      "obs_l2_error": 2.6497722869471377e-14,
+      "obs_mean_error": 3.638805237192936e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999889,
+        "abs_error": 1.1102230246251565e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.3933214202946606e-14,
+      "obs_mean_error": 4.6541165204614535e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.393643522107799e-14,
+      "obs_mean_error": 4.662606167267006e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.393643522107799e-14,
+      "obs_mean_error": 4.662606167267006e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.393643522107799e-14,
+      "obs_mean_error": 4.662606167267006e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999889,
+      "fidelity_error": 1.1102230246251565e-14,
+      "obs_max_error": 1.1102230246251565e-14,
+      "obs_l2_error": 2.6497640761097428e-14,
+      "obs_mean_error": 3.6386220493145725e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999889,
+        "abs_error": 1.1102230246251565e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.3933276444215847e-14,
+      "obs_mean_error": 4.654299708339842e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.393602900343865e-14,
+      "obs_mean_error": 4.6616279106779395e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.393602900343865e-14,
+      "obs_mean_error": 4.6616279106779395e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999856,
+      "fidelity_error": 1.4432899320127035e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.393602900343865e-14,
+      "obs_mean_error": 4.6616279106779395e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0,
+        "simulated": 0.9999999999999858,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999916,
+      "fidelity_error": 8.43769498715119e-15,
+      "obs_max_error": 8.770761894538737e-15,
+      "obs_l2_error": 2.1202062552014508e-14,
+      "obs_mean_error": 3.194975148643506e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.9999999999999915,
+        "abs_error": 8.770761894538737e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999882,
+      "fidelity_error": 1.176836406102666e-14,
+      "obs_max_error": 1.2101430968414206e-14,
+      "obs_l2_error": 2.907979089494346e-14,
+      "obs_mean_error": 4.379213041577006e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.9999999999999881,
+        "abs_error": 1.2101430968414206e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9999999999999893,
+      "fidelity_error": 1.0658141036401503e-14,
+      "obs_max_error": 1.099120794378905e-14,
+      "obs_l2_error": 2.6490628625087597e-14,
+      "obs_mean_error": 3.990634982958201e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.9999999999999892,
+        "abs_error": 1.099120794378905e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999893,
+      "fidelity_error": 1.0658141036401503e-14,
+      "obs_max_error": 1.099120794378905e-14,
+      "obs_l2_error": 2.6490628625087597e-14,
+      "obs_mean_error": 3.990634982958201e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.9999999999999892,
+        "abs_error": 1.099120794378905e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999893,
+      "fidelity_error": 1.0658141036401503e-14,
+      "obs_max_error": 1.099120794378905e-14,
+      "obs_l2_error": 2.6490628625087597e-14,
+      "obs_mean_error": 3.990634982958201e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.9999999999999892,
+        "abs_error": 1.099120794378905e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999878,
+      "fidelity_error": 1.2212453270876722e-14,
+      "obs_max_error": 1.2545520178264269e-14,
+      "obs_l2_error": 2.987510934787872e-14,
+      "obs_mean_error": 4.3298697960381105e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.9999999999999877,
+        "abs_error": 1.2545520178264269e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.999999999999986,
+      "fidelity_error": 1.3988810110276972e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.369924670931846e-14,
+      "obs_mean_error": 4.884981308350689e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.999999999999986,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.999999999999986,
+      "fidelity_error": 1.3988810110276972e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.369924670931846e-14,
+      "obs_mean_error": 4.884981308350689e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.999999999999986,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.999999999999986,
+      "fidelity_error": 1.3988810110276972e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.369924670931846e-14,
+      "obs_mean_error": 4.884981308350689e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.999999999999986,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.999999999999986,
+      "fidelity_error": 1.3988810110276972e-14,
+      "obs_max_error": 1.4210854715202004e-14,
+      "obs_l2_error": 3.369924670931846e-14,
+      "obs_mean_error": 4.884981308350689e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 1.0000000000000002,
+        "simulated": 0.999999999999986,
+        "abs_error": 1.4210854715202004e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 1.5543122344752192e-15,
+      "obs_l2_error": 2.2065246201687695e-15,
+      "obs_mean_error": 2.898915675410131e-16,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845189458,
+        "abs_error": 1.5543122344752192e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 1.0000000000000013,
+      "fidelity_error": -1.3322676295501878e-15,
+      "obs_max_error": 1.4988010832439613e-14,
+      "obs_l2_error": 1.9230768589036718e-14,
+      "obs_mean_error": 2.2281559313657654e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845191113,
+        "abs_error": 1.4988010832439613e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 1.0000000000000022,
+      "fidelity_error": -2.220446049250313e-15,
+      "obs_max_error": 6.38378239159465e-15,
+      "obs_l2_error": 1.0436834585573876e-14,
+      "obs_mean_error": 1.61907524424502e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845190252,
+        "abs_error": 6.38378239159465e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 1.0000000000000022,
+      "fidelity_error": -2.220446049250313e-15,
+      "obs_max_error": 6.38378239159465e-15,
+      "obs_l2_error": 1.0436834585573876e-14,
+      "obs_mean_error": 1.61907524424502e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845190252,
+        "abs_error": 6.38378239159465e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 1.0000000000000022,
+      "fidelity_error": -2.220446049250313e-15,
+      "obs_max_error": 6.38378239159465e-15,
+      "obs_l2_error": 1.0436834585573876e-14,
+      "obs_mean_error": 1.61907524424502e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": -0.16947622845189614,
+        "simulated": -0.16947622845190252,
+        "abs_error": 6.38378239159465e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999958,
+      "fidelity_error": 4.218847493575595e-15,
+      "obs_max_error": 4.218847493575595e-15,
+      "obs_l2_error": 1.0079717301551601e-14,
+      "obs_mean_error": 1.5689610104945789e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.9999999999999999,
+        "simulated": 0.9999999999999957,
+        "abs_error": 4.218847493575595e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999969,
+      "fidelity_error": 3.1086244689504383e-15,
+      "obs_max_error": 2.886579864025407e-15,
+      "obs_l2_error": 6.627947771331266e-15,
+      "obs_mean_error": 9.992007221626409e-16,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.9999999999999999,
+        "simulated": 0.999999999999997,
+        "abs_error": 2.886579864025407e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9999999999999929,
+      "fidelity_error": 7.105427357601002e-15,
+      "obs_max_error": 6.8833827526759706e-15,
+      "obs_l2_error": 1.627248588685416e-14,
+      "obs_mean_error": 2.494917852560421e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.9999999999999999,
+        "simulated": 0.999999999999993,
+        "abs_error": 6.8833827526759706e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999929,
+      "fidelity_error": 7.105427357601002e-15,
+      "obs_max_error": 6.8833827526759706e-15,
+      "obs_l2_error": 1.627248588685416e-14,
+      "obs_mean_error": 2.494917852560421e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.9999999999999999,
+        "simulated": 0.999999999999993,
+        "abs_error": 6.8833827526759706e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999929,
+      "fidelity_error": 7.105427357601002e-15,
+      "obs_max_error": 6.8833827526759706e-15,
+      "obs_l2_error": 1.627248588685416e-14,
+      "obs_mean_error": 2.494917852560421e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.9999999999999999,
+        "simulated": 0.999999999999993,
+        "abs_error": 6.8833827526759706e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999887,
+      "fidelity_error": 1.1324274851176597e-14,
+      "obs_max_error": 2.3592239273284576e-14,
+      "obs_l2_error": 4.211211451778203e-14,
+      "obs_mean_error": 6.775444403059636e-15,
+      "worst_observable": {
+        "name": "x",
+        "site": 5,
+        "reference": 0.4300759263905931,
+        "simulated": 0.4300759263905695,
+        "abs_error": 2.3592239273284576e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 1.000000000000004,
+      "fidelity_error": -3.9968028886505635e-15,
+      "obs_max_error": 5.773159728050814e-15,
+      "obs_l2_error": 1.391083311078842e-14,
+      "obs_mean_error": 2.3129646346357427e-15,
+      "worst_observable": {
+        "name": "x",
+        "site": 0,
+        "reference": 0.5173821608993934,
+        "simulated": 0.5173821608993991,
+        "abs_error": 5.773159728050814e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9999999999999969,
+      "fidelity_error": 3.1086244689504383e-15,
+      "obs_max_error": 7.93809462606987e-15,
+      "obs_l2_error": 1.4101362164631236e-14,
+      "obs_mean_error": 2.257453483404485e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.38993922527385544,
+        "simulated": 0.3899392252738475,
+        "abs_error": 7.93809462606987e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999969,
+      "fidelity_error": 3.1086244689504383e-15,
+      "obs_max_error": 7.93809462606987e-15,
+      "obs_l2_error": 1.4101362164631236e-14,
+      "obs_mean_error": 2.257453483404485e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.38993922527385544,
+        "simulated": 0.3899392252738475,
+        "abs_error": 7.93809462606987e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999969,
+      "fidelity_error": 3.1086244689504383e-15,
+      "obs_max_error": 7.93809462606987e-15,
+      "obs_l2_error": 1.4101362164631236e-14,
+      "obs_mean_error": 2.257453483404485e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.38993922527385544,
+        "simulated": 0.3899392252738475,
+        "abs_error": 7.93809462606987e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 1.0000000000000013,
+      "fidelity_error": -1.3322676295501878e-15,
+      "obs_max_error": 6.106226635438361e-15,
+      "obs_l2_error": 9.767596798244547e-15,
+      "obs_mean_error": 1.4402059791665224e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 5,
+        "reference": 0.5919487295139038,
+        "simulated": 0.5919487295138977,
+        "abs_error": 6.106226635438361e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999956,
+      "fidelity_error": 4.440892098500626e-15,
+      "obs_max_error": 8.770761894538737e-15,
+      "obs_l2_error": 1.4382959637379134e-14,
+      "obs_mean_error": 2.2111941907117702e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 5,
+        "reference": 0.5919487295139038,
+        "simulated": 0.591948729513895,
+        "abs_error": 8.770761894538737e-15
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9999999999999907,
+      "fidelity_error": 9.325873406851315e-15,
+      "obs_max_error": 1.2212453270876722e-14,
+      "obs_l2_error": 2.4512557817280706e-14,
+      "obs_mean_error": 3.651400169878292e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.5173821608993934,
+        "simulated": 0.5173821608993812,
+        "abs_error": 1.2212453270876722e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999907,
+      "fidelity_error": 9.325873406851315e-15,
+      "obs_max_error": 1.2212453270876722e-14,
+      "obs_l2_error": 2.4512557817280706e-14,
+      "obs_mean_error": 3.651400169878292e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.5173821608993934,
+        "simulated": 0.5173821608993812,
+        "abs_error": 1.2212453270876722e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999907,
+      "fidelity_error": 9.325873406851315e-15,
+      "obs_max_error": 1.2212453270876722e-14,
+      "obs_l2_error": 2.4512557817280706e-14,
+      "obs_mean_error": 3.651400169878292e-15,
+      "worst_observable": {
+        "name": "z",
+        "site": 0,
+        "reference": 0.5173821608993934,
+        "simulated": 0.5173821608993812,
+        "abs_error": 1.2212453270876722e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9999999999999996,
+      "fidelity_error": 4.440892098500626e-16,
+      "obs_max_error": 1.4779844015322396e-14,
+      "obs_l2_error": 2.555898689662393e-14,
+      "obs_mean_error": 2.9925907431128785e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.04033544998818034,
+        "simulated": -0.04033544998816556,
+        "abs_error": 1.4779844015322396e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9999999999999936,
+      "fidelity_error": 6.439293542825908e-15,
+      "obs_max_error": 2.1298934838043238e-14,
+      "obs_l2_error": 3.1775612303734154e-14,
+      "obs_mean_error": 4.509702796381039e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 0,
+        "reference": 0.020583000067726953,
+        "simulated": 0.020583000067705654,
+        "abs_error": 2.1298934838043238e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9999999999999933,
+      "fidelity_error": 6.661338147750939e-15,
+      "obs_max_error": 1.9796664307847323e-14,
+      "obs_l2_error": 3.192245436843112e-14,
+      "obs_mean_error": 4.655612315415978e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.04033544998818034,
+        "simulated": -0.04033544998816054,
+        "abs_error": 1.9796664307847323e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999933,
+      "fidelity_error": 6.661338147750939e-15,
+      "obs_max_error": 1.9796664307847323e-14,
+      "obs_l2_error": 3.192245436843112e-14,
+      "obs_mean_error": 4.655612315415978e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.04033544998818034,
+        "simulated": -0.04033544998816054,
+        "abs_error": 1.9796664307847323e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "num_qubits": 6,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9999999999999933,
+      "fidelity_error": 6.661338147750939e-15,
+      "obs_max_error": 1.9796664307847323e-14,
+      "obs_l2_error": 3.192245436843112e-14,
+      "obs_mean_error": 4.655612315415978e-15,
+      "worst_observable": {
+        "name": "y",
+        "site": 5,
+        "reference": -0.04033544998818034,
+        "simulated": -0.04033544998816054,
+        "abs_error": 1.9796664307847323e-14
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9828988064918589,
+      "fidelity_error": 0.0171011935081411,
+      "obs_max_error": 0.031087578289357265,
+      "obs_l2_error": 0.04457590181404492,
+      "obs_mean_error": 0.003102912492149775,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 1.0000000000000018,
+        "abs_error": 0.031087578289357265
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9721334935981817,
+      "fidelity_error": 0.027866506401818314,
+      "obs_max_error": 0.031087578289355045,
+      "obs_l2_error": 0.05427156358882814,
+      "obs_mean_error": 0.004843502542530121,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 0.9999999999999996,
+        "abs_error": 0.031087578289355045
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9721334935981817,
+      "fidelity_error": 0.027866506401818314,
+      "obs_max_error": 0.031087578289355045,
+      "obs_l2_error": 0.05427156358882814,
+      "obs_mean_error": 0.004843502542530121,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9689124217106445,
+        "simulated": 0.9999999999999996,
+        "abs_error": 0.031087578289355045
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.987437817012343,
+      "fidelity_error": 0.012562182987656989,
+      "obs_max_error": 0.02196908527583652,
+      "obs_l2_error": 0.03202240338015774,
+      "obs_mean_error": 0.002387546349681616,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.978030914724148,
+        "simulated": 0.9999999999999846,
+        "abs_error": 0.02196908527583652
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "num_qubits": 8,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 16,
+      "fidelity": 0.987437817012343,
+      "fidelity_error": 0.012562182987656989,
+      "obs_max_error": 0.02196908527583652,
+      "obs_l2_error": 0.03202240338015774,
+      "obs_mean_error": 0.002387546349681616,
+      "worst_observable": {
+        "name": "z",
+        "site": 1,
+        "reference": 0.978030914724148,
+        "simulated": 0.9999999999999846,
+        "abs_error": 0.02196908527583652
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9844562108553082,
+      "fidelity_error": 0.015543789144691789,
+      "obs_max_error": 0.031087578289340834,
+      "obs_l2_error": 0.04396447483812119,
+      "obs_mean_error": 0.0020725052192932004,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 0.9999999999999856,
+        "abs_error": 0.031087578289340834
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320095,
+      "fidelity_error": 0.026357590367990458,
+      "obs_max_error": 0.031087578289353712,
+      "obs_l2_error": 0.05383452854357087,
+      "obs_mean_error": 0.0035371109043472143,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106447,
+        "simulated": 0.9999999999999984,
+        "abs_error": 0.031087578289353712
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9890154573620681,
+      "fidelity_error": 0.010984542637931916,
+      "obs_max_error": 0.021969085275845623,
+      "obs_l2_error": 0.03106897835003195,
+      "obs_mean_error": 0.0014646056850580568,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9780309147241483,
+        "simulated": 0.9999999999999939,
+        "abs_error": 0.021969085275845623
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9890154573620608,
+      "fidelity_error": 0.010984542637939243,
+      "obs_max_error": 0.021969085275838407,
+      "obs_l2_error": 0.031068978350021745,
+      "obs_mean_error": 0.0014646056850594654,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9780309147241483,
+        "simulated": 0.9999999999999867,
+        "abs_error": 0.021969085275838407
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 16,
+      "fidelity": 0.9890154573620608,
+      "fidelity_error": 0.010984542637939243,
+      "obs_max_error": 0.021969085275838407,
+      "obs_l2_error": 0.031068978350021745,
+      "obs_mean_error": 0.0014646056850594654,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9780309147241483,
+        "simulated": 0.9999999999999867,
+        "abs_error": 0.021969085275838407
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9840626352960479,
+      "fidelity_error": 0.015937364703952128,
+      "obs_max_error": 0.022155187054224923,
+      "obs_l2_error": 0.043524016161910484,
+      "obs_mean_error": 0.002980406753797958,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.6851245437674766,
+        "simulated": 0.7072797308217015,
+        "abs_error": 0.022155187054224923
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9821562632804005,
+      "fidelity_error": 0.01784373671959949,
+      "obs_max_error": 0.021982226983564113,
+      "obs_l2_error": 0.044482594355722486,
+      "obs_mean_error": 0.0033638933438344845,
+      "worst_observable": {
+        "name": "x",
+        "site": 8,
+        "reference": 0.6851245437674767,
+        "simulated": 0.7071067707510408,
+        "abs_error": 0.021982226983564113
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9972188603091813,
+      "fidelity_error": 0.0027811396908187236,
+      "obs_max_error": 0.00810975371951217,
+      "obs_l2_error": 0.011571294973293315,
+      "obs_mean_error": 0.0006350920890795339,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.6915722920115269,
+        "simulated": 0.6996820457310391,
+        "abs_error": 0.00810975371951217
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9972188603091939,
+      "fidelity_error": 0.002781139690806067,
+      "obs_max_error": 0.008109753719519608,
+      "obs_l2_error": 0.011571294973304388,
+      "obs_mean_error": 0.0006350920890757741,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.6915722920115269,
+        "simulated": 0.6996820457310465,
+        "abs_error": 0.008109753719519608
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 16,
+      "fidelity": 0.9972188603091939,
+      "fidelity_error": 0.002781139690806067,
+      "obs_max_error": 0.008109753719519608,
+      "obs_l2_error": 0.011571294973304388,
+      "obs_mean_error": 0.0006350920890757741,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.6915722920115269,
+        "simulated": 0.6996820457310465,
+        "abs_error": 0.008109753719519608
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.9833853221281577,
+      "fidelity_error": 0.016614677871842343,
+      "obs_max_error": 0.03108757588201505,
+      "obs_l2_error": 0.044343357203146715,
+      "obs_mean_error": 0.0025232082175228486,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 0.9999999975926595,
+        "abs_error": 0.03108757588201505
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096320062,
+      "fidelity_error": 0.02635759036799379,
+      "obs_max_error": 0.031087578289350715,
+      "obs_l2_error": 0.053834528543564956,
+      "obs_mean_error": 0.003537110904347725,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 0.9999999999999951,
+        "abs_error": 0.031087578289350715
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9736424096319938,
+      "fidelity_error": 0.026357590368006223,
+      "obs_max_error": 0.031087578289337947,
+      "obs_l2_error": 0.05383452854353979,
+      "obs_mean_error": 0.0035371109043490037,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 0.9999999999999823,
+        "abs_error": 0.031087578289337947
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9736424096319938,
+      "fidelity_error": 0.026357590368006223,
+      "obs_max_error": 0.031087578289337947,
+      "obs_l2_error": 0.05383452854353979,
+      "obs_mean_error": 0.0035371109043490037,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106444,
+        "simulated": 0.9999999999999823,
+        "abs_error": 0.031087578289337947
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "num_qubits": 10,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 16,
+      "fidelity": 0.9888526124895503,
+      "fidelity_error": 0.011147387510449747,
+      "obs_max_error": 0.0219690852758323,
+      "obs_l2_error": 0.03171036967878087,
+      "obs_mean_error": 0.001809939403163624,
+      "worst_observable": {
+        "name": "z",
+        "site": 2,
+        "reference": 0.9780309147241479,
+        "simulated": 0.9999999999999802,
+        "abs_error": 0.0219690852758323
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": null,
+      "path": "direct_mps",
+      "initial_bond_dim": 1,
+      "fidelity": 0.973642409631978,
+      "fidelity_error": 0.026357590368021988,
+      "obs_max_error": 0.031087578289321183,
+      "obs_l2_error": 0.053834528543506927,
+      "obs_mean_error": 0.002947592420295005,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 0.9999999999999658,
+        "abs_error": 0.031087578289321183
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 2,
+      "path": "direct_mps",
+      "initial_bond_dim": 2,
+      "fidelity": 0.9736424096319907,
+      "fidelity_error": 0.02635759036800933,
+      "obs_max_error": 0.031087578289334727,
+      "obs_l2_error": 0.05383452854353363,
+      "obs_mean_error": 0.002947592420292697,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 0.9999999999999793,
+        "abs_error": 0.031087578289334727
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 4,
+      "path": "direct_mps",
+      "initial_bond_dim": 4,
+      "fidelity": 0.9736424096319992,
+      "fidelity_error": 0.026357590368000783,
+      "obs_max_error": 0.031087578289343276,
+      "obs_l2_error": 0.053834528543550475,
+      "obs_mean_error": 0.002947592420291258,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 0.9999999999999879,
+        "abs_error": 0.031087578289343276
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 8,
+      "path": "direct_mps",
+      "initial_bond_dim": 8,
+      "fidelity": 0.9736424096319992,
+      "fidelity_error": 0.026357590368000783,
+      "obs_max_error": 0.031087578289343276,
+      "obs_l2_error": 0.053834528543550475,
+      "obs_mean_error": 0.002947592420291258,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 0.9999999999999879,
+        "abs_error": 0.031087578289343276
+      },
+      "meta": {
+        "study": "padding"
+      }
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "num_qubits": 12,
+      "gate_mode": "hybrid",
+      "tdvp_sweeps": 4,
+      "tdvp_circuit_full_sweep": false,
+      "initial_pad": 16,
+      "path": "direct_mps",
+      "initial_bond_dim": 16,
+      "fidelity": 0.9736424096319992,
+      "fidelity_error": 0.026357590368000783,
+      "obs_max_error": 0.031087578289343276,
+      "obs_l2_error": 0.053834528543550475,
+      "obs_mean_error": 0.002947592420291258,
+      "worst_observable": {
+        "name": "z",
+        "site": 3,
+        "reference": 0.9689124217106446,
+        "simulated": 0.9999999999999879,
+        "abs_error": 0.031087578289343276
+      },
+      "meta": {
+        "study": "padding"
+      }
+    }
+  ],
+  "classification": [
+    {
+      "probe": "rzz_one_active_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "rzz_both_active_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "rxx_vacuum_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": true,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "ryy_vacuum_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": true,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "rxx_one_active_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": true,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "ryy_one_active_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": true,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "rxx_both_active_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "ryy_both_active_lr_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": true,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "rzz_repeated_same_pair_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": true,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "rxx_repeated_same_pair_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": true,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "mixed_axes_same_pair_6q",
+      "passes_default": true,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": false,
+      "padding_does_not_help": false,
+      "structural_or_impl_suspect": false,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": true,
+      "unresolved_failure": false,
+      "likely_reason": "safe isolated LR rotation",
+      "failing_circuit_text": null
+    },
+    {
+      "probe": "mixed_axes_disjoint_pairs_8q",
+      "passes_default": false,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": true,
+      "padding_does_not_help": true,
+      "structural_or_impl_suspect": true,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": false,
+      "unresolved_failure": true,
+      "likely_reason": "mixed-axis/stack structural or implementation issue",
+      "failing_circuit_text": "      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                           \nq_0: \u2500\u2524 Ry(\u03c0/4) \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u250c\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2510               \u2502         \nq_1: \u25240           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2502            \u2502\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u2502         \nq_2: \u2524            \u251c\u25240           \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2502            \u2502\u2502            \u2502 \u2502         \nq_3: \u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2502  Rxx(0.21) \u2502\u2502  Ryy(0.25) \u2502 \u2502         \nq_4: \u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2502            \u2502\u2502            \u2502 \u2502         \nq_5: \u2524            \u251c\u25241           \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2502            \u2502\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2502         \nq_6: \u25241           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2514\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2518               \u2502ZZ(0.19) \nq_7: \u2500\u2524 Ry(\u03c0/5) \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                           "
+    },
+    {
+      "probe": "stack_core_rxx_ryy_vacuum_10q",
+      "passes_default": false,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": true,
+      "padding_does_not_help": true,
+      "structural_or_impl_suspect": true,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": false,
+      "unresolved_failure": true,
+      "likely_reason": "mixed-axis/stack structural or implementation issue",
+      "failing_circuit_text": "                                 \nq_0: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                                 \nq_1: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510              \nq_2: \u25240           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2502            \u2502\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\nq_3: \u2524            \u251c\u25240           \u251c\n     \u2502            \u2502\u2502            \u2502\nq_4: \u2524            \u251c\u2524            \u251c\n     \u2502            \u2502\u2502            \u2502\nq_5: \u2524            \u251c\u2524            \u251c\n     \u2502  Rxx(0.21) \u2502\u2502  Ryy(0.25) \u2502\nq_6: \u2524            \u251c\u2524            \u251c\n     \u2502            \u2502\u2502            \u2502\nq_7: \u2524            \u251c\u2524            \u251c\n     \u2502            \u2502\u2502            \u2502\nq_8: \u2524            \u251c\u25241           \u251c\n     \u2502            \u2502\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nq_9: \u25241           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518              "
+    },
+    {
+      "probe": "stack_core_rxx_ryy_active_10q",
+      "passes_default": false,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": true,
+      "padding_does_not_help": true,
+      "structural_or_impl_suspect": true,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": false,
+      "unresolved_failure": true,
+      "likely_reason": "mixed-axis/stack structural or implementation issue",
+      "failing_circuit_text": "                                            \nq_0: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                                            \nq_1: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510              \nq_2: \u2524 Ry(\u03c0/4) \u251c\u25240           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\u2502            \u2502\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\nq_3: \u2524 Ry(\u03c0/4) \u251c\u2524            \u251c\u25240           \u251c\n     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\u2502            \u2502\u2502            \u2502\nq_4: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u2524            \u251c\n                \u2502            \u2502\u2502            \u2502\nq_5: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u2524            \u251c\n                \u2502  Rxx(0.21) \u2502\u2502  Ryy(0.25) \u2502\nq_6: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u2524            \u251c\n                \u2502            \u2502\u2502            \u2502\nq_7: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u2524            \u251c\n     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\u2502            \u2502\u2502            \u2502\nq_8: \u2524 Ry(\u03c0/4) \u251c\u2524            \u251c\u25241           \u251c\n     \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\u2502            \u2502\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nq_9: \u2524 Ry(\u03c0/4) \u251c\u25241           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518              "
+    },
+    {
+      "probe": "minimal_mixed_stack_10q",
+      "passes_default": false,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": true,
+      "padding_does_not_help": true,
+      "structural_or_impl_suspect": true,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": false,
+      "unresolved_failure": true,
+      "likely_reason": "mixed-axis/stack structural or implementation issue",
+      "failing_circuit_text": "                                                                  \nq_0: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                                                  \nq_1: \u2524 Ry(\u03c0/4) \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u2502                    \nq_2: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25240           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                \u2502            \u2502\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u2502                    \nq_3: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u25240           \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\u2502            \u2502\u2502            \u2502 \u2502                    \nq_4: \u2524 Ry(\u03c0/5) \u251c\u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\u2502  Rxx(0.21) \u2502\u2502  Ryy(0.25) \u2502 \u2502          \u2502         \nq_5: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                \u2502            \u2502\u2502            \u2502 \u2502          \u2502         \nq_6: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u25241           \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                \u2502            \u2502\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2502          \u2502         \nq_7: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25241           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518               \u2502ZZ(0.19)  \u2502         \nq_8: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                                                        \u2502ZZ(0.27) \nq_9: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                                                                  "
+    },
+    {
+      "probe": "lr_stack_mixed_12q",
+      "passes_default": false,
+      "needs_padding": false,
+      "needs_more_sweeps": false,
+      "sweeps_do_not_help": true,
+      "padding_does_not_help": true,
+      "structural_or_impl_suspect": true,
+      "likely_padding_issue": false,
+      "likely_convergence_issue": false,
+      "likely_safe_gate": false,
+      "unresolved_failure": true,
+      "likely_reason": "mixed-axis/stack structural or implementation issue",
+      "failing_circuit_text": "                                                                              \n q_0: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                                                   \u2502         \n q_1: \u2524 Ry(\u03c0/4) \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510               \u2502                     \u2502         \n q_2: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25240           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                 \u2502            \u2502\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u2502                     \u2502         \n q_3: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u25240           \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\u2502            \u2502\u2502            \u2502 \u2502                     \u2502         \n q_4: \u2524 Ry(\u03c0/4) \u251c\u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\u2502            \u2502\u2502            \u2502 \u2502          \u2502          \u2502         \n q_5: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                 \u2502  Rxx(0.21) \u2502\u2502  Ryy(0.25) \u2502 \u2502          \u2502          \u2502         \n q_6: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\u2502            \u2502\u2502            \u2502 \u2502          \u2502          \u2502ZZ(0.33) \n q_7: \u2524 Ry(\u03c0/4) \u251c\u2524            \u251c\u2524            \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\u2502            \u2502\u2502            \u2502 \u2502          \u2502                    \n q_8: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524            \u251c\u25241           \u251c\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                 \u2502            \u2502\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2502          \u2502                    \n q_9: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25241           \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518               \u2502ZZ(0.19)  \u2502                    \nq_10: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                                                         \u2502ZZ(0.27)            \nq_11: \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25a0\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n                                                                              "
+    }
+  ]
+}

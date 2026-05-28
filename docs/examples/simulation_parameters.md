@@ -184,6 +184,8 @@ Qiskit qubit indices are preserved: MPS site `i` matches qubit `i` in the input 
 
 Set `gate_mode="tdvp"` to apply TDVP to every two-qubit gate. Set `gate_mode="tebd"` to use TEBD/SVD for all two-qubit gates; long-range gates are implemented by adjacent SWAP insertion before and after the update.
 
+Long-range TDVP uses `tdvp_sweeps` (default `4`): each sweep applies the circuit TDVP update with `dt = 1 / tdvp_sweeps`.
+
 ```{code-cell} ipython3
 strong = StrongSimParams(
     observables=[Observable(Z(), 0)],
