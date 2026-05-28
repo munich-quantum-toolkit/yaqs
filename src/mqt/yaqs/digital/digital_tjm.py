@@ -259,6 +259,20 @@ def _gate_tensor_left_right_order(
 
 @dataclass(frozen=True)
 class TangentVisibility:
+    r"""Visibility diagnostics for a local TDVP projector.
+
+    Attributes:
+        projected_norm: Estimate of \\(\\lVert P_T H_g |\\psi\rangle\rVert\\) (max over adjacent pairs).
+        update_delta_norm: Optional estimate of the local TDVP update strength \\(\\lVert\\Delta A\rVert\\).
+        generator_norm: Estimate of \\(\\lVert H_g |\\psi\rangle\rVert\\) for Pauli rotations.
+        projected_ratio: ``projected_norm / generator_norm`` (clamped for safety in routing logic).
+        update_delta_ratio: ``update_delta_norm / generator_norm`` if estimated.
+        is_blind: Whether the projected generator ratio is below the configured blindness tolerance.
+        is_weakly_visible: Whether the projected generator ratio is below the configured safety tolerance.
+        recommended_route: Suggested update mechanism (``"tdvp"`` or ``"pauli_enriched"``).
+        route_reason: Human-readable reason for the recommendation.
+    """
+
     projected_norm: float
     update_delta_norm: float | None
     generator_norm: float
@@ -272,6 +286,8 @@ class TangentVisibility:
 
 @dataclass(frozen=True)
 class PauliRouteDecision:
+    """Routing decision for long-range Pauli rotations."""
+
     route: str  # "tdvp" or "pauli_enriched"
     reason: str
     visibility: TangentVisibility
@@ -280,7 +296,18 @@ class PauliRouteDecision:
 
 
 def mps_overlap(left: MPS, right: MPS) -> complex:
-    """Contract ``<left|right>`` exactly (no dense conversion)."""
+    r"""Contract ``<left|right>`` exactly (no dense conversion).
+
+    Args:
+        left: Left MPS \\(|\\psi\rangle\\).
+        right: Right MPS \\(|\\phi\rangle\\).
+
+    Returns:
+        The complex overlap \\(\\langle\\psi|\\phi\rangle\\).
+
+    Raises:
+        ValueError: If the MPS lengths do not match.
+    """
     if left.length != right.length:
         msg = "MPS lengths must match for overlap."
         raise ValueError(msg)
@@ -293,6 +320,14 @@ def mps_overlap(left: MPS, right: MPS) -> complex:
 
 
 def mps_norm_squared(state: MPS) -> float:
+    r"""Compute ``<state|state>`` exactly (no dense conversion).
+
+    Args:
+        state: MPS \\(|\\psi\rangle\\).
+
+    Returns:
+        The real scalar norm-squared \\(\\langle\\psi|\\psi\rangle\\).
+    """
     return float(np.real(mps_overlap(state, state)))
 
 
@@ -301,7 +336,23 @@ def decide_long_range_pauli_route(
     gate: BaseGate,
     sim_params: StrongSimParams | WeakSimParams,
 ) -> PauliRouteDecision:
-    """Decide routing for LR Pauli rotations using visibility + candidate consistency."""
+    """Decide routing for LR Pauli rotations using projection defect.
+
+    Fast rule:
+        projection_defect = 1 - min(projected_ratio, 1)
+        route to TDVP if projection_defect <= tdvp_projection_defect_tol, else enrichment.
+
+    ``tangent_blindness_tol`` is only used to label the extreme case where the
+    projected generator is essentially zero.
+
+    Args:
+        state: Current MPS state.
+        gate: Two-qubit long-range Pauli rotation gate.
+        sim_params: Simulation parameters holding the routing tolerances.
+
+    Returns:
+        The routing decision and the underlying visibility diagnostics.
+    """
     visibility = estimate_local_tdvp_projected_norm(
         state,
         gate,
@@ -309,56 +360,36 @@ def decide_long_range_pauli_route(
         window_size=1,
         estimate_update_delta=False,
     )
-    if visibility.recommended_route == "pauli_enriched":
+    blind_tol = float(getattr(sim_params, "tangent_blindness_tol", 1e-12))
+    defect_tol = float(getattr(sim_params, "tdvp_projection_defect_tol", 1e-4))
+
+    projected_ratio = float(visibility.projected_ratio)
+    projection_defect = max(0.0, 1.0 - min(projected_ratio, 1.0))
+
+    if projection_defect > defect_tol:
+        if projected_ratio < blind_tol:
+            reason = "tangent-blind: projected generator nearly zero"
+        else:
+            reason = (
+                "projection-incomplete: projection defect "
+                f"{projection_defect:.6g} above defect tol {defect_tol:.6g}"
+            )
         return PauliRouteDecision(
             route="pauli_enriched",
-            reason=visibility.route_reason,
+            reason=reason,
             visibility=visibility,
             candidate_fidelity_error=None,
             candidate_norm_error=None,
-        )
-
-    do_check = bool(getattr(sim_params, "tdvp_pauli_consistency_check", True))
-    if not do_check:
-        return PauliRouteDecision(
-            route="tdvp",
-            reason="visible and consistency check disabled",
-            visibility=visibility,
-            candidate_fidelity_error=None,
-            candidate_norm_error=None,
-        )
-
-    tdvp_candidate = copy.deepcopy(state)
-    apply_two_qubit_gate_tdvp(tdvp_candidate, copy.deepcopy(gate), sim_params)
-
-    enriched_candidate = copy.deepcopy(state)
-    apply_pauli_product_rotation_enriched(enriched_candidate, copy.deepcopy(gate), sim_params, record_stats=False)
-
-    ov = mps_overlap(tdvp_candidate, enriched_candidate)
-    n_tdvp = mps_norm_squared(tdvp_candidate)
-    n_enr = mps_norm_squared(enriched_candidate)
-    denom = max(n_tdvp * n_enr, 1e-300)
-    fidelity = abs(ov) ** 2 / denom
-    fidelity_error = float(max(0.0, 1.0 - fidelity))
-
-    diff_sq = max(0.0, n_tdvp + n_enr - 2.0 * float(np.real(ov)))
-    norm_error = float(np.sqrt(diff_sq))
-
-    tol = float(getattr(sim_params, "tdvp_pauli_consistency_tol", 1e-10))
-    if fidelity_error <= tol:
-        return PauliRouteDecision(
-            route="tdvp",
-            reason="visible and TDVP candidate agrees with exact Pauli-product update",
-            visibility=visibility,
-            candidate_fidelity_error=fidelity_error,
-            candidate_norm_error=norm_error,
         )
     return PauliRouteDecision(
-        route="pauli_enriched",
-        reason="visible but TDVP candidate disagrees with exact Pauli-product update",
+        route="tdvp",
+        reason=(
+            "projection-complete: projection defect "
+            f"{projection_defect:.6g} below defect tol {defect_tol:.6g}"
+        ),
         visibility=visibility,
-        candidate_fidelity_error=fidelity_error,
-        candidate_norm_error=norm_error,
+        candidate_fidelity_error=None,
+        candidate_norm_error=None,
     )
 
 
@@ -374,6 +405,9 @@ def estimate_local_tdvp_projected_norm(
 
     Uses max-norm over adjacent-pair `project_site` values as a cheap diagnostic.
     Optionally also estimates the local update strength via `update_site` without mutating tensors.
+
+    Returns:
+        Visibility diagnostics for the current state and gate.
     """
     probe_state = copy.deepcopy(state)
     mpo, first_site, last_site = construct_generator_mpo(gate, probe_state.length)
@@ -393,7 +427,7 @@ def estimate_local_tdvp_projected_norm(
     left_blocks[0] = left_identity
 
     projected_max = 0.0
-    update_delta_max: float | None = 0.0 if estimate_update_delta else None
+    update_delta_max_f = 0.0
     for i in range(num_sites - 1):
         merged_tensor = merge_two_site(short_state.tensors[i], short_state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(short_mpo.tensors[i], short_mpo.tensors[i + 1])
@@ -408,7 +442,7 @@ def estimate_local_tdvp_projected_norm(
                 float(getattr(sim_params, "dt", 1.0)),
                 krylov_tol=float(sim_params.krylov_tol),
             )
-            update_delta_max = max(update_delta_max, float(np.linalg.norm(updated - merged_tensor)))
+            update_delta_max_f = max(update_delta_max_f, float(np.linalg.norm(updated - merged_tensor)))
         if i + 1 < num_sites - 1:
             left_blocks[i + 1] = update_left_environment(
                 short_state.tensors[i], short_state.tensors[i], short_mpo.tensors[i], left_blocks[i]
@@ -417,6 +451,7 @@ def estimate_local_tdvp_projected_norm(
     theta = float(getattr(gate, "theta", 0.0))
     generator_norm = abs(theta) / 2.0
     projected_ratio = projected_max / max(generator_norm, 1e-300)
+    update_delta_max = update_delta_max_f if estimate_update_delta else None
     update_delta_ratio = None if update_delta_max is None else update_delta_max / max(generator_norm, 1e-300)
 
     blind_tol = float(getattr(sim_params, "tangent_blindness_tol", 1e-12))
@@ -447,35 +482,48 @@ def estimate_local_tdvp_projected_norm(
     )
 
 
-def add_mps_linear_combination(a: complex, A: MPS, b: complex, B: MPS) -> MPS:
-    """Exact direct-sum MPS for ``a|A> + b|B>`` (no compression)."""
-    if A.length != B.length:
+def add_mps_linear_combination(a: complex, state_a: MPS, b: complex, state_b: MPS) -> MPS:
+    r"""Exact direct-sum MPS for ``a|A> + b|B>`` (no compression).
+
+    Args:
+        a: Scalar multiplier for ``state_a``.
+        state_a: First MPS \\(|A\rangle\\).
+        b: Scalar multiplier for ``state_b``.
+        state_b: Second MPS \\(|B\rangle\\).
+
+    Returns:
+        An exact direct-sum MPS representing ``a|A> + b|B>``.
+
+    Raises:
+        ValueError: If the MPS lengths or physical dimensions do not match.
+    """
+    if state_a.length != state_b.length:
         msg = "A and B must have the same length."
         raise ValueError(msg)
 
     tensors: list[NDArray[np.complex128]] = []
-    for n in range(A.length):
-        At = np.asarray(A.tensors[n], dtype=np.complex128)
-        Bt = np.asarray(B.tensors[n], dtype=np.complex128)
-        dA, lA, rA = At.shape
-        dB, lB, rB = Bt.shape
-        if dA != dB:
+    for n in range(state_a.length):
+        a_t = np.asarray(state_a.tensors[n], dtype=np.complex128)
+        b_t = np.asarray(state_b.tensors[n], dtype=np.complex128)
+        d_a, l_a, r_a = a_t.shape
+        d_b, l_b, r_b = b_t.shape
+        if d_a != d_b:
             msg = "Physical dimensions must match."
             raise ValueError(msg)
 
         if n == 0:
             # Left boundary is assumed to be 1; concatenate along right bond.
-            Ct = np.concatenate([a * At, b * Bt], axis=2)
-        elif n == A.length - 1:
+            c_t = np.concatenate([a * a_t, b * b_t], axis=2)
+        elif n == state_a.length - 1:
             # Right boundary is assumed to be 1; concatenate along left bond.
-            Ct = np.concatenate([At, Bt], axis=1)
+            c_t = np.concatenate([a_t, b_t], axis=1)
         else:
-            Ct = np.zeros((dA, lA + lB, rA + rB), dtype=np.complex128)
-            Ct[:, :lA, :rA] = At
-            Ct[:, lA:, rA:] = Bt
-        tensors.append(Ct)
+            c_t = np.zeros((d_a, l_a + l_b, r_a + r_b), dtype=np.complex128)
+            c_t[:, :l_a, :r_a] = a_t
+            c_t[:, l_a:, r_a:] = b_t
+        tensors.append(c_t)
 
-    return MPS(length=A.length, tensors=tensors)
+    return MPS(length=state_a.length, tensors=tensors)
 
 
 def compress_mps_svd_sweep(state: MPS, sim_params: StrongSimParams | WeakSimParams) -> None:
@@ -515,6 +563,18 @@ def apply_pauli_product_rotation_enriched(
     Uses the identity:
         exp(-i * theta * P_i P_j / 2) |psi>
         = cos(theta/2) |psi> - i sin(theta/2) P_i P_j |psi>
+
+    Args:
+        state: MPS updated in place.
+        gate: Two-qubit Pauli rotation gate.
+        sim_params: Truncation settings used for post-update compression.
+        record_stats: If ``True``, updates diagnostic counters on ``sim_params``.
+
+    Returns:
+        ``(left_site, right_site)`` spanning the gate support in MPS order.
+
+    Raises:
+        ValueError: If ``gate.name`` is not a supported Pauli rotation.
     """
     if gate.name not in {"rxx", "ryy", "rzz"}:
         msg = f"Unsupported gate for enriched update: {gate.name!r}"
@@ -523,7 +583,7 @@ def apply_pauli_product_rotation_enriched(
     site0, site1 = gate.sites
     left_site = min(site0, site1)
     right_site = max(site0, site1)
-    theta = float(gate.theta)
+    theta = float(getattr(gate, "theta", 0.0))
 
     if gate.name == "rxx":
         pauli = np.array([[0, 1], [1, 0]], dtype=np.complex128)
@@ -540,11 +600,8 @@ def apply_pauli_product_rotation_enriched(
     b = complex(-1j * np.sin(theta / 2.0))
     combined = add_mps_linear_combination(a, state, b, branch)
     if record_stats:
-        # TODO: Simulator deep-copies `sim_params`, so counters stored here are not reliable
-        # for benchmark reports. Prefer `mps.route_stats` (attached to the returned MPS)
-        # for per-run aggregation.
         # Metadata counters for diagnostics/direct runs.
-        setattr(sim_params, "enriched_pauli_count", int(getattr(sim_params, "enriched_pauli_count", 0)) + 1)
+        sim_params.enriched_pauli_count = int(getattr(sim_params, "enriched_pauli_count", 0)) + 1
     # Compress to avoid direct-sum bond blowup.
     compress_mps_svd_sweep(combined, sim_params)
 
@@ -666,48 +723,58 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     gate_mode: GateMode = getattr(sim_params, "gate_mode", "hybrid")
 
     if gate_mode == "tdvp":
-        setattr(sim_params, "tdvp_lr_count", int(getattr(sim_params, "tdvp_lr_count", 0)) + 1)
+        sim_params.tdvp_lr_count = int(getattr(sim_params, "tdvp_lr_count", 0)) + 1
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
     if gate_mode == "tebd":
-        setattr(sim_params, "tebd_nn_count", int(getattr(sim_params, "tebd_nn_count", 0)) + 1)
+        sim_params.tebd_nn_count = int(getattr(sim_params, "tebd_nn_count", 0)) + 1
         return apply_two_qubit_gate_tebd(state, gate, sim_params)
 
     if gate_mode == "hybrid":
         if is_nearest_neighbor:
-            setattr(sim_params, "tebd_nn_count", int(getattr(sim_params, "tebd_nn_count", 0)) + 1)
+            sim_params.tebd_nn_count = int(getattr(sim_params, "tebd_nn_count", 0)) + 1
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
         if gate.name in {"rxx", "ryy", "rzz"}:
             # Route accounting attached to the returned MPS (Simulator deep-copies sim_params).
-            stats = getattr(state, "route_stats", None)
-            if stats is None:
-                stats = {"tdvp_lr_pauli": 0, "enriched_lr_pauli": 0, "ratios": []}
-                setattr(state, "route_stats", stats)
+            stats_any = getattr(state, "route_stats", None)
+            if not isinstance(stats_any, dict):
+                stats_any = {"tdvp_lr_pauli": 0, "enriched_lr_pauli": 0, "ratios": []}
+                state.route_stats = stats_any
+            stats = cast("dict[str, object]", stats_any)
 
             decision = decide_long_range_pauli_route(state, gate, sim_params)
-            setattr(sim_params, "last_lr_visibility", decision.visibility)
-            setattr(sim_params, "last_lr_route", decision.route)
-            setattr(sim_params, "last_lr_decision", decision)
-            stats["ratios"].append(
-                {
-                    "gate": gate.name,
-                    "sites": tuple(gate.sites),
-                    "projected_ratio": decision.visibility.projected_ratio,
-                    "update_delta_ratio": decision.visibility.update_delta_ratio,
-                    "candidate_fidelity_error": decision.candidate_fidelity_error,
-                    "candidate_norm_error": decision.candidate_norm_error,
-                    "route": decision.route,
-                    "reason": decision.reason,
-                }
-            )
+            sim_params.last_lr_visibility = decision.visibility
+            sim_params.last_lr_route = decision.route
+            sim_params.last_lr_decision = decision
+            defect_tol = float(getattr(sim_params, "tdvp_projection_defect_tol", 1e-3))
+            projection_defect = max(0.0, 1.0 - min(float(decision.visibility.projected_ratio), 1.0))
+            ratios_any = stats.get("ratios")
+            if not isinstance(ratios_any, list):
+                ratios_any = []
+                stats["ratios"] = ratios_any
+            ratios = cast("list[dict[str, object]]", ratios_any)
+            ratios.append({
+                "gate": gate.name,
+                "sites": tuple(gate.sites),
+                "projected_ratio": decision.visibility.projected_ratio,
+                "projected_norm": decision.visibility.projected_norm,
+                "generator_norm": decision.visibility.generator_norm,
+                "projection_defect": projection_defect,
+                "tdvp_projection_defect_tol": defect_tol,
+                "update_delta_ratio": decision.visibility.update_delta_ratio,
+                "candidate_fidelity_error": decision.candidate_fidelity_error,
+                "candidate_norm_error": decision.candidate_norm_error,
+                "route": decision.route,
+                "reason": decision.reason,
+            })
 
             if decision.route == "pauli_enriched":
-                stats["enriched_lr_pauli"] += 1
+                stats["enriched_lr_pauli"] = int(stats.get("enriched_lr_pauli", 0)) + 1
                 return apply_pauli_product_rotation_enriched(state, gate, sim_params)
-            stats["tdvp_lr_pauli"] += 1
-            setattr(sim_params, "tdvp_lr_count", int(getattr(sim_params, "tdvp_lr_count", 0)) + 1)
+            stats["tdvp_lr_pauli"] = int(stats.get("tdvp_lr_pauli", 0)) + 1
+            sim_params.tdvp_lr_count = int(getattr(sim_params, "tdvp_lr_count", 0)) + 1
         else:
-            setattr(sim_params, "tdvp_lr_count", int(getattr(sim_params, "tdvp_lr_count", 0)) + 1)
+            sim_params.tdvp_lr_count = int(getattr(sim_params, "tdvp_lr_count", 0)) + 1
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
     msg = f"Unknown gate_mode: {gate_mode!r}"

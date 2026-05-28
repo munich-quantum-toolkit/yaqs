@@ -398,11 +398,13 @@ class StrongSimParams:
         random_seed: int | None = None,
         gate_mode: GateMode = "hybrid",
         tangent_blindness_tol: float = 1e-12,
+        tdvp_projection_accept_ratio: float = 0.95,
+        tdvp_projection_defect_tol: float = 1e-3,
         tdvp_visibility_safety_tol: float | None = None,
         tdvp_pauli_consistency_tol: float = 1e-10,
         tdvp_pauli_consistency_check: bool = True,
     ) -> None:
-        """Strong circuit simulation parameters initialization.
+        r"""Strong circuit simulation parameters initialization.
 
         Initializes parameters for a strong quantum circuit simulation.
 
@@ -427,6 +429,13 @@ class StrongSimParams:
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
+            tangent_blindness_tol: Tangent-blindness threshold for the local TDVP projector diagnostic.
+            tdvp_projection_accept_ratio: Legacy accept-ratio threshold (kept for compatibility).
+            tdvp_projection_defect_tol: Projection-defect tolerance \\(\varepsilon\\) used by the fast router:
+                route to TDVP when ``projection_defect <= ε``, else route to enrichment.
+            tdvp_visibility_safety_tol: Optional safety threshold for debug/calibration logic.
+            tdvp_pauli_consistency_tol: Fidelity tolerance for optional TDVP-vs-enriched consistency checks.
+            tdvp_pauli_consistency_check: Enable expensive candidate consistency checks (debug/calibration).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -462,7 +471,12 @@ class StrongSimParams:
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
         self.tangent_blindness_tol = float(tangent_blindness_tol)
-        self.tdvp_visibility_safety_tol = None if tdvp_visibility_safety_tol is None else float(tdvp_visibility_safety_tol)
+        # Backward-compatibility; production routing uses `tdvp_projection_defect_tol`.
+        self.tdvp_projection_accept_ratio = float(tdvp_projection_accept_ratio)
+        self.tdvp_projection_defect_tol = float(tdvp_projection_defect_tol)
+        self.tdvp_visibility_safety_tol = (
+            None if tdvp_visibility_safety_tol is None else float(tdvp_visibility_safety_tol)
+        )
         self.tdvp_pauli_consistency_tol = float(tdvp_pauli_consistency_tol)
         self.tdvp_pauli_consistency_check = bool(tdvp_pauli_consistency_check)
 
@@ -514,11 +528,13 @@ class WeakSimParams:
         random_seed: int | None = None,
         gate_mode: GateMode = "hybrid",
         tangent_blindness_tol: float = 1e-12,
+        tdvp_projection_accept_ratio: float = 0.95,
+        tdvp_projection_defect_tol: float = 1e-3,
         tdvp_visibility_safety_tol: float | None = None,
         tdvp_pauli_consistency_tol: float = 1e-10,
         tdvp_pauli_consistency_check: bool = True,
     ) -> None:
-        """Weak circuit simulation initialization.
+        r"""Weak circuit simulation initialization.
 
         Initializes parameters for a weak circuit simulation.
 
@@ -540,6 +556,12 @@ class WeakSimParams:
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
             gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
+            tangent_blindness_tol: Tangent-blindness threshold for the local TDVP projector diagnostic.
+            tdvp_projection_accept_ratio: Legacy accept-ratio threshold (kept for compatibility).
+            tdvp_projection_defect_tol: Projection-defect tolerance \\(\varepsilon\\) used by the fast router.
+            tdvp_visibility_safety_tol: Optional safety threshold for debug/calibration logic.
+            tdvp_pauli_consistency_tol: Fidelity tolerance for optional TDVP-vs-enriched consistency checks.
+            tdvp_pauli_consistency_check: Enable expensive candidate consistency checks (debug/calibration).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -556,6 +578,11 @@ class WeakSimParams:
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
         self.tangent_blindness_tol = float(tangent_blindness_tol)
-        self.tdvp_visibility_safety_tol = None if tdvp_visibility_safety_tol is None else float(tdvp_visibility_safety_tol)
+        # Backward-compatibility; production routing uses `tdvp_projection_defect_tol`.
+        self.tdvp_projection_accept_ratio = float(tdvp_projection_accept_ratio)
+        self.tdvp_projection_defect_tol = float(tdvp_projection_defect_tol)
+        self.tdvp_visibility_safety_tol = (
+            None if tdvp_visibility_safety_tol is None else float(tdvp_visibility_safety_tol)
+        )
         self.tdvp_pauli_consistency_tol = float(tdvp_pauli_consistency_tol)
         self.tdvp_pauli_consistency_check = bool(tdvp_pauli_consistency_check)
