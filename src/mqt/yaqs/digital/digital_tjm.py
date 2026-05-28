@@ -249,6 +249,76 @@ def _gate_tensor_left_right_order(
     raise ValueError(msg)
 
 
+def add_mps_linear_combination(a: complex, A: MPS, b: complex, B: MPS) -> MPS:
+    """Exact direct-sum MPS for ``a|A> + b|B>`` (no compression)."""
+    if A.length != B.length:
+        msg = "A and B must have the same length."
+        raise ValueError(msg)
+
+    tensors: list[NDArray[np.complex128]] = []
+    for n in range(A.length):
+        At = np.asarray(A.tensors[n], dtype=np.complex128)
+        Bt = np.asarray(B.tensors[n], dtype=np.complex128)
+        dA, lA, rA = At.shape
+        dB, lB, rB = Bt.shape
+        if dA != dB:
+            msg = "Physical dimensions must match."
+            raise ValueError(msg)
+
+        if n == 0:
+            # Left boundary is assumed to be 1; concatenate along right bond.
+            Ct = np.concatenate([a * At, b * Bt], axis=2)
+        elif n == A.length - 1:
+            # Right boundary is assumed to be 1; concatenate along left bond.
+            Ct = np.concatenate([At, Bt], axis=1)
+        else:
+            Ct = np.zeros((dA, lA + lB, rA + rB), dtype=np.complex128)
+            Ct[:, :lA, :rA] = At
+            Ct[:, lA:, rA:] = Bt
+        tensors.append(Ct)
+
+    return MPS(length=A.length, tensors=tensors)
+
+
+def apply_pauli_product_rotation_enriched(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+) -> tuple[int, int]:
+    """Apply ``rxx/ryy/rzz`` via exact Pauli-product generator enrichment.
+
+    Uses the identity:
+        exp(-i * theta * P_i P_j / 2) |psi>
+        = cos(theta/2) |psi> - i sin(theta/2) P_i P_j |psi>
+    """
+    if gate.name not in {"rxx", "ryy", "rzz"}:
+        msg = f"Unsupported gate for enriched update: {gate.name!r}"
+        raise ValueError(msg)
+
+    site0, site1 = gate.sites
+    left_site = min(site0, site1)
+    right_site = max(site0, site1)
+    theta = float(gate.theta)
+
+    if gate.name == "rxx":
+        pauli = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    elif gate.name == "ryy":
+        pauli = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+    else:  # rzz
+        pauli = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+
+    branch = copy.deepcopy(state)
+    branch.tensors[site0] = oe.contract("ab, bcd->acd", pauli, branch.tensors[site0])
+    branch.tensors[site1] = oe.contract("ab, bcd->acd", pauli, branch.tensors[site1])
+
+    a = complex(np.cos(theta / 2.0))
+    b = complex(-1j * np.sin(theta / 2.0))
+    combined = add_mps_linear_combination(a, state, b, branch)
+    state.tensors = combined.tensors
+    state.normalize(form="B", decomposition="QR")
+    return left_site, right_site
+
+
 def apply_two_qubit_gate_tdvp(
     state: MPS,
     gate: BaseGate,
@@ -371,6 +441,8 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     if gate_mode == "hybrid":
         if is_nearest_neighbor:
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
+        if gate.name in {"rxx", "ryy"}:
+            return apply_pauli_product_rotation_enriched(state, gate, sim_params)
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
     msg = f"Unknown gate_mode: {gate_mode!r}"
