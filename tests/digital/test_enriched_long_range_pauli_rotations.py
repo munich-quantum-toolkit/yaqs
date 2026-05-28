@@ -25,6 +25,10 @@ def _hybrid_statevector(qc: QuantumCircuit) -> np.ndarray:
         get_state=True,
         svd_threshold=1e-14,
         gate_mode="hybrid",
+        tangent_blindness_tol=1e-12,
+        tdvp_visibility_safety_tol=None,
+        tdvp_pauli_consistency_check=True,
+        tdvp_pauli_consistency_tol=1e-10,
     )
     sim = Simulator()
     init = State(qc.num_qubits, initial="zeros", representation="mps")
@@ -57,6 +61,16 @@ def test_enriched_ryy_strictly_interior_long_range_matches_qiskit() -> None:
 def test_enriched_long_range_pauli_rotations_position_sweep_match_qiskit(gate_name: str, i: int, j: int) -> None:
     qc = QuantumCircuit(10)
     getattr(qc, gate_name)(0.25, i, j)
+    vec = _hybrid_statevector(qc)
+    assert _fidelity_error(qc, vec) < 1e-10
+
+
+@pytest.mark.parametrize("i,j", [(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)])
+def test_enriched_long_range_rzz_position_sweep_match_qiskit(i: int, j: int) -> None:
+    qc = QuantumCircuit(10)
+    qc.ry(np.pi / 4, i)
+    qc.ry(np.pi / 5, j)
+    qc.rzz(0.25, i, j)
     vec = _hybrid_statevector(qc)
     assert _fidelity_error(qc, vec) < 1e-10
 

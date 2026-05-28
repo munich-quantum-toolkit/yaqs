@@ -397,6 +397,10 @@ class StrongSimParams:
         num_mid_measurements: int = 0,
         random_seed: int | None = None,
         gate_mode: GateMode = "hybrid",
+        tangent_blindness_tol: float = 1e-12,
+        tdvp_visibility_safety_tol: float | None = None,
+        tdvp_pauli_consistency_tol: float = 1e-10,
+        tdvp_pauli_consistency_check: bool = True,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -457,6 +461,10 @@ class StrongSimParams:
         self.num_mid_measurements = num_mid_measurements
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
+        self.tangent_blindness_tol = float(tangent_blindness_tol)
+        self.tdvp_visibility_safety_tol = None if tdvp_visibility_safety_tol is None else float(tdvp_visibility_safety_tol)
+        self.tdvp_pauli_consistency_tol = float(tdvp_pauli_consistency_tol)
+        self.tdvp_pauli_consistency_check = bool(tdvp_pauli_consistency_check)
 
 
 class WeakSimParams:
@@ -505,6 +513,10 @@ class WeakSimParams:
         get_state: bool = False,
         random_seed: int | None = None,
         gate_mode: GateMode = "hybrid",
+        tangent_blindness_tol: float = 1e-12,
+        tdvp_visibility_safety_tol: float | None = None,
+        tdvp_pauli_consistency_tol: float = 1e-10,
+        tdvp_pauli_consistency_check: bool = True,
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -543,3 +555,7 @@ class WeakSimParams:
         self.get_state = get_state
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
+        self.tangent_blindness_tol = float(tangent_blindness_tol)
+        self.tdvp_visibility_safety_tol = None if tdvp_visibility_safety_tol is None else float(tdvp_visibility_safety_tol)
+        self.tdvp_pauli_consistency_tol = float(tdvp_pauli_consistency_tol)
+        self.tdvp_pauli_consistency_check = bool(tdvp_pauli_consistency_check)
