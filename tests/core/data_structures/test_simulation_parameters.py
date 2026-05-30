@@ -169,6 +169,7 @@ def test_gate_mode_defaults_and_validation() -> None:
     assert StrongSimParams().gate_mode == "hybrid"
     assert WeakSimParams(shots=1).gate_mode == "hybrid"
     assert StrongSimParams(gate_mode="tdvp").gate_mode == "tdvp"
+    assert StrongSimParams(gate_mode="hybrid_pauli").gate_mode == "hybrid_pauli"
     with pytest.raises(ValueError, match="gate_mode"):
         StrongSimParams(gate_mode=cast("GateMode", "invalid"))
 

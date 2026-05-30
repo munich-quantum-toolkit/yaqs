@@ -710,6 +710,52 @@ def test_long_range_hybrid_matches_tdvp() -> None:
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
+def test_hybrid_pauli_can_route_long_range_pauli_to_enrichment() -> None:
+    """``hybrid_pauli`` falls back to enrichment on tangent-blind LR Pauli rotations."""
+    qc = QuantumCircuit(8)
+    qc.ryy(0.25, 1, 6)
+    params = StrongSimParams(
+        preset="exact",
+        gate_mode="hybrid_pauli",
+        svd_threshold=1e-14,
+        tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
+        tdvp_pauli_consistency_check=False,
+    )
+    st = State(8, initial="zeros", representation="mps")
+    dag = circuit_to_dag(qc)
+    for node in dag.topological_op_nodes():
+        if len(node.qargs) == 2:
+            apply_two_qubit_gate(st.mps, node, params)
+    assert getattr(params, "last_lr_route", None) == "pauli_enriched"
+
+
+def test_hybrid_pauli_defaults_to_tdvp_for_visible_long_range_pauli() -> None:
+    """``hybrid_pauli`` uses TDVP when the projection-defect diagnostic is acceptable."""
+    qc = QuantumCircuit(8)
+    qc.rx(np.pi / 2, 6)
+    qc.ryy(0.25, 1, 6)
+    params = StrongSimParams(
+        preset="exact",
+        gate_mode="hybrid_pauli",
+        svd_threshold=1e-14,
+        tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
+        tdvp_pauli_consistency_check=False,
+    )
+    st = State(8, initial="zeros", representation="mps")
+    dag = circuit_to_dag(qc)
+    for node in dag.topological_op_nodes():
+        if len(node.qargs) == 1:
+            apply_single_qubit_gate(st.mps, node)
+        elif len(node.qargs) == 2:
+            apply_two_qubit_gate(st.mps, node, params)
+    assert getattr(params, "last_lr_route", None) == "tdvp"
+    vec = np.asarray(st.mps.to_vec(), dtype=np.complex128)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert float(1.0 - abs(np.vdot(ref, vec)) ** 2) < 1e-10
+
+
 def test_long_range_tebd_matches_tdvp() -> None:
     """TEBD with SWAP insertion matches all-TDVP on a long-range gate."""
     qc = QuantumCircuit(4)

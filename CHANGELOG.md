@@ -12,6 +12,8 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ### Added
 
 - added tebd/hybrid/tdvp options for circuit simulation ([#441]) ([**@aaronleesander**])
+- added `scripts/benchmark_nn_tdvp_regimes` for NN-only TEBD vs all-TDVP comparisons ([#441]) ([**@aaronleesander**])
+- added `scripts/benchmark_tdvp_claims_outline` for laptop-feasible TDVP paper-claims benchmarking ([#441]) ([**@aaronleesander**])
 - added Krylov tolerance as high-level parameter ([#439]) ([**@aaronleesander**])
 - added accuracy presets to simulation parameters ([#438]) ([**@aaronleesander**])
 - added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
@@ -21,6 +23,9 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- changed default `gate_mode="hybrid"` to always route long-range gates through TDVP; use `gate_mode="hybrid_pauli"` for projection-defect Pauli enrichment routing ([#441]) ([**@aaronleesander**])
+- consolidated staged TDVP-vs-TEBD benchmarking into `scripts/benchmark_long_range_tdvp_regimes` (stages 0–3); removed superseded `benchmark_small_angle_tdvp_vs_tebd`, `benchmark_fixed_chi_tdvp_advantage`, and `benchmark_enriched_tdvp_vs_tebd` scripts ([#441]) ([**@aaronleesander**])
+- extended `scripts/benchmark_long_range_tdvp_regimes` with explicit TDVP variants (`hybrid_tdvp_unpadded`, `hybrid_tdvp_padded4`, optional `hybrid_tdvp_padding_scan`), default `tdvp_sweeps=1`, `validate_tdvp_padding()`, and `main_method_comparison.csv` ([#441]) ([**@aaronleesander**])
 - refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
 - changed `simulator.run` to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])

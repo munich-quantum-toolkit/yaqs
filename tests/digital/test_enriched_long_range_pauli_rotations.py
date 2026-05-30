@@ -12,14 +12,20 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Statevector
 
-from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.digital.digital_tjm import (
+    apply_pauli_product_rotation_enriched,
+    apply_single_qubit_gate,
+    apply_two_qubit_gate,
+)
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 
 
-def _hybrid_statevector(qc: QuantumCircuit) -> np.ndarray:
+def _enriched_statevector(qc: QuantumCircuit) -> np.ndarray:
     params = StrongSimParams(
         preset="exact",
         get_state=True,
@@ -31,11 +37,22 @@ def _hybrid_statevector(qc: QuantumCircuit) -> np.ndarray:
         tdvp_pauli_consistency_check=False,
         tdvp_pauli_consistency_tol=1e-10,
     )
-    sim = Simulator()
-    init = State(qc.num_qubits, initial="zeros", representation="mps")
-    result = sim.run(init, qc, params)
-    assert result.output_state is not None
-    return np.asarray(result.output_state.mps.to_vec(), dtype=np.complex128)
+    st = State(qc.num_qubits, initial="zeros", representation="mps")
+    mps = st.mps
+    dag = circuit_to_dag(qc)
+    for node in dag.topological_op_nodes():
+        if len(node.qargs) == 1:
+            apply_single_qubit_gate(mps, node)
+            continue
+        if len(node.qargs) != 2:
+            continue
+        gate = convert_dag_to_tensor_algorithm(node)[0]
+        i, j = int(gate.sites[0]), int(gate.sites[1])
+        if abs(i - j) > 1 and gate.name in {"rxx", "ryy", "rzz"}:
+            apply_pauli_product_rotation_enriched(mps, gate, params)
+        else:
+            apply_two_qubit_gate(mps, node, params)
+    return np.asarray(mps.to_vec(), dtype=np.complex128)
 
 
 def _fidelity_error(qc: QuantumCircuit, vec: np.ndarray) -> float:
@@ -47,7 +64,7 @@ def test_enriched_rxx_strictly_interior_long_range_matches_qiskit() -> None:
     """Enriched LR `rxx` on a product state matches Qiskit."""
     qc = QuantumCircuit(8)
     qc.rxx(0.25, 1, 6)
-    vec = _hybrid_statevector(qc)
+    vec = _enriched_statevector(qc)
     assert _fidelity_error(qc, vec) < 1e-10
 
 
@@ -55,7 +72,7 @@ def test_enriched_ryy_strictly_interior_long_range_matches_qiskit() -> None:
     """Enriched LR `ryy` on a product state matches Qiskit."""
     qc = QuantumCircuit(8)
     qc.ryy(0.25, 1, 6)
-    vec = _hybrid_statevector(qc)
+    vec = _enriched_statevector(qc)
     assert _fidelity_error(qc, vec) < 1e-10
 
 
@@ -65,7 +82,7 @@ def test_enriched_long_range_pauli_rotations_position_sweep_match_qiskit(gate_na
     """Enriched LR `rxx/ryy` position sweeps match Qiskit."""
     qc = QuantumCircuit(10)
     getattr(qc, gate_name)(0.25, i, j)
-    vec = _hybrid_statevector(qc)
+    vec = _enriched_statevector(qc)
     assert _fidelity_error(qc, vec) < 1e-10
 
 
@@ -76,5 +93,5 @@ def test_enriched_long_range_rzz_position_sweep_match_qiskit(i: int, j: int) -> 
     qc.ry(np.pi / 4, i)
     qc.ry(np.pi / 5, j)
     qc.rzz(0.25, i, j)
-    vec = _hybrid_statevector(qc)
+    vec = _enriched_statevector(qc)
     assert _fidelity_error(qc, vec) < 1e-10

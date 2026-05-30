@@ -14,11 +14,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Statevector
 
-from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.digital.digital_tjm import (
+    apply_pauli_product_rotation_enriched,
+    apply_single_qubit_gate,
+    apply_two_qubit_gate,
+)
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -36,12 +42,23 @@ def _run_hybrid(qc: QuantumCircuit) -> tuple[np.ndarray, int]:
         tdvp_pauli_consistency_check=False,
         tdvp_pauli_consistency_tol=1e-10,
     )
-    sim = Simulator()
-    init = State(qc.num_qubits, initial="zeros", representation="mps")
-    result = sim.run(init, qc, params)
-    assert result.output_state is not None
-    vec = np.asarray(result.output_state.mps.to_vec(), dtype=np.complex128)
-    return vec, int(result.output_state.mps.get_max_bond())
+    st = State(qc.num_qubits, initial="zeros", representation="mps")
+    mps = st.mps
+    dag = circuit_to_dag(qc)
+    for node in dag.topological_op_nodes():
+        if len(node.qargs) == 1:
+            apply_single_qubit_gate(mps, node)
+            continue
+        if len(node.qargs) != 2:
+            continue
+        gate = convert_dag_to_tensor_algorithm(node)[0]
+        i, j = int(gate.sites[0]), int(gate.sites[1])
+        if abs(i - j) > 1 and gate.name in {"rxx", "ryy", "rzz"}:
+            apply_pauli_product_rotation_enriched(mps, gate, params)
+        else:
+            apply_two_qubit_gate(mps, node, params)
+    vec = np.asarray(mps.to_vec(), dtype=np.complex128)
+    return vec, int(mps.get_max_bond())
 
 
 def _fid_err(qc: QuantumCircuit, vec: np.ndarray) -> float:

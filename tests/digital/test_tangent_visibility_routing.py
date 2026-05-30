@@ -16,7 +16,26 @@ from qiskit.quantum_info import Statevector
 
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.digital.digital_tjm import apply_single_qubit_gate, apply_two_qubit_gate
+from mqt.yaqs.digital.digital_tjm import (
+    apply_single_qubit_gate,
+    apply_two_qubit_gate,
+    decide_long_range_pauli_route,
+)
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
+
+
+def _routing_params(**overrides: object) -> StrongSimParams:
+    return StrongSimParams(
+        preset="exact",
+        gate_mode="hybrid",
+        svd_threshold=1e-14,
+        tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
+        tdvp_visibility_safety_tol=None,
+        tdvp_pauli_consistency_check=False,
+        tdvp_pauli_consistency_tol=1e-10,
+        **overrides,
+    )
 
 
 def _apply_circuit_direct(qc: QuantumCircuit, params: StrongSimParams) -> np.ndarray:
@@ -40,65 +59,47 @@ def _fid_err(qc: QuantumCircuit, vec: np.ndarray) -> float:
     return float(1.0 - abs(np.vdot(ref, vec)) ** 2)
 
 
-def test_tangent_blind_ryy_routes_to_enriched_and_matches_qiskit() -> None:
+def _long_range_gate(qc: QuantumCircuit) -> object:
+    dag = circuit_to_dag(qc)
+    for node in dag.topological_op_nodes():
+        if len(node.qargs) == 2:
+            return convert_dag_to_tensor_algorithm(node)[0]
+    msg = "No two-qubit gate found"
+    raise AssertionError(msg)
+
+
+def test_tangent_blind_ryy_router_recommends_enriched_but_hybrid_uses_tdvp() -> None:
     qc = QuantumCircuit(8)
     qc.ryy(0.25, 1, 6)
-    params = StrongSimParams(
-        preset="exact",
-        gate_mode="hybrid",
-        svd_threshold=1e-14,
-        tangent_blindness_tol=1e-12,
-        tdvp_projection_defect_tol=5e-2,
-        tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=False,
-        tdvp_pauli_consistency_tol=1e-10,
-    )
+    params = _routing_params()
+    st = State(8, initial="zeros", representation="mps")
+    gate = _long_range_gate(qc)
+    decision = decide_long_range_pauli_route(st.mps, gate, params)
+    assert decision.route == "pauli_enriched"
+    assert decision.visibility.projected_ratio < params.tangent_blindness_tol
+
     vec = _apply_circuit_direct(qc, params)
-    assert getattr(params, "last_lr_route", None) == "pauli_enriched"
-    vis = getattr(params, "last_lr_visibility", None)
-    assert vis is not None
-    assert vis.projected_ratio < params.tangent_blindness_tol
-    assert _fid_err(qc, vec) < 1e-10
+    assert getattr(params, "last_lr_route", None) == "tdvp"
+    # Hybrid TDVP on tangent-blind states is intentionally not enriched; accuracy may suffer.
+    assert _fid_err(qc, vec) > 1e-4
 
 
-def test_endpoint_prepared_ryy_routes_to_tdvp_and_matches_qiskit() -> None:
+def test_endpoint_prepared_ryy_hybrid_uses_tdvp_and_matches_qiskit() -> None:
     qc = QuantumCircuit(8)
     qc.rx(np.pi / 2, 6)
     qc.ryy(0.25, 1, 6)
-    params = StrongSimParams(
-        preset="exact",
-        gate_mode="hybrid",
-        svd_threshold=1e-14,
-        tangent_blindness_tol=1e-12,
-        tdvp_projection_defect_tol=5e-2,
-        tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=False,
-        tdvp_pauli_consistency_tol=1e-10,
-    )
+    params = _routing_params()
     vec = _apply_circuit_direct(qc, params)
-    assert getattr(params, "last_lr_route", None) in {"tdvp", "pauli_enriched"}
-    vis = getattr(params, "last_lr_visibility", None)
-    assert vis is not None
-    assert not vis.is_blind
+    assert getattr(params, "last_lr_route", None) == "tdvp"
     assert _fid_err(qc, vec) < 1e-10
 
 
-def test_rzz_on_product_state_routes_to_tdvp_and_matches_qiskit() -> None:
+def test_rzz_on_product_state_hybrid_uses_tdvp_and_matches_qiskit() -> None:
     qc = QuantumCircuit(8)
     qc.rzz(0.25, 1, 6)
-    params = StrongSimParams(
-        preset="exact",
-        gate_mode="hybrid",
-        svd_threshold=1e-14,
-        tangent_blindness_tol=1e-12,
-        tdvp_projection_defect_tol=5e-2,
-        tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=False,
-        tdvp_pauli_consistency_tol=1e-10,
-    )
+    params = _routing_params()
     vec = _apply_circuit_direct(qc, params)
-    assert getattr(params, "last_lr_route", None) in {"tdvp", "pauli_enriched"}
+    assert getattr(params, "last_lr_route", None) == "tdvp"
     vis = getattr(params, "last_lr_visibility", None)
-    assert vis is not None
-    assert not vis.is_blind
+    assert vis is None or not vis.is_blind
     assert _fid_err(qc, vec) < 1e-10

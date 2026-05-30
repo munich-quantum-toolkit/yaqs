@@ -4,6 +4,25 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
+### `gate_mode="hybrid"` now always uses TDVP for long-range gates
+
+The default hybrid mode no longer routes long-range Pauli rotations through projection-defect
+Pauli enrichment. Nearest-neighbor gates still use TEBD; all long-range gates use TDVP.
+
+To restore the previous adaptive TDVP/enrichment routing, set `gate_mode="hybrid_pauli"`.
+
+**Before (implicit behavior of `gate_mode="hybrid"`):**
+
+Long-range `rxx`/`ryy`/`rzz` gates could route to Pauli-product enrichment when the projection
+defect exceeded `tdvp_projection_defect_tol`.
+
+**After:**
+
+```python
+StrongSimParams(gate_mode="hybrid")  # NN: TEBD, LR: TDVP
+StrongSimParams(gate_mode="hybrid_pauli")  # NN: TEBD, LR Pauli: TDVP or enrichment
+```
+
 ### `simulator.run` becomes `Simulator(...).run(...)`
 
 The free `mqt.yaqs.simulator.run` function has been replaced by a `Simulator` class.

@@ -30,7 +30,7 @@ from ..core.data_structures.simulation_parameters import (
     StrongSimParams,
     WeakSimParams,
 )
-from ..core.libraries.gate_library import BaseGate, GateLibrary
+from ..core.libraries.gate_library import GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from ..core.data_structures.simulation_parameters import GateMode
+    from ..core.libraries.gate_library import BaseGate
     from ..core.methods.decompositions import TruncMode
 
 WindowSizeSpec = int | Literal["interval", "full"]
@@ -373,8 +374,7 @@ def decide_long_range_pauli_route(
             reason = "tangent-blind: projected generator nearly zero"
         else:
             reason = (
-                "projection-incomplete: projection defect "
-                f"{projection_defect:.6g} above defect tol {defect_tol:.6g}"
+                f"projection-incomplete: projection defect {projection_defect:.6g} above defect tol {defect_tol:.6g}"
             )
         return PauliRouteDecision(
             route="pauli_enriched",
@@ -385,10 +385,7 @@ def decide_long_range_pauli_route(
         )
     return PauliRouteDecision(
         route="tdvp",
-        reason=(
-            "projection-complete: projection defect "
-            f"{projection_defect:.6g} below defect tol {defect_tol:.6g}"
-        ),
+        reason=(f"projection-complete: projection defect {projection_defect:.6g} below defect tol {defect_tol:.6g}"),
         visibility=visibility,
         candidate_fidelity_error=None,
         candidate_norm_error=None,

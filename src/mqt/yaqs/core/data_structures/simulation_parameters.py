@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
-GateMode = Literal["hybrid", "tdvp", "tebd"]
+GateMode = Literal["hybrid", "hybrid_pauli", "tdvp", "tebd"]
 
 
 class PresetTypes(TypedDict):
@@ -102,7 +102,7 @@ def _validate_gate_mode(mode: GateMode) -> GateMode:
     Raises:
         ValueError: If ``mode`` is not a supported value.
     """
-    allowed = ("hybrid", "tdvp", "tebd")
+    allowed = ("hybrid", "hybrid_pauli", "tdvp", "tebd")
     if mode not in allowed:
         msg = f"gate_mode must be one of {allowed!r}, got {mode!r}."
         raise ValueError(msg)
@@ -375,7 +375,7 @@ class StrongSimParams:
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
+            (``"hybrid"``, ``"hybrid_pauli"``, ``"tdvp"``, or ``"tebd"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -428,7 +428,11 @@ class StrongSimParams:
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
+            gate_mode: Two-qubit gate update mode (default ``"hybrid"``). ``"hybrid"`` uses TEBD
+                for nearest-neighbor gates and TDVP for all long-range gates. ``"hybrid_pauli"``
+                matches the former adaptive hybrid: long-range ``rxx``/``ryy``/``rzz`` gates default
+                to TDVP and fall back to Pauli-product enrichment only when the projection-defect
+                diagnostic exceeds ``tdvp_projection_defect_tol``.
             tangent_blindness_tol: Tangent-blindness threshold for the local TDVP projector diagnostic.
             tdvp_projection_accept_ratio: Legacy accept-ratio threshold (kept for compatibility).
             tdvp_projection_defect_tol: Projection-defect tolerance \\(\varepsilon\\) used by the fast router:
@@ -507,7 +511,7 @@ class WeakSimParams:
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
+            (``"hybrid"``, ``"hybrid_pauli"``, ``"tdvp"``, or ``"tebd"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -555,7 +559,11 @@ class WeakSimParams:
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
+            gate_mode: Two-qubit gate update mode (default ``"hybrid"``). ``"hybrid"`` uses TEBD
+                for nearest-neighbor gates and TDVP for all long-range gates. ``"hybrid_pauli"``
+                matches the former adaptive hybrid: long-range ``rxx``/``ryy``/``rzz`` gates default
+                to TDVP and fall back to Pauli-product enrichment only when the projection-defect
+                diagnostic exceeds ``tdvp_projection_defect_tol``.
             tangent_blindness_tol: Tangent-blindness threshold for the local TDVP projector diagnostic.
             tdvp_projection_accept_ratio: Legacy accept-ratio threshold (kept for compatibility).
             tdvp_projection_defect_tol: Projection-defect tolerance \\(\varepsilon\\) used by the fast router.

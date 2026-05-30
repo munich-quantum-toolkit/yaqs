@@ -9,10 +9,9 @@
 
 from __future__ import annotations
 
-import copy
-
 import numpy as np
 from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Statevector
 
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
@@ -24,7 +23,6 @@ from mqt.yaqs.digital.digital_tjm import (
     copy_pauli_rotation_with_angle,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
-from qiskit.converters import circuit_to_dag
 
 
 def _fid_err(qc: QuantumCircuit, vec: np.ndarray) -> float:
@@ -67,7 +65,8 @@ def test_experimental_tdvp_matches_plain_for_defaults_on_short_range() -> None:
                 return np.asarray(mps.to_vec(), dtype=np.complex128)
             if len(node.qargs) == 1:
                 apply_single_qubit_gate(mps, node)
-        raise AssertionError("missing rzz")
+        msg = "missing rzz"
+        raise AssertionError(msg)
 
     def run_experimental() -> np.ndarray:
         mps = State(6, initial="zeros", representation="mps").mps
@@ -86,7 +85,8 @@ def test_experimental_tdvp_matches_plain_for_defaults_on_short_range() -> None:
                 return np.asarray(mps.to_vec(), dtype=np.complex128)
             if len(node.qargs) == 1:
                 apply_single_qubit_gate(mps, node)
-        raise AssertionError("missing rzz")
+        msg = "missing rzz"
+        raise AssertionError(msg)
 
     vec_plain = run_plain()
     vec_exp = run_experimental()
