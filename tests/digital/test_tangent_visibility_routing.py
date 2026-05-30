@@ -10,8 +10,8 @@
 from __future__ import annotations
 
 import numpy as np
-from qiskit.converters import circuit_to_dag
 from qiskit.circuit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Statevector
 
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
@@ -30,7 +30,8 @@ def _apply_circuit_direct(qc: QuantumCircuit, params: StrongSimParams) -> np.nda
         elif len(node.qargs) == 2:
             apply_two_qubit_gate(mps, node, params)
         else:
-            raise AssertionError(f"Unexpected {len(node.qargs)}-qubit operation: {node.op.name}")
+            msg = f"Unexpected {len(node.qargs)}-qubit operation: {node.op.name}"
+            raise AssertionError(msg)
     return np.asarray(mps.to_vec(), dtype=np.complex128)
 
 
@@ -47,8 +48,9 @@ def test_tangent_blind_ryy_routes_to_enriched_and_matches_qiskit() -> None:
         gate_mode="hybrid",
         svd_threshold=1e-14,
         tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
         tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=True,
+        tdvp_pauli_consistency_check=False,
         tdvp_pauli_consistency_tol=1e-10,
     )
     vec = _apply_circuit_direct(qc, params)
@@ -68,8 +70,9 @@ def test_endpoint_prepared_ryy_routes_to_tdvp_and_matches_qiskit() -> None:
         gate_mode="hybrid",
         svd_threshold=1e-14,
         tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
         tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=True,
+        tdvp_pauli_consistency_check=False,
         tdvp_pauli_consistency_tol=1e-10,
     )
     vec = _apply_circuit_direct(qc, params)
@@ -88,8 +91,9 @@ def test_rzz_on_product_state_routes_to_tdvp_and_matches_qiskit() -> None:
         gate_mode="hybrid",
         svd_threshold=1e-14,
         tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
         tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=True,
+        tdvp_pauli_consistency_check=False,
         tdvp_pauli_consistency_tol=1e-10,
     )
     vec = _apply_circuit_direct(qc, params)
@@ -98,4 +102,3 @@ def test_rzz_on_product_state_routes_to_tdvp_and_matches_qiskit() -> None:
     assert vis is not None
     assert not vis.is_blind
     assert _fid_err(qc, vec) < 1e-10
-

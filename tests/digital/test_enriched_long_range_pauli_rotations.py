@@ -26,8 +26,9 @@ def _hybrid_statevector(qc: QuantumCircuit) -> np.ndarray:
         svd_threshold=1e-14,
         gate_mode="hybrid",
         tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
         tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=True,
+        tdvp_pauli_consistency_check=False,
         tdvp_pauli_consistency_tol=1e-10,
     )
     sim = Simulator()
@@ -43,6 +44,7 @@ def _fidelity_error(qc: QuantumCircuit, vec: np.ndarray) -> float:
 
 
 def test_enriched_rxx_strictly_interior_long_range_matches_qiskit() -> None:
+    """Enriched LR `rxx` on a product state matches Qiskit."""
     qc = QuantumCircuit(8)
     qc.rxx(0.25, 1, 6)
     vec = _hybrid_statevector(qc)
@@ -50,6 +52,7 @@ def test_enriched_rxx_strictly_interior_long_range_matches_qiskit() -> None:
 
 
 def test_enriched_ryy_strictly_interior_long_range_matches_qiskit() -> None:
+    """Enriched LR `ryy` on a product state matches Qiskit."""
     qc = QuantumCircuit(8)
     qc.ryy(0.25, 1, 6)
     vec = _hybrid_statevector(qc)
@@ -57,20 +60,21 @@ def test_enriched_ryy_strictly_interior_long_range_matches_qiskit() -> None:
 
 
 @pytest.mark.parametrize("gate_name", ["rxx", "ryy"])
-@pytest.mark.parametrize("i,j", [(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)])
+@pytest.mark.parametrize(("i", "j"), [(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)])
 def test_enriched_long_range_pauli_rotations_position_sweep_match_qiskit(gate_name: str, i: int, j: int) -> None:
+    """Enriched LR `rxx/ryy` position sweeps match Qiskit."""
     qc = QuantumCircuit(10)
     getattr(qc, gate_name)(0.25, i, j)
     vec = _hybrid_statevector(qc)
     assert _fidelity_error(qc, vec) < 1e-10
 
 
-@pytest.mark.parametrize("i,j", [(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)])
+@pytest.mark.parametrize(("i", "j"), [(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)])
 def test_enriched_long_range_rzz_position_sweep_match_qiskit(i: int, j: int) -> None:
+    """Enriched LR `rzz` position sweeps match Qiskit."""
     qc = QuantumCircuit(10)
     qc.ry(np.pi / 4, i)
     qc.ry(np.pi / 5, j)
     qc.rzz(0.25, i, j)
     vec = _hybrid_statevector(qc)
     assert _fidelity_error(qc, vec) < 1e-10
-

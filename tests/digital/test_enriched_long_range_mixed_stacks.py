@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
@@ -18,6 +20,9 @@ from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 from mqt.yaqs.core.data_structures.state import State
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 def _run_hybrid(qc: QuantumCircuit) -> tuple[np.ndarray, int]:
     params = StrongSimParams(
@@ -26,8 +31,9 @@ def _run_hybrid(qc: QuantumCircuit) -> tuple[np.ndarray, int]:
         svd_threshold=1e-14,
         gate_mode="hybrid",
         tangent_blindness_tol=1e-12,
+        tdvp_projection_defect_tol=5e-2,
         tdvp_visibility_safety_tol=None,
-        tdvp_pauli_consistency_check=True,
+        tdvp_pauli_consistency_check=False,
         tdvp_pauli_consistency_tol=1e-10,
     )
     sim = Simulator()
@@ -43,37 +49,72 @@ def _fid_err(qc: QuantumCircuit, vec: np.ndarray) -> float:
     return float(1.0 - abs(np.vdot(ref, vec)) ** 2)
 
 
+def _qc_stack_core_rxx_ryy_vacuum_10q() -> QuantumCircuit:
+    qc = QuantumCircuit(10)
+    qc.rxx(0.21, 2, 9)
+    qc.ryy(0.25, 3, 8)
+    return qc
+
+
+def _qc_mixed_axes_disjoint_pairs_8q() -> QuantumCircuit:
+    qc = QuantumCircuit(8)
+    qc.ry(np.pi / 4, 0)
+    qc.ry(np.pi / 5, 7)
+    qc.rzz(0.19, 0, 7)
+    qc.rxx(0.21, 1, 6)
+    qc.ryy(0.25, 2, 5)
+    return qc
+
+
+def _qc_minimal_mixed_stack_10q() -> QuantumCircuit:
+    qc = QuantumCircuit(10)
+    qc.ry(np.pi / 4, 1)
+    qc.ry(np.pi / 5, 4)
+    qc.rzz(0.19, 1, 8)
+    qc.rzz(0.27, 4, 9)
+    qc.rxx(0.21, 2, 7)
+    qc.ryy(0.25, 3, 6)
+    return qc
+
+
+def _qc_lr_stack_mixed_12q() -> QuantumCircuit:
+    qc = QuantumCircuit(12)
+    qc.ry(np.pi / 4, 1)
+    qc.ry(np.pi / 4, 4)
+    qc.ry(np.pi / 4, 7)
+    qc.rzz(0.19, 1, 10)
+    qc.rzz(0.27, 4, 11)
+    qc.rzz(0.33, 0, 7)
+    qc.rxx(0.21, 2, 9)
+    qc.ryy(0.25, 3, 8)
+    return qc
+
+
 @pytest.mark.parametrize(
     "qc_builder",
     [
         pytest.param(
-            lambda: (lambda qc: (qc.rxx(0.21, 2, 9), qc.ryy(0.25, 3, 8), qc)[-1])(QuantumCircuit(10)),
+            _qc_stack_core_rxx_ryy_vacuum_10q,
             id="stack_core_rxx_ryy_vacuum_10q",
         ),
         pytest.param(
-            lambda: (lambda qc: (qc.ry(np.pi / 4, 0), qc.ry(np.pi / 5, 7), qc.rzz(0.19, 0, 7), qc.rxx(0.21, 1, 6), qc.ryy(0.25, 2, 5), qc)[-1])(  # noqa: E501
-                QuantumCircuit(8)
-            ),
+            _qc_mixed_axes_disjoint_pairs_8q,
             id="mixed_axes_disjoint_pairs_8q",
         ),
         pytest.param(
-            lambda: (lambda qc: (qc.ry(np.pi / 4, 1), qc.ry(np.pi / 5, 4), qc.rzz(0.19, 1, 8), qc.rzz(0.27, 4, 9), qc.rxx(0.21, 2, 7), qc.ryy(0.25, 3, 6), qc)[-1])(  # noqa: E501
-                QuantumCircuit(10)
-            ),
+            _qc_minimal_mixed_stack_10q,
             id="minimal_mixed_stack_10q",
         ),
         pytest.param(
-            lambda: (lambda qc: (qc.ry(np.pi / 4, 1), qc.ry(np.pi / 4, 4), qc.ry(np.pi / 4, 7), qc.rzz(0.19, 1, 10), qc.rzz(0.27, 4, 11), qc.rzz(0.33, 0, 7), qc.rxx(0.21, 2, 9), qc.ryy(0.25, 3, 8), qc)[-1])(  # noqa: E501
-                QuantumCircuit(12)
-            ),
+            _qc_lr_stack_mixed_12q,
             id="lr_stack_mixed_12q",
         ),
     ],
 )
-def test_enriched_mixed_long_range_stacks_match_qiskit(qc_builder) -> None:
+def test_enriched_mixed_long_range_stacks_match_qiskit(qc_builder: Callable[[], QuantumCircuit]) -> None:
+    """Previously failing mixed LR stacks match Qiskit within tolerance."""
     qc = qc_builder()
     vec, max_bond = _run_hybrid(qc)
     assert _fid_err(qc, vec) < 1e-10
     # Loose guardrail: ensure we didn't keep doubling bonds without truncation.
     assert max_bond <= 128
-

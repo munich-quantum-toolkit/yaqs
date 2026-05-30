@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -26,10 +26,11 @@ from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import (
+    AnalogSimParams,
     StrongSimParams,
     WeakSimParams,
 )
-from ..core.libraries.gate_library import GateLibrary
+from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
@@ -50,8 +51,9 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from ..core.data_structures.simulation_parameters import GateMode
-    from ..core.libraries.gate_library import BaseGate
     from ..core.methods.decompositions import TruncMode
+
+WindowSizeSpec = int | Literal["interval", "full"]
 
 
 def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site: int) -> NoiseModel:
@@ -609,6 +611,137 @@ def apply_pauli_product_rotation_enriched(
     return left_site, right_site
 
 
+def make_pauli_product_branch(state: MPS, gate: BaseGate) -> MPS:
+    """Return ``phi = P_i P_j |psi>`` as an MPS copy.
+
+    Supports ``gate.name`` in ``{"rxx", "ryy", "rzz"}`` and does not mutate ``state``.
+    """
+    if gate.name not in {"rxx", "ryy", "rzz"}:
+        msg = f"Unsupported gate for Pauli-product branch: {gate.name!r}"
+        raise ValueError(msg)
+
+    if gate.name == "rxx":
+        pauli = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    elif gate.name == "ryy":
+        pauli = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+    else:  # rzz
+        pauli = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+
+    branch = copy.deepcopy(state)
+    site0, site1 = gate.sites
+    branch.tensors[site0] = oe.contract("ab, bcd->acd", pauli, branch.tensors[site0])
+    branch.tensors[site1] = oe.contract("ab, bcd->acd", pauli, branch.tensors[site1])
+    return branch
+
+
+def expand_mps_subspace_with_branch(
+    state: MPS,
+    branch: MPS,
+    *,
+    interval: tuple[int, int] | None = None,
+) -> None:
+    """Expand state bond spaces using branch while preserving ``|state>``.
+
+    Prototype implementation:
+        Uses an exact direct-sum MPS construction with coefficients ``1.0`` and ``0.0``
+        to keep the represented physical state equal to the input ``state``, while
+        enlarging the virtual bond spaces to include directions from ``branch``.
+
+    Notes:
+        - This function does not compress or truncate.
+        - ``interval`` is accepted for future localized expansions, but is currently ignored.
+    """
+    _ = interval
+    expanded = add_mps_linear_combination(1.0 + 0.0j, state, 0.0 + 0.0j, branch)
+    state.tensors = expanded.tensors
+
+
+def apply_pauli_product_rotation_subspace_expanded_tdvp(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+) -> tuple[int, int]:
+    """Apply LR Pauli rotation by generator subspace expansion followed by TDVP.
+
+    This is experimental and does not apply the finite Pauli-product update directly.
+    """
+    if gate.name not in {"rxx", "ryy", "rzz"}:
+        msg = f"Unsupported gate for subspace-expanded TDVP: {gate.name!r}"
+        raise ValueError(msg)
+
+    first_site = min(gate.sites)
+    last_site = max(gate.sites)
+
+    branch = make_pauli_product_branch(state, gate)
+    expand_mps_subspace_with_branch(state, branch, interval=(first_site, last_site))
+
+    first_site, last_site = apply_two_qubit_gate_tdvp(state, gate, sim_params)
+
+    compress_mps_svd_sweep(state, sim_params)
+    state.normalize(form="B", decomposition="QR")
+    return first_site, last_site
+
+
+@dataclass(slots=True, frozen=True)
+class SubspaceExpansionDiagnostics:
+    """Diagnostics for subspace-expanded TDVP experiments."""
+
+    projected_ratio_before: float
+    projection_defect_before: float
+    projected_ratio_after: float
+    projection_defect_after: float
+    state_delta_from_expansion: float
+    max_bond_before: int
+    max_bond_after_expansion: int
+
+
+def apply_pauli_product_rotation_subspace_expanded_tdvp_with_diagnostics(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+) -> tuple[tuple[int, int], SubspaceExpansionDiagnostics]:
+    """Apply subspace-expanded TDVP and return expansion diagnostics.
+
+    This is intended for benchmark/diagnostic scripts and keeps the production
+    path unchanged.
+    """
+    if gate.name not in {"rxx", "ryy", "rzz"}:
+        msg = f"Unsupported gate for subspace-expanded TDVP: {gate.name!r}"
+        raise ValueError(msg)
+
+    max_bond_before = int(state.get_max_bond())
+    vis0 = estimate_local_tdvp_projected_norm(state, gate, sim_params, window_size=1, estimate_update_delta=False)
+    projected_ratio_before = float(vis0.projected_ratio)
+    projection_defect_before = max(0.0, 1.0 - min(projected_ratio_before, 1.0))
+
+    state_before = copy.deepcopy(state)
+    branch = make_pauli_product_branch(state, gate)
+    first_site = min(gate.sites)
+    last_site = max(gate.sites)
+    expand_mps_subspace_with_branch(state, branch, interval=(first_site, last_site))
+
+    max_bond_after = int(state.get_max_bond())
+    overlap = mps_overlap(state_before, state)
+    state_delta = float(max(0.0, 1.0 - abs(overlap) ** 2))
+
+    vis1 = estimate_local_tdvp_projected_norm(state, gate, sim_params, window_size=1, estimate_update_delta=False)
+    projected_ratio_after = float(vis1.projected_ratio)
+    projection_defect_after = max(0.0, 1.0 - min(projected_ratio_after, 1.0))
+
+    sites = apply_two_qubit_gate_tdvp(state, gate, sim_params)
+    compress_mps_svd_sweep(state, sim_params)
+    state.normalize(form="B", decomposition="QR")
+    return sites, SubspaceExpansionDiagnostics(
+        projected_ratio_before=projected_ratio_before,
+        projection_defect_before=projection_defect_before,
+        projected_ratio_after=projected_ratio_after,
+        projection_defect_after=projection_defect_after,
+        state_delta_from_expansion=state_delta,
+        max_bond_before=max_bond_before,
+        max_bond_after_expansion=max_bond_after,
+    )
+
+
 def apply_two_qubit_gate_tdvp(
     state: MPS,
     gate: BaseGate,
@@ -632,6 +765,142 @@ def apply_two_qubit_gate_tdvp(
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 
+    return first_site, last_site
+
+
+def copy_pauli_rotation_with_angle(gate: BaseGate, theta: float) -> BaseGate:
+    """Return a fresh ``rxx/ryy/rzz`` gate with the same sites and a new angle.
+
+    Intended for diagnostic substepping; does not mutate ``gate``.
+    """
+    if gate.name not in {"rxx", "ryy", "rzz"}:
+        msg = f"copy_pauli_rotation_with_angle supports rxx/ryy/rzz only, got {gate.name!r}"
+        raise ValueError(msg)
+    factory = getattr(GateLibrary, gate.name)
+    new_gate = factory([float(theta)])
+    new_gate.set_sites(*gate.sites)
+    return new_gate
+
+
+def _window_padding_for_spec(
+    state: MPS,
+    first_site: int,
+    last_site: int,
+    window_size: WindowSizeSpec,
+) -> int:
+    if window_size == "interval":
+        return 0
+    if window_size == "full":
+        return max(first_site, state.length - 1 - last_site)
+    if isinstance(window_size, str):
+        msg = f"Unsupported window_size {window_size!r}"
+        raise ValueError(msg)
+    return int(window_size)
+
+
+def _two_site_tdvp_with_sweep_mode(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: StrongSimParams | WeakSimParams,
+    *,
+    circuit_full_sweep: bool,
+) -> None:
+    """Run ``two_site_tdvp`` with optional symmetric (full) circuit sweep."""
+    if circuit_full_sweep:
+        analog_params = AnalogSimParams(
+            preset="exact",
+            krylov_tol=sim_params.krylov_tol,
+            svd_threshold=sim_params.svd_threshold,
+            max_bond_dim=sim_params.max_bond_dim,
+            trunc_mode=sim_params.trunc_mode,
+            min_bond_dim=sim_params.min_bond_dim,
+        )
+        two_site_tdvp(state, hamiltonian, analog_params)
+        return
+    local = copy.deepcopy(sim_params)
+    two_site_tdvp(state, hamiltonian, local)
+
+
+def _apply_tdvp_on_window(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+    *,
+    window_size: WindowSizeSpec,
+    circuit_full_sweep: bool,
+) -> tuple[int, int]:
+    mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
+    pad = _window_padding_for_spec(state, first_site, last_site, window_size)
+    short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, pad)
+    _two_site_tdvp_with_sweep_mode(
+        short_state,
+        short_mpo,
+        sim_params,
+        circuit_full_sweep=circuit_full_sweep,
+    )
+    for i in range(window[0], window[1] + 1):
+        state.tensors[i] = short_state.tensors[i - window[0]]
+    return first_site, last_site
+
+
+def apply_two_qubit_gate_tdvp_experimental(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+    *,
+    window_size: WindowSizeSpec = 1,
+    tdvp_sweeps: int | None = None,
+    substeps: int = 1,
+    tdvp_circuit_full_sweep: bool | None = None,
+) -> tuple[int, int]:
+    """Experimental LR TDVP application for diagnostics.
+
+    Supports larger window padding, full-chain windows, temporary sweep overrides,
+    symmetric circuit sweeps, and finite-angle substepping for Pauli rotations.
+
+    Does not mutate ``sim_params``; uses a deep copy for TDVP integration.
+    """
+    if substeps < 1:
+        msg = f"substeps must be >= 1, got {substeps}"
+        raise ValueError(msg)
+
+    local_params = copy.deepcopy(sim_params)
+    sweeps = 1 if tdvp_sweeps is None else int(tdvp_sweeps)
+    if sweeps < 1:
+        msg = f"tdvp_sweeps must be >= 1, got {sweeps}"
+        raise ValueError(msg)
+    full_sweep = (
+        bool(getattr(sim_params, "tdvp_circuit_full_sweep", False))
+        if tdvp_circuit_full_sweep is None
+        else bool(tdvp_circuit_full_sweep)
+    )
+
+    theta = float(getattr(gate, "theta", 0.0))
+    first_site = min(gate.sites)
+    last_site = max(gate.sites)
+
+    if gate.name in {"rxx", "ryy", "rzz"} and substeps > 1:
+        for _ in range(substeps):
+            step_gate = copy_pauli_rotation_with_angle(gate, theta / substeps)
+            for _ in range(sweeps):
+                _apply_tdvp_on_window(
+                    state,
+                    step_gate,
+                    local_params,
+                    window_size=window_size,
+                    circuit_full_sweep=full_sweep,
+                )
+        return first_site, last_site
+
+    step_gate = gate
+    for _ in range(sweeps):
+        _apply_tdvp_on_window(
+            state,
+            step_gate,
+            local_params,
+            window_size=window_size,
+            circuit_full_sweep=full_sweep,
+        )
     return first_site, last_site
 
 
