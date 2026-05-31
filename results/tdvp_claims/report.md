@@ -12,7 +12,9 @@ Runtime advantage is not assumed; wall-clock is reported honestly.
 
 The Floquet application is exploratory unless it clearly shows improved fixed-χ collision-entropy accuracy.
 
-- NN control median TDVP/TEBD error ratio: 1.74
+- Fixed-χ advantage subset: 412 cases; TDVP wins (2× error) in 284.
+- Padding: required=235, helpful=9 over 468 pairs.
+- NN control median TDVP/TEBD error ratio: 8.11
 
 ## Validation and dispatch checks
 
@@ -20,24 +22,25 @@ The Floquet application is exploratory unless it clearly shows improved fixed-χ
 
 ## Padding diagnostic
 
+- periodic_1d padding pairs: 234
 - Does padding fix periodic gates? See `padding_diagnostic.csv`.
 - Is padded4 always better? Expected: no.
 
 ## Sparse long-range fixed-χ advantage
 
-- sparse comparisons: 0
+- sparse comparisons: 468
 
 ## Recovery χ
 
-- Recovered within tested χ: 0/0
+- Recovered within tested χ: 450/592
 
 ## Nearest-neighbor control
 
-- Cases with TDVP ≥ TEBD error: 15/18
+- Cases with TDVP ≥ TEBD error: 209/234
 
 ## Heisenberg Floquet mini-application
 
-- Floquet patch rows: 0 (exploratory).
+- Floquet patch rows: 648 (exploratory).
 
 ## Failure/scope cases
 
@@ -52,4 +55,4 @@ The Floquet application is exploratory unless it clearly shows improved fixed-χ
 
 ---
 
-Total runs: 36.
+Total runs: 2545.
