@@ -28,6 +28,8 @@ from .digital.utils.mpo_utils import iterate
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
 
+    from .core.parallel import MPContext
+
 __all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "EquivalenceRepresentation"]
 
 EquivalenceRepresentation = Literal["auto", "matrix", "mpo"]
@@ -64,6 +66,9 @@ class EquivalenceChecker:
         fidelity: Fidelity threshold for deciding whether the composed operator is identity-like.
         representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
         matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
+        parallel: Whether to use a thread pool for independent MPO pair updates.
+        max_workers: Maximum worker threads when ``parallel`` is True.
+        mp_context: Reserved for future process-pool use (MPO uses threads today).
     """
 
     def __init__(
@@ -73,6 +78,9 @@ class EquivalenceChecker:
         fidelity: float = 1 - 1e-13,
         representation: EquivalenceRepresentation = "auto",
         matrix_max_qubits: int = DEFAULT_MATRIX_MAX_QUBITS,
+        parallel: bool = False,
+        max_workers: int | None = None,
+        mp_context: MPContext = "auto",
     ) -> None:
         """Initialize the checker with numerical thresholds and backend options.
 
@@ -82,11 +90,17 @@ class EquivalenceChecker:
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
             matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
+            parallel: Enable thread-pool parallelism for checkerboard MPO pair updates.
+            max_workers: Cap on worker threads (default: machine CPU count).
+            mp_context: Reserved; MPO parallelism uses in-process threads, not processes.
         """
         self.threshold = threshold
         self.fidelity = fidelity
         self.representation = _validate_representation(representation)
         self.matrix_max_qubits = _validate_matrix_max_qubits(matrix_max_qubits)
+        self.parallel = parallel
+        self.max_workers = max_workers
+        self.mp_context = mp_context
 
     def _resolve_representation(self, num_qubits: int) -> Literal["matrix", "mpo"]:
         if self.representation == "matrix":
@@ -124,12 +138,27 @@ class EquivalenceChecker:
         start_time = time.time()
 
         if backend == "matrix":
-            equivalent = check_equivalence_matrix(circuit1, circuit2, fidelity=self.fidelity)
+            equivalent = check_equivalence_matrix(
+                circuit1,
+                circuit2,
+                fidelity=self.fidelity,
+                parallel=self.parallel,
+                max_workers=self.max_workers,
+                mp_context=self.mp_context,
+            )
         else:
             mpo = MPO.identity(circuit1.num_qubits)
             circuit1_dag = circuit_to_dag(circuit1)
             circuit2_dag = circuit_to_dag(circuit2)
-            iterate(mpo, circuit1_dag, circuit2_dag, self.threshold)
+            iterate(
+                mpo,
+                circuit1_dag,
+                circuit2_dag,
+                self.threshold,
+                parallel=self.parallel,
+                max_workers=self.max_workers,
+                mp_context=self.mp_context,
+            )
             equivalent = mpo.check_if_identity(self.fidelity)
 
         return {
