@@ -31,7 +31,7 @@ import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
-from qiskit.quantum_info import Statevector
+from qiskit.quantum_info import Pauli, Statevector
 
 from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -43,7 +43,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 )
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Z
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
 from mqt.yaqs.digital.digital_tjm import (
     apply_single_qubit_gate,
     apply_two_qubit_gate,
@@ -756,8 +756,7 @@ def test_mixed_circuit_tebd_matches_tdvp() -> None:
 def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
     """Lock down YAQS dense-vector convention against Qiskit on non-symmetric circuits.
 
-    The simulator reverses qubit order internally; this test ensures the resulting MPS dense
-    vector remains consistent with a single documented Qiskit reference convention.
+    This guards qubit ordering conventions in YAQS' digital backend against Qiskit.
     """
     n = 3
     circuits: list[QuantumCircuit] = []
@@ -789,6 +788,46 @@ def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
         assert isinstance(vec, np.ndarray)
         ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
         assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_observables_match_qiskit_statevector_qubit_ordering() -> None:
+    """Digital observable expectations match Qiskit (guards qubit ordering)."""
+
+    def qiskit_single_pauli_expectation(qc: QuantumCircuit, site: int, op: str) -> float:
+        n = qc.num_qubits
+        label = ["I"] * n
+        # Qiskit Pauli labels are ordered as q_{n-1} ... q_0.
+        label[n - 1 - site] = op
+        psi = Statevector(qc)
+        exp = psi.expectation_value(Pauli("".join(label)))
+        return float(np.real(exp))
+
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.cx(0, 2)
+    qc.ry(0.51, 1)
+    qc.rz(0.23, 2)
+    qc.cx(2, 1)
+
+    requested = [
+        Observable(Z(), 2),
+        Observable(X(), 0),
+        Observable(Y(), 1),
+        Observable(Z(), 0),
+        Observable(X(), 2),
+    ]
+    sim_params = StrongSimParams(observables=requested, gate_mode="hybrid", preset="exact")
+    state = State(3, initial="zeros")
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    for i, obs in enumerate(result.observables):
+        site = obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        assert isinstance(site, int)
+        op = obs.gate.name.upper()
+        assert op in {"X", "Y", "Z"}
+        expected = qiskit_single_pauli_expectation(qc, site, op)
+        got = float(np.real(result.expectation_values[i][0]))
+        assert got == pytest.approx(expected, abs=1e-10)
 
 
 def test_expectation_values_align_with_result_observables_order() -> None:
