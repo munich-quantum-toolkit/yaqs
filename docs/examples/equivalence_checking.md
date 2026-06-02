@@ -82,8 +82,8 @@ are not supported for unitary equivalence on either backend. See
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default {data}`~mqt.yaqs.DEFAULT_MATRIX_MAX_QUBITS`): only affects
   `"auto"`.
-- **`parallel`** (default `False`): when `True`, checkerboard **MPO** pair updates run in a
-  **thread pool** (ignored for the matrix backend).
+- **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair updates run in a
+  **thread pool** from 12 qubits upward (ignored for the matrix backend and below the cutoff).
 - **`max_workers`** (default `None`): cap on worker threads when `parallel=True` (defaults to
   the machine CPU count via {func}`~mqt.yaqs.parallel_utils.available_cpus`).
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
@@ -184,8 +184,9 @@ MPO instead.
 ## Parallel execution
 
 Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up **MPO** checks on circuits
-where many independent updates can run at once. The default remains serial (`parallel=False`).
-The matrix backend is always serial.
+where many independent updates can run at once. This is the default; below 12 qubits the
+implementation keeps the serial path even when `parallel=True`, because thread overhead would
+dominate. The matrix backend is always serial.
 
 Within each checkerboard sweep, disjoint nearest-neighbor pairs update different MPO site
 tensors and can be computed in parallel in a shared thread pool (one pool per `iterate()` call).
@@ -195,7 +196,6 @@ step runs concurrently. Long-range gate handling stays serial in this version.
 ```{code-cell} ipython3
 wide_checker = EquivalenceChecker(
     representation="mpo",
-    parallel=True,
     max_workers=4,
 )
 ```

@@ -29,21 +29,6 @@ if TYPE_CHECKING:
     from mqt.yaqs.equivalence_checker import EquivalenceRepresentation
 
 
-def _make_n_by_n_circuit(num_qubits: int) -> QuantumCircuit:
-    """Build an ``n`` x ``n`` layered circuit (``n`` qubits, ``n`` repetitions).
-
-    Returns:
-        A layered circuit with all-qubit ``h`` gates and linear ``cx`` chains.
-    """
-    qc = QuantumCircuit(num_qubits)
-    for _ in range(num_qubits):
-        for q in range(num_qubits):
-            qc.h(q)
-        for q in range(num_qubits - 1):
-            qc.cx(q, q + 1)
-    return qc
-
-
 @pytest.mark.parametrize(("threshold", "fidelity"), [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
 def test_identity_vs_identity(threshold: float, fidelity: float) -> None:
     """Test that two empty (no-gate) circuits on the same number of qubits are equivalent.
@@ -242,6 +227,26 @@ def test_checker_rejects_non_int_max_workers() -> None:
     """Non-integer ``max_workers`` values are rejected."""
     with pytest.raises(TypeError, match="max_workers"):
         EquivalenceChecker(max_workers=1.5)  # ty: ignore[invalid-argument-type]
+
+
+def test_equivalence_checker_defaults_parallel_true() -> None:
+    """``parallel`` defaults to ``True`` (MPO thread pool still gated by qubit count)."""
+    assert EquivalenceChecker().parallel is True
+
+
+def _make_n_by_n_circuit(num_qubits: int) -> QuantumCircuit:
+    """Build an ``n`` x ``n`` layered circuit (``n`` qubits, ``n`` repetitions).
+
+    Returns:
+        A layered circuit with all-qubit ``h`` gates and linear ``cx`` chains.
+    """
+    qc = QuantumCircuit(num_qubits)
+    for _ in range(num_qubits):
+        for q in range(num_qubits):
+            qc.h(q)
+        for q in range(num_qubits - 1):
+            qc.cx(q, q + 1)
+    return qc
 
 
 @pytest.mark.parametrize("parallel", [False, True])

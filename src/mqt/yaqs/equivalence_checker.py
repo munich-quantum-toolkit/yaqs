@@ -113,7 +113,7 @@ class EquivalenceChecker:
         fidelity: Fidelity threshold for deciding whether the composed operator is identity-like.
         representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
         matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
-        parallel: Whether to use a thread pool for independent MPO pair updates (MPO backend only).
+        parallel: Whether to use a thread pool for independent MPO pair updates (default ``True``; MPO backend only).
         max_workers: Maximum worker threads when ``parallel`` is True (MPO backend only).
         mp_context: Reserved for future process-pool use (MPO uses threads today).
     """
@@ -125,7 +125,7 @@ class EquivalenceChecker:
         fidelity: float = 1 - 1e-13,
         representation: EquivalenceRepresentation = "auto",
         matrix_max_qubits: int = DEFAULT_MATRIX_MAX_QUBITS,
-        parallel: bool = False,
+        parallel: bool = True,
         max_workers: int | None = None,
         mp_context: MPContext = "auto",
     ) -> None:
@@ -137,7 +137,8 @@ class EquivalenceChecker:
             representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
                 ``"matrix"`` or ``"mpo"`` force that backend.
             matrix_max_qubits: Cutover for ``representation="auto"`` (default ``7``).
-            parallel: Enable thread-pool parallelism for checkerboard MPO pair updates only.
+            parallel: Enable thread-pool parallelism for checkerboard MPO pair updates (default ``True``;
+                effective only from ``MIN_QUBITS_FOR_MPO_PARALLEL`` qubits upward).
             max_workers: Cap on worker threads for the MPO backend (default: machine CPU count).
             mp_context: Reserved; MPO parallelism uses in-process threads, not processes.
         """
