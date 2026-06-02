@@ -31,6 +31,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
 
@@ -124,6 +125,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#447]: https://github.com/munich-quantum-toolkit/yaqs/pull/447
 [#446]: https://github.com/munich-quantum-toolkit/yaqs/pull/446
 [#445]: https://github.com/munich-quantum-toolkit/yaqs/pull/445
 [#441]: https://github.com/munich-quantum-toolkit/yaqs/pull/441

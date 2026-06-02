@@ -218,14 +218,75 @@ class Observable:
             self.gate.set_sites(self.sites)
 
 
-class AnalogSimParams:
+def _prepare_observable_ordering(observables: list[Observable]) -> tuple[list[Observable], tuple[int, ...]]:
+    """Prepare a sorted evaluation order and a user-index to sorted-row mapping.
+
+    Non-PVM observables are evaluated in ascending site order to reduce the number of
+    orthogonality-center shifts in MPS-based backends. The sorting is *stable* for
+    ties (observables on the same site keep their original list order). PVM
+    observables are appended in their original relative order.
+
+    Args:
+        observables: Observables in the order supplied by the user.
+
+    Returns:
+        ``(sorted_observables, observable_sorted_indices)`` where
+        ``observable_sorted_indices[user_i]`` is the corresponding row index in the
+        sorted worker buffers for ``observables[user_i]``.
+    """
+    if not observables:
+        return [], ()
+
+    indexed = list(enumerate(observables))
+    sortable = [(i, obs) for i, obs in indexed if obs.gate.name != "pvm"]
+    pvm_pairs = [(i, obs) for i, obs in indexed if obs.gate.name == "pvm"]
+
+    def _site_sort_key(pair: tuple[int, Observable]) -> tuple[int, int]:
+        user_i, obs = pair
+        sites = obs.sites
+        site = sites[0] if isinstance(sites, list) else sites
+        assert isinstance(site, int)
+        return (site, user_i)
+
+    sorted_pairs = sorted(sortable, key=_site_sort_key) + pvm_pairs
+    sorted_observables = [obs for _user_i, obs in sorted_pairs]
+
+    user_to_sorted: list[int] = [0] * len(observables)
+    for sorted_i, (user_i, _obs) in enumerate(sorted_pairs):
+        user_to_sorted[user_i] = sorted_i
+
+    return sorted_observables, tuple(user_to_sorted)
+
+
+class _ObservableOrderingMixin:
+    """Computed observable ordering from the current ``observables`` list."""
+
+    observables: list[Observable]
+
+    @property
+    def sorted_observables(self) -> list[Observable]:
+        """Observables sorted by site for efficient MPS evaluation."""
+        sorted_obs, _indices = _prepare_observable_ordering(self.observables)
+        return sorted_obs
+
+    @property
+    def observable_sorted_indices(self) -> tuple[int, ...]:
+        """Maps each user-list index to the corresponding sorted worker-buffer row."""
+        _sorted_obs, indices = _prepare_observable_ordering(self.observables)
+        return indices
+
+
+class AnalogSimParams(_ObservableOrderingMixin):
     """Analog Simulation Parameters.
 
     A class to represent the parameters for an analog simulation.
 
     Attributes:
         observables: List of observables tracked during the simulation.
-        sorted_observables: Observables sorted by site and name.
+        sorted_observables: Observables sorted by site for efficient MPS evaluation (computed
+            from the current :attr:`observables` list).
+        observable_sorted_indices: Maps each user-list index to the corresponding row in
+            sorted worker buffers (computed from the current :attr:`observables` list).
         elapsed_time: Total simulation time.
         dt: Simulation time step.
         times: Array of sampled times from ``0`` to ``elapsed_time`` with spacing ``dt``.
@@ -312,17 +373,6 @@ class AnalogSimParams:
         )
         self.observables = obs_list
 
-        if self.observables:
-            sortable = [obs for obs in self.observables if obs.gate.name != "pvm"]
-            unsorted = [obs for obs in self.observables if obs.gate.name == "pvm"]
-            sorted_obs = sorted(
-                sortable,
-                key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,
-            )
-            self.sorted_observables = sorted_obs + unsorted
-        else:
-            self.sorted_observables = []
-
         self.elapsed_time = elapsed_time
         self.dt = dt
         self.times = np.arange(0, elapsed_time + dt, dt)
@@ -344,7 +394,7 @@ class AnalogSimParams:
         )
 
 
-class StrongSimParams:
+class StrongSimParams(_ObservableOrderingMixin):
     """Strong Circuit Simulation Parameters.
 
     A class to represent the parameters for a strong simulation.
@@ -352,7 +402,10 @@ class StrongSimParams:
     Attributes:
         dt: A placeholder property for code compatibility.
         observables: A list of observables to be tracked during the simulation.
-        sorted_observables: A list of observables sorted by site and name.
+        sorted_observables: Observables sorted by site for efficient MPS evaluation (computed
+            from the current :attr:`observables` list).
+        observable_sorted_indices: Maps each user-list index to the corresponding row in
+            sorted worker buffers (computed from the current :attr:`observables` list).
         num_traj: The number of trajectories to simulate.
         random_seed: If set, seeds per-trajectory jump RNG and static noise
             sampling for reproducible runs.
@@ -432,17 +485,6 @@ class StrongSimParams:
             "We currently have not implemented mixed observable and projective-measurement simulation."
         )
         self.observables = obs_list
-
-        if self.observables:
-            sortable = [obs for obs in self.observables if obs.gate.name != "pvm"]
-            unsorted = [obs for obs in self.observables if obs.gate.name == "pvm"]
-            sorted_obs = sorted(
-                sortable,
-                key=lambda obs: obs.sites[0] if isinstance(obs.sites, list) else obs.sites,
-            )
-            self.sorted_observables = sorted_obs + unsorted
-        else:
-            self.sorted_observables = []
 
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])

@@ -116,7 +116,12 @@ from .core.data_structures.result import (
     allocate_diagnostic_buffers,
     allocate_observable_buffers,
 )
-from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from .core.data_structures.simulation_parameters import (
+    AnalogSimParams,
+    StrongSimParams,
+    WeakSimParams,
+    _prepare_observable_ordering,
+)
 from .core.data_structures.state import State
 
 if TYPE_CHECKING:
@@ -488,8 +493,8 @@ def _prepare_result_observables(
     num_traj: int,
     num_mid_measurements: int | None = None,
 ) -> None:
-    """Deep-copy sorted observables onto ``result`` and allocate output buffers."""
-    result.observables = [copy.deepcopy(obs) for obs in sim_params.sorted_observables]
+    """Deep-copy user-ordered observables onto ``result`` and allocate output buffers."""
+    result.observables = [copy.deepcopy(obs) for obs in sim_params.observables]
     trajectories, expectation_values, times = allocate_observable_buffers(
         sim_params,
         len(result.observables),
@@ -503,17 +508,30 @@ def _prepare_result_observables(
 
 def _worker_sim_params(
     sim_params: AnalogSimParams | StrongSimParams,
-    result: Result,
 ) -> AnalogSimParams | StrongSimParams:
-    """Build worker-visible params that reference ``result.observables`` for measurement.
+    """Build worker-visible params that expose sorted observables for measurement.
 
     Returns:
-        A deep copy of ``sim_params`` whose observable lists alias ``result.observables``.
+        A deep copy of ``sim_params`` whose observable lists are ordered for worker evaluation.
     """
     worker_params = copy.deepcopy(sim_params)
-    worker_params.observables = result.observables
-    worker_params.sorted_observables = result.observables
+    # Workers evaluate in sorted order for efficiency; Result retains user order.
+    sorted_obs, _ = _prepare_observable_ordering(sim_params.observables)
+    worker_params.observables = [copy.deepcopy(obs) for obs in sorted_obs]
     return worker_params
+
+
+def _store_observable_trajectory(
+    result: Result,
+    sim_params: AnalogSimParams | StrongSimParams,
+    *,
+    traj_index: int,
+    sorted_traj_data: NDArray[np.float64] | NDArray[np.complex128],
+) -> None:
+    """Store one trajectory's observable data into result buffers in user order."""
+    _, observable_sorted_indices = _prepare_observable_ordering(sim_params.observables)
+    for user_i, sorted_i in enumerate(observable_sorted_indices):
+        result.trajectories[user_i][traj_index] = sorted_traj_data[sorted_i]
 
 
 def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
@@ -922,7 +940,7 @@ class Simulator:
             effective_num_traj = sim_params.num_traj
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
-        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
+        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params))
 
         diag_per_traj: NDArray[np.float64] | None = None
         if state_rep == "mps":
@@ -983,8 +1001,7 @@ class Simulator:
                 mp_context=self.mp_context,
             ):
                 traj_data, traj_diag, traj_final = traj_payload
-                for obs_index in range(len(result.observables)):
-                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=traj_data)
                 if traj_diag is not None and diag_per_traj is not None:
                     diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
@@ -1007,8 +1024,7 @@ class Simulator:
 
             for i, arg in enumerate(iterator):
                 traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
-                for obs_index in range(len(result.observables)):
-                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=traj_data)
                 if traj_diag is not None and diag_per_traj is not None:
                     diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
@@ -1081,7 +1097,7 @@ class Simulator:
             num_traj=effective_num_traj,
             num_mid_measurements=effective_num_mid_measurements,
         )
-        worker_params = cast("StrongSimParams", _worker_sim_params(sim_params, result))
+        worker_params = cast("StrongSimParams", _worker_sim_params(sim_params))
         if sim_params.sample_layers:
             worker_params.num_mid_measurements = effective_num_mid_measurements
 
@@ -1113,8 +1129,8 @@ class Simulator:
                 mp_context=self.mp_context,
             ):
                 traj_data, traj_diag, traj_final = traj_payload
-                for obs_index in range(len(result.observables)):
-                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                traj_data = cast("NDArray[np.float64] | NDArray[np.complex128]", traj_data)
+                _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=traj_data)
                 if traj_diag is not None:
                     diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
@@ -1130,8 +1146,8 @@ class Simulator:
 
             for i, arg in enumerate(iterator):
                 traj_data, traj_diag, traj_final = _call_backend(backend, arg, n_threads=n_threads)
-                for obs_index in range(len(result.observables)):
-                    result.trajectories[obs_index][i] = traj_data[obs_index]
+                traj_data = cast("NDArray[np.float64] | NDArray[np.complex128]", traj_data)
+                _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=traj_data)
                 if traj_diag is not None:
                     diag_per_traj[:, i, :] = traj_diag
                 if traj_final is not None:
@@ -1337,7 +1353,7 @@ class Simulator:
         effective_num_traj = len(initial_states)
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
-        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params, result))
+        worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params))
         diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
 
         n_pairs = len(sim_params.multi_time_observables)
@@ -1369,8 +1385,7 @@ class Simulator:
                 retry_exceptions=self.retry_exceptions,
                 mp_context=self.mp_context,
             ):
-                for obs_index in range(len(result.observables)):
-                    result.trajectories[obs_index][i] = obs_result[obs_index]
+                _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=obs_result)
                 diag_per_traj[:, i, :] = traj_diag
                 if multi_time_matrix is not None:
                     assert multi_time_result is not None
@@ -1383,8 +1398,7 @@ class Simulator:
                 obs_result, traj_diag, multi_time_result = _call_backend(
                     ensemble_member_worker, arg, n_threads=n_threads
                 )
-                for obs_index in range(len(result.observables)):
-                    result.trajectories[obs_index][i] = obs_result[obs_index]
+                _store_observable_trajectory(result, sim_params, traj_index=i, sorted_traj_data=obs_result)
                 diag_per_traj[:, i, :] = traj_diag
                 if multi_time_matrix is not None:
                     assert multi_time_result is not None

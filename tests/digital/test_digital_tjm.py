@@ -874,24 +874,33 @@ def test_statevector_observables_match_qiskit_paulis() -> None:
 
 
 def test_expectation_values_align_with_result_observables_order() -> None:
-    """Ensure expectation_values[i] corresponds to result.observables[i] (sorted order)."""
+    """Ensure expectation_values[i] corresponds to result.observables[i] (user order)."""
     qc = QuantumCircuit(3)
     qc.rx(0.37, 0)
     qc.cx(0, 2)
     qc.ry(0.51, 1)
 
-    # Intentionally not sorted by site to ensure sorting doesn't break interpretation.
+    # Intentionally not sorted by site: Result order should still match this list.
     requested = [Observable(Z(), 2), Observable(X(), 0), Observable(Z(), 0)]
     sim_params = StrongSimParams(observables=requested, gate_mode="hybrid", preset="exact", get_state=True)
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
     assert result.output_state is not None
-    mps = result.output_state.mps
+    vec = result.output_state.mps.to_vec()
 
-    # result.observables defines the canonical order for expectation_values.
-    expected_vals = _expect_mps_like_evaluate_observables(mps, result.observables)
-    for i, expected in enumerate(expected_vals):
+    assert len(result.observables) == len(requested)
+    for i, (got_obs, req_obs) in enumerate(zip(result.observables, requested, strict=True)):
+        assert got_obs.gate.name == req_obs.gate.name
+        assert got_obs.sites == req_obs.sites
+
+        # Verify the expectation value matches the observable at the same index.
+        n = int(np.log2(vec.size))
+        label = ["I"] * n
+        site = got_obs.sites[0] if isinstance(got_obs.sites, list) else got_obs.sites
+        assert isinstance(site, int)
+        label[n - 1 - site] = got_obs.gate.name.upper()
+        expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
         got = float(np.real(result.expectation_values[i][-1]))
         assert got == pytest.approx(expected, abs=1e-10)
 

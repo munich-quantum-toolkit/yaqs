@@ -28,6 +28,7 @@ import numba
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
+from qiskit.quantum_info import Pauli, Statevector
 
 from mqt.yaqs import Result, Simulator, simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
@@ -1085,6 +1086,41 @@ def test_transmon_simulation() -> None:
 
     # finally check total leakage
     np.testing.assert_array_less(leakage, 5e-2)
+
+
+def test_analog_result_observables_preserve_user_order() -> None:
+    """Analog runs must preserve user observable order on Result."""
+    state = State(2, initial="zeros")
+    H = Hamiltonian.ising(2, J=1.0, g=0.7)
+    requested = [Observable(Z(), 1), Observable(X(), 0), Observable(Z(), 0)]
+    sim_params = AnalogSimParams(
+        observables=requested,
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        get_state=True,
+        sample_timesteps=False,
+        preset="exact",
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
+
+    assert result.output_state is not None
+    vec = result.output_state.mps.to_vec()
+    n = int(np.log2(vec.size))
+
+    assert len(result.observables) == len(requested)
+    for i, (got_obs, req_obs) in enumerate(zip(result.observables, requested, strict=True)):
+        assert got_obs.gate.name == req_obs.gate.name
+        assert got_obs.sites == req_obs.sites
+
+        label = ["I"] * n
+        site = got_obs.sites[0] if isinstance(got_obs.sites, list) else got_obs.sites
+        assert isinstance(site, int)
+        label[n - 1 - site] = got_obs.gate.name.upper()
+        expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
+        got = float(np.real(result.expectation_values[i][-1]))
+        assert got == pytest.approx(expected, abs=1e-10)
 
 
 def test_scheduled_jump_single_site() -> None:
