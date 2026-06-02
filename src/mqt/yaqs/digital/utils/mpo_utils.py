@@ -16,6 +16,8 @@ conversion of quantum circuits into tensor network algorithms for checking equiv
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -24,7 +26,13 @@ from qiskit.converters import dag_to_circuit
 
 from ...core import linalg
 from ...core.data_structures.mpo import MPO
+from ...core.parallel import MPContext, available_cpus, parallel_worker_init
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
+from .equivalence_parallel import MpoPairUpdateResult
+
+# Below this width, thread-pool overhead usually beats the cost of one SVD pair update.
+_MIN_QUBITS_FOR_MPO_PARALLEL = 12
+_MIN_PAIRS_PER_SWEEP_FOR_PARALLEL = 3
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -140,6 +148,24 @@ def apply_gate(
     return theta
 
 
+def apply_temporal_zone_gates(
+    theta: NDArray[np.complex128],
+    gates: list[BaseGate],
+    qubits: list[int],
+    *,
+    conjugate: bool = False,
+) -> NDArray[np.complex128]:
+    """Apply a pre-extracted list of gates to a local tensor ``theta``.
+
+    Returns:
+        The updated local tensor after applying all gates.
+    """
+    n = qubits[0]
+    for gate in gates:
+        theta = apply_gate(gate, theta, n, n + 1, conjugate=conjugate)
+    return theta
+
+
 def apply_temporal_zone(
     theta: NDArray[np.complex128],
     dag: DAGCircuit,
@@ -166,10 +192,114 @@ def apply_temporal_zone(
     if dag.op_nodes():
         temporal_zone = get_temporal_zone(dag, [n, n + 1])
         tensor_circuit = convert_dag_to_tensor_algorithm(temporal_zone)
-
-        for gate in tensor_circuit:
-            theta = apply_gate(gate, theta, n, n + 1, conjugate=conjugate)
+        return apply_temporal_zone_gates(theta, tensor_circuit, qubits, conjugate=conjugate)
     return theta
+
+
+def compute_pair_update(
+    tensor_n: NDArray[np.complex128],
+    tensor_n1: NDArray[np.complex128],
+    gates1: list[BaseGate],
+    gates2: list[BaseGate],
+    threshold: float,
+    qubits: list[int],
+    *,
+    apply_conjugate_on_second: bool,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Contract two site tensors, apply gate zones, and SVD-decompose back to two sites.
+
+    Args:
+        tensor_n: MPO tensor on the left site of the pair.
+        tensor_n1: MPO tensor on the right site of the pair.
+        gates1: Gates from the first circuit's temporal zone on this pair.
+        gates2: Gates from the second circuit's temporal zone on this pair.
+        threshold: SVD truncation threshold.
+        qubits: The two site indices ``[n, n + 1]`` for gate placement.
+        apply_conjugate_on_second: If True, apply ``gates2`` with conjugation (both DAGs present).
+
+    Returns:
+        Updated ``(tensor_n, tensor_n1)`` after decomposition.
+    """
+    theta = oe.contract("abcd, efdg->aecbfg", tensor_n, tensor_n1)
+    if gates1:
+        theta = apply_temporal_zone_gates(theta, gates1, qubits, conjugate=False)
+    if gates2:
+        theta = apply_temporal_zone_gates(
+            theta,
+            gates2,
+            qubits,
+            conjugate=apply_conjugate_on_second,
+        )
+    return decompose_theta(theta, threshold)
+
+
+@dataclass(frozen=True)
+class _PairUpdateWork:
+    """One checkerboard pair: gate zones and site index (serial zone extraction)."""
+
+    site: int
+    gates1: tuple[BaseGate, ...]
+    gates2: tuple[BaseGate, ...]
+    apply_conjugate_on_second: bool
+
+
+def _gather_pair_update_work(
+    dag1: DAGCircuit,
+    dag2: DAGCircuit,
+    pair_iterator: range,
+) -> list[_PairUpdateWork]:
+    """Extract temporal zones serially for each pair in a sweep.
+
+    Returns:
+        One work item per site index in ``pair_iterator``.
+    """
+    work_items: list[_PairUpdateWork] = []
+    dag1_has_ops = bool(dag1.op_nodes())
+    for n in pair_iterator:
+        qubits = [n, n + 1]
+        zone1 = get_temporal_zone(dag1, qubits) if dag1_has_ops else None
+        zone2 = get_temporal_zone(dag2, qubits)
+        gates1 = convert_dag_to_tensor_algorithm(zone1) if zone1 is not None and zone1.op_nodes() else []
+        gates2 = convert_dag_to_tensor_algorithm(zone2) if zone2.op_nodes() else []
+        work_items.append(
+            _PairUpdateWork(
+                site=n,
+                gates1=tuple(gates1),
+                gates2=tuple(gates2),
+                apply_conjugate_on_second=bool(gates1),
+            )
+        )
+    return work_items
+
+
+def _compute_pair_work(
+    mpo: MPO,
+    work: _PairUpdateWork,
+    threshold: float,
+) -> MpoPairUpdateResult:
+    """Run ``compute_pair_update`` for one checkerboard pair (thread-pool worker).
+
+    Returns:
+        Updated tensors for the pair's left site index.
+    """
+    n = work.site
+    qubits = [n, n + 1]
+    tensor_n, tensor_n1 = compute_pair_update(
+        mpo.tensors[n],
+        mpo.tensors[n + 1],
+        list(work.gates1),
+        list(work.gates2),
+        threshold,
+        qubits,
+        apply_conjugate_on_second=work.apply_conjugate_on_second,
+    )
+    return MpoPairUpdateResult(site=n, tensor_n=tensor_n, tensor_n1=tensor_n1)
+
+
+def _apply_pair_update_results(mpo: MPO, results: list[MpoPairUpdateResult]) -> None:
+    for result in results:
+        mpo.tensors[result.site] = result.tensor_n
+        mpo.tensors[result.site + 1] = result.tensor_n1
 
 
 def update_mpo(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], threshold: float) -> None:
@@ -187,21 +317,61 @@ def update_mpo(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
         threshold (float): The SVD threshold for truncation.
     """
     n = qubits[0]
-    # Contract two neighboring MPO tensors
-    theta = oe.contract("abcd, efdg->aecbfg", mpo.tensors[n], mpo.tensors[n + 1])
+    gates1: list[BaseGate] = []
+    gates2: list[BaseGate] = []
+    if dag1.op_nodes():
+        zone1 = get_temporal_zone(dag1, qubits)
+        gates1 = convert_dag_to_tensor_algorithm(zone1)
+    if dag2.op_nodes():
+        zone2 = get_temporal_zone(dag2, qubits)
+        gates2 = convert_dag_to_tensor_algorithm(zone2)
+    apply_conjugate = bool(gates1)
+    mpo.tensors[n], mpo.tensors[n + 1] = compute_pair_update(
+        mpo.tensors[n],
+        mpo.tensors[n + 1],
+        gates1,
+        gates2,
+        threshold,
+        qubits,
+        apply_conjugate_on_second=apply_conjugate,
+    )
 
-    # Apply gates from dag1 (G) and dag2 (G')
-    if dag1:
-        theta = apply_temporal_zone(theta, dag1, qubits, conjugate=False)
-    if dag2:
-        # When both dag1 and dag2 are provided, use conjugation on dag2's gates
-        if dag1 is None:
-            theta = apply_temporal_zone(theta, dag2, qubits, conjugate=False)
-        else:
-            theta = apply_temporal_zone(theta, dag2, qubits, conjugate=True)
 
-    # Decompose the tensor back into two MPO tensors
-    mpo.tensors[n], mpo.tensors[n + 1] = decompose_theta(theta, threshold)
+def _apply_layer_sweep(
+    mpo: MPO,
+    circuit1_dag: DAGCircuit,
+    circuit2_dag: DAGCircuit,
+    pair_iterator: range,
+    threshold: float,
+    *,
+    parallel: bool,
+    max_workers: int | None,
+    mp_context: MPContext,
+    thread_pool: ThreadPoolExecutor | None,
+) -> None:
+    _ = mp_context
+    if not parallel or len(pair_iterator) < _MIN_PAIRS_PER_SWEEP_FOR_PARALLEL:
+        for n in pair_iterator:
+            update_mpo(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
+        return
+
+    work_items = _gather_pair_update_work(circuit1_dag, circuit2_dag, pair_iterator)
+    if thread_pool is None:
+        msg = "parallel MPO sweeps require an active thread pool from iterate()."
+        raise RuntimeError(msg)
+
+    workers = max_workers if max_workers is not None else available_cpus()
+    workers = max(1, min(workers, len(work_items)))
+
+    def _run_one(work: _PairUpdateWork) -> MpoPairUpdateResult:
+        return _compute_pair_work(mpo, work, threshold)
+
+    if workers == 1:
+        results = [_run_one(work) for work in work_items]
+    else:
+        chunks = thread_pool.map(_run_one, work_items)
+        results = list(chunks)
+    _apply_pair_update_results(mpo, results)
 
 
 def apply_layer(
@@ -211,6 +381,11 @@ def apply_layer(
     first_iterator: range,
     second_iterator: range,
     threshold: float,
+    *,
+    parallel: bool = False,
+    max_workers: int | None = None,
+    mp_context: MPContext = "auto",
+    thread_pool: ThreadPoolExecutor | None = None,
 ) -> None:
     """Apply a complete layer of gate updates to an MPO in two sweeps.
 
@@ -224,12 +399,33 @@ def apply_layer(
         first_iterator (range): Range of starting qubit indices for the first sweep.
         second_iterator (range): Range of starting qubit indices for the second sweep.
         threshold (float): The SVD truncation threshold.
+        parallel: If True, run disjoint pair tensor updates in a thread pool after serial zone extraction.
+        max_workers: Worker thread count when ``parallel`` is True.
+        mp_context: Reserved (thread pool is used for MPO parallelism).
+        thread_pool: Shared thread pool created by :func:`iterate`.
     """
-    for n in first_iterator:
-        update_mpo(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
-
-    for n in second_iterator:
-        update_mpo(mpo, circuit1_dag, circuit2_dag, [n, n + 1], threshold)
+    _apply_layer_sweep(
+        mpo,
+        circuit1_dag,
+        circuit2_dag,
+        first_iterator,
+        threshold,
+        parallel=parallel,
+        max_workers=max_workers,
+        mp_context=mp_context,
+        thread_pool=thread_pool,
+    )
+    _apply_layer_sweep(
+        mpo,
+        circuit1_dag,
+        circuit2_dag,
+        second_iterator,
+        threshold,
+        parallel=parallel,
+        max_workers=max_workers,
+        mp_context=mp_context,
+        thread_pool=thread_pool,
+    )
 
 
 def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float, *, conjugate: bool) -> None:
@@ -349,7 +545,16 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
     assert not any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors), "Not all gate tensors were applied."
 
 
-def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> None:
+def iterate(
+    mpo: MPO,
+    dag1: DAGCircuit,
+    dag2: DAGCircuit,
+    threshold: float,
+    *,
+    parallel: bool = False,
+    max_workers: int | None = None,
+    mp_context: MPContext = "auto",
+) -> None:
     """Iteratively apply layers of gates from two DAGCircuits to an MPO until no gates remain.
 
     The function selects starting qubit ranges based on the available operations in dag1 or dag2.
@@ -361,6 +566,9 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> N
         dag1 (DAGCircuit): The first circuit's DAGCircuit.
         dag2 (DAGCircuit): The second circuit's DAGCircuit.
         threshold (float): The SVD truncation threshold used during decomposition.
+        parallel: If True, parallelize tensor updates within checkerboard sweeps.
+        max_workers: Worker process count when ``parallel`` is True.
+        mp_context: Multiprocessing context for the process pool.
     """
     length = mpo.length
 
@@ -369,13 +577,33 @@ def iterate(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, threshold: float) -> N
     else:
         first_iterator, second_iterator = select_starting_point(length, dag2)
 
-    while dag1.op_nodes() or dag2.op_nodes():
-        largest_distance1 = check_longest_gate(dag1)
-        largest_distance2 = check_longest_gate(dag2)
-        # If all gates are nearest-neighbor (distance <= 2), apply the standard layer.
-        if largest_distance1 in {1, 2} and largest_distance2 in {1, 2}:
-            apply_layer(mpo, dag1, dag2, first_iterator, second_iterator, threshold)
-        else:
-            # For longer-range gates, decide which DAG to use based on gate distance.
-            conjugate = largest_distance2 > largest_distance1
-            apply_long_range_layer(mpo, dag1, dag2, threshold, conjugate=conjugate)
+    def _consume_dags(thread_pool: ThreadPoolExecutor | None) -> None:
+        layer_parallel = parallel and thread_pool is not None
+        while dag1.op_nodes() or dag2.op_nodes():
+            largest_distance1 = check_longest_gate(dag1)
+            largest_distance2 = check_longest_gate(dag2)
+            if largest_distance1 in {1, 2} and largest_distance2 in {1, 2}:
+                apply_layer(
+                    mpo,
+                    dag1,
+                    dag2,
+                    first_iterator,
+                    second_iterator,
+                    threshold,
+                    parallel=layer_parallel,
+                    max_workers=max_workers,
+                    mp_context=mp_context,
+                    thread_pool=thread_pool,
+                )
+            else:
+                conjugate = largest_distance2 > largest_distance1
+                apply_long_range_layer(mpo, dag1, dag2, threshold, conjugate=conjugate)
+
+    use_parallel = parallel and length >= _MIN_QUBITS_FOR_MPO_PARALLEL
+    if not use_parallel:
+        _consume_dags(None)
+        return
+
+    workers = max_workers if max_workers is not None else available_cpus()
+    with ThreadPoolExecutor(max_workers=workers, initializer=parallel_worker_init) as pool:
+        _consume_dags(pool)
