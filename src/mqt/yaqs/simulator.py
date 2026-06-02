@@ -47,23 +47,15 @@ from __future__ import annotations
 
 import contextlib
 import copy
-import importlib
 
 # ruff: noqa: E402
-# ---------------------------------------------------------------------------
-# 1) STANDARD/LIB IMPORTS (safe after thread-cap env is set)
-# ---------------------------------------------------------------------------
-import multiprocessing
-
 # ---------------------------------------------------------------------------
 # 0) IMPORTS
 # Thread caps are NOT set at module level to allow single-trajectory
 # simulations to use multi-threading via threadpoolctl.
-# Thread limits are enforced in worker processes via _limit_worker_threads()
+# Thread limits are enforced in worker processes via limit_worker_threads()
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
-import os
-import sys
 from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -71,7 +63,7 @@ from concurrent.futures import (
     ProcessPoolExecutor,
     wait,
 )
-from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
 
@@ -123,6 +115,7 @@ from .core.data_structures.simulation_parameters import (
     _prepare_observable_ordering,
 )
 from .core.data_structures.state import State
+from .parallel_utils import MPContext, available_cpus, get_parallel_context, limit_worker_threads
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -146,100 +139,18 @@ __all__ = ["Simulator", "available_cpus", "run_backend_parallel"]
 TArg = TypeVar("TArg")
 TRes = TypeVar("TRes")
 
-MPContext = Literal["fork", "spawn", "auto"]
+# Backward-compatible alias for tests and docs that import the private name.
+_get_parallel_context = get_parallel_context
 
 
 # ---------------------------------------------------------------------------
-# 5) CPU DISCOVERY — be respectful of cgroups/SLURM/taskset limits.
-# On Linux, processes may be constrained (containers, sched_setaffinity,
-# SLURM). We try to detect the actual number of logical CPUs visible.
-# ---------------------------------------------------------------------------
-def available_cpus() -> int:
-    """Determine the number of available CPU cores for parallel execution.
-
-    This function checks if the PYTEST_XDIST_WORKER environment variable is set. If so, it returns 1 to avoid
-    nested parallelism during tests.
-    Next, it checks if the SLURM_CPUS_ON_NODE environment variable is set (indicating a SLURM-managed cluster job).
-    If so, it returns the number of CPUs specified by SLURM. Otherwise, it returns the total number of CPUs available
-    on the machine as reported by multiprocessing.cpu_count().
-
-    Returns:
-        int: The number of available CPU cores for parallel execution.
-    """
-    # 0) Priority Override: YAQS_MAX_WORKERS
-    if "YAQS_MAX_WORKERS" in os.environ:
-        try:
-            val = int(os.environ["YAQS_MAX_WORKERS"])
-            if val > 0:
-                return val
-        except ValueError:
-            pass
-
-    # 1) Detect xdist: running inside a pytest worker?
-    if os.environ.get("PYTEST_XDIST_WORKER", ""):
-        return 1
-
-    # 2) SLURM hints (explicit user/job request should win)
-    for var in ("SLURM_CPUS_PER_TASK", "SLURM_CPUS_ON_NODE"):
-        value = os.environ.get(var, "").strip()
-        if value:
-            try:
-                n = int(value)
-                if n > 0:
-                    return n
-            except ValueError:
-                # Ignore malformed values and continue
-                pass
-
-    # 3) Respect Linux affinity / cgroup limits if available
-    fn = getattr(os, "sched_getaffinity", None)
-    if fn is not None:
-        try:
-            sched_getaffinity = cast("Callable[[int], set[int]]", fn)
-            n = len(sched_getaffinity(0))
-            if n > 0:
-                return n
-        except OSError:
-            # System call failed; fall through to next fallback
-            pass
-
-    # 4) Fallback
-    count = 0
-    try:
-        count = os.cpu_count() or multiprocessing.cpu_count() or 1
-    except (NotImplementedError, OSError):
-        count = 1
-
-    return count
-
-
-# ---------------------------------------------------------------------------
-# 6) WORKER INITIALIZER — cap threads inside each worker process
+# 5) WORKER INITIALIZER — cap threads inside each worker process
 # When a worker starts, we:
 #   - Set environment caps (no-ops if already set)
 #   - Try to cap numexpr and MKL explicitly if present
 #   - Optionally use threadpoolctl to cap vendored OpenMP pools (OpenBLAS, MKL)
 #   - Initialize the worker-global context with large objects (e.g. State, NoiseModel)
 # ---------------------------------------------------------------------------
-THREAD_ENV_VARS: dict[str, str] = {
-    # OpenMP default thread count (covers any library compiled with OpenMP,
-    # e.g., MKL, SciPy routines, numba-parallel, some Qiskit internals).
-    "OMP_NUM_THREADS": "1",
-    # OpenBLAS thread pool size (most Linux NumPy/SciPy wheels link to OpenBLAS).
-    "OPENBLAS_NUM_THREADS": "1",
-    # Intel MKL thread pool size (common in conda distributions of NumPy/SciPy).
-    "MKL_NUM_THREADS": "1",
-    # NumExpr parallelism (used by pandas.eval/query and some NumPy expressions).
-    "NUMEXPR_NUM_THREADS": "1",
-    # Apple vecLib/Accelerate framework (only relevant on macOS).
-    "VECLIB_MAXIMUM_THREADS": "1",
-    # BLIS BLAS implementation (used in some NumPy builds instead of OpenBLAS/MKL).
-    "BLIS_NUM_THREADS": "1",
-    # Numba threading (used for parallel=True kernels)
-    "NUMBA_NUM_THREADS": "1",
-}
-
-
 # Global worker state (initialized once per process)
 WORKER_CTX: dict[str, Any] = {}
 
@@ -259,7 +170,7 @@ def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
             Defaults to 1 to prevent thread oversubscription.
     """
     # 1. Thread Capping
-    _limit_worker_threads(n_threads)
+    limit_worker_threads(n_threads)
 
     # 2. Context Initialization
     WORKER_CTX.clear()
@@ -275,41 +186,8 @@ def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
         pass
 
 
-def _limit_worker_threads(n_threads: int = 1) -> None:
-    """Limit the number of threads used by numerical libraries in the current process.
-
-    This helper sets environment variables (OMP_NUM_THREADS, MKL_NUM_THREADS, etc.)
-    and calls runtime configuration functions for libraries like `numexpr`, `mkl`,
-    and `threadpoolctl` to prevent thread oversubscription when running many
-    worker processes in parallel.
-
-    Args:
-        n_threads: The maximum number of threads to allow. Defaults to 1.
-    """
-    for k in THREAD_ENV_VARS:
-        os.environ.setdefault(k, str(n_threads))
-    os.environ.setdefault("OMP_DYNAMIC", "FALSE")
-    os.environ.setdefault("MKL_DYNAMIC", "FALSE")
-
-    with contextlib.suppress(Exception):
-        numexpr = importlib.import_module("numexpr")
-        numexpr.set_num_threads(n_threads)
-
-    with contextlib.suppress(Exception):
-        mkl = importlib.import_module("mkl")
-        mkl.set_num_threads(n_threads)
-
-    if threadpool_limits is not None:
-        with contextlib.suppress(Exception):
-            threadpool_limits(limits=n_threads)
-
-    if os.environ.get("YAQS_THREAD_DEBUG", "") == "1" and threadpool_info is not None:
-        with contextlib.suppress(Exception):
-            threadpool_info()
-
-
 # ---------------------------------------------------------------------------
-# 7) WORKER WRAPPERS
+# 6) WORKER WRAPPERS
 # These functions are pickled and sent to workers. They retrieve large objects
 # from the global _WORKER_CTX instead of receiving them as arguments. Analog
 # workers come first (primary simulation mode), followed by the digital
@@ -598,31 +476,6 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
     return backend(arg)
 
 
-# ---------------------------------------------------------------------------
-# 9) MULTIPROCESS CONTEXT
-# On Linux, using "fork" with heavy numerical libs is safe as long as
-# threading libraries are properly capped (which we do). On Windows/macOS,
-# "spawn" is the standard/required option.
-# ---------------------------------------------------------------------------
-def _get_parallel_context(mp_context: MPContext = "auto") -> multiprocessing.context.BaseContext:
-    """Return the appropriate multiprocessing context for the OS.
-
-    Args:
-        mp_context: ``"auto"`` (default) selects ``"fork"`` on Linux and ``"spawn"`` elsewhere.
-            Pass ``"fork"`` or ``"spawn"`` to force a specific context.
-
-    Returns:
-        The selected :class:`multiprocessing.context.BaseContext`.
-    """
-    if mp_context == "auto":
-        # On Linux, 'fork' is generally safe if we ensure OpenMP/etc are single-threaded
-        # BEFORE forking or strictly cap them in the worker.
-        if sys.platform == "linux":
-            return multiprocessing.get_context("fork")
-        return multiprocessing.get_context("spawn")
-    return multiprocessing.get_context(mp_context)
-
-
 def run_backend_parallel(
     worker_fn: Callable[[int], TRes],
     *,
@@ -659,13 +512,13 @@ def run_backend_parallel(
             (e.g., TimeoutError). Defaults to 10.
         retry_exceptions: A tuple of exception types that trigger a retry.
             Defaults to (CancelledError, TimeoutError, OSError).
-        mp_context: Multiprocessing context selector; see :func:`_get_parallel_context`.
+        mp_context: Multiprocessing context selector; see :func:`~mqt.yaqs.parallel_utils.get_parallel_context`.
 
     Yields:
         tuple[int, TRes]: A tuple containing the job index and its result,
         yielded in the order of completion.
     """
-    ctx = _get_parallel_context(mp_context)
+    ctx = get_parallel_context(mp_context)
 
     # Bounded in-flight factor (keep 2-4x workers busy to hide latency)
     inflight_factor = 2
