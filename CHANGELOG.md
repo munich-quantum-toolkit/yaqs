@@ -21,6 +21,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
 - refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
 - changed `simulator.run` to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
@@ -122,6 +123,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#445]: https://github.com/munich-quantum-toolkit/yaqs/pull/445
 [#441]: https://github.com/munich-quantum-toolkit/yaqs/pull/441
 [#439]: https://github.com/munich-quantum-toolkit/yaqs/pull/439
 [#438]: https://github.com/munich-quantum-toolkit/yaqs/pull/438
