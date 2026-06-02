@@ -5,27 +5,27 @@
 #
 # Licensed under the MIT License
 
-"""Tests for MPO-based equivalence checking implementation.
+"""Tests for circuit equivalence checking.
 
 This module provides unit tests for :class:`~mqt.yaqs.EquivalenceChecker`. It verifies
-the correctness of the MPO-based equivalence algorithm by comparing quantum circuits.
-Tests include checks for:
-  - Identity circuits (empty circuits) which should be equivalent.
-  - Two-qubit circuits that implement the same operation (e.g., Bell state preparation).
-  - Two-qubit circuits that differ by an extra gate, which should be non-equivalent.
-  - Long-range circuits, ensuring that circuits with identical long-range interactions
-    are equivalent, while those with additional gates are not.
+the MPO and dense matrix backends by comparing quantum circuits, including automatic
+backend selection and global-phase equivalence.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal, cast
 
+import numpy as np
 import pytest
 from qiskit import QuantumCircuit
 from qiskit.qasm2 import load
 
-from mqt.yaqs import EquivalenceChecker
+from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
+
+if TYPE_CHECKING:
+    from mqt.yaqs.equivalence_checker import EquivalenceRepresentation
 
 
 @pytest.mark.parametrize(("threshold", "fidelity"), [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
@@ -47,7 +47,7 @@ def test_identity_vs_identity(threshold: float, fidelity: float) -> None:
     checker = EquivalenceChecker(threshold=threshold, fidelity=fidelity)
     result = checker.check(qc1, qc2)
     assert result["equivalent"] is True, "Empty circuits (identities) should be equivalent."
-    assert result["elapsed_time"] >= 0
+    assert float(result["elapsed_time"]) >= 0
 
 
 def test_two_qubit_equivalence() -> None:
@@ -137,6 +137,69 @@ def test_large_equivalence() -> None:
     qasm_path = Path(__file__).parent / "circuit.qasm"
     qc = load(filename=str(qasm_path))
 
-    checker = EquivalenceChecker()
+    checker = EquivalenceChecker(representation="mpo")
     result = checker.check(qc, qc)
     assert result["equivalent"] is True, "Large scale test fails. Circuits should be equivalent."
+    assert result["representation"] == "mpo"
+
+
+@pytest.mark.parametrize("representation", ["matrix", "mpo"])
+def test_matrix_and_mpo_agree_on_small_circuits(representation: Literal["matrix", "mpo"]) -> None:
+    """Matrix and MPO backends agree on equivalent and non-equivalent small circuits."""
+    qc_equal_a = QuantumCircuit(2)
+    qc_equal_a.h(0)
+    qc_equal_a.cx(0, 1)
+    qc_equal_b = qc_equal_a.copy()
+
+    qc_diff_b = QuantumCircuit(2)
+    qc_diff_b.h(0)
+    qc_diff_b.cx(0, 1)
+    qc_diff_b.x(1)
+
+    checker = EquivalenceChecker(
+        threshold=1e-13,
+        fidelity=1 - 1e-13,
+        representation=cast("EquivalenceRepresentation", representation),
+    )
+    equal_result = checker.check(qc_equal_a, qc_equal_b)
+    diff_result = checker.check(qc_equal_a, qc_diff_b)
+    assert equal_result["equivalent"] is True
+    assert diff_result["equivalent"] is False
+    assert equal_result["representation"] == representation
+
+
+def test_global_phase_equivalence_matrix() -> None:
+    """Circuits differing by global phase are equivalent under the matrix backend."""
+    qc1 = QuantumCircuit(2)
+    qc1.h(0)
+    qc1.cx(0, 1)
+
+    qc2 = qc1.copy()
+    qc2.global_phase = np.pi / 3
+
+    checker = EquivalenceChecker(representation="matrix", fidelity=1 - 1e-13)
+    result = checker.check(qc1, qc2)
+    assert result["equivalent"] is True
+    assert result["representation"] == "matrix"
+
+
+def test_auto_representation_selects_by_qubit_count() -> None:
+    """``representation='auto'`` uses matrix at or below the cutover and MPO above it."""
+    small = QuantumCircuit(2)
+    large = QuantumCircuit(DEFAULT_MATRIX_MAX_QUBITS + 1)
+
+    auto_small = EquivalenceChecker(representation="auto")
+    assert auto_small.check(small, small)["representation"] == "matrix"
+
+    auto_large = EquivalenceChecker(representation="auto")
+    assert auto_large.check(large, large)["representation"] == "mpo"
+
+
+def test_matrix_max_qubits_override() -> None:
+    """``matrix_max_qubits`` controls the auto cutover."""
+    qc = QuantumCircuit(3)
+    checker = EquivalenceChecker(representation="auto", matrix_max_qubits=2)
+    assert checker.check(qc, qc)["representation"] == "mpo"
+
+    checker_wide = EquivalenceChecker(representation="auto", matrix_max_qubits=4)
+    assert checker_wide.check(qc, qc)["representation"] == "matrix"
