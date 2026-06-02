@@ -21,6 +21,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- changed default digital circuit simulator `gate_mode` to `tebd` (from `hybrid`)
 - refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
 - changed `simulator.run` to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
