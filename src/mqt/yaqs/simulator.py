@@ -116,7 +116,12 @@ from .core.data_structures.result import (
     allocate_diagnostic_buffers,
     allocate_observable_buffers,
 )
-from .core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from .core.data_structures.simulation_parameters import (
+    AnalogSimParams,
+    StrongSimParams,
+    WeakSimParams,
+    _prepare_observable_ordering,
+)
 from .core.data_structures.state import State
 
 if TYPE_CHECKING:
@@ -511,8 +516,8 @@ def _worker_sim_params(
     """
     worker_params = copy.deepcopy(sim_params)
     # Workers evaluate in sorted order for efficiency; Result retains user order.
-    worker_params.sorted_observables = [copy.deepcopy(obs) for obs in sim_params.sorted_observables]
-    worker_params.observables = worker_params.sorted_observables
+    sorted_obs, _ = _prepare_observable_ordering(sim_params.observables)
+    worker_params.observables = [copy.deepcopy(obs) for obs in sorted_obs]
     return worker_params
 
 
@@ -524,7 +529,8 @@ def _store_observable_trajectory(
     sorted_traj_data: NDArray[np.float64] | NDArray[np.complex128],
 ) -> None:
     """Store one trajectory's observable data into result buffers in user order."""
-    for user_i, sorted_i in enumerate(sim_params.observable_sorted_indices):
+    _, observable_sorted_indices = _prepare_observable_ordering(sim_params.observables)
+    for user_i, sorted_i in enumerate(observable_sorted_indices):
         result.trajectories[user_i][traj_index] = sorted_traj_data[sorted_i]
 
 

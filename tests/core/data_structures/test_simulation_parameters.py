@@ -487,6 +487,11 @@ def test_strong_params_sorting_and_fields() -> None:
     # Mapping from user order -> sorted worker row indices
     assert params.observable_sorted_indices == (3, 2, 0, 1)
 
+    # Ordering is derived from the current observables list, not cached at construction.
+    params.observables.append(Observable(GateLibrary.z(), sites=0))
+    assert len(params.sorted_observables) == 5
+    assert params.observable_sorted_indices == (4, 3, 1, 2, 0)
+
     # Parameter fields are retained
     assert params.num_traj == 7
     assert params.max_bond_dim == 128
