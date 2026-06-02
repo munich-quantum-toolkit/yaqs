@@ -375,7 +375,7 @@ class StrongSimParams:
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
+            (``"tebd"``, ``"hybrid"``, or ``"tdvp"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -396,7 +396,7 @@ class StrongSimParams:
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
         random_seed: int | None = None,
-        gate_mode: GateMode = "hybrid",
+        gate_mode: GateMode = "tebd",
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -422,7 +422,7 @@ class StrongSimParams:
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
+            gate_mode: Two-qubit gate update mode (default ``"tebd"``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -485,7 +485,7 @@ class WeakSimParams:
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
+            (``"tebd"``, ``"hybrid"``, or ``"tdvp"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -504,7 +504,7 @@ class WeakSimParams:
         preset: SimulationPreset = "balanced",
         get_state: bool = False,
         random_seed: int | None = None,
-        gate_mode: GateMode = "hybrid",
+        gate_mode: GateMode = "tebd",
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -527,7 +527,7 @@ class WeakSimParams:
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
+            gate_mode: Two-qubit gate update mode (default ``"tebd"``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
