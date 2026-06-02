@@ -79,8 +79,8 @@ the circuit DAGs directly; see {cite:p}`sander2025_EquivalenceChecking` for the 
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
 - **`matrix_max_qubits`** (default {data}`~mqt.yaqs.DEFAULT_MATRIX_MAX_QUBITS`): only affects
   `"auto"`.
-- **`parallel`** (default `False`): when `True`, checkerboard MPO pair updates run in a
-  **thread pool** (no per-sweep process spawn; same `compute_pair_update` path as serial).
+- **`parallel`** (default `False`): when `True`, checkerboard **MPO** pair updates run in a
+  **thread pool** (ignored for the matrix backend).
 - **`max_workers`** (default `None`): cap on worker threads when `parallel=True` (defaults to
   the machine CPU count via {func}`~mqt.yaqs.core.parallel.available_cpus`).
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
@@ -180,16 +180,14 @@ MPO instead.
 
 ## Parallel execution
 
-Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up checks on circuits
+Set `parallel=True` on {class}`~mqt.yaqs.EquivalenceChecker` to speed up **MPO** checks on circuits
 where many independent updates can run at once. The default remains serial (`parallel=False`).
+The matrix backend is always serial.
 
-**MPO backend:** Within each checkerboard sweep, disjoint nearest-neighbor pairs update different
-MPO site tensors and can be computed in parallel in a shared thread pool (one pool per
-`iterate()` call). Temporal zones are still extracted from the DAGs serially; only the tensor
-contraction and SVD step runs concurrently. Long-range gate handling stays serial in this version.
-
-**Matrix backend:** `parallel=True` does not change the matrix path today (layers are applied
-serially); use MPO parallelism for multi-core speedups.
+Within each checkerboard sweep, disjoint nearest-neighbor pairs update different MPO site
+tensors and can be computed in parallel in a shared thread pool (one pool per `iterate()` call).
+Temporal zones are still extracted from the DAGs serially; only the tensor contraction and SVD
+step runs concurrently. Long-range gate handling stays serial in this version.
 
 Worker threads cap BLAS/OpenMP to one thread each (same policy as {class}`~mqt.yaqs.Simulator`
 workers) to avoid oversubscription.

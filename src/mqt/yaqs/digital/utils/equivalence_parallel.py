@@ -53,16 +53,6 @@ class MpoPairUpdateResult:
     tensor_n1: NDArray[np.complex128]
 
 
-@dataclass(frozen=True)
-class MatrixGateTask:
-    """Apply one gate to an operator tensor (full tensor copy in worker)."""
-
-    op: NDArray[np.complex128]
-    gate: SerializedGate
-    num_qubits: int
-    dagger: bool
-
-
 def serialize_gates(gates: list[BaseGate]) -> tuple[SerializedGate, ...]:
     """Convert gate objects to picklable payloads."""
     serialized: list[SerializedGate] = []
@@ -111,10 +101,3 @@ def mpo_pair_update_worker(task: MpoPairUpdateTask) -> MpoPairUpdateResult:
         apply_conjugate_on_second=task.apply_conjugate_on_second,
     )
     return MpoPairUpdateResult(site=task.site, tensor_n=tensor_n, tensor_n1=tensor_n1)
-
-
-def matrix_gate_worker(task: MatrixGateTask) -> NDArray[np.complex128]:
-    """Apply one gate to an operator tensor (process-pool entry point)."""
-    from .matrix_utils import apply_serialized_gate_left
-
-    return apply_serialized_gate_left(task.op, task.gate, task.num_qubits, dagger=task.dagger)

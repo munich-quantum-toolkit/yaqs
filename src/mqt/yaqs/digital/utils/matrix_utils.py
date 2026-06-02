@@ -32,8 +32,6 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit
 
     from ...core.libraries.gate_library import BaseGate
-    from ...core.parallel import MPContext
-    from .equivalence_parallel import SerializedGate
 
 _EINSUM_LETTERS = string.ascii_lowercase
 _GATE_EINSUM_LETTERS = string.ascii_uppercase
@@ -143,31 +141,6 @@ def _apply_two_qubit_left(
     return np.einsum(eq, gate, op, optimize=True)
 
 
-def apply_serialized_gate_left(
-    op: NDArray[np.complex128],
-    gate: SerializedGate,
-    num_qubits: int,
-    *,
-    dagger: bool = False,
-) -> NDArray[np.complex128]:
-    """Left-multiply ``op`` by a serialized gate specification.
-
-    Returns:
-        The updated operator tensor.
-    """
-    if gate.interaction == 1:
-        matrix = gate.matrix.conj().T if dagger else gate.matrix
-        return _apply_single_qubit_left(op, matrix, gate.sites[0], num_qubits, dagger=False)
-    if gate.interaction == 2:
-        assert gate.tensor is not None
-        return _apply_two_qubit_left(op, gate.tensor, gate.sites[0], gate.sites[1], num_qubits, dagger=dagger)
-
-    local = gate.matrix.conj().T if dagger else gate.matrix
-    op_mat = op.reshape(2**num_qubits, 2**num_qubits)
-    full = _embed_unitary(local, list(gate.sites), num_qubits)
-    return (full @ op_mat).reshape((2,) * (2 * num_qubits))
-
-
 def _apply_gate_left(
     op: NDArray[np.complex128],
     gate: BaseGate,
@@ -217,16 +190,12 @@ def _apply_gate_batch(
     num_qubits: int,
     *,
     dagger: bool,
-    parallel: bool,
-    max_workers: int | None,
-    mp_context: MPContext,
 ) -> NDArray[np.complex128]:
     """Apply a commuting batch of gates in deterministic site order.
 
     Returns:
         The operator tensor after applying all gates in the batch.
     """
-    _ = (parallel, max_workers, mp_context)
     for gate in sorted(gates, key=lambda g: min(g.sites)):
         op = _apply_gate_left(op, gate, num_qubits, dagger=dagger)
     return op
@@ -238,25 +207,14 @@ def _apply_layer_gates(
     num_qubits: int,
     *,
     dagger: bool,
-    parallel: bool,
-    max_workers: int | None,
-    mp_context: MPContext,
 ) -> NDArray[np.complex128]:
-    """Apply one circuit layer, parallelizing across disjoint gate batches.
+    """Apply one circuit layer as sequential disjoint gate batches.
 
     Returns:
         The operator tensor after applying the full layer.
     """
     for batch in partition_disjoint_gate_batches(layer_gates):
-        op = _apply_gate_batch(
-            op,
-            batch,
-            num_qubits,
-            dagger=dagger,
-            parallel=parallel,
-            max_workers=max_workers,
-            mp_context=mp_context,
-        )
+        op = _apply_gate_batch(op, batch, num_qubits, dagger=dagger)
     return op
 
 
@@ -277,10 +235,6 @@ def _collect_layer_groups(dag: DAGCircuit) -> list[list[BaseGate]]:
 def build_composed_operator_tensor(
     circuit1: QuantumCircuit,
     circuit2: QuantumCircuit,
-    *,
-    parallel: bool = False,
-    max_workers: int | None = None,
-    mp_context: MPContext = "auto",
 ) -> NDArray[np.complex128]:
     """Build ``W = U2† U1`` as a tensor with ``2 * num_qubits`` indices of dimension 2.
 
@@ -290,9 +244,6 @@ def build_composed_operator_tensor(
     Args:
         circuit1: First circuit.
         circuit2: Second circuit (same number of qubits as ``circuit1``).
-        parallel: If True, apply disjoint gates in a process pool.
-        max_workers: Worker process count when ``parallel`` is True.
-        mp_context: Multiprocessing context for the process pool.
 
     Returns:
         Tensor of shape ``(2,) * (2 * num_qubits)`` representing the composed operator.
@@ -304,27 +255,11 @@ def build_composed_operator_tensor(
     dag2 = circuit_to_dag(_circuit_without_measurements(circuit2))
 
     for layer_gates in _collect_layer_groups(dag1):
-        op = _apply_layer_gates(
-            op,
-            layer_gates,
-            num_qubits,
-            dagger=False,
-            parallel=parallel,
-            max_workers=max_workers,
-            mp_context=mp_context,
-        )
+        op = _apply_layer_gates(op, layer_gates, num_qubits, dagger=False)
 
     layers2 = _collect_layer_groups(dag2)
     for layer_gates in reversed(layers2):
-        op = _apply_layer_gates(
-            op,
-            layer_gates,
-            num_qubits,
-            dagger=True,
-            parallel=parallel,
-            max_workers=max_workers,
-            mp_context=mp_context,
-        )
+        op = _apply_layer_gates(op, layer_gates, num_qubits, dagger=True)
 
     return op
 
@@ -357,9 +292,6 @@ def check_equivalence_matrix(
     circuit2: QuantumCircuit,
     *,
     fidelity: float,
-    parallel: bool = False,
-    max_workers: int | None = None,
-    mp_context: MPContext = "auto",
 ) -> bool:
     """Check circuit equivalence using the tensorized dense operator backend.
 
@@ -367,18 +299,9 @@ def check_equivalence_matrix(
         circuit1: First circuit.
         circuit2: Second circuit.
         fidelity: Minimum overlap with the identity to count as equivalent.
-        parallel: If True, apply gates in a process pool where possible.
-        max_workers: Worker process count when ``parallel`` is True.
-        mp_context: Multiprocessing context for the process pool.
 
     Returns:
         Whether the circuits are equivalent within ``fidelity``.
     """
-    composed = build_composed_operator_tensor(
-        circuit1,
-        circuit2,
-        parallel=parallel,
-        max_workers=max_workers,
-        mp_context=mp_context,
-    )
+    composed = build_composed_operator_tensor(circuit1, circuit2)
     return check_operator_is_identity(composed, fidelity)

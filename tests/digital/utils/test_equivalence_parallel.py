@@ -14,10 +14,9 @@ import pytest
 from qiskit import QuantumCircuit
 
 from mqt.yaqs import EquivalenceChecker
-from mqt.yaqs.digital.utils.equivalence_schedule import partition_disjoint_gate_batches
-from mqt.yaqs.digital.utils.matrix_utils import build_composed_operator_tensor
-from mqt.yaqs.digital.utils.mpo_utils import compute_pair_update
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.digital.utils.equivalence_schedule import partition_disjoint_gate_batches
+from mqt.yaqs.digital.utils.mpo_utils import compute_pair_update
 
 
 def test_partition_disjoint_gate_batches() -> None:
@@ -39,9 +38,10 @@ def test_partition_disjoint_gate_batches() -> None:
 
 def test_compute_pair_update_matches_update_mpo_step() -> None:
     """Pure pair kernel reproduces a single update_mpo step on two sites."""
+    from qiskit.converters import circuit_to_dag
+
     from mqt.yaqs.core.data_structures.mpo import MPO
     from mqt.yaqs.digital.utils.mpo_utils import update_mpo
-    from qiskit.converters import circuit_to_dag
 
     qc1 = QuantumCircuit(2)
     qc1.h(0)
@@ -94,31 +94,17 @@ def test_mpo_checker_serial_vs_parallel(parallel: bool) -> None:
     assert result["equivalent"] is True
 
 
-@pytest.mark.parametrize("parallel", [False, True])
-def test_matrix_checker_serial_vs_parallel(parallel: bool) -> None:
-    """Matrix equivalence matches for serial and parallel execution."""
+def test_matrix_checker_equivalent_circuits() -> None:
+    """Matrix backend reports equivalent circuits."""
     qc1 = QuantumCircuit(3)
     qc1.h(0)
     qc1.cx(0, 1)
     qc1.rz(np.pi / 4, 2)
-
     qc2 = qc1.copy()
 
-    checker = EquivalenceChecker(representation="matrix", parallel=parallel, max_workers=2)
-    result = checker.check(qc1, qc2)
+    result = EquivalenceChecker(representation="matrix").check(qc1, qc2)
     assert result["equivalent"] is True
-
-
-def test_matrix_compose_serial_vs_parallel_operator() -> None:
-    """Layer-scheduled matrix compose agrees between serial and parallel paths."""
-    qc1 = QuantumCircuit(2)
-    qc1.h(0)
-    qc1.cx(0, 1)
-    qc2 = qc1.copy()
-
-    serial = build_composed_operator_tensor(qc1, qc2, parallel=False)
-    parallel = build_composed_operator_tensor(qc1, qc2, parallel=True, max_workers=2)
-    assert np.allclose(serial, parallel, atol=1e-10)
+    assert result["representation"] == "matrix"
 
 
 def test_long_range_mpo_parallel() -> None:
