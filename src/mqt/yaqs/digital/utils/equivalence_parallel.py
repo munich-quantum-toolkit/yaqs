@@ -14,10 +14,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ...core.libraries.gate_library import BaseGate
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-    from ...core.libraries.gate_library import BaseGate
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,11 @@ class MpoPairUpdateResult:
 
 
 def serialize_gates(gates: list[BaseGate]) -> tuple[SerializedGate, ...]:
-    """Convert gate objects to picklable payloads."""
+    """Convert gate objects to picklable payloads.
+
+    Returns:
+        Tuple of serialized gates in the same order as ``gates``.
+    """
     serialized: list[SerializedGate] = []
     for gate in gates:
         tensor = None
@@ -73,8 +77,11 @@ def serialize_gates(gates: list[BaseGate]) -> tuple[SerializedGate, ...]:
 
 
 def _gate_from_serialized(spec: SerializedGate) -> BaseGate:
-    from ...core.libraries.gate_library import BaseGate
+    """Reconstruct a gate from a serialized payload.
 
+    Returns:
+        Gate with sites and tensors restored from ``spec``.
+    """
     gate = BaseGate(spec.matrix.copy())
     gate.name = spec.name
     gate.interaction = spec.interaction
@@ -85,8 +92,12 @@ def _gate_from_serialized(spec: SerializedGate) -> BaseGate:
 
 
 def mpo_pair_update_worker(task: MpoPairUpdateTask) -> MpoPairUpdateResult:
-    """Compute updated MPO site tensors for one qubit pair (process-pool entry point)."""
-    from .mpo_utils import compute_pair_update
+    """Compute updated MPO site tensors for one qubit pair (process-pool entry point).
+
+    Returns:
+        Updated tensors for the pair starting at ``task.site``.
+    """
+    from .mpo_utils import compute_pair_update  # noqa: PLC0415
 
     gates1 = [_gate_from_serialized(spec) for spec in task.gates1]
     gates2 = [_gate_from_serialized(spec) for spec in task.gates2]

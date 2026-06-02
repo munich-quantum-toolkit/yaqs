@@ -12,11 +12,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
+from qiskit.converters import circuit_to_dag
 
 from mqt.yaqs import EquivalenceChecker
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone
 from mqt.yaqs.digital.utils.equivalence_schedule import partition_disjoint_gate_batches
-from mqt.yaqs.digital.utils.mpo_utils import compute_pair_update
+from mqt.yaqs.digital.utils.mpo_utils import compute_pair_update, update_mpo
 
 
 def test_partition_disjoint_gate_batches() -> None:
@@ -38,11 +41,6 @@ def test_partition_disjoint_gate_batches() -> None:
 
 def test_compute_pair_update_matches_update_mpo_step() -> None:
     """Pure pair kernel reproduces a single update_mpo step on two sites."""
-    from qiskit.converters import circuit_to_dag
-
-    from mqt.yaqs.core.data_structures.mpo import MPO
-    from mqt.yaqs.digital.utils.mpo_utils import update_mpo
-
     qc1 = QuantumCircuit(2)
     qc1.h(0)
     qc1.cx(0, 1)
@@ -54,7 +52,6 @@ def test_compute_pair_update_matches_update_mpo_step() -> None:
     update_mpo(mpo_ref, dag1, dag2, [0, 1], 1e-12)
 
     mpo_test = MPO.identity(2)
-    from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone
 
     dag1b = circuit_to_dag(qc1)
     dag2b = circuit_to_dag(qc2)
@@ -79,7 +76,7 @@ def test_compute_pair_update_matches_update_mpo_step() -> None:
 
 
 @pytest.mark.parametrize("parallel", [False, True])
-def test_mpo_checker_serial_vs_parallel(parallel: bool) -> None:
+def test_mpo_checker_serial_vs_parallel(*, parallel: bool) -> None:
     """MPO equivalence matches for serial and parallel execution."""
     qc1 = QuantumCircuit(2)
     qc1.h(0)

@@ -24,6 +24,9 @@ def partition_disjoint_gate_batches(gates: list[BaseGate]) -> list[list[BaseGate
     """Partition gates into batches of pairwise disjoint site sets.
 
     Gates within a batch can be applied in parallel; batches are applied sequentially.
+
+    Returns:
+        Disjoint gate batches in input order (within each batch).
     """
     batches: list[list[BaseGate]] = []
     for gate in gates:

@@ -144,7 +144,11 @@ def _run_on_executor(
     tasks: list[TArg],
     worker_fn: Callable[[TArg], TRes],
 ) -> list[TRes]:
-    """Submit ``tasks`` to an existing executor and return results in order."""
+    """Submit ``tasks`` to an existing executor and return results in order.
+
+    Returns:
+        Worker results in the same order as ``tasks``.
+    """
     indexed = list(enumerate(tasks))
     results: list[TRes | None] = [None] * len(tasks)
     future_to_index = {executor.submit(worker_fn, task): index for index, task in indexed}
