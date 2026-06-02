@@ -26,7 +26,7 @@ from qiskit.converters import dag_to_circuit
 
 from ...core import linalg
 from ...core.data_structures.mpo import MPO
-from ...parallel_utils import MPContext, available_cpus
+from ...parallel_utils import MPContext, available_cpus, limit_worker_threads
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 from .equivalence_parallel import MpoPairUpdateResult
 
@@ -604,6 +604,7 @@ def iterate(
         _consume_dags(None)
         return
 
+    limit_worker_threads(1)
     workers = max_workers if max_workers is not None else available_cpus()
     with ThreadPoolExecutor(max_workers=workers) as pool:
         _consume_dags(pool)
