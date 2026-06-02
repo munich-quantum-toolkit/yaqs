@@ -54,9 +54,12 @@ $$
 U_2^\dagger U_1 \approx e^{i\phi}\, I
 $$
 
-for some global phase $\phi$, within `fidelity`. Measurements and barriers are ignored for the
-matrix path (final measurements are stripped before building $U$). The MPO algorithm processes
-the circuit DAGs directly; see {cite:p}`sander2025_EquivalenceChecking` for the underlying method.
+for some global phase $\phi$, within `fidelity`. On the **matrix** path, only **final**
+measurements are stripped before building $U$; mid-circuit measurements raise an error.
+Barriers are ignored on the matrix path. The **MPO** backend walks circuit DAGs directly
+(measurements and barriers are skipped during zone extraction); mid-circuit measurements
+are not supported for unitary equivalence on either backend. See
+{cite:p}`sander2025_EquivalenceChecking` for the underlying MPO method.
 
 `check` returns a dictionary:
 

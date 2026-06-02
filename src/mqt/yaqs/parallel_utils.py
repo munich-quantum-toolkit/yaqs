@@ -82,7 +82,15 @@ def available_cpus() -> int:
 
 
 def get_parallel_context(mp_context: MPContext = "auto") -> multiprocessing.context.BaseContext:
-    """Return a multiprocessing context for worker processes."""
+    """Return a multiprocessing context for worker processes.
+
+    Args:
+        mp_context: Start method selector. ``"auto"`` uses ``"fork"`` on Linux and
+            ``"spawn"`` elsewhere; ``"fork"`` or ``"spawn"`` select that method explicitly.
+
+    Returns:
+        A :class:`~multiprocessing.context.BaseContext` for creating worker processes.
+    """
     if mp_context == "auto":
         if sys.platform == "linux":
             return multiprocessing.get_context("fork")
@@ -101,9 +109,9 @@ def limit_worker_threads(n_threads: int = 1) -> None:
         n_threads: Maximum threads per numerical library (default ``1``).
     """
     for key in THREAD_ENV_VARS:
-        os.environ.setdefault(key, str(n_threads))
-    os.environ.setdefault("OMP_DYNAMIC", "FALSE")
-    os.environ.setdefault("MKL_DYNAMIC", "FALSE")
+        os.environ[key] = str(n_threads)
+    os.environ["OMP_DYNAMIC"] = "FALSE"
+    os.environ["MKL_DYNAMIC"] = "FALSE"
 
     with contextlib.suppress(Exception):
         numexpr = importlib.import_module("numexpr")

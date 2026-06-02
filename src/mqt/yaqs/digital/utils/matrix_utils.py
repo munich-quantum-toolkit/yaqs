@@ -25,7 +25,7 @@ from qiskit.dagcircuit import DAGOpNode
 from qiskit.quantum_info import Operator
 
 from .dag_utils import convert_dag_to_tensor_algorithm
-from .equivalence_schedule import partition_disjoint_gate_batches
+from .scheduler_utils import partition_disjoint_gate_batches
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

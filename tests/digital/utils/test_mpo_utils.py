@@ -24,6 +24,7 @@ for simulating quantum circuits are performed correctly.
 from __future__ import annotations
 
 import copy
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -34,12 +35,14 @@ from qiskit.converters import circuit_to_dag
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.digital.utils.dag_utils import select_starting_point
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 from mqt.yaqs.digital.utils.mpo_utils import (
+    MIN_QUBITS_FOR_MPO_PARALLEL,
     apply_gate,
     apply_layer,
     apply_long_range_layer,
     apply_temporal_zone,
+    compute_pair_update,
     decompose_theta,
     update_mpo,
 )
@@ -285,3 +288,144 @@ def test_apply_long_range_layer() -> None:
     apply_long_range_layer(mpo, dag1, dag2, conjugate=True, threshold=threshold)
 
     assert mpo.check_if_identity(1 - 1e-6), "MPO should approximate identity after long-range layer."
+
+
+def _make_n_by_n_circuit(num_qubits: int) -> QuantumCircuit:
+    """Build an ``n`` x ``n`` layered circuit (``n`` qubits, ``n`` repetitions).
+
+    Returns:
+        A layered circuit with all-qubit ``h`` gates and linear ``cx`` chains.
+    """
+    qc = QuantumCircuit(num_qubits)
+    for _ in range(num_qubits):
+        for q in range(num_qubits):
+            qc.h(q)
+        for q in range(num_qubits - 1):
+            qc.cx(q, q + 1)
+    return qc
+
+
+def test_compute_pair_update_matches_update_mpo_step() -> None:
+    """Pure pair kernel reproduces a single update_mpo step on two sites."""
+    qc1 = QuantumCircuit(2)
+    qc1.h(0)
+    qc1.cx(0, 1)
+    qc2 = qc1.copy()
+
+    mpo_ref = MPO.identity(2)
+    dag1 = circuit_to_dag(qc1)
+    dag2 = circuit_to_dag(qc2)
+    update_mpo(mpo_ref, dag1, dag2, [0, 1], 1e-12)
+
+    mpo_test = MPO.identity(2)
+
+    dag1b = circuit_to_dag(qc1)
+    dag2b = circuit_to_dag(qc2)
+    zone1 = get_temporal_zone(dag1b, [0, 1])
+    zone2 = get_temporal_zone(dag2b, [0, 1])
+    gates1 = convert_dag_to_tensor_algorithm(zone1)
+    gates2 = convert_dag_to_tensor_algorithm(zone2)
+    t0, t1 = compute_pair_update(
+        mpo_test.tensors[0],
+        mpo_test.tensors[1],
+        gates1,
+        gates2,
+        1e-12,
+        [0, 1],
+        apply_conjugate_on_second=True,
+    )
+    mpo_test.tensors[0] = t0
+    mpo_test.tensors[1] = t1
+
+    for a, b in zip(mpo_ref.tensors, mpo_test.tensors, strict=True):
+        assert np.allclose(a, b, atol=1e-10)
+
+
+def test_compute_pair_update_conjugates_second_zone() -> None:
+    """``gates2`` are conjugated whenever the second zone is non-empty."""
+    rz_gate = GateLibrary.rz([np.pi / 4])
+    rz_gate.set_sites(0)
+
+    tensor_n = MPO.identity(2).tensors[0]
+    tensor_n1 = MPO.identity(2).tensors[1]
+
+    with_conjugate = compute_pair_update(
+        tensor_n,
+        tensor_n1,
+        [],
+        [rz_gate],
+        1e-12,
+        [0, 1],
+        apply_conjugate_on_second=True,
+    )
+    without_conjugate = compute_pair_update(
+        tensor_n,
+        tensor_n1,
+        [],
+        [rz_gate],
+        1e-12,
+        [0, 1],
+        apply_conjugate_on_second=False,
+    )
+
+    assert not np.allclose(with_conjugate[0], without_conjugate[0], atol=1e-10)
+
+
+def test_apply_layer_parallel_requires_thread_pool() -> None:
+    """Parallel layer updates without a thread pool raise at runtime."""
+    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc = _make_n_by_n_circuit(num_qubits)
+    dag1 = circuit_to_dag(qc)
+    dag2 = circuit_to_dag(qc)
+    mpo = MPO.identity(num_qubits)
+    first_iterator, second_iterator = select_starting_point(num_qubits, dag1)
+
+    with pytest.raises(RuntimeError, match="thread pool"):
+        apply_layer(
+            mpo,
+            dag1,
+            dag2,
+            first_iterator,
+            second_iterator,
+            1e-6,
+            parallel=True,
+            max_workers=2,
+            thread_pool=None,
+        )
+
+
+def test_apply_layer_parallel_with_thread_pool() -> None:
+    """Parallel apply_layer succeeds when a thread pool is provided."""
+    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc = _make_n_by_n_circuit(num_qubits)
+    dag1 = circuit_to_dag(qc)
+    dag2 = circuit_to_dag(qc)
+    mpo_serial = MPO.identity(num_qubits)
+    mpo_parallel = MPO.identity(num_qubits)
+    first_iterator, second_iterator = select_starting_point(num_qubits, dag1)
+
+    apply_layer(
+        mpo_serial,
+        dag1,
+        dag2,
+        first_iterator,
+        second_iterator,
+        1e-6,
+        parallel=False,
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        apply_layer(
+            mpo_parallel,
+            dag1,
+            dag2,
+            first_iterator,
+            second_iterator,
+            1e-6,
+            parallel=True,
+            max_workers=2,
+            thread_pool=pool,
+        )
+
+    for serial_tensor, parallel_tensor in zip(mpo_serial.tensors, mpo_parallel.tensors, strict=True):
+        assert np.allclose(serial_tensor, parallel_tensor, atol=1e-8)

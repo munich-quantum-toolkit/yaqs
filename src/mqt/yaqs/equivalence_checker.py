@@ -77,6 +77,30 @@ def _validate_matrix_max_qubits(matrix_max_qubits: int) -> int:
     return matrix_max_qubits
 
 
+def _validate_max_workers(max_workers: int | None) -> int | None:
+    """Validate the MPO parallel worker-thread cap.
+
+    Args:
+        max_workers: Requested thread cap, or ``None`` for the default.
+
+    Returns:
+        The validated cap, or ``None``.
+
+    Raises:
+        TypeError: If ``max_workers`` is not ``None`` or a non-boolean ``int``.
+        ValueError: If ``max_workers`` is not positive.
+    """
+    if max_workers is None:
+        return None
+    if isinstance(max_workers, bool) or not isinstance(max_workers, int):
+        msg = f"max_workers must be int or None, got {type(max_workers).__name__}."
+        raise TypeError(msg)
+    if max_workers <= 0:
+        msg = f"max_workers must be positive, got {max_workers}."
+        raise ValueError(msg)
+    return max_workers
+
+
 class EquivalenceChecker:
     """Public entry point for circuit equivalence checking.
 
@@ -122,7 +146,7 @@ class EquivalenceChecker:
         self.representation = _validate_representation(representation)
         self.matrix_max_qubits = _validate_matrix_max_qubits(matrix_max_qubits)
         self.parallel = parallel
-        self.max_workers = max_workers
+        self.max_workers = _validate_max_workers(max_workers)
         self.mp_context = mp_context
 
     def _resolve_representation(self, num_qubits: int) -> Literal["matrix", "mpo"]:

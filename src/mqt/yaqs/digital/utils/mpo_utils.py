@@ -156,6 +156,12 @@ def apply_temporal_zone_gates(
 ) -> NDArray[np.complex128]:
     """Apply a pre-extracted list of gates to a local tensor ``theta``.
 
+    Args:
+        theta: Local tensor to update.
+        gates: Pre-extracted gates to apply in order.
+        qubits: Local qubit indices; ``qubits[0]`` is used as the left site ``n``.
+        conjugate: If True, apply each gate as its conjugate transpose.
+
     Returns:
         The updated local tensor after applying all gates.
     """
@@ -214,7 +220,7 @@ def compute_pair_update(
         gates2: Gates from the second circuit's temporal zone on this pair.
         threshold: SVD truncation threshold.
         qubits: The two site indices ``[n, n + 1]`` for gate placement.
-        apply_conjugate_on_second: If True, apply ``gates2`` with conjugation (both DAGs present).
+        apply_conjugate_on_second: If True, apply ``gates2`` with conjugation.
 
     Returns:
         Updated ``(tensor_n, tensor_n1)`` after decomposition.
@@ -274,7 +280,7 @@ def _gather_pair_update_work(
                 site=n,
                 gates1=tuple(gates1),
                 gates2=tuple(gates2),
-                apply_conjugate_on_second=bool(gates1),
+                apply_conjugate_on_second=bool(gates2),
             )
         )
     return work_items
@@ -333,7 +339,7 @@ def update_mpo(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, qubits: list[int], 
     if dag2.op_nodes():
         zone2 = get_temporal_zone(dag2, qubits)
         gates2 = convert_dag_to_tensor_algorithm(zone2)
-    apply_conjugate = bool(gates1)
+    apply_conjugate = bool(gates2)
     mpo.tensors[n], mpo.tensors[n + 1] = compute_pair_update(
         mpo.tensors[n],
         mpo.tensors[n + 1],

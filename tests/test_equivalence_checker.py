@@ -29,6 +29,21 @@ if TYPE_CHECKING:
     from mqt.yaqs.equivalence_checker import EquivalenceRepresentation
 
 
+def _make_n_by_n_circuit(num_qubits: int) -> QuantumCircuit:
+    """Build an ``n`` x ``n`` layered circuit (``n`` qubits, ``n`` repetitions).
+
+    Returns:
+        A layered circuit with all-qubit ``h`` gates and linear ``cx`` chains.
+    """
+    qc = QuantumCircuit(num_qubits)
+    for _ in range(num_qubits):
+        for q in range(num_qubits):
+            qc.h(q)
+        for q in range(num_qubits - 1):
+            qc.cx(q, q + 1)
+    return qc
+
+
 @pytest.mark.parametrize(("threshold", "fidelity"), [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
 def test_identity_vs_identity(threshold: float, fidelity: float) -> None:
     """Test that two empty (no-gate) circuits on the same number of qubits are equivalent.
@@ -210,16 +225,98 @@ def test_matrix_max_qubits_override() -> None:
     assert checker_wide.check(qc, qc)["representation"] == "matrix"
 
 
-def test_checker_parallel_option_on_wide_mpo() -> None:
-    """``parallel=True`` is accepted on wide MPO checks at the parallel cutoff."""
-    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
-    qc = QuantumCircuit(num_qubits)
-    for q in range(num_qubits):
-        qc.h(q)
-    for q in range(num_qubits - 1):
-        qc.cx(q, q + 1)
+@pytest.mark.parametrize("max_workers", [0, -1])
+def test_checker_rejects_non_positive_max_workers(max_workers: int) -> None:
+    """``max_workers`` must be positive when provided."""
+    with pytest.raises(ValueError, match="positive"):
+        EquivalenceChecker(max_workers=max_workers)
 
-    checker = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2, threshold=1e-6)
-    result = checker.check(qc, qc)
+
+def test_checker_rejects_bool_max_workers() -> None:
+    """``max_workers=False`` is rejected (booleans are not valid thread caps)."""
+    with pytest.raises(TypeError, match="max_workers"):
+        EquivalenceChecker(max_workers=False)
+
+
+def test_checker_rejects_non_int_max_workers() -> None:
+    """Non-integer ``max_workers`` values are rejected."""
+    with pytest.raises(TypeError, match="max_workers"):
+        EquivalenceChecker(max_workers=1.5)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_mpo_checker_serial_vs_parallel_small(*, parallel: bool) -> None:
+    """MPO equivalence on small circuits (serial path even when parallel=True)."""
+    qc1 = QuantumCircuit(2)
+    qc1.h(0)
+    qc1.cx(0, 1)
+
+    qc2 = QuantumCircuit(2)
+    qc2.h(0)
+    qc2.cx(0, 1)
+
+    checker = EquivalenceChecker(representation="mpo", parallel=parallel, max_workers=2)
+    result = checker.check(qc1, qc2)
     assert result["equivalent"] is True
-    assert result["representation"] == "mpo"
+
+
+@pytest.mark.parametrize("num_qubits", [MIN_QUBITS_FOR_MPO_PARALLEL, MIN_QUBITS_FOR_MPO_PARALLEL + 2])
+def test_wide_mpo_serial_vs_parallel_equivalent(num_qubits: int) -> None:
+    """Wide ``n`` x ``n`` circuits agree between serial and parallel MPO checking."""
+    qc = _make_n_by_n_circuit(num_qubits)
+    serial = EquivalenceChecker(representation="mpo", parallel=False, threshold=1e-6).check(qc, qc)
+    parallel = EquivalenceChecker(
+        representation="mpo",
+        parallel=True,
+        max_workers=2,
+        threshold=1e-6,
+    ).check(qc, qc)
+
+    assert serial["equivalent"] is True
+    assert parallel["equivalent"] is True
+    assert serial["equivalent"] == parallel["equivalent"]
+
+
+def test_wide_mpo_serial_vs_parallel_non_equivalent() -> None:
+    """Serial and parallel MPO paths agree on non-equivalent wide circuits."""
+    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc1 = _make_n_by_n_circuit(num_qubits)
+    qc2 = qc1.copy()
+    qc2.x(0)
+
+    serial = EquivalenceChecker(representation="mpo", parallel=False, threshold=1e-6).check(qc1, qc2)
+    parallel = EquivalenceChecker(
+        representation="mpo",
+        parallel=True,
+        max_workers=2,
+        threshold=1e-6,
+    ).check(qc1, qc2)
+
+    assert serial["equivalent"] is False
+    assert serial["equivalent"] == parallel["equivalent"]
+
+
+def test_mpo_parallel_max_workers_one_uses_in_process_path() -> None:
+    """``max_workers=1`` still runs through the parallel sweep with a thread pool."""
+    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc = _make_n_by_n_circuit(num_qubits)
+    result = EquivalenceChecker(
+        representation="mpo",
+        parallel=True,
+        max_workers=1,
+        threshold=1e-6,
+    ).check(qc, qc)
+    assert result["equivalent"] is True
+
+
+def test_long_range_mpo_parallel() -> None:
+    """Long-range circuits agree between serial and parallel MPO checking."""
+    qc1 = QuantumCircuit(3)
+    qc1.h(0)
+    qc1.cx(0, 2)
+
+    qc2 = qc1.copy()
+
+    serial = EquivalenceChecker(representation="mpo", parallel=False).check(qc1, qc2)
+    parallel = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2).check(qc1, qc2)
+    assert serial["equivalent"] == parallel["equivalent"]
