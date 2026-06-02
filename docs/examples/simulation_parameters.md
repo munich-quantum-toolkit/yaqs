@@ -175,12 +175,9 @@ Used for noisy strong circuit simulation. Provide observables and optionally ena
 
 ### Two-qubit gate mode (`gate_mode`)
 
-Digital circuit simulation on an MPS uses a **hybrid** two-qubit update by default (`gate_mode="hybrid"`):
+Digital circuit simulation on an MPS uses a **TEBD/SVD** two-qubit update by default (`gate_mode="tebd"`).
 
-- **Nearest-neighbor** gates (adjacent qubits in the Qiskit circuit) use a direct **TEBD/SVD** update.
-- **Long-range** gates use the **generator MPO + two-site TDVP** path.
-
-Qiskit qubit indices are preserved: MPS site `i` matches qubit `i` in the input circuit.
+You can also set `gate_mode="hybrid"` to use TEBD/SVD for **nearest-neighbor** gates (adjacent in the internal MPS site order after bit reversal) while keeping the existing **generator MPO + two-site TDVP** path for **long-range** gates.
 
 Set `gate_mode="tdvp"` to apply TDVP to every two-qubit gate. Set `gate_mode="tebd"` to use TEBD/SVD for all two-qubit gates; long-range gates are implemented by adjacent SWAP insertion before and after the update.
 

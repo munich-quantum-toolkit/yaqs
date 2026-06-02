@@ -21,12 +21,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
-- circuit simulation pads product-state initial MPS bond dimension to at least two before gate application
-- long-range circuit TDVP uses `tdvp_sweeps` sub-steps with `dt = 1/n` per sweep (default `n = 4`) instead of a single `dt = 1` sweep
-- added `tdvp_circuit_full_sweep` to opt into symmetric LR+RL circuit TDVP sweeps (default `False`; symmetric mode regresses on skip-site gate MPOs)
-- hybrid TDVP benchmark report generator (`uv run python -m tests.digital.bench_hybrid_report`) writes `benchmarks/hybrid_tdvp_benchmark.{json,md}`
-- rotation-only hybrid TDVP benchmark (`uv run python -m tests.digital.bench_hybrid_rotation_report`) writes `benchmarks/hybrid_rotation_tdvp_benchmark.{json,md}` using RX/RY/RZ/RXX/RYY/RZZ probes (no H/CX)
-- removed unused internal `reverse_bits()` call from digital circuit simulation; Qiskit qubit indices map directly to MPS sites
+- changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
 - refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
 - sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
 - changed `simulator.run` to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
@@ -128,6 +123,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#445]: https://github.com/munich-quantum-toolkit/yaqs/pull/445
 [#441]: https://github.com/munich-quantum-toolkit/yaqs/pull/441
 [#439]: https://github.com/munich-quantum-toolkit/yaqs/pull/439
 [#438]: https://github.com/munich-quantum-toolkit/yaqs/pull/438

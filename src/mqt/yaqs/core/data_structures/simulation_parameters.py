@@ -393,10 +393,7 @@ class StrongSimParams:
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
-        tdvp_sweeps: Number of TDVP sweeps per long-range two-qubit gate (each with ``dt = 1/n``).
-        tdvp_circuit_full_sweep: If ``True``, circuit TDVP sub-steps use symmetric LR+RL sweeps.
-            Default ``False`` keeps the partial LR integrator for skip-site gate MPOs.
+            (``"tebd"``, ``"hybrid"``, or ``"tdvp"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -417,9 +414,7 @@ class StrongSimParams:
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
         random_seed: int | None = None,
-        gate_mode: GateMode = "hybrid",
-        tdvp_sweeps: int = 4,
-        tdvp_circuit_full_sweep: bool = False,
+        gate_mode: GateMode = "tebd",
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -446,10 +441,6 @@ class StrongSimParams:
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
-            tdvp_sweeps: TDVP sweeps per long-range gate (default ``4``); each sweep uses ``dt = 1/n``.
-            tdvp_circuit_full_sweep: If ``True``, each sub-step runs a symmetric LR+RL two-site sweep.
-                Default ``False`` uses the partial left-to-right integrator, which is more accurate
-                for skip-site gate generator MPOs in circuit simulation.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -515,9 +506,6 @@ class WeakSimParams:
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
             (``"hybrid"``, ``"tdvp"``, or ``"tebd"``).
-        tdvp_sweeps: Number of TDVP sweeps per long-range two-qubit gate (each with ``dt = 1/n``).
-        tdvp_circuit_full_sweep: If ``True``, circuit TDVP sub-steps use symmetric LR+RL sweeps.
-            Default ``False`` keeps the partial LR integrator for skip-site gate MPOs.
     """
 
     # Properties set as placeholders for code compatibility
@@ -537,8 +525,6 @@ class WeakSimParams:
         get_state: bool = False,
         random_seed: int | None = None,
         gate_mode: GateMode = "hybrid",
-        tdvp_sweeps: int = 4,
-        tdvp_circuit_full_sweep: bool = False,
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -562,9 +548,6 @@ class WeakSimParams:
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
             gate_mode: Two-qubit gate update mode (default ``"hybrid"``).
-            tdvp_sweeps: TDVP sweeps per long-range gate (default ``4``); each sweep uses ``dt = 1/n``.
-            tdvp_circuit_full_sweep: If ``True``, each sub-step runs a symmetric LR+RL two-site sweep.
-                Default ``False`` uses the partial left-to-right integrator.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
