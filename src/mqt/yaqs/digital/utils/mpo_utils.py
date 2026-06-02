@@ -28,7 +28,6 @@ from ...core import linalg
 from ...core.data_structures.mpo import MPO
 from ...parallel_utils import MPContext, available_cpus, limit_worker_threads
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
-from .equivalence_parallel import MpoPairUpdateResult
 
 # Below this width, thread-pool overhead usually beats the cost of one SVD pair update.
 MIN_QUBITS_FOR_MPO_PARALLEL = 12
@@ -243,6 +242,15 @@ class _PairUpdateWork:
     apply_conjugate_on_second: bool
 
 
+@dataclass(frozen=True)
+class _PairUpdateResult:
+    """Updated MPO tensors for one checkerboard pair."""
+
+    site: int
+    tensor_n: NDArray[np.complex128]
+    tensor_n1: NDArray[np.complex128]
+
+
 def _gather_pair_update_work(
     dag1: DAGCircuit,
     dag2: DAGCircuit,
@@ -276,7 +284,7 @@ def _compute_pair_work(
     mpo: MPO,
     work: _PairUpdateWork,
     threshold: float,
-) -> MpoPairUpdateResult:
+) -> _PairUpdateResult:
     """Run ``compute_pair_update`` for one checkerboard pair (thread-pool worker).
 
     Returns:
@@ -293,10 +301,10 @@ def _compute_pair_work(
         qubits,
         apply_conjugate_on_second=work.apply_conjugate_on_second,
     )
-    return MpoPairUpdateResult(site=n, tensor_n=tensor_n, tensor_n1=tensor_n1)
+    return _PairUpdateResult(site=n, tensor_n=tensor_n, tensor_n1=tensor_n1)
 
 
-def _apply_pair_update_results(mpo: MPO, results: list[MpoPairUpdateResult]) -> None:
+def _apply_pair_update_results(mpo: MPO, results: list[_PairUpdateResult]) -> None:
     for result in results:
         mpo.tensors[result.site] = result.tensor_n
         mpo.tensors[result.site + 1] = result.tensor_n1
@@ -363,7 +371,7 @@ def _apply_layer_sweep(
     workers = max_workers if max_workers is not None else available_cpus()
     workers = max(1, min(workers, len(work_items)))
 
-    def _run_one(work: _PairUpdateWork) -> MpoPairUpdateResult:
+    def _run_one(work: _PairUpdateWork) -> _PairUpdateResult:
         return _compute_pair_work(mpo, work, threshold)
 
     if workers == 1:

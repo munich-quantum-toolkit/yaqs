@@ -23,6 +23,7 @@ from qiskit import QuantumCircuit
 from qiskit.qasm2 import load
 
 from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
+from mqt.yaqs.digital.utils.mpo_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 
 if TYPE_CHECKING:
     from mqt.yaqs.equivalence_checker import EquivalenceRepresentation
@@ -207,3 +208,18 @@ def test_matrix_max_qubits_override() -> None:
 
     checker_wide = EquivalenceChecker(representation="auto", matrix_max_qubits=4)
     assert checker_wide.check(qc, qc)["representation"] == "matrix"
+
+
+def test_checker_parallel_option_on_wide_mpo() -> None:
+    """``parallel=True`` is accepted on wide MPO checks at the parallel cutoff."""
+    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc = QuantumCircuit(num_qubits)
+    for q in range(num_qubits):
+        qc.h(q)
+    for q in range(num_qubits - 1):
+        qc.cx(q, q + 1)
+
+    checker = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2, threshold=1e-6)
+    result = checker.check(qc, qc)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
