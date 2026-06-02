@@ -30,6 +30,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ### Removed
 
 ### Fixed
+
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
 
