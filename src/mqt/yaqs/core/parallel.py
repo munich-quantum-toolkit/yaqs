@@ -14,13 +14,14 @@ import importlib
 import multiprocessing
 import os
 import sys
-from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
-from typing import Literal, TypeVar
+from typing import TYPE_CHECKING, Literal, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 try:
-    from threadpoolctl import threadpool_info
-    from threadpoolctl import threadpool_limits
+    from threadpoolctl import threadpool_info, threadpool_limits
 except ImportError:
     threadpool_limits = None  # ty: ignore[invalid-assignment]
     threadpool_info = None
@@ -41,8 +42,8 @@ THREAD_ENV_VARS: dict[str, str] = {
 }
 
 __all__ = [
-    "MPContext",
     "THREAD_ENV_VARS",
+    "MPContext",
     "available_cpus",
     "get_parallel_context",
     "limit_worker_threads",
