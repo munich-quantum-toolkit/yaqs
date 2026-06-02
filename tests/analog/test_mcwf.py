@@ -33,8 +33,7 @@ def test_mcwf_amplitude_damping() -> None:
     """
     n_sites = 1
     initial_state = State(n_sites, initial="ones", representation="vector")  # |1>
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0  # H = 0
     hamiltonian = Hamiltonian.from_mpo(mpo)
@@ -115,8 +114,7 @@ def test_mcwf_dephasing() -> None:
     n_sites = 2
     initial_state = State(n_sites, initial="x+", representation="vector")  # |++>
 
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0
     hamiltonian = Hamiltonian.from_mpo(mpo)
@@ -212,8 +210,7 @@ def test_mcwf_noisy_system_has_propagator() -> None:
     """Open-system runs on small Hilbert spaces also use the precomputed propagator."""
     n_sites = 2
     psi = MPS(n_sites, state="x+")
-    h = MPO()
-    h.identity(n_sites)
+    h = MPO.identity(n_sites)
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
@@ -244,8 +241,7 @@ def test_mcwf_trajectory_rng_seeding_reproducible() -> None:
     """Two runs with the same ``random_seed`` produce identical MCWF trajectories."""
     n_sites = 1
     state = State(n_sites, initial="x+", representation="vector")
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0
     hamiltonian = Hamiltonian.from_mpo(mpo)
@@ -272,8 +268,7 @@ def test_mcwf_noisy_evolution_with_propagator_via_simulator() -> None:
     """Noisy open-system evolution through the Simulator returns finite trajectories."""
     n_sites = 2
     state = State(n_sites, initial="x+", representation="vector")
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0
     hamiltonian = Hamiltonian.from_mpo(mpo)
@@ -320,8 +315,7 @@ def test_mcwf_noisy_arnoldi_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mcwf_mod, "MAX_PRECOMPUTE_DIM", 4)
     n_sites = 3
     state = State(n_sites, initial="x+", representation="vector")
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0
     hamiltonian = Hamiltonian.from_mpo(mpo)

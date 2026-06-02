@@ -233,9 +233,8 @@ def test_update_mpo() -> None:
     This test initializes an identity MPO for 2 qubits, creates an Ising circuit,
     and applies update_mpo. It then checks that each tensor in the updated MPO is a rank-4 tensor.
     """
-    mpo = MPO()
     length = 2
-    mpo.identity(length)
+    mpo = MPO.identity(length)
     circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -255,9 +254,8 @@ def test_apply_layer() -> None:
     This test initializes an identity MPO for 3 qubits and applies a layer update using two sweeps.
     It then checks if the final MPO is (approximately) the identity.
     """
-    mpo = MPO()
     length = 3
-    mpo.identity(length)
+    mpo = MPO.identity(length)
     circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -276,9 +274,8 @@ def test_apply_long_range_layer() -> None:
     then applies the long-range layer with both conjugated and non-conjugated settings.
     Checks that the final MPO approximates the identity.
     """
-    mpo = MPO()
     num_qubits = 3
-    mpo.identity(num_qubits)
+    mpo = MPO.identity(num_qubits)
     circuit = QuantumCircuit(num_qubits)
     circuit.cx(0, 2)
     dag1 = circuit_to_dag(circuit)

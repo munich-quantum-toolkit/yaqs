@@ -423,11 +423,10 @@ def test_identity() -> None:
     This test checks that an identity MPO has the correct length, physical dimension,
     and that each tensor corresponds to the identity operator.
     """
-    mpo = MPO()
     length = 3
     pdim = 2
 
-    mpo.identity(length, physical_dimension=pdim)
+    mpo = MPO.identity(length, physical_dimension=pdim)
 
     assert mpo.length == length
     assert mpo.physical_dimension == pdim
@@ -635,26 +634,20 @@ def test_check_if_identity() -> None:
     This test initializes an identity MPO and verifies that check_if_identity returns True
     when a fidelity threshold is provided.
     """
-    mpo = MPO()
-    length = 3
-    pdim = 2
-
-    mpo.identity(length, pdim)
+    mpo = MPO.identity(length=3, physical_dimension=2)
     fidelity_threshold = 0.9
     assert mpo.check_if_identity(fidelity_threshold) is True
 
 
 def test_identity_mpo_tensors_are_independent() -> None:
     """Each site tensor in identity() must be a distinct array."""
-    mpo = MPO()
-    mpo.identity(3, physical_dimension=2)
+    mpo = MPO.identity(3, physical_dimension=2)
     assert mpo.tensors[0] is not mpo.tensors[1]
 
 
 def test_check_if_identity_non_qubit_physical_dimension() -> None:
     """Identity check uses the MPO physical dimension, not the qubit default."""
-    mpo = MPO()
-    mpo.identity(2, physical_dimension=3)
+    mpo = MPO.identity(2, physical_dimension=3)
     assert mpo.check_if_identity(0.9) is True
 
 

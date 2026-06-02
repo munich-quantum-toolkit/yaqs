@@ -32,8 +32,7 @@ def test_lindblad_amplitude_damping() -> None:
     """Test single qubit amplitude damping with exact Lindblad solver."""
     n_sites = 1
     initial_state = State(n_sites, initial="ones", representation="density_matrix")
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0  # H = 0
     hamiltonian = Hamiltonian.from_mpo(mpo)
@@ -98,8 +97,7 @@ def test_lindblad_dephasing() -> None:
     n_sites = 2
     initial_state = State(n_sites, initial="x+", representation="density_matrix")
 
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0
     hamiltonian = Hamiltonian.from_mpo(mpo)
@@ -142,8 +140,7 @@ def test_lindblad_dephasing_both_qubits() -> None:
     n_sites = 2
     initial_state = State(n_sites, initial="x+", representation="density_matrix")
 
-    mpo = MPO()
-    mpo.identity(n_sites)
+    mpo = MPO.identity(n_sites)
     for i in range(len(mpo.tensors)):
         mpo.tensors[i] *= 0.0
     hamiltonian = Hamiltonian.from_mpo(mpo)
@@ -243,8 +240,7 @@ def test_lindblad_noisy_small_system_has_propagator() -> None:
     """Open-system runs on small Hilbert spaces also use the precomputed propagator."""
     n_sites = 2
     psi = MPS(n_sites, state="x+")
-    h = MPO()
-    h.identity(n_sites)
+    h = MPO.identity(n_sites)
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(processes=[{"name": "pauli_z", "sites": [0], "strength": 0.2}])
@@ -294,8 +290,7 @@ def test_lindblad_propagator_records_all_timepoints() -> None:
     """Propagator path records observables at every entry in ``sim_params.times``."""
     n_sites = 1
     psi = MPS(n_sites, state="ones")
-    h = MPO()
-    h.identity(n_sites)
+    h = MPO.identity(n_sites)
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
 
@@ -326,8 +321,7 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(lindblad_mod, "MAX_LIOUVILLIAN_VECTOR_DIM", 4)
     n_sites = 2
     psi = MPS(n_sites, state="ones")
-    h = MPO()
-    h.identity(n_sites)
+    h = MPO.identity(n_sites)
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
 
