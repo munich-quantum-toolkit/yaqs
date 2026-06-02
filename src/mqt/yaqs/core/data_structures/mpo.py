@@ -44,7 +44,8 @@ class MPO:
     - ``MPO.fermi_hubbard_1d(...)``: 1D Fermi-Hubbard (fermionic or Jordan-Wigner Pauli).
     - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
     - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
-    - ``identity(...)``, ``custom(...)``, ``finite_state_machine(...)``: in-place builders.
+    - ``MPO.identity(...)``: identity operator.
+    - ``custom(...)``, ``finite_state_machine(...)``: in-place builders.
 
     **Operations**
 
@@ -581,15 +582,29 @@ class MPO:
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
         return mpo
 
-    def identity(self, length: int, physical_dimension: int = 2) -> None:
-        """Initialize identity MPO.
+    @classmethod
+    def identity(cls, length: int, physical_dimension: int = 2) -> MPO:
+        """Construct an identity MPO.
 
-        Initializes the network with identity matrices.
+        Args:
+            length: Number of sites.
+            physical_dimension: Local Hilbert-space dimension per site (default 2 for qubits).
 
-        Parameters:
-            length (int): The number of identity matrices to initialize.
-            physical_dimension (int, optional): The physical dimension of the identity matrices. Default is 2.
+        Returns:
+            An MPO representing the identity operator on ``length`` sites.
+        """
+        mpo = cls()
+        mpo.init_identity(length, physical_dimension=physical_dimension)
+        return mpo
 
+    def init_identity(self, length: int, physical_dimension: int = 2) -> None:
+        """Initialize this MPO in place as the identity operator.
+
+        Prefer :meth:`identity` when constructing a new MPO.
+
+        Args:
+            length: Number of sites.
+            physical_dimension: Local dimension per site (default 2).
         """
         mat = np.eye(physical_dimension, dtype=np.complex128)
         mat = np.expand_dims(mat, (2, 3))
@@ -1182,8 +1197,7 @@ class MPO:
         Returns:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
-        identity_mpo = MPO()
-        identity_mpo.identity(self.length, physical_dimension=self.physical_dimension)
+        identity_mpo = MPO.identity(self.length, physical_dimension=self.physical_dimension)
 
         identity_mps = identity_mpo.to_mps()
         mps = self.to_mps()
