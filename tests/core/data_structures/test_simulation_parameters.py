@@ -484,6 +484,9 @@ def test_strong_params_sorting_and_fields() -> None:
     assert params.sorted_observables[2] is obs_x2
     assert params.sorted_observables[3] is obs_z3
 
+    # Mapping from user order -> sorted worker row indices
+    assert params.observable_sorted_indices == (3, 2, 0, 1)
+
     # Parameter fields are retained
     assert params.num_traj == 7
     assert params.max_bond_dim == 128

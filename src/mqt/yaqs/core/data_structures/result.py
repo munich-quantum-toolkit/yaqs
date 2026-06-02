@@ -159,8 +159,9 @@ class Result:
     """Result of a :meth:`~mqt.yaqs.Simulator.run` call.
 
     Holds all simulation outputs. :attr:`sim_params` is the read-only configuration
-    object the user passed in. :attr:`observables` lists measurement metadata
-    (deep-copied from the configuration); :attr:`expectation_values` and
+    object the user passed in. :attr:`observables` preserves the user-supplied
+    ordering from ``sim_params.observables`` (deep-copied from the configuration);
+    :attr:`expectation_values` and
     :attr:`trajectories` hold the corresponding data in lock-step by index.
     For MPS-backed analog and strong-digital runs, :attr:`runtime_cost`,
     :attr:`max_bond`, and :attr:`total_bond` are populated automatically.
