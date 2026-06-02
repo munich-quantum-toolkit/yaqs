@@ -30,6 +30,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ### Removed
 
 ### Fixed
+
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
