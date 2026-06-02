@@ -28,7 +28,7 @@ from .digital.utils.mpo_utils import iterate
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
 
-    from .core.parallel import MPContext
+    from .parallel_utils import MPContext
 
 __all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "EquivalenceRepresentation"]
 

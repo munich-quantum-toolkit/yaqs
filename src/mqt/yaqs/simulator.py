@@ -115,7 +115,7 @@ from .core.data_structures.simulation_parameters import (
     _prepare_observable_ordering,
 )
 from .core.data_structures.state import State
-from .core.parallel import MPContext, available_cpus, get_parallel_context, limit_worker_threads
+from .parallel_utils import MPContext, available_cpus, get_parallel_context, limit_worker_threads
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -512,7 +512,7 @@ def run_backend_parallel(
             (e.g., TimeoutError). Defaults to 10.
         retry_exceptions: A tuple of exception types that trigger a retry.
             Defaults to (CancelledError, TimeoutError, OSError).
-        mp_context: Multiprocessing context selector; see :func:`~mqt.yaqs.core.parallel.get_parallel_context`.
+        mp_context: Multiprocessing context selector; see :func:`~mqt.yaqs.parallel_utils.get_parallel_context`.
 
     Yields:
         tuple[int, TRes]: A tuple containing the job index and its result,

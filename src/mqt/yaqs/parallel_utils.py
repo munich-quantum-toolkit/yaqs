@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Shared process-pool helpers for parallel backend execution."""
+"""Shared helpers for parallel simulator and equivalence-checker execution."""
 
 from __future__ import annotations
 

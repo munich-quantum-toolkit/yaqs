@@ -26,7 +26,7 @@ from qiskit.converters import dag_to_circuit
 
 from ...core import linalg
 from ...core.data_structures.mpo import MPO
-from ...core.parallel import MPContext, available_cpus, parallel_worker_init
+from ...parallel_utils import MPContext, available_cpus, parallel_worker_init
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 from .equivalence_parallel import MpoPairUpdateResult
 
