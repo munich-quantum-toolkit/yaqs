@@ -1257,9 +1257,8 @@ class Simulator:
 
         Requires :attr:`~mqt.yaqs.core.data_structures.state.State.representation` ``"mps"``,
         materializes the state, validates that the number of qubits in the quantum circuit
-        matches the MPS length, reverses the bit order of the circuit, and dispatches the
-        simulation to the appropriate backend based on whether the simulation parameters
-        indicate strong or weak simulation.
+        matches the MPS length, and dispatches the simulation to the appropriate backend
+        based on whether the simulation parameters indicate strong or weak simulation.
 
         Args:
             initial_state: The initial system state (must use MPS representation).
@@ -1283,7 +1282,6 @@ class Simulator:
         if mps.length != operator.num_qubits:
             msg = "State and circuit qubit counts do not match."
             raise ValueError(msg)
-        operator = copy.deepcopy(operator.reverse_bits())
 
         if isinstance(sim_params, StrongSimParams):
             self._run_strong_sim(mps, operator, sim_params, noise_model, result)
