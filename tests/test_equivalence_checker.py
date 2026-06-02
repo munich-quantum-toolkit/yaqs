@@ -26,7 +26,7 @@ from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
 from mqt.yaqs.digital.utils.mpo_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 
 if TYPE_CHECKING:
-    from mqt.yaqs.equivalence_checker import EquivalenceRepresentation
+    from mqt.yaqs.equivalence_checker import Representation
 
 
 @pytest.mark.parametrize(("threshold", "fidelity"), [(1e-13, 1 - 1e-13), (1e-1, 1 - 1e-3)])
@@ -160,7 +160,7 @@ def test_matrix_and_mpo_agree_on_small_circuits(representation: Literal["matrix"
     checker = EquivalenceChecker(
         threshold=1e-13,
         fidelity=1 - 1e-13,
-        representation=cast("EquivalenceRepresentation", representation),
+        representation=cast("Representation", representation),
     )
     equal_result = checker.check(qc_equal_a, qc_equal_b)
     diff_result = checker.check(qc_equal_a, qc_diff_b)
@@ -180,7 +180,7 @@ def test_global_phase_equivalence(representation: str) -> None:
     qc2.global_phase = np.pi / 3
 
     checker = EquivalenceChecker(
-        representation=cast("EquivalenceRepresentation", representation),
+        representation=cast("Representation", representation),
         fidelity=1 - 1e-13,
     )
     result = checker.check(qc1, qc2)

@@ -30,20 +30,20 @@ if TYPE_CHECKING:
 
     from .parallel_utils import MPContext
 
-__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "EquivalenceRepresentation"]
+__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "Representation"]
 
-EquivalenceRepresentation = Literal["auto", "matrix", "mpo"]
+Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
 
 
-def _validate_representation(representation: str) -> EquivalenceRepresentation:
+def _validate_representation(representation: str) -> Representation:
     """Validate and normalize the representation selector.
 
     Args:
         representation: Requested backend name.
 
     Returns:
-        A validated ``EquivalenceRepresentation`` literal.
+        A validated ``Representation`` literal.
 
     Raises:
         ValueError: If ``representation`` is not one of ``auto``, ``matrix``, or ``mpo``.
@@ -52,7 +52,7 @@ def _validate_representation(representation: str) -> EquivalenceRepresentation:
     if representation not in allowed:
         msg = f"representation must be one of {allowed!r}, got {representation!r}."
         raise ValueError(msg)
-    return cast("EquivalenceRepresentation", representation)
+    return cast("Representation", representation)
 
 
 def _validate_matrix_max_qubits(matrix_max_qubits: int) -> int:
@@ -123,7 +123,7 @@ class EquivalenceChecker:
         *,
         threshold: float = 1e-13,
         fidelity: float = 1 - 1e-13,
-        representation: EquivalenceRepresentation = "auto",
+        representation: Representation = "auto",
         matrix_max_qubits: int = DEFAULT_MATRIX_MAX_QUBITS,
         parallel: bool = True,
         max_workers: int | None = None,
