@@ -830,6 +830,49 @@ def test_observables_match_qiskit_statevector_qubit_ordering() -> None:
         assert got == pytest.approx(expected, abs=1e-10)
 
 
+def test_statevector_observables_match_qiskit_paulis() -> None:
+    """Observables computed from YAQS dense vector match Qiskit Pauli placement."""
+
+    def qiskit_single_pauli_expectation_from_vec(vec: np.ndarray, site: int, op: str) -> float:
+        n = int(np.log2(vec.size))
+        label = ["I"] * n
+        # Qiskit Pauli labels are ordered as q_{n-1} ... q_0.
+        label[n - 1 - site] = op
+        psi = Statevector(vec)
+        exp = psi.expectation_value(Pauli("".join(label)))
+        return float(np.real(exp))
+
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.cx(0, 2)
+    qc.ry(0.51, 1)
+    qc.rz(0.23, 2)
+    qc.cx(2, 1)
+
+    requested = [
+        Observable(Z(), 2),
+        Observable(X(), 0),
+        Observable(Y(), 1),
+        Observable(Z(), 0),
+        Observable(X(), 2),
+    ]
+    sim_params = StrongSimParams(observables=requested, gate_mode="hybrid", preset="exact", get_state=True)
+    state = State(3, initial="zeros")
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+
+    assert result.output_state is not None
+    yaqs_vec = result.output_state.mps.to_vec()
+
+    for i, obs in enumerate(result.observables):
+        site = obs.sites[0] if isinstance(obs.sites, list) else obs.sites
+        assert isinstance(site, int)
+        op = obs.gate.name.upper()
+        assert op in {"X", "Y", "Z"}
+        expected = qiskit_single_pauli_expectation_from_vec(yaqs_vec, site, op)
+        got = float(np.real(result.expectation_values[i][0]))
+        assert got == pytest.approx(expected, abs=1e-10)
+
+
 def test_expectation_values_align_with_result_observables_order() -> None:
     """Ensure expectation_values[i] corresponds to result.observables[i] (sorted order)."""
     qc = QuantumCircuit(3)
@@ -912,6 +955,40 @@ def test_weak_simulation_nearest_neighbor_counts() -> None:
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
     assert result.counts is not None
     assert sum(result.counts.values()) == 32
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "ones"),
+    [
+        (3, (0,)),
+        (3, (1,)),
+        (3, (2,)),
+        (4, (0, 2)),
+        (4, (1, 3)),
+        (5, (0, 1, 4)),
+    ],
+)
+def test_weak_counts_match_qiskit_qubit_ordering_deterministic(num_qubits: int, ones: tuple[int, ...]) -> None:
+    """Weak counts match Qiskit (bitstring->int) for deterministic basis states."""
+    qc = QuantumCircuit(num_qubits, num_qubits)
+    for q in ones:
+        qc.x(q)
+    qc.measure_all()
+
+    shots = 32
+    sim_params = WeakSimParams(shots=shots, gate_mode="hybrid", preset="exact")
+    state = State(num_qubits, initial="zeros")
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+    assert result.counts is not None
+
+    # Qiskit gives bitstrings ordered c_{n-1}..c_0; YAQS uses int keys.
+    qc_nom = qc.remove_final_measurements(inplace=False)
+    assert qc_nom is not None
+    probs = Statevector(qc_nom).probabilities_dict()
+    qiskit_counts_int = {int(bitstring, 2): round(p * shots) for bitstring, p in probs.items() if p > 0}
+    # Deterministic circuits should produce exactly one outcome with probability 1.
+    assert sum(qiskit_counts_int.values()) == shots
+    assert result.counts == qiskit_counts_int
 
 
 def test_noisy_nearest_neighbor_smoke() -> None:
