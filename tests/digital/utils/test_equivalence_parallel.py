@@ -19,7 +19,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone
 from mqt.yaqs.digital.utils.equivalence_schedule import partition_disjoint_gate_batches
-from mqt.yaqs.digital.utils.mpo_utils import compute_pair_update, update_mpo
+from mqt.yaqs.digital.utils.mpo_utils import MIN_QUBITS_FOR_MPO_PARALLEL, compute_pair_update, update_mpo
 
 
 def test_partition_disjoint_gate_batches() -> None:
@@ -102,6 +102,21 @@ def test_matrix_checker_equivalent_circuits() -> None:
     result = EquivalenceChecker(representation="matrix").check(qc1, qc2)
     assert result["equivalent"] is True
     assert result["representation"] == "matrix"
+
+
+def test_mpo_parallel_cutoff_exercises_thread_pool() -> None:
+    """MPO checks at the parallel cutoff width use the thread-pool path when parallel=True."""
+    n = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc1 = QuantumCircuit(n)
+    for q in range(n):
+        qc1.h(q)
+    for q in range(n - 1):
+        qc1.cx(q, q + 1)
+    qc2 = qc1.copy()
+
+    result = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2).check(qc1, qc2)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
 
 
 def test_long_range_mpo_parallel() -> None:

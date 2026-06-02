@@ -37,6 +37,17 @@ DEFAULT_MATRIX_MAX_QUBITS = 7
 
 
 def _validate_representation(representation: str) -> EquivalenceRepresentation:
+    """Validate and normalize the representation selector.
+
+    Args:
+        representation: Requested backend name.
+
+    Returns:
+        A validated ``EquivalenceRepresentation`` literal.
+
+    Raises:
+        ValueError: If ``representation`` is not one of ``auto``, ``matrix``, or ``mpo``.
+    """
     allowed = ("auto", "matrix", "mpo")
     if representation not in allowed:
         msg = f"representation must be one of {allowed!r}, got {representation!r}."
@@ -45,6 +56,18 @@ def _validate_representation(representation: str) -> EquivalenceRepresentation:
 
 
 def _validate_matrix_max_qubits(matrix_max_qubits: int) -> int:
+    """Validate the matrix auto-backend qubit cutover.
+
+    Args:
+        matrix_max_qubits: Maximum qubit count for ``representation="auto"`` to select matrix.
+
+    Returns:
+        The validated non-negative cutover value.
+
+    Raises:
+        TypeError: If ``matrix_max_qubits`` is not an ``int``.
+        ValueError: If ``matrix_max_qubits`` is negative.
+    """
     if isinstance(matrix_max_qubits, bool) or not isinstance(matrix_max_qubits, int):
         msg = f"matrix_max_qubits must be int, got {type(matrix_max_qubits).__name__}."
         raise TypeError(msg)
@@ -103,6 +126,14 @@ class EquivalenceChecker:
         self.mp_context = mp_context
 
     def _resolve_representation(self, num_qubits: int) -> Literal["matrix", "mpo"]:
+        """Choose the concrete backend for a given circuit width.
+
+        Args:
+            num_qubits: Number of qubits in the circuits being compared.
+
+        Returns:
+            ``"matrix"`` or ``"mpo"`` according to ``representation`` and ``matrix_max_qubits``.
+        """
         if self.representation == "matrix":
             return "matrix"
         if self.representation == "mpo":

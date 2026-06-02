@@ -15,7 +15,7 @@ import multiprocessing
 import os
 import sys
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, Literal, TypeVar, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -146,8 +146,16 @@ def _run_on_executor(
 ) -> list[TRes]:
     """Submit ``tasks`` to an existing executor and return results in order.
 
+    Args:
+        executor: Executor used to submit work.
+        tasks: Picklable task payloads, one per submission.
+        worker_fn: Callable invoked as ``worker_fn(task)`` in worker processes.
+
     Returns:
         Worker results in the same order as ``tasks``.
+
+    Raises:
+        RuntimeError: If any task slot is left unset after all futures complete.
     """
     indexed = list(enumerate(tasks))
     results: list[TRes | None] = [None] * len(tasks)
@@ -157,7 +165,10 @@ def _run_on_executor(
         for future in done:
             index = future_to_index.pop(future)
             results[index] = future.result()
-    return [r for r in results if r is not None]
+    if any(result is None for result in results):
+        msg = "Parallel worker pool returned incomplete results."
+        raise RuntimeError(msg)
+    return cast("list[TRes]", results)
 
 
 def run_parallel_tasks(

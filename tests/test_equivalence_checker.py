@@ -168,8 +168,9 @@ def test_matrix_and_mpo_agree_on_small_circuits(representation: Literal["matrix"
     assert equal_result["representation"] == representation
 
 
-def test_global_phase_equivalence_matrix() -> None:
-    """Circuits differing by global phase are equivalent under the matrix backend."""
+@pytest.mark.parametrize("representation", ["matrix", "mpo"])
+def test_global_phase_equivalence(representation: str) -> None:
+    """Circuits differing by global phase are equivalent on both backends."""
     qc1 = QuantumCircuit(2)
     qc1.h(0)
     qc1.cx(0, 1)
@@ -177,10 +178,13 @@ def test_global_phase_equivalence_matrix() -> None:
     qc2 = qc1.copy()
     qc2.global_phase = np.pi / 3
 
-    checker = EquivalenceChecker(representation="matrix", fidelity=1 - 1e-13)
+    checker = EquivalenceChecker(
+        representation=cast("EquivalenceRepresentation", representation),
+        fidelity=1 - 1e-13,
+    )
     result = checker.check(qc1, qc2)
     assert result["equivalent"] is True
-    assert result["representation"] == "matrix"
+    assert result["representation"] == representation
 
 
 def test_auto_representation_selects_by_qubit_count() -> None:

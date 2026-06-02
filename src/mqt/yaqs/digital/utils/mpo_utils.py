@@ -26,12 +26,12 @@ from qiskit.converters import dag_to_circuit
 
 from ...core import linalg
 from ...core.data_structures.mpo import MPO
-from ...parallel_utils import MPContext, available_cpus, parallel_worker_init
+from ...parallel_utils import MPContext, available_cpus
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 from .equivalence_parallel import MpoPairUpdateResult
 
 # Below this width, thread-pool overhead usually beats the cost of one SVD pair update.
-_MIN_QUBITS_FOR_MPO_PARALLEL = 12
+MIN_QUBITS_FOR_MPO_PARALLEL = 12
 _MIN_PAIRS_PER_SWEEP_FOR_PARALLEL = 3
 
 if TYPE_CHECKING:
@@ -599,11 +599,11 @@ def iterate(
                 conjugate = largest_distance2 > largest_distance1
                 apply_long_range_layer(mpo, dag1, dag2, threshold, conjugate=conjugate)
 
-    use_parallel = parallel and length >= _MIN_QUBITS_FOR_MPO_PARALLEL
+    use_parallel = parallel and length >= MIN_QUBITS_FOR_MPO_PARALLEL
     if not use_parallel:
         _consume_dags(None)
         return
 
     workers = max_workers if max_workers is not None else available_cpus()
-    with ThreadPoolExecutor(max_workers=workers, initializer=parallel_worker_init) as pool:
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         _consume_dags(pool)

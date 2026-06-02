@@ -38,20 +38,46 @@ _GATE_EINSUM_LETTERS = string.ascii_uppercase
 
 
 def _circuit_without_measurements(circuit: QuantumCircuit) -> QuantumCircuit:
-    """Return a copy of ``circuit`` with final measurements removed."""
+    """Return a copy of ``circuit`` with final measurements removed.
+
+    Args:
+        circuit: Input circuit (may include terminal measurements).
+
+    Returns:
+        A copy with final measurements stripped.
+
+    Raises:
+        ValueError: If mid-circuit measurements remain after removing final measurements.
+    """
     qc = circuit.copy()
     qc.remove_final_measurements(inplace=True)
+    dag = circuit_to_dag(qc)
+    if any(isinstance(node, DAGOpNode) and node.op.name == "measure" for node in dag.op_nodes()):
+        msg = "Mid-circuit measurements are not supported by the matrix equivalence backend."
+        raise ValueError(msg)
     return qc
 
 
 def _identity_operator_tensor(num_qubits: int) -> NDArray[np.complex128]:
-    """Return the identity operator as a tensor with ``2 * num_qubits`` indices of size 2."""
+    """Return the identity operator as a tensor with ``2 * num_qubits`` indices of size 2.
+
+    Args:
+        num_qubits: Number of qubits.
+
+    Returns:
+        Identity operator tensor of shape ``(2,) * (2 * num_qubits)``.
+    """
     dim = 2**num_qubits
     return np.eye(dim, dtype=np.complex128).reshape((2,) * (2 * num_qubits))
 
 
 def _embed_unitary(local: NDArray[np.complex128], sites: list[int], num_qubits: int) -> NDArray[np.complex128]:
     """Embed a k-qubit unitary on the given sites (Qiskit little-endian ordering).
+
+    Args:
+        local: ``2**k`` by ``2**k`` unitary on ``k = len(sites)`` qubits.
+        sites: Target qubit indices.
+        num_qubits: Total number of qubits in the circuit.
 
     Returns:
         The ``2**num_qubits``-dimensional unitary matrix with ``local`` on ``sites``.
@@ -73,6 +99,13 @@ def _apply_single_qubit_left(
     dagger: bool = False,
 ) -> NDArray[np.complex128]:
     """Left-multiply ``op`` by a single-qubit gate on ``qubit``.
+
+    Args:
+        op: Operator tensor with ``2 * num_qubits`` indices of dimension 2.
+        matrix: Single-qubit gate matrix.
+        qubit: Target qubit index.
+        num_qubits: Total number of qubits.
+        dagger: If True, apply the conjugate transpose of ``matrix``.
 
     Returns:
         The updated operator tensor.
@@ -104,6 +137,14 @@ def _apply_two_qubit_left(
     dagger: bool = False,
 ) -> NDArray[np.complex128]:
     """Left-multiply ``op`` by a two-qubit gate on ``(site0, site1)``.
+
+    Args:
+        op: Operator tensor with ``2 * num_qubits`` indices of dimension 2.
+        gate_tensor: Two-qubit gate in ``(out0, out1, in0, in1)`` layout.
+        site0: First qubit index (need not be sorted).
+        site1: Second qubit index.
+        num_qubits: Total number of qubits.
+        dagger: If True, apply the conjugate transpose of the gate.
 
     Returns:
         The updated operator tensor.
@@ -150,6 +191,12 @@ def _apply_gate_left(
 ) -> NDArray[np.complex128]:
     """Left-multiply ``op`` by ``gate`` embedded on its sites.
 
+    Args:
+        op: Operator tensor with ``2 * num_qubits`` indices of dimension 2.
+        gate: Gate object with ``sites`` and ``matrix``/``tensor`` data.
+        num_qubits: Total number of qubits.
+        dagger: If True, apply each gate as its conjugate transpose.
+
     Returns:
         The updated operator tensor.
     """
@@ -168,6 +215,9 @@ def _apply_gate_left(
 
 def _pop_front_layer_gates(dag: DAGCircuit) -> list[BaseGate]:
     """Remove and return gates from the current DAG front layer.
+
+    Args:
+        dag: Circuit DAG being consumed layer by layer.
 
     Returns:
         Gate objects from the front layer, in extraction order.
@@ -193,6 +243,12 @@ def _apply_gate_batch(
 ) -> NDArray[np.complex128]:
     """Apply a commuting batch of gates in deterministic site order.
 
+    Args:
+        op: Operator tensor to update.
+        gates: Gates with pairwise disjoint supports.
+        num_qubits: Total number of qubits.
+        dagger: If True, apply gates as conjugate-transpose.
+
     Returns:
         The operator tensor after applying all gates in the batch.
     """
@@ -210,6 +266,12 @@ def _apply_layer_gates(
 ) -> NDArray[np.complex128]:
     """Apply one circuit layer as sequential disjoint gate batches.
 
+    Args:
+        op: Operator tensor to update.
+        layer_gates: Gates in one DAG front layer.
+        num_qubits: Total number of qubits.
+        dagger: If True, apply gates as conjugate-transpose.
+
     Returns:
         The operator tensor after applying the full layer.
     """
@@ -220,6 +282,9 @@ def _apply_layer_gates(
 
 def _collect_layer_groups(dag: DAGCircuit) -> list[list[BaseGate]]:
     """Consume ``dag`` layer by layer and return gate lists per layer.
+
+    Args:
+        dag: Circuit DAG to consume.
 
     Returns:
         One list of gates per consumed front layer.
@@ -247,7 +312,13 @@ def build_composed_operator_tensor(
 
     Returns:
         Tensor of shape ``(2,) * (2 * num_qubits)`` representing the composed operator.
+
+    Raises:
+        ValueError: If ``circuit1`` and ``circuit2`` have different numbers of qubits.
     """
+    if circuit1.num_qubits != circuit2.num_qubits:
+        msg = "Circuits must have the same number of qubits."
+        raise ValueError(msg)
     num_qubits = circuit1.num_qubits
     op = _identity_operator_tensor(num_qubits)
 
@@ -284,7 +355,8 @@ def check_operator_is_identity(
     dense = operator_tensor.reshape(hilbert_dim, hilbert_dim)
     identity = np.eye(hilbert_dim, dtype=np.complex128)
     trace = np.vdot(dense.ravel(), identity.ravel())
-    return not np.round(np.abs(trace), 1) / hilbert_dim < fidelity
+    normalized = float(np.abs(trace) / hilbert_dim)
+    return normalized >= fidelity
 
 
 def check_equivalence_matrix(
