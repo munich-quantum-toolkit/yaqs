@@ -91,19 +91,41 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
     return algorithm
 
 
+def extract_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
+    """Extract the temporal zone without modifying ``dag``.
+
+    Args:
+        dag: The input DAGCircuit (unchanged).
+        qubits: Qubit indices defining the strip ``[min(qubits), max(qubits)]``.
+
+    Returns:
+        A new DAGCircuit containing only operations in the temporal zone.
+    """
+    return _build_temporal_zone(dag.copy(), qubits)
+
+
 def get_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
     """Extract the temporal zone from a DAGCircuit for the specified qubits.
 
     The temporal zone is defined as the subset of operations (layers) acting solely on the specified qubits,
     continuing until those qubits no longer participate in any further operations. The function builds a new
-    DAGCircuit containing only these operations.
+    DAGCircuit containing only these operations and removes consumed nodes from ``dag``.
 
     Args:
-        dag (DAGCircuit): The input DAGCircuit.
+        dag (DAGCircuit): The input DAGCircuit (mutated in place).
         qubits (list[int]): List of qubit indices for which to extract the temporal zone.
 
     Returns:
         DAGCircuit: A new DAGCircuit containing only the operations within the temporal zone for the specified qubits.
+    """
+    return _build_temporal_zone(dag, qubits)
+
+
+def _build_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
+    """Build a temporal-zone DAG and remove consumed nodes from ``dag``.
+
+    Returns:
+        A new DAGCircuit containing only operations in the temporal zone.
     """
     new_dag = dag.copy_empty_like()
     layers = list(dag.multigraph_layers())
