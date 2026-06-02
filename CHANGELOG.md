@@ -31,6 +31,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
 
 ## [0.5.0] - 2026-05-12
@@ -123,6 +124,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#446]: https://github.com/munich-quantum-toolkit/yaqs/pull/446
 [#445]: https://github.com/munich-quantum-toolkit/yaqs/pull/445
 [#441]: https://github.com/munich-quantum-toolkit/yaqs/pull/441
 [#439]: https://github.com/munich-quantum-toolkit/yaqs/pull/439

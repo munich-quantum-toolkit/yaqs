@@ -193,6 +193,8 @@ _trunc_summary(strong)
 
 Used for noisy weak simulation. **`shots` is always required** and is not part of the preset.
 
+YAQS stores weak-simulation measurement histograms in `Result.counts` as a `dict[int, int]`. The integer key encodes the measured bitstring with **site 0 as the least-significant bit** (little-endian). This matches Qiskit’s default convention if you interpret Qiskit bitstrings (`c_{n-1}...c_0`) via `int(bitstring, 2)`.
+
 ```{code-cell} ipython3
 weak_balanced = WeakSimParams(shots=1000)
 weak_exact = WeakSimParams(shots=1000, preset="exact")
