@@ -35,6 +35,7 @@ from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
+from .utils.mps_utils import apply_long_range_gate
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -372,6 +373,11 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
         if is_nearest_neighbor:
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+
+    if gate_mode == "zip-up":
+        if is_nearest_neighbor:
+            return apply_two_qubit_gate_tebd(state, gate, sim_params)
+        return apply_long_range_gate(state, gate, sim_params)
 
     msg = f"Unknown gate_mode: {gate_mode!r}"
     raise ValueError(msg)

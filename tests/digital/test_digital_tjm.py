@@ -54,6 +54,7 @@ from mqt.yaqs.digital.digital_tjm import (
     process_layer,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
+from mqt.yaqs.digital.utils.mps_utils import apply_long_range_gate
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import (
@@ -710,6 +711,41 @@ def test_long_range_hybrid_matches_tdvp() -> None:
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
+def test_zip_up_nearest_neighbor_matches_tebd() -> None:
+    """Zip-up uses TEBD on nearest-neighbor gates, matching an all-TEBD run."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.cz(1, 2)
+    qc.rx(0.3, 2)
+
+    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
+    zip_up_z = _run_strong_noiseless(qc, gate_mode="zip-up")
+    assert zip_up_z == pytest.approx(tebd_z, abs=1e-12)
+
+
+def test_long_range_zip_up_matches_tdvp() -> None:
+    """Long-range gates use extended MPO zip-up and match all-TDVP."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 2)
+
+    zip_up_z = _run_strong_noiseless(qc, gate_mode="zip-up")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    assert zip_up_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def test_long_range_zip_up_matches_tebd() -> None:
+    """Zip-up on long-range gates matches SWAP+TEBD on small circuits."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 2)
+
+    zip_up_z = _run_strong_noiseless(qc, gate_mode="zip-up")
+    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
+    assert zip_up_z == pytest.approx(tebd_z, abs=1e-10)
+
+
 def test_long_range_tebd_matches_tdvp() -> None:
     """TEBD with SWAP insertion matches all-TDVP on a long-range gate."""
     qc = QuantumCircuit(4)
@@ -1029,6 +1065,27 @@ def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
 
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
     apply_two_qubit_gate_tebd(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
+    mps.normalize(decomposition="SVD")
+    for i, element in enumerate(mps.to_vec()):
+        if i == 7:
+            np.testing.assert_allclose(np.abs(element), 1, atol=1e-10)
+        else:
+            np.testing.assert_allclose(np.abs(element), 0, atol=1e-10)
+
+
+def test_apply_long_range_gate_direct_cx_long_range() -> None:
+    """Zip-up applies CX(1, 3) on |1111> via extended gate MPO."""
+    length = 4
+    mps = MPS(length, state="ones")
+    mps.normalize()
+
+    qc = QuantumCircuit(length)
+    qc.cx(1, 3)
+    dag = circuit_to_dag(qc)
+    node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
+
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="zip-up")
+    apply_long_range_gate(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
         if i == 7:

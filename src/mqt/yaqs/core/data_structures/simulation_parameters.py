@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
-GateMode = Literal["hybrid", "tdvp", "tebd"]
+GateMode = Literal["hybrid", "tdvp", "tebd", "zip-up"]
 
 
 class PresetTypes(TypedDict):
@@ -102,7 +102,7 @@ def _validate_gate_mode(mode: GateMode) -> GateMode:
     Raises:
         ValueError: If ``mode`` is not a supported value.
     """
-    allowed = ("hybrid", "tdvp", "tebd")
+    allowed = ("hybrid", "tdvp", "tebd", "zip-up")
     if mode not in allowed:
         msg = f"gate_mode must be one of {allowed!r}, got {mode!r}."
         raise ValueError(msg)
@@ -428,7 +428,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"tebd"``, ``"hybrid"``, or ``"tdvp"``).
+            (``"tebd"``, ``"hybrid"``, ``"tdvp"``, or ``"zip-up"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -527,7 +527,7 @@ class WeakSimParams:
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"tebd"``, ``"hybrid"``, or ``"tdvp"``).
+            (``"tebd"``, ``"hybrid"``, ``"tdvp"``, or ``"zip-up"``).
     """
 
     # Properties set as placeholders for code compatibility
