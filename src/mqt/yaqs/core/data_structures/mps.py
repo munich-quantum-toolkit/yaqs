@@ -598,46 +598,6 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:
-        """In-place MPS truncation via repeated two-site SVDs."""
-        orth_center = self.check_canonical_form()[0]
-        if self.length == 1:
-            return
-
-        # ——— left­-to-­center sweep ———
-        for i in range(orth_center):
-            a, b = self.tensors[i], self.tensors[i + 1]
-            merged = merge_two_site(a, b)
-            a_new, b_new = split_two_site(
-                merged,
-                [a.shape[0], b.shape[0]],
-                svd_distribution="right",
-                trunc_mode="discarded_weight",
-                threshold=threshold,
-                max_bond_dim=max_bond_dim,
-                min_bond_dim=2,
-            )
-            self.tensors[i], self.tensors[i + 1] = a_new, b_new
-
-        # flip the network and sweep back
-        self.flip_network()
-        orth_flipped = self.length - 1 - orth_center
-        for i in range(orth_flipped):
-            a, b = self.tensors[i], self.tensors[i + 1]
-            merged = merge_two_site(a, b)
-            a_new, b_new = split_two_site(
-                merged,
-                [a.shape[0], b.shape[0]],
-                svd_distribution="right",
-                trunc_mode="discarded_weight",
-                threshold=threshold,
-                max_bond_dim=max_bond_dim,
-                min_bond_dim=2,
-            )
-            self.tensors[i], self.tensors[i + 1] = a_new, b_new
-
-        self.flip_network()
-
     def compress(
         self,
         threshold: float,
