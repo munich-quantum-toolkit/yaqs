@@ -175,13 +175,11 @@ Used for noisy strong circuit simulation. Provide observables and optionally ena
 
 ### Two-qubit gate mode (`gate_mode`)
 
-Digital circuit simulation on an MPS uses **generic MPO--MPS application** by default (`gate_mode="mpo"`): nearest-neighbor gates use the same local TEBD/SVD path as `swaps`, and long-range gates contract an extended gate MPO site-wise (library leg ordering, MPS virtual index before MPO virtual index) followed by compression with `svd_threshold` and `max_bond_dim`.
+Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic MPO--MPS application): nearest-neighbor gates use the same local TEBD/SVD path as `swaps`, and long-range gates contract an extended gate MPO site-wise (library leg ordering, MPS virtual index before MPO virtual index) followed by compression with `svd_threshold` and `max_bond_dim`. Other modes differ only in how two-qubit gates are applied:
 
-Set `gate_mode="swaps"` to use TEBD/SVD for all two-qubit gates; long-range gates are implemented by adjacent SWAP insertion before and after the update.
-
-Set `gate_mode="tdvp"` to use TEBD/SVD for **nearest-neighbor** gates while keeping the **generator MPO + two-site TDVP** path for **long-range** gates.
-
-Set `gate_mode="full-tdvp"` to apply TDVP to every two-qubit gate.
+- **`swaps`** — TEBD/SVD for every two-qubit gate; long-range gates are routed with adjacent SWAP insertion before and after the local update.
+- **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + two-site TDVP path.
+- **`full-tdvp`** — TDVP (generator MPO + two-site TDVP) on every two-qubit gate.
 
 ```{code-cell} ipython3
 strong = StrongSimParams(
