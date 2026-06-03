@@ -52,6 +52,7 @@ from mqt.yaqs.digital.digital_tjm import (
     apply_window,
     construct_generator_mpo,
     create_local_noise_model,
+    digital_tjm,
     process_layer,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
@@ -709,6 +710,43 @@ def test_long_range_hybrid_matches_tdvp() -> None:
     hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def test_long_range_swap_path_reversed_control_target() -> None:
+    """TEBD swap routing handles gates with descending site indices (``cx(3, 0)``)."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(3, 0)
+    swaps_z = _run_strong_noiseless(qc, gate_mode="swaps")
+    mpo_z = _run_strong_noiseless(qc, gate_mode="mpo")
+    assert swaps_z == pytest.approx(mpo_z, abs=1e-10)
+
+
+def test_weak_noiseless_get_state_returns_mps() -> None:
+    """Noiseless weak simulation with ``get_state=True`` returns the final MPS."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.measure_all()
+    sim_params = WeakSimParams(shots=4, gate_mode="tdvp", preset="exact", get_state=True)
+    state = State(2, initial="zeros")
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == 4
+    assert result.output_state is not None
+    assert result.output_state.mps.length == 2
+
+
+def test_digital_tjm_weak_noisy_get_state_returns_mps() -> None:
+    """Noisy weak ``digital_tjm`` may return the evolved MPS when ``get_state=True``."""
+    mps = MPS(2, state="zeros")
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    noise_model = NoiseModel([{"name": "pauli_x", "sites": [0], "strength": 0.01}])
+    sim_params = WeakSimParams(shots=1, gate_mode="tdvp", preset="exact", get_state=True)
+    counts, _, final = digital_tjm((0, mps, noise_model, sim_params, qc))
+    assert isinstance(counts, dict)
+    assert final is not None
+    assert final.length == 2
 
 
 def test_zip_up_nearest_neighbor_matches_tebd() -> None:

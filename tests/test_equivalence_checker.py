@@ -229,6 +229,30 @@ def test_checker_rejects_non_int_max_workers() -> None:
         EquivalenceChecker(max_workers=1.5)  # ty: ignore[invalid-argument-type]
 
 
+def test_checker_rejects_invalid_representation() -> None:
+    """Unknown ``representation`` strings are rejected at construction."""
+    with pytest.raises(ValueError, match="representation must be one of"):
+        EquivalenceChecker(representation="tensor")  # ty: ignore[invalid-argument-type]
+
+
+def test_checker_rejects_bool_matrix_max_qubits() -> None:
+    """``matrix_max_qubits`` must be a true integer, not a boolean."""
+    with pytest.raises(TypeError, match="matrix_max_qubits"):
+        EquivalenceChecker(matrix_max_qubits=True)
+
+
+def test_checker_rejects_negative_matrix_max_qubits() -> None:
+    """``matrix_max_qubits`` must be non-negative."""
+    with pytest.raises(ValueError, match="non-negative"):
+        EquivalenceChecker(matrix_max_qubits=-1)
+
+
+def test_check_rejects_mismatched_qubit_counts() -> None:
+    """``check`` requires both circuits to have the same width."""
+    with pytest.raises(ValueError, match="same number of qubits"):
+        EquivalenceChecker().check(QuantumCircuit(2), QuantumCircuit(3))
+
+
 def test_equivalence_checker_defaults_parallel_true() -> None:
     """``parallel`` defaults to ``True`` (MPO thread pool still gated by qubit count)."""
     assert EquivalenceChecker().parallel is True

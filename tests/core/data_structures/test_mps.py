@@ -1024,6 +1024,15 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
         assert bond_right <= 3
 
 
+def test_compress_single_site_returns_immediately() -> None:
+    """``compress`` is a no-op on a one-site MPS."""
+    mps = MPS(1, state="zeros")
+    before = copy.deepcopy(mps.tensors)
+    mps.compress(threshold=1e-12)
+    for before_tensor, after_tensor in zip(before, mps.tensors, strict=True):
+        np.testing.assert_allclose(before_tensor, after_tensor)
+
+
 def _bell_pair_mps() -> MPS:
     """Auxiliary function to create a Bell-pair MPS.
 
