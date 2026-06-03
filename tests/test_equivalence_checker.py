@@ -23,7 +23,7 @@ from qiskit import QuantumCircuit
 from qiskit.qasm2 import load
 
 from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
-from mqt.yaqs.digital.utils.mpo_utils import MIN_QUBITS_FOR_MPO_PARALLEL
+from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 
 if TYPE_CHECKING:
     from mqt.yaqs.equivalence_checker import Representation

@@ -645,6 +645,30 @@ def test_identity_mpo_tensors_are_independent() -> None:
     assert mpo.tensors[0] is not mpo.tensors[1]
 
 
+def test_multiply_mps_identity_preserves_state() -> None:
+    """Identity MPO.multiply(MPS) leaves the dense state unchanged."""
+    length = 4
+    state = MPS(length, state="ones")
+    state.normalize()
+    expected = np.asarray(state.to_vec(), dtype=np.complex128)
+
+    identity = MPO.identity(length)
+    identity.multiply(state, compress=False)
+
+    np.testing.assert_allclose(state.to_vec(), expected, atol=1e-10)
+
+
+def test_multiply_mpo_matches_dense_operator_product() -> None:
+    """Site-wise MPO.multiply(MPO) matches the dense matrix product."""
+    length = 4
+    left = MPO.ising(length, 1.0, 0.5)
+    right = MPO.ising(length, 1.0, 0.3)
+    reference = left.to_matrix() @ right.to_matrix()
+
+    left.multiply(right, compress=False)
+    np.testing.assert_allclose(right.to_matrix(), reference, atol=1e-10)
+
+
 def test_check_if_identity_non_qubit_physical_dimension() -> None:
     """Identity check uses the MPO physical dimension, not the qubit default."""
     mpo = MPO.identity(2, physical_dimension=3)

@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast, overload
 
 import numpy as np
 import opt_einsum as oe
@@ -18,8 +18,18 @@ import scipy.sparse
 from numpy.typing import NDArray
 
 from .. import linalg
-from ..libraries.gate_library import Destroy
+from ..libraries.gate_library import BaseGate, Destroy
+from .mpo_utils import (
+    contract_mpo_site_with_mpo_site,
+    contract_mpo_site_with_mps_site,
+    gate_support_mpo_tensors,
+    identity_mpo_site,
+)
 from .mps import MPS
+
+if TYPE_CHECKING:
+    from ..methods.decompositions import TruncMode
+    from .simulation_parameters import StrongSimParams, WeakSimParams
 
 ComplexTensor = NDArray[np.complex128]
 
@@ -49,6 +59,8 @@ class MPO:
 
     **Operations**
 
+    - ``from_gate(...)``: build an MPO from a two-qubit gate on a chain (optionally identity-padded).
+    - ``multiply(MPS)`` / ``multiply(MPO)``: apply this MPO to an MPS or left-multiply into another MPO.
     - ``compress(...)``: SVD-based bond compression sweeps.
     - ``rotate(...)``: swap physical legs (optionally conjugating).
 
@@ -597,6 +609,58 @@ class MPO:
         mpo.init_identity(length, physical_dimension=physical_dimension)
         return mpo
 
+    @classmethod
+    def from_gate(cls, gate: BaseGate, chain_length: int) -> MPO:
+        """Build an MPO for a two-qubit gate on a chain.
+
+        When ``chain_length`` equals the gate support size, the MPO contains only the
+        extended gate tensors. When ``chain_length`` is larger, identity MPO sites are
+        placed outside the support interval ``[min(sites), max(sites)]``.
+
+        Reuses :attr:`~mqt.yaqs.core.libraries.gate_library.BaseGate.mpo_tensors` when
+        already populated for the gate support.
+
+        Args:
+            gate: Two-qubit gate with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
+            chain_length: Total number of MPO sites (support length or full MPS length).
+
+        Returns:
+            MPO ready for :meth:`multiply` on an MPS or another MPO.
+
+        Raises:
+            ValueError: If the gate is not two-qubit or ``chain_length`` is too small.
+        """
+        if gate.interaction != 2:
+            msg = f"from_gate requires a two-qubit gate, got interaction {gate.interaction}."
+            raise ValueError(msg)
+        if len(gate.sites) != 2:
+            msg = f"from_gate requires exactly two sites, got {len(gate.sites)}."
+            raise ValueError(msg)
+
+        first_site = min(gate.sites[0], gate.sites[1])
+        last_site = max(gate.sites[0], gate.sites[1])
+        support_len = last_site - first_site + 1
+        if chain_length < support_len:
+            msg = f"chain_length {chain_length} is smaller than gate support length {support_len}."
+            raise ValueError(msg)
+
+        support = gate_support_mpo_tensors(gate, first_site=first_site, last_site=last_site)
+        if chain_length == support_len:
+            tensors = support
+        else:
+            phys_dim = support[0].shape[0]
+            identity_site = identity_mpo_site(phys_dim)
+            tensors = []
+            for site in range(chain_length):
+                if site < first_site or site > last_site:
+                    tensors.append(np.array(identity_site, copy=True))
+                else:
+                    tensors.append(support[site - first_site])
+
+        mpo = cls()
+        mpo.custom(tensors, transpose=False)
+        return mpo
+
     def init_identity(self, length: int, physical_dimension: int = 2) -> None:
         """Initialize this MPO in place as the identity operator.
 
@@ -606,14 +670,13 @@ class MPO:
             length: Number of sites.
             physical_dimension: Local dimension per site (default 2).
         """
-        mat = np.eye(physical_dimension, dtype=np.complex128)
-        mat = np.expand_dims(mat, (2, 3))
+        site = identity_mpo_site(physical_dimension)
         self.length = length
         self.physical_dimension = physical_dimension
 
         self.tensors = []
         for _ in range(length):
-            self.tensors.append(mat.copy())
+            self.tensors.append(np.array(site, copy=True))
 
     def finite_state_machine(
         self,
@@ -919,6 +982,167 @@ class MPO:
 
             self.tensors[k] = left
             self.tensors[k + 1] = right
+
+    @overload
+    def multiply(
+        self,
+        other: MPS,
+        *,
+        sim_params: StrongSimParams | WeakSimParams | None = None,
+        compress: bool = True,
+    ) -> None: ...
+
+    @overload
+    def multiply(
+        self,
+        other: MPO,
+        *,
+        start_site: int = 0,
+        conjugate: bool = False,
+        compress: bool = True,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 1,
+        directions: str = "lr_rl",
+    ) -> None: ...
+
+    def multiply(
+        self,
+        other: MPS | MPO,
+        *,
+        sim_params: StrongSimParams | WeakSimParams | None = None,
+        compress: bool = True,
+        start_site: int = 0,
+        conjugate: bool = False,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 1,
+        directions: str = "lr_rl",
+    ) -> None:
+        """Left-multiply this MPO into ``other`` (MPS or MPO), updating ``other`` in place.
+
+        For an :class:`~mqt.yaqs.core.data_structures.mps.MPS`, each site is updated by
+        :func:`~mqt.yaqs.core.data_structures.mpo_utils.contract_mpo_site_with_mps_site`,
+        optionally followed by a two-site SVD compression sweep driven by ``sim_params``.
+
+        For another :class:`MPO`, each site uses the equivalence-checking
+        :func:`~mqt.yaqs.core.data_structures.mpo_utils.contract_mpo_site_with_mpo_site`
+        contraction (``abcd,cefg``), optionally
+        followed by :meth:`compress` on ``other``.
+
+        Args:
+            other: Target MPS or MPO to update in place.
+            sim_params: Truncation settings for MPS compression (required if ``compress``
+                is True and ``other`` is an MPS).
+            compress: Whether to run a compression sweep after contraction.
+            start_site: When ``len(self) != len(other)``, index on ``other`` where this
+                MPO is embedded (only for MPO targets).
+            conjugate: Use the conjugated MPO--MPO contraction (MPO targets only).
+            tol: MPO compression threshold (MPO targets only).
+            max_bond_dim: Optional bond-dimension cap for MPO compression.
+            n_sweeps: Number of MPO compression sweeps.
+            directions: MPO compression sweep schedule (see :meth:`compress`).
+
+        Raises:
+            TypeError: If ``other`` is neither an MPS nor an MPO.
+        """
+        if isinstance(other, MPS):
+            self._multiply_mps(
+                other,
+                sim_params=sim_params,
+                compress=compress,
+            )
+            return
+
+        if not isinstance(other, MPO):
+            msg = f"multiply expects MPS or MPO, got {type(other).__name__}."
+            raise TypeError(msg)
+
+        self._multiply_mpo(
+            other,
+            start_site=start_site,
+            conjugate=conjugate,
+            compress=compress,
+            tol=tol,
+            max_bond_dim=max_bond_dim,
+            n_sweeps=n_sweeps,
+            directions=directions,
+        )
+
+    def _multiply_mps(
+        self,
+        state: MPS,
+        *,
+        sim_params: StrongSimParams | WeakSimParams | None,
+        compress: bool,
+    ) -> None:
+        """Apply this MPO to ``state`` with optional compression.
+
+        Raises:
+            ValueError: On length mismatch or missing ``sim_params`` when compressing.
+        """
+        if len(self.tensors) != state.length:
+            msg = f"MPO length {len(self.tensors)} does not match MPS length {state.length}."
+            raise ValueError(msg)
+
+        for site, operator in enumerate(self.tensors):
+            state.tensors[site] = contract_mpo_site_with_mps_site(operator, state.tensors[site])
+
+        if not compress:
+            return
+        if sim_params is None:
+            msg = "sim_params is required when compress=True for MPO.multiply(MPS)."
+            raise ValueError(msg)
+
+        state.compress(
+            sim_params.svd_threshold,
+            max_bond_dim=sim_params.max_bond_dim,
+            min_bond_dim=sim_params.min_bond_dim,
+            trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        )
+
+    def _multiply_mpo(
+        self,
+        other: MPO,
+        *,
+        start_site: int,
+        conjugate: bool,
+        compress: bool,
+        tol: float,
+        max_bond_dim: int | None,
+        n_sweeps: int,
+        directions: str,
+    ) -> None:
+        """Left-multiply this MPO into ``other``.
+
+        Raises:
+            ValueError: If this MPO cannot be embedded at ``start_site``.
+        """
+        gate_len = len(self.tensors)
+        target_len = len(other.tensors)
+
+        if gate_len == target_len:
+            sites = range(target_len)
+        elif start_site >= 0 and start_site + gate_len <= target_len:
+            sites = range(start_site, start_site + gate_len)
+        else:
+            msg = f"Cannot embed MPO of length {gate_len} at start_site={start_site} into MPO of length {target_len}."
+            raise ValueError(msg)
+
+        for gate_site, target_site in enumerate(sites):
+            other.tensors[target_site] = contract_mpo_site_with_mpo_site(
+                self.tensors[gate_site],
+                other.tensors[target_site],
+                conjugate=conjugate,
+            )
+
+        if compress:
+            other.compress(
+                tol=tol,
+                max_bond_dim=max_bond_dim,
+                n_sweeps=n_sweeps,
+                directions=directions,
+            )
 
     def rotate(self, *, conjugate: bool = False) -> None:
         """Rotates MPO.

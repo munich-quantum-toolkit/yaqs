@@ -5,9 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""Tests for the MPO utility functions used in the equivalence checking framework.
+"""Tests for contraction utilities used in the equivalence checking framework.
 
-This module contains unit tests for the MPO utility functions used in the equivalence checking framework.
+This module contains unit tests for the digital contraction utilities used in the equivalence checking framework.
 It verifies the correct functionality of tensor operations including:
   - SVD-based splitting of MPS tensors (decompose_theta)
   - Gate application routines (apply_gate, apply_temporal_zone)
@@ -36,14 +36,14 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
-from mqt.yaqs.digital.utils.mpo_utils import (
+from mqt.yaqs.core.data_structures.mpo_utils import decompose_theta
+from mqt.yaqs.digital.utils.contraction_utils import (
     MIN_QUBITS_FOR_MPO_PARALLEL,
     apply_gate,
     apply_layer,
     apply_long_range_layer,
     apply_temporal_zone,
     compute_pair_update,
-    decompose_theta,
     update_mpo,
 )
 

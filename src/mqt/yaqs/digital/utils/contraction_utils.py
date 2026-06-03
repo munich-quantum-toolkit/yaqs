@@ -5,13 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Utility functions for MPO-based equivalence checking.
+"""DAG-driven MPO update routines for equivalence checking.
 
-This module provides functions to manipulate tensor network representations of quantum operations.
-It includes routines for performing SVD-based decompositions (decompose_theta), applying gates to local tensors
-(apply_gate), extracting and applying temporal zones from DAGCircuits (apply_temporal_zone), and updating Matrix
-Product Operators (MPO) via layer-wise and long-range gate applications. These utilities facilitate the
-conversion of quantum circuits into tensor network algorithms for checking equivalence.
+Applies temporal zones from paired circuits to an MPO via local contractions, gate updates,
+and SVD splits (see :mod:`mqt.yaqs.core.data_structures.mpo_utils` for primitive tensor ops).
 """
 
 from __future__ import annotations
@@ -24,8 +21,8 @@ import numpy as np
 import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
-from ...core import linalg
 from ...core.data_structures.mpo import MPO
+from ...core.data_structures.mpo_utils import contract_mpo_site_with_mpo_site, decompose_theta
 from ...parallel_utils import MPContext, available_cpus, limit_worker_threads
 from .dag_utils import check_longest_gate, convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
@@ -38,51 +35,6 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit
 
     from ...core.libraries.gate_library import BaseGate
-
-
-def decompose_theta(
-    theta: NDArray[np.complex128], threshold: float
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Decompose theta during equivalence checking.
-
-    Perform an SVD-based decomposition of the tensor `theta`, truncating singular values below a given threshold,
-    and reshape the result into two rank-4 tensors.
-
-    The input tensor is first re-ordered and flattened into a matrix, then decomposed using SVD.
-    Singular values below the threshold are discarded. The left singular vectors (U) are reshaped into a tensor
-    with shape (dims[0], dims[1], dims[2], num_sv), and the product of the diagonal singular value matrix with
-    the right singular vectors (V) is reshaped and transposed into a tensor with shape
-    (dims[3], dims[4], num_sv, dims[5]).
-
-    Args:
-        theta (NDArray[np.complex128]): The high-rank tensor to decompose.
-        threshold (float): The cutoff threshold for singular values.
-
-    Returns:
-        tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-            A tuple (U, M) of two reshaped tensors derived from the SVD.
-    """
-    dims = theta.shape
-    # Reorder indices before flattening
-    theta = np.transpose(theta, (0, 3, 2, 1, 4, 5))
-    theta_matrix = np.reshape(theta, (dims[0] * dims[1] * dims[2], dims[3] * dims[4] * dims[5]))
-
-    u_mat, s_list, v_mat = linalg.svd(theta_matrix, full_matrices=False)
-    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=threshold, min_keep=1)
-    s_list = s_list[:keep]
-    u_mat = u_mat[:, :keep]
-    v_mat = v_mat[:keep, :]
-
-    # Reshape U into a tensor of shape (dims[0], dims[1], dims[2], num_sv)
-    u_tensor = np.reshape(u_mat, (dims[0], dims[1], dims[2], len(s_list)))
-
-    # Compute site tensor M and reshape: first form M = diag(S_list) @ V,
-    # then reshape to (num_sv, dims[3], dims[4], dims[5]) and transpose to (dims[3], dims[4], num_sv, dims[5])
-    m_mat = np.diag(s_list) @ v_mat
-    m_tensor = np.reshape(m_mat, (len(s_list), dims[3], dims[4], dims[5]))
-    m_tensor = np.transpose(m_tensor, (1, 2, 0, 3))
-
-    return u_tensor, m_tensor
 
 
 def apply_gate(
@@ -485,9 +437,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     and node.qargs[1]._index == gate.qubits[1]._index  # noqa: SLF001
                 ):
                     gate_ = convert_dag_to_tensor_algorithm(node)[0]
-                    mpo_tensors = gate_.mpo_tensors
-                    gate_mpo = MPO()
-                    gate_mpo.custom(mpo_tensors, transpose=False)
+                    gate_mpo = MPO.from_gate(gate_, distance)
                     if conjugate:
                         gate_mpo.rotate(conjugate=True)
                     dag.remove_op_node(node)
@@ -533,19 +483,16 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
 
         # Process odd-indexed (or hanging) tensor if present.
         if site_gate_mpo == len(sites) - 1 and any(isinstance(tensor, np.ndarray) for tensor in gate_mpo.tensors):
-            if not conjugate:
-                tensor1 = np.transpose(gate_mpo.tensors[site_gate_mpo], (0, 2, 1, 3))
-                tensor2 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
-                theta = oe.contract("abcd,cefg->abefdg", tensor1, tensor2)
-            else:
+            if conjugate:
                 mpo.rotate()
-                tensor1 = np.transpose(gate_mpo.tensors[site_gate_mpo], (0, 2, 1, 3))
-                tensor2 = np.transpose(mpo.tensors[overall_site], (0, 2, 1, 3))
-                theta = oe.contract("abcd,cefg->febagd", tensor1, tensor2)
+            theta = contract_mpo_site_with_mpo_site(
+                gate_mpo.tensors[site_gate_mpo],
+                mpo.tensors[overall_site],
+                conjugate=conjugate,
+            )
+            if conjugate:
                 mpo.rotate()
-
-            dims = theta.shape
-            theta = np.reshape(theta, (dims[0], dims[1] * dims[2], dims[3], dims[4] * dims[5]))
+            theta = np.transpose(theta, (0, 2, 1, 3))
 
             tensor1 = np.transpose(mpo.tensors[overall_site - 1], (0, 2, 1, 3))
             theta = oe.contract("abcd, edfg->aebcfg", tensor1, theta)

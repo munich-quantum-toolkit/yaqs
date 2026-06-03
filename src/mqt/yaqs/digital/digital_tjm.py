@@ -22,20 +22,20 @@ import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.mpo import MPO
+from ..core.data_structures.mpo_utils import gate_tensor_lr_order
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import (
     StrongSimParams,
     WeakSimParams,
 )
-from ..core.libraries.gate_library import GateLibrary
+from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import two_site_tdvp
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
-from .utils.mps_utils import apply_long_range_gate
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -224,32 +224,6 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     return short_state, short_mpo, window
 
 
-def _gate_tensor_left_right_order(
-    gate: BaseGate,
-    left_site: int,
-    right_site: int,
-) -> NDArray[np.complex128]:
-    """Return ``gate.tensor`` with axes ordered as (left site, right site).
-
-    Args:
-        gate: Two-qubit gate with ``sites`` and ``tensor`` already set.
-        left_site: Lower MPS site index.
-        right_site: Higher MPS site index.
-
-    Returns:
-        Gate tensor ``U[out_l, out_r, in_l, in_r]`` for the left/right ordering.
-
-    Raises:
-        ValueError: If ``gate.sites`` does not match ``(left_site, right_site)``.
-    """
-    if gate.sites[0] == left_site and gate.sites[1] == right_site:
-        return gate.tensor
-    if gate.sites[0] == right_site and gate.sites[1] == left_site:
-        return np.transpose(gate.tensor, (1, 0, 3, 2))
-    msg = f"Gate sites {gate.sites!r} are not consistent with MPS sites ({left_site}, {right_site})."
-    raise ValueError(msg)
-
-
 def apply_two_qubit_gate_tdvp(
     state: MPS,
     gate: BaseGate,
@@ -319,7 +293,7 @@ def apply_two_qubit_gate_tebd(
 
     left_site = min(site0, site1)
     right_site = max(site0, site1)
-    u_gate = _gate_tensor_left_right_order(gate, left_site, right_site)
+    u_gate = gate_tensor_lr_order(gate, left_site, right_site)
 
     left_tensor = state.tensors[left_site]
     right_tensor = state.tensors[right_site]
@@ -344,6 +318,28 @@ def apply_two_qubit_gate_tebd(
     return left_site, right_site
 
 
+def apply_long_range_gate_mpo(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: StrongSimParams | WeakSimParams,
+) -> tuple[int, int]:
+    """Apply a long-range two-qubit gate via :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.multiply`.
+
+    Args:
+        state: MPS updated in place.
+        gate: Two-qubit gate with sites and MPO data populated.
+        sim_params: Truncation settings for the compression sweep.
+
+    Returns:
+        ``(first_site, last_site)`` spanning the gate support in MPS order.
+    """
+    site0, site1 = gate.sites[0], gate.sites[1]
+    first_site = min(site0, site1)
+    last_site = max(site0, site1)
+    MPO.from_gate(gate, state.length).multiply(state, sim_params=sim_params, compress=True)
+    return first_site, last_site
+
+
 def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParams | WeakSimParams) -> tuple[int, int]:
     """Apply a two-qubit gate using the configured two-qubit gate mode.
 
@@ -361,23 +357,23 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     gate = convert_dag_to_tensor_algorithm(node)[0]
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
-    gate_mode: GateMode = getattr(sim_params, "gate_mode", "hybrid")
+    gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
 
-    if gate_mode == "tdvp":
+    if gate_mode == "full-tdvp":
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
-    if gate_mode == "tebd":
+    if gate_mode == "swaps":
         return apply_two_qubit_gate_tebd(state, gate, sim_params)
 
-    if gate_mode == "hybrid":
+    if gate_mode == "tdvp":
         if is_nearest_neighbor:
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
         return apply_two_qubit_gate_tdvp(state, gate, sim_params)
 
-    if gate_mode == "zip-up":
+    if gate_mode == "mpo":
         if is_nearest_neighbor:
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
-        return apply_long_range_gate(state, gate, sim_params)
+        return apply_long_range_gate_mpo(state, gate, sim_params)
 
     msg = f"Unknown gate_mode: {gate_mode!r}"
     raise ValueError(msg)

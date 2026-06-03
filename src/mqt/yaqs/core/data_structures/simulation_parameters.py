@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
-GateMode = Literal["hybrid", "tdvp", "tebd", "zip-up"]
+GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
 
 
 class PresetTypes(TypedDict):
@@ -102,7 +102,7 @@ def _validate_gate_mode(mode: GateMode) -> GateMode:
     Raises:
         ValueError: If ``mode`` is not a supported value.
     """
-    allowed = ("hybrid", "tdvp", "tebd", "zip-up")
+    allowed = ("tdvp", "full-tdvp", "swaps", "mpo")
     if mode not in allowed:
         msg = f"gate_mode must be one of {allowed!r}, got {mode!r}."
         raise ValueError(msg)
@@ -428,7 +428,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"tebd"``, ``"hybrid"``, ``"tdvp"``, or ``"zip-up"``).
+            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -449,7 +449,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         sample_layers: bool = False,
         num_mid_measurements: int = 0,
         random_seed: int | None = None,
-        gate_mode: GateMode = "tebd",
+        gate_mode: GateMode = "mpo",
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -475,7 +475,7 @@ class StrongSimParams(_ObservableOrderingMixin):
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"tebd"``).
+            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -527,7 +527,7 @@ class WeakSimParams:
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"tebd"``, ``"hybrid"``, ``"tdvp"``, or ``"zip-up"``).
+            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
     """
 
     # Properties set as placeholders for code compatibility
@@ -546,7 +546,7 @@ class WeakSimParams:
         preset: SimulationPreset = "balanced",
         get_state: bool = False,
         random_seed: int | None = None,
-        gate_mode: GateMode = "tebd",
+        gate_mode: GateMode = "mpo",
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -569,7 +569,7 @@ class WeakSimParams:
             svd_threshold: SVD truncation threshold for bond dimension control.
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"tebd"``).
+            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]

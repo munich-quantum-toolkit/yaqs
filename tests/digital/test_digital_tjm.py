@@ -45,6 +45,7 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
 from mqt.yaqs.digital.digital_tjm import (
+    apply_long_range_gate_mpo,
     apply_single_qubit_gate,
     apply_two_qubit_gate,
     apply_two_qubit_gate_tebd,
@@ -54,7 +55,6 @@ from mqt.yaqs.digital.digital_tjm import (
     process_layer,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
-from mqt.yaqs.digital.utils.mps_utils import apply_long_range_gate
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import (
@@ -657,7 +657,7 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
 def _run_strong_noiseless(
     qc: QuantumCircuit,
     *,
-    gate_mode: GateMode = "hybrid",
+    gate_mode: GateMode = "tdvp",
     max_bond_dim: int | None = None,
     svd_threshold: float = 1e-12,
     get_state: bool = False,
@@ -686,7 +686,7 @@ def _run_strong_noiseless(
     return float(np.real(exp[0]))
 
 
-@pytest.mark.parametrize("gate_mode", ["hybrid", "tebd"])
+@pytest.mark.parametrize("gate_mode", ["tdvp", "swaps"])
 def test_nearest_neighbor_gate_modes_agree(gate_mode: str) -> None:
     """Hybrid and TEBD agree on a purely nearest-neighbor circuit."""
     qc = QuantumCircuit(3)
@@ -695,7 +695,7 @@ def test_nearest_neighbor_gate_modes_agree(gate_mode: str) -> None:
     qc.cz(1, 2)
     qc.rx(0.3, 2)
 
-    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     other_z = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode))
     assert hybrid_z == pytest.approx(other_z, abs=1e-12)
 
@@ -706,8 +706,8 @@ def test_long_range_hybrid_matches_tdvp() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -719,19 +719,19 @@ def test_zip_up_nearest_neighbor_matches_tebd() -> None:
     qc.cz(1, 2)
     qc.rx(0.3, 2)
 
-    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
-    zip_up_z = _run_strong_noiseless(qc, gate_mode="zip-up")
+    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
+    zip_up_z = _run_strong_noiseless(qc, gate_mode="mpo")
     assert zip_up_z == pytest.approx(tebd_z, abs=1e-12)
 
 
 def test_long_range_zip_up_matches_tdvp() -> None:
-    """Long-range gates use extended MPO zip-up and match all-TDVP."""
+    """Long-range gates use MPO mode and match full-tdvp."""
     qc = QuantumCircuit(4)
     qc.h(0)
     qc.cx(0, 2)
 
-    zip_up_z = _run_strong_noiseless(qc, gate_mode="zip-up")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    zip_up_z = _run_strong_noiseless(qc, gate_mode="mpo")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
     assert zip_up_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -741,8 +741,8 @@ def test_long_range_zip_up_matches_tebd() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    zip_up_z = _run_strong_noiseless(qc, gate_mode="zip-up")
-    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
+    zip_up_z = _run_strong_noiseless(qc, gate_mode="mpo")
+    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
     assert zip_up_z == pytest.approx(tebd_z, abs=1e-10)
 
 
@@ -752,8 +752,8 @@ def test_long_range_tebd_matches_tdvp() -> None:
     qc.h(0)
     qc.cx(0, 2)
 
-    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
     assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -769,7 +769,7 @@ def test_long_range_tebd_matches_qiskit_statevector() -> None:
 
     # Use a stricter SVD threshold than the helper default to reduce purely numerical drift
     # from repeated TEBD split/merge operations (including SWAP insertion).
-    tebd_vec = _run_strong_noiseless(qc, gate_mode="tebd", get_state=True, svd_threshold=1e-14)
+    tebd_vec = _run_strong_noiseless(qc, gate_mode="swaps", get_state=True, svd_threshold=1e-14)
     assert isinstance(tebd_vec, np.ndarray)
 
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
@@ -784,8 +784,8 @@ def test_mixed_circuit_tebd_matches_tdvp() -> None:
     qc.cx(0, 3)
     qc.rzz(0.2, 2, 3)
 
-    tebd_z = _run_strong_noiseless(qc, gate_mode="tebd")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    tebd_z = _run_strong_noiseless(qc, gate_mode="swaps")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
     assert tebd_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -820,7 +820,7 @@ def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
         circuits.append(qc)
 
     for qc in circuits:
-        vec = _run_strong_noiseless(qc, gate_mode="hybrid", get_state=True)
+        vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
         assert isinstance(vec, np.ndarray)
         ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
         assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
@@ -852,7 +852,7 @@ def test_observables_match_qiskit_statevector_qubit_ordering() -> None:
         Observable(Z(), 0),
         Observable(X(), 2),
     ]
-    sim_params = StrongSimParams(observables=requested, gate_mode="hybrid", preset="exact")
+    sim_params = StrongSimParams(observables=requested, gate_mode="tdvp", preset="exact")
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
@@ -892,7 +892,7 @@ def test_statevector_observables_match_qiskit_paulis() -> None:
         Observable(Z(), 0),
         Observable(X(), 2),
     ]
-    sim_params = StrongSimParams(observables=requested, gate_mode="hybrid", preset="exact", get_state=True)
+    sim_params = StrongSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
@@ -918,7 +918,7 @@ def test_expectation_values_align_with_result_observables_order() -> None:
 
     # Intentionally not sorted by site: Result order should still match this list.
     requested = [Observable(Z(), 2), Observable(X(), 0), Observable(Z(), 0)]
-    sim_params = StrongSimParams(observables=requested, gate_mode="hybrid", preset="exact", get_state=True)
+    sim_params = StrongSimParams(observables=requested, gate_mode="tdvp", preset="exact", get_state=True)
     state = State(3, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
 
@@ -949,8 +949,8 @@ def test_mixed_circuit_hybrid_matches_tdvp() -> None:
     qc.cx(0, 3)
     qc.rzz(0.2, 2, 3)
 
-    hybrid_z = _run_strong_noiseless(qc, gate_mode="hybrid")
-    tdvp_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
+    tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
 
 
@@ -960,7 +960,7 @@ def test_bell_state_sanity() -> None:
     qc.h(0)
     qc.cx(0, 1)
 
-    vec = _run_strong_noiseless(qc, gate_mode="hybrid", get_state=True)
+    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
     assert isinstance(vec, np.ndarray)
     probs = np.abs(vec) ** 2
     np.testing.assert_allclose(probs[0], 0.5, atol=1e-10)
@@ -979,7 +979,7 @@ def test_tebd_truncation_respects_max_bond_dim() -> None:
     state = State(4, initial="zeros")
     sim_params = StrongSimParams(
         observables=[Observable(Z(), 0)],
-        gate_mode="tebd",
+        gate_mode="swaps",
         max_bond_dim=2,
         svd_threshold=1e-6,
     )
@@ -996,7 +996,7 @@ def test_weak_simulation_nearest_neighbor_counts() -> None:
     qc.measure_all()
 
     state = State(3, initial="zeros")
-    sim_params = WeakSimParams(shots=32, gate_mode="hybrid", preset="exact")
+    sim_params = WeakSimParams(shots=32, gate_mode="tdvp", preset="exact")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
     assert result.counts is not None
     assert sum(result.counts.values()) == 32
@@ -1021,7 +1021,7 @@ def test_weak_counts_match_qiskit_qubit_ordering_deterministic(num_qubits: int, 
     qc.measure_all()
 
     shots = 32
-    sim_params = WeakSimParams(shots=shots, gate_mode="hybrid", preset="exact")
+    sim_params = WeakSimParams(shots=shots, gate_mode="tdvp", preset="exact")
     state = State(num_qubits, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
     assert result.counts is not None
@@ -1044,7 +1044,7 @@ def test_noisy_nearest_neighbor_smoke() -> None:
     state = State(2, initial="zeros")
     sim_params = StrongSimParams(
         observables=[Observable(Z(), 0)],
-        gate_mode="hybrid",
+        gate_mode="tdvp",
         num_traj=4,
         random_seed=0,
     )
@@ -1063,7 +1063,7 @@ def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
     apply_two_qubit_gate_tebd(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
@@ -1073,7 +1073,7 @@ def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-10)
 
 
-def test_apply_long_range_gate_direct_cx_long_range() -> None:
+def test_apply_long_range_gate_mpo_direct_cx_long_range() -> None:
     """Zip-up applies CX(1, 3) on |1111> via extended gate MPO."""
     length = 4
     mps = MPS(length, state="ones")
@@ -1084,8 +1084,8 @@ def test_apply_long_range_gate_direct_cx_long_range() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="zip-up")
-    apply_long_range_gate(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="mpo")
+    apply_long_range_gate_mpo(mps, convert_dag_to_tensor_algorithm(node)[0], sim_params)
     mps.normalize(decomposition="SVD")
     for i, element in enumerate(mps.to_vec()):
         if i == 7:
@@ -1105,7 +1105,7 @@ def test_apply_two_qubit_gate_tebd_direct_cnot() -> None:
     dag = circuit_to_dag(qc)
     node = next(n for n in dag.front_layer() if n.op.name.lower() == "cx")
 
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="tebd")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", gate_mode="swaps")
     apply_two_qubit_gate_tebd(
         mps,
         convert_dag_to_tensor_algorithm(node)[0],

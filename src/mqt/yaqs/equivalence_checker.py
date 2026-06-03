@@ -22,8 +22,8 @@ from typing import TYPE_CHECKING, Literal, cast
 from qiskit.converters import circuit_to_dag
 
 from .core.data_structures.mpo import MPO
+from .digital.utils.contraction_utils import iterate
 from .digital.utils.matrix_utils import check_equivalence_matrix
-from .digital.utils.mpo_utils import iterate
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
