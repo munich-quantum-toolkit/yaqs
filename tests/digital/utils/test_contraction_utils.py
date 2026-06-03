@@ -33,10 +33,9 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mpo_utils import decompose_theta
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
-from mqt.yaqs.core.data_structures.mpo_utils import decompose_theta
 from mqt.yaqs.digital.utils.contraction_utils import (
     MIN_QUBITS_FOR_MPO_PARALLEL,
     apply_gate,
@@ -46,6 +45,7 @@ from mqt.yaqs.digital.utils.contraction_utils import (
     compute_pair_update,
     update_mpo,
 )
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
