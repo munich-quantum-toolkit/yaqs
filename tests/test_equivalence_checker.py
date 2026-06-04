@@ -326,6 +326,7 @@ def test_long_range_mpo_parallel() -> None:
     parallel = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2).check(qc1, qc2)
     assert serial["equivalent"] == parallel["equivalent"]
 
+
 def test_check_accepts_qasm2_path_object() -> None:
     qasm_path = Path(__file__).parent / "circuit.qasm"
 

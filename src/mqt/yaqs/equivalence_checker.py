@@ -17,15 +17,15 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
+from qiskit import qasm2, qasm3
 from qiskit.converters import circuit_to_dag
 
 from .core.data_structures.mpo import MPO
 from .digital.utils.contraction_utils import iterate
 from .digital.utils.matrix_utils import check_equivalence_matrix
-from pathlib import Path
-from qiskit import qasm2, qasm3
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
@@ -51,11 +51,12 @@ def _load_if_path(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
         return qasm2.loads(circuit)
     if isinstance(circuit, (str, Path)):
         path = Path(circuit)
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         if _first_non_comment_line(content).startswith("OPENQASM 3"):
             return qasm3.load(str(path))
         return qasm2.load(str(path))
     return circuit
+
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
