@@ -975,7 +975,7 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
     assert before_center == center
 
     # do a "no-real" truncation (tiny threshold, generous max bond)
-    mps.truncate(threshold=1e-16, max_bond_dim=100)
+    mps.compress(threshold=1e-16, max_bond_dim=100)
     after_center = mps.check_canonical_form()[0]
     assert after_center == center
 
@@ -1012,7 +1012,7 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
     # put it into a known canonical form
     mps.set_canonical_form(2)
     # perform a truncation that will cut back to max_bond=3
-    mps.truncate(threshold=1e-12, max_bond_dim=3)
+    mps.compress(threshold=1e-12, max_bond_dim=3)
 
     # check validity and that every bond dim <= 3
     mps.check_if_valid_mps()
@@ -1022,6 +1022,15 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
         _, bond_left, bond_right = T.shape
         assert bond_left <= 3
         assert bond_right <= 3
+
+
+def test_compress_single_site_returns_immediately() -> None:
+    """``compress`` is a no-op on a one-site MPS."""
+    mps = MPS(1, state="zeros")
+    before = copy.deepcopy(mps.tensors)
+    mps.compress(threshold=1e-12)
+    for before_tensor, after_tensor in zip(before, mps.tensors, strict=True):
+        np.testing.assert_allclose(before_tensor, after_tensor)
 
 
 def _bell_pair_mps() -> MPS:

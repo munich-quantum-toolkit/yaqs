@@ -161,14 +161,15 @@ def test_weak_simparams_default_constructor_uses_balanced() -> None:
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
     assert params.krylov_tol == pytest.approx(balanced["krylov_tol"])
-    assert params.gate_mode == "tebd"
+    assert params.gate_mode == "mpo"
 
 
 def test_gate_mode_defaults_and_validation() -> None:
-    """Strong and weak digital params default to TEBD and validate gate_mode names."""
-    assert StrongSimParams().gate_mode == "tebd"
-    assert WeakSimParams(shots=1).gate_mode == "tebd"
-    assert StrongSimParams(gate_mode="tdvp").gate_mode == "tdvp"
+    """Strong and weak digital params default to mpo and validate gate_mode names."""
+    assert StrongSimParams().gate_mode == "mpo"
+    assert WeakSimParams(shots=1).gate_mode == "mpo"
+    assert StrongSimParams(gate_mode="full-tdvp").gate_mode == "full-tdvp"
+    assert StrongSimParams(gate_mode="mpo").gate_mode == "mpo"
     with pytest.raises(ValueError, match="gate_mode"):
         StrongSimParams(gate_mode=cast("GateMode", "invalid"))
 

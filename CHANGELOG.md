@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added MPO zip-up as default long-range gate application method ([#449]) ([**@aaronleesander**])
 - parallelized MPO equivalence checker ([#448]) ([**@aaronleesander**])
 - added tebd/hybrid/tdvp options for circuit simulation ([#441]) ([**@aaronleesander**])
 - added Krylov tolerance as high-level parameter ([#439]) ([**@aaronleesander**])
@@ -126,6 +127,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#449]: https://github.com/munich-quantum-toolkit/yaqs/pull/449
 [#448]: https://github.com/munich-quantum-toolkit/yaqs/pull/448
 [#447]: https://github.com/munich-quantum-toolkit/yaqs/pull/447
 [#446]: https://github.com/munich-quantum-toolkit/yaqs/pull/446

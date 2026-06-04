@@ -24,6 +24,7 @@ from ..methods.decompositions import merge_two_site, right_qr, split_two_site
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from ..methods.decompositions import TruncMode
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 
 
@@ -597,44 +598,61 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:
-        """In-place MPS truncation via repeated two-site SVDs."""
-        orth_center = self.check_canonical_form()[0]
+    def compress(
+        self,
+        threshold: float,
+        *,
+        max_bond_dim: int | None = None,
+        min_bond_dim: int = 2,
+        trunc_mode: TruncMode = "discarded_weight",
+    ) -> None:
+        """Compress in place via left-to-center and right-to-left two-site SVD sweeps.
+
+        Args:
+            threshold: SVD truncation threshold (e.g. ``sim_params.svd_threshold``).
+            max_bond_dim: Optional cap on bond dimension.
+            min_bond_dim: Minimum bond dimension to retain when truncating.
+            trunc_mode: ``"discarded_weight"`` or ``"relative"``.
+        """
         if self.length == 1:
             return
 
-        # ——— left­-to-­center sweep ———
-        for i in range(orth_center):
-            a, b = self.tensors[i], self.tensors[i + 1]
-            merged = merge_two_site(a, b)
-            a_new, b_new = split_two_site(
+        canonical = self.check_canonical_form()
+        orth_center = canonical[0] if canonical and canonical[0] >= 0 else self.length - 1
+
+        for site in range(orth_center):
+            left_tensor = self.tensors[site]
+            right_tensor = self.tensors[site + 1]
+            merged = merge_two_site(left_tensor, right_tensor)
+            left_new, right_new = split_two_site(
                 merged,
-                [a.shape[0], b.shape[0]],
+                [left_tensor.shape[0], right_tensor.shape[0]],
                 svd_distribution="right",
-                trunc_mode="discarded_weight",
+                trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=2,
+                min_bond_dim=min_bond_dim,
             )
-            self.tensors[i], self.tensors[i + 1] = a_new, b_new
+            self.tensors[site] = left_new
+            self.tensors[site + 1] = right_new
 
-        # flip the network and sweep back
         self.flip_network()
         orth_flipped = self.length - 1 - orth_center
-        for i in range(orth_flipped):
-            a, b = self.tensors[i], self.tensors[i + 1]
-            merged = merge_two_site(a, b)
-            a_new, b_new = split_two_site(
+        for site in range(orth_flipped):
+            left_tensor = self.tensors[site]
+            right_tensor = self.tensors[site + 1]
+            merged = merge_two_site(left_tensor, right_tensor)
+            left_new, right_new = split_two_site(
                 merged,
-                [a.shape[0], b.shape[0]],
+                [left_tensor.shape[0], right_tensor.shape[0]],
                 svd_distribution="right",
-                trunc_mode="discarded_weight",
+                trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=2,
+                min_bond_dim=min_bond_dim,
             )
-            self.tensors[i], self.tensors[i + 1] = a_new, b_new
-
+            self.tensors[site] = left_new
+            self.tensors[site + 1] = right_new
         self.flip_network()
 
     def scalar_product(self, other: MPS, sites: int | list[int] | None = None) -> np.complex128:
