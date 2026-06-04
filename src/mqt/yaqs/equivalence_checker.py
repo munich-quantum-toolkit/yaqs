@@ -24,6 +24,8 @@ from qiskit.converters import circuit_to_dag
 from .core.data_structures.mpo import MPO
 from .digital.utils.contraction_utils import iterate
 from .digital.utils.matrix_utils import check_equivalence_matrix
+from pathlib import Path
+from qiskit import qasm2, qasm3
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
@@ -31,6 +33,29 @@ if TYPE_CHECKING:
     from .parallel_utils import MPContext
 
 __all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "Representation"]
+
+
+def _first_non_comment_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("//"):
+            return stripped
+    return ""
+
+
+def _load_if_path(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
+    """Load a QuantumCircuit from a QASM string, file path, or pass through an existing circuit."""
+    if isinstance(circuit, str) and _first_non_comment_line(circuit).startswith("OPENQASM"):
+        if _first_non_comment_line(circuit).startswith("OPENQASM 3"):
+            return qasm3.loads(circuit)
+        return qasm2.loads(circuit)
+    if isinstance(circuit, (str, Path)):
+        path = Path(circuit)
+        content = path.read_text()
+        if _first_non_comment_line(content).startswith("OPENQASM 3"):
+            return qasm3.load(str(path))
+        return qasm2.load(str(path))
+    return circuit
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
@@ -167,8 +192,8 @@ class EquivalenceChecker:
 
     def check(
         self,
-        circuit1: QuantumCircuit,
-        circuit2: QuantumCircuit,
+        circuit1: QuantumCircuit | str | Path,
+        circuit2: QuantumCircuit | str | Path,
     ) -> dict[str, bool | float | str]:
         """Check whether two quantum circuits are equivalent.
 
@@ -186,6 +211,9 @@ class EquivalenceChecker:
         Raises:
             ValueError: If the circuits have different numbers of qubits.
         """
+        circuit1 = _load_if_path(circuit1)
+        circuit2 = _load_if_path(circuit2)
+
         if circuit1.num_qubits != circuit2.num_qubits:
             msg = "Circuits must have the same number of qubits."
             raise ValueError(msg)
