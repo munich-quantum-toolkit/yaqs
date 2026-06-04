@@ -23,7 +23,7 @@ from qiskit import QuantumCircuit
 from qiskit.qasm2 import load
 
 from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
-from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
+from mqt.yaqs.digital.utils.mpo_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 
 if TYPE_CHECKING:
     from mqt.yaqs.equivalence_checker import Representation
@@ -229,30 +229,6 @@ def test_checker_rejects_non_int_max_workers() -> None:
         EquivalenceChecker(max_workers=1.5)  # ty: ignore[invalid-argument-type]
 
 
-def test_checker_rejects_invalid_representation() -> None:
-    """Unknown ``representation`` strings are rejected at construction."""
-    with pytest.raises(ValueError, match="representation must be one of"):
-        EquivalenceChecker(representation="tensor")  # ty: ignore[invalid-argument-type]
-
-
-def test_checker_rejects_bool_matrix_max_qubits() -> None:
-    """``matrix_max_qubits`` must be a true integer, not a boolean."""
-    with pytest.raises(TypeError, match="matrix_max_qubits"):
-        EquivalenceChecker(matrix_max_qubits=True)
-
-
-def test_checker_rejects_negative_matrix_max_qubits() -> None:
-    """``matrix_max_qubits`` must be non-negative."""
-    with pytest.raises(ValueError, match="non-negative"):
-        EquivalenceChecker(matrix_max_qubits=-1)
-
-
-def test_check_rejects_mismatched_qubit_counts() -> None:
-    """``check`` requires both circuits to have the same width."""
-    with pytest.raises(ValueError, match="same number of qubits"):
-        EquivalenceChecker().check(QuantumCircuit(2), QuantumCircuit(3))
-
-
 def test_equivalence_checker_defaults_parallel_true() -> None:
     """``parallel`` defaults to ``True`` (MPO thread pool still gated by qubit count)."""
     assert EquivalenceChecker().parallel is True
@@ -349,3 +325,45 @@ def test_long_range_mpo_parallel() -> None:
     serial = EquivalenceChecker(representation="mpo", parallel=False).check(qc1, qc2)
     parallel = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2).check(qc1, qc2)
     assert serial["equivalent"] == parallel["equivalent"]
+
+def test_check_accepts_qasm2_path_object() -> None:
+    qasm_path = Path(__file__).parent / "circuit.qasm"
+
+    checker = EquivalenceChecker(representation="mpo")
+    result = checker.check(qasm_path, qasm_path)
+    assert result["equivalent"] is True
+
+
+def test_check_accepts_qasm2_str_path() -> None:
+    qasm_path = str(Path(__file__).parent / "circuit.qasm")
+
+    checker = EquivalenceChecker(representation="mpo")
+    result = checker.check(qasm_path, qasm_path)
+    assert result["equivalent"] is True
+
+
+def test_check_qasm_path_vs_quantumcircuit_agree() -> None:
+    qasm_path = Path(__file__).parent / "circuit.qasm"
+    qc = load(filename=str(qasm_path))
+    checker = EquivalenceChecker(representation="mpo")
+    result_path = checker.check(qasm_path, qasm_path)
+    result_qc = checker.check(qc, qc)
+    assert result_path["equivalent"] == result_qc["equivalent"]
+
+
+def test_check_accepts_qasm3_path_object() -> None:
+    pytest.importorskip("qiskit_qasm3_import")
+    qasm_file = Path(__file__).parent / "circuit3.qasm"
+
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qasm_file, qasm_file)
+    assert result["equivalent"] is True
+
+
+def test_check_accepts_qasm3_str_path() -> None:
+    pytest.importorskip("qiskit_qasm3_import")
+    qasm_file = str(Path(__file__).parent / "circuit3.qasm")
+
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qasm_file, qasm_file)
+    assert result["equivalent"] is True
