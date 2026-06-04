@@ -66,6 +66,8 @@ from concurrent.futures import (
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
+from pathlib import Path
+from qiskit import qasm2, qasm3
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -132,6 +134,14 @@ from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
 
 __all__ = ["Simulator", "available_cpus", "run_backend_parallel"]
+
+def _first_non_comment_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("//"):
+            return stripped
+    return ""
+
 
 # ---------------------------------------------------------------------------
 # 4) TYPE VARS FOR GENERIC PARALLEL RUNNERS
@@ -631,7 +641,7 @@ class Simulator:
     def run(
         self,
         initial_state: State | list[State],
-        operator: Hamiltonian | QuantumCircuit,
+        operator: Hamiltonian | QuantumCircuit | str | Path,
         sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
         noise_model: NoiseModel | None = None,
     ) -> Result:
@@ -663,8 +673,21 @@ class Simulator:
         Raises:
             ValueError: If no output is specified (neither observables nor ``get_state``).
             TypeError: If the provided ``initial_state`` type is incompatible with the
-                selected simulation mode.
         """
+
+        if isinstance(operator, str) and _first_non_comment_line(operator).startswith("OPENQASM"):
+            if _first_non_comment_line(operator).startswith("OPENQASM 3"):
+                operator = qasm3.loads(operator)
+            else:
+                operator = qasm2.loads(operator)
+        elif isinstance(operator, (str, Path)):
+            path = Path(operator)
+            content = path.read_text()
+            if _first_non_comment_line(content).startswith("OPENQASM 3"):
+                operator = qasm3.load(str(path))
+            else:
+                operator = qasm2.load(str(path))
+
         if isinstance(initial_state, list) and any(not isinstance(state, State) for state in initial_state):
             msg = "initial_state list must contain only State objects."
             raise TypeError(msg)
