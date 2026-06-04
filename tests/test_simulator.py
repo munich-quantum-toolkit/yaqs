@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib
 import multiprocessing
+from pathlib import Path
 import os
 import sys
 from typing import Any, cast
@@ -1423,7 +1424,6 @@ def test_analog_simulation_vector_serial_get_state() -> None:
     assert result.output_state is not None
     assert result.output_state.representation == "vector"
 
-
 def test_analog_simulation_parallel_observables_no_state() -> None:
     """Noisy parallel analog runs aggregate trajectory observables without ``get_state``."""
     length = 2
@@ -1441,3 +1441,55 @@ def test_analog_simulation_parallel_observables_no_state() -> None:
     result = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, hamiltonian, sim_params, noise)
     assert result.expectation_values[0] is not None
     assert result.runtime_cost is not None
+
+def test_simulator_run_accepts_qasm2_path_object() -> None:
+    qasm_file = Path(__file__).parent / "circuit.qasm"
+    state = State(6, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_accepts_qasm2_str_path() -> None:
+    qasm_file = str(Path(__file__).parent / "circuit.qasm")
+    state = State(6, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_accepts_qasm3_path_object() -> None:
+    qasm_file = Path(__file__).parent / "circuit3.qasm"
+    state = State(2, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_accepts_qasm3_str_path() -> None:
+    qasm_file = str(Path(__file__).parent / "circuit3.qasm")
+    state = State(2, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_strong_accepts_qasm_path() -> None:
+    qasm_file = Path(__file__).parent / "circuit.qasm"
+    state = State(6, initial="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.expectation_values[0] is not None
+
+
+def test_simulator_run_strong_accepts_qasm_string() -> None:
+    qasm_string = (Path(__file__).parent / "circuit.qasm")
+    state = State(6, initial="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    assert result.expectation_values[0] is not None
+
