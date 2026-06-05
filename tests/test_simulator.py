@@ -1466,6 +1466,7 @@ def test_simulator_run_accepts_qasm2_str_path() -> None:
 
 def test_simulator_run_accepts_qasm3_path_object() -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
+    pytest.importorskip("qiskit_qasm3_import")
     qasm_file = Path(__file__).parent / "circuit3.qasm"
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
@@ -1476,6 +1477,7 @@ def test_simulator_run_accepts_qasm3_path_object() -> None:
 
 def test_simulator_run_accepts_qasm3_str_path() -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a str path."""
+    pytest.importorskip("qiskit_qasm3_import")
     qasm_file = str(Path(__file__).parent / "circuit3.qasm")
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
