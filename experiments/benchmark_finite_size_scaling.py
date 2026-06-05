@@ -166,6 +166,43 @@ def _configure_matplotlib() -> None:
     )
 
 
+def _configure_matplotlib_figure_star() -> None:
+    """RevTeX ``figure*`` / full ``\\textwidth`` (matches other benchmark PRL rc)."""
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    import matplotlib as mpl
+
+    mpl.rcParams.update(
+        {
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "savefig.facecolor": "white",
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.02,
+            "font.family": "serif",
+            "font.serif": ["DejaVu Serif", "Times New Roman", "Times", "STIXGeneral"],
+            "mathtext.fontset": "stix",
+            "font.size": 10,
+            "axes.labelsize": 12,
+            "axes.titlesize": 11,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+            "legend.fontsize": 9,
+            "axes.linewidth": 0.8,
+            "xtick.major.width": 0.7,
+            "ytick.major.width": 0.7,
+            "xtick.minor.width": 0.3,
+            "ytick.minor.width": 0.3,
+            "xtick.direction": "in",
+            "ytick.direction": "in",
+            "xtick.top": True,
+            "ytick.right": True,
+            "grid.alpha": 0.0,
+            "lines.linewidth": 1.5,
+            "lines.markersize": 3.5,
+        }
+    )
+
+
 def _col_j(j: float) -> str:
     if abs(j - 0.5) < 1e-9:
         return "#0072B2"
@@ -333,6 +370,7 @@ def plot_entropy_vs_l_for_fixed_cuts(
     out_stem: Path,
     cuts: tuple[int, ...] = (5, 10, 15),
 ) -> None:
+    """Three-panel row sized for RevTeX ``figure*`` (full ``\\textwidth``)."""
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap, Normalize
 
@@ -340,16 +378,17 @@ def plot_entropy_vs_l_for_fixed_cuts(
         base = plt.get_cmap(name)
         return LinearSegmentedColormap.from_list(f"{name}_trunc_{lo:.2f}_{hi:.2f}", base(np.linspace(lo, hi, n)))
 
-    _configure_matplotlib()
+    _configure_matplotlib_figure_star()
     js = sorted({float(r["J"]) for r in detail_rows})
     ls_all = sorted({int(float(r["L"])) for r in detail_rows})
     j_norm = Normalize(vmin=0.0, vmax=2.0)
     j_cmap = _truncate_cmap("Reds", 0.30, 0.95)
 
-    fig, axes = plt.subplots(1, 3, figsize=(7.1, 2.55), constrained_layout=True, sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(8.2, 2.85), constrained_layout=True, sharey=True)
     fig.patch.set_facecolor("white")
+    panel_tags = ("(a)", "(b)", "(c)")
 
-    for ax, cut in zip(axes, cuts, strict=False):
+    for ax, cut, tag in zip(axes, cuts, panel_tags, strict=False):
         ax.set_facecolor("white")
         for jv in js:
             xs: list[int] = []
@@ -364,7 +403,7 @@ def plot_entropy_vs_l_for_fixed_cuts(
                 ]
                 if not sub:
                     continue
-                xs.append(L-1)
+                xs.append(L - 1)
                 ys.append(float(sub[0]["entropy"]))
             if xs:
                 pts = sorted(zip(xs, ys), key=lambda p: p[0])
@@ -372,27 +411,30 @@ def plot_entropy_vs_l_for_fixed_cuts(
                     [p[0] for p in pts],
                     [p[1] for p in pts],
                     marker="o",
-                    lw=1.6,
-                    ms=4.6,
+                    lw=1.7,
+                    ms=4.0,
                     markeredgewidth=0.0,
                     color=j_cmap(j_norm(jv)),
                     label=rf"$J={jv:g}$",
                 )
 
-        ax.set_title(rf"$c={int(cut)}$", fontsize=10)
+        ax.set_title(rf"$c={int(cut)}$")
         ax.set_xlabel(r"Environmental sites")
-        ax.set_xticks([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        env_sites = [L - 1 for L in ls_all]
+        if env_sites:
+            ax.set_xticks(env_sites)
         ax.grid(True, axis="y", alpha=0.10, linewidth=0.35)
         ax.grid(False, axis="x")
         ax.tick_params(direction="in", which="both", top=True, right=True, length=3.5, width=0.8)
         for spine in ax.spines.values():
-            spine.set_linewidth(1.1)
+            spine.set_linewidth(1.15)
+        ax.text(0.04, 0.955, tag, transform=ax.transAxes, va="top", ha="left", fontsize=11, fontweight="bold")
 
     axes[0].set_ylabel(r"$S_V(c)$")
-    axes[-1].legend(frameon=False, loc="upper right", fontsize=7.0, handlelength=1.8, borderaxespad=0.25)
+    axes[-1].legend(frameon=False, loc="upper right", handlelength=1.6, borderaxespad=0.2)
 
-    fig.savefig(out_stem.with_suffix(".pdf"), dpi=600, bbox_inches="tight", pad_inches=0.02)
-    fig.savefig(out_stem.with_suffix(".png"), dpi=600, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(out_stem.with_suffix(".pdf"), bbox_inches="tight", pad_inches=0.02, dpi=600)
+    fig.savefig(out_stem.with_suffix(".png"), bbox_inches="tight", pad_inches=0.02, dpi=600)
     plt.close(fig)
 
 
