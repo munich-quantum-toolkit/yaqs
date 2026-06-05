@@ -17,46 +17,23 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
-from qiskit import qasm2, qasm3
 from qiskit.converters import circuit_to_dag
 
 from .core.data_structures.mpo import MPO
 from .digital.utils.contraction_utils import iterate
 from .digital.utils.matrix_utils import check_equivalence_matrix
+from .digital.utils.qasm_utils import load_circuit
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from qiskit.circuit import QuantumCircuit
 
     from .parallel_utils import MPContext
 
 __all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "Representation"]
-
-
-def _first_non_comment_line(text: str) -> str:
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("//"):
-            return stripped
-    return ""
-
-
-def _load_if_path(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
-    """Load a QuantumCircuit from a QASM string, file path, or pass through an existing circuit."""
-    if isinstance(circuit, str) and _first_non_comment_line(circuit).startswith("OPENQASM"):
-        if _first_non_comment_line(circuit).startswith("OPENQASM 3"):
-            return qasm3.loads(circuit)
-        return qasm2.loads(circuit)
-    if isinstance(circuit, (str, Path)):
-        path = Path(circuit)
-        content = path.read_text(encoding="utf-8")
-        if _first_non_comment_line(content).startswith("OPENQASM 3"):
-            return qasm3.load(str(path))
-        return qasm2.load(str(path))
-    return circuit
-
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
@@ -212,8 +189,8 @@ class EquivalenceChecker:
         Raises:
             ValueError: If the circuits have different numbers of qubits.
         """
-        circuit1 = _load_if_path(circuit1)
-        circuit2 = _load_if_path(circuit2)
+        circuit1 = load_circuit(circuit1)
+        circuit2 = load_circuit(circuit2)
 
         if circuit1.num_qubits != circuit2.num_qubits:
             msg = "Circuits must have the same number of qubits."

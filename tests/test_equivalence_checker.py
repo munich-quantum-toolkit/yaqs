@@ -328,6 +328,7 @@ def test_long_range_mpo_parallel() -> None:
 
 
 def test_check_accepts_qasm2_path_object() -> None:
+    """Check that a QASM 2 file given as a Path object is accepted and returns equivalent."""
     qasm_path = Path(__file__).parent / "circuit.qasm"
 
     checker = EquivalenceChecker(representation="mpo")
@@ -336,6 +337,7 @@ def test_check_accepts_qasm2_path_object() -> None:
 
 
 def test_check_accepts_qasm2_str_path() -> None:
+    """Check that a QASM 2 file given as a str path is accepted and returns equivalent."""
     qasm_path = str(Path(__file__).parent / "circuit.qasm")
 
     checker = EquivalenceChecker(representation="mpo")
@@ -344,6 +346,7 @@ def test_check_accepts_qasm2_str_path() -> None:
 
 
 def test_check_qasm_path_vs_quantumcircuit_agree() -> None:
+    """Verify that loading via path and via QuantumCircuit gives the same equivalence result."""
     qasm_path = Path(__file__).parent / "circuit.qasm"
     qc = load(filename=str(qasm_path))
     checker = EquivalenceChecker(representation="mpo")
@@ -353,6 +356,7 @@ def test_check_qasm_path_vs_quantumcircuit_agree() -> None:
 
 
 def test_check_accepts_qasm3_path_object() -> None:
+    """Check that a QASM 3 file given as a Path object is accepted and returns equivalent."""
     pytest.importorskip("qiskit_qasm3_import")
     qasm_file = Path(__file__).parent / "circuit3.qasm"
 
@@ -362,6 +366,7 @@ def test_check_accepts_qasm3_path_object() -> None:
 
 
 def test_check_accepts_qasm3_str_path() -> None:
+    """Check that a QASM 3 file given as a str path is accepted and returns equivalent."""
     pytest.importorskip("qiskit_qasm3_import")
     qasm_file = str(Path(__file__).parent / "circuit3.qasm")
 

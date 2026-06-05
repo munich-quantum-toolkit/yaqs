@@ -1445,6 +1445,7 @@ def test_analog_simulation_parallel_observables_no_state() -> None:
 
 
 def test_simulator_run_accepts_qasm2_path_object() -> None:
+    """Verify that Simulator.run accepts a QASM 2 file passed as a Path object."""
     qasm_file = Path(__file__).parent / "circuit.qasm"
     state = State(6, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
@@ -1454,6 +1455,7 @@ def test_simulator_run_accepts_qasm2_path_object() -> None:
 
 
 def test_simulator_run_accepts_qasm2_str_path() -> None:
+    """Verify that Simulator.run accepts a QASM 2 file passed as a str path."""
     qasm_file = str(Path(__file__).parent / "circuit.qasm")
     state = State(6, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
@@ -1463,6 +1465,7 @@ def test_simulator_run_accepts_qasm2_str_path() -> None:
 
 
 def test_simulator_run_accepts_qasm3_path_object() -> None:
+    """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
     qasm_file = Path(__file__).parent / "circuit3.qasm"
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
@@ -1472,6 +1475,7 @@ def test_simulator_run_accepts_qasm3_path_object() -> None:
 
 
 def test_simulator_run_accepts_qasm3_str_path() -> None:
+    """Verify that Simulator.run accepts a QASM 3 file passed as a str path."""
     qasm_file = str(Path(__file__).parent / "circuit3.qasm")
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
@@ -1481,6 +1485,7 @@ def test_simulator_run_accepts_qasm3_str_path() -> None:
 
 
 def test_simulator_run_strong_accepts_qasm_path() -> None:
+    """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a Path."""
     qasm_file = Path(__file__).parent / "circuit.qasm"
     state = State(6, initial="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
@@ -1489,6 +1494,7 @@ def test_simulator_run_strong_accepts_qasm_path() -> None:
 
 
 def test_simulator_run_strong_accepts_qasm_string() -> None:
+    """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a str path."""
     qasm_string = Path(__file__).parent / "circuit.qasm"
     state = State(6, initial="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)

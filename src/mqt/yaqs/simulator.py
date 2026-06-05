@@ -63,11 +63,9 @@ from concurrent.futures import (
     ProcessPoolExecutor,
     wait,
 )
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
-from qiskit import qasm2, qasm3
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -127,21 +125,16 @@ if TYPE_CHECKING:
 
     from .core.data_structures.noise_model import NoiseModel
 
+from pathlib import Path
+
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .analog.ensemble import ensemble_member_worker
 from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
+from .digital.utils.qasm_utils import load_circuit
 
 __all__ = ["Simulator", "available_cpus", "run_backend_parallel"]
-
-
-def _first_non_comment_line(text: str) -> str:
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("//"):
-            return stripped
-    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -675,18 +668,8 @@ class Simulator:
             ValueError: If no output is specified (neither observables nor ``get_state``).
             TypeError: If the provided ``initial_state`` type is incompatible with the
         """
-        if isinstance(operator, str) and _first_non_comment_line(operator).startswith("OPENQASM"):
-            if _first_non_comment_line(operator).startswith("OPENQASM 3"):
-                operator = qasm3.loads(operator)
-            else:
-                operator = qasm2.loads(operator)
-        elif isinstance(operator, (str, Path)):
-            path = Path(operator)
-            content = path.read_text(encoding="utf-8")
-            if _first_non_comment_line(content).startswith("OPENQASM 3"):
-                operator = qasm3.load(str(path))
-            else:
-                operator = qasm2.load(str(path))
+        if isinstance(operator, (str, Path)):
+            operator = load_circuit(operator)
 
         if isinstance(initial_state, list) and any(not isinstance(state, State) for state in initial_state):
             msg = "initial_state list must contain only State objects."
