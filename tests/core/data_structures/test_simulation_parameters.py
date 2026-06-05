@@ -33,6 +33,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     Observable,
     StrongSimParams,
     WeakSimParams,
+    _validate_tdvp_sweeps,  # noqa: PLC2701
 )
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
 from mqt.yaqs.core.methods import tdvp
@@ -172,6 +173,25 @@ def test_gate_mode_defaults_and_validation() -> None:
     assert StrongSimParams(gate_mode="mpo").gate_mode == "mpo"
     with pytest.raises(ValueError, match="gate_mode"):
         StrongSimParams(gate_mode=cast("GateMode", "invalid"))
+
+
+def test_tdvp_sweeps_defaults_and_validation() -> None:
+    """Analog, strong, and weak params default tdvp_sweeps to 1 and validate inputs."""
+    assert AnalogSimParams().tdvp_sweeps == 1
+    assert StrongSimParams().tdvp_sweeps == 1
+    assert WeakSimParams(shots=1).tdvp_sweeps == 1
+    assert StrongSimParams(tdvp_sweeps=3).tdvp_sweeps == 3
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        StrongSimParams(tdvp_sweeps=0)
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        StrongSimParams(tdvp_sweeps=-1)
+
+
+@pytest.mark.parametrize("invalid", [1.5, True])
+def test_tdvp_sweeps_rejects_non_int(invalid: object) -> None:
+    """tdvp_sweeps must be a true int, not bool or float."""
+    with pytest.raises(TypeError, match="tdvp_sweeps"):
+        _validate_tdvp_sweeps(invalid)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize(

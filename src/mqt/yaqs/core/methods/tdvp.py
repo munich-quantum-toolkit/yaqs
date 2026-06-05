@@ -26,7 +26,7 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -52,6 +52,40 @@ def _bond_dim_at_or_above_cap(bond_dim: int, max_bond_dim: int | None) -> bool:
 
 
 DENSE_THRESHOLD = 128
+
+SweepDirection = Literal["symmetric", "ltr_full", "ltr", "rtl"]
+CircuitPhase = Literal["preamble", "final"]
+
+
+def _prepare_substep_evolution_dt(
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    step_scale: float,
+    *,
+    sweep_direction: SweepDirection,
+    circuit_phase: CircuitPhase | None = None,
+) -> float:
+    """Return the TDVP evolution timestep for the current substep or circuit phase."""
+    if not isinstance(sim_params, (StrongSimParams, WeakSimParams)):
+        return float(sim_params.dt) * step_scale
+    if sweep_direction == "ltr_full":
+        dt_value = step_scale if circuit_phase == "final" else 2.0 * step_scale
+        sim_params.dt = dt_value  # ty: ignore[invalid-assignment]
+        return dt_value
+    return step_scale
+
+
+def _circuit_sweep_direction(substep_index: int, tdvp_sweeps: int) -> SweepDirection:
+    """Map a circuit substep index to a directional half-sweep.
+
+    ``tdvp_sweeps=1`` uses a single LTR full-gate pass. For ``tdvp_sweeps>=2``,
+    substeps alternate LTR and RTL directional half-sweeps.
+
+    Returns:
+        The sweep direction for the given substep index.
+    """
+    if tdvp_sweeps == 1:
+        return "ltr_full"
+    return "ltr" if substep_index % 2 == 0 else "rtl"
 
 
 def _split_two_site_tdvp(
@@ -556,6 +590,211 @@ def update_bond(
     )
 
 
+def _build_left_blocks_from_state(
+    state: MPS,
+    hamiltonian: MPO,
+    right_blocks: list[NDArray[np.complex128]],
+) -> list[NDArray[np.complex128]]:
+    """Build left environment blocks from the current MPS without time evolution.
+
+    Returns:
+        Left environment tensors for each site, compatible with ``right_blocks``.
+    """
+    num_sites = hamiltonian.length
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    left_virtual_dim = state.tensors[0].shape[1]
+    mpo_left_dim = hamiltonian.tensors[0].shape[2]
+    left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
+    for i in range(left_virtual_dim):
+        for a in range(mpo_left_dim):
+            left_identity[i, a, i] = 1
+    left_blocks[0] = left_identity
+    for i in range(num_sites - 1):
+        left_blocks[i + 1] = update_left_environment(
+            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+        )
+    return left_blocks
+
+
+def _run_sweeps(
+    evolve_once: Callable[..., None],
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    /,
+    *args: object,
+    **kwargs: object,
+) -> None:
+    """Run ``sim_params.tdvp_sweeps`` TDVP substeps per evolution step.
+
+    Public TDVP entry points validate inputs and delegate here. Private ``_*_sweep``
+    kernels perform one substep and accept ``step_scale`` plus ``sweep_direction``;
+    they must not re-enter the public wrappers.
+
+    Circuit vs analog substep geometry:
+
+    - **Analog**: each substep is a **symmetric** integrator step (LTR then RTL) at
+      ``dt / tdvp_sweeps``.
+    - **Circuit**: ``tdvp_sweeps=1`` applies the gate in one LTR full-gate pass;
+      ``tdvp_sweeps>=2`` alternates **directional half-sweeps** (LTR, RTL, LTR, …)
+      at ``tau / tdvp_sweeps`` each.
+    """
+    is_circuit = isinstance(sim_params, (StrongSimParams, WeakSimParams))
+    if is_circuit:
+        tdvp_sweeps = sim_params.tdvp_sweeps
+        sweep_plan = [
+            (_circuit_sweep_direction(substep_index, tdvp_sweeps), 1.0 / tdvp_sweeps)
+            for substep_index in range(tdvp_sweeps)
+        ]
+        evolve_once(
+            state,
+            hamiltonian,
+            sim_params,
+            *args,
+            sweep_plan=sweep_plan,
+            **kwargs,
+        )
+        return
+
+    for _substep_index in range(sim_params.tdvp_sweeps):
+        step_scale = 1.0 / sim_params.tdvp_sweeps
+        evolve_once(
+            state,
+            hamiltonian,
+            sim_params,
+            *args,
+            step_scale=step_scale,
+            sweep_direction="symmetric",
+            **kwargs,
+        )
+
+
+def _single_site_tdvp_sweep(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    step_scale: float = 1.0,
+    sweep_direction: SweepDirection = "symmetric",
+    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+) -> None:
+    if sweep_plan is not None:
+        for plan_direction, plan_step_scale in sweep_plan:
+            _single_site_tdvp_sweep(
+                state,
+                hamiltonian,
+                sim_params,
+                step_scale=plan_step_scale,
+                sweep_direction=plan_direction,
+            )
+        return
+
+    num_sites = hamiltonian.length
+    run_ltr = sweep_direction in {"symmetric", "ltr_full", "ltr"}
+    run_rtl = sweep_direction in {"symmetric", "rtl"}
+
+    right_blocks = initialize_right_environments(state, hamiltonian)
+
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    left_virtual_dim = state.tensors[0].shape[1]
+    mpo_left_dim = hamiltonian.tensors[0].shape[2]
+    left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
+    for i in range(left_virtual_dim):
+        for a in range(mpo_left_dim):
+            left_identity[i, a, i] = 1
+    left_blocks[0] = left_identity
+
+    if run_ltr:
+        if sweep_direction == "ltr_full":
+            substep_evolution_dt = _prepare_substep_evolution_dt(
+                sim_params, step_scale, sweep_direction=sweep_direction, circuit_phase="preamble"
+            )
+        else:
+            substep_evolution_dt = _prepare_substep_evolution_dt(
+                sim_params, step_scale, sweep_direction=sweep_direction
+            )
+
+        # Left-to-right sweep: Update sites 0 to L-2.
+        for i in range(num_sites - 1):
+            state.tensors[i] = update_site(
+                left_blocks[i],
+                right_blocks[i],
+                hamiltonian.tensors[i],
+                state.tensors[i],
+                0.5 * substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            tensor_shape = state.tensors[i].shape
+            reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+            site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+            state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
+            left_blocks[i + 1] = update_left_environment(
+                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+            )
+            bond_tensor = update_bond(
+                left_blocks[i + 1],
+                right_blocks[i],
+                bond_tensor,
+                -0.5 * substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
+
+        if sweep_direction == "ltr_full":
+            substep_evolution_dt = _prepare_substep_evolution_dt(
+                sim_params, step_scale, sweep_direction=sweep_direction, circuit_phase="final"
+            )
+
+        last = num_sites - 1
+        state.tensors[last] = update_site(
+            left_blocks[last],
+            right_blocks[last],
+            hamiltonian.tensors[last],
+            state.tensors[last],
+            substep_evolution_dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+
+    if not run_rtl:
+        return
+
+    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale, sweep_direction=sweep_direction)
+    if not run_ltr:
+        left_blocks = _build_left_blocks_from_state(state, hamiltonian, right_blocks)
+
+    # Right-to-left sweep: Update sites 1 to L-1.
+    for i in reversed(range(1, num_sites)):
+        state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
+        tensor_shape = state.tensors[i].shape
+        reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+        site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+        state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1])).transpose((
+            0,
+            2,
+            1,
+        ))
+        right_blocks[i - 1] = update_right_environment(
+            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+        )
+        bond_tensor = bond_tensor.transpose()
+        bond_tensor = update_bond(
+            left_blocks[i],
+            right_blocks[i - 1],
+            bond_tensor,
+            -0.5 * substep_evolution_dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+        state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
+        state.tensors[i - 1] = update_site(
+            left_blocks[i - 1],
+            right_blocks[i - 1],
+            hamiltonian.tensors[i - 1],
+            state.tensors[i - 1],
+            0.5 * substep_evolution_dt,
+            krylov_tol=sim_params.krylov_tol,
+        )
+
+
 def single_site_tdvp(
     state: MPS,
     hamiltonian: MPO,
@@ -581,8 +820,23 @@ def single_site_tdvp(
         msg = "The state and Hamiltonian must have the same number of sites."
         raise ValueError(msg)
 
-    right_blocks = initialize_right_environments(state, hamiltonian)
+    _run_sweeps(_single_site_tdvp_sweep, state, hamiltonian, sim_params)
 
+
+def _two_site_tdvp_sweep(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    dynamic: bool = False,
+    step_scale: float = 1.0,
+    sweep_direction: SweepDirection = "symmetric",
+    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+) -> None:
+    num_sites = hamiltonian.length
+    plan = sweep_plan if sweep_plan is not None else [(sweep_direction, step_scale)]
+
+    right_blocks = initialize_right_environments(state, hamiltonian)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = hamiltonian.tensors[0].shape[2]
@@ -592,82 +846,145 @@ def single_site_tdvp(
             left_identity[i, a, i] = 1
     left_blocks[0] = left_identity
 
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 2
+    for plan_direction, plan_step_scale in plan:
+        run_ltr = plan_direction in {"symmetric", "ltr_full", "ltr"}
+        run_rtl = plan_direction in {"symmetric", "rtl"}
 
-    # Left-to-right sweep: Update sites 0 to L-2.
-    for i in range(num_sites - 1):
-        state.tensors[i] = update_site(
-            left_blocks[i],
-            right_blocks[i],
-            hamiltonian.tensors[i],
-            state.tensors[i],
-            0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        tensor_shape = state.tensors[i].shape
-        reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-        site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-        state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
-        left_blocks[i + 1] = update_left_environment(
-            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-        )
-        bond_tensor = update_bond(
-            left_blocks[i + 1],
-            right_blocks[i],
-            bond_tensor,
-            -0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
+        if run_ltr:
+            if plan_direction == "ltr_full":
+                substep_evolution_dt = _prepare_substep_evolution_dt(
+                    sim_params, plan_step_scale, sweep_direction=plan_direction, circuit_phase="preamble"
+                )
+            else:
+                substep_evolution_dt = _prepare_substep_evolution_dt(
+                    sim_params, plan_step_scale, sweep_direction=plan_direction
+                )
 
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 1
+            for i in range(num_sites - 2):
+                merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+                merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+                merged_tensor = update_site(
+                    left_blocks[i],
+                    right_blocks[i + 1],
+                    merged_mpo,
+                    merged_tensor,
+                    0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
+                state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                    merged_tensor,
+                    sim_params,
+                    [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                    "right",
+                    dynamic=dynamic,
+                )
+                left_blocks[i + 1] = update_left_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                )
+                state.tensors[i + 1] = update_site(
+                    left_blocks[i + 1],
+                    right_blocks[i + 1],
+                    hamiltonian.tensors[i + 1],
+                    state.tensors[i + 1],
+                    -0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
 
-    last = num_sites - 1
-    state.tensors[last] = update_site(
-        left_blocks[last],
-        right_blocks[last],
-        hamiltonian.tensors[last],
-        state.tensors[last],
-        sim_params.dt,
-        krylov_tol=sim_params.krylov_tol,
-    )
+            if plan_direction == "ltr_full":
+                substep_evolution_dt = _prepare_substep_evolution_dt(
+                    sim_params, plan_step_scale, sweep_direction=plan_direction, circuit_phase="final"
+                )
 
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        return
+            i = num_sites - 2
+            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_tensor = update_site(
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            final_split = "right" if plan_direction == "ltr_full" else "left"
+            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                merged_tensor,
+                sim_params,
+                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                final_split,
+                dynamic=dynamic,
+            )
 
-    # Right-to-left sweep: Update sites 1 to L-1.
-    for i in reversed(range(1, num_sites)):
-        state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
-        tensor_shape = state.tensors[i].shape
-        reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-        site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-        state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1])).transpose((
-            0,
-            2,
-            1,
-        ))
-        right_blocks[i - 1] = update_right_environment(
-            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+            if plan_direction == "ltr_full":
+                return
+
+            if plan_direction == "ltr":
+                right_blocks[i] = update_right_environment(
+                    state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+                )
+                continue
+
+            right_blocks[i] = update_right_environment(
+                state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+            )
+
+        if not run_rtl:
+            continue
+
+        substep_evolution_dt = _prepare_substep_evolution_dt(
+            sim_params, plan_step_scale, sweep_direction=plan_direction
         )
-        bond_tensor = bond_tensor.transpose()
-        bond_tensor = update_bond(
-            left_blocks[i],
-            right_blocks[i - 1],
-            bond_tensor,
-            -0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
-        state.tensors[i - 1] = update_site(
-            left_blocks[i - 1],
-            right_blocks[i - 1],
-            hamiltonian.tensors[i - 1],
-            state.tensors[i - 1],
-            0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
+
+        if num_sites - 2 == 0:
+            i = num_sites - 2
+            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_tensor = update_site(
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                merged_tensor,
+                sim_params,
+                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                "right",
+                dynamic=dynamic,
+            )
+            continue
+
+        for i in reversed(range(num_sites - 2)):
+            state.tensors[i + 1] = update_site(
+                left_blocks[i + 1],
+                right_blocks[i + 1],
+                hamiltonian.tensors[i + 1],
+                state.tensors[i + 1],
+                -0.5 * substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_tensor = update_site(
+                left_blocks[i],
+                right_blocks[i + 1],
+                merged_mpo,
+                merged_tensor,
+                0.5 * substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                merged_tensor,
+                sim_params,
+                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                "left",
+                dynamic=dynamic,
+            )
+            right_blocks[i] = update_right_environment(
+                state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+            )
 
 
 def two_site_tdvp(
@@ -703,119 +1020,221 @@ def two_site_tdvp(
         msg = "Hamiltonian is too short for a two-site update (2TDVP)."
         raise ValueError(msg)
 
-    right_blocks = initialize_right_environments(state, hamiltonian)
+    _run_sweeps(_two_site_tdvp_sweep, state, hamiltonian, sim_params, dynamic=dynamic)
 
-    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
-    left_virtual_dim = state.tensors[0].shape[1]
-    mpo_left_dim = hamiltonian.tensors[0].shape[2]
-    left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
-    for i in range(left_virtual_dim):
-        for a in range(mpo_left_dim):
-            left_identity[i, a, i] = 1
-    left_blocks[0] = left_identity
 
-    # Adjust simulation time step if simulation parameters require a unit time step.
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 2
-
-    # Left-to-right sweep for sites 0 to L-2.
-    for i in range(num_sites - 2):
-        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i],
-            right_blocks[i + 1],
-            merged_mpo,
-            merged_tensor,
-            0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-            merged_tensor,
-            sim_params,
-            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-            "right",
-            dynamic=dynamic,
-        )
-        left_blocks[i + 1] = update_left_environment(
-            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-        )
-        state.tensors[i + 1] = update_site(
-            left_blocks[i + 1],
-            right_blocks[i + 1],
-            hamiltonian.tensors[i + 1],
-            state.tensors[i + 1],
-            -0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-
-    # Guarantees unit time at final site for circuits
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 1
-
-    i = num_sites - 2
-    merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-    merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-    merged_tensor = update_site(
-        left_blocks[i],
-        right_blocks[i + 1],
-        merged_mpo,
-        merged_tensor,
-        sim_params.dt,
-        krylov_tol=sim_params.krylov_tol,
-    )
-    # Only a single sweep is needed for circuits
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-            merged_tensor,
-            sim_params,
-            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-            "right",
-            dynamic=dynamic,
-        )
+def _local_dynamic_tdvp_sweep(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    step_scale: float = 1.0,
+    sweep_direction: SweepDirection = "symmetric",
+    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+) -> None:
+    if sweep_plan is not None:
+        for plan_direction, plan_step_scale in sweep_plan:
+            _local_dynamic_tdvp_sweep(
+                state,
+                hamiltonian,
+                sim_params,
+                step_scale=plan_step_scale,
+                sweep_direction=plan_direction,
+            )
         return
 
-    state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-        merged_tensor,
-        sim_params,
-        [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-        "left",
-        dynamic=dynamic,
-    )
-    right_blocks[i] = update_right_environment(
-        state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
-    )
+    num_sites = hamiltonian.length
+    run_ltr = sweep_direction in {"symmetric", "ltr_full", "ltr"}
+    run_rtl = sweep_direction in {"symmetric", "rtl"}
 
-    # Right-to-left sweep.
-    for i in reversed(range(num_sites - 2)):
-        state.tensors[i + 1] = update_site(
-            left_blocks[i + 1],
-            right_blocks[i + 1],
-            hamiltonian.tensors[i + 1],
-            state.tensors[i + 1],
-            -0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-        merged_tensor = update_site(
-            left_blocks[i],
-            right_blocks[i + 1],
-            merged_mpo,
-            merged_tensor,
-            0.5 * sim_params.dt,
-            krylov_tol=sim_params.krylov_tol,
-        )
-        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-            merged_tensor,
-            sim_params,
-            [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-            "left",
-            dynamic=dynamic,
-        )
-        right_blocks[i] = update_right_environment(
-            state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
-        )
+    right_blocks = initialize_right_environments(state, hamiltonian)
+    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    chi0 = state.tensors[0].shape[1]
+    mpo_dim = hamiltonian.tensors[0].shape[2]
+    eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
+    for i in range(chi0):
+        eye[i, :, i] = 1
+    left_blocks[0] = eye
+
+    if run_ltr:
+        if sweep_direction == "ltr_full":
+            substep_evolution_dt = _prepare_substep_evolution_dt(
+                sim_params, step_scale, sweep_direction=sweep_direction, circuit_phase="preamble"
+            )
+        else:
+            substep_evolution_dt = _prepare_substep_evolution_dt(
+                sim_params, step_scale, sweep_direction=sweep_direction
+            )
+
+        # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
+        lock_final_site = False
+        for i in range(num_sites):
+            bond_dim = state.tensors[i].shape[2]
+            if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
+                state.tensors[i] = update_site(
+                    left_blocks[i],
+                    right_blocks[i],
+                    hamiltonian.tensors[i],
+                    state.tensors[i],
+                    0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
+                if i != num_sites - 1:
+                    tensor_shape = state.tensors[i].shape
+                    reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+                    site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+                    state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
+                    left_blocks[i + 1] = update_left_environment(
+                        state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                    )
+                    bond_tensor = update_bond(
+                        left_blocks[i + 1],
+                        right_blocks[i],
+                        bond_tensor,
+                        -0.5 * substep_evolution_dt,
+                        krylov_tol=sim_params.krylov_tol,
+                    )
+                    state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
+                if i == num_sites - 2:
+                    lock_final_site = True
+            elif i == num_sites - 1:
+                continue
+            elif i == num_sites - 2:
+                merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+                merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+                merged_tensor = update_site(
+                    left_blocks[i],
+                    right_blocks[i + 1],
+                    merged_mpo,
+                    merged_tensor,
+                    0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
+
+                state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                    merged_tensor,
+                    sim_params,
+                    [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                    "right",
+                    dynamic=True,
+                )
+                right_blocks[i] = update_right_environment(
+                    state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+                )
+                left_blocks[i + 1] = update_left_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                )
+
+            else:
+                merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
+                merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+                merged_tensor = update_site(
+                    left_blocks[i],
+                    right_blocks[i + 1],
+                    merged_mpo,
+                    merged_tensor,
+                    0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
+                state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                    merged_tensor,
+                    sim_params,
+                    [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                    "right",
+                    dynamic=True,
+                )
+                left_blocks[i + 1] = update_left_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                )
+                state.tensors[i + 1] = update_site(
+                    left_blocks[i + 1],
+                    right_blocks[i + 1],
+                    hamiltonian.tensors[i + 1],
+                    state.tensors[i + 1],
+                    -0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
+        if not run_rtl:
+            return
+
+    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale, sweep_direction=sweep_direction)
+    if not run_ltr:
+        left_blocks = _build_left_blocks_from_state(state, hamiltonian, right_blocks)
+
+    # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
+    lock_final_site = False
+    for i in reversed(range(num_sites)):
+        bond_dim = state.tensors[i].shape[1]
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
+            state.tensors[i] = update_site(
+                left_blocks[i],
+                right_blocks[i],
+                hamiltonian.tensors[i],
+                state.tensors[i],
+                0.5 * substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            if i != 0:
+                state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
+                tensor_shape = state.tensors[i].shape
+                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
+                state.tensors[i] = site_tensor.reshape((
+                    tensor_shape[0],
+                    tensor_shape[1],
+                    site_tensor.shape[1],
+                )).transpose((
+                    0,
+                    2,
+                    1,
+                ))
+                right_blocks[i - 1] = update_right_environment(
+                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+                )
+                bond_tensor = bond_tensor.transpose()
+                bond_tensor = update_bond(
+                    left_blocks[i],
+                    right_blocks[i - 1],
+                    bond_tensor,
+                    -0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
+                state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
+
+                if i == 1:
+                    lock_final_site = True
+        elif i == 0:
+            continue
+        else:
+            merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
+            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
+            merged_tensor = update_site(
+                left_blocks[i - 1],
+                right_blocks[i],
+                merged_mpo,
+                merged_tensor,
+                0.5 * substep_evolution_dt,
+                krylov_tol=sim_params.krylov_tol,
+            )
+            state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
+                merged_tensor,
+                sim_params,
+                [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
+                "left",
+                dynamic=True,
+            )
+            right_blocks[i - 1] = update_right_environment(
+                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+            )
+            if i != 1:
+                state.tensors[i - 1] = update_site(
+                    left_blocks[i - 1],
+                    right_blocks[i - 1],
+                    hamiltonian.tensors[i - 1],
+                    state.tensors[i - 1],
+                    -0.5 * substep_evolution_dt,
+                    krylov_tol=sim_params.krylov_tol,
+                )
 
 
 def local_dynamic_tdvp(
@@ -847,191 +1266,39 @@ def local_dynamic_tdvp(
         single_site_tdvp(state, hamiltonian, sim_params)
         return
 
-    # Prepare environments
-    right_blocks = initialize_right_environments(state, hamiltonian)
-    left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
-    # build identity for left_blocks[0]
-    chi0 = state.tensors[0].shape[1]
-    mpo_dim = hamiltonian.tensors[0].shape[2]
-    eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
-    for i in range(chi0):
-        eye[i, :, i] = 1
-    left_blocks[0] = eye
+    _run_sweeps(_local_dynamic_tdvp_sweep, state, hamiltonian, sim_params)
 
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        sim_params.dt = 2
 
-    # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
-    lock_final_site = False
-    for i in range(num_sites):
-        # current bond dimension between i and i+1
-        bond_dim = state.tensors[i].shape[2]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
-            state.tensors[i] = update_site(
-                left_blocks[i],
-                right_blocks[i],
-                hamiltonian.tensors[i],
-                state.tensors[i],
-                0.5 * sim_params.dt,
-                krylov_tol=sim_params.krylov_tol,
-            )
-            if i != num_sites - 1:
-                tensor_shape = state.tensors[i].shape
-                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-                state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
-                left_blocks[i + 1] = update_left_environment(
-                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-                )
-                bond_tensor = update_bond(
-                    left_blocks[i + 1],
-                    right_blocks[i],
-                    bond_tensor,
-                    -0.5 * sim_params.dt,
-                    krylov_tol=sim_params.krylov_tol,
-                )
-                state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
-            if i == num_sites - 2:
-                # Guarantees final site is 1TDVP
-                lock_final_site = True
-        # Will be encountered at final site in loop due to dummy dimension
-        elif i == num_sites - 1:
-            continue
-        elif i == num_sites - 2:
-            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-            merged_tensor = update_site(
-                left_blocks[i],
-                right_blocks[i + 1],
-                merged_mpo,
-                merged_tensor,
-                0.5 * sim_params.dt,
-                krylov_tol=sim_params.krylov_tol,
-            )
-
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-                merged_tensor,
-                sim_params,
-                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-                "right",
-                dynamic=True,
-            )
-            right_blocks[i] = update_right_environment(
-                state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
-            )
-            left_blocks[i + 1] = update_left_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-            )
-
-        else:
-            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
-            merged_tensor = update_site(
-                left_blocks[i],
-                right_blocks[i + 1],
-                merged_mpo,
-                merged_tensor,
-                0.5 * sim_params.dt,
-                krylov_tol=sim_params.krylov_tol,
-            )
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-                merged_tensor,
-                sim_params,
-                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-                "right",
-                dynamic=True,
-            )
-            left_blocks[i + 1] = update_left_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
-            )
-            state.tensors[i + 1] = update_site(
-                left_blocks[i + 1],
-                right_blocks[i + 1],
-                hamiltonian.tensors[i + 1],
-                state.tensors[i + 1],
-                -0.5 * sim_params.dt,
-                krylov_tol=sim_params.krylov_tol,
-            )
-
-    if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
-        return
-
-    # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
-    lock_final_site = False
-    for i in reversed(range(num_sites)):
-        bond_dim = state.tensors[i].shape[1]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
-            state.tensors[i] = update_site(
-                left_blocks[i],
-                right_blocks[i],
-                hamiltonian.tensors[i],
-                state.tensors[i],
-                0.5 * sim_params.dt,
-                krylov_tol=sim_params.krylov_tol,
-            )
-            if i != 0:
-                state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
-                tensor_shape = state.tensors[i].shape
-                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-                state.tensors[i] = site_tensor.reshape((
-                    tensor_shape[0],
-                    tensor_shape[1],
-                    site_tensor.shape[1],
-                )).transpose((
-                    0,
-                    2,
-                    1,
-                ))
-                right_blocks[i - 1] = update_right_environment(
-                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
-                )
-                bond_tensor = bond_tensor.transpose()
-                bond_tensor = update_bond(
-                    left_blocks[i],
-                    right_blocks[i - 1],
-                    bond_tensor,
-                    -0.5 * sim_params.dt,
-                    krylov_tol=sim_params.krylov_tol,
-                )
-                state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
-
-                if i == 1:
-                    lock_final_site = True
-        elif i == 0:
-            # Will be encountered at final site in loop due to dummy dimension
-            continue
-        else:
-            merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
-            merged_tensor = update_site(
-                left_blocks[i - 1],
-                right_blocks[i],
-                merged_mpo,
-                merged_tensor,
-                0.5 * sim_params.dt,
-                krylov_tol=sim_params.krylov_tol,
-            )
-            state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
-                merged_tensor,
-                sim_params,
-                [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
-                "left",
-                dynamic=True,
-            )
-            right_blocks[i - 1] = update_right_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
-            )
-            # No backwards evolution at final site
-            if i != 1:
-                state.tensors[i - 1] = update_site(
-                    left_blocks[i - 1],
-                    right_blocks[i - 1],
-                    hamiltonian.tensors[i - 1],
-                    state.tensors[i - 1],
-                    -0.5 * sim_params.dt,
-                    krylov_tol=sim_params.krylov_tol,
-                )
+def _global_dynamic_tdvp_sweep(
+    state: MPS,
+    hamiltonian: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    step_scale: float = 1.0,
+    sweep_direction: SweepDirection = "symmetric",
+    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+) -> None:
+    """Run one global dynamic TDVP substep, routing to the appropriate sweep kernel."""
+    current_max_bond_dim = state.get_max_bond()
+    if sim_params.max_bond_dim is None or current_max_bond_dim < sim_params.max_bond_dim:
+        _two_site_tdvp_sweep(
+            state,
+            hamiltonian,
+            sim_params,
+            dynamic=True,
+            step_scale=step_scale,
+            sweep_direction=sweep_direction,
+            sweep_plan=sweep_plan,
+        )
+    else:
+        _single_site_tdvp_sweep(
+            state,
+            hamiltonian,
+            sim_params,
+            step_scale=step_scale,
+            sweep_direction=sweep_direction,
+            sweep_plan=sweep_plan,
+        )
 
 
 def global_dynamic_tdvp(
@@ -1050,14 +1317,8 @@ def global_dynamic_tdvp(
         sim_params: Simulation parameters including ``max_bond_dim``, ``svd_threshold``,
             and ``krylov_tol``.
     """
-    current_max_bond_dim = state.get_max_bond()
     if state.length == 1:
         single_site_tdvp(state, hamiltonian, sim_params)
         return
 
-    if sim_params.max_bond_dim is None or current_max_bond_dim < sim_params.max_bond_dim:
-        # Perform 2TDVP when the current bond dimension is within the allowed limit
-        two_site_tdvp(state, hamiltonian, sim_params, dynamic=True)
-    else:
-        # Perform 1TDVP when the bond dimension exceeds the allowed limit
-        single_site_tdvp(state, hamiltonian, sim_params)
+    _run_sweeps(_global_dynamic_tdvp_sweep, state, hamiltonian, sim_params)

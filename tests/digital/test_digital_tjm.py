@@ -662,6 +662,7 @@ def _run_strong_noiseless(
     max_bond_dim: int | None = None,
     svd_threshold: float = 1e-12,
     get_state: bool = False,
+    tdvp_sweeps: int = 1,
 ) -> float | np.ndarray:
     """Run a noiseless strong simulation.
 
@@ -676,6 +677,7 @@ def _run_strong_noiseless(
         svd_threshold=svd_threshold,
         max_bond_dim=max_bond_dim,
         get_state=get_state,
+        tdvp_sweeps=tdvp_sweeps,
     )
     state = State(num_qubits, initial="zeros")
     result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
@@ -990,6 +992,83 @@ def test_mixed_circuit_hybrid_matches_tdvp() -> None:
     hybrid_z = _run_strong_noiseless(qc, gate_mode="tdvp")
     tdvp_z = _run_strong_noiseless(qc, gate_mode="full-tdvp")
     assert hybrid_z == pytest.approx(tdvp_z, abs=1e-10)
+
+
+def test_tdvp_sweeps_preserves_gate_unitary() -> None:
+    """Multiple TDVP substeps target the same gate, not its square."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.rzz(0.3, 0, 3)
+
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    one_sweep = _run_strong_noiseless(qc, gate_mode="full-tdvp", get_state=True, tdvp_sweeps=1)
+    two_sweeps = _run_strong_noiseless(qc, gate_mode="full-tdvp", get_state=True, tdvp_sweeps=2)
+    assert isinstance(one_sweep, np.ndarray)
+    assert isinstance(two_sweeps, np.ndarray)
+
+    assert _fidelity(ref, one_sweep) == pytest.approx(1.0, abs=1e-9)
+    assert _fidelity(ref, two_sweeps) == pytest.approx(1.0, abs=1e-2)
+    assert _fidelity(one_sweep, two_sweeps) == pytest.approx(1.0, abs=1e-2)
+
+    doubled_gate = QuantumCircuit(4)
+    doubled_gate.h(0)
+    doubled_gate.rzz(0.3, 0, 3)
+    doubled_gate.rzz(0.3, 0, 3)
+    ref_doubled = np.asarray(Statevector(doubled_gate).data, dtype=np.complex128)
+    assert _fidelity(ref_doubled, two_sweeps) < 0.99
+
+
+def test_tdvp_sweeps_hybrid_long_range_matches_qiskit() -> None:
+    """Hybrid long-range TDVP with multiple sweeps matches Qiskit within truncation error."""
+    qc = QuantumCircuit(4)
+    qc.rx(0.2, 1)
+    qc.rxx(0.25, 0, 3)
+
+    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=2)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=5e-3)
+
+
+def test_tdvp_sweeps_hybrid_nn_unchanged() -> None:
+    """Nearest-neighbor hybrid circuits ignore tdvp_sweeps (TEBD path)."""
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.cz(1, 2)
+
+    baseline = _run_strong_noiseless(qc, gate_mode="tdvp", tdvp_sweeps=1)
+    many_sweeps = _run_strong_noiseless(qc, gate_mode="tdvp", tdvp_sweeps=5)
+    assert baseline == pytest.approx(many_sweeps, abs=1e-10)
+
+
+def test_tdvp_sweeps_mixed_circuit_regression() -> None:
+    """Mixed NN and long-range hybrid circuit with tdvp_sweeps runs and stays consistent."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.cx(0, 1)
+    qc.cx(0, 3)
+    qc.rzz(0.2, 2, 3)
+
+    one_sweep = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=1)
+    two_sweeps = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=2)
+    assert isinstance(one_sweep, np.ndarray)
+    assert isinstance(two_sweeps, np.ndarray)
+
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, one_sweep) > 0.5
+    assert _fidelity(ref, two_sweeps) > 0.4
+    assert _fidelity(one_sweep, two_sweeps) > 0.5
+
+    doubled_gate = QuantumCircuit(4)
+    doubled_gate.h(0)
+    doubled_gate.cx(0, 1)
+    doubled_gate.cx(0, 3)
+    doubled_gate.rzz(0.2, 2, 3)
+    doubled_gate.rzz(0.2, 2, 3)
+    ref_doubled = np.asarray(Statevector(doubled_gate).data, dtype=np.complex128)
+    assert _fidelity(ref_doubled, one_sweep) < _fidelity(ref, one_sweep)
+    assert _fidelity(one_sweep, two_sweeps) > 0.5
 
 
 def test_bell_state_sanity() -> None:

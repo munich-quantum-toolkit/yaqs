@@ -38,15 +38,17 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.tdvp import (
     _build_dense_effective_hamiltonian,  # noqa: PLC2701
+    _run_sweeps,  # noqa: PLC2701
     _split_two_site_tdvp,  # noqa: PLC2701
     build_dense_heff_bond,
     build_dense_heff_site,
     global_dynamic_tdvp,
+    local_dynamic_tdvp,
     merge_mpo_tensors,
     project_bond,
     project_site,
@@ -302,6 +304,102 @@ def test_two_site_tdvp() -> None:
     assert np.allclose(state_vec, found)
 
 
+def test_two_site_tdvp_circuit_sweep_scaling() -> None:
+    """Circuit-mode 2TDVP passes an LTR then RTL sweep plan."""
+    L = 4
+    H = MPO.ising(L, 1.0, 0.5)
+    state = MPS(L, state="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact")
+
+    with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_sweep:
+        two_site_tdvp(state, H, sim_params)
+        assert mock_sweep.call_count == 1
+        sweep_plan = mock_sweep.call_args.kwargs["sweep_plan"]
+        assert len(sweep_plan) == 2
+        assert sweep_plan[0][0] == "ltr"
+        assert sweep_plan[1][0] == "rtl"
+        assert sweep_plan[0][1] == pytest.approx(0.5)
+        assert sweep_plan[1][1] == pytest.approx(0.5)
+
+
+def test_run_sweeps_invokes_substeps() -> None:
+    """_run_sweeps loops symmetric substeps for analog and passes a sweep plan for digital."""
+    L = 3
+    H = MPO.ising(L, 1.0, 0.5)
+    state = MPS(L, state="zeros")
+
+    analog_count = 0
+
+    def _count_analog(*_args: object, **_kwargs: object) -> None:
+        nonlocal analog_count
+        analog_count += 1
+
+    analog_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        tdvp_sweeps=3,
+        sample_timesteps=True,
+    )
+    _run_sweeps(_count_analog, state, H, analog_params)
+    assert analog_count == 3
+
+    captured_plan: list[tuple[str, float]] = []
+
+    def _capture_plan(*_args: object, sweep_plan: list[tuple[str, float]] | None = None, **_kwargs: object) -> None:
+        if sweep_plan is not None:
+            captured_plan.extend(sweep_plan)
+
+    digital_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=3, preset="exact")
+    _run_sweeps(_capture_plan, state, H, digital_params)
+    assert len(captured_plan) == 3
+    assert captured_plan[0][0] == "ltr"
+    assert captured_plan[1][0] == "rtl"
+    assert captured_plan[2][0] == "ltr"
+    for _direction, scale in captured_plan:
+        assert scale == pytest.approx(1 / 3)
+
+
+def test_two_site_tdvp_analog_sweep_preservation() -> None:
+    """Analog 2TDVP with tdvp_sweeps>1 still integrates over the full dt per step."""
+    L = 5
+    J = 1
+    g = 0.5
+    H = MPO.ising(L, J, g)
+
+    state = MPS(L, state="zeros")
+    ref_mps = deepcopy(state)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        tdvp_sweeps=2,
+        sample_timesteps=True,
+        krylov_tol=1e-12,
+    )
+    two_site_tdvp(state, H, sim_params)
+
+    state_vec = ref_mps.to_vec()
+    H_mat = H.to_matrix()
+    U = expm(-1j * sim_params.dt * H_mat)
+    state_vec = U @ state_vec
+    found = state.to_vec()
+    assert np.allclose(state_vec, found)
+
+
+def test_local_dynamic_tdvp_circuit_sweep_scaling() -> None:
+    """Circuit-mode local dynamic TDVP honors tdvp_sweeps via a sweep plan."""
+    L = 4
+    H = MPO.ising(L, 1.0, 0.5)
+    state = MPS(L, state="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact")
+
+    with patch("mqt.yaqs.core.methods.tdvp._local_dynamic_tdvp_sweep") as mock_sweep:
+        local_dynamic_tdvp(state, H, sim_params)
+        assert mock_sweep.call_count == 1
+        assert len(mock_sweep.call_args.kwargs["sweep_plan"]) == 2
+
+
 def test_dynamic_tdvp_one_site() -> None:
     """Test dynamic TDVP, single site.
 
@@ -330,9 +428,10 @@ def test_dynamic_tdvp_one_site() -> None:
         sample_timesteps=False,
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp.single_site_tdvp") as mock_single_site:
+    with patch("mqt.yaqs.core.methods.tdvp._single_site_tdvp_sweep") as mock_single_site:
         global_dynamic_tdvp(state, H, sim_params)
-        mock_single_site.assert_called_once_with(state, H, sim_params)
+        mock_single_site.assert_called_once()
+        assert mock_single_site.call_args.kwargs["step_scale"] == pytest.approx(1.0)
 
 
 def test_dynamic_tdvp_two_site() -> None:
@@ -362,9 +461,31 @@ def test_dynamic_tdvp_two_site() -> None:
         max_bond_dim=8,
         sample_timesteps=False,
     )
-    with patch("mqt.yaqs.core.methods.tdvp.two_site_tdvp") as mock_two_site:
+    with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_two_site:
         global_dynamic_tdvp(state, H, sim_params)
-        mock_two_site.assert_called_once_with(state, H, sim_params, dynamic=True)
+        mock_two_site.assert_called_once()
+        assert mock_two_site.call_args.kwargs["dynamic"] is True
+        assert mock_two_site.call_args.kwargs["step_scale"] == pytest.approx(1.0)
+
+
+def test_global_dynamic_tdvp_sweep_scaling() -> None:
+    """Global dynamic TDVP honors tdvp_sweeps for analog evolution."""
+    L = 5
+    H = MPO.ising(L, 1.0, 0.5)
+    state = MPS(L, state="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(X(), 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        max_bond_dim=8,
+        tdvp_sweeps=2,
+        sample_timesteps=False,
+    )
+
+    with patch("mqt.yaqs.core.methods.tdvp._global_dynamic_tdvp_sweep") as mock_sweep:
+        global_dynamic_tdvp(state, H, sim_params)
+        assert mock_sweep.call_count == 2
+        assert mock_sweep.call_args.kwargs["step_scale"] == pytest.approx(0.5)
 
 
 def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:

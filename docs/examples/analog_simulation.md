@@ -95,6 +95,8 @@ sim_params = AnalogSimParams(
 )
 ```
 
+Optional **`tdvp_sweeps`** (default `1`) runs multiple TDVP substeps per time step `dt`. Each substep is a **symmetric** integrator step (left-to-right then right-to-left within the substep) at evolution time `dt / tdvp_sweeps`, which can improve accuracy without changing the physical step size used for noise and dissipation. See {doc}`simulation_parameters` for how circuit TDVP uses directional half-sweeps instead.
+
 ## Reproducible (deterministic) stochastic runs
 
 Open-system simulations with `num_traj > 1` average over independent quantum-jump trajectories.

@@ -109,6 +109,28 @@ def _validate_gate_mode(mode: GateMode) -> GateMode:
     return mode
 
 
+def _validate_tdvp_sweeps(tdvp_sweeps: int) -> int:
+    """Validate ``tdvp_sweeps`` for TDVP evolution substeps.
+
+    Args:
+        tdvp_sweeps: Number of TDVP substeps per evolution step (analog ``dt`` or circuit gate).
+
+    Returns:
+        The validated sweep count.
+
+    Raises:
+        TypeError: If ``tdvp_sweeps`` is not an ``int``.
+        ValueError: If ``tdvp_sweeps`` is less than 1.
+    """
+    if isinstance(tdvp_sweeps, bool) or not isinstance(tdvp_sweeps, int):
+        msg = f"tdvp_sweeps must be int, got {type(tdvp_sweeps).__name__}."
+        raise TypeError(msg)
+    if tdvp_sweeps < 1:
+        msg = f"tdvp_sweeps must be >= 1, got {tdvp_sweeps}."
+        raise ValueError(msg)
+    return tdvp_sweeps
+
+
 def _validate_krylov_tol(krylov_tol: float) -> float:
     """Validate the Krylov/Lanczos matrix exponential tolerance.
 
@@ -310,6 +332,9 @@ class AnalogSimParams(_ObservableOrderingMixin):
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
             two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
             Autocorrelation is the special case ``(O, O)``. Results are indexed by pair position.
+        tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
+            symmetric integrator step (LTR then RTL) at evolution time ``dt / tdvp_sweeps``.
+            Default is ``1``.
     """
 
     def __init__(
@@ -331,6 +356,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
+        tdvp_sweeps: int = 1,
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -362,7 +388,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
                 case ``(O, O)``.
-
+            tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
+                symmetric integrator step at ``dt / tdvp_sweeps`` (default ``1``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -392,6 +419,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
             [] if multi_time_observables is None else list(multi_time_observables)
         )
+        self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
 
 
 class StrongSimParams(_ObservableOrderingMixin):
@@ -429,6 +457,10 @@ class StrongSimParams(_ObservableOrderingMixin):
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
             (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
+        tdvp_sweeps: Number of TDVP substeps per evolution step. For digital TDVP gates,
+            ``tdvp_sweeps=1`` applies the gate in one LTR full-gate pass; ``tdvp_sweeps>=2``
+            alternates directional half-sweeps (LTR, RTL, …) at ``1 / tdvp_sweeps`` of the
+            unit gate time each. Default is ``1``.
     """
 
     # Properties set as placeholders for code compatibility
@@ -450,6 +482,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         num_mid_measurements: int = 0,
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
+        tdvp_sweeps: int = 1,
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -476,6 +509,8 @@ class StrongSimParams(_ObservableOrderingMixin):
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             gate_mode: Two-qubit gate update mode (default ``"mpo"``).
+            tdvp_sweeps: Number of TDVP substeps per evolution step. ``1`` uses one LTR
+                full-gate pass; ``>=2`` alternates LTR/RTL half-sweeps (default ``1``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -499,6 +534,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         self.num_mid_measurements = num_mid_measurements
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
+        self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
 
 
 class WeakSimParams:
@@ -528,6 +564,10 @@ class WeakSimParams:
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
             (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
+        tdvp_sweeps: Number of TDVP substeps per evolution step. For digital TDVP gates,
+            ``tdvp_sweeps=1`` applies the gate in one LTR full-gate pass; ``tdvp_sweeps>=2``
+            alternates directional half-sweeps (LTR, RTL, …) at ``1 / tdvp_sweeps`` of the
+            unit gate time each. Default is ``1``.
     """
 
     # Properties set as placeholders for code compatibility
@@ -547,6 +587,7 @@ class WeakSimParams:
         get_state: bool = False,
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
+        tdvp_sweeps: int = 1,
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -570,6 +611,8 @@ class WeakSimParams:
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
             gate_mode: Two-qubit gate update mode (default ``"mpo"``).
+            tdvp_sweeps: Number of TDVP substeps per evolution step. ``1`` uses one LTR
+                full-gate pass; ``>=2`` alternates LTR/RTL half-sweeps (default ``1``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -585,3 +628,4 @@ class WeakSimParams:
         self.get_state = get_state
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
+        self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)

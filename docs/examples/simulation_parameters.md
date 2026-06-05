@@ -181,12 +181,29 @@ Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic 
 - **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + two-site TDVP path.
 - **`full-tdvp`** — TDVP (generator MPO + two-site TDVP) on every two-qubit gate.
 
+Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Higher values can improve accuracy at higher cost. The setting applies to all TDVP kernels (two-site, single-site, local dynamic, and global dynamic TDVP) on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
+
+Circuit and analog simulation use different substep geometry:
+
+- **Digital circuits** (`StrongSimParams`, `WeakSimParams`): with `tdvp_sweeps=1`, the gate is applied in one left-to-right (LTR) full-gate pass (the default exact unitary path). With `tdvp_sweeps≥2`, substeps alternate **directional half-sweeps** (LTR, RTL, LTR, …), each using a fraction `1 / tdvp_sweeps` of the unit gate time `τ`. This refinement path can deviate slightly from the single-sweep result on entangled states.
+- **Analog simulation** (`AnalogSimParams`): each substep is a **symmetric** integrator step (LTR then RTL within the substep) at evolution time `dt / tdvp_sweeps`. Noise and dissipation after TDVP still use the full physical step `dt`.
+
 ```{code-cell} ipython3
 strong = StrongSimParams(
     observables=[Observable(Z(), 0)],
+    gate_mode="tdvp",
+    tdvp_sweeps=2,
     preset="accurate",
 )
 _trunc_summary(strong)
+```
+
+```{code-cell} ipython3
+strong_default = StrongSimParams(
+    observables=[Observable(Z(), 0)],
+    preset="accurate",
+)
+_trunc_summary(strong_default)
 ```
 
 ## `WeakSimParams`
