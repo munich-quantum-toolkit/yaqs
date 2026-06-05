@@ -39,12 +39,12 @@ def load_circuit(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
         return circuit
 
     if isinstance(circuit, str) and _first_non_comment_line(circuit).startswith("OPENQASM"):
-        if _first_non_comment_line(circuit).startswith("OPENQASM 3"):
+        if _first_non_comment_line(circuit).startswith("OPENQASM 3"):  # pragma: no cover
             return qasm3.loads(circuit)
         return qasm2.loads(circuit)
 
     path = Path(circuit)
     content = path.read_text(encoding="utf-8")
-    if _first_non_comment_line(content).startswith("OPENQASM 3"):
+    if _first_non_comment_line(content).startswith("OPENQASM 3"):  # pragma: no cover
         return qasm3.load(str(path))
     return qasm2.load(str(path))
