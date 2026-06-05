@@ -316,14 +316,12 @@ def test_two_site_tdvp_circuit_sweep_scaling() -> None:
         assert mock_sweep.call_count == 1
         sweep_plan = mock_sweep.call_args.kwargs["sweep_plan"]
         assert len(sweep_plan) == 2
-        assert sweep_plan[0][0] == "symmetric"
-        assert sweep_plan[1][0] == "symmetric"
-        assert sweep_plan[0][1] == pytest.approx(0.5)
-        assert sweep_plan[1][1] == pytest.approx(0.5)
+        assert sweep_plan[0] == pytest.approx(0.5)
+        assert sweep_plan[1] == pytest.approx(0.5)
 
 
-def test_two_site_tdvp_circuit_single_sweep_uses_ltr_full() -> None:
-    """Circuit tdvp_sweeps=1 uses one ltr_full substep."""
+def test_two_site_tdvp_circuit_single_sweep_uses_symmetric() -> None:
+    """Circuit tdvp_sweeps=1 uses one symmetric substep, matching analog geometry."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
@@ -331,18 +329,18 @@ def test_two_site_tdvp_circuit_single_sweep_uses_ltr_full() -> None:
 
     with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_sweep:
         two_site_tdvp(state, H, sim_params)
-        assert mock_sweep.call_args.kwargs["sweep_plan"] == [("ltr_full", 1.0)]
+        assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
 
 
 def test_run_sweeps_invokes_substeps() -> None:
-    """_run_sweeps batches symmetric substeps for analog and digital (except circuit N=1)."""
+    """_run_sweeps batches symmetric substeps for analog and digital."""
     L = 3
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
 
-    captured_analog: list[tuple[str, float]] = []
+    captured_analog: list[float] = []
 
-    def _capture_analog(*_args: object, sweep_plan: list[tuple[str, float]] | None = None, **_kwargs: object) -> None:
+    def _capture_analog(*_args: object, sweep_plan: list[float] | None = None, **_kwargs: object) -> None:
         if sweep_plan is not None:
             captured_analog.extend(sweep_plan)
 
@@ -355,27 +353,36 @@ def test_run_sweeps_invokes_substeps() -> None:
     )
     _run_sweeps(_capture_analog, state, H, analog_params)
     assert len(captured_analog) == 3
-    assert all(direction == "symmetric" for direction, _scale in captured_analog)
-    for _direction, scale in captured_analog:
+    for scale in captured_analog:
         assert scale == pytest.approx(1 / 3)
 
-    captured_plan: list[tuple[str, float]] = []
+    captured_plan: list[float] = []
 
-    def _capture_plan(*_args: object, sweep_plan: list[tuple[str, float]] | None = None, **_kwargs: object) -> None:
+    def _capture_plan(*_args: object, sweep_plan: list[float] | None = None, **_kwargs: object) -> None:
         if sweep_plan is not None:
             captured_plan.extend(sweep_plan)
 
     digital_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=3, preset="exact")
     _run_sweeps(_capture_plan, state, H, digital_params)
     assert len(captured_plan) == 3
-    assert all(direction == "symmetric" for direction, _scale in captured_plan)
-    for _direction, scale in captured_plan:
+    for scale in captured_plan:
         assert scale == pytest.approx(1 / 3)
 
     captured_plan.clear()
     digital_one = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=1, preset="exact")
     _run_sweeps(_capture_plan, state, H, digital_one)
-    assert captured_plan == [("ltr_full", 1.0)]
+    assert captured_plan == [1.0]
+
+    analog_one = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        tdvp_sweeps=1,
+        sample_timesteps=True,
+    )
+    captured_analog.clear()
+    _run_sweeps(_capture_analog, state, H, analog_one)
+    assert captured_analog == captured_plan
 
 
 def test_two_site_tdvp_analog_sweep_preservation() -> None:
@@ -505,10 +512,8 @@ def test_global_dynamic_tdvp_sweep_scaling() -> None:
         assert mock_sweep.call_count == 1
         sweep_plan = mock_sweep.call_args.kwargs["sweep_plan"]
         assert len(sweep_plan) == 2
-        assert sweep_plan[0][0] == "symmetric"
-        assert sweep_plan[1][0] == "symmetric"
-        assert sweep_plan[0][1] == pytest.approx(0.5)
-        assert sweep_plan[1][1] == pytest.approx(0.5)
+        assert sweep_plan[0] == pytest.approx(0.5)
+        assert sweep_plan[1] == pytest.approx(0.5)
 
 
 def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:

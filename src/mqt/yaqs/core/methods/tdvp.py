@@ -26,7 +26,7 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -53,24 +53,14 @@ def _bond_dim_at_or_above_cap(bond_dim: int, max_bond_dim: int | None) -> bool:
 
 DENSE_THRESHOLD = 128
 
-SweepDirection = Literal["symmetric", "ltr_full"]
-CircuitPhase = Literal["preamble", "final"]
-
 
 def _prepare_substep_evolution_dt(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     step_scale: float,
-    *,
-    sweep_direction: SweepDirection,
-    circuit_phase: CircuitPhase | None = None,
 ) -> float:
-    """Return the TDVP evolution timestep for the current substep or circuit phase."""
+    """Return the TDVP evolution timestep for the current symmetric substep."""
     if not isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         return float(sim_params.dt) * step_scale
-    if sweep_direction == "ltr_full":
-        dt_value = step_scale if circuit_phase == "final" else 2.0 * step_scale
-        sim_params.dt = dt_value  # ty: ignore[invalid-assignment]
-        return dt_value
     return step_scale
 
 
@@ -578,21 +568,16 @@ def update_bond(
 
 def _build_tdvp_sweep_plan(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-) -> list[tuple[SweepDirection, float]]:
+) -> list[float]:
     """Build the sweep plan for one evolution step (gate or analog ``dt``).
 
-    Circuit ``tdvp_sweeps=1`` uses a single ``ltr_full`` pass; all other cases use
-    symmetric substeps at ``1 / tdvp_sweeps`` of the step time each.
+    Each substep is symmetric (LTR then RTL) at ``step_time / tdvp_sweeps``.
 
     Returns:
-        Ordered ``(direction, step_scale)`` pairs for one batched kernel call.
+        Ordered step-scale factors for one batched kernel call.
     """
-    tdvp_sweeps = sim_params.tdvp_sweeps
-    is_circuit = isinstance(sim_params, (StrongSimParams, WeakSimParams))
-    if is_circuit and tdvp_sweeps == 1:
-        return [("ltr_full", 1.0)]
-    step_scale = 1.0 / tdvp_sweeps
-    return [("symmetric", step_scale) for _ in range(tdvp_sweeps)]
+    step_scale = 1.0 / sim_params.tdvp_sweeps
+    return [step_scale for _ in range(sim_params.tdvp_sweeps)]
 
 
 def _run_sweeps(
@@ -607,14 +592,11 @@ def _run_sweeps(
     """Run ``sim_params.tdvp_sweeps`` TDVP substeps per evolution step.
 
     Public TDVP entry points validate inputs and delegate here. Private ``_*_sweep``
-    kernels perform one substep and accept ``step_scale`` plus ``sweep_direction``;
-    they must not re-enter the public wrappers.
+    kernels perform one symmetric substep and accept ``step_scale``; they must not
+    re-enter the public wrappers.
 
-    Substep geometry (``_build_tdvp_sweep_plan``):
-
-    - **Circuit** ``tdvp_sweeps=1``: one ``ltr_full`` pass (exact unitary gate path).
-    - **Otherwise**: ``tdvp_sweeps`` symmetric steps (LTR then RTL each) at
-      ``step_time / tdvp_sweeps`` (analog ``dt`` or circuit gate time ``tau``).
+    Substep geometry (``_build_tdvp_sweep_plan``): ``tdvp_sweeps`` symmetric substeps
+    (LTR then RTL each) at ``step_time / tdvp_sweeps`` for analog ``dt`` and digital gates.
     """
     sweep_plan = _build_tdvp_sweep_plan(sim_params)
     evolve_once(
@@ -633,22 +615,19 @@ def _single_site_tdvp_sweep(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
     step_scale: float = 1.0,
-    sweep_direction: SweepDirection = "symmetric",
-    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+    sweep_plan: list[float] | None = None,
 ) -> None:
     if sweep_plan is not None:
-        for plan_direction, plan_step_scale in sweep_plan:
+        for plan_step_scale in sweep_plan:
             _single_site_tdvp_sweep(
                 state,
                 hamiltonian,
                 sim_params,
                 step_scale=plan_step_scale,
-                sweep_direction=plan_direction,
             )
         return
 
     num_sites = hamiltonian.length
-    run_rtl = sweep_direction == "symmetric"
 
     right_blocks = initialize_right_environments(state, hamiltonian)
 
@@ -661,12 +640,7 @@ def _single_site_tdvp_sweep(
             left_identity[i, a, i] = 1
     left_blocks[0] = left_identity
 
-    if sweep_direction == "ltr_full":
-        substep_evolution_dt = _prepare_substep_evolution_dt(
-            sim_params, step_scale, sweep_direction=sweep_direction, circuit_phase="preamble"
-        )
-    else:
-        substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale, sweep_direction=sweep_direction)
+    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale)
 
     # Left-to-right sweep: Update sites 0 to L-2.
     for i in range(num_sites - 1):
@@ -694,11 +668,6 @@ def _single_site_tdvp_sweep(
         )
         state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
 
-    if sweep_direction == "ltr_full":
-        substep_evolution_dt = _prepare_substep_evolution_dt(
-            sim_params, step_scale, sweep_direction=sweep_direction, circuit_phase="final"
-        )
-
     last = num_sites - 1
     state.tensors[last] = update_site(
         left_blocks[last],
@@ -709,10 +678,7 @@ def _single_site_tdvp_sweep(
         krylov_tol=sim_params.krylov_tol,
     )
 
-    if not run_rtl:
-        return
-
-    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale, sweep_direction=sweep_direction)
+    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale)
 
     # Right-to-left sweep: Update sites 1 to L-1.
     for i in reversed(range(1, num_sites)):
@@ -782,11 +748,10 @@ def _two_site_tdvp_sweep(
     *,
     dynamic: bool = False,
     step_scale: float = 1.0,
-    sweep_direction: SweepDirection = "symmetric",
-    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+    sweep_plan: list[float] | None = None,
 ) -> None:
     num_sites = hamiltonian.length
-    plan = sweep_plan if sweep_plan is not None else [(sweep_direction, step_scale)]
+    plan = sweep_plan if sweep_plan is not None else [step_scale]
 
     right_blocks = initialize_right_environments(state, hamiltonian)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
@@ -798,17 +763,8 @@ def _two_site_tdvp_sweep(
             left_identity[i, a, i] = 1
     left_blocks[0] = left_identity
 
-    for plan_direction, plan_step_scale in plan:
-        run_rtl = plan_direction == "symmetric"
-
-        if plan_direction == "ltr_full":
-            substep_evolution_dt = _prepare_substep_evolution_dt(
-                sim_params, plan_step_scale, sweep_direction=plan_direction, circuit_phase="preamble"
-            )
-        else:
-            substep_evolution_dt = _prepare_substep_evolution_dt(
-                sim_params, plan_step_scale, sweep_direction=plan_direction
-            )
+    for plan_step_scale in plan:
+        substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, plan_step_scale)
 
         for i in range(num_sites - 2):
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
@@ -840,11 +796,6 @@ def _two_site_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
 
-        if plan_direction == "ltr_full":
-            substep_evolution_dt = _prepare_substep_evolution_dt(
-                sim_params, plan_step_scale, sweep_direction=plan_direction, circuit_phase="final"
-            )
-
         i = num_sites - 2
         merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
         merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
@@ -856,28 +807,19 @@ def _two_site_tdvp_sweep(
             substep_evolution_dt,
             krylov_tol=sim_params.krylov_tol,
         )
-        final_split = "right" if plan_direction == "ltr_full" else "left"
         state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
             merged_tensor,
             sim_params,
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-            final_split,
+            "left",
             dynamic=dynamic,
         )
-
-        if plan_direction == "ltr_full":
-            return
 
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
         )
 
-        if not run_rtl:
-            continue
-
-        substep_evolution_dt = _prepare_substep_evolution_dt(
-            sim_params, plan_step_scale, sweep_direction=plan_direction
-        )
+        substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, plan_step_scale)
 
         if num_sites - 2 == 0:
             i = num_sites - 2
@@ -973,22 +915,19 @@ def _local_dynamic_tdvp_sweep(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
     step_scale: float = 1.0,
-    sweep_direction: SweepDirection = "symmetric",
-    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+    sweep_plan: list[float] | None = None,
 ) -> None:
     if sweep_plan is not None:
-        for plan_direction, plan_step_scale in sweep_plan:
+        for plan_step_scale in sweep_plan:
             _local_dynamic_tdvp_sweep(
                 state,
                 hamiltonian,
                 sim_params,
                 step_scale=plan_step_scale,
-                sweep_direction=plan_direction,
             )
         return
 
     num_sites = hamiltonian.length
-    run_rtl = sweep_direction == "symmetric"
 
     right_blocks = initialize_right_environments(state, hamiltonian)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
@@ -999,12 +938,7 @@ def _local_dynamic_tdvp_sweep(
         eye[i, :, i] = 1
     left_blocks[0] = eye
 
-    if sweep_direction == "ltr_full":
-        substep_evolution_dt = _prepare_substep_evolution_dt(
-            sim_params, step_scale, sweep_direction=sweep_direction, circuit_phase="preamble"
-        )
-    else:
-        substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale, sweep_direction=sweep_direction)
+    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale)
 
     # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
     lock_final_site = False
@@ -1094,10 +1028,7 @@ def _local_dynamic_tdvp_sweep(
                 -0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-    if not run_rtl:
-        return
-
-    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale, sweep_direction=sweep_direction)
+    substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, step_scale)
 
     # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
     lock_final_site = False
@@ -1213,8 +1144,7 @@ def _global_dynamic_tdvp_sweep(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
     step_scale: float = 1.0,
-    sweep_direction: SweepDirection = "symmetric",
-    sweep_plan: list[tuple[SweepDirection, float]] | None = None,
+    sweep_plan: list[float] | None = None,
 ) -> None:
     """Run one global dynamic TDVP substep, routing to the appropriate sweep kernel."""
     current_max_bond_dim = state.get_max_bond()
@@ -1225,7 +1155,6 @@ def _global_dynamic_tdvp_sweep(
             sim_params,
             dynamic=True,
             step_scale=step_scale,
-            sweep_direction=sweep_direction,
             sweep_plan=sweep_plan,
         )
     else:
@@ -1234,7 +1163,6 @@ def _global_dynamic_tdvp_sweep(
             hamiltonian,
             sim_params,
             step_scale=step_scale,
-            sweep_direction=sweep_direction,
             sweep_plan=sweep_plan,
         )
 

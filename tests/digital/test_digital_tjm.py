@@ -1046,8 +1046,8 @@ def test_tdvp_sweeps_mixed_circuit_regression() -> None:
     """Mixed hybrid circuit: multi-sweep TDVP converges toward Qiskit on long-range gates.
 
     Nearest-neighbor gates use TEBD; long-range gates use symmetric TDVP substeps.
-    ``tdvp_sweeps=1`` (``ltr_full``) is not the same integrator as ``tdvp_sweeps>=2``;
-    sweep count must be increased until results stabilize against Qiskit.
+    Unpadded minimal-bond MPS may need many sweeps; sweep count must increase until
+    results stabilize against Qiskit.
     """
     qc = QuantumCircuit(4)
     qc.h(0)

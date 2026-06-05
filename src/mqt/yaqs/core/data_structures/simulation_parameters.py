@@ -457,10 +457,9 @@ class StrongSimParams(_ObservableOrderingMixin):
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
             (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
-        tdvp_sweeps: Number of TDVP substeps per evolution step. For digital TDVP gates,
-            ``tdvp_sweeps=1`` applies the gate in one LTR full-gate pass; ``tdvp_sweeps>=2``
-            uses symmetric substeps at ``1 / tdvp_sweeps`` of the unit gate time each.
-            Default is ``1``.
+        tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
+            symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
+            of the unit gate time. Default is ``1``.
     """
 
     # Properties set as placeholders for code compatibility
@@ -509,8 +508,9 @@ class StrongSimParams(_ObservableOrderingMixin):
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             gate_mode: Two-qubit gate update mode (default ``"mpo"``).
-            tdvp_sweeps: Number of TDVP substeps per evolution step. ``1`` uses one LTR
-                full-gate pass; ``>=2`` uses symmetric substeps (default ``1``).
+            tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
+                symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
+                (default ``1``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -564,10 +564,9 @@ class WeakSimParams:
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
             (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
-        tdvp_sweeps: Number of TDVP substeps per evolution step. For digital TDVP gates,
-            ``tdvp_sweeps=1`` applies the gate in one LTR full-gate pass; ``tdvp_sweeps>=2``
-            uses symmetric substeps at ``1 / tdvp_sweeps`` of the unit gate time each.
-            Default is ``1``.
+        tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
+            symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
+            of the unit gate time. Default is ``1``.
     """
 
     # Properties set as placeholders for code compatibility
@@ -611,8 +610,9 @@ class WeakSimParams:
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
             gate_mode: Two-qubit gate update mode (default ``"mpo"``).
-            tdvp_sweeps: Number of TDVP substeps per evolution step. ``1`` uses one LTR
-                full-gate pass; ``>=2`` uses symmetric substeps (default ``1``).
+            tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
+                symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
+                (default ``1``).
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
