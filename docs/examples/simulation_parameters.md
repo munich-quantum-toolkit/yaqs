@@ -183,10 +183,10 @@ Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic 
 
 Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Higher values can improve accuracy at higher cost. The setting applies to all TDVP kernels (two-site, single-site, local dynamic, and global dynamic TDVP) on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
 
-Circuit and analog simulation use different substep geometry:
+Substep geometry:
 
-- **Digital circuits** (`StrongSimParams`, `WeakSimParams`): with `tdvp_sweeps=1`, the gate is applied in one left-to-right (LTR) full-gate pass (the default exact unitary path). With `tdvp_sweeps≥2`, substeps alternate **directional half-sweeps** (LTR, RTL, LTR, …), each using a fraction `1 / tdvp_sweeps` of the unit gate time `τ`. This refinement path can deviate slightly from the single-sweep result on entangled states.
-- **Analog simulation** (`AnalogSimParams`): each substep is a **symmetric** integrator step (LTR then RTL within the substep) at evolution time `dt / tdvp_sweeps`. Noise and dissipation after TDVP still use the full physical step `dt`.
+- **Digital circuits** (`StrongSimParams`, `WeakSimParams`): `tdvp_sweeps=1` applies the gate in one left-to-right full-gate pass (exact unitary default). `tdvp_sweeps>=2` uses **symmetric** substeps (left-to-right then right-to-left within each substep) at evolution time `τ / tdvp_sweeps`.
+- **Analog simulation** (`AnalogSimParams`): each substep is symmetric at `dt / tdvp_sweeps`. Noise and dissipation after TDVP still use the full physical step `dt`.
 
 ```{code-cell} ipython3
 strong = StrongSimParams(
