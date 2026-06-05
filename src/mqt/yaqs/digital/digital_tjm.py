@@ -33,7 +33,7 @@ from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import two_site_tdvp
+from ..core.methods.tdvp import tdvp
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -243,7 +243,7 @@ def apply_two_qubit_gate_tdvp(
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
-    two_site_tdvp(short_state, short_mpo, sim_params)
+    tdvp(short_state, short_mpo, sim_params, mode="2site")
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 

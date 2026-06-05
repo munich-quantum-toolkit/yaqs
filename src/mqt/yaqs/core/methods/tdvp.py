@@ -26,7 +26,7 @@ techniques described in Haegeman et al., Phys. Rev. B 94, 165116 (2016).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import opt_einsum as oe
@@ -52,6 +52,8 @@ def _bond_dim_at_or_above_cap(bond_dim: int, max_bond_dim: int | None) -> bool:
 
 
 DENSE_THRESHOLD = 128
+
+Mode = Literal["1site", "2site", "dynamic"]
 
 
 def _prepare_substep_evolution_dt(
@@ -381,7 +383,7 @@ def build_dense_heff_bond(
     return np.asarray(h4.reshape(p_dim * w_dim, u_dim * v_dim), dtype=np.complex128)
 
 
-def _build_dense_effective_hamiltonian(
+def _build_dense_effective_operator(
     projector: Callable[..., NDArray[np.complex128]],
     proj_args: tuple[NDArray[np.complex128], ...],
     tensor_shape: tuple[int, ...],
@@ -482,7 +484,7 @@ def _evolve_local_tensor_krylov(
 
     if n_loc <= dense_threshold:
         # Build dense H_eff once from environments + MPO
-        h_eff = _build_dense_effective_hamiltonian(projector, proj_args, tensor_shape)
+        h_eff = _build_dense_effective_operator(projector, proj_args, tensor_shape)
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
             return h_eff @ x_flat
@@ -583,7 +585,7 @@ def _build_tdvp_sweep_plan(
 def _run_sweeps(
     evolve_once: Callable[..., None],
     state: MPS,
-    hamiltonian: MPO,
+    operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     /,
     *args: object,
@@ -601,7 +603,7 @@ def _run_sweeps(
     sweep_plan = _build_tdvp_sweep_plan(sim_params)
     evolve_once(
         state,
-        hamiltonian,
+        operator,
         sim_params,
         *args,
         sweep_plan=sweep_plan,
@@ -611,7 +613,7 @@ def _run_sweeps(
 
 def _single_site_tdvp_sweep(
     state: MPS,
-    hamiltonian: MPO,
+    operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
     step_scale: float = 1.0,
@@ -621,19 +623,19 @@ def _single_site_tdvp_sweep(
         for plan_step_scale in sweep_plan:
             _single_site_tdvp_sweep(
                 state,
-                hamiltonian,
+                operator,
                 sim_params,
                 step_scale=plan_step_scale,
             )
         return
 
-    num_sites = hamiltonian.length
+    num_sites = operator.length
 
-    right_blocks = initialize_right_environments(state, hamiltonian)
+    right_blocks = initialize_right_environments(state, operator)
 
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
-    mpo_left_dim = hamiltonian.tensors[0].shape[2]
+    mpo_left_dim = operator.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
     for i in range(left_virtual_dim):
         for a in range(mpo_left_dim):
@@ -647,7 +649,7 @@ def _single_site_tdvp_sweep(
         state.tensors[i] = update_site(
             left_blocks[i],
             right_blocks[i],
-            hamiltonian.tensors[i],
+            operator.tensors[i],
             state.tensors[i],
             0.5 * substep_evolution_dt,
             krylov_tol=sim_params.krylov_tol,
@@ -657,7 +659,7 @@ def _single_site_tdvp_sweep(
         site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
         state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
         left_blocks[i + 1] = update_left_environment(
-            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+            state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
         )
         bond_tensor = update_bond(
             left_blocks[i + 1],
@@ -672,7 +674,7 @@ def _single_site_tdvp_sweep(
     state.tensors[last] = update_site(
         left_blocks[last],
         right_blocks[last],
-        hamiltonian.tensors[last],
+        operator.tensors[last],
         state.tensors[last],
         substep_evolution_dt,
         krylov_tol=sim_params.krylov_tol,
@@ -692,7 +694,7 @@ def _single_site_tdvp_sweep(
             1,
         ))
         right_blocks[i - 1] = update_right_environment(
-            state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+            state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
         )
         bond_tensor = bond_tensor.transpose()
         bond_tensor = update_bond(
@@ -706,57 +708,70 @@ def _single_site_tdvp_sweep(
         state.tensors[i - 1] = update_site(
             left_blocks[i - 1],
             right_blocks[i - 1],
-            hamiltonian.tensors[i - 1],
+            operator.tensors[i - 1],
             state.tensors[i - 1],
             0.5 * substep_evolution_dt,
             krylov_tol=sim_params.krylov_tol,
         )
 
 
-def single_site_tdvp(
+def tdvp(
     state: MPS,
-    hamiltonian: MPO,
+    operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    mode: Mode = "dynamic",
 ) -> None:
-    """Perform symmetric single-site Time-Dependent Variational Principle (TDVP) integration.
+    """Evolve an MPS under an MPO operator via TDVP.
 
-    The function evolves the MPS state in time by sequentially updating each site tensor using
-    local Hamiltonian evolution and bond updates. The process includes a left-to-right sweep followed by
-    an optional right-to-left sweep for full integration.
+    The operator may represent a Hamiltonian (analog simulation) or a gate
+    generator MPO (digital simulation).
 
     Args:
-        state: The initial state represented as an MPS.
-        hamiltonian: Hamiltonian represented as an MPO.
-        sim_params: Simulation parameters with ``dt``, ``svd_threshold``, ``krylov_tol``,
-            ``trunc_mode``, and bond limits.
+        state: MPS state updated in place.
+        operator: MPO defining the local generator at each site.
+        sim_params: Simulation parameters including ``dt`` or gate time,
+            ``tdvp_sweeps``, truncation, and Krylov settings.
+        mode: TDVP integrator variant. ``"dynamic"`` (default) adaptively
+            chooses single- or two-site updates per bond; ``"1site"`` and
+            ``"2site"`` force 1TDVP or 2TDVP respectively.
 
     Raises:
-        ValueError: If Hamiltonian is invalid length.
+        ValueError: If ``state`` and ``operator`` lengths mismatch, or if
+            ``mode="2site"`` with fewer than two sites.
     """
-    num_sites = hamiltonian.length
-    if num_sites != state.length:
-        msg = "The state and Hamiltonian must have the same number of sites."
+    if operator.length != state.length:
+        msg = "MPS and operator must have the same number of sites."
+        raise ValueError(msg)
+    if mode == "2site" and operator.length < 2:
+        msg = "Operator is too short for a two-site update (2TDVP)."
         raise ValueError(msg)
 
-    _run_sweeps(_single_site_tdvp_sweep, state, hamiltonian, sim_params)
+    if mode == "dynamic" and operator.length == 1:
+        mode = "1site"
+
+    if mode == "1site":
+        _run_sweeps(_single_site_tdvp_sweep, state, operator, sim_params)
+    elif mode == "2site":
+        _run_sweeps(_two_site_tdvp_sweep, state, operator, sim_params)
+    else:
+        _run_sweeps(_local_dynamic_tdvp_sweep, state, operator, sim_params)
 
 
 def _two_site_tdvp_sweep(
     state: MPS,
-    hamiltonian: MPO,
+    operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
-    dynamic: bool = False,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
 ) -> None:
-    num_sites = hamiltonian.length
+    num_sites = operator.length
     plan = sweep_plan if sweep_plan is not None else [step_scale]
 
-    right_blocks = initialize_right_environments(state, hamiltonian)
+    right_blocks = initialize_right_environments(state, operator)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
-    mpo_left_dim = hamiltonian.tensors[0].shape[2]
+    mpo_left_dim = operator.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
     for i in range(left_virtual_dim):
         for a in range(mpo_left_dim):
@@ -768,7 +783,7 @@ def _two_site_tdvp_sweep(
 
         for i in range(num_sites - 2):
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(operator.tensors[i], operator.tensors[i + 1])
             merged_tensor = update_site(
                 left_blocks[i],
                 right_blocks[i + 1],
@@ -782,15 +797,15 @@ def _two_site_tdvp_sweep(
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "right",
-                dynamic=dynamic,
+                dynamic=False,
             )
             left_blocks[i + 1] = update_left_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
             state.tensors[i + 1] = update_site(
                 left_blocks[i + 1],
                 right_blocks[i + 1],
-                hamiltonian.tensors[i + 1],
+                operator.tensors[i + 1],
                 state.tensors[i + 1],
                 -0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
@@ -798,7 +813,7 @@ def _two_site_tdvp_sweep(
 
         i = num_sites - 2
         merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-        merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+        merged_mpo = merge_mpo_tensors(operator.tensors[i], operator.tensors[i + 1])
         merged_tensor = update_site(
             left_blocks[i],
             right_blocks[i + 1],
@@ -812,11 +827,11 @@ def _two_site_tdvp_sweep(
             sim_params,
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
             "left",
-            dynamic=dynamic,
+            dynamic=False,
         )
 
         right_blocks[i] = update_right_environment(
-            state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+            state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
         )
 
         substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, plan_step_scale)
@@ -824,7 +839,7 @@ def _two_site_tdvp_sweep(
         if num_sites - 2 == 0:
             i = num_sites - 2
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(operator.tensors[i], operator.tensors[i + 1])
             merged_tensor = update_site(
                 left_blocks[i],
                 right_blocks[i + 1],
@@ -838,7 +853,7 @@ def _two_site_tdvp_sweep(
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "right",
-                dynamic=dynamic,
+                dynamic=False,
             )
             continue
 
@@ -846,13 +861,13 @@ def _two_site_tdvp_sweep(
             state.tensors[i + 1] = update_site(
                 left_blocks[i + 1],
                 right_blocks[i + 1],
-                hamiltonian.tensors[i + 1],
+                operator.tensors[i + 1],
                 state.tensors[i + 1],
                 -0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(operator.tensors[i], operator.tensors[i + 1])
             merged_tensor = update_site(
                 left_blocks[i],
                 right_blocks[i + 1],
@@ -866,52 +881,16 @@ def _two_site_tdvp_sweep(
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "left",
-                dynamic=dynamic,
+                dynamic=False,
             )
             right_blocks[i] = update_right_environment(
-                state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+                state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
-
-
-def two_site_tdvp(
-    state: MPS,
-    hamiltonian: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    *,
-    dynamic: bool = False,
-) -> None:
-    """Perform symmetric two-site TDVP integration.
-
-    This function evolves the MPS by updating two neighboring sites simultaneously. The evolution involves:
-      - Merging the two site tensors.
-      - Applying the local Hamiltonian evolution on the merged tensor.
-      - Splitting the merged tensor back into two tensors via SVD, using a specified singular value distribution.
-      - Updating the operator blocks via left-to-right and right-to-left sweeps.
-
-    Args:
-        state: The initial state represented as an MPS.
-        hamiltonian: Hamiltonian represented as an MPO.
-        sim_params: Simulation parameters with ``dt``, ``svd_threshold``, ``krylov_tol``,
-            ``trunc_mode``, ``max_bond_dim``, and related truncation settings.
-        dynamic: If True, bond growth is handled by dynamic TDVP without an intermediate cap.
-
-    Raises:
-        ValueError: If Hamiltonian is invalid length.
-    """
-    num_sites = hamiltonian.length
-    if num_sites != state.length:
-        msg = "MPS and Hamiltonian must have the same number of sites"
-        raise ValueError(msg)
-    if num_sites < 2:
-        msg = "Hamiltonian is too short for a two-site update (2TDVP)."
-        raise ValueError(msg)
-
-    _run_sweeps(_two_site_tdvp_sweep, state, hamiltonian, sim_params, dynamic=dynamic)
 
 
 def _local_dynamic_tdvp_sweep(
     state: MPS,
-    hamiltonian: MPO,
+    operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
     step_scale: float = 1.0,
@@ -921,18 +900,18 @@ def _local_dynamic_tdvp_sweep(
         for plan_step_scale in sweep_plan:
             _local_dynamic_tdvp_sweep(
                 state,
-                hamiltonian,
+                operator,
                 sim_params,
                 step_scale=plan_step_scale,
             )
         return
 
-    num_sites = hamiltonian.length
+    num_sites = operator.length
 
-    right_blocks = initialize_right_environments(state, hamiltonian)
+    right_blocks = initialize_right_environments(state, operator)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     chi0 = state.tensors[0].shape[1]
-    mpo_dim = hamiltonian.tensors[0].shape[2]
+    mpo_dim = operator.tensors[0].shape[2]
     eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
     for i in range(chi0):
         eye[i, :, i] = 1
@@ -948,7 +927,7 @@ def _local_dynamic_tdvp_sweep(
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
-                hamiltonian.tensors[i],
+                operator.tensors[i],
                 state.tensors[i],
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
@@ -959,7 +938,7 @@ def _local_dynamic_tdvp_sweep(
                 site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
                 state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
                 left_blocks[i + 1] = update_left_environment(
-                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                    state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
                 )
                 bond_tensor = update_bond(
                     left_blocks[i + 1],
@@ -975,7 +954,7 @@ def _local_dynamic_tdvp_sweep(
             continue
         elif i == num_sites - 2:
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(operator.tensors[i], operator.tensors[i + 1])
             merged_tensor = update_site(
                 left_blocks[i],
                 right_blocks[i + 1],
@@ -993,15 +972,15 @@ def _local_dynamic_tdvp_sweep(
                 dynamic=True,
             )
             right_blocks[i] = update_right_environment(
-                state.tensors[i + 1], state.tensors[i + 1], hamiltonian.tensors[i + 1], right_blocks[i + 1]
+                state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
             left_blocks[i + 1] = update_left_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
 
         else:
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i], hamiltonian.tensors[i + 1])
+            merged_mpo = merge_mpo_tensors(operator.tensors[i], operator.tensors[i + 1])
             merged_tensor = update_site(
                 left_blocks[i],
                 right_blocks[i + 1],
@@ -1018,12 +997,12 @@ def _local_dynamic_tdvp_sweep(
                 dynamic=True,
             )
             left_blocks[i + 1] = update_left_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], left_blocks[i]
+                state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
             state.tensors[i + 1] = update_site(
                 left_blocks[i + 1],
                 right_blocks[i + 1],
-                hamiltonian.tensors[i + 1],
+                operator.tensors[i + 1],
                 state.tensors[i + 1],
                 -0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
@@ -1038,7 +1017,7 @@ def _local_dynamic_tdvp_sweep(
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
-                hamiltonian.tensors[i],
+                operator.tensors[i],
                 state.tensors[i],
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
@@ -1058,7 +1037,7 @@ def _local_dynamic_tdvp_sweep(
                     1,
                 ))
                 right_blocks[i - 1] = update_right_environment(
-                    state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+                    state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
                 )
                 bond_tensor = bond_tensor.transpose()
                 bond_tensor = update_bond(
@@ -1076,7 +1055,7 @@ def _local_dynamic_tdvp_sweep(
             continue
         else:
             merged_tensor = merge_two_site(state.tensors[i - 1], state.tensors[i])
-            merged_mpo = merge_mpo_tensors(hamiltonian.tensors[i - 1], hamiltonian.tensors[i])
+            merged_mpo = merge_mpo_tensors(operator.tensors[i - 1], operator.tensors[i])
             merged_tensor = update_site(
                 left_blocks[i - 1],
                 right_blocks[i],
@@ -1093,98 +1072,14 @@ def _local_dynamic_tdvp_sweep(
                 dynamic=True,
             )
             right_blocks[i - 1] = update_right_environment(
-                state.tensors[i], state.tensors[i], hamiltonian.tensors[i], right_blocks[i]
+                state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
             )
             if i != 1:
                 state.tensors[i - 1] = update_site(
                     left_blocks[i - 1],
                     right_blocks[i - 1],
-                    hamiltonian.tensors[i - 1],
+                    operator.tensors[i - 1],
                     state.tensors[i - 1],
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
-
-
-def local_dynamic_tdvp(
-    state: MPS,
-    hamiltonian: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-) -> None:
-    """Perform a dynamic TDVP sweep: at each bond.
-
-    Local dynamic TDVP sweep. If the current bond dimension
-    exceeds max_bond_dim, apply a local single-site TDVP step; otherwise,
-    apply a two-site TDVP step.
-
-    Args:
-        state: MPS state to evolve.
-        hamiltonian: MPO Hamiltonian.
-        sim_params: Simulation parameters including ``dt``, ``svd_threshold``, ``krylov_tol``,
-            and ``max_bond_dim``.
-
-    Raises:
-        ValueError: If Hamiltonian is invalid length.
-    """
-    num_sites = hamiltonian.length
-    if num_sites != state.length:
-        msg = "MPS and Hamiltonian must have the same length"
-        raise ValueError(msg)
-
-    if num_sites == 1:
-        single_site_tdvp(state, hamiltonian, sim_params)
-        return
-
-    _run_sweeps(_local_dynamic_tdvp_sweep, state, hamiltonian, sim_params)
-
-
-def _global_dynamic_tdvp_sweep(
-    state: MPS,
-    hamiltonian: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    *,
-    step_scale: float = 1.0,
-    sweep_plan: list[float] | None = None,
-) -> None:
-    """Run one global dynamic TDVP substep, routing to the appropriate sweep kernel."""
-    current_max_bond_dim = state.get_max_bond()
-    if sim_params.max_bond_dim is None or current_max_bond_dim < sim_params.max_bond_dim:
-        _two_site_tdvp_sweep(
-            state,
-            hamiltonian,
-            sim_params,
-            dynamic=True,
-            step_scale=step_scale,
-            sweep_plan=sweep_plan,
-        )
-    else:
-        _single_site_tdvp_sweep(
-            state,
-            hamiltonian,
-            sim_params,
-            step_scale=step_scale,
-            sweep_plan=sweep_plan,
-        )
-
-
-def global_dynamic_tdvp(
-    state: MPS, hamiltonian: MPO, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams
-) -> None:
-    """Perform a dynamic Time-Dependent Variational Principle (TDVP) evolution of the system state.
-
-    This function evolves the state by choosing between a two-site TDVP (2TDVP) and a single-site TDVP (1TDVP)
-    based on the current maximum bond dimension of the MPS. The decision is made by comparing the state's bond
-    dimension (obtained via `state.get_max_bond()`) to the maximum allowed bond dimension specified in
-    `sim_params`.
-
-    Args:
-        state: The MPS representing the current state of the system.
-        hamiltonian: The MPO representing the Hamiltonian of the system.
-        sim_params: Simulation parameters including ``max_bond_dim``, ``svd_threshold``,
-            and ``krylov_tol``.
-    """
-    if state.length == 1:
-        single_site_tdvp(state, hamiltonian, sim_params)
-        return
-
-    _run_sweeps(_global_dynamic_tdvp_sweep, state, hamiltonian, sim_params)

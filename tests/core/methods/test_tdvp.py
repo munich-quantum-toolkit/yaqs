@@ -39,21 +39,18 @@ from scipy.linalg import expm
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
-from mqt.yaqs.core.libraries.gate_library import X, Z
+from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.tdvp import (
-    _build_dense_effective_hamiltonian,  # noqa: PLC2701
+    _build_dense_effective_operator,  # noqa: PLC2701
     _run_sweeps,  # noqa: PLC2701
     _split_two_site_tdvp,  # noqa: PLC2701
     build_dense_heff_bond,
     build_dense_heff_site,
-    global_dynamic_tdvp,
-    local_dynamic_tdvp,
     merge_mpo_tensors,
     project_bond,
     project_site,
-    single_site_tdvp,
-    two_site_tdvp,
+    tdvp,
     update_bond,
     update_left_environment,
     update_right_environment,
@@ -255,7 +252,7 @@ def test_single_site_tdvp() -> None:
         dt=0.1,
         sample_timesteps=True,
     )
-    single_site_tdvp(state, H, sim_params)
+    tdvp(state, H, sim_params, mode="1site")
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -287,7 +284,7 @@ def test_two_site_tdvp() -> None:
         sample_timesteps=True,
         krylov_tol=1e-12,
     )
-    two_site_tdvp(state, H, sim_params)
+    tdvp(state, H, sim_params, mode="2site")
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
@@ -312,7 +309,7 @@ def test_two_site_tdvp_circuit_sweep_scaling() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact")
 
     with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_sweep:
-        two_site_tdvp(state, H, sim_params)
+        tdvp(state, H, sim_params, mode="2site")
         assert mock_sweep.call_count == 1
         sweep_plan = mock_sweep.call_args.kwargs["sweep_plan"]
         assert len(sweep_plan) == 2
@@ -328,7 +325,7 @@ def test_two_site_tdvp_circuit_single_sweep_uses_symmetric() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=1, preset="exact")
 
     with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_sweep:
-        two_site_tdvp(state, H, sim_params)
+        tdvp(state, H, sim_params, mode="2site")
         assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
 
 
@@ -402,7 +399,7 @@ def test_two_site_tdvp_analog_sweep_preservation() -> None:
         sample_timesteps=True,
         krylov_tol=1e-12,
     )
-    two_site_tdvp(state, H, sim_params)
+    tdvp(state, H, sim_params, mode="2site")
 
     state_vec = ref_mps.to_vec()
     H_mat = H.to_matrix()
@@ -420,100 +417,62 @@ def test_local_dynamic_tdvp_circuit_sweep_scaling() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact")
 
     with patch("mqt.yaqs.core.methods.tdvp._local_dynamic_tdvp_sweep") as mock_sweep:
-        local_dynamic_tdvp(state, H, sim_params)
+        tdvp(state, H, sim_params)
         assert mock_sweep.call_count == 1
         assert len(mock_sweep.call_args.kwargs["sweep_plan"]) == 2
 
 
-def test_dynamic_tdvp_one_site() -> None:
-    """Test dynamic TDVP, single site.
-
-    Test that dynamic_TDVP calls single_site_TDVP exactly once when the current maximum bond dimension
-    exceeds sim_params.max_bond_dim.
-
-    In this test, sim_params.max_bond_dim is set to 0 so that the current maximum bond dimension of the MPS,
-    computed by state.get_max_bond(), is greater than 0. Therefore, the else branch of dynamic_TDVP should be
-    taken, and single_site_tdvp should be called exactly once.
-    """
-    # Define the system Hamiltonian.
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    # Define the initial state.
+def test_tdvp_mode_dispatch() -> None:
+    """Tdvp routes each mode to the matching private sweep kernel."""
+    L = 4
+    H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
 
-    # Define simulation parameters with max_bond_dim set to 0.
-    sim_params = AnalogSimParams(
-        observables=[Observable(X(), 0)],
-        elapsed_time=0.2,
-        dt=0.1,
-        max_bond_dim=0,
-        sample_timesteps=False,
-    )
+    with patch("mqt.yaqs.core.methods.tdvp._single_site_tdvp_sweep") as mock_one:
+        tdvp(state, H, sim_params, mode="1site")
+        mock_one.assert_called_once()
 
-    with patch("mqt.yaqs.core.methods.tdvp._single_site_tdvp_sweep") as mock_single_site:
-        global_dynamic_tdvp(state, H, sim_params)
-        mock_single_site.assert_called_once()
-        assert mock_single_site.call_args.kwargs["step_scale"] == pytest.approx(1.0)
+    with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_two:
+        tdvp(state, H, sim_params, mode="2site")
+        mock_two.assert_called_once()
 
-
-def test_dynamic_tdvp_two_site() -> None:
-    """Test dynamic TDVP, two site.
-
-    Test that dynamic_TDVP calls two_site_TDVP exactly once when the current maximum bond dimension
-    is less than or equal to sim_params.max_bond_dim.
-
-    In this test, sim_params.max_bond_dim is set to 2, so if the current maximum bond dimension is ≤ 2,
-    the if branch of dynamic_TDVP is executed and two_site_TDVP is called exactly once.
-    """
-    # Define the system Hamiltonian.
-    L = 5
-    J = 1
-    g = 0.5
-    H = MPO.ising(L, J, g)
-
-    # Define the initial state.
-    state = MPS(L, state="zeros")
-
-    # Define simulation parameters with max_bond_dim set to 2.
-
-    sim_params = AnalogSimParams(
-        observables=[Observable(X(), 0)],
-        elapsed_time=0.2,
-        dt=0.1,
-        max_bond_dim=8,
-        sample_timesteps=False,
-    )
-    with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_two_site:
-        global_dynamic_tdvp(state, H, sim_params)
-        mock_two_site.assert_called_once()
-        assert mock_two_site.call_args.kwargs["dynamic"] is True
-        assert mock_two_site.call_args.kwargs["step_scale"] == pytest.approx(1.0)
+    with patch("mqt.yaqs.core.methods.tdvp._local_dynamic_tdvp_sweep") as mock_dyn:
+        tdvp(state, H, sim_params, mode="dynamic")
+        mock_dyn.assert_called_once()
 
 
-def test_global_dynamic_tdvp_sweep_scaling() -> None:
-    """Global dynamic TDVP honors tdvp_sweeps for analog evolution."""
-    L = 5
+def test_tdvp_default_mode_is_dynamic() -> None:
+    """Default tdvp mode uses local dynamic TDVP."""
+    L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
     sim_params = AnalogSimParams(
-        observables=[Observable(X(), 0)],
+        observables=[Observable(Z(), 0)],
         elapsed_time=0.2,
         dt=0.1,
-        max_bond_dim=8,
-        tdvp_sweeps=2,
         sample_timesteps=False,
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp._global_dynamic_tdvp_sweep") as mock_sweep:
-        global_dynamic_tdvp(state, H, sim_params)
-        assert mock_sweep.call_count == 1
-        sweep_plan = mock_sweep.call_args.kwargs["sweep_plan"]
-        assert len(sweep_plan) == 2
-        assert sweep_plan[0] == pytest.approx(0.5)
-        assert sweep_plan[1] == pytest.approx(0.5)
+    with patch("mqt.yaqs.core.methods.tdvp._local_dynamic_tdvp_sweep") as mock_dyn:
+        tdvp(state, H, sim_params)
+        mock_dyn.assert_called_once()
+
+
+def test_tdvp_dynamic_single_site_chain() -> None:
+    """Dynamic mode on a one-site chain falls back to 1-site TDVP."""
+    H = MPO.ising(1, 1.0, 0.5)
+    state = MPS(1, state="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+    )
+
+    with patch("mqt.yaqs.core.methods.tdvp._single_site_tdvp_sweep") as mock_one:
+        tdvp(state, H, sim_params)
+        mock_one.assert_called_once()
 
 
 def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
@@ -728,7 +687,7 @@ def test_dense_vs_project_site() -> None:
         size=(phys_dim, phys_dim, chi_a_left, chi_a_right)
     )
 
-    H_eff = _build_dense_effective_hamiltonian(
+    H_eff = _build_dense_effective_operator(
         project_site,
         (left_env, right_env, op),
         ket.shape,
@@ -755,7 +714,7 @@ def test_dense_vs_project_bond() -> None:
         size=(bond_right_dim, chi_a, bond_right_dim)
     )
 
-    H_eff = _build_dense_effective_hamiltonian(
+    H_eff = _build_dense_effective_operator(
         project_bond,
         (left_env, right_env),
         C.shape,
@@ -848,11 +807,11 @@ def test_build_dense_heff_bond_matches_project_bond() -> None:
     np.testing.assert_allclose(y1, y2, atol=1e-12)
 
 
-def test_build_dense_effective_hamiltonian_uses_generic_fallback() -> None:
-    """_build_dense_effective_hamiltonian: uses generic fallback for unknown projector (basis-loop path).
+def test_build_dense_effective_operator_uses_generic_fallback() -> None:
+    """_build_dense_effective_operator: uses generic fallback for unknown projector (basis-loop path).
 
     This test defines a simple linear projector that is *not* the canonical project_site/project_bond
-    function object, calls _build_dense_effective_hamiltonian, and verifies:
+    function object, calls _build_dense_effective_operator, and verifies:
       1) the projector was called exactly n_loc times (once per basis vector),
       2) the resulting dense operator has the expected shape.
     """
@@ -873,7 +832,7 @@ def test_build_dense_effective_hamiltonian_uses_generic_fallback() -> None:
         y = mat @ x.reshape(-1)
         return y.reshape(tensor_shape)
 
-    H_eff = _build_dense_effective_hamiltonian(
+    H_eff = _build_dense_effective_operator(
         projector=custom_projector,  # not project_site / project_bond
         proj_args=(A,),
         tensor_shape=tensor_shape,
@@ -883,8 +842,8 @@ def test_build_dense_effective_hamiltonian_uses_generic_fallback() -> None:
     assert H_eff.shape == (n_loc, n_loc)
 
 
-def test_build_dense_effective_hamiltonian_generic_fallback_correctness() -> None:
-    """_build_dense_effective_hamiltonian: generic fallback reconstructs the operator exactly.
+def test_build_dense_effective_operator_generic_fallback_correctness() -> None:
+    """_build_dense_effective_operator: generic fallback reconstructs the operator exactly.
 
     This test uses a custom linear projector defined by an explicit matrix A acting on vec(x).
     The fallback builder should reconstruct A (up to floating-point roundoff), so H_eff @ vec(x)
@@ -902,7 +861,7 @@ def test_build_dense_effective_hamiltonian_generic_fallback_correctness() -> Non
         y = mat @ x.reshape(-1)
         return y.reshape(tensor_shape)
 
-    H_eff = _build_dense_effective_hamiltonian(
+    H_eff = _build_dense_effective_operator(
         projector=custom_projector,
         proj_args=(A,),
         tensor_shape=tensor_shape,

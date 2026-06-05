@@ -103,7 +103,7 @@ def test_step_through() -> None:
         sample_timesteps=False,
     )
     with (
-        patch("mqt.yaqs.analog.analog_tjm.local_dynamic_tdvp") as mock_dynamic_tdvp,
+        patch("mqt.yaqs.analog.analog_tjm.tdvp") as mock_dynamic_tdvp,
         patch("mqt.yaqs.analog.analog_tjm.apply_dissipation") as mock_dissipation,
         patch("mqt.yaqs.analog.analog_tjm.stochastic_process") as mock_stochastic_process,
     ):
