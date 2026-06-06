@@ -48,6 +48,14 @@ SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
     "exact": {"svd_threshold": 1e-13, "max_bond_dim": None, "num_traj": 1024, "krylov_tol": 1e-12},
 }
 
+
+def _clamp_min_bond_dim(min_bond_dim: int, max_bond_dim: int | None) -> int:
+    """Keep ``min_bond_dim`` within a finite χ cap."""
+    if max_bond_dim is not None:
+        return min(min_bond_dim, max_bond_dim)
+    return min_bond_dim
+
+
 _USE_PRESET = object()
 
 
@@ -406,7 +414,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = min_bond_dim
+        self.min_bond_dim = _clamp_min_bond_dim(min_bond_dim, self.max_bond_dim)
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
@@ -523,7 +531,7 @@ class StrongSimParams(_ObservableOrderingMixin):
 
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = min_bond_dim
+        self.min_bond_dim = _clamp_min_bond_dim(min_bond_dim, self.max_bond_dim)
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
@@ -619,7 +627,7 @@ class WeakSimParams:
         self.preset = preset
         self.shots = shots
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = min_bond_dim
+        self.min_bond_dim = _clamp_min_bond_dim(min_bond_dim, self.max_bond_dim)
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
