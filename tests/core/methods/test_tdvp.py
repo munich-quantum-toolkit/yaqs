@@ -34,12 +34,15 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from qiskit.circuit import QuantumCircuit
+from qiskit.quantum_info import Statevector
 from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.tdvp import (
     _build_dense_effective_operator,  # noqa: PLC2701
@@ -56,6 +59,7 @@ from mqt.yaqs.core.methods.tdvp import (
     update_right_environment,
     update_site,
 )
+from mqt.yaqs.digital.digital_tjm import apply_window, construct_generator_mpo
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -876,3 +880,157 @@ def test_build_dense_effective_operator_generic_fallback_correctness() -> None:
     y2 = H_eff @ x
 
     np.testing.assert_allclose(y1, y2, atol=1e-12)
+
+
+def _digital_two_site_rzz_fidelity(
+    length: int,
+    theta: float,
+    *,
+    sites: tuple[int, int],
+    initial: str = "x+",
+) -> float:
+    """Fidelity of ``mode='2site'`` digital TDVP against Qiskit for one RZZ gate.
+
+    Args:
+        length: Chain length.
+        theta: RZZ angle.
+        sites: Qubit indices for the gate.
+        initial: Initial state label for :class:`~mqt.yaqs.core.data_structures.state.State`.
+
+    Returns:
+        Squared overlap fidelity against Qiskit.
+    """
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    qc.rzz(theta, sites[0], sites[1])
+    reference = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    prep = deepcopy(State(length, initial=initial).mps)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    window_state, window_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
+    sim_params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=None,
+        tdvp_sweeps=1,
+        svd_threshold=1e-14,
+        krylov_tol=1e-12,
+    )
+    tdvp(window_state, window_mpo, sim_params, mode="2site")
+    return float(abs(np.vdot(reference, window_state.to_vec())) ** 2)
+
+
+@pytest.mark.parametrize("theta", [0.1, 0.3, np.pi / 4])
+def test_two_site_digital_rzz_l2_plus_exact(theta: float) -> None:
+    """Two-site digital TDVP is exact on ``L=2``, ``|++⟩``, ``RZZ(0,1)`` without truncation."""
+    fidelity = _digital_two_site_rzz_fidelity(2, theta, sites=(0, 1))
+    assert fidelity == pytest.approx(1.0, abs=1e-12)
+
+
+def test_two_site_digital_rzz_l2_haar_exact() -> None:
+    """Two-site digital TDVP is exact on ``L=2`` Haar random states."""
+    length = 2
+    prep = MPS(length, state="haar-random")
+    prep.normalize()
+    theta = 0.3
+
+    qc = QuantumCircuit(length)
+    qc.initialize(prep.to_vec().tolist(), range(length))
+    qc.rzz(theta, 0, 1)
+    reference = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, 1)
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    window_state, window_mpo, _window = apply_window(deepcopy(prep), mpo, first_site, last_site, 1)
+    sim_params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=None,
+        tdvp_sweeps=1,
+        svd_threshold=1e-14,
+        krylov_tol=1e-12,
+    )
+    tdvp(window_state, window_mpo, sim_params, mode="2site")
+    fidelity = float(abs(np.vdot(reference, window_state.to_vec())) ** 2)
+    assert fidelity == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("gate_name", "theta"),
+    [
+        ("rzz", 0.3),
+        ("rxx", 0.3),
+        ("ryy", 0.3),
+    ],
+)
+def test_two_site_digital_pauli_pair_l2_plus_exact(gate_name: str, theta: float) -> None:
+    """Two-site digital TDVP is exact for diagonal Pauli pair gates on ``L=2``."""
+    length = 2
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    if gate_name == "rzz":
+        qc.rzz(theta, 0, 1)
+        gate = GateLibrary.rzz([theta])
+    elif gate_name == "rxx":
+        qc.rxx(theta, 0, 1)
+        gate = GateLibrary.rxx([theta])
+    else:
+        qc.ryy(theta, 0, 1)
+        gate = GateLibrary.ryy([theta])
+    reference = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    prep = deepcopy(State(length, initial="x+").mps)
+    gate.set_sites(0, 1)
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    window_state, window_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
+    sim_params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=None,
+        tdvp_sweeps=1,
+        svd_threshold=1e-14,
+        krylov_tol=1e-12,
+    )
+    tdvp(window_state, window_mpo, sim_params, mode="2site")
+    fidelity = float(abs(np.vdot(reference, window_state.to_vec())) ** 2)
+    assert fidelity == pytest.approx(1.0, abs=1e-12)
+
+
+def test_two_site_l2_rzz_applies_unit_evolution_time() -> None:
+    """One digital 2TDVP substep on ``L=2`` must apply total generator time 1, not 2."""
+    theta = 0.3
+    prep = deepcopy(State(2, initial="x+").mps)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, 1)
+    mpo, first_site, last_site = construct_generator_mpo(gate, 2)
+    window_state, window_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
+    sim_params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=None,
+        tdvp_sweeps=1,
+        svd_threshold=1e-14,
+        krylov_tol=1e-12,
+    )
+
+    recorded_dts: list[float] = []
+
+    def _record_update_site(
+        left_env: NDArray[np.complex128],
+        right_env: NDArray[np.complex128],
+        op: NDArray[np.complex128],
+        ket: NDArray[np.complex128],
+        dt: float,
+        *,
+        krylov_tol: float,
+    ) -> NDArray[np.complex128]:
+        recorded_dts.append(dt)
+        return update_site(left_env, right_env, op, ket, dt, krylov_tol=krylov_tol)
+
+    with patch("mqt.yaqs.core.methods.tdvp.update_site", side_effect=_record_update_site):
+        tdvp(window_state, window_mpo, sim_params, mode="2site")
+
+    assert recorded_dts == [pytest.approx(1.0)]

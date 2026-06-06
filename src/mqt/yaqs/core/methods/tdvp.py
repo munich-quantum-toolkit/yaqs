@@ -836,27 +836,8 @@ def _two_site_tdvp_sweep(
 
         substep_evolution_dt = _prepare_substep_evolution_dt(sim_params, plan_step_scale)
 
-        if num_sites - 2 == 0:
-            i = num_sites - 2
-            merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
-            merged_mpo = merge_mpo_tensors(operator.tensors[i], operator.tensors[i + 1])
-            merged_tensor = update_site(
-                left_blocks[i],
-                right_blocks[i + 1],
-                merged_mpo,
-                merged_tensor,
-                substep_evolution_dt,
-                krylov_tol=sim_params.krylov_tol,
-            )
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-                merged_tensor,
-                sim_params,
-                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-                "right",
-                dynamic=False,
-            )
-            continue
-
+        # For ``num_sites == 2`` the RTL loop is empty; the LTR final-bond update above
+        # already applies the full substep time once. Do not duplicate it here.
         for i in reversed(range(num_sites - 2)):
             state.tensors[i + 1] = update_site(
                 left_blocks[i + 1],

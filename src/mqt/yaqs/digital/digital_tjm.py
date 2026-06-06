@@ -229,7 +229,10 @@ def apply_two_qubit_gate_tdvp(
     gate: BaseGate,
     sim_params: StrongSimParams | WeakSimParams,
 ) -> tuple[int, int]:
-    """Apply a two-qubit gate via generator MPO and two-site TDVP.
+    """Apply a two-qubit gate via generator MPO and TDVP.
+
+    Gates use local dynamic TDVP (``mode="dynamic"``), which correctly implements
+    product-form generator MPOs over extended windows.
 
     Args:
         state: MPS updated in place.
@@ -243,7 +246,7 @@ def apply_two_qubit_gate_tdvp(
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
-    tdvp(short_state, short_mpo, sim_params, mode="2site")
+    tdvp(short_state, short_mpo, sim_params, mode="dynamic")
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 

@@ -44,10 +44,12 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
+from mqt.yaqs.core.methods import tdvp as tdvp_mod
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
     apply_single_qubit_gate,
     apply_two_qubit_gate,
+    apply_two_qubit_gate_tdvp,
     apply_two_qubit_gate_tebd,
     apply_window,
     construct_generator_mpo,
@@ -61,6 +63,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import (
         GateMode,
     )
+    from mqt.yaqs.core.methods.tdvp import Mode
 
 
 def _phase_align(reference: np.ndarray, state: np.ndarray) -> np.ndarray:
@@ -1251,3 +1254,139 @@ def test_unknown_gate_mode_raises() -> None:
     sim_params.gate_mode = cast("GateMode", "invalid")
     with pytest.raises(ValueError, match="Unknown gate_mode"):
         apply_two_qubit_gate(mps, node, sim_params)
+
+
+def _qiskit_plus_rzz_reference(length: int, theta: float, *, sites: tuple[int, int]) -> np.ndarray:
+    """Reference state for ``|+⟩^{⊗L}`` followed by ``RZZ(sites, θ)``.
+
+    Args:
+        length: Number of qubits.
+        theta: RZZ rotation angle.
+        sites: Qubit indices for the RZZ gate.
+
+    Returns:
+        State vector from Qiskit.
+    """
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    qc.rzz(theta, sites[0], sites[1])
+    return np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+
+def _tdvp_exact_params(*, tdvp_sweeps: int = 1) -> StrongSimParams:
+    """Strong-simulation parameters for near-exact TDVP regression checks.
+
+    Args:
+        tdvp_sweeps: Number of symmetric TDVP substeps.
+
+    Returns:
+        Parameter object for strong simulation.
+    """
+    return StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=None,
+        tdvp_sweeps=tdvp_sweeps,
+        svd_threshold=1e-14,
+        krylov_tol=1e-12,
+    )
+
+
+def test_dynamic_tdvp_rzz_nn_window_matches_qiskit() -> None:
+    """Two-site dynamic TDVP implements ``RZZ(0,1)`` on ``|++⟩`` to machine precision."""
+    theta = 0.3
+    length = 2
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, 1)
+    sim_params = _tdvp_exact_params()
+
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    window_state, window_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
+    tdvp_mod.tdvp(window_state, window_mpo, sim_params, mode="dynamic")
+
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=(0, 1))
+    got = window_state.to_vec()
+    assert _fidelity(ref, got) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_two_site_tdvp_rzz_nn_window_matches_qiskit() -> None:
+    """Nearest-neighbor two-site TDVP integrates ``RZZ(0,1)`` on ``|++⟩`` exactly."""
+    theta = 0.3
+    length = 2
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, 1)
+    sim_params = _tdvp_exact_params()
+
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    window_state, window_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
+    tdvp_mod.tdvp(window_state, window_mpo, sim_params, mode="2site")
+
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=(0, 1))
+    assert _fidelity(ref, window_state.to_vec()) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_two_site_tdvp_via_hybrid_route_matches_qiskit_l2() -> None:
+    """``apply_two_qubit_gate_tdvp`` on ``L=2`` NN RZZ matches Qiskit after the 2TDVP fix."""
+    theta = 0.3
+    length = 2
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, 1)
+    sim_params = _tdvp_exact_params()
+
+    out = copy.deepcopy(prep)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=(0, 1))
+    assert _fidelity(ref, out.to_vec()) == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("length", "sites", "mode"),
+    [
+        (3, (0, 1), "2site"),
+        (4, (1, 2), "2site"),
+        (4, (0, 3), "dynamic"),
+        (6, (0, 5), "dynamic"),
+    ],
+)
+def test_tdvp_embedded_rzz_window_matches_qiskit(
+    length: int,
+    sites: tuple[int, int],
+    mode: str,
+) -> None:
+    """Embedded ±1-window TDVP matches Qiskit on small chains without truncation."""
+    theta = 0.3
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sweeps = 64 if abs(sites[0] - sites[1]) != 1 else 1
+    sim_params = _tdvp_exact_params(tdvp_sweeps=sweeps)
+
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    window_state, window_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
+    tdvp_mod.tdvp(window_state, window_mpo, sim_params, mode=cast("Mode", mode))
+
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
+    infidelity = 1.0 - _fidelity(ref, window_state.to_vec())
+    assert infidelity < 1e-4
+
+
+def test_dynamic_tdvp_rzz_long_range_matches_qiskit_with_sweeps() -> None:
+    """Long-range hybrid TDVP converges ``RZZ(0,L-1)`` on ``|+⟩^{⊗L}`` toward Qiskit."""
+    theta = 0.3
+    length = 6
+    sites = (0, length - 1)
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sim_params = _tdvp_exact_params(tdvp_sweeps=64)
+
+    out = copy.deepcopy(prep)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
+    infidelity = 1.0 - _fidelity(ref, out.to_vec())
+    assert infidelity < 1e-4
