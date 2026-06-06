@@ -327,6 +327,101 @@ class MPS:
         # renormalise the state
         self.normalize()
 
+    def _ensure_internal_bond_dims(
+        self,
+        bond_indices: list[int] | tuple[int, ...],
+        min_dim: int,
+        *,
+        max_dim: int | None = None,
+    ) -> None:
+        """Raise selected internal bonds to at least ``min_dim`` without shrinking others.
+
+        Library-internal helper used by TDVP support retention. Bond ``b`` connects
+        sites ``b`` and ``b+1``. Only the listed bonds are modified; tensors are
+        zero-padded on the shared index when needed.
+
+        Args:
+            bond_indices: Internal bond indices ``0 <= b < length - 1``.
+            min_dim: Minimum bond dimension to enforce on each listed bond.
+            max_dim: Optional hard cap; when set, bonds are never padded above this
+                value and no-op if ``min_dim`` exceeds ``max_dim``.
+
+        Raises:
+            ValueError: If ``min_dim`` is less than 1 or a bond index is invalid.
+        """
+        if min_dim < 1:
+            msg = "min_dim must be at least 1."
+            raise ValueError(msg)
+        if max_dim is not None and min_dim > max_dim:
+            return
+        target_dim = min_dim if max_dim is None else min(min_dim, max_dim)
+        for bond in bond_indices:
+            if bond < 0 or bond >= self.length - 1:
+                msg = f"Bond index {bond} out of range for length {self.length}."
+                raise ValueError(msg)
+            left = self.tensors[bond]
+            right = self.tensors[bond + 1]
+            chi_out = int(left.shape[2])
+            chi_in = int(right.shape[1])
+            if chi_out == target_dim and chi_in == target_dim:
+                continue
+            if chi_out > target_dim:
+                self.tensors[bond] = left[:, :, :target_dim]
+                left = self.tensors[bond]
+            if chi_in > target_dim:
+                self.tensors[bond + 1] = right[:, :target_dim, :]
+                right = self.tensors[bond + 1]
+            chi_out = int(left.shape[2])
+            chi_in = int(right.shape[1])
+            if chi_out >= target_dim and chi_in >= target_dim:
+                continue
+            phys_l, chi_l, _ = left.shape
+            phys_r, _, chi_r = right.shape
+            new_left = np.zeros((phys_l, chi_l, target_dim), dtype=left.dtype)
+            new_left[:, :, :chi_out] = left
+            new_right = np.zeros((phys_r, target_dim, chi_r), dtype=right.dtype)
+            new_right[:, :chi_in, :] = right
+            self.tensors[bond] = new_left
+            self.tensors[bond + 1] = new_right
+
+    def bond_dimensions(self) -> list[int]:
+        """Return outgoing bond dimension at each internal bond ``b``.
+
+        Returns:
+            List of bond dimensions ``[chi_0, ..., chi_{L-2}]``.
+        """
+        return [int(tensor.shape[2]) for tensor in self.tensors[:-1]]
+
+    def _assert_bond_shapes_consistent(self, *, max_bond_dim: int | None = None) -> None:
+        """Validate adjacent tensor virtual dimensions and an optional bond cap.
+
+        Library-internal invariant check used by fixed-χ TDVP.
+
+        Args:
+            max_bond_dim: When set, each internal bond must not exceed this value.
+
+        Raises:
+            ValueError: If outgoing/incoming bond dimensions disagree or exceed the cap.
+        """
+        for bond in range(self.length - 1):
+            left = self.tensors[bond]
+            right = self.tensors[bond + 1]
+            chi_out = int(left.shape[2])
+            chi_in = int(right.shape[1])
+            if chi_out != chi_in:
+                msg = (
+                    f"MPS bond mismatch at bond {bond}: left outgoing {chi_out} "
+                    f"!= right incoming {chi_in}; left shape {left.shape}, "
+                    f"right shape {right.shape}"
+                )
+                raise ValueError(msg)
+            if max_bond_dim is not None and chi_out > max_bond_dim:
+                msg = (
+                    f"MPS bond cap violated at bond {bond}: chi={chi_out} > "
+                    f"max_bond_dim={max_bond_dim}"
+                )
+                raise ValueError(msg)
+
     def get_max_bond(self) -> int:
         """Write max bond dim.
 
