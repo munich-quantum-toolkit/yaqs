@@ -56,7 +56,6 @@ import copy
 # Thread limits are enforced in worker processes via limit_worker_threads()
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
-from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,
@@ -68,6 +67,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 import numpy as np
 
 if TYPE_CHECKING:
+
     from collections.abc import Callable
 
     from .core.data_structures.hamiltonian import Representation
