@@ -33,7 +33,7 @@ from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import tdvp
+from ..core.methods.tdvp import _tdvp_dynamic
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -43,7 +43,6 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from ..core.data_structures.simulation_parameters import GateMode
-    from ..core.libraries.gate_library import BaseGate
     from ..core.methods.decompositions import TruncMode
 
 
@@ -224,6 +223,69 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     return short_state, short_mpo, window
 
 
+def _gate_bond_support_enabled(sim_params: StrongSimParams | WeakSimParams) -> bool:
+    """Return whether long-range TDVP should retain at least two support dimensions."""
+    cap = sim_params.max_bond_dim
+    return cap is None or cap >= 2
+
+
+def _protected_support_min_dim(sim_params: StrongSimParams | WeakSimParams) -> int:
+    """Minimum protected bond dimension allowed under the current χ budget.
+
+    Returns:
+        ``min(2, max_bond_dim)`` when capped, otherwise ``2``.
+    """
+    cap = sim_params.max_bond_dim
+    if cap is None:
+        return 2
+    return min(2, cap)
+
+
+def protected_bonds_for_two_site_gate(
+    site0: int,
+    site1: int,
+    window_left: int,
+    window_right: int,
+) -> frozenset[int]:
+    """Return window-local bond indices crossed by a two-site gate.
+
+    For gate sites ``a < b``, protected bonds are ``a, a+1, ..., b-1`` (global
+    indices), mapped into the local window ``[window_left, window_right]``.
+
+    Args:
+        site0: First acted-on site (global index).
+        site1: Second acted-on site (global index).
+        window_left: Leftmost site included in the local TDVP window.
+        window_right: Rightmost site included in the local TDVP window.
+
+    Returns:
+        Window-local indices of bonds between ``site0`` and ``site1``.
+    """
+    left_site = min(site0, site1)
+    right_site = max(site0, site1)
+    return frozenset(
+        bond - window_left for bond in range(left_site, right_site) if window_left <= bond <= window_right - 1
+    )
+
+
+def retention_crossed_bonds(crossed_bonds: frozenset[int], num_sites: int) -> frozenset[int]:
+    """Return crossed bonds that receive active support retention during TDVP.
+
+    All crossed bonds are pre-padded; only bonds left of the window midpoint
+    are actively monitored during sweeps so longer windows avoid variational
+    fixed points while tail bonds still converge naturally.
+
+    Args:
+        crossed_bonds: Window-local bonds crossed by the gate.
+        num_sites: Number of sites in the local TDVP window.
+
+    Returns:
+        Subset of ``crossed_bonds`` used for dynamic TDVP retention policy.
+    """
+    midpoint = (num_sites - 1) // 2
+    return frozenset(bond for bond in crossed_bonds if bond < midpoint)
+
+
 def apply_two_qubit_gate_tdvp(
     state: MPS,
     gate: BaseGate,
@@ -231,8 +293,8 @@ def apply_two_qubit_gate_tdvp(
 ) -> tuple[int, int]:
     """Apply a two-qubit gate via generator MPO and TDVP.
 
-    Gates use local dynamic TDVP (``mode="dynamic"``), which correctly implements
-    product-form generator MPOs over extended windows.
+    Long-range gates use local dynamic TDVP (``mode="dynamic"``) with gate-local
+    minimal bond support on crossed internal bonds.
 
     Args:
         state: MPS updated in place.
@@ -246,7 +308,23 @@ def apply_two_qubit_gate_tdvp(
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
-    tdvp(short_state, short_mpo, sim_params, mode="dynamic")
+
+    site0, site1 = gate.sites[0], gate.sites[1]
+    is_long_range = abs(site0 - site1) != 1
+    crossed_bonds: frozenset[int] | None = None
+    if is_long_range and _gate_bond_support_enabled(sim_params):
+        crossed_bonds = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
+        retention_bonds = retention_crossed_bonds(crossed_bonds, short_state.length)
+        min_dim = _protected_support_min_dim(sim_params)
+        short_state._ensure_internal_bond_dims(  # noqa: SLF001
+            tuple(retention_bonds),
+            min_dim,
+            max_dim=sim_params.max_bond_dim,
+        )
+    else:
+        retention_bonds = None
+
+    _tdvp_dynamic(short_state, short_mpo, sim_params, crossed_bonds=retention_bonds)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 

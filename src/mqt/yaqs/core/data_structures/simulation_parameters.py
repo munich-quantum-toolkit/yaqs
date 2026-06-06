@@ -50,7 +50,11 @@ SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
 
 
 def _clamp_min_bond_dim(min_bond_dim: int, max_bond_dim: int | None) -> int:
-    """Keep ``min_bond_dim`` within a finite χ cap."""
+    """Keep ``min_bond_dim`` within a finite χ cap.
+
+    Returns:
+        ``min(min_bond_dim, max_bond_dim)`` when capped, otherwise ``min_bond_dim``.
+    """
     if max_bond_dim is not None:
         return min(min_bond_dim, max_bond_dim)
     return min_bond_dim

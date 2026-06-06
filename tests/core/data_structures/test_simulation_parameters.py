@@ -175,6 +175,14 @@ def test_gate_mode_defaults_and_validation() -> None:
         StrongSimParams(gate_mode=cast("GateMode", "invalid"))
 
 
+def test_min_bond_dim_clamped_to_finite_max_bond_dim() -> None:
+    """Finite χ caps keep the default min_bond_dim from exceeding max_bond_dim."""
+    assert StrongSimParams(preset="exact", max_bond_dim=1).min_bond_dim == 1
+    assert WeakSimParams(shots=1, preset="exact", max_bond_dim=1).min_bond_dim == 1
+    assert AnalogSimParams(preset="exact", max_bond_dim=1).min_bond_dim == 1
+    assert StrongSimParams(preset="exact", max_bond_dim=None).min_bond_dim == 2
+
+
 def test_tdvp_sweeps_defaults_and_validation() -> None:
     """Analog, strong, and weak params default tdvp_sweeps to 1 and validate inputs."""
     assert AnalogSimParams().tdvp_sweeps == 1
@@ -307,7 +315,7 @@ def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -
 
     tensor = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
-    _ = tdvp._evolve_local_tensor_krylov(  # noqa: SLF001
+    _ = tdvp._evolve_local_tensor_krylov(
         projector=lambda x: x,
         tensor=tensor,
         dt=0.1,

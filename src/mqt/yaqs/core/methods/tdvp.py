@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import numpy as np
 import opt_einsum as oe
 
+from .. import linalg
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import merge_two_site, split_two_site
 from .matrix_exponential import expm_krylov
@@ -56,6 +57,44 @@ DENSE_THRESHOLD = 128
 Mode = Literal["1site", "2site", "dynamic"]
 
 
+def _crossed_entanglement_threshold(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
+    """Minimum second-Schmidt ratio treated as physical entanglement on crossed bonds.
+
+    Derived from ``svd_threshold`` with a floor so product states are not misclassified
+    at typical truncation settings (``max(sqrt(svd_threshold), 100 * svd_threshold)``).
+
+    Returns:
+        Entanglement detection threshold for crossed-bond retention.
+    """
+    threshold = sim_params.svd_threshold
+    return max(0.01, np.sqrt(threshold), 100.0 * threshold)
+
+
+def _crossed_bond_min_dim(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
+    """Minimum bond dimension to retain on protected crossed bonds.
+
+    Returns:
+        ``min(2, max_bond_dim)`` when a finite cap is set, otherwise ``2``.
+    """
+    cap = sim_params.max_bond_dim
+    if cap is None:
+        return 2
+    return min(2, cap)
+
+
+def _clamp_protected_bond_dim(dim: int, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
+    """Clamp a bond dimension to the protected-bond ``[min, max]`` window.
+
+    Returns:
+        Bond dimension clipped to the protected-bond range.
+    """
+    clamped = max(dim, _crossed_bond_min_dim(sim_params))
+    cap = sim_params.max_bond_dim
+    if cap is not None:
+        clamped = min(clamped, cap)
+    return clamped
+
+
 def _prepare_substep_evolution_dt(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     step_scale: float,
@@ -73,6 +112,8 @@ def _split_two_site_tdvp(
     svd_distribution: str,
     *,
     dynamic: bool,
+    bond_index: int | None = None,
+    crossed_bonds: frozenset[int] | None = None,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a merged two-site tensor using TDVP simulation truncation policy.
 
@@ -88,19 +129,355 @@ def _split_two_site_tdvp(
         physical_dimensions: ``[d_left, d_right]`` physical dimensions.
         svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
         dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
+        bond_index: MPS bond index for this split (between ``bond_index`` and ``bond_index + 1``).
+        crossed_bonds: Gate-crossed bonds that retain at least two Schmidt weights during truncation.
 
     Returns:
         Left and right MPS site tensors after split and truncation.
     """
+    min_bond_dim = sim_params.min_bond_dim
+    threshold = sim_params.svd_threshold
+    max_bond_dim = None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim
+    if crossed_bonds is not None and bond_index is not None and bond_index in crossed_bonds:
+        min_bond_dim = max(min_bond_dim, _crossed_bond_min_dim(sim_params))
+        threshold = 0.0
     return split_two_site(
         merged,
         physical_dimensions,
         svd_distribution=cast("SvdDistribution", svd_distribution),
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
-        threshold=sim_params.svd_threshold,
-        max_bond_dim=None if dynamic else sim_params.max_bond_dim,
-        min_bond_dim=sim_params.min_bond_dim,
+        threshold=threshold,
+        max_bond_dim=max_bond_dim,
+        min_bond_dim=min_bond_dim,
     )
+
+
+def _second_schmidt_ratio(state: MPS, bond_index: int) -> float:
+    """Return the normalized second-to-first Schmidt singular-value ratio at a bond."""
+    left = state.tensors[bond_index]
+    right = state.tensors[bond_index + 1]
+    theta = np.tensordot(left, right, axes=(2, 1))
+    mat = theta.reshape(left.shape[0] * left.shape[1], right.shape[0] * right.shape[2])
+    _u, s_vec, _v = linalg.svd(mat, full_matrices=False)
+    if len(s_vec) < 2 or float(s_vec[0]) <= 0.0:
+        return 0.0
+    return float(s_vec[1] / s_vec[0])
+
+
+def _reseed_crossed_bond_support(
+    state: MPS,
+    bond_index: int,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+) -> None:
+    """Inject a tiny second support direction on a rank-deficient crossed bond."""
+    target = _crossed_bond_min_dim(sim_params)
+    if target < 2:
+        return
+    eps = max(np.sqrt(sim_params.svd_threshold), np.finfo(float).eps)
+    left = state.tensors[bond_index]
+    right = state.tensors[bond_index + 1]
+    phys_l, chi_l, chi = left.shape
+    phys_r, _, chi_r = right.shape
+    chi_copy = min(chi, target)
+    new_left = np.zeros((phys_l, chi_l, target), dtype=left.dtype)
+    new_right = np.zeros((phys_r, target, chi_r), dtype=right.dtype)
+    new_left[:, :, :chi_copy] = left[:, :, :chi_copy]
+    new_right[:, :chi_copy, :] = right[:, :chi_copy, :]
+    if phys_l >= 2 and target >= 2:
+        new_left[0, :, 1] = eps
+        new_left[1, :, 1] = -eps
+        new_right[0, 1, :] = 1.0
+        new_right[1, 1, :] = 1.0
+    state.tensors[bond_index] = new_left
+    state.tensors[bond_index + 1] = new_right
+
+
+def _merged_second_schmidt_ratio(
+    merged: NDArray[np.complex128],
+    physical_dimensions: list[int],
+) -> float:
+    """Return the second-to-first Schmidt ratio of a merged two-site tensor."""
+    d_left, d_right = physical_dimensions
+    tensor_reshaped = merged.reshape(d_left, d_right, merged.shape[1], merged.shape[2])
+    tensor_transposed = tensor_reshaped.transpose((0, 2, 1, 3))
+    shape_transposed = tensor_transposed.shape
+    theta_mat = tensor_transposed.reshape(
+        shape_transposed[0] * shape_transposed[1],
+        shape_transposed[2] * shape_transposed[3],
+    )
+    _u, s_vec, _v = linalg.svd(theta_mat, full_matrices=False)
+    if len(s_vec) < 2 or float(s_vec[0]) <= 0.0:
+        return 0.0
+    return float(s_vec[1] / s_vec[0])
+
+
+def _after_crossed_split(
+    state: MPS,
+    bond_index: int,
+    merged: NDArray[np.complex128],
+    physical_dimensions: list[int],
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    merged_peak: dict[int, float],
+    last_second: dict[int, float],
+) -> None:
+    """Pad and re-seed a crossed bond immediately after a two-site split."""
+    min_dim = _crossed_bond_min_dim(sim_params)
+    threshold = sim_params.svd_threshold
+    propagation = _crossed_entanglement_threshold(sim_params)
+    if min_dim >= 2:
+        state._ensure_internal_bond_dims((bond_index,), min_dim, max_dim=sim_params.max_bond_dim)
+    pre_ratio = _merged_second_schmidt_ratio(merged, physical_dimensions)
+    merged_peak[bond_index] = max(merged_peak.get(bond_index, 0.0), pre_ratio)
+    post_ratio = _second_schmidt_ratio(state, bond_index)
+    if min_dim >= 2 and pre_ratio >= propagation and post_ratio < threshold:
+        _reseed_crossed_bond_support(state, bond_index, sim_params)
+        post_ratio = _second_schmidt_ratio(state, bond_index)
+    last_second[bond_index] = post_ratio
+
+
+def _retain_crossed_bonds(
+    state: MPS,
+    crossed_bonds: frozenset[int],
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    merged_peak: dict[int, float],
+    last_second: dict[int, float],
+) -> None:
+    """Re-pad and re-seed crossed bonds after one dynamic TDVP substep."""
+    min_dim = _crossed_bond_min_dim(sim_params)
+    if min_dim < 2:
+        return
+    threshold = sim_params.svd_threshold
+    propagation = _crossed_entanglement_threshold(sim_params)
+    ratios = {bond: _second_schmidt_ratio(state, bond) for bond in crossed_bonds}
+    bonds_to_repad = [bond for bond in crossed_bonds if state.tensors[bond].shape[2] < min_dim]
+    if bonds_to_repad:
+        state._ensure_internal_bond_dims(tuple(bonds_to_repad), min_dim, max_dim=sim_params.max_bond_dim)
+        for bond in bonds_to_repad:
+            ratios[bond] = _second_schmidt_ratio(state, bond)
+    entangled = any(ratio >= propagation for ratio in ratios.values())
+    entangled_cutoff = propagation if sim_params.max_bond_dim == 2 else threshold
+    reseeded = False
+    for bond in sorted(crossed_bonds):
+        ratio = ratios[bond]
+        collapsed = last_second.get(bond, 0.0) >= propagation and ratio < threshold
+        merged_relative = merged_peak.get(bond, 0.0) / max(ratio, 1e-30)
+        if (
+            collapsed
+            or (entangled and ratio < entangled_cutoff)
+            or (merged_relative >= propagation and ratio < threshold)
+        ):
+            _reseed_crossed_bond_support(state, bond, sim_params)
+            ratio = _second_schmidt_ratio(state, bond)
+            reseeded = True
+        last_second[bond] = ratio
+    if reseeded:
+        state.normalize()
+
+
+def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
+    """Set both tensors on an internal bond to share dimension ``target_dim``."""
+    left = state.tensors[bond_index]
+    right = state.tensors[bond_index + 1]
+    chi_out = int(left.shape[2])
+    chi_in = int(right.shape[1])
+    if chi_out == target_dim and chi_in == target_dim:
+        return
+    if chi_out > target_dim:
+        state.tensors[bond_index] = left[:, :, :target_dim]
+    elif chi_out < target_dim:
+        state._ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
+    right = state.tensors[bond_index + 1]
+    chi_in = int(right.shape[1])
+    if chi_in > target_dim:
+        state.tensors[bond_index + 1] = right[:, :target_dim, :]
+    elif chi_in < target_dim:
+        state._ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
+
+
+def _contract_bond_target_dim(
+    state: MPS,
+    bond_index: int,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+) -> int:
+    """Return the shared bond dimension to use before a bond transfer contraction."""
+    chi_left = int(state.tensors[bond_index].shape[2])
+    chi_right = int(state.tensors[bond_index + 1].shape[1])
+    chi_target = max(chi_left, chi_right)
+    cap = sim_params.max_bond_dim
+    if cap is not None:
+        chi_target = min(chi_target, cap)
+    return max(chi_target, 1)
+
+
+def _bond_dims_mismatched(state: MPS, bond_index: int) -> bool:
+    """Return whether neighboring tensors disagree on a bond dimension."""
+    return int(state.tensors[bond_index].shape[2]) != int(state.tensors[bond_index + 1].shape[1])
+
+
+def _enforce_global_bond_cap(
+    state: MPS,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+) -> None:
+    """Truncate all internal bonds to ``max_bond_dim`` before a fixed-χ sweep."""
+    cap = sim_params.max_bond_dim
+    if cap is None:
+        return
+    for bond in range(state.length - 1):
+        chi_out = int(state.tensors[bond].shape[2])
+        chi_in = int(state.tensors[bond + 1].shape[1])
+        if chi_out > cap or chi_in > cap:
+            _sync_bond_dim(state, bond, cap)
+    state.normalize()
+
+
+def _resize_bond(
+    bond_tensor: NDArray[np.complex128],
+    *,
+    lead: int | None = None,
+    trail: int | None = None,
+) -> NDArray[np.complex128]:
+    """Resize leading and/or trailing axes of a bond transfer matrix.
+
+    Returns:
+        Resized bond tensor.
+    """
+    out = bond_tensor
+    if lead is not None:
+        current = int(out.shape[0])
+        if current != lead:
+            if current > lead:
+                out = out[:lead, :]
+            else:
+                padded = np.zeros((lead, out.shape[1]), dtype=out.dtype)
+                padded[:current, :] = out
+                out = padded
+    if trail is not None:
+        current = int(out.shape[1])
+        if current != trail:
+            if current > trail:
+                out = out[:, :trail]
+            else:
+                padded = np.zeros((out.shape[0], trail), dtype=out.dtype)
+                padded[:, :current] = out
+                out = padded
+    return out
+
+
+def _pad_canonical(
+    site_tensor: NDArray[np.complex128],
+    bond_tensor: NDArray[np.complex128],
+    target_dim: int,
+    *,
+    outgoing: bool,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Pad a canonical site/bond pair to ``target_dim`` on the swept bond axis.
+
+    Returns:
+        Padded site and bond tensors.
+    """
+    if outgoing:
+        chi = int(site_tensor.shape[2])
+        if chi >= target_dim:
+            return site_tensor, bond_tensor
+        phys_l, chi_l, _ = site_tensor.shape
+        _, chi_r = bond_tensor.shape
+        new_site = np.zeros((phys_l, chi_l, target_dim), dtype=site_tensor.dtype)
+        new_site[:, :, :chi] = site_tensor
+        new_bond = np.zeros((target_dim, chi_r), dtype=bond_tensor.dtype)
+        new_bond[:chi, :] = bond_tensor
+        return new_site, new_bond
+    chi = int(site_tensor.shape[1])
+    if chi >= target_dim:
+        return site_tensor, bond_tensor
+    phys, _, chi_out = site_tensor.shape
+    _, chi_in_right = bond_tensor.shape
+    new_site = np.zeros((phys, target_dim, chi_out), dtype=site_tensor.dtype)
+    new_site[:, :chi, :] = site_tensor
+    new_bond = np.zeros((target_dim, chi_in_right), dtype=bond_tensor.dtype)
+    new_bond[:chi, :] = bond_tensor
+    return new_site, new_bond
+
+
+def _canonicalize_site_ltr(
+    tensor: NDArray[np.complex128],
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    crossed: bool,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Right-canonicalize a site tensor and return the bond transfer matrix.
+
+    Returns:
+        Right-canonical site tensor and outgoing bond transfer matrix.
+    """
+    tensor_shape = tensor.shape
+    reshaped = tensor.reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+    chi_r = tensor_shape[2]
+    eff_min = _crossed_bond_min_dim(sim_params) if crossed else 1
+    cap = sim_params.max_bond_dim
+    entanglement_threshold = _crossed_entanglement_threshold(sim_params)
+    if crossed and chi_r >= eff_min and eff_min >= 2:
+        u_mat, s_vec, vh_mat = linalg.svd(reshaped, full_matrices=False)
+        if len(s_vec) >= 2 and float(s_vec[1] / max(float(s_vec[0]), 1e-30)) >= entanglement_threshold:
+            keep = min(chi_r, max(eff_min, u_mat.shape[1]))
+            if cap is not None:
+                keep = min(keep, cap)
+            site_tensor = u_mat[:, :keep].reshape((tensor_shape[0], tensor_shape[1], keep))
+            return site_tensor, vh_mat[:keep, :]
+    site_tensor, bond_tensor = np.linalg.qr(reshaped)
+    chi_out = int(site_tensor.shape[1])
+    site_tensor = site_tensor.reshape((tensor_shape[0], tensor_shape[1], chi_out))
+    if crossed and eff_min >= 2 and cap is not None:
+        target = _clamp_protected_bond_dim(chi_out, sim_params)
+        site_tensor, bond_tensor = _pad_canonical(site_tensor, bond_tensor, target, outgoing=True)
+        chi_out = target
+    if crossed and cap is not None and chi_out > cap:
+        site_tensor = site_tensor[:, :, :cap]
+        bond_tensor = bond_tensor[:cap, :]
+    return site_tensor, bond_tensor
+
+
+def _canonicalize_site_rtl(
+    tensor: NDArray[np.complex128],
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    crossed: bool,
+) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
+    """Left-canonicalize a site tensor (RTL sweep) and return the bond transfer matrix.
+
+    Returns:
+        Left-canonical site tensor and incoming bond transfer matrix.
+    """
+    tensor_t = tensor.transpose((0, 2, 1))
+    tensor_shape = tensor_t.shape
+    reshaped = tensor_t.reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+    chi_r = tensor_shape[2]
+    eff_min = _crossed_bond_min_dim(sim_params) if crossed else 1
+    cap = sim_params.max_bond_dim
+    entanglement_threshold = _crossed_entanglement_threshold(sim_params)
+    if crossed and chi_r >= eff_min and eff_min >= 2:
+        u_mat, s_vec, vh_mat = linalg.svd(reshaped, full_matrices=False)
+        if len(s_vec) >= 2 and float(s_vec[1] / max(float(s_vec[0]), 1e-30)) >= entanglement_threshold:
+            keep = min(chi_r, max(eff_min, u_mat.shape[1]))
+            if cap is not None:
+                keep = min(keep, cap)
+            site_tensor = u_mat[:, :keep].reshape((tensor_shape[0], tensor_shape[1], keep)).transpose((0, 2, 1))
+            bond_tensor = vh_mat[:keep, :].transpose()
+            return site_tensor, bond_tensor.transpose()
+    site_tensor, bond_tensor = np.linalg.qr(reshaped)
+    site_tensor = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1])).transpose((
+        0,
+        2,
+        1,
+    ))
+    if crossed and eff_min >= 2 and cap is not None:
+        target = _clamp_protected_bond_dim(int(site_tensor.shape[1]), sim_params)
+        site_tensor, bond_tensor = _pad_canonical(site_tensor, bond_tensor, target, outgoing=False)
+    if crossed and cap is not None and int(site_tensor.shape[1]) > cap:
+        site_tensor = site_tensor[:, :cap, :]
+        bond_tensor = bond_tensor[:cap, :]
+    return site_tensor, bond_tensor.transpose()
 
 
 def merge_mpo_tensors(
@@ -600,13 +977,12 @@ def _run_sweeps(
     Substep geometry (``_build_tdvp_sweep_plan``): ``tdvp_sweeps`` symmetric substeps
     (LTR then RTL each) at ``step_time / tdvp_sweeps`` for analog ``dt`` and digital gates.
     """
-    sweep_plan = _build_tdvp_sweep_plan(sim_params)
     evolve_once(
         state,
         operator,
         sim_params,
         *args,
-        sweep_plan=sweep_plan,
+        sweep_plan=_build_tdvp_sweep_plan(sim_params),
         **kwargs,
     )
 
@@ -757,6 +1133,33 @@ def tdvp(
         _run_sweeps(_local_dynamic_tdvp_sweep, state, operator, sim_params)
 
 
+def _tdvp_dynamic(
+    state: MPS,
+    operator: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    crossed_bonds: frozenset[int] | None = None,
+) -> None:
+    """Dynamic TDVP for long-range digital gates with crossed-bond padding.
+
+    Raises:
+        ValueError: If ``state`` and ``operator`` lengths mismatch.
+    """
+    if operator.length != state.length:
+        msg = "MPS and operator must have the same number of sites."
+        raise ValueError(msg)
+    if operator.length == 1:
+        _run_sweeps(_single_site_tdvp_sweep, state, operator, sim_params)
+        return
+    _run_sweeps(
+        _local_dynamic_tdvp_sweep,
+        state,
+        operator,
+        sim_params,
+        crossed_bonds=crossed_bonds,
+    )
+
+
 def _two_site_tdvp_sweep(
     state: MPS,
     operator: MPO,
@@ -876,16 +1279,28 @@ def _local_dynamic_tdvp_sweep(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
+    crossed_bonds: frozenset[int] | None = None,
+    merged_peak: dict[int, float] | None = None,
+    last_second: dict[int, float] | None = None,
 ) -> None:
     if sweep_plan is not None:
+        peak = merged_peak if merged_peak is not None else {}
+        second = last_second if last_second is not None else {}
         for plan_step_scale in sweep_plan:
             _local_dynamic_tdvp_sweep(
                 state,
                 operator,
                 sim_params,
                 step_scale=plan_step_scale,
+                crossed_bonds=crossed_bonds,
+                merged_peak=peak,
+                last_second=second,
             )
         return
+
+    peak = merged_peak if merged_peak is not None else {}
+    second = last_second if last_second is not None else {}
+    _enforce_global_bond_cap(state, sim_params)
 
     num_sites = operator.length
 
@@ -904,7 +1319,7 @@ def _local_dynamic_tdvp_sweep(
     lock_final_site = False
     for i in range(num_sites):
         bond_dim = state.tensors[i].shape[2]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or (lock_final_site and crossed_bonds is None):
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -914,10 +1329,12 @@ def _local_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != num_sites - 1:
-                tensor_shape = state.tensors[i].shape
-                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-                state.tensors[i] = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1]))
+                site_tensor, bond_tensor = _canonicalize_site_ltr(
+                    state.tensors[i],
+                    sim_params,
+                    crossed=crossed_bonds is not None and i in crossed_bonds,
+                )
+                state.tensors[i] = site_tensor
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
                 )
@@ -928,7 +1345,19 @@ def _local_dynamic_tdvp_sweep(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
+                if sim_params.max_bond_dim is not None:
+                    if _bond_dims_mismatched(state, i):
+                        _sync_bond_dim(state, i, _contract_bond_target_dim(state, i, sim_params))
+                        state.normalize()
+                    bond_tensor = _resize_bond(
+                        bond_tensor,
+                        lead=int(state.tensors[i].shape[2]),
+                        trail=int(state.tensors[i + 1].shape[1]),
+                    )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
+                if sim_params.max_bond_dim is not None and _bond_dims_mismatched(state, i):
+                    _sync_bond_dim(state, i, _contract_bond_target_dim(state, i, sim_params))
+                    state.normalize()
             if i == num_sites - 2:
                 lock_final_site = True
         elif i == num_sites - 1:
@@ -951,7 +1380,19 @@ def _local_dynamic_tdvp_sweep(
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "right",
                 dynamic=True,
+                bond_index=i,
+                crossed_bonds=crossed_bonds,
             )
+            if crossed_bonds is not None and i in crossed_bonds:
+                _after_crossed_split(
+                    state,
+                    i,
+                    merged_tensor,
+                    [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                    sim_params,
+                    merged_peak=peak,
+                    last_second=second,
+                )
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
@@ -976,7 +1417,19 @@ def _local_dynamic_tdvp_sweep(
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "right",
                 dynamic=True,
+                bond_index=i,
+                crossed_bonds=crossed_bonds,
             )
+            if crossed_bonds is not None and i in crossed_bonds:
+                _after_crossed_split(
+                    state,
+                    i,
+                    merged_tensor,
+                    [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
+                    sim_params,
+                    merged_peak=peak,
+                    last_second=second,
+                )
             left_blocks[i + 1] = update_left_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
@@ -994,7 +1447,7 @@ def _local_dynamic_tdvp_sweep(
     lock_final_site = False
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i].shape[1]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or (lock_final_site and crossed_bonds is None):
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -1004,19 +1457,12 @@ def _local_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != 0:
-                state.tensors[i] = state.tensors[i].transpose((0, 2, 1))
-                tensor_shape = state.tensors[i].shape
-                reshaped_tensor = state.tensors[i].reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-                site_tensor, bond_tensor = np.linalg.qr(reshaped_tensor)
-                state.tensors[i] = site_tensor.reshape((
-                    tensor_shape[0],
-                    tensor_shape[1],
-                    site_tensor.shape[1],
-                )).transpose((
-                    0,
-                    2,
-                    1,
-                ))
+                site_tensor, bond_tensor = _canonicalize_site_rtl(
+                    state.tensors[i],
+                    sim_params,
+                    crossed=crossed_bonds is not None and (i - 1) in crossed_bonds,
+                )
+                state.tensors[i] = site_tensor
                 right_blocks[i - 1] = update_right_environment(
                     state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
                 )
@@ -1028,8 +1474,19 @@ def _local_dynamic_tdvp_sweep(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
+                if sim_params.max_bond_dim is not None:
+                    if _bond_dims_mismatched(state, i - 1):
+                        _sync_bond_dim(state, i - 1, _contract_bond_target_dim(state, i - 1, sim_params))
+                        state.normalize()
+                    bond_tensor = _resize_bond(
+                        bond_tensor,
+                        lead=int(state.tensors[i - 1].shape[2]),
+                        trail=int(state.tensors[i].shape[1]),
+                    )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
-
+                if sim_params.max_bond_dim is not None and _bond_dims_mismatched(state, i - 1):
+                    _sync_bond_dim(state, i - 1, _contract_bond_target_dim(state, i - 1, sim_params))
+                    state.normalize()
                 if i == 1:
                     lock_final_site = True
         elif i == 0:
@@ -1051,7 +1508,19 @@ def _local_dynamic_tdvp_sweep(
                 [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
                 "left",
                 dynamic=True,
+                bond_index=i - 1,
+                crossed_bonds=crossed_bonds,
             )
+            if crossed_bonds is not None and (i - 1) in crossed_bonds:
+                _after_crossed_split(
+                    state,
+                    i - 1,
+                    merged_tensor,
+                    [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
+                    sim_params,
+                    merged_peak=peak,
+                    last_second=second,
+                )
             right_blocks[i - 1] = update_right_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
             )
@@ -1064,3 +1533,8 @@ def _local_dynamic_tdvp_sweep(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
+
+    if crossed_bonds is not None:
+        _retain_crossed_bonds(state, crossed_bonds, sim_params, merged_peak=peak, last_second=second)
+    if sim_params.max_bond_dim is not None:
+        state.normalize()

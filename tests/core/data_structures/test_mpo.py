@@ -900,7 +900,7 @@ def test_compress_one_sweep_raises_on_invalid_direction() -> None:
         np.zeros((2, 2, 1, 1), dtype=complex),
     ]
     with pytest.raises(ValueError, match=r"direction must be 'lr' or 'rl'\."):
-        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)  # noqa: SLF001
+        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)
 
 
 def test_from_pauli_sum_empty_spec_is_identity_term() -> None:

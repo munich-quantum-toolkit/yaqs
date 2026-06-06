@@ -59,7 +59,7 @@ from mqt.yaqs.core.methods.tdvp import (
     update_right_environment,
     update_site,
 )
-from mqt.yaqs.digital.digital_tjm import apply_window, construct_generator_mpo
+from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -958,14 +958,8 @@ def test_two_site_digital_rzz_l2_haar_exact() -> None:
     assert fidelity == pytest.approx(1.0, abs=1e-12)
 
 
-@pytest.mark.parametrize(
-    ("gate_name", "theta"),
-    [
-        ("rzz", 0.3),
-        ("rxx", 0.3),
-        ("ryy", 0.3),
-    ],
-)
+@pytest.mark.parametrize("gate_name", ["rzz", "rxx", "ryy"])
+@pytest.mark.parametrize("theta", [0.1, 0.3, np.pi / 4])
 def test_two_site_digital_pauli_pair_l2_plus_exact(gate_name: str, theta: float) -> None:
     """Two-site digital TDVP is exact for diagonal Pauli pair gates on ``L=2``."""
     length = 2
@@ -997,6 +991,7 @@ def test_two_site_digital_pauli_pair_l2_plus_exact(gate_name: str, theta: float)
     tdvp(window_state, window_mpo, sim_params, mode="2site")
     fidelity = float(abs(np.vdot(reference, window_state.to_vec())) ** 2)
     assert fidelity == pytest.approx(1.0, abs=1e-12)
+    assert window_state.norm() == pytest.approx(1.0, abs=1e-12)
 
 
 def test_two_site_l2_rzz_applies_unit_evolution_time() -> None:
@@ -1034,3 +1029,35 @@ def test_two_site_l2_rzz_applies_unit_evolution_time() -> None:
         tdvp(window_state, window_mpo, sim_params, mode="2site")
 
     assert recorded_dts == [pytest.approx(1.0)]
+
+
+def test_lr_rzz_sweep_improves_fidelity() -> None:
+    """More ``tdvp_sweeps`` should improve long-range RZZ accuracy on ``|+⟩^{⊗L}``."""
+    length = 6
+    theta = 0.3
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, length - 1)
+    prep = State(length, initial="x+").mps
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    qc.rzz(theta, 0, length - 1)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    def _fidelity(out: MPS) -> float:
+        return float(abs(np.vdot(ref, out.to_vec())) ** 2)
+
+    fidelities: list[float] = []
+    for sweeps in (1, 16, 64):
+        out = deepcopy(prep)
+        params = StrongSimParams(
+            preset="exact",
+            get_state=True,
+            max_bond_dim=None,
+            tdvp_sweeps=sweeps,
+            svd_threshold=1e-14,
+            krylov_tol=1e-12,
+        )
+        apply_two_qubit_gate_tdvp(out, gate, params)
+        fidelities.append(_fidelity(out))
+
+    assert fidelities[-1] > fidelities[0] + 1e-6

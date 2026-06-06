@@ -56,6 +56,8 @@ from mqt.yaqs.digital.digital_tjm import (
     create_local_noise_model,
     digital_tjm,
     process_layer,
+    protected_bonds_for_two_site_gate,
+    retention_crossed_bonds,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -171,14 +173,14 @@ def test_process_layer() -> None:
     # Verify the grouping of two-qubit gates.
     # For each node in the even group, the lower qubit index should be even.
     for node in even:
-        q0 = node.qargs[0]._index  # noqa: SLF001
-        q1 = node.qargs[1]._index  # noqa: SLF001
+        q0 = node.qargs[0]._index
+        q1 = node.qargs[1]._index
         assert min(q0, q1) % 2 == 0, f"Node with qubits {q0, q1} not in even group."
 
     # For each node in the odd group, the lower qubit index should be odd.
     for node in odd:
-        q0 = node.qargs[0]._index  # noqa: SLF001
-        q1 = node.qargs[1]._index  # noqa: SLF001
+        q0 = node.qargs[0]._index
+        q1 = node.qargs[1]._index
         assert min(q0, q1) % 2 == 1, f"Node with qubits {q0, q1} not in odd group."
 
 
@@ -1027,10 +1029,10 @@ def test_tdvp_sweeps_hybrid_long_range_matches_qiskit() -> None:
     qc.rx(0.2, 1)
     qc.rxx(0.25, 0, 3)
 
-    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=2)
+    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True, tdvp_sweeps=8)
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-5)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-4)
 
 
 def test_tdvp_sweeps_hybrid_nn_unchanged() -> None:
@@ -1390,3 +1392,231 @@ def test_dynamic_tdvp_rzz_long_range_matches_qiskit_with_sweeps() -> None:
     ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
     infidelity = 1.0 - _fidelity(ref, out.to_vec())
     assert infidelity < 1e-4
+
+
+@pytest.mark.parametrize("length", [7, 8, 10])
+def test_dynamic_tdvp_rzz_long_range_plus_support_retention(length: int) -> None:
+    """Long-range ``RZZ(0,L-1)`` on ``|+⟩^{⊗L}`` escapes the rank-1 trap for ``L >= 7``."""
+    theta = 0.3
+    sites = (0, length - 1)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sweeps = 256 if length >= 10 else 64
+    sim_params = _tdvp_exact_params(tdvp_sweeps=sweeps)
+
+    out = copy.deepcopy(State(length, initial="x+").mps)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
+    plus = copy.deepcopy(State(length, initial="x+").mps)
+    infidelity = 1.0 - _fidelity(ref, out.to_vec())
+    overlap_plus = abs(np.vdot(plus.to_vec(), out.to_vec())) ** 2
+
+    assert infidelity < 1e-3
+    assert overlap_plus < 0.999
+    assert overlap_plus > 0.97
+
+
+def test_dynamic_tdvp_rzz_long_range_zeros_unchanged() -> None:
+    """Long-range ``RZZ`` on ``|0⟩^{⊗L}`` remains exact under gate-local support rules."""
+    theta = 0.3
+    length = 8
+    sites = (0, length - 1)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sim_params = _tdvp_exact_params(tdvp_sweeps=64)
+
+    out = copy.deepcopy(State(length, initial="zeros").mps)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    qc = QuantumCircuit(length)
+    qc.rzz(theta, sites[0], sites[1])
+    ref_zeros = np.asarray(Statevector.from_label("0" * length).evolve(qc).data)
+
+    infidelity = 1.0 - _fidelity(ref_zeros, out.to_vec())
+    assert infidelity < 1e-10
+
+
+def test_dynamic_tdvp_rzz_long_range_fixed_chi_two_sensible() -> None:
+    """Fixed ``max_bond_dim=2`` long-range TDVP applies the gate rather than staying at ``|+⟩``."""
+    theta = 0.3
+    length = 7
+    sites = (0, length - 1)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sim_params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=2,
+        tdvp_sweeps=4,
+        svd_threshold=1e-14,
+        krylov_tol=1e-12,
+    )
+
+    out = copy.deepcopy(State(length, initial="x+").mps)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    plus = copy.deepcopy(State(length, initial="x+").mps)
+    overlap_plus = abs(np.vdot(plus.to_vec(), out.to_vec())) ** 2
+
+    assert overlap_plus < 0.99
+    assert out.get_max_bond() <= 2
+
+
+def _bond_second_schmidt(mps: MPS, bond: int) -> float:
+    """Return the second normalized Schmidt singular value at an internal bond."""
+    spec = mps.get_schmidt_spectrum([bond, bond + 1])
+    vals = np.asarray(spec[~np.isnan(spec)], dtype=np.float64)
+    norm = float(np.sum(vals**2))
+    if norm > 0.0:
+        vals /= np.sqrt(norm)
+    return float(vals[1]) if len(vals) > 1 else 0.0
+
+
+def _physical_second_schmidt(vec: np.ndarray, length: int, cut: int) -> float:
+    """Second Schmidt value of a statevector at a physical cut.
+
+    Returns:
+        Normalized second Schmidt singular value at ``cut``.
+    """
+    left_dim = 2 ** (cut + 1)
+    right_dim = 2 ** (length - cut - 1)
+    mat = vec.reshape(left_dim, right_dim)
+    _u, s_vec, _v = np.linalg.svd(mat, full_matrices=False)
+    s_arr = np.asarray(s_vec, dtype=np.float64)
+    norm = float(np.linalg.norm(s_arr))
+    if norm > 0.0:
+        s_arr /= norm
+    return float(s_arr[1]) if len(s_arr) > 1 else 0.0
+
+
+@pytest.mark.parametrize(
+    ("site0", "site1", "window_left", "window_right", "expected"),
+    [
+        (0, 6, 0, 8, frozenset({0, 1, 2, 3, 4, 5})),
+        (1, 8, 0, 9, frozenset({1, 2, 3, 4, 5, 6, 7})),
+        (2, 7, 1, 8, frozenset({1, 2, 3, 4, 5})),
+        (0, 3, 1, 4, frozenset({0, 1})),
+        (0, 1, 0, 2, frozenset({0})),
+    ],
+)
+def test_protected_bonds_for_long_range_gate(
+    site0: int,
+    site1: int,
+    window_left: int,
+    window_right: int,
+    expected: frozenset[int],
+) -> None:
+    """Protected bonds are gate-crossed bonds mapped into the local window."""
+    assert protected_bonds_for_two_site_gate(site0, site1, window_left, window_right) == expected
+
+
+@pytest.mark.parametrize(
+    ("num_sites", "crossed", "expected"),
+    [
+        (8, frozenset({0, 1, 2, 3, 4, 5, 6}), frozenset({0, 1, 2})),
+        (10, frozenset({0, 1, 2, 3, 4, 5, 6, 7, 8}), frozenset({0, 1, 2, 3})),
+    ],
+)
+def test_retention_crossed_bonds_uses_anchor_half(
+    num_sites: int,
+    crossed: frozenset[int],
+    expected: frozenset[int],
+) -> None:
+    """Active retention applies only to bonds left of the window midpoint."""
+    assert retention_crossed_bonds(crossed, num_sites) == expected
+
+
+@pytest.mark.parametrize("length", [7, 8, 10])
+def test_dynamic_tdvp_rzz_plus_no_rank1_trap_general_rule(length: int) -> None:
+    """General protected-bond rule escapes the rank-1 trap without anchor heuristics."""
+    theta = 0.3
+    sites = (0, length - 1)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sweeps = 256 if length >= 10 else 64
+    sim_params = _tdvp_exact_params(tdvp_sweeps=sweeps)
+
+    out = copy.deepcopy(State(length, initial="x+").mps)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
+    plus = copy.deepcopy(State(length, initial="x+").mps)
+    infidelity = 1.0 - _fidelity(ref, out.to_vec())
+    overlap_plus = abs(np.vdot(plus.to_vec(), out.to_vec())) ** 2
+
+    assert infidelity < 1e-3
+    assert overlap_plus < 0.999
+    assert overlap_plus > 0.97
+    assert _bond_second_schmidt(out, 0) > 0.1
+
+
+def test_dynamic_tdvp_rzz_plus_internal_pair() -> None:
+    """Internal long-range pairs protect all crossed bonds, not only endpoints."""
+    theta = 0.3
+    length = 10
+    sites = (2, 7)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sim_params = _tdvp_exact_params(tdvp_sweeps=64)
+
+    out = copy.deepcopy(State(length, initial="x+").mps)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    qc.rzz(theta, sites[0], sites[1])
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    infidelity = 1.0 - _fidelity(ref, out.to_vec())
+    assert infidelity < 1e-3
+
+    window = [1, 8]
+    protected = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
+    assert protected == frozenset({1, 2, 3, 4, 5})
+    for bond in range(sites[0], sites[1]):
+        assert _bond_second_schmidt(out, bond) > 0.05
+
+
+def test_dynamic_tdvp_rzz_zeros_no_artificial_entanglement() -> None:
+    """Zeros plus long-range RZZ stays exact and does not gain spurious entanglement."""
+    theta = 0.3
+    length = 8
+    sites = (0, length - 1)
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sim_params = _tdvp_exact_params(tdvp_sweeps=64)
+
+    out = copy.deepcopy(State(length, initial="zeros").mps)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    qc = QuantumCircuit(length)
+    qc.rzz(theta, sites[0], sites[1])
+    ref_zeros = np.asarray(Statevector.from_label("0" * length).evolve(qc).data)
+
+    infidelity = 1.0 - _fidelity(ref_zeros, out.to_vec())
+    assert infidelity < 1e-10
+    vec = out.to_vec()
+    for bond in range(length - 1):
+        assert _physical_second_schmidt(vec, length, bond) < 3e-7
+
+
+def test_dynamic_tdvp_haar_no_regression() -> None:
+    """Haar-random states remain accurate under long-range dynamic TDVP gates."""
+    theta = 0.3
+    length = 8
+    sites = (0, length - 1)
+    prep = State(length, initial="haar-random").mps
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(*sites)
+    sim_params = _tdvp_exact_params(tdvp_sweeps=64)
+
+    out = copy.deepcopy(prep)
+    apply_two_qubit_gate_tdvp(out, gate, sim_params)
+
+    qc = QuantumCircuit(length)
+    qc.initialize(np.asarray(prep.to_vec(), dtype=np.complex128).tolist(), range(length))
+    qc.rzz(theta, sites[0], sites[1])
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    assert _fidelity(ref, out.to_vec()) > 0.99

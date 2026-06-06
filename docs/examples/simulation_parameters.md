@@ -178,12 +178,14 @@ Used for noisy strong circuit simulation. Provide observables and optionally ena
 Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic MPO--MPS application): nearest-neighbor gates use the same local TEBD/SVD path as `swaps`, and long-range gates contract an extended gate MPO site-wise (library leg ordering, MPS virtual index before MPO virtual index) followed by compression with `svd_threshold` and `max_bond_dim`. Other modes differ only in how two-qubit gates are applied:
 
 - **`swaps`** — TEBD/SVD for every two-qubit gate; long-range gates are routed with adjacent SWAP insertion before and after the local update.
-- **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + two-site TDVP path.
-- **`full-tdvp`** — TDVP (generator MPO + two-site TDVP) on every two-qubit gate.
+- **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + **dynamic** TDVP path.
+- **`full-tdvp`** — TDVP (generator MPO + dynamic TDVP) on every two-qubit gate.
+
+Long-range entangling gates in TDVP mode automatically apply **gate-local bond support retention** on anchor bonds crossed by the active two-qubit gate (handled inside the digital TDVP path; not a user-facing parameter). The rule enforces an effective minimum bond dimension of `min(2, max_bond_dim)` when a finite cap is set, or `2` when `max_bond_dim` is unset. Retention never exceeds `max_bond_dim`.
 
 Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Higher values can improve accuracy at higher cost. The setting applies to all TDVP kernels (two-site, single-site, local dynamic, and global dynamic TDVP) on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
 
-Substep geometry: each substep is **symmetric** (left-to-right then right-to-left) at evolution time `step_time / tdvp_sweeps` for analog (`dt`) and digital gates. Noise and dissipation after TDVP still use the full physical step `dt` in analog simulation.
+Substep geometry: each substep is **symmetric** (left-to-right then right-to-left) at evolution time `step_time / tdvp_sweeps` for analog (`dt`) and digital gates. The total generator time applied to one digital gate remains `1` across all substeps. Noise and dissipation after TDVP still use the full physical step `dt` in analog simulation.
 
 ```{code-cell} ipython3
 strong = StrongSimParams(

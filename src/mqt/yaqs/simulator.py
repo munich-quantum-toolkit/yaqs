@@ -56,7 +56,6 @@ import copy
 # Thread limits are enforced in worker processes via limit_worker_threads()
 # and in backend calls via _call_backend() with threadpoolctl.
 # ---------------------------------------------------------------------------
-from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
     CancelledError,

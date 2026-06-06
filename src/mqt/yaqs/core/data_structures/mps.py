@@ -416,10 +416,7 @@ class MPS:
                 )
                 raise ValueError(msg)
             if max_bond_dim is not None and chi_out > max_bond_dim:
-                msg = (
-                    f"MPS bond cap violated at bond {bond}: chi={chi_out} > "
-                    f"max_bond_dim={max_bond_dim}"
-                )
+                msg = f"MPS bond cap violated at bond {bond}: chi={chi_out} > max_bond_dim={max_bond_dim}"
                 raise ValueError(msg)
 
     def get_max_bond(self) -> int:
