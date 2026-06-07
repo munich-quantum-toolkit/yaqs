@@ -67,7 +67,6 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 import numpy as np
 
 if TYPE_CHECKING:
-
     from collections.abc import Callable
 
     from .core.data_structures.hamiltonian import Representation
