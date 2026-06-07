@@ -434,6 +434,14 @@ def _gate_dynamic_tdvp_sweep(
 ) -> None:
     from ..core.methods.decompositions import merge_two_site  # noqa: PLC0415
     from ..core.methods.tdvp import (  # noqa: PLC0415
+        initialize_right_environments,
+        merge_mpo_tensors,
+        update_bond,
+        update_left_environment,
+        update_right_environment,
+        update_site,
+    )
+    from ..core.methods.tdvp_utils import (  # noqa: PLC0415
         _bond_dim_at_or_above_cap,
         _bond_dims_mismatched,
         _canonicalize_site_ltr,
@@ -443,12 +451,6 @@ def _gate_dynamic_tdvp_sweep(
         _prepare_substep_evolution_dt,
         _resize_bond,
         _sync_bond_dim,
-        initialize_right_environments,
-        merge_mpo_tensors,
-        update_bond,
-        update_left_environment,
-        update_right_environment,
-        update_site,
     )
 
     if sweep_plan is not None:
