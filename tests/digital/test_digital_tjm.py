@@ -45,6 +45,7 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
 from mqt.yaqs.core.methods import tdvp as tdvp_mod
+from mqt.yaqs.digital.digital_tdvp_utils import protected_bonds_for_two_site_gate, retention_crossed_bonds
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
     apply_single_qubit_gate,
@@ -56,8 +57,6 @@ from mqt.yaqs.digital.digital_tjm import (
     create_local_noise_model,
     digital_tjm,
     process_layer,
-    protected_bonds_for_two_site_gate,
-    retention_crossed_bonds,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 

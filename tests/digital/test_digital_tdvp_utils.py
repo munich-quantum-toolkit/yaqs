@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Protected-bond support retention and dynamic TDVP routing tests."""
+"""Digital gate TDVP bond-support and routing tests."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def test_dynamic_tdvp_lr_gate_uses_dynamic_mode() -> None:
     def _noop_tdvp(*_args: object, **_kwargs: object) -> None:
         return None
 
-    with patch("mqt.yaqs.digital.digital_tjm._tdvp_dynamic", side_effect=_noop_tdvp) as mock_tdvp:
+    with patch("mqt.yaqs.digital.digital_tjm.gate_tdvp", side_effect=_noop_tdvp) as mock_tdvp:
         apply_two_qubit_gate_tdvp(out, gate, params)
         assert mock_tdvp.call_count == 1
 
