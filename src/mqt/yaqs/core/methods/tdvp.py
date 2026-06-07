@@ -63,6 +63,9 @@ DENSE_THRESHOLD = 128
 Mode = Literal["1site", "2site", "dynamic"]
 
 
+# --- MPO environment blocks ---
+
+
 def merge_mpo_tensors(
     left_tensor: NDArray[np.complex128], right_tensor: NDArray[np.complex128]
 ) -> NDArray[np.complex128]:
@@ -180,6 +183,9 @@ def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex1
             psi.tensors[site + 1], psi.tensors[site + 1], op.tensors[site + 1], right_blocks[site + 1]
         )
     return right_blocks
+
+
+# --- Dense effective operator ---
 
 
 def project_site(
@@ -460,6 +466,9 @@ def _evolve_local_tensor_krylov(
     return evolved_flat.reshape(tensor_shape)
 
 
+# --- Local TDVP updates ---
+
+
 def update_site(
     left_env: NDArray[np.complex128],
     right_env: NDArray[np.complex128],
@@ -528,6 +537,9 @@ def update_bond(
     )
 
 
+# --- Sweep orchestration ---
+
+
 def _build_tdvp_sweep_plan(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> list[float]:
@@ -568,6 +580,9 @@ def _run_sweeps(
         sweep_plan=_build_tdvp_sweep_plan(sim_params),
         **kwargs,
     )
+
+
+# --- TDVP integrators ---
 
 
 def _single_site_tdvp_sweep(
@@ -672,48 +687,6 @@ def _single_site_tdvp_sweep(
             0.5 * substep_evolution_dt,
             krylov_tol=sim_params.krylov_tol,
         )
-
-
-def tdvp(
-    state: MPS,
-    operator: MPO,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    mode: Mode = "dynamic",
-) -> None:
-    """Evolve an MPS under an MPO operator via TDVP.
-
-    The operator may represent a Hamiltonian (analog simulation) or a gate
-    generator MPO (digital simulation).
-
-    Args:
-        state: MPS state updated in place.
-        operator: MPO defining the local generator at each site.
-        sim_params: Simulation parameters including ``dt`` or gate time,
-            ``tdvp_sweeps``, truncation, and Krylov settings.
-        mode: TDVP integrator variant. ``"dynamic"`` (default) adaptively
-            chooses single- or two-site updates per bond; ``"1site"`` and
-            ``"2site"`` force 1TDVP or 2TDVP respectively.
-
-    Raises:
-        ValueError: If ``state`` and ``operator`` lengths mismatch, or if
-            ``mode="2site"`` with fewer than two sites.
-    """
-    if operator.length != state.length:
-        msg = "MPS and operator must have the same number of sites."
-        raise ValueError(msg)
-    if mode == "2site" and operator.length < 2:
-        msg = "Operator is too short for a two-site update (2TDVP)."
-        raise ValueError(msg)
-
-    if mode == "dynamic" and operator.length == 1:
-        mode = "1site"
-
-    if mode == "1site":
-        _run_sweeps(_single_site_tdvp_sweep, state, operator, sim_params)
-    elif mode == "2site":
-        _run_sweeps(_two_site_tdvp_sweep, state, operator, sim_params)
-    else:
-        _run_sweeps(_local_dynamic_tdvp_sweep, state, operator, sim_params)
 
 
 def _two_site_tdvp_sweep(
@@ -1038,3 +1011,48 @@ def _local_dynamic_tdvp_sweep(
 
     if sim_params.max_bond_dim is not None:
         state.normalize()
+
+
+# --- Public entry point ---
+
+
+def tdvp(
+    state: MPS,
+    operator: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    mode: Mode = "dynamic",
+) -> None:
+    """Evolve an MPS under an MPO operator via TDVP.
+
+    The operator may represent a Hamiltonian (analog simulation) or a gate
+    generator MPO (digital simulation).
+
+    Args:
+        state: MPS state updated in place.
+        operator: MPO defining the local generator at each site.
+        sim_params: Simulation parameters including ``dt`` or gate time,
+            ``tdvp_sweeps``, truncation, and Krylov settings.
+        mode: TDVP integrator variant. ``"dynamic"`` (default) adaptively
+            chooses single- or two-site updates per bond; ``"1site"`` and
+            ``"2site"`` force 1TDVP or 2TDVP respectively.
+
+    Raises:
+        ValueError: If ``state`` and ``operator`` lengths mismatch, or if
+            ``mode="2site"`` with fewer than two sites.
+    """
+    if operator.length != state.length:
+        msg = "MPS and operator must have the same number of sites."
+        raise ValueError(msg)
+    if mode == "2site" and operator.length < 2:
+        msg = "Operator is too short for a two-site update (2TDVP)."
+        raise ValueError(msg)
+
+    if mode == "dynamic" and operator.length == 1:
+        mode = "1site"
+
+    if mode == "1site":
+        _run_sweeps(_single_site_tdvp_sweep, state, operator, sim_params)
+    elif mode == "2site":
+        _run_sweeps(_two_site_tdvp_sweep, state, operator, sim_params)
+    else:
+        _run_sweeps(_local_dynamic_tdvp_sweep, state, operator, sim_params)
