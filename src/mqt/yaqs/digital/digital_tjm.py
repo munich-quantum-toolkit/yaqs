@@ -33,8 +33,9 @@ from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
+from ..core.methods.tdvp import tdvp
+from ..core.methods.tdvp_retained_bonds import prepare_retained_bonds
 from ..core.random_utils import make_trajectory_rng
-from .digital_tdvp_utils import digital_tdvp, prepare_retained_bonds
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -252,7 +253,7 @@ def apply_two_qubit_gate_tdvp(
         if abs(site0 - site1) != 1
         else None
     )
-    digital_tdvp(short_state, short_mpo, sim_params, retained_bonds=retained_bonds)
+    tdvp(short_state, short_mpo, sim_params, mode="dynamic", retained_bonds=retained_bonds)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 

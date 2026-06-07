@@ -45,8 +45,8 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
 from mqt.yaqs.core.methods import tdvp as tdvp_mod
-from mqt.yaqs.digital.digital_tdvp_utils import (
-    digital_tdvp,
+from mqt.yaqs.core.methods.tdvp import tdvp
+from mqt.yaqs.core.methods.tdvp_retained_bonds import (
     prepare_retained_bonds,
     protected_bonds_for_two_site_gate,
     retention_crossed_bonds,
@@ -1375,7 +1375,7 @@ def test_tdvp_embedded_rzz_window_matches_qiskit(
     window_state, window_mpo, window = apply_window(prep, mpo, first_site, last_site, 1)
     if mode == "dynamic" and abs(sites[0] - sites[1]) != 1:
         retained = prepare_retained_bonds(window_state, sites[0], sites[1], (window[0], window[1]), sim_params)
-        digital_tdvp(window_state, window_mpo, sim_params, retained_bonds=retained)
+        tdvp(window_state, window_mpo, sim_params, mode="dynamic", retained_bonds=retained)
     else:
         tdvp_mod.tdvp(window_state, window_mpo, sim_params, mode=cast("Mode", mode))
 

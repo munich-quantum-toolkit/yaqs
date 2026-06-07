@@ -9,8 +9,7 @@
 
 Low-level helpers for truncated two-site splits, fixed-χ bond handling, and
 site canonicalization during dynamic TDVP sweeps. Integrator loops live in
-:mod:`mqt.yaqs.core.methods.tdvp`; digital gate TDVP reuses these utilities
-from :mod:`mqt.yaqs.digital.digital_tdvp_utils`.
+:mod:`mqt.yaqs.core.methods.tdvp`.
 """
 
 from __future__ import annotations

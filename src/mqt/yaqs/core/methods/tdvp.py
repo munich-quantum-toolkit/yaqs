@@ -35,6 +35,12 @@ import opt_einsum as oe
 
 from .decompositions import merge_two_site
 from .matrix_exponential import expm_krylov
+from .tdvp_retained_bonds import (
+    _after_digital_substep,
+    _after_retained_split,
+    _canon_retained_site,
+    _split_digital_two_site,
+)
 from .tdvp_utils import (
     _bond_dim_at_or_above_cap,
     _bond_dims_mismatched,
@@ -801,20 +807,22 @@ def _two_site_tdvp_sweep(
             )
 
 
-def _local_dynamic_tdvp_sweep(
+def _dynamic_tdvp_sweep(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    retained_bonds: frozenset[int] | None = None,
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
 ) -> None:
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
-            _local_dynamic_tdvp_sweep(
+            _dynamic_tdvp_sweep(
                 state,
                 operator,
                 sim_params,
+                retained_bonds,
                 step_scale=plan_step_scale,
             )
         return
@@ -822,6 +830,9 @@ def _local_dynamic_tdvp_sweep(
     _enforce_global_bond_cap(state, sim_params)
 
     num_sites = operator.length
+    use_lock = retained_bonds is None
+    merged_peak: dict[int, float] = {}
+    last_second: dict[int, float] = {}
 
     right_blocks = initialize_right_environments(state, operator)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
@@ -838,7 +849,7 @@ def _local_dynamic_tdvp_sweep(
     lock_final_site = False
     for i in range(num_sites):
         bond_dim = state.tensors[i].shape[2]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or (use_lock and lock_final_site):
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -848,7 +859,10 @@ def _local_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != num_sites - 1:
-                site_tensor, bond_tensor = _canonicalize_site_ltr(state.tensors[i], sim_params)
+                if retained_bonds is not None and i in retained_bonds:
+                    site_tensor, bond_tensor = _canon_retained_site(state.tensors[i], sim_params, ltr=True)
+                else:
+                    site_tensor, bond_tensor = _canonicalize_site_ltr(state.tensors[i], sim_params)
                 state.tensors[i] = site_tensor
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
@@ -873,7 +887,7 @@ def _local_dynamic_tdvp_sweep(
                 if sim_params.max_bond_dim is not None and _bond_dims_mismatched(state, i):
                     _sync_bond_dim(state, i, _contract_bond_target_dim(state, i, sim_params))
                     state.normalize()
-            if i == num_sites - 2:
+            if use_lock and i == num_sites - 2:
                 lock_final_site = True
         elif i == num_sites - 1:
             continue
@@ -888,14 +902,26 @@ def _local_dynamic_tdvp_sweep(
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-                merged_tensor,
-                sim_params,
-                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-                "right",
-                dynamic=True,
-            )
+            phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
+            if retained_bonds is not None:
+                state.tensors[i], state.tensors[i + 1] = _split_digital_two_site(
+                    merged_tensor,
+                    sim_params,
+                    phys_dims,
+                    "right",
+                    bond_index=i,
+                    retained_bonds=retained_bonds,
+                )
+                if i in retained_bonds:
+                    _after_retained_split(state, i, merged_tensor, phys_dims, sim_params, merged_peak, last_second)
+            else:
+                state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                    merged_tensor,
+                    sim_params,
+                    phys_dims,
+                    "right",
+                    dynamic=True,
+                )
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
@@ -914,13 +940,26 @@ def _local_dynamic_tdvp_sweep(
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
-                merged_tensor,
-                sim_params,
-                [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-                "right",
-                dynamic=True,
-            )
+            phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
+            if retained_bonds is not None:
+                state.tensors[i], state.tensors[i + 1] = _split_digital_two_site(
+                    merged_tensor,
+                    sim_params,
+                    phys_dims,
+                    "right",
+                    bond_index=i,
+                    retained_bonds=retained_bonds,
+                )
+                if i in retained_bonds:
+                    _after_retained_split(state, i, merged_tensor, phys_dims, sim_params, merged_peak, last_second)
+            else:
+                state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+                    merged_tensor,
+                    sim_params,
+                    phys_dims,
+                    "right",
+                    dynamic=True,
+                )
             left_blocks[i + 1] = update_left_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
@@ -938,7 +977,7 @@ def _local_dynamic_tdvp_sweep(
     lock_final_site = False
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i].shape[1]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or (use_lock and lock_final_site):
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -948,7 +987,10 @@ def _local_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != 0:
-                site_tensor, bond_tensor = _canonicalize_site_rtl(state.tensors[i], sim_params)
+                if retained_bonds is not None and (i - 1) in retained_bonds:
+                    site_tensor, bond_tensor = _canon_retained_site(state.tensors[i], sim_params, ltr=False)
+                else:
+                    site_tensor, bond_tensor = _canonicalize_site_rtl(state.tensors[i], sim_params)
                 state.tensors[i] = site_tensor
                 right_blocks[i - 1] = update_right_environment(
                     state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
@@ -974,7 +1016,7 @@ def _local_dynamic_tdvp_sweep(
                 if sim_params.max_bond_dim is not None and _bond_dims_mismatched(state, i - 1):
                     _sync_bond_dim(state, i - 1, _contract_bond_target_dim(state, i - 1, sim_params))
                     state.normalize()
-                if i == 1:
+                if use_lock and i == 1:
                     lock_final_site = True
         elif i == 0:
             continue
@@ -989,13 +1031,29 @@ def _local_dynamic_tdvp_sweep(
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-            state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
-                merged_tensor,
-                sim_params,
-                [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
-                "left",
-                dynamic=True,
-            )
+            phys_dims = [state.physical_dimensions[i - 1], state.physical_dimensions[i]]
+            bond_index = i - 1
+            if retained_bonds is not None:
+                state.tensors[i - 1], state.tensors[i] = _split_digital_two_site(
+                    merged_tensor,
+                    sim_params,
+                    phys_dims,
+                    "left",
+                    bond_index=bond_index,
+                    retained_bonds=retained_bonds,
+                )
+                if bond_index in retained_bonds:
+                    _after_retained_split(
+                        state, bond_index, merged_tensor, phys_dims, sim_params, merged_peak, last_second
+                    )
+            else:
+                state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
+                    merged_tensor,
+                    sim_params,
+                    phys_dims,
+                    "left",
+                    dynamic=True,
+                )
             right_blocks[i - 1] = update_right_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
             )
@@ -1009,6 +1067,8 @@ def _local_dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
 
+    if retained_bonds is not None:
+        _after_digital_substep(state, retained_bonds, sim_params, merged_peak, last_second)
     if sim_params.max_bond_dim is not None:
         state.normalize()
 
@@ -1021,6 +1081,8 @@ def tdvp(
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     mode: Mode = "dynamic",
+    *,
+    retained_bonds: frozenset[int] | None = None,
 ) -> None:
     """Evolve an MPS under an MPO operator via TDVP.
 
@@ -1035,16 +1097,22 @@ def tdvp(
         mode: TDVP integrator variant. ``"dynamic"`` (default) adaptively
             chooses single- or two-site updates per bond; ``"1site"`` and
             ``"2site"`` force 1TDVP or 2TDVP respectively.
+        retained_bonds: Optional window-local bond indices for long-range digital
+            gate support during dynamic TDVP. Analog callers should omit this.
 
     Raises:
-        ValueError: If ``state`` and ``operator`` lengths mismatch, or if
-            ``mode="2site"`` with fewer than two sites.
+        ValueError: If ``state`` and ``operator`` lengths mismatch, if
+            ``mode="2site"`` with fewer than two sites, or if ``retained_bonds``
+            is set with a non-dynamic mode.
     """
     if operator.length != state.length:
         msg = "MPS and operator must have the same number of sites."
         raise ValueError(msg)
     if mode == "2site" and operator.length < 2:
         msg = "Operator is too short for a two-site update (2TDVP)."
+        raise ValueError(msg)
+    if retained_bonds is not None and mode != "dynamic":
+        msg = "retained_bonds is only supported with mode='dynamic'."
         raise ValueError(msg)
 
     if mode == "dynamic" and operator.length == 1:
@@ -1054,5 +1122,7 @@ def tdvp(
         _run_sweeps(_single_site_tdvp_sweep, state, operator, sim_params)
     elif mode == "2site":
         _run_sweeps(_two_site_tdvp_sweep, state, operator, sim_params)
+    elif retained_bonds:
+        _run_sweeps(_dynamic_tdvp_sweep, state, operator, sim_params, retained_bonds)
     else:
-        _run_sweeps(_local_dynamic_tdvp_sweep, state, operator, sim_params)
+        _run_sweeps(_dynamic_tdvp_sweep, state, operator, sim_params)
