@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import numpy as np
 import opt_einsum as oe
 
+from .. import linalg
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import merge_two_site, split_two_site
 from .matrix_exponential import expm_krylov
@@ -126,25 +127,91 @@ def _split_two_site_tdvp(
 
     Returns:
         Left and right MPS site tensors after split and truncation.
+
+    Raises:
+        ValueError: If ``physical_dimensions`` is invalid, ``trunc_mode`` is
+            unrecognized, or ``svd_distribution`` is invalid.
     """
     threshold = sim_params.svd_threshold
+    trunc_mode = cast("TruncMode", sim_params.trunc_mode)
+    svd_dist = cast("SvdDistribution", svd_distribution)
     max_bond_dim = None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim
-    if hooks is not None:
-        cap = sim_params.max_bond_dim
-        min_bond_dim = 2 if cap is None else min(2, cap)
-    else:
-        min_bond_dim = 1
-    if hooks is not None and bond_index is not None and bond_index in hooks.bonds:
-        min_bond_dim, threshold = hooks.split(bond_index, min_bond_dim, threshold)
-    return split_two_site(
-        merged,
-        physical_dimensions,
-        svd_distribution=cast("SvdDistribution", svd_distribution),
-        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
-        threshold=threshold,
-        max_bond_dim=max_bond_dim,
-        min_bond_dim=min_bond_dim,
+
+    if hooks is None:
+        return split_two_site(
+            merged,
+            physical_dimensions,
+            svd_distribution=svd_dist,
+            trunc_mode=trunc_mode,
+            threshold=threshold,
+            max_bond_dim=max_bond_dim,
+        )
+
+    cap = sim_params.max_bond_dim
+    min_keep = 2 if cap is None else min(2, cap)
+    if bond_index is not None and bond_index in hooks.bonds:
+        min_keep, threshold = hooks.split(bond_index, min_keep, threshold)
+
+    if len(physical_dimensions) != 2:
+        msg = f"physical_dimensions must have exactly 2 elements (d_left, d_right); got {len(physical_dimensions)}."
+        raise ValueError(msg)
+    d_left = physical_dimensions[0]
+    d_right = physical_dimensions[1]
+    if merged.shape[0] != d_left * d_right:
+        msg = "The first dimension of the tensor must be a combination of the given physical dimensions."
+        raise ValueError(msg)
+
+    tensor_reshaped = merged.reshape(d_left, d_right, merged.shape[1], merged.shape[2])
+    tensor_transposed = tensor_reshaped.transpose((0, 2, 1, 3))
+    shape_transposed = tensor_transposed.shape
+
+    theta_mat = tensor_transposed.reshape(
+        shape_transposed[0] * shape_transposed[1],
+        shape_transposed[2] * shape_transposed[3],
     )
+    u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
+
+    if trunc_mode == "discarded_weight":
+        keep = linalg.truncate(
+            s_vec,
+            mode="discarded_weight",
+            threshold=threshold,
+            max_bond_dim=max_bond_dim,
+            min_keep=min_keep,
+        )
+    elif trunc_mode == "relative":
+        keep = linalg.truncate(
+            s_vec,
+            mode="relative",
+            threshold=threshold,
+            max_bond_dim=max_bond_dim,
+            min_keep=min_keep,
+        )
+    else:
+        msg = f"Unknown truncation mode: {trunc_mode!r}"
+        raise ValueError(msg)
+
+    left_tensor = u_mat[:, :keep]
+    s_vec = s_vec[:keep]
+    right_tensor = v_mat[:keep, :]
+
+    left_tensor = left_tensor.reshape((shape_transposed[0], shape_transposed[1], keep))
+    right_tensor = right_tensor.reshape((keep, shape_transposed[2], shape_transposed[3]))
+
+    if svd_dist == "left":
+        left_tensor *= s_vec
+    elif svd_dist == "right":
+        right_tensor *= s_vec[:, None, None]
+    elif svd_dist == "sqrt":
+        sqrt_sigma = np.sqrt(s_vec)
+        left_tensor *= sqrt_sigma
+        right_tensor *= sqrt_sigma[:, None, None]
+    else:
+        msg = "svd_distribution parameter must be left, right, or sqrt."
+        raise ValueError(msg)
+
+    right_tensor = right_tensor.transpose((1, 0, 2))
+    return left_tensor, right_tensor
 
 
 def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:

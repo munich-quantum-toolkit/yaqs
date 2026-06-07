@@ -92,7 +92,6 @@ def apply_scheduled_jumps(
                     trunc_mode=cast("TruncMode", sim_params.trunc_mode),
                     threshold=sim_params.svd_threshold,
                     max_bond_dim=sim_params.max_bond_dim,
-                    min_bond_dim=1,
                 )
                 state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
 

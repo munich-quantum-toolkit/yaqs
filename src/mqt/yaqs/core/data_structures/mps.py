@@ -621,7 +621,6 @@ class MPS:
                 trunc_mode="discarded_weight",
                 threshold=1e-12,
                 max_bond_dim=None,
-                min_bond_dim=2,
             )
             (
                 self.tensors[current_orthogonality_center],
@@ -721,7 +720,6 @@ class MPS:
                 trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=1,
             )
             self.tensors[site] = left_new
             self.tensors[site + 1] = right_new
@@ -739,7 +737,6 @@ class MPS:
                 trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=1,
             )
             self.tensors[site] = left_new
             self.tensors[site + 1] = right_new

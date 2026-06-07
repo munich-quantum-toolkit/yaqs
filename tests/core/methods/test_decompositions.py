@@ -122,7 +122,6 @@ def test_split_two_site_reconstructs_full_rank(distr: str) -> None:
         trunc_mode="discarded_weight",
         threshold=0.0,
         max_bond_dim=None,
-        min_bond_dim=1,
     )
     merged_back = merge_two_site(a_new, b_new)
     np.testing.assert_allclose(merged_back, merged, atol=1e-10, rtol=1e-8)
@@ -142,7 +141,6 @@ def test_split_two_site_truncates_to_max_bond_dim() -> None:
         trunc_mode="discarded_weight",
         threshold=0.0,
         max_bond_dim=k,
-        min_bond_dim=1,
     )
     assert a_new.shape[2] == k
     assert b_new.shape[1] == k
@@ -159,7 +157,6 @@ def test_split_two_site_unknown_mode_raises() -> None:
             trunc_mode=cast("Any", "invalid"),
             threshold=1e-9,
             max_bond_dim=None,
-            min_bond_dim=1,
         )
 
 
