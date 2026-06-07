@@ -27,7 +27,7 @@ from mqt.yaqs.core.methods.bug import (
     prepare_canonical_site_tensors,
 )
 from mqt.yaqs.core.methods.decompositions import right_qr
-from mqt.yaqs.core.methods.tdvp import update_left_environment
+from mqt.yaqs.core.methods.tdvp_primitives import update_left_environment
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

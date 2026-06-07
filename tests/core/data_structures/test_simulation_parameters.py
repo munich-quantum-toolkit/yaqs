@@ -36,7 +36,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     _validate_tdvp_sweeps,  # noqa: PLC2701
 )
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
-from mqt.yaqs.core.methods import tdvp
+from mqt.yaqs.core.methods import tdvp_primitives
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -303,11 +303,11 @@ def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -
         seen["tol"] = float(tol)
         return vec
 
-    monkeypatch.setattr(tdvp, "expm_krylov", fake_expm_krylov)
+    monkeypatch.setattr(tdvp_primitives, "expm_krylov", fake_expm_krylov)
 
     tensor = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
-    _ = tdvp._evolve_local_tensor_krylov(
+    _ = tdvp_primitives._evolve_local_tensor_krylov(
         projector=lambda x: x,
         tensor=tensor,
         dt=0.1,

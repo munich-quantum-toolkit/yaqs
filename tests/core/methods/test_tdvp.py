@@ -45,15 +45,17 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.tdvp import (
-    _build_dense_effective_operator,  # noqa: PLC2701
     _run_sweeps,  # noqa: PLC2701
+    tdvp,
+)
+from mqt.yaqs.core.methods.tdvp_primitives import (
+    _build_dense_effective_operator,  # noqa: PLC2701
     _split_two_site_tdvp,  # noqa: PLC2701
     build_dense_heff_bond,
     build_dense_heff_site,
     merge_mpo_tensors,
     project_bond,
     project_site,
-    tdvp,
     update_bond,
     update_left_environment,
     update_right_environment,
@@ -414,18 +416,28 @@ def test_two_site_tdvp_analog_sweep_preservation() -> None:
     assert np.allclose(state_vec, found)
 
 
-def test_tdvp_retained_bonds_requires_dynamic_mode() -> None:
-    """retained_bonds is rejected when mode is not dynamic."""
+def test_tdvp_support_bonds_requires_dynamic_mode() -> None:
+    """support_bonds is rejected when mode is not dynamic."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
-    with pytest.raises(ValueError, match="retained_bonds is only supported"):
-        tdvp(state, H, sim_params, mode="1site", retained_bonds=frozenset({0}))
+    with pytest.raises(ValueError, match="support_bonds is only supported"):
+        tdvp(state, H, sim_params, mode="1site", support_bonds=frozenset({0}))
 
 
-def test_tdvp_retained_bonds_dynamic_dispatch() -> None:
-    """Dynamic TDVP with retained_bonds passes the bond set to the sweep kernel."""
+def test_tdvp_support_bonds_rejects_analog_sim_params() -> None:
+    """support_bonds is rejected for analog simulation parameters."""
+    L = 4
+    H = MPO.ising(L, 1.0, 0.5)
+    state = MPS(L, state="zeros")
+    sim_params = AnalogSimParams(elapsed_time=1.0, dt=0.1, preset="exact")
+    with pytest.raises(ValueError, match="support_bonds is not supported with AnalogSimParams"):
+        tdvp(state, H, sim_params, mode="dynamic", support_bonds=frozenset({0}))
+
+
+def test_tdvp_support_bonds_dynamic_dispatch() -> None:
+    """Dynamic TDVP with support_bonds passes the bond set to the sweep kernel."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
@@ -433,7 +445,7 @@ def test_tdvp_retained_bonds_dynamic_dispatch() -> None:
     bonds = frozenset({0})
 
     with patch("mqt.yaqs.core.methods.tdvp._dynamic_tdvp_sweep") as mock_dyn:
-        tdvp(state, H, sim_params, mode="dynamic", retained_bonds=bonds)
+        tdvp(state, H, sim_params, mode="dynamic", support_bonds=bonds)
         mock_dyn.assert_called_once()
         assert mock_dyn.call_args.args[3] == bonds
 

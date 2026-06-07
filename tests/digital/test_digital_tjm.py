@@ -46,10 +46,10 @@ from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
 from mqt.yaqs.core.methods import tdvp as tdvp_mod
 from mqt.yaqs.core.methods.tdvp import tdvp
-from mqt.yaqs.core.methods.tdvp_retained_bonds import (
-    prepare_retained_bonds,
+from mqt.yaqs.core.methods.tdvp_bond_support import (
+    anchor_support_bonds,
+    prepare_support_bonds,
     protected_bonds_for_two_site_gate,
-    retention_crossed_bonds,
 )
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
@@ -1374,8 +1374,8 @@ def test_tdvp_embedded_rzz_window_matches_qiskit(
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
     window_state, window_mpo, window = apply_window(prep, mpo, first_site, last_site, 1)
     if mode == "dynamic" and abs(sites[0] - sites[1]) != 1:
-        retained = prepare_retained_bonds(window_state, sites[0], sites[1], (window[0], window[1]), sim_params)
-        tdvp(window_state, window_mpo, sim_params, mode="dynamic", retained_bonds=retained)
+        support = prepare_support_bonds(window_state, sites[0], sites[1], (window[0], window[1]), sim_params)
+        tdvp(window_state, window_mpo, sim_params, mode="dynamic", support_bonds=support)
     else:
         tdvp_mod.tdvp(window_state, window_mpo, sim_params, mode=cast("Mode", mode))
 
@@ -1526,13 +1526,13 @@ def test_protected_bonds_for_long_range_gate(
         (10, frozenset({0, 1, 2, 3, 4, 5, 6, 7, 8}), frozenset({0, 1, 2, 3})),
     ],
 )
-def test_retention_crossed_bonds_uses_anchor_half(
+def test_anchor_support_bonds_uses_anchor_half(
     num_sites: int,
     crossed: frozenset[int],
     expected: frozenset[int],
 ) -> None:
-    """Active retention applies only to bonds left of the window midpoint."""
-    assert retention_crossed_bonds(crossed, num_sites) == expected
+    """Active support applies only to bonds left of the window midpoint."""
+    assert anchor_support_bonds(crossed, num_sites) == expected
 
 
 @pytest.mark.parametrize("length", [7, 8, 10])

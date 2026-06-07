@@ -5,10 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Long-range digital gate retained-bond support for dynamic TDVP.
+"""Long-range digital gate bond support for dynamic TDVP.
 
 Bond geometry, preparation helpers, and sweep hooks used by
-:func:`mqt.yaqs.core.methods.tdvp.tdvp` when ``retained_bonds`` is set.
+:func:`mqt.yaqs.core.methods.tdvp.tdvp` when ``support_bonds`` is set.
 """
 
 from __future__ import annotations
@@ -18,13 +18,13 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 
 from .. import linalg
-from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .decompositions import split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..data_structures.mps import MPS
+    from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
     from .decompositions import SvdDistribution, TruncMode
 
 
@@ -93,7 +93,7 @@ def protected_bonds_for_two_site_gate(
     )
 
 
-def retention_crossed_bonds(crossed_bonds: frozenset[int], num_sites: int) -> frozenset[int]:
+def anchor_support_bonds(crossed_bonds: frozenset[int], num_sites: int) -> frozenset[int]:
     """Return crossed bonds that receive active support during gate TDVP.
 
     Args:
@@ -193,7 +193,7 @@ def _reseed_support(
     state.tensors[bond_index + 1] = new_right
 
 
-def _canon_retained_site(
+def _canon_support_site(
     tensor: NDArray[np.complex128],
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
@@ -253,16 +253,16 @@ def _canon_retained_site(
     return site_tensor, bond_tensor.transpose()
 
 
-def _split_digital_two_site(
+def _split_support_two_site(
     merged: NDArray[np.complex128],
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     physical_dimensions: list[int],
     svd_distribution: str,
     *,
     bond_index: int,
-    retained_bonds: frozenset[int],
+    support_bonds: frozenset[int],
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Split a merged two-site tensor with digital TDVP truncation policy.
+    """Split a merged two-site tensor with bond-support truncation policy.
 
     Returns:
         Left and right MPS site tensors after split and truncation.
@@ -270,7 +270,7 @@ def _split_digital_two_site(
     cap = sim_params.max_bond_dim
     min_keep = 2 if cap is None else min(2, cap)
     threshold = sim_params.svd_threshold
-    if bond_index in retained_bonds:
+    if bond_index in support_bonds:
         min_keep = max(min_keep, _min_bond_dim(sim_params))
         threshold = 0.0
     return split_two_site(
@@ -284,7 +284,7 @@ def _split_digital_two_site(
     )
 
 
-def _after_retained_split(
+def _after_support_split(
     state: MPS,
     bond_index: int,
     merged: NDArray[np.complex128],
@@ -297,9 +297,7 @@ def _after_retained_split(
     threshold = sim_params.svd_threshold
     propagation = _entanglement_threshold(sim_params)
     if min_dim >= 2:
-        state._ensure_internal_bond_dims(  # noqa: SLF001
-            (bond_index,), min_dim, max_dim=sim_params.max_bond_dim
-        )
+        state._ensure_internal_bond_dims((bond_index,), min_dim, max_dim=sim_params.max_bond_dim)
     pre_ratio = _merged_second_schmidt_ratio(merged, physical_dimensions)
     merged_peak[bond_index] = max(merged_peak.get(bond_index, 0.0), pre_ratio)
     post_ratio = _second_schmidt_ratio(state, bond_index)
@@ -309,9 +307,9 @@ def _after_retained_split(
     last_second[bond_index] = post_ratio
 
 
-def _after_digital_substep(
+def _after_support_substep(
     state: MPS,
-    retained_bonds: frozenset[int],
+    support_bonds: frozenset[int],
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     merged_peak: dict[int, float],
     last_second: dict[int, float],
@@ -321,18 +319,16 @@ def _after_digital_substep(
         return
     threshold = sim_params.svd_threshold
     propagation = _entanglement_threshold(sim_params)
-    ratios = {bond: _second_schmidt_ratio(state, bond) for bond in retained_bonds}
-    bonds_to_repad = [bond for bond in retained_bonds if state.tensors[bond].shape[2] < min_dim]
+    ratios = {bond: _second_schmidt_ratio(state, bond) for bond in support_bonds}
+    bonds_to_repad = [bond for bond in support_bonds if state.tensors[bond].shape[2] < min_dim]
     if bonds_to_repad:
-        state._ensure_internal_bond_dims(  # noqa: SLF001
-            tuple(bonds_to_repad), min_dim, max_dim=sim_params.max_bond_dim
-        )
+        state._ensure_internal_bond_dims(tuple(bonds_to_repad), min_dim, max_dim=sim_params.max_bond_dim)
         for bond in bonds_to_repad:
             ratios[bond] = _second_schmidt_ratio(state, bond)
     entangled = any(ratio >= propagation for ratio in ratios.values())
     entangled_cutoff = propagation if sim_params.max_bond_dim == 2 else threshold
     reseeded = False
-    for bond in sorted(retained_bonds):
+    for bond in sorted(support_bonds):
         ratio = ratios[bond]
         collapsed = last_second.get(bond, 0.0) >= propagation and ratio < threshold
         merged_relative = merged_peak.get(bond, 0.0) / max(ratio, 1e-30)
@@ -349,14 +345,14 @@ def _after_digital_substep(
         state.normalize()
 
 
-def prepare_retained_bonds(
+def prepare_support_bonds(
     state: MPS,
     site0: int,
     site1: int,
     window: tuple[int, int],
     sim_params: StrongSimParams | WeakSimParams,
 ) -> frozenset[int] | None:
-    """Build retained bond indices for a long-range gate, pre-padding support dims.
+    """Build support bond indices for a long-range gate, pre-padding support dims.
 
     Returns:
         ``None`` when bond support is disabled under the current χ budget.
@@ -364,9 +360,7 @@ def prepare_retained_bonds(
     if not _support_enabled(sim_params):
         return None
     crossed = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
-    bonds = retention_crossed_bonds(crossed, state.length)
+    bonds = anchor_support_bonds(crossed, state.length)
     min_dim = _min_bond_dim(sim_params)
-    state._ensure_internal_bond_dims(  # noqa: SLF001
-        tuple(bonds), min_dim, max_dim=sim_params.max_bond_dim
-    )
+    state._ensure_internal_bond_dims(tuple(bonds), min_dim, max_dim=sim_params.max_bond_dim)
     return bonds

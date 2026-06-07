@@ -21,7 +21,7 @@ from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.core.methods.tdvp_retained_bonds import protected_bonds_for_two_site_gate
+from mqt.yaqs.core.methods.tdvp_bond_support import protected_bonds_for_two_site_gate
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
 
 if TYPE_CHECKING:
