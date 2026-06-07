@@ -8,7 +8,7 @@
 """Digital long-range gate TDVP helpers.
 
 Core :func:`mqt.yaqs.core.methods.tdvp.tdvp` with ``mode="dynamic"`` is the analog
-integrator. This module provides :func:`gate_tdvp` for long-range two-qubit gates
+integrator. This module provides :func:`digital_tdvp` for long-range two-qubit gates
 with explicit retained-bond support during a forked dynamic TDVP sweep.
 """
 
@@ -21,6 +21,7 @@ import numpy as np
 import opt_einsum as oe
 
 from ..core import linalg
+from ..core.methods.decompositions import split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -197,65 +198,59 @@ def _reseed_support(
 
 
 @dataclass
-class _GateSupportTracker:
-    """Per-substep Schmidt monitoring state for retained gate bonds."""
+class _DigitalSupportTracker:
+    """Per-substep Schmidt monitoring state for retained digital bonds."""
 
     merged_peak: dict[int, float] = field(default_factory=dict)
     last_second: dict[int, float] = field(default_factory=dict)
 
 
-def _canon_retained_ltr(
+def _canon_retained_site(
     tensor: NDArray[np.complex128],
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    ltr: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    tensor_shape = tensor.shape
-    reshaped = tensor.reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-    chi_r = tensor_shape[2]
     eff_min = _min_bond_dim(sim_params)
     cap = sim_params.max_bond_dim
     entanglement_threshold = _entanglement_threshold(sim_params)
+
+    if ltr:
+        tensor_shape = tensor.shape
+        reshaped = tensor.reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+        chi_r = tensor_shape[2]
+    else:
+        tensor_t = tensor.transpose((0, 2, 1))
+        tensor_shape = tensor_t.shape
+        reshaped = tensor_t.reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
+        chi_r = tensor_shape[2]
+
     if chi_r >= eff_min >= 2:
         u_mat, s_vec, vh_mat = linalg.svd(reshaped, full_matrices=False)
         if len(s_vec) >= 2 and float(s_vec[1] / max(float(s_vec[0]), 1e-30)) >= entanglement_threshold:
             keep = min(chi_r, max(eff_min, u_mat.shape[1]))
             if cap is not None:
                 keep = min(keep, cap)
-            site_tensor = u_mat[:, :keep].reshape((tensor_shape[0], tensor_shape[1], keep))
-            return site_tensor, vh_mat[:keep, :]
-    site_tensor, bond_tensor = np.linalg.qr(reshaped)
-    chi_out = int(site_tensor.shape[1])
-    site_tensor = site_tensor.reshape((tensor_shape[0], tensor_shape[1], chi_out))
-    if eff_min >= 2 and cap is not None:
-        target = _clamp_bond_dim(chi_out, sim_params)
-        site_tensor, bond_tensor = _pad_canonical(site_tensor, bond_tensor, target, outgoing=True)
-        chi_out = target
-    if cap is not None and chi_out > cap:
-        site_tensor = site_tensor[:, :, :cap]
-        bond_tensor = bond_tensor[:cap, :]
-    return site_tensor, bond_tensor
-
-
-def _canon_retained_rtl(
-    tensor: NDArray[np.complex128],
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    tensor_t = tensor.transpose((0, 2, 1))
-    tensor_shape = tensor_t.shape
-    reshaped = tensor_t.reshape((tensor_shape[0] * tensor_shape[1], tensor_shape[2]))
-    chi_r = tensor_shape[2]
-    eff_min = _min_bond_dim(sim_params)
-    cap = sim_params.max_bond_dim
-    entanglement_threshold = _entanglement_threshold(sim_params)
-    if chi_r >= eff_min >= 2:
-        u_mat, s_vec, vh_mat = linalg.svd(reshaped, full_matrices=False)
-        if len(s_vec) >= 2 and float(s_vec[1] / max(float(s_vec[0]), 1e-30)) >= entanglement_threshold:
-            keep = min(chi_r, max(eff_min, u_mat.shape[1]))
-            if cap is not None:
-                keep = min(keep, cap)
+            if ltr:
+                site_tensor = u_mat[:, :keep].reshape((tensor_shape[0], tensor_shape[1], keep))
+                return site_tensor, vh_mat[:keep, :]
             site_tensor = u_mat[:, :keep].reshape((tensor_shape[0], tensor_shape[1], keep)).transpose((0, 2, 1))
             bond_tensor = vh_mat[:keep, :].transpose()
             return site_tensor, bond_tensor.transpose()
+
     site_tensor, bond_tensor = np.linalg.qr(reshaped)
+    if ltr:
+        chi_out = int(site_tensor.shape[1])
+        site_tensor = site_tensor.reshape((tensor_shape[0], tensor_shape[1], chi_out))
+        if eff_min >= 2 and cap is not None:
+            target = _clamp_bond_dim(chi_out, sim_params)
+            site_tensor, bond_tensor = _pad_canonical(site_tensor, bond_tensor, target, outgoing=True)
+            chi_out = target
+        if cap is not None and chi_out > cap:
+            site_tensor = site_tensor[:, :, :cap]
+            bond_tensor = bond_tensor[:cap, :]
+        return site_tensor, bond_tensor
+
     site_tensor = site_tensor.reshape((tensor_shape[0], tensor_shape[1], site_tensor.shape[1])).transpose((
         0,
         2,
@@ -270,7 +265,7 @@ def _canon_retained_rtl(
     return site_tensor, bond_tensor.transpose()
 
 
-def _split_gate_two_site(
+def _split_digital_two_site(
     merged: NDArray[np.complex128],
     sim_params: StrongSimParams | WeakSimParams,
     physical_dimensions: list[int],
@@ -279,85 +274,26 @@ def _split_gate_two_site(
     bond_index: int,
     retained_bonds: frozenset[int],
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Split a merged two-site tensor with gate-support truncation policy.
+    """Split a merged two-site tensor with digital TDVP truncation policy.
 
     Returns:
         Left and right MPS site tensors after split and truncation.
-
-    Raises:
-        ValueError: If ``physical_dimensions`` is invalid, ``trunc_mode`` is
-            unrecognized, or ``svd_distribution`` is invalid.
     """
-    threshold = sim_params.svd_threshold
-    trunc_mode = cast("TruncMode", sim_params.trunc_mode)
-    svd_dist = cast("SvdDistribution", svd_distribution)
     cap = sim_params.max_bond_dim
-    max_bond_dim = cap
     min_keep = 2 if cap is None else min(2, cap)
+    threshold = sim_params.svd_threshold
     if bond_index in retained_bonds:
         min_keep = max(min_keep, _min_bond_dim(sim_params))
         threshold = 0.0
-
-    if len(physical_dimensions) != 2:
-        msg = f"physical_dimensions must have exactly 2 elements (d_left, d_right); got {len(physical_dimensions)}."
-        raise ValueError(msg)
-    d_left = physical_dimensions[0]
-    d_right = physical_dimensions[1]
-    if merged.shape[0] != d_left * d_right:
-        msg = "The first dimension of the tensor must be a combination of the given physical dimensions."
-        raise ValueError(msg)
-
-    tensor_reshaped = merged.reshape(d_left, d_right, merged.shape[1], merged.shape[2])
-    tensor_transposed = tensor_reshaped.transpose((0, 2, 1, 3))
-    shape_transposed = tensor_transposed.shape
-
-    theta_mat = tensor_transposed.reshape(
-        shape_transposed[0] * shape_transposed[1],
-        shape_transposed[2] * shape_transposed[3],
+    return split_two_site(
+        merged,
+        physical_dimensions,
+        svd_distribution=cast("SvdDistribution", svd_distribution),
+        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        threshold=threshold,
+        max_bond_dim=cap,
+        min_keep=min_keep,
     )
-    u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
-
-    if trunc_mode == "discarded_weight":
-        keep = linalg.truncate(
-            s_vec,
-            mode="discarded_weight",
-            threshold=threshold,
-            max_bond_dim=max_bond_dim,
-            min_keep=min_keep,
-        )
-    elif trunc_mode == "relative":
-        keep = linalg.truncate(
-            s_vec,
-            mode="relative",
-            threshold=threshold,
-            max_bond_dim=max_bond_dim,
-            min_keep=min_keep,
-        )
-    else:
-        msg = f"Unknown truncation mode: {trunc_mode!r}"
-        raise ValueError(msg)
-
-    left_tensor = u_mat[:, :keep]
-    s_vec = s_vec[:keep]
-    right_tensor = v_mat[:keep, :]
-
-    left_tensor = left_tensor.reshape((shape_transposed[0], shape_transposed[1], keep))
-    right_tensor = right_tensor.reshape((keep, shape_transposed[2], shape_transposed[3]))
-
-    if svd_dist == "left":
-        left_tensor *= s_vec
-    elif svd_dist == "right":
-        right_tensor *= s_vec[:, None, None]
-    elif svd_dist == "sqrt":
-        sqrt_sigma = np.sqrt(s_vec)
-        left_tensor *= sqrt_sigma
-        right_tensor *= sqrt_sigma[:, None, None]
-    else:
-        msg = "svd_distribution parameter must be left, right, or sqrt."
-        raise ValueError(msg)
-
-    right_tensor = right_tensor.transpose((1, 0, 2))
-    return left_tensor, right_tensor
 
 
 def _after_retained_split(
@@ -366,7 +302,7 @@ def _after_retained_split(
     merged: NDArray[np.complex128],
     physical_dimensions: list[int],
     sim_params: StrongSimParams | WeakSimParams,
-    tracker: _GateSupportTracker,
+    tracker: _DigitalSupportTracker,
 ) -> None:
     min_dim = _min_bond_dim(sim_params)
     threshold = sim_params.svd_threshold
@@ -384,11 +320,11 @@ def _after_retained_split(
     tracker.last_second[bond_index] = post_ratio
 
 
-def _after_gate_substep(
+def _after_digital_substep(
     state: MPS,
     retained_bonds: frozenset[int],
     sim_params: StrongSimParams | WeakSimParams,
-    tracker: _GateSupportTracker,
+    tracker: _DigitalSupportTracker,
 ) -> None:
     min_dim = _min_bond_dim(sim_params)
     if min_dim < 2:
@@ -423,7 +359,7 @@ def _after_gate_substep(
         state.normalize()
 
 
-def _gate_dynamic_tdvp_sweep(
+def _digital_dynamic_tdvp_sweep(
     state: MPS,
     operator: MPO,
     sim_params: StrongSimParams | WeakSimParams,
@@ -455,7 +391,7 @@ def _gate_dynamic_tdvp_sweep(
 
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
-            _gate_dynamic_tdvp_sweep(
+            _digital_dynamic_tdvp_sweep(
                 state,
                 operator,
                 sim_params,
@@ -464,7 +400,7 @@ def _gate_dynamic_tdvp_sweep(
             )
         return
 
-    tracker = _GateSupportTracker()
+    tracker = _DigitalSupportTracker()
     _enforce_global_bond_cap(state, sim_params)
 
     num_sites = operator.length
@@ -494,7 +430,7 @@ def _gate_dynamic_tdvp_sweep(
             )
             if i != num_sites - 1:
                 if i in retained_bonds:
-                    site_tensor, bond_tensor = _canon_retained_ltr(state.tensors[i], sim_params)
+                    site_tensor, bond_tensor = _canon_retained_site(state.tensors[i], sim_params, ltr=True)
                 else:
                     site_tensor, bond_tensor = _canonicalize_site_ltr(state.tensors[i], sim_params)
                 state.tensors[i] = site_tensor
@@ -535,7 +471,7 @@ def _gate_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            state.tensors[i], state.tensors[i + 1] = _split_gate_two_site(
+            state.tensors[i], state.tensors[i + 1] = _split_digital_two_site(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -564,7 +500,7 @@ def _gate_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            state.tensors[i], state.tensors[i + 1] = _split_gate_two_site(
+            state.tensors[i], state.tensors[i + 1] = _split_digital_two_site(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -601,7 +537,7 @@ def _gate_dynamic_tdvp_sweep(
             )
             if i != 0:
                 if (i - 1) in retained_bonds:
-                    site_tensor, bond_tensor = _canon_retained_rtl(state.tensors[i], sim_params)
+                    site_tensor, bond_tensor = _canon_retained_site(state.tensors[i], sim_params, ltr=False)
                 else:
                     site_tensor, bond_tensor = _canonicalize_site_rtl(state.tensors[i], sim_params)
                 state.tensors[i] = site_tensor
@@ -643,7 +579,7 @@ def _gate_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i - 1], state.physical_dimensions[i]]
-            state.tensors[i - 1], state.tensors[i] = _split_gate_two_site(
+            state.tensors[i - 1], state.tensors[i] = _split_digital_two_site(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -666,7 +602,7 @@ def _gate_dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
 
-    _after_gate_substep(state, retained_bonds, sim_params, tracker)
+    _after_digital_substep(state, retained_bonds, sim_params, tracker)
     if sim_params.max_bond_dim is not None:
         state.normalize()
 
@@ -694,7 +630,7 @@ def prepare_retained_bonds(
     return bonds
 
 
-def gate_tdvp(
+def digital_tdvp(
     state: MPS,
     operator: MPO,
     sim_params: StrongSimParams | WeakSimParams,
@@ -704,25 +640,18 @@ def gate_tdvp(
     """Evolve a window MPS under a gate generator with optional retained-bond support.
 
     Entry point for digital long-range gates. When ``retained_bonds`` is set, a
-    forked dynamic TDVP sweep enforces gate bond support; otherwise the core
-    dynamic sweep is used (e.g. χ=1 degraded path).
+    forked dynamic TDVP sweep enforces bond support; otherwise core
+    :func:`mqt.yaqs.core.methods.tdvp.tdvp` is used (e.g. χ=1 degraded path).
 
     Raises:
         ValueError: If ``state`` and ``operator`` lengths mismatch.
     """
-    from ..core.methods.tdvp import (  # noqa: PLC0415
-        _local_dynamic_tdvp_sweep,
-        _run_sweeps,
-        _single_site_tdvp_sweep,
-    )
+    from ..core.methods.tdvp import _run_sweeps, tdvp  # noqa: PLC0415
 
     if operator.length != state.length:
         msg = "MPS and operator must have the same number of sites."
         raise ValueError(msg)
-    if operator.length == 1:
-        _run_sweeps(_single_site_tdvp_sweep, state, operator, sim_params)
-        return
     if retained_bonds:
-        _run_sweeps(_gate_dynamic_tdvp_sweep, state, operator, sim_params, retained_bonds)
+        _run_sweeps(_digital_dynamic_tdvp_sweep, state, operator, sim_params, retained_bonds)
     else:
-        _run_sweeps(_local_dynamic_tdvp_sweep, state, operator, sim_params)
+        tdvp(state, operator, sim_params, mode="dynamic")
