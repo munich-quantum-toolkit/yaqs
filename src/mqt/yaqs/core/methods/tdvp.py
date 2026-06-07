@@ -31,14 +31,12 @@ from typing import TYPE_CHECKING, Literal, cast
 import numpy as np
 import opt_einsum as oe
 
-from .. import linalg
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import merge_two_site, split_two_site
 from .matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from typing import Protocol
 
     from numpy.typing import NDArray
 
@@ -46,36 +44,6 @@ if TYPE_CHECKING:
     from ..data_structures.mps import MPS
     from ..data_structures.simulation_parameters import AnalogSimParams
     from .decompositions import SvdDistribution, TruncMode
-
-    class TdvpBondHooks(Protocol):
-        """Optional digital gate bond-support hooks for dynamic TDVP sweeps."""
-
-        bonds: frozenset[int]
-
-        def split(self, bond: int, min_dim: int, the: float) -> tuple[int, float]: ...  # noqa: D102
-
-        def canon(  # noqa: D102
-            self,
-            tensor: NDArray[np.complex128],
-            sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-            *,
-            rtl: bool,
-        ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]: ...
-
-        def after_split(  # noqa: D102
-            self,
-            state: MPS,
-            bond_index: int,
-            merged: NDArray[np.complex128],
-            physical_dimensions: list[int],
-            sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-        ) -> None: ...
-
-        def after_substep(  # noqa: D102
-            self,
-            state: MPS,
-            sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-        ) -> None: ...
 
 
 def _bond_dim_at_or_above_cap(bond_dim: int, max_bond_dim: int | None) -> bool:
@@ -105,8 +73,6 @@ def _split_two_site_tdvp(
     svd_distribution: str,
     *,
     dynamic: bool,
-    bond_index: int | None = None,
-    hooks: TdvpBondHooks | None = None,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a merged two-site tensor using TDVP simulation truncation policy.
 
@@ -122,96 +88,18 @@ def _split_two_site_tdvp(
         physical_dimensions: ``[d_left, d_right]`` physical dimensions.
         svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
         dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
-        bond_index: MPS bond index for this split (between ``bond_index`` and ``bond_index + 1``).
-        hooks: Optional digital gate bond-support hooks (duck-typed).
 
     Returns:
         Left and right MPS site tensors after split and truncation.
-
-    Raises:
-        ValueError: If ``physical_dimensions`` is invalid, ``trunc_mode`` is
-            unrecognized, or ``svd_distribution`` is invalid.
     """
-    threshold = sim_params.svd_threshold
-    trunc_mode = cast("TruncMode", sim_params.trunc_mode)
-    svd_dist = cast("SvdDistribution", svd_distribution)
-    max_bond_dim = None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim
-
-    if hooks is None:
-        return split_two_site(
-            merged,
-            physical_dimensions,
-            svd_distribution=svd_dist,
-            trunc_mode=trunc_mode,
-            threshold=threshold,
-            max_bond_dim=max_bond_dim,
-        )
-
-    cap = sim_params.max_bond_dim
-    min_keep = 2 if cap is None else min(2, cap)
-    if bond_index is not None and bond_index in hooks.bonds:
-        min_keep, threshold = hooks.split(bond_index, min_keep, threshold)
-
-    if len(physical_dimensions) != 2:
-        msg = f"physical_dimensions must have exactly 2 elements (d_left, d_right); got {len(physical_dimensions)}."
-        raise ValueError(msg)
-    d_left = physical_dimensions[0]
-    d_right = physical_dimensions[1]
-    if merged.shape[0] != d_left * d_right:
-        msg = "The first dimension of the tensor must be a combination of the given physical dimensions."
-        raise ValueError(msg)
-
-    tensor_reshaped = merged.reshape(d_left, d_right, merged.shape[1], merged.shape[2])
-    tensor_transposed = tensor_reshaped.transpose((0, 2, 1, 3))
-    shape_transposed = tensor_transposed.shape
-
-    theta_mat = tensor_transposed.reshape(
-        shape_transposed[0] * shape_transposed[1],
-        shape_transposed[2] * shape_transposed[3],
+    return split_two_site(
+        merged,
+        physical_dimensions,
+        svd_distribution=cast("SvdDistribution", svd_distribution),
+        trunc_mode=cast("TruncMode", sim_params.trunc_mode),
+        threshold=sim_params.svd_threshold,
+        max_bond_dim=None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim,
     )
-    u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
-
-    if trunc_mode == "discarded_weight":
-        keep = linalg.truncate(
-            s_vec,
-            mode="discarded_weight",
-            threshold=threshold,
-            max_bond_dim=max_bond_dim,
-            min_keep=min_keep,
-        )
-    elif trunc_mode == "relative":
-        keep = linalg.truncate(
-            s_vec,
-            mode="relative",
-            threshold=threshold,
-            max_bond_dim=max_bond_dim,
-            min_keep=min_keep,
-        )
-    else:
-        msg = f"Unknown truncation mode: {trunc_mode!r}"
-        raise ValueError(msg)
-
-    left_tensor = u_mat[:, :keep]
-    s_vec = s_vec[:keep]
-    right_tensor = v_mat[:keep, :]
-
-    left_tensor = left_tensor.reshape((shape_transposed[0], shape_transposed[1], keep))
-    right_tensor = right_tensor.reshape((keep, shape_transposed[2], shape_transposed[3]))
-
-    if svd_dist == "left":
-        left_tensor *= s_vec
-    elif svd_dist == "right":
-        right_tensor *= s_vec[:, None, None]
-    elif svd_dist == "sqrt":
-        sqrt_sigma = np.sqrt(s_vec)
-        left_tensor *= sqrt_sigma
-        right_tensor *= sqrt_sigma[:, None, None]
-    else:
-        msg = "svd_distribution parameter must be left, right, or sqrt."
-        raise ValueError(msg)
-
-    right_tensor = right_tensor.transpose((1, 0, 2))
-    return left_tensor, right_tensor
 
 
 def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
@@ -1121,7 +1009,6 @@ def _local_dynamic_tdvp_sweep(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
-    hooks: TdvpBondHooks | None = None,
 ) -> None:
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
@@ -1130,7 +1017,6 @@ def _local_dynamic_tdvp_sweep(
                 operator,
                 sim_params,
                 step_scale=plan_step_scale,
-                hooks=hooks,
             )
         return
 
@@ -1153,7 +1039,7 @@ def _local_dynamic_tdvp_sweep(
     lock_final_site = False
     for i in range(num_sites):
         bond_dim = state.tensors[i].shape[2]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or (lock_final_site and hooks is None):
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -1163,10 +1049,7 @@ def _local_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != num_sites - 1:
-                if hooks is not None and i in hooks.bonds:
-                    site_tensor, bond_tensor = hooks.canon(state.tensors[i], sim_params, rtl=False)
-                else:
-                    site_tensor, bond_tensor = _canonicalize_site_ltr(state.tensors[i], sim_params)
+                site_tensor, bond_tensor = _canonicalize_site_ltr(state.tensors[i], sim_params)
                 state.tensors[i] = site_tensor
                 left_blocks[i + 1] = update_left_environment(
                     state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
@@ -1213,17 +1096,7 @@ def _local_dynamic_tdvp_sweep(
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "right",
                 dynamic=True,
-                bond_index=i,
-                hooks=hooks,
             )
-            if hooks is not None and i in hooks.bonds:
-                hooks.after_split(
-                    state,
-                    i,
-                    merged_tensor,
-                    [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-                    sim_params,
-                )
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
@@ -1248,17 +1121,7 @@ def _local_dynamic_tdvp_sweep(
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
                 "right",
                 dynamic=True,
-                bond_index=i,
-                hooks=hooks,
             )
-            if hooks is not None and i in hooks.bonds:
-                hooks.after_split(
-                    state,
-                    i,
-                    merged_tensor,
-                    [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
-                    sim_params,
-                )
             left_blocks[i + 1] = update_left_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
@@ -1276,7 +1139,7 @@ def _local_dynamic_tdvp_sweep(
     lock_final_site = False
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i].shape[1]
-        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or (lock_final_site and hooks is None):
+        if _bond_dim_at_or_above_cap(bond_dim, sim_params.max_bond_dim) or lock_final_site:
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -1286,10 +1149,7 @@ def _local_dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != 0:
-                if hooks is not None and (i - 1) in hooks.bonds:
-                    site_tensor, bond_tensor = hooks.canon(state.tensors[i], sim_params, rtl=True)
-                else:
-                    site_tensor, bond_tensor = _canonicalize_site_rtl(state.tensors[i], sim_params)
+                site_tensor, bond_tensor = _canonicalize_site_rtl(state.tensors[i], sim_params)
                 state.tensors[i] = site_tensor
                 right_blocks[i - 1] = update_right_environment(
                     state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
@@ -1336,17 +1196,7 @@ def _local_dynamic_tdvp_sweep(
                 [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
                 "left",
                 dynamic=True,
-                bond_index=i - 1,
-                hooks=hooks,
             )
-            if hooks is not None and (i - 1) in hooks.bonds:
-                hooks.after_split(
-                    state,
-                    i - 1,
-                    merged_tensor,
-                    [state.physical_dimensions[i - 1], state.physical_dimensions[i]],
-                    sim_params,
-                )
             right_blocks[i - 1] = update_right_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
             )
@@ -1360,7 +1210,5 @@ def _local_dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
 
-    if hooks is not None:
-        hooks.after_substep(state, sim_params)
     if sim_params.max_bond_dim is not None:
         state.normalize()

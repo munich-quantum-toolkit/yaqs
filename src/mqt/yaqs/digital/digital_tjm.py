@@ -34,7 +34,7 @@ from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.random_utils import make_trajectory_rng
-from .digital_tdvp_utils import gate_tdvp, make_hooks
+from .digital_tdvp_utils import gate_tdvp, prepare_retained_bonds
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
@@ -247,10 +247,12 @@ def apply_two_qubit_gate_tdvp(
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 
     site0, site1 = gate.sites[0], gate.sites[1]
-    hooks = (
-        make_hooks(short_state, site0, site1, (window[0], window[1]), sim_params) if abs(site0 - site1) != 1 else None
+    retained_bonds = (
+        prepare_retained_bonds(short_state, site0, site1, (window[0], window[1]), sim_params)
+        if abs(site0 - site1) != 1
+        else None
     )
-    gate_tdvp(short_state, short_mpo, sim_params, hooks=hooks)
+    gate_tdvp(short_state, short_mpo, sim_params, retained_bonds=retained_bonds)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 
