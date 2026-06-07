@@ -49,17 +49,6 @@ SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
 }
 
 
-def _clamp_min_bond_dim(min_bond_dim: int, max_bond_dim: int | None) -> int:
-    """Keep ``min_bond_dim`` within a finite χ cap.
-
-    Returns:
-        ``min(min_bond_dim, max_bond_dim)`` when capped, otherwise ``min_bond_dim``.
-    """
-    if max_bond_dim is not None:
-        return min(min_bond_dim, max_bond_dim)
-    return min_bond_dim
-
-
 _USE_PRESET = object()
 
 
@@ -356,7 +345,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
         dt: float = 0.1,
         num_traj: int | None = None,
         max_bond_dim: int | object | None = _USE_PRESET,
-        min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
         krylov_tol: float | None = None,
@@ -382,7 +370,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed, or ``None`` for no cap. Omit to use
                 the preset value; pass ``None`` explicitly for no cap.
-            min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -418,7 +405,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = _clamp_min_bond_dim(min_bond_dim, self.max_bond_dim)
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
@@ -459,8 +445,6 @@ class StrongSimParams(_ObservableOrderingMixin):
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
-        min_bond_dim: The minimum bond dimension if possible which gives TDVP
-            better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
             ``"discarded_weight"`` and ``"relative"``.
         svd_threshold: SVD truncation threshold for bond dimension control.
@@ -482,7 +466,6 @@ class StrongSimParams(_ObservableOrderingMixin):
         observables: list[Observable] | None = None,
         num_traj: int | None = None,
         max_bond_dim: int | object | None = _USE_PRESET,
-        min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
         krylov_tol: float | None = None,
@@ -504,7 +487,6 @@ class StrongSimParams(_ObservableOrderingMixin):
             num_traj: Number of trajectories to simulate.
             max_bond_dim: Maximum bond dimension allowed in simulation, or ``None`` for no cap. Omit
                 to use the preset value; pass ``None`` explicitly for no cap.
-            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -535,7 +517,6 @@ class StrongSimParams(_ObservableOrderingMixin):
 
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = _clamp_min_bond_dim(min_bond_dim, self.max_bond_dim)
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
@@ -566,8 +547,6 @@ class WeakSimParams:
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
-        min_bond_dim: The minimum bond dimension if possible which gives TDVP
-            better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
             ``"discarded_weight"`` and ``"relative"``.
         svd_threshold: SVD truncation threshold for bond dimension control.
@@ -589,7 +568,6 @@ class WeakSimParams:
         self,
         shots: int,
         max_bond_dim: int | object | None = _USE_PRESET,
-        min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
         krylov_tol: float | None = None,
@@ -608,7 +586,6 @@ class WeakSimParams:
             shots: Number of measurement shots to simulate.
             max_bond_dim: Maximum bond dimension for simulation, or ``None`` for no cap. Omit to
                 use the preset value; pass ``None`` explicitly for no cap.
-            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -631,7 +608,6 @@ class WeakSimParams:
         self.preset = preset
         self.shots = shots
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = _clamp_min_bond_dim(min_bond_dim, self.max_bond_dim)
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]

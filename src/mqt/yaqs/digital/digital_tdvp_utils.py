@@ -19,14 +19,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..core import linalg
-from ..core.data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..core.data_structures.mpo import MPO
     from ..core.data_structures.mps import MPS
-    from ..core.data_structures.simulation_parameters import AnalogSimParams
+    from ..core.data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
 
 def _support_enabled(sim_params: StrongSimParams | WeakSimParams) -> bool:
@@ -36,21 +35,33 @@ def _support_enabled(sim_params: StrongSimParams | WeakSimParams) -> bool:
 
 
 def _min_bond_dim(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
-    """Minimum bond dimension on gate-crossed bonds."""
+    """Minimum bond dimension on gate-crossed bonds.
+
+    Returns:
+        ``min(2, max_bond_dim)`` when capped, otherwise ``2``.
+    """
     cap = sim_params.max_bond_dim
     if cap is None:
         return 2
     return min(2, cap)
 
 
-def _entanglement_thr(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
-    """Second-Schmidt ratio floor for entanglement on crossed bonds."""
+def _entanglement_threshold(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
+    """Second-Schmidt ratio floor for entanglement on crossed bonds.
+
+    Returns:
+        Entanglement detection threshold derived from ``svd_threshold``.
+    """
     threshold = sim_params.svd_threshold
     return max(0.01, np.sqrt(threshold), 100.0 * threshold)
 
 
 def _clamp_bond_dim(dim: int, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
-    """Clamp a bond dimension to the gate-support window."""
+    """Clamp a bond dimension to the gate-support window.
+
+    Returns:
+        Bond dimension clipped to the gate-support range.
+    """
     clamped = max(dim, _min_bond_dim(sim_params))
     cap = sim_params.max_bond_dim
     if cap is not None:
@@ -190,16 +201,22 @@ class BondHooks:
         bonds: frozenset[int],
         sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     ) -> None:
+        """Store retained bond indices and per-substep monitoring state."""
         self.bonds = bonds
         self._params = sim_params
         self._merged_peak: dict[int, float] = {}
         self._last_second: dict[int, float] = {}
 
-    def split(self, bond: int, min_dim: int, thr: float) -> tuple[int, float]:
-        """Adjust truncation on a retained bond split."""
+    def split(self, bond: int, min_dim: int, threshold: float) -> tuple[int, float]:
+        """Adjust truncation on a retained bond split.
+
+        Returns:
+            ``(min_dim, threshold)`` for ordinary bonds; boosted floor and zero
+            threshold on retained bonds.
+        """
         if bond in self.bonds:
             return max(min_dim, _min_bond_dim(self._params)), 0.0
-        return min_dim, thr
+        return min_dim, threshold
 
     def canon(
         self,
@@ -208,12 +225,16 @@ class BondHooks:
         *,
         rtl: bool,
     ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-        """Canonicalize a site on a retained bond during a dynamic sweep."""
+        """Canonicalize a site on a retained bond during a dynamic sweep.
+
+        Returns:
+            Canonical site tensor and bond transfer matrix.
+        """
         if rtl:
             return self._canon_rtl(tensor, sim_params)
         return self._canon_ltr(tensor, sim_params)
 
-    def _canon_ltr(
+    def _canon_ltr(  # noqa: PLR6301
         self,
         tensor: NDArray[np.complex128],
         sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -223,8 +244,8 @@ class BondHooks:
         chi_r = tensor_shape[2]
         eff_min = _min_bond_dim(sim_params)
         cap = sim_params.max_bond_dim
-        entanglement_threshold = _entanglement_thr(sim_params)
-        if chi_r >= eff_min and eff_min >= 2:
+        entanglement_threshold = _entanglement_threshold(sim_params)
+        if chi_r >= eff_min >= 2:
             u_mat, s_vec, vh_mat = linalg.svd(reshaped, full_matrices=False)
             if len(s_vec) >= 2 and float(s_vec[1] / max(float(s_vec[0]), 1e-30)) >= entanglement_threshold:
                 keep = min(chi_r, max(eff_min, u_mat.shape[1]))
@@ -244,7 +265,7 @@ class BondHooks:
             bond_tensor = bond_tensor[:cap, :]
         return site_tensor, bond_tensor
 
-    def _canon_rtl(
+    def _canon_rtl(  # noqa: PLR6301
         self,
         tensor: NDArray[np.complex128],
         sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -255,8 +276,8 @@ class BondHooks:
         chi_r = tensor_shape[2]
         eff_min = _min_bond_dim(sim_params)
         cap = sim_params.max_bond_dim
-        entanglement_threshold = _entanglement_thr(sim_params)
-        if chi_r >= eff_min and eff_min >= 2:
+        entanglement_threshold = _entanglement_threshold(sim_params)
+        if chi_r >= eff_min >= 2:
             u_mat, s_vec, vh_mat = linalg.svd(reshaped, full_matrices=False)
             if len(s_vec) >= 2 and float(s_vec[1] / max(float(s_vec[0]), 1e-30)) >= entanglement_threshold:
                 keep = min(chi_r, max(eff_min, u_mat.shape[1]))
@@ -290,9 +311,11 @@ class BondHooks:
         """Pad and re-seed a retained bond immediately after a two-site split."""
         min_dim = _min_bond_dim(sim_params)
         threshold = sim_params.svd_threshold
-        propagation = _entanglement_thr(sim_params)
+        propagation = _entanglement_threshold(sim_params)
         if min_dim >= 2:
-            state._ensure_internal_bond_dims((bond_index,), min_dim, max_dim=sim_params.max_bond_dim)
+            state._ensure_internal_bond_dims(  # noqa: SLF001
+                (bond_index,), min_dim, max_dim=sim_params.max_bond_dim
+            )
         pre_ratio = _merged_second_schmidt_ratio(merged, physical_dimensions)
         self._merged_peak[bond_index] = max(self._merged_peak.get(bond_index, 0.0), pre_ratio)
         post_ratio = _second_schmidt_ratio(state, bond_index)
@@ -311,11 +334,13 @@ class BondHooks:
         if min_dim < 2:
             return
         threshold = sim_params.svd_threshold
-        propagation = _entanglement_thr(sim_params)
+        propagation = _entanglement_threshold(sim_params)
         ratios = {bond: _second_schmidt_ratio(state, bond) for bond in self.bonds}
         bonds_to_repad = [bond for bond in self.bonds if state.tensors[bond].shape[2] < min_dim]
         if bonds_to_repad:
-            state._ensure_internal_bond_dims(tuple(bonds_to_repad), min_dim, max_dim=sim_params.max_bond_dim)
+            state._ensure_internal_bond_dims(  # noqa: SLF001
+                tuple(bonds_to_repad), min_dim, max_dim=sim_params.max_bond_dim
+            )
             for bond in bonds_to_repad:
                 ratios[bond] = _second_schmidt_ratio(state, bond)
         entangled = any(ratio >= propagation for ratio in ratios.values())
@@ -355,7 +380,9 @@ def make_hooks(
     crossed = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
     bonds = retention_crossed_bonds(crossed, state.length)
     min_dim = _min_bond_dim(sim_params)
-    state._ensure_internal_bond_dims(tuple(bonds), min_dim, max_dim=sim_params.max_bond_dim)
+    state._ensure_internal_bond_dims(  # noqa: SLF001
+        tuple(bonds), min_dim, max_dim=sim_params.max_bond_dim
+    )
     return BondHooks(bonds, sim_params)
 
 

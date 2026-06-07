@@ -117,7 +117,7 @@ def _split_two_site_tdvp(
     Args:
         merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
         sim_params: Simulation parameters with ``svd_threshold``, ``trunc_mode``,
-            ``max_bond_dim``, and ``min_bond_dim``.
+            and ``max_bond_dim``.
         physical_dimensions: ``[d_left, d_right]`` physical dimensions.
         svd_distribution: How to absorb singular values (``"left"``, ``"right"``, ``"sqrt"``).
         dynamic: If True, pass ``max_bond_dim=None`` to truncation (dynamic TDVP path).
@@ -127,9 +127,13 @@ def _split_two_site_tdvp(
     Returns:
         Left and right MPS site tensors after split and truncation.
     """
-    min_bond_dim = sim_params.min_bond_dim
     threshold = sim_params.svd_threshold
     max_bond_dim = None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim
+    if hooks is not None:
+        cap = sim_params.max_bond_dim
+        min_bond_dim = 2 if cap is None else min(2, cap)
+    else:
+        min_bond_dim = 1
     if hooks is not None and bond_index is not None and bond_index in hooks.bonds:
         min_bond_dim, threshold = hooks.split(bond_index, min_bond_dim, threshold)
     return split_two_site(

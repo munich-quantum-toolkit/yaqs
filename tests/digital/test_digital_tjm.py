@@ -45,7 +45,12 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
 from mqt.yaqs.core.methods import tdvp as tdvp_mod
-from mqt.yaqs.digital.digital_tdvp_utils import protected_bonds_for_two_site_gate, retention_crossed_bonds
+from mqt.yaqs.digital.digital_tdvp_utils import (
+    gate_tdvp,
+    make_hooks,
+    protected_bonds_for_two_site_gate,
+    retention_crossed_bonds,
+)
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
     apply_single_qubit_gate,
@@ -1367,8 +1372,12 @@ def test_tdvp_embedded_rzz_window_matches_qiskit(
     sim_params = _tdvp_exact_params(tdvp_sweeps=sweeps)
 
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
-    window_state, window_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
-    tdvp_mod.tdvp(window_state, window_mpo, sim_params, mode=cast("Mode", mode))
+    window_state, window_mpo, window = apply_window(prep, mpo, first_site, last_site, 1)
+    if mode == "dynamic" and abs(sites[0] - sites[1]) != 1:
+        hooks = make_hooks(window_state, sites[0], sites[1], (window[0], window[1]), sim_params)
+        gate_tdvp(window_state, window_mpo, sim_params, hooks=hooks)
+    else:
+        tdvp_mod.tdvp(window_state, window_mpo, sim_params, mode=cast("Mode", mode))
 
     ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
     infidelity = 1.0 - _fidelity(ref, window_state.to_vec())

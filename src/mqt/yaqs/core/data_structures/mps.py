@@ -695,7 +695,6 @@ class MPS:
         threshold: float,
         *,
         max_bond_dim: int | None = None,
-        min_bond_dim: int = 2,
         trunc_mode: TruncMode = "discarded_weight",
     ) -> None:
         """Compress in place via left-to-center and right-to-left two-site SVD sweeps.
@@ -703,7 +702,6 @@ class MPS:
         Args:
             threshold: SVD truncation threshold (e.g. ``sim_params.svd_threshold``).
             max_bond_dim: Optional cap on bond dimension.
-            min_bond_dim: Minimum bond dimension to retain when truncating.
             trunc_mode: ``"discarded_weight"`` or ``"relative"``.
         """
         if self.length == 1:
@@ -723,7 +721,7 @@ class MPS:
                 trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=min_bond_dim,
+                min_bond_dim=1,
             )
             self.tensors[site] = left_new
             self.tensors[site + 1] = right_new
@@ -741,7 +739,7 @@ class MPS:
                 trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=min_bond_dim,
+                min_bond_dim=1,
             )
             self.tensors[site] = left_new
             self.tensors[site + 1] = right_new

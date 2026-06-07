@@ -121,7 +121,7 @@ def test_split_two_site_invalid_shape() -> None:
             trunc_mode=cast("TruncMode", sim_params.trunc_mode),
             threshold=sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
-            min_bond_dim=sim_params.min_bond_dim,
+            min_bond_dim=1,
         )
 
 
@@ -287,6 +287,7 @@ def test_two_site_tdvp() -> None:
         dt=0.1,
         sample_timesteps=True,
         krylov_tol=1e-12,
+        preset="exact",
     )
     tdvp(state, H, sim_params, mode="2site")
     assert state.length == L
@@ -402,6 +403,7 @@ def test_two_site_tdvp_analog_sweep_preservation() -> None:
         tdvp_sweeps=2,
         sample_timesteps=True,
         krylov_tol=1e-12,
+        preset="exact",
     )
     tdvp(state, H, sim_params, mode="2site")
 
@@ -521,7 +523,6 @@ def test_split_truncation_discarded_weight_kept_count(
         observables=[Observable(Z(), 0)],
         elapsed_time=0.2,
         dt=0.1,
-        min_bond_dim=1,
         svd_threshold=threshold,
         trunc_mode="discarded_weight",
         sample_timesteps=True,
@@ -542,7 +543,7 @@ def test_split_truncation_discarded_weight_kept_count(
     if boundary_case:
         # Accept ±1 around expected_keep; SVD numerics can flip the decision at the boundary.
         acceptable = {expected_keep}
-        if expected_keep > sim_params.min_bond_dim:
+        if expected_keep > 1:
             acceptable.add(expected_keep - 1)
         if expected_keep < len(svs):
             acceptable.add(expected_keep + 1)
@@ -557,7 +558,7 @@ def test_split_truncation_discarded_weight_kept_count(
     assert tail_power <= threshold + tol or keep == len(svs)
 
     # 2) maximality: if we kept one fewer, tail would exceed threshold (unless keep is forced)
-    if keep > sim_params.min_bond_dim:
+    if keep > 1:
         tail_prev = svs[keep - 1 :]  # discarding one extra singular value
         tail_prev_power = float(np.sum(tail_prev**2))
         assert tail_prev_power > threshold - tol
@@ -582,7 +583,6 @@ def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the:
         observables=[Observable(Z(), 0)],
         elapsed_time=0.2,
         dt=0.1,
-        min_bond_dim=1,
         svd_threshold=rel_the,
         trunc_mode="relative",
         sample_timesteps=True,
@@ -601,14 +601,13 @@ def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the:
         assert not (svs[expected_keep] / smax > rel_the)
 
 
-def test_split_truncation_min_max_bond_enforced() -> None:
-    """min_bond_dim/max_bond_dim are respected in both modes."""
+def test_split_truncation_max_bond_enforced() -> None:
+    """max_bond_dim caps truncation in relative mode."""
     svs = np.array([1.0, 0.9, 0.8, 0.7])
     d0, d1, D0, D2 = 2, 2, 3, 3
     theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=13)
     A_in = _as_input_tensor(theta, d0, d1, D0, D2)
 
-    # relative would keep >2, cap at max_bond_dim=2
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         elapsed_time=0.2,
@@ -619,20 +618,6 @@ def test_split_truncation_min_max_bond_enforced() -> None:
         sample_timesteps=True,
     )
     A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=False)
-    assert A0.shape[2] == 2
-    assert A1.shape[1] == 2
-
-    # discarded_weight would keep 1 for high threshold; min_bond_dim=2 lifts it to 2
-    sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
-        elapsed_time=0.2,
-        dt=0.1,
-        min_bond_dim=2,
-        svd_threshold=2,
-        trunc_mode="discarded_weight",
-        sample_timesteps=True,
-    )
-    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     assert A0.shape[2] == 2
     assert A1.shape[1] == 2
 

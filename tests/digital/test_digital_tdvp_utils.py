@@ -141,9 +141,7 @@ def test_digital_gate_modes_small_lr_high_fidelity(
         svd_threshold=1e-14,
         krylov_tol=1e-12,
     )
-    result = Simulator(parallel=False, show_progress=False).run(
-        State(length, initial="zeros"), qc, params, None
-    )
+    result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, params, None)
     assert result.output_state is not None
     out = result.output_state.mps
     assert _fidelity(ref, out.to_vec()) > 0.999

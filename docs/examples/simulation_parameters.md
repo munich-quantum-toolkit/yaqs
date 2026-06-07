@@ -37,7 +37,7 @@ All three `*SimParams` classes accept a keyword-only `preset` argument (default 
 - **`"accurate"`** — high-quality production settings.
 - **`"exact"`** — strict reference/debug preset with minimal internal numerical relaxation. Stochastic trajectory sampling, finite time steps, and model error still apply; this is not mathematically exact.
 
-`svd_threshold` controls **tensor-network SVD truncation** (bond truncation). `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. These are independent: tightening one does not change the other. `min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset name is stored on the object as `params.preset`.
+`svd_threshold` controls **tensor-network SVD truncation** (bond truncation). `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. These are independent: tightening one does not change the other. `trunc_mode` (default `"discarded_weight"`) is unchanged across presets. The chosen preset name is stored on the object as `params.preset`.
 
 ## Override only what you need
 

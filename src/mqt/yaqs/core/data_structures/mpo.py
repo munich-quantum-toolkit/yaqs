@@ -1097,7 +1097,6 @@ class MPO:
         state.compress(
             sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
-            min_bond_dim=sim_params.min_bond_dim,
             trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         )
 
