@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
-from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 from .decompositions import left_qr, merge_two_site, right_qr
 from .tdvp_bond_support import (
     _after_support_split,
@@ -32,18 +31,18 @@ from .tdvp_primitives import (
 )
 from .tdvp_sweep_utils import (
     _bond_dim_at_or_above_cap,
-    _bond_dims_mismatched,
-    _contract_bond_target_dim,
     _enforce_global_bond_cap,
     _prepare_substep_evolution_dt,
+    _renormalize_after_fixed_chi_sync,
     _resize_bond,
     _split_two_site_tdvp,
-    _sync_bond_dim,
+    _sync_fixed_chi_bond_if_mismatched,
 )
 
 if TYPE_CHECKING:
     from ..data_structures.mpo import MPO
     from ..data_structures.mps import MPS
+    from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
 
 def _single_site_tdvp_sweep(
@@ -334,18 +333,14 @@ def _dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
                 if sim_params.max_bond_dim is not None:
-                    if _bond_dims_mismatched(state, i):
-                        _sync_bond_dim(state, i, _contract_bond_target_dim(state, i, sim_params))
-                        state.normalize()
+                    _sync_fixed_chi_bond_if_mismatched(state, i, sim_params)
                     bond_tensor = _resize_bond(
                         bond_tensor,
                         lead=int(state.tensors[i].shape[2]),
                         trail=int(state.tensors[i + 1].shape[1]),
                     )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
-                if sim_params.max_bond_dim is not None and _bond_dims_mismatched(state, i):
-                    _sync_bond_dim(state, i, _contract_bond_target_dim(state, i, sim_params))
-                    state.normalize()
+                _sync_fixed_chi_bond_if_mismatched(state, i, sim_params)
             if use_lock and i == num_sites - 2:
                 lock_final_site = True
         elif i == num_sites - 1:
@@ -466,18 +461,14 @@ def _dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
                 if sim_params.max_bond_dim is not None:
-                    if _bond_dims_mismatched(state, i - 1):
-                        _sync_bond_dim(state, i - 1, _contract_bond_target_dim(state, i - 1, sim_params))
-                        state.normalize()
+                    _sync_fixed_chi_bond_if_mismatched(state, i - 1, sim_params)
                     bond_tensor = _resize_bond(
                         bond_tensor,
                         lead=int(state.tensors[i - 1].shape[2]),
                         trail=int(state.tensors[i].shape[1]),
                     )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
-                if sim_params.max_bond_dim is not None and _bond_dims_mismatched(state, i - 1):
-                    _sync_bond_dim(state, i - 1, _contract_bond_target_dim(state, i - 1, sim_params))
-                    state.normalize()
+                _sync_fixed_chi_bond_if_mismatched(state, i - 1, sim_params)
                 if use_lock and i == 1:
                     lock_final_site = True
         elif i == 0:
@@ -531,5 +522,5 @@ def _dynamic_tdvp_sweep(
 
     if support_bonds is not None:
         _after_support_substep(state, support_bonds, sim_params, merged_peak, last_second)
-    if sim_params.max_bond_dim is not None:
+    if _renormalize_after_fixed_chi_sync(sim_params):
         state.normalize()

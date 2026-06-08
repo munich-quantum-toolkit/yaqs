@@ -119,6 +119,26 @@ def _bond_dims_mismatched(state: MPS, bond_index: int) -> bool:
     return int(state.tensors[bond_index].shape[2]) != int(state.tensors[bond_index + 1].shape[1])
 
 
+def _renormalize_after_fixed_chi_sync(
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+) -> bool:
+    """Return whether a sweep should renormalize after χ capping (digital only)."""
+    return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
+
+
+def _sync_fixed_chi_bond_if_mismatched(
+    state: MPS,
+    bond_index: int,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+) -> None:
+    """Align a bond to the fixed-χ target and optionally renormalize (digital only)."""
+    if sim_params.max_bond_dim is None or not _bond_dims_mismatched(state, bond_index):
+        return
+    _sync_bond_dim(state, bond_index, _contract_bond_target_dim(state, bond_index, sim_params))
+    if _renormalize_after_fixed_chi_sync(sim_params):
+        state.normalize()
+
+
 def _enforce_global_bond_cap(
     state: MPS,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -127,12 +147,15 @@ def _enforce_global_bond_cap(
     cap = sim_params.max_bond_dim
     if cap is None:
         return
+    changed = False
     for bond in range(state.length - 1):
         chi_out = int(state.tensors[bond].shape[2])
         chi_in = int(state.tensors[bond + 1].shape[1])
         if chi_out > cap or chi_in > cap:
             _sync_bond_dim(state, bond, cap)
-    state.normalize()
+            changed = True
+    if changed and _renormalize_after_fixed_chi_sync(sim_params):
+        state.normalize()
 
 
 def _resize_bond(
