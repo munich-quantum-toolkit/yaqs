@@ -5,16 +5,14 @@
 #
 # Licensed under the MIT License
 
-"""Shared helpers for TDVP unit and regression tests.
+r"""Shared helpers for TDVP unit and regression tests.
 
 PR TDVP regression smoke (fast subset)::
 
     uv run pytest tests/core/methods/tdvp/test_tdvp.py \\
                   tests/core/methods/tdvp/test_bond_support.py \\
                   tests/core/methods/tdvp/test_integrators.py \\
-                  tests/digital/test_digital_tdvp_support_retention.py \\
-                  tests/digital/test_digital_tdvp_fixed_chi.py \\
-                  tests/digital/test_digital_tdvp_gate_modes.py \\
+                  tests/digital/test_digital_tjm.py \\
                   -m "tdvp_regression and not slow"
 """
 
@@ -25,7 +23,6 @@ import math
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
@@ -36,6 +33,8 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
 
 if TYPE_CHECKING:
+    import pytest
+
     from mqt.yaqs.core.data_structures.mps import MPS
 
 NORM_TOL = 1e-6
@@ -150,7 +149,11 @@ def assert_mps_bond_invariants(mps: MPS, *, max_bond_dim: int | None = None) -> 
 
 
 def _reliable_sweeps(length: int) -> int:
-    """Sweep count that converges endpoint long-range TDVP on product states."""
+    """Sweep count that converges endpoint long-range TDVP on product states.
+
+    Returns:
+        Recommended TDVP sweep count for the given chain length.
+    """
     return 256 if length >= 10 else 64
 
 
@@ -163,7 +166,14 @@ def _qiskit_two_site_reference(
     initial: str = "x+",
     prep_vec: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Exact Qiskit reference for one two-qubit Pauli rotation gate."""
+    """Exact Qiskit reference for one two-qubit Pauli rotation gate.
+
+    Returns:
+        State vector after evolving ``initial`` (or ``prep_vec``) with one gate.
+
+    Raises:
+        ValueError: If ``initial`` is not a supported label.
+    """
     qc = QuantumCircuit(length)
     if prep_vec is not None:
         qc.initialize(prep_vec.tolist(), range(length))
@@ -184,7 +194,11 @@ def _qiskit_two_site_reference(
 
 
 def _double_theta_reference(length: int, theta: float, *, sites: tuple[int, int]) -> np.ndarray:
-    """Reference for accidentally applying RZZ twice (the old 2θ bug)."""
+    """Reference for accidentally applying RZZ twice (the old 2θ bug).
+
+    Returns:
+        State vector after two identical RZZ applications on |+⟩^L.
+    """
     qc = QuantumCircuit(length)
     qc.h(range(length))
     qc.rzz(theta, sites[0], sites[1])
@@ -192,8 +206,12 @@ def _double_theta_reference(length: int, theta: float, *, sites: tuple[int, int]
     return np.asarray(Statevector(qc).data, dtype=np.complex128)
 
 
-def _plus_rzz_overlap(length: int, theta: float) -> float:
-    """Expected |⟨+|ψ⟩|² after RZZ(0, L-1, θ) on |+⟩^L (global phase ignored)."""
+def _plus_rzz_overlap(_length: int, theta: float) -> float:
+    """Expected |⟨+|ψ⟩|² after RZZ(0, L-1, θ) on |+⟩^L (global phase ignored).
+
+    Returns:
+        Squared overlap with the uniform superposition state.
+    """
     return math.cos(theta / 2.0) ** 2
 
 
