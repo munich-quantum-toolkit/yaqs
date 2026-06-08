@@ -478,12 +478,14 @@ class StrongSimParams(_ObservableOrderingMixin):
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
-        tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
-            symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
-            of the unit gate time. Default is ``1``.
-        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-            Default is ``"dynamic"``.
+            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``). Default is
+            ``"mpo"``. Hybrid ``"tdvp"`` applies TEBD to nearest-neighbor gates and
+            dynamic TDVP with protected-bond support to long-range gates.
+        tdvp_sweeps: Number of symmetric TDVP substeps per gate. Each substep integrates
+            evolution time ``1 / tdvp_sweeps`` of the unit gate. Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or
+            ``"dynamic"``). Long-range digital gates require ``"dynamic"`` when
+            ``support_bonds`` is set. Default is ``"dynamic"``.
     """
 
     # Properties set as placeholders for code compatibility
@@ -530,10 +532,10 @@ class StrongSimParams(_ObservableOrderingMixin):
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
-            tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
-                symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
-                (default ``1``).
+            gate_mode: Two-qubit gate update mode (default ``"mpo"``). Hybrid ``"tdvp"`` uses
+                TEBD for nearest-neighbor gates and dynamic TDVP for long-range gates.
+            tdvp_sweeps: Number of symmetric TDVP substeps per gate at evolution time
+                ``1 / tdvp_sweeps`` (default ``1``).
             tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
                 Default is ``"dynamic"``.
         """

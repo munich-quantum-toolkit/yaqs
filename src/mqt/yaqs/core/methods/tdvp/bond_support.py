@@ -29,9 +29,9 @@ if TYPE_CHECKING:
     from ..decompositions import SvdDistribution, TruncMode
 
 __all__ = [
-    "anchor_support_bonds",
     "prepare_support_bonds",
     "protected_bonds_for_two_site_gate",
+    "select_protected_seed_bonds",
 ]
 
 
@@ -62,20 +62,6 @@ def protected_bonds_for_two_site_gate(
     )
 
 
-def anchor_support_bonds(crossed_bonds: frozenset[int], num_sites: int) -> frozenset[int]:
-    """Return crossed bonds that receive active support during gate TDVP.
-
-    Args:
-        crossed_bonds: Window-local bonds crossed by the gate.
-        num_sites: Number of sites in the local TDVP window.
-
-    Returns:
-        Anchor-half subset of ``crossed_bonds`` monitored during sweeps.
-    """
-    midpoint = (num_sites - 1) // 2
-    return frozenset(bond for bond in crossed_bonds if bond < midpoint)
-
-
 def prepare_support_bonds(
     state: MPS,
     site0: int,
@@ -85,16 +71,56 @@ def prepare_support_bonds(
 ) -> frozenset[int] | None:
     """Build support bond indices for a long-range gate, pre-padding support dims.
 
+    Gate-local protected-bond support retention preserves the minimal virtual
+    support required by an active long-range entangling gate, subject to
+    ``max_bond_dim``. All bonds crossed by the gate within the TDVP window are
+    returned as the protected set; seed bonds (see
+    :func:`select_protected_seed_bonds`) are pre-padded for null-space
+    initialization. Returns ``None`` when ``max_bond_dim < 2``.
+
     Returns:
+        Window-local bond indices receiving active support during sweeps, or
         ``None`` when bond support is disabled under the current χ budget.
     """
     if not _support_enabled(sim_params):
         return None
-    crossed = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
-    bonds = anchor_support_bonds(crossed, state.length)
+    protected_bonds = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
     min_dim = compute_min_keep(sim_params)
-    state._ensure_internal_bond_dims(tuple(bonds), min_dim, max_dim=sim_params.max_bond_dim)
-    return bonds
+    seed_bonds = select_protected_seed_bonds(protected_bonds)
+    state._ensure_internal_bond_dims(tuple(seed_bonds), min_dim, max_dim=sim_params.max_bond_dim)
+    return protected_bonds
+
+
+def select_protected_seed_bonds(protected_bonds: frozenset[int]) -> frozenset[int]:
+    """Select crossed bonds used to initialize protected virtual support.
+
+    The selected bonds are always a subset of the active gate-crossed bonds.
+    They are used only to initialize a nonzero virtual direction so dynamic
+    TDVP can leave rank-deficient product manifolds during long-range
+    entangling updates.
+
+    The rule is deterministic and independent of system size or TDVP window
+    size: sort the crossed-bond interval and seed the left half
+    (``floor(n/2)`` bonds). For a single crossed bond, seed that bond. This
+    provides a reproducible left-to-right support-initialization convention
+    without hardcoded anchors.
+
+    This helper does not override ``max_bond_dim``. If the effective bond cap
+    is one, no rank-2 support should be created by the caller.
+
+    Args:
+        protected_bonds: Gate-crossed bonds within the TDVP window.
+
+    Returns:
+        Subset of ``protected_bonds`` chosen for support seeding.
+    """
+    if not protected_bonds:
+        return frozenset()
+    ordered = sorted(protected_bonds)
+    split_at = len(ordered) // 2
+    if split_at <= 0:
+        return frozenset({ordered[0]})
+    return frozenset(ordered[:split_at])
 
 
 # --- Support policy ---
@@ -194,7 +220,7 @@ def _merged_second_schmidt_ratio(
 # --- Sweep hooks ---
 
 
-def _reseed_support(
+def _init_support_null_direction(
     state: MPS,
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -288,7 +314,7 @@ def _split_support_two_site(
     svd_distribution: str,
     *,
     bond_index: int,
-    support_bonds: frozenset[int],
+    seed_bonds: frozenset[int],
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a merged two-site tensor with bond-support truncation policy.
 
@@ -297,9 +323,7 @@ def _split_support_two_site(
     """
     cap = sim_params.max_bond_dim
     min_keep = compute_min_keep(sim_params)
-    threshold = sim_params.svd_threshold
-    if bond_index in support_bonds:
-        threshold = 0.0
+    threshold = 0.0 if bond_index in seed_bonds else sim_params.svd_threshold
     return split_two_site(
         merged,
         physical_dimensions,
@@ -319,6 +343,8 @@ def _after_support_split(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     merged_peak: dict[int, float],
     last_second: dict[int, float],
+    *,
+    seed_bonds: frozenset[int],
 ) -> None:
     min_dim = compute_min_keep(sim_params)
     threshold = sim_params.svd_threshold
@@ -328,34 +354,40 @@ def _after_support_split(
     pre_ratio = _merged_second_schmidt_ratio(merged, physical_dimensions)
     merged_peak[bond_index] = max(merged_peak.get(bond_index, 0.0), pre_ratio)
     post_ratio = _second_schmidt_ratio(state, bond_index)
-    if min_dim >= 2 and pre_ratio >= propagation and post_ratio < threshold:
-        _reseed_support(state, bond_index, sim_params)
+    if (
+        bond_index in seed_bonds
+        and min_dim >= 2
+        and pre_ratio >= propagation
+        and post_ratio < threshold
+    ):
+        _init_support_null_direction(state, bond_index, sim_params)
         post_ratio = _second_schmidt_ratio(state, bond_index)
     last_second[bond_index] = post_ratio
 
 
 def _after_support_substep(
     state: MPS,
-    support_bonds: frozenset[int],
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     merged_peak: dict[int, float],
     last_second: dict[int, float],
+    *,
+    seed_bonds: frozenset[int],
 ) -> None:
     min_dim = compute_min_keep(sim_params)
     if min_dim < 2:
         return
     threshold = sim_params.svd_threshold
     propagation = _entanglement_threshold(sim_params)
-    ratios = {bond: _second_schmidt_ratio(state, bond) for bond in support_bonds}
-    bonds_to_repad = [bond for bond in support_bonds if state.tensors[bond].shape[2] < min_dim]
+    ratios = {bond: _second_schmidt_ratio(state, bond) for bond in seed_bonds}
+    bonds_to_repad = [bond for bond in seed_bonds if state.tensors[bond].shape[2] < min_dim]
     if bonds_to_repad:
         state._ensure_internal_bond_dims(tuple(bonds_to_repad), min_dim, max_dim=sim_params.max_bond_dim)
         for bond in bonds_to_repad:
             ratios[bond] = _second_schmidt_ratio(state, bond)
     entangled = any(ratio >= propagation for ratio in ratios.values())
     entangled_cutoff = propagation if sim_params.max_bond_dim == 2 else threshold
-    reseeded = False
-    for bond in sorted(support_bonds):
+    initialized = False
+    for bond in sorted(seed_bonds):
         ratio = ratios[bond]
         collapsed = last_second.get(bond, 0.0) >= propagation and ratio < threshold
         merged_relative = merged_peak.get(bond, 0.0) / max(ratio, 1e-30)
@@ -364,9 +396,9 @@ def _after_support_substep(
             or (entangled and ratio < entangled_cutoff)
             or (merged_relative >= propagation and ratio < threshold)
         ):
-            _reseed_support(state, bond, sim_params)
+            _init_support_null_direction(state, bond, sim_params)
             ratio = _second_schmidt_ratio(state, bond)
-            reseeded = True
+            initialized = True
         last_second[bond] = ratio
-    if reseeded:
+    if initialized:
         _renorm_if_digital(state, sim_params)

@@ -20,6 +20,7 @@ from .bond_support import (
     _after_support_substep,
     _canon_support_site,
     _split_support_two_site,
+    select_protected_seed_bonds,
 )
 from .primitives import (
     initialize_right_environments,
@@ -284,6 +285,7 @@ def _dynamic_tdvp_sweep(
 
     num_sites = operator.length
     use_lock = support_bonds is None
+    seed_bonds = select_protected_seed_bonds(support_bonds) if support_bonds is not None else frozenset()
     merged_peak: dict[int, float] = {}
     last_second: dict[int, float] = {}
     cap = sim_params.max_bond_dim
@@ -314,7 +316,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != num_sites - 1:
-                if support_bonds is not None and i in support_bonds:
+                if support_bonds is not None and i in seed_bonds:
                     site_tensor, bond_tensor = _canon_support_site(state.tensors[i], sim_params, ltr=True)
                 else:
                     site_tensor, bond_tensor = right_qr(state.tensors[i])
@@ -357,17 +359,25 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            if support_bonds is not None:
+            if support_bonds is not None and i in seed_bonds:
                 state.tensors[i], state.tensors[i + 1] = _split_support_two_site(
                     merged_tensor,
                     sim_params,
                     phys_dims,
                     "right",
                     bond_index=i,
-                    support_bonds=support_bonds,
+                    seed_bonds=seed_bonds,
                 )
-                if i in support_bonds:
-                    _after_support_split(state, i, merged_tensor, phys_dims, sim_params, merged_peak, last_second)
+                _after_support_split(
+                    state,
+                    i,
+                    merged_tensor,
+                    phys_dims,
+                    sim_params,
+                    merged_peak,
+                    last_second,
+                    seed_bonds=seed_bonds,
+                )
             else:
                 state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
                     merged_tensor,
@@ -395,17 +405,25 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            if support_bonds is not None:
+            if support_bonds is not None and i in seed_bonds:
                 state.tensors[i], state.tensors[i + 1] = _split_support_two_site(
                     merged_tensor,
                     sim_params,
                     phys_dims,
                     "right",
                     bond_index=i,
-                    support_bonds=support_bonds,
+                    seed_bonds=seed_bonds,
                 )
-                if i in support_bonds:
-                    _after_support_split(state, i, merged_tensor, phys_dims, sim_params, merged_peak, last_second)
+                _after_support_split(
+                    state,
+                    i,
+                    merged_tensor,
+                    phys_dims,
+                    sim_params,
+                    merged_peak,
+                    last_second,
+                    seed_bonds=seed_bonds,
+                )
             else:
                 state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
                     merged_tensor,
@@ -442,7 +460,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             if i != 0:
-                if support_bonds is not None and (i - 1) in support_bonds:
+                if support_bonds is not None and (i - 1) in seed_bonds:
                     site_tensor, bond_tensor = _canon_support_site(state.tensors[i], sim_params, ltr=False)
                 else:
                     site_tensor, bond_tensor = left_qr(state.tensors[i])
@@ -487,19 +505,25 @@ def _dynamic_tdvp_sweep(
             )
             phys_dims = [state.physical_dimensions[i - 1], state.physical_dimensions[i]]
             bond_index = i - 1
-            if support_bonds is not None:
+            if support_bonds is not None and bond_index in seed_bonds:
                 state.tensors[i - 1], state.tensors[i] = _split_support_two_site(
                     merged_tensor,
                     sim_params,
                     phys_dims,
                     "left",
                     bond_index=bond_index,
-                    support_bonds=support_bonds,
+                    seed_bonds=seed_bonds,
                 )
-                if bond_index in support_bonds:
-                    _after_support_split(
-                        state, bond_index, merged_tensor, phys_dims, sim_params, merged_peak, last_second
-                    )
+                _after_support_split(
+                    state,
+                    bond_index,
+                    merged_tensor,
+                    phys_dims,
+                    sim_params,
+                    merged_peak,
+                    last_second,
+                    seed_bonds=seed_bonds,
+                )
             else:
                 state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
                     merged_tensor,
@@ -522,5 +546,11 @@ def _dynamic_tdvp_sweep(
                 )
 
     if support_bonds is not None:
-        _after_support_substep(state, support_bonds, sim_params, merged_peak, last_second)
+        _after_support_substep(
+            state,
+            sim_params,
+            merged_peak,
+            last_second,
+            seed_bonds=seed_bonds,
+        )
     _renorm_if_digital(state, sim_params)

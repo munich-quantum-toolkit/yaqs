@@ -5,14 +5,27 @@
 #
 # Licensed under the MIT License
 
-"""Shared helpers for TDVP unit and regression tests."""
+"""Shared helpers for TDVP unit and regression tests.
+
+PR TDVP regression smoke (fast subset)::
+
+    uv run pytest tests/core/methods/tdvp/test_tdvp.py \\
+                  tests/core/methods/tdvp/test_bond_support.py \\
+                  tests/core/methods/tdvp/test_integrators.py \\
+                  tests/digital/test_digital_tdvp_support_retention.py \\
+                  tests/digital/test_digital_tdvp_fixed_chi.py \\
+                  tests/digital/test_digital_tdvp_gate_modes.py \\
+                  -m "tdvp_regression and not slow"
+"""
 
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+import math
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
@@ -24,6 +37,23 @@ from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
 
 if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.mps import MPS
+
+NORM_TOL = 1e-6
+EXACT_FID_TOL = 1e-12
+
+GateName = Literal["rzz", "rxx", "ryy"]
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register TDVP regression markers."""
+    config.addinivalue_line(
+        "markers",
+        "tdvp_regression: circuit TDVP infrastructure stability regressions",
+    )
+    config.addinivalue_line(
+        "markers",
+        "slow: tests that need many TDVP sweeps or large L",
+    )
 
 
 def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
@@ -96,7 +126,7 @@ def _apply_lr_gate(
     gate_name: str,
     theta: float,
     *,
-    max_bond_dim: int,
+    max_bond_dim: int | None,
     sweeps: int,
 ) -> MPS:
     if gate_name == "rzz":
@@ -110,6 +140,61 @@ def _apply_lr_gate(
     out = copy.deepcopy(mps)
     apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=max_bond_dim, tdvp_sweeps=sweeps))
     return out
+
+
+def assert_mps_bond_invariants(mps: MPS, *, max_bond_dim: int | None = None) -> None:
+    """Check neighbor tensor virtual dimensions match and respect an optional χ cap."""
+    mps._assert_bond_shapes_consistent(max_bond_dim=max_bond_dim)
+    if max_bond_dim is not None:
+        assert all(dim <= max_bond_dim for dim in mps.bond_dimensions())
+
+
+def _reliable_sweeps(length: int) -> int:
+    """Sweep count that converges endpoint long-range TDVP on product states."""
+    return 256 if length >= 10 else 64
+
+
+def _qiskit_two_site_reference(
+    length: int,
+    gate_name: GateName,
+    theta: float,
+    *,
+    sites: tuple[int, int],
+    initial: str = "x+",
+    prep_vec: np.ndarray | None = None,
+) -> np.ndarray:
+    """Exact Qiskit reference for one two-qubit Pauli rotation gate."""
+    qc = QuantumCircuit(length)
+    if prep_vec is not None:
+        qc.initialize(prep_vec.tolist(), range(length))
+    elif initial == "x+":
+        qc.h(range(length))
+    elif initial == "zeros":
+        pass
+    else:
+        msg = f"Unknown initial {initial!r}"
+        raise ValueError(msg)
+    if gate_name == "rzz":
+        qc.rzz(theta, sites[0], sites[1])
+    elif gate_name == "rxx":
+        qc.rxx(theta, sites[0], sites[1])
+    else:
+        qc.ryy(theta, sites[0], sites[1])
+    return np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+
+def _double_theta_reference(length: int, theta: float, *, sites: tuple[int, int]) -> np.ndarray:
+    """Reference for accidentally applying RZZ twice (the old 2θ bug)."""
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    qc.rzz(theta, sites[0], sites[1])
+    qc.rzz(theta, sites[0], sites[1])
+    return np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+
+def _plus_rzz_overlap(length: int, theta: float) -> float:
+    """Expected |⟨+|ψ⟩|² after RZZ(0, L-1, θ) on |+⟩^L (global phase ignored)."""
+    return math.cos(theta / 2.0) ** 2
 
 
 def _run_circuit(

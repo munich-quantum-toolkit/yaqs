@@ -181,7 +181,7 @@ Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic 
 - **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + **dynamic** TDVP path.
 - **`full-tdvp`** — TDVP (generator MPO + dynamic TDVP) on every two-qubit gate.
 
-Long-range entangling gates in TDVP mode automatically apply **gate-local bond support retention** on anchor bonds crossed by the active two-qubit gate (handled inside the digital TDVP path; not a user-facing parameter). The rule enforces an effective minimum bond dimension of `min(2, max_bond_dim)` when a finite cap is set, or `2` when `max_bond_dim` is unset. Retention never exceeds `max_bond_dim`.
+Long-range entangling gates in TDVP mode automatically apply **gate-local protected-bond support retention** on bonds crossed by the active two-qubit gate (handled inside the digital TDVP path; not a user-facing parameter). The rule enforces an effective minimum bond dimension of `min(2, max_bond_dim)` when a finite cap is set, or `2` when `max_bond_dim` is unset. Retention never exceeds `max_bond_dim`.
 
 Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Higher values can improve accuracy at higher cost. The setting applies to all TDVP kernels on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
 

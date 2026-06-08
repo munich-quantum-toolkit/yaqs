@@ -233,7 +233,9 @@ def apply_two_qubit_gate_tdvp(
     """Apply a two-qubit gate via generator MPO and TDVP.
 
     Long-range gates use local dynamic TDVP (``tdvp_mode="dynamic"``) with gate-local
-    minimal bond support on crossed internal bonds.
+    protected-bond support on crossed internal bonds. Nearest-neighbor gates in hybrid
+    ``gate_mode="tdvp"`` use TEBD instead; callers should route via
+    :func:`apply_two_qubit_gate`.
 
     Args:
         state: MPS updated in place.
