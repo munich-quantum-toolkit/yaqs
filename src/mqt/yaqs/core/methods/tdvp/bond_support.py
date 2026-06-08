@@ -8,7 +8,7 @@
 """Long-range digital gate bond support for dynamic TDVP.
 
 Bond geometry, preparation helpers, and sweep hooks used by
-:func:`mqt.yaqs.core.methods.tdvp.tdvp` when ``support_bonds`` is set.
+:func:`mqt.yaqs.core.methods.tdvp.tdvp.tdvp` when ``support_bonds`` is set.
 """
 
 from __future__ import annotations
@@ -17,56 +17,25 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from .. import linalg
-from .decompositions import split_two_site
+from ... import linalg
+from ..decompositions import split_two_site
+from .sweep_utils import _renorm_if_digital, compute_min_keep
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..data_structures.mps import MPS
-    from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
-    from .decompositions import SvdDistribution, TruncMode
+    from ...data_structures.mps import MPS
+    from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+    from ..decompositions import SvdDistribution, TruncMode
+
+__all__ = [
+    "anchor_support_bonds",
+    "prepare_support_bonds",
+    "protected_bonds_for_two_site_gate",
+]
 
 
-def _support_enabled(sim_params: StrongSimParams | WeakSimParams) -> bool:
-    """Return whether long-range TDVP should retain at least two support dimensions."""
-    cap = sim_params.max_bond_dim
-    return cap is None or cap >= 2
-
-
-def _min_bond_dim(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
-    """Minimum bond dimension on gate-crossed bonds.
-
-    Returns:
-        ``min(2, max_bond_dim)`` when capped, otherwise ``2``.
-    """
-    cap = sim_params.max_bond_dim
-    if cap is None:
-        return 2
-    return min(2, cap)
-
-
-def _entanglement_threshold(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
-    """Second-Schmidt ratio floor for entanglement on crossed bonds.
-
-    Returns:
-        Entanglement detection threshold derived from ``svd_threshold``.
-    """
-    threshold = sim_params.svd_threshold
-    return max(0.01, np.sqrt(threshold), 100.0 * threshold)
-
-
-def _clamp_bond_dim(dim: int, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
-    """Clamp a bond dimension to the gate-support window.
-
-    Returns:
-        Bond dimension clipped to the gate-support range.
-    """
-    clamped = max(dim, _min_bond_dim(sim_params))
-    cap = sim_params.max_bond_dim
-    if cap is not None:
-        clamped = min(clamped, cap)
-    return clamped
+# --- Public bond geometry and setup ---
 
 
 def protected_bonds_for_two_site_gate(
@@ -105,6 +74,62 @@ def anchor_support_bonds(crossed_bonds: frozenset[int], num_sites: int) -> froze
     """
     midpoint = (num_sites - 1) // 2
     return frozenset(bond for bond in crossed_bonds if bond < midpoint)
+
+
+def prepare_support_bonds(
+    state: MPS,
+    site0: int,
+    site1: int,
+    window: tuple[int, int],
+    sim_params: StrongSimParams | WeakSimParams,
+) -> frozenset[int] | None:
+    """Build support bond indices for a long-range gate, pre-padding support dims.
+
+    Returns:
+        ``None`` when bond support is disabled under the current χ budget.
+    """
+    if not _support_enabled(sim_params):
+        return None
+    crossed = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
+    bonds = anchor_support_bonds(crossed, state.length)
+    min_dim = compute_min_keep(sim_params)
+    state._ensure_internal_bond_dims(tuple(bonds), min_dim, max_dim=sim_params.max_bond_dim)
+    return bonds
+
+
+# --- Support policy ---
+
+
+def _support_enabled(sim_params: StrongSimParams | WeakSimParams) -> bool:
+    """Return whether long-range TDVP should retain at least two support dimensions."""
+    cap = sim_params.max_bond_dim
+    return cap is None or cap >= 2
+
+
+def _entanglement_threshold(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
+    """Second-Schmidt ratio floor for entanglement on crossed bonds.
+
+    Returns:
+        Entanglement detection threshold derived from ``svd_threshold``.
+    """
+    threshold = sim_params.svd_threshold
+    return max(0.01, np.sqrt(threshold), 100.0 * threshold)
+
+
+def _clamp_bond_dim(dim: int, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
+    """Clamp a bond dimension to the gate-support window.
+
+    Returns:
+        Bond dimension clipped to the gate-support range.
+    """
+    clamped = max(dim, compute_min_keep(sim_params))
+    cap = sim_params.max_bond_dim
+    if cap is not None:
+        clamped = min(clamped, cap)
+    return clamped
+
+
+# --- Schmidt metrics and padding ---
 
 
 def _pad_canonical(
@@ -166,12 +191,15 @@ def _merged_second_schmidt_ratio(
     return float(s_vec[1] / s_vec[0])
 
 
+# --- Sweep hooks ---
+
+
 def _reseed_support(
     state: MPS,
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> None:
-    target = _min_bond_dim(sim_params)
+    target = compute_min_keep(sim_params)
     if target < 2:
         return
     eps = max(np.sqrt(sim_params.svd_threshold), np.finfo(float).eps)
@@ -199,7 +227,7 @@ def _canon_support_site(
     *,
     ltr: bool,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    eff_min = _min_bond_dim(sim_params)
+    eff_min = compute_min_keep(sim_params)
     cap = sim_params.max_bond_dim
     entanglement_threshold = _entanglement_threshold(sim_params)
 
@@ -268,10 +296,9 @@ def _split_support_two_site(
         Left and right MPS site tensors after split and truncation.
     """
     cap = sim_params.max_bond_dim
-    min_keep = 2 if cap is None else min(2, cap)
+    min_keep = compute_min_keep(sim_params)
     threshold = sim_params.svd_threshold
     if bond_index in support_bonds:
-        min_keep = max(min_keep, _min_bond_dim(sim_params))
         threshold = 0.0
     return split_two_site(
         merged,
@@ -293,7 +320,7 @@ def _after_support_split(
     merged_peak: dict[int, float],
     last_second: dict[int, float],
 ) -> None:
-    min_dim = _min_bond_dim(sim_params)
+    min_dim = compute_min_keep(sim_params)
     threshold = sim_params.svd_threshold
     propagation = _entanglement_threshold(sim_params)
     if min_dim >= 2:
@@ -314,7 +341,7 @@ def _after_support_substep(
     merged_peak: dict[int, float],
     last_second: dict[int, float],
 ) -> None:
-    min_dim = _min_bond_dim(sim_params)
+    min_dim = compute_min_keep(sim_params)
     if min_dim < 2:
         return
     threshold = sim_params.svd_threshold
@@ -342,25 +369,4 @@ def _after_support_substep(
             reseeded = True
         last_second[bond] = ratio
     if reseeded:
-        state.normalize()
-
-
-def prepare_support_bonds(
-    state: MPS,
-    site0: int,
-    site1: int,
-    window: tuple[int, int],
-    sim_params: StrongSimParams | WeakSimParams,
-) -> frozenset[int] | None:
-    """Build support bond indices for a long-range gate, pre-padding support dims.
-
-    Returns:
-        ``None`` when bond support is disabled under the current χ budget.
-    """
-    if not _support_enabled(sim_params):
-        return None
-    crossed = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
-    bonds = anchor_support_bonds(crossed, state.length)
-    min_dim = _min_bond_dim(sim_params)
-    state._ensure_internal_bond_dims(tuple(bonds), min_dim, max_dim=sim_params.max_bond_dim)
-    return bonds
+        _renorm_if_digital(state, sim_params)

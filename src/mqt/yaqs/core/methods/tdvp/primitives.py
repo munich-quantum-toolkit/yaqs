@@ -8,7 +8,7 @@
 """Low-level TDVP primitives.
 
 MPO environment blocks, dense effective operators, and local tensor updates.
-Integrator loops live in :mod:`mqt.yaqs.core.methods.tdvp_integrators`.
+Integrator loops live in :mod:`mqt.yaqs.core.methods.tdvp.integrators`.
 """
 
 from __future__ import annotations
@@ -18,15 +18,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 
-from .matrix_exponential import expm_krylov
+from ..matrix_exponential import expm_krylov
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
 
-    from ..data_structures.mpo import MPO
-    from ..data_structures.mps import MPS
+    from ...data_structures.mpo import MPO
+    from ...data_structures.mps import MPS
 
 
 DENSE_THRESHOLD = 128
@@ -167,7 +167,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex1
     return right_blocks
 
 
-# --- Dense effective operator ---
+# --- Matrix-free projectors ---
 
 
 def project_site(
@@ -215,6 +215,9 @@ def project_bond(
     """
     tensor = np.tensordot(bond_tensor, right_env, axes=1)
     return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
+
+
+# --- Dense effective operator ---
 
 
 def build_dense_heff_site(

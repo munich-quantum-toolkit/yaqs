@@ -22,42 +22,16 @@ from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.core.methods.tdvp.bond_support import (
+    anchor_support_bonds,
+    protected_bonds_for_two_site_gate,
+)
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
 
+from tests.core.methods.tdvp.conftest import _bond_second_schmidt, _fidelity, _qiskit_plus_rzz_reference, _tdvp_params
+
 if TYPE_CHECKING:
-    from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
-
-
-def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
-    return float(abs(np.vdot(a, b)) ** 2)
-
-
-def _bond_second_schmidt(mps: MPS, bond: int) -> float:
-    spec = mps.get_schmidt_spectrum([bond, bond + 1])
-    vals = np.asarray(spec[~np.isnan(spec)], dtype=np.float64)
-    norm = float(np.sum(vals**2))
-    if norm > 0.0:
-        vals /= np.sqrt(norm)
-    return float(vals[1]) if len(vals) > 1 else 0.0
-
-
-def _tdvp_params(*, max_bond_dim: int | None, tdvp_sweeps: int) -> StrongSimParams:
-    return StrongSimParams(
-        preset="exact",
-        get_state=True,
-        max_bond_dim=max_bond_dim,
-        tdvp_sweeps=tdvp_sweeps,
-        svd_threshold=1e-14,
-        krylov_tol=1e-12,
-    )
-
-
-def _qiskit_plus_rzz_reference(length: int, theta: float, *, sites: tuple[int, int]) -> np.ndarray:
-    qc = QuantumCircuit(length)
-    qc.h(range(length))
-    qc.rzz(theta, sites[0], sites[1])
-    return np.asarray(Statevector(qc).data, dtype=np.complex128)
 
 
 @pytest.mark.parametrize("length", [7, 8, 10])
@@ -147,3 +121,50 @@ def test_digital_gate_modes_small_lr_high_fidelity(
     assert _fidelity(ref, out.to_vec()) > 0.999
     assert out.get_max_bond() <= 8
     out._assert_bond_shapes_consistent(max_bond_dim=8)
+
+
+def test_fixed_chi_protected_bonds_match_gate_support() -> None:
+    """Protected bonds follow the active gate window, not hardcoded anchors."""
+    length = 8
+    sites = (0, length - 1)
+    protected = protected_bonds_for_two_site_gate(sites[0], sites[1], 0, length - 1)
+    assert protected == frozenset(range(sites[0], sites[1]))
+    assert 0 in protected
+    assert length - 2 in protected
+
+
+@pytest.mark.parametrize(
+    ("site0", "site1", "window_left", "window_right", "expected"),
+    [
+        (0, 6, 0, 8, frozenset({0, 1, 2, 3, 4, 5})),
+        (1, 8, 0, 9, frozenset({1, 2, 3, 4, 5, 6, 7})),
+        (2, 7, 1, 8, frozenset({1, 2, 3, 4, 5})),
+        (0, 3, 1, 4, frozenset({0, 1})),
+        (0, 1, 0, 2, frozenset({0})),
+    ],
+)
+def test_protected_bonds_for_long_range_gate(
+    site0: int,
+    site1: int,
+    window_left: int,
+    window_right: int,
+    expected: frozenset[int],
+) -> None:
+    """Protected bonds are gate-crossed bonds mapped into the local window."""
+    assert protected_bonds_for_two_site_gate(site0, site1, window_left, window_right) == expected
+
+
+@pytest.mark.parametrize(
+    ("num_sites", "crossed", "expected"),
+    [
+        (8, frozenset({0, 1, 2, 3, 4, 5, 6}), frozenset({0, 1, 2})),
+        (10, frozenset({0, 1, 2, 3, 4, 5, 6, 7, 8}), frozenset({0, 1, 2, 3})),
+    ],
+)
+def test_anchor_support_bonds_uses_anchor_half(
+    num_sites: int,
+    crossed: frozenset[int],
+    expected: frozenset[int],
+) -> None:
+    """Active support applies only to bonds left of the window midpoint."""
+    assert anchor_support_bonds(crossed, num_sites) == expected

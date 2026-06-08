@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
+TDVPMode = Literal["1site", "2site", "dynamic"]
 
 
 class PresetTypes(TypedDict):
@@ -130,6 +131,25 @@ def _validate_tdvp_sweeps(tdvp_sweeps: int) -> int:
         msg = f"tdvp_sweeps must be >= 1, got {tdvp_sweeps}."
         raise ValueError(msg)
     return tdvp_sweeps
+
+
+def _validate_tdvp_mode(tdvp_mode: TDVPMode) -> TDVPMode:
+    """Validate ``tdvp_mode`` for TDVP integrator geometry.
+
+    Args:
+        tdvp_mode: Integrator variant (``"1site"``, ``"2site"``, or ``"dynamic"``).
+
+    Returns:
+        The validated mode name.
+
+    Raises:
+        ValueError: If ``tdvp_mode`` is not a supported value.
+    """
+    allowed = ("1site", "2site", "dynamic")
+    if tdvp_mode not in allowed:
+        msg = f"tdvp_mode must be one of {allowed!r}, got {tdvp_mode!r}."
+        raise ValueError(msg)
+    return tdvp_mode
 
 
 def _validate_krylov_tol(krylov_tol: float) -> float:
@@ -336,6 +356,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
         tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
             symmetric integrator step (LTR then RTL) at evolution time ``dt / tdvp_sweeps``.
             Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+            Default is ``"dynamic"``.
     """
 
     def __init__(
@@ -357,6 +379,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
         tdvp_sweeps: int = 1,
+        tdvp_mode: TDVPMode = "dynamic",
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -389,6 +412,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
                 case ``(O, O)``.
             tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
                 symmetric integrator step at ``dt / tdvp_sweeps`` (default ``1``).
+            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+                Default is ``"dynamic"``.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -418,6 +443,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             [] if multi_time_observables is None else list(multi_time_observables)
         )
         self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
+        self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
 
 
 class StrongSimParams(_ObservableOrderingMixin):
@@ -456,6 +482,8 @@ class StrongSimParams(_ObservableOrderingMixin):
         tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
             symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
             of the unit gate time. Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+            Default is ``"dynamic"``.
     """
 
     # Properties set as placeholders for code compatibility
@@ -477,6 +505,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
         tdvp_sweeps: int = 1,
+        tdvp_mode: TDVPMode = "dynamic",
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -505,6 +534,8 @@ class StrongSimParams(_ObservableOrderingMixin):
             tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
                 symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
                 (default ``1``).
+            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+                Default is ``"dynamic"``.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -528,6 +559,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
         self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
+        self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
 
 
 class WeakSimParams:
@@ -558,6 +590,8 @@ class WeakSimParams:
         tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
             symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
             of the unit gate time. Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+            Default is ``"dynamic"``.
     """
 
     # Properties set as placeholders for code compatibility
@@ -577,6 +611,7 @@ class WeakSimParams:
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
         tdvp_sweeps: int = 1,
+        tdvp_mode: TDVPMode = "dynamic",
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -602,6 +637,8 @@ class WeakSimParams:
             tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
                 symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
                 (default ``1``).
+            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+                Default is ``"dynamic"``.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -617,3 +654,4 @@ class WeakSimParams:
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
         self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
+        self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)

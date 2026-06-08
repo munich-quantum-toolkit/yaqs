@@ -8,7 +8,7 @@
 """TDVP sweep helpers.
 
 Substep timestep scaling, truncation-policy split adapter, and fixed-χ bond
-bookkeeping used by :mod:`mqt.yaqs.core.methods.tdvp_integrators`.
+bookkeeping used by :mod:`mqt.yaqs.core.methods.tdvp.integrators`.
 """
 
 from __future__ import annotations
@@ -17,24 +17,25 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from ..data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
-from .decompositions import split_two_site
+from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
+from ..decompositions import split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..data_structures.mps import MPS
-    from .decompositions import SvdDistribution, TruncMode
+    from ...data_structures.mps import MPS
+    from ..decompositions import SvdDistribution, TruncMode
 
 
-def _prepare_substep_evolution_dt(
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    step_scale: float,
-) -> float:
-    """Return the TDVP evolution timestep for the current symmetric substep."""
-    if not isinstance(sim_params, (StrongSimParams, WeakSimParams)):
-        return float(sim_params.dt) * step_scale
-    return step_scale
+# --- Truncation policy ---
+
+
+def compute_min_keep(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
+    """Return the minimum bond dimension to retain during TDVP truncation."""
+    cap = sim_params.max_bond_dim
+    if cap is None:
+        return 2
+    return min(2, cap)
 
 
 def _split_two_site_tdvp(
@@ -70,13 +71,24 @@ def _split_two_site_tdvp(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim,
-        min_keep=2,
+        min_keep=compute_min_keep(sim_params),
     )
 
 
-def _bond_dim_at_or_above_cap(bond_dim: int, max_bond_dim: int | None) -> bool:
-    """Return True when a finite ``max_bond_dim`` cap is reached."""
-    return max_bond_dim is not None and bond_dim >= max_bond_dim
+# --- Substep timing ---
+
+
+def _prepare_substep_dt(
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    step_scale: float,
+) -> float:
+    """Return the TDVP evolution timestep for the current symmetric substep."""
+    if not isinstance(sim_params, (StrongSimParams, WeakSimParams)):
+        return float(sim_params.dt) * step_scale
+    return step_scale
+
+
+# --- Fixed-χ bond bookkeeping ---
 
 
 def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
@@ -99,7 +111,7 @@ def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
         state._ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
 
 
-def _contract_bond_target_dim(
+def _compute_bond_target_dim(
     state: MPS,
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -114,29 +126,36 @@ def _contract_bond_target_dim(
     return max(chi_target, 1)
 
 
-def _bond_dims_mismatched(state: MPS, bond_index: int) -> bool:
-    """Return whether neighboring tensors disagree on a bond dimension."""
-    return int(state.tensors[bond_index].shape[2]) != int(state.tensors[bond_index + 1].shape[1])
-
-
-def _renormalize_after_fixed_chi_sync(
+def _check_renorm_after_chi(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> bool:
-    """Return whether a sweep should renormalize after χ capping (digital only)."""
+    """Check whether a sweep should renormalize after χ capping (digital only)."""
     return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
 
 
-def _sync_fixed_chi_bond_if_mismatched(
+def _renorm_if_digital(
+    state: MPS,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+) -> None:
+    """Renormalize the MPS when fixed-χ digital TDVP requires it after truncation."""
+    if _check_renorm_after_chi(sim_params):
+        state.normalize()
+
+
+def _sync_fixed_chi_bond(
     state: MPS,
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> None:
     """Align a bond to the fixed-χ target and optionally renormalize (digital only)."""
-    if sim_params.max_bond_dim is None or not _bond_dims_mismatched(state, bond_index):
+    if sim_params.max_bond_dim is None:
         return
-    _sync_bond_dim(state, bond_index, _contract_bond_target_dim(state, bond_index, sim_params))
-    if _renormalize_after_fixed_chi_sync(sim_params):
-        state.normalize()
+    left = state.tensors[bond_index]
+    right = state.tensors[bond_index + 1]
+    if int(left.shape[2]) == int(right.shape[1]):
+        return
+    _sync_bond_dim(state, bond_index, _compute_bond_target_dim(state, bond_index, sim_params))
+    _renorm_if_digital(state, sim_params)
 
 
 def _enforce_global_bond_cap(
@@ -154,8 +173,11 @@ def _enforce_global_bond_cap(
         if chi_out > cap or chi_in > cap:
             _sync_bond_dim(state, bond, cap)
             changed = True
-    if changed and _renormalize_after_fixed_chi_sync(sim_params):
-        state.normalize()
+    if changed:
+        _renorm_if_digital(state, sim_params)
+
+
+# --- Bond transfer geometry ---
 
 
 def _resize_bond(

@@ -34,7 +34,8 @@ from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import tdvp
-from ..core.methods.tdvp_bond_support import prepare_support_bonds
+from ..core.methods.tdvp.bond_support import prepare_support_bonds
+from ..core.methods.tdvp.sweep_utils import compute_min_keep
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -231,7 +232,7 @@ def apply_two_qubit_gate_tdvp(
 ) -> tuple[int, int]:
     """Apply a two-qubit gate via generator MPO and TDVP.
 
-    Long-range gates use local dynamic TDVP (``mode="dynamic"``) with gate-local
+    Long-range gates use local dynamic TDVP (``tdvp_mode="dynamic"``) with gate-local
     minimal bond support on crossed internal bonds.
 
     Args:
@@ -253,7 +254,7 @@ def apply_two_qubit_gate_tdvp(
         if abs(site0 - site1) != 1
         else None
     )
-    tdvp(short_state, short_mpo, sim_params, mode="dynamic", support_bonds=support_bonds)
+    tdvp(short_state, short_mpo, sim_params, support_bonds=support_bonds)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 
@@ -321,7 +322,7 @@ def apply_two_qubit_gate_tebd(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
-        min_keep=2,
+        min_keep=compute_min_keep(sim_params),
     )
     state.tensors[left_site] = new_left
     state.tensors[right_site] = new_right

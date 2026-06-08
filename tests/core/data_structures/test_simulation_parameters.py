@@ -36,7 +36,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     _validate_tdvp_sweeps,  # noqa: PLC2701
 )
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
-from mqt.yaqs.core.methods import tdvp_primitives
+from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import (
         GateMode,
         SimulationPreset,
+        TDVPMode,
     )
 
 
@@ -173,6 +174,17 @@ def test_gate_mode_defaults_and_validation() -> None:
     assert StrongSimParams(gate_mode="mpo").gate_mode == "mpo"
     with pytest.raises(ValueError, match="gate_mode"):
         StrongSimParams(gate_mode=cast("GateMode", "invalid"))
+
+
+def test_tdvp_mode_defaults_and_validation() -> None:
+    """Analog, strong, and weak params default tdvp_mode to dynamic and validate inputs."""
+    assert AnalogSimParams().tdvp_mode == "dynamic"
+    assert StrongSimParams().tdvp_mode == "dynamic"
+    assert WeakSimParams(shots=1).tdvp_mode == "dynamic"
+    assert StrongSimParams(tdvp_mode="1site").tdvp_mode == "1site"
+    assert StrongSimParams(tdvp_mode="2site").tdvp_mode == "2site"
+    with pytest.raises(ValueError, match="tdvp_mode"):
+        StrongSimParams(tdvp_mode=cast("TDVPMode", "invalid"))
 
 
 def test_tdvp_sweeps_defaults_and_validation() -> None:
