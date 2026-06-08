@@ -659,6 +659,26 @@ def test_split_truncation_max_bond_enforced() -> None:
     assert A1.shape[1] == 2
 
 
+def test_split_two_site_tdvp_min_keep() -> None:
+    """``_split_two_site_tdvp`` enforces ``min_keep=2`` even when threshold would drop further."""
+    svs = np.array([1.0, 1e-12, 1e-13, 1e-14], dtype=np.float64)
+    d0, d1, D0, D2 = 2, 2, 2, 2
+    theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=31)
+    A_in = _as_input_tensor(theta, d0, d1, D0, D2)
+
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        svd_threshold=1e-6,
+        trunc_mode="relative",
+        sample_timesteps=True,
+    )
+    A0, A1 = _split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
+    assert A0.shape[2] == 2
+    assert A1.shape[1] == 2
+
+
 @pytest.mark.parametrize("distr", ["left", "right", "sqrt"])
 def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> None:
     """All SVD distribution choices reconstruct the optimal rank-k approximation."""

@@ -70,6 +70,7 @@ def _split_two_site_tdvp(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim,
+        min_keep=2,
     )
 
 
