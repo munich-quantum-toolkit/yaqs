@@ -236,8 +236,12 @@ def test_dense_vs_project_bond() -> None:
     np.testing.assert_allclose(y1, y2, atol=1e-12)
 
 
-def test_build_dense_heff_site_matches_project_site() -> None:
+def test_build_dense_heff_site_matches_project_site(monkeypatch: pytest.MonkeyPatch) -> None:
     """build_dense_heff_site: vec(project_site(..., X)) == H_eff @ vec(X) for random small tensors."""
+    monkeypatch.setattr(
+        "mqt.yaqs.core.methods.tdvp.primitives.NUMBA_DENSE_HEFF_MIN_DIM",
+        1,
+    )
     phys_in, phys_out = 2, 2
     bond_left_dim, bond_right_dim = 3, 4
     chi_left, chi_right = 2, 3

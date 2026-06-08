@@ -15,10 +15,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numba
 import numpy as np
 import opt_einsum as oe
 
 from ..matrix_exponential import expm_krylov
+from .numba import build_dense_heff_site_numba
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -30,6 +32,7 @@ if TYPE_CHECKING:
 
 
 DENSE_THRESHOLD = 128
+NUMBA_DENSE_HEFF_MIN_DIM = 16
 
 __all__ = [
     "build_dense_heff_bond",
@@ -272,6 +275,9 @@ def build_dense_heff_site(
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
     op = np.asarray(op, dtype=np.complex128)
+    d = max(left_env.shape[0], left_env.shape[2], right_env.shape[0], right_env.shape[2])
+    if d >= NUMBA_DENSE_HEFF_MIN_DIM and numba.get_num_threads() > 1:
+        return build_dense_heff_site_numba(left_env, right_env, op)
     # h[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
     h6 = np.einsum("oplr,alA,brB->oABpab", op, left_env, right_env, optimize=True)
     o_dim, a_dim_out, b_dim_out, p_dim, a_dim_in, b_dim_in = h6.shape
@@ -327,7 +333,6 @@ def build_dense_heff_bond(
     """
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
-
     # h[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
     h4 = np.einsum("uap,vaw->pwuv", left_env, right_env, optimize=True)
     p_dim, w_dim, u_dim, v_dim = h4.shape

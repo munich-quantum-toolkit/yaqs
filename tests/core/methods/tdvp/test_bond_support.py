@@ -27,7 +27,6 @@ from mqt.yaqs.core.methods.tdvp.bond_support import (
     protected_bonds_for_two_site_gate,
 )
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
-
 from tests.core.methods.tdvp.conftest import _bond_second_schmidt, _fidelity, _qiskit_plus_rzz_reference, _tdvp_params
 
 if TYPE_CHECKING:

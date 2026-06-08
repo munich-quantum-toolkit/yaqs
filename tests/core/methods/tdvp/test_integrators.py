@@ -28,7 +28,6 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.tdvp import tdvp
 from mqt.yaqs.core.methods.tdvp.primitives import update_site
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
-
 from tests.core.methods.tdvp.conftest import (
     _apply_lr_gate,
     _bond_second_schmidt,
