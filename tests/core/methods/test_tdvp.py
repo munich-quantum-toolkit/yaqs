@@ -50,7 +50,6 @@ from mqt.yaqs.core.methods.tdvp import (
 )
 from mqt.yaqs.core.methods.tdvp_primitives import (
     _build_dense_effective_operator,  # noqa: PLC2701
-    _split_two_site_tdvp,  # noqa: PLC2701
     build_dense_heff_bond,
     build_dense_heff_site,
     merge_mpo_tensors,
@@ -60,6 +59,9 @@ from mqt.yaqs.core.methods.tdvp_primitives import (
     update_left_environment,
     update_right_environment,
     update_site,
+)
+from mqt.yaqs.core.methods.tdvp_sweep_utils import (
+    _split_two_site_tdvp,  # noqa: PLC2701
 )
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
 
@@ -76,7 +78,7 @@ def test_split_two_site_tdvp_left_right_sqrt() -> None:
 
     This test creates a random tensor A with shape (4, 3, 5), corresponding to (d0*d1, D0, D2)
     with d0 = d1 = 2, D0 = 3, and D2 = 5. For each SVD distribution option ("left", "right", "sqrt"),
-    :func:`mqt.yaqs.core.methods.tdvp._split_two_site_tdvp` decomposes A into two tensors A0 and A1.
+    :func:`mqt.yaqs.core.methods.tdvp_sweep_utils._split_two_site_tdvp` decomposes A into two tensors A0 and A1.
     The test then reconstructs A from A0 and A1 by undoing the transpose on A1 and contracting
     over the singular value index.
     """
@@ -314,7 +316,7 @@ def test_two_site_tdvp_circuit_sweep_scaling() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact")
 
-    with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_sweep:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._two_site_tdvp_sweep") as mock_sweep:
         tdvp(state, H, sim_params, mode="2site")
         assert mock_sweep.call_count == 1
         sweep_plan = mock_sweep.call_args.kwargs["sweep_plan"]
@@ -330,7 +332,7 @@ def test_two_site_tdvp_circuit_single_sweep_uses_symmetric() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=1, preset="exact")
 
-    with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_sweep:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._two_site_tdvp_sweep") as mock_sweep:
         tdvp(state, H, sim_params, mode="2site")
         assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
 
@@ -444,7 +446,7 @@ def test_tdvp_support_bonds_dynamic_dispatch() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
     bonds = frozenset({0})
 
-    with patch("mqt.yaqs.core.methods.tdvp._dynamic_tdvp_sweep") as mock_dyn:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._dynamic_tdvp_sweep") as mock_dyn:
         tdvp(state, H, sim_params, mode="dynamic", support_bonds=bonds)
         mock_dyn.assert_called_once()
         assert mock_dyn.call_args.args[3] == bonds
@@ -457,7 +459,7 @@ def test_local_dynamic_tdvp_circuit_sweep_scaling() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact")
 
-    with patch("mqt.yaqs.core.methods.tdvp._dynamic_tdvp_sweep") as mock_sweep:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._dynamic_tdvp_sweep") as mock_sweep:
         tdvp(state, H, sim_params)
         assert mock_sweep.call_count == 1
         assert len(mock_sweep.call_args.kwargs["sweep_plan"]) == 2
@@ -470,15 +472,15 @@ def test_tdvp_mode_dispatch() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
 
-    with patch("mqt.yaqs.core.methods.tdvp._single_site_tdvp_sweep") as mock_one:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._single_site_tdvp_sweep") as mock_one:
         tdvp(state, H, sim_params, mode="1site")
         mock_one.assert_called_once()
 
-    with patch("mqt.yaqs.core.methods.tdvp._two_site_tdvp_sweep") as mock_two:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._two_site_tdvp_sweep") as mock_two:
         tdvp(state, H, sim_params, mode="2site")
         mock_two.assert_called_once()
 
-    with patch("mqt.yaqs.core.methods.tdvp._dynamic_tdvp_sweep") as mock_dyn:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._dynamic_tdvp_sweep") as mock_dyn:
         tdvp(state, H, sim_params, mode="dynamic")
         mock_dyn.assert_called_once()
 
@@ -495,7 +497,7 @@ def test_tdvp_default_mode_is_dynamic() -> None:
         sample_timesteps=False,
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp._dynamic_tdvp_sweep") as mock_dyn:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._dynamic_tdvp_sweep") as mock_dyn:
         tdvp(state, H, sim_params)
         mock_dyn.assert_called_once()
 
@@ -511,7 +513,7 @@ def test_tdvp_dynamic_single_site_chain() -> None:
         sample_timesteps=False,
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp._single_site_tdvp_sweep") as mock_one:
+    with patch("mqt.yaqs.core.methods.tdvp_integrators._single_site_tdvp_sweep") as mock_one:
         tdvp(state, H, sim_params)
         mock_one.assert_called_once()
 
@@ -1045,7 +1047,7 @@ def test_two_site_l2_rzz_applies_unit_evolution_time() -> None:
         recorded_dts.append(dt)
         return update_site(left_env, right_env, op, ket, dt, krylov_tol=krylov_tol)
 
-    with patch("mqt.yaqs.core.methods.tdvp.update_site", side_effect=_record_update_site):
+    with patch("mqt.yaqs.core.methods.tdvp_integrators.update_site", side_effect=_record_update_site):
         tdvp(window_state, window_mpo, sim_params, mode="2site")
 
     assert recorded_dts == [pytest.approx(1.0)]
