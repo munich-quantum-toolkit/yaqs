@@ -50,8 +50,8 @@ def _split_two_site_tdvp(
 
     Thin adapter around :func:`mqt.yaqs.core.methods.decompositions.split_two_site`.
     When ``dynamic`` is True, no ``max_bond_dim`` cap is applied during truncation
-    (bond growth is handled by the dynamic TDVP sweep). Otherwise the cap is
-    ``sim_params.max_bond_dim``.
+    (bond growth is handled by the dynamic TDVP sweep and global χ enforcement).
+    Otherwise the cap is ``sim_params.max_bond_dim``.
 
     Args:
         merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
@@ -70,7 +70,7 @@ def _split_two_site_tdvp(
         svd_distribution=cast("SvdDistribution", svd_distribution),
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
-        max_bond_dim=None if dynamic and sim_params.max_bond_dim is None else sim_params.max_bond_dim,
+        max_bond_dim=None if dynamic else sim_params.max_bond_dim,
         min_keep=compute_min_keep(sim_params),
     )
 
@@ -133,12 +133,36 @@ def _check_renorm_after_chi(
     return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
 
 
+def _norm_drift_renorm_tol(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
+    """Tolerance for renormalizing fixed-χ digital TDVP after global norm drift."""
+    return max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
+
+
+def _global_mps_norm(state: MPS) -> float:
+    """Return the L2 norm of the full MPS state vector."""
+    overlap = state.scalar_product(state)
+    norm_sq = float(np.real(np.asarray(overlap, dtype=np.complex128).flat[0]))
+    return float(np.sqrt(max(norm_sq, 0.0)))
+
+
 def _renorm_if_digital(
     state: MPS,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+    *,
+    force: bool = False,
 ) -> None:
-    """Renormalize the MPS when fixed-χ digital TDVP requires it after truncation."""
-    if _check_renorm_after_chi(sim_params):
+    """Renormalize the MPS when fixed-χ digital TDVP requires it after truncation.
+
+    Fixed-χ digital sweeps renormalize only after explicit truncation (``force=True``)
+    or when the full MPS norm drifts significantly from unity.
+    """
+    if not _check_renorm_after_chi(sim_params):
+        return
+    if force:
+        state.normalize()
+        return
+    norm = _global_mps_norm(state)
+    if abs(norm - 1.0) > _norm_drift_renorm_tol(sim_params):
         state.normalize()
 
 
@@ -155,7 +179,7 @@ def _sync_fixed_chi_bond(
     if int(left.shape[2]) == int(right.shape[1]):
         return
     _sync_bond_dim(state, bond_index, _compute_bond_target_dim(state, bond_index, sim_params))
-    _renorm_if_digital(state, sim_params)
+    _renorm_if_digital(state, sim_params, force=True)
 
 
 def _enforce_global_bond_cap(
@@ -174,7 +198,7 @@ def _enforce_global_bond_cap(
             _sync_bond_dim(state, bond, cap)
             changed = True
     if changed:
-        _renorm_if_digital(state, sim_params)
+        _renorm_if_digital(state, sim_params, force=True)
 
 
 # --- Bond transfer geometry ---

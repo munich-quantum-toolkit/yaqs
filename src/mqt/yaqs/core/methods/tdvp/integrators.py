@@ -52,6 +52,7 @@ def _single_site_tdvp_sweep(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
+    renorm_after: bool = True,
 ) -> None:
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
@@ -156,6 +157,7 @@ def _two_site_tdvp_sweep(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
+    renorm_after: bool = True,
 ) -> None:
     num_sites = operator.length
     plan = sweep_plan if sweep_plan is not None else [step_scale]
@@ -269,6 +271,7 @@ def _dynamic_tdvp_sweep(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
+    renorm_after: bool = True,
 ) -> None:
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
@@ -278,17 +281,16 @@ def _dynamic_tdvp_sweep(
                 sim_params,
                 support_bonds,
                 step_scale=plan_step_scale,
+                renorm_after=renorm_after,
             )
         return
 
     _enforce_global_bond_cap(state, sim_params)
 
     num_sites = operator.length
-    use_lock = support_bonds is None
     seed_bonds = select_protected_seed_bonds(support_bonds) if support_bonds is not None else frozenset()
     merged_peak: dict[int, float] = {}
     last_second: dict[int, float] = {}
-    cap = sim_params.max_bond_dim
 
     right_blocks = initialize_right_environments(state, operator)
     left_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
@@ -302,11 +304,10 @@ def _dynamic_tdvp_sweep(
     substep_evolution_dt = _prepare_substep_dt(sim_params, step_scale)
 
     # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
-    lock_final_site = False
     for i in range(num_sites):
         bond_dim = state.tensors[i].shape[2]
         cap = sim_params.max_bond_dim
-        if (cap is not None and bond_dim >= cap) or (use_lock and lock_final_site):
+        if cap is not None and bond_dim >= cap:
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -343,8 +344,6 @@ def _dynamic_tdvp_sweep(
                     )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
                 _sync_fixed_chi_bond(state, i, sim_params)
-            if use_lock and i == num_sites - 2:
-                lock_final_site = True
         elif i == num_sites - 1:
             continue
         elif i == num_sites - 2:
@@ -446,11 +445,10 @@ def _dynamic_tdvp_sweep(
     substep_evolution_dt = _prepare_substep_dt(sim_params, step_scale)
 
     # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
-    lock_final_site = False
     for i in reversed(range(num_sites)):
         bond_dim = state.tensors[i].shape[1]
         cap = sim_params.max_bond_dim
-        if (cap is not None and bond_dim >= cap) or (use_lock and lock_final_site):
+        if cap is not None and bond_dim >= cap:
             state.tensors[i] = update_site(
                 left_blocks[i],
                 right_blocks[i],
@@ -488,8 +486,6 @@ def _dynamic_tdvp_sweep(
                     )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
                 _sync_fixed_chi_bond(state, i - 1, sim_params)
-                if use_lock and i == 1:
-                    lock_final_site = True
         elif i == 0:
             continue
         else:
@@ -553,4 +549,5 @@ def _dynamic_tdvp_sweep(
             last_second,
             seed_bonds=seed_bonds,
         )
-    _renorm_if_digital(state, sim_params)
+    if renorm_after:
+        _renorm_if_digital(state, sim_params)

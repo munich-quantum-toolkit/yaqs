@@ -230,3 +230,38 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
     u, s, v = np.linalg.svd(theta, full_matrices=False)
     theta_opt_k = (u[:, :k] * s[:k]) @ v[:k, :]
     np.testing.assert_allclose(theta_recon, theta_opt_k, atol=1e-10, rtol=1e-8)
+
+
+def test_dynamic_split_matches_uncapped_when_rank_below_cap() -> None:
+    """Dynamic splits ignore ``max_bond_dim`` when the kept rank stays below the cap."""
+    svs = np.array([1.0, 0.4, 0.2])
+    d0, d1, D0, D2 = 2, 2, 2, 2
+    theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=21)
+    a_in = _as_input_tensor(theta, d0, d1, D0, D2)
+
+    uncapped = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        max_bond_dim=None,
+        svd_threshold=1e-14,
+        trunc_mode="discarded_weight",
+        sample_timesteps=True,
+    )
+    capped = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.2,
+        dt=0.1,
+        max_bond_dim=64,
+        svd_threshold=1e-14,
+        trunc_mode="discarded_weight",
+        sample_timesteps=True,
+    )
+
+    left_u, right_u = _split_two_site_tdvp(a_in, uncapped, [d0, d1], "sqrt", dynamic=True)
+    left_c, right_c = _split_two_site_tdvp(a_in, capped, [d0, d1], "sqrt", dynamic=True)
+
+    assert left_u.shape == left_c.shape
+    assert right_u.shape == right_c.shape
+    np.testing.assert_allclose(left_u, left_c, atol=1e-12)
+    np.testing.assert_allclose(right_u, right_c, atol=1e-12)

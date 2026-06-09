@@ -6,6 +6,7 @@
 # Licensed under the MIT License
 
 """Tests for Numba-accelerated TDVP kernels."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

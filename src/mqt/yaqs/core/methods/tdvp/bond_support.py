@@ -29,22 +29,25 @@ if TYPE_CHECKING:
     from ..decompositions import SvdDistribution, TruncMode
 
 __all__ = [
+    "crossed_bonds_for_two_site_gate",
+    "prepare_lr_tdvp_seed_bonds",
     "prepare_support_bonds",
     "protected_bonds_for_two_site_gate",
     "select_protected_seed_bonds",
+    "select_seed_bonds",
 ]
 
 
 # --- Public bond geometry and setup ---
 
 
-def protected_bonds_for_two_site_gate(
+def crossed_bonds_for_two_site_gate(
     site0: int,
     site1: int,
     window_left: int,
     window_right: int,
 ) -> frozenset[int]:
-    """Return window-local bond indices crossed by a two-site gate.
+    """Return window-local bond indices geometrically crossed by a two-site gate.
 
     Args:
         site0: First acted-on site (global index).
@@ -62,6 +65,83 @@ def protected_bonds_for_two_site_gate(
     )
 
 
+def protected_bonds_for_two_site_gate(
+    site0: int,
+    site1: int,
+    window_left: int,
+    window_right: int,
+) -> frozenset[int]:
+    """Alias for :func:`crossed_bonds_for_two_site_gate` (legacy name).
+
+    Returns:
+        Window-local crossed bond indices for explicit ablation/lab use.
+    """
+    return crossed_bonds_for_two_site_gate(site0, site1, window_left, window_right)
+
+
+def select_seed_bonds(crossed_bonds: frozenset[int]) -> frozenset[int]:
+    """Select crossed bonds used to initialize virtual support via pre-padding.
+
+    The selected bonds are always a subset of ``crossed_bonds``. They are used
+    only to initialize a nonzero virtual direction so dynamic TDVP can leave
+    rank-deficient product manifolds during long-range entangling updates.
+
+    The rule is deterministic: sort the crossed-bond interval and seed the left
+    half (``floor(n/2)`` bonds). For a single crossed bond, seed that bond.
+
+    Args:
+        crossed_bonds: Gate-crossed bonds within the TDVP window.
+
+    Returns:
+        Subset of ``crossed_bonds`` chosen for seed pre-padding.
+    """
+    if not crossed_bonds:
+        return frozenset()
+    ordered = sorted(crossed_bonds)
+    split_at = len(ordered) // 2
+    if split_at <= 0:
+        return frozenset({ordered[0]})
+    return frozenset(ordered[:split_at])
+
+
+def select_protected_seed_bonds(protected_bonds: frozenset[int]) -> frozenset[int]:
+    """Alias for :func:`select_seed_bonds` (legacy name).
+
+    Returns:
+        Seed-bond subset of the crossed/protected bond set.
+    """
+    return select_seed_bonds(protected_bonds)
+
+
+def prepare_lr_tdvp_seed_bonds(
+    state: MPS,
+    site0: int,
+    site1: int,
+    window: tuple[int, int],
+    sim_params: StrongSimParams | WeakSimParams,
+) -> None:
+    """Prepad seed bonds for long-range dynamic TDVP without sweep protection.
+
+    Production long-range gates call dynamic TDVP with ``support_bonds=None`` after
+    optional seed pre-padding. This helper only enlarges bond dimensions on
+    ``seed_bonds``; it does not enable protected-bond semantics during sweeps.
+
+    Args:
+        state: Window-local MPS updated in place when pre-padding is applied.
+        site0: First acted-on site (global index).
+        site1: Second acted-on site (global index).
+        window: ``(window_left, window_right)`` global window bounds.
+        sim_params: Simulation parameters including ``max_bond_dim``.
+    """
+    if not _support_enabled(sim_params):
+        return
+    crossed_bonds = crossed_bonds_for_two_site_gate(site0, site1, window[0], window[1])
+    seed_bonds = select_seed_bonds(crossed_bonds)
+    min_dim = compute_min_keep(sim_params)
+    if seed_bonds:
+        state._ensure_internal_bond_dims(tuple(seed_bonds), min_dim, max_dim=sim_params.max_bond_dim)
+
+
 def prepare_support_bonds(
     state: MPS,
     site0: int,
@@ -69,58 +149,21 @@ def prepare_support_bonds(
     window: tuple[int, int],
     sim_params: StrongSimParams | WeakSimParams,
 ) -> frozenset[int] | None:
-    """Build support bond indices for a long-range gate, pre-padding support dims.
+    """Lab/ablation helper: prepad seed bonds and return crossed bonds for protection.
 
-    Gate-local protected-bond support retention preserves the minimal virtual
-    support required by an active long-range entangling gate, subject to
-    ``max_bond_dim``. All bonds crossed by the gate within the TDVP window are
-    returned as the protected set; seed bonds (see
-    :func:`select_protected_seed_bonds`) are pre-padded for null-space
-    initialization. Returns ``None`` when ``max_bond_dim < 2``.
+    Production code should use :func:`prepare_lr_tdvp_seed_bonds` and call dynamic
+    TDVP with ``support_bonds=None``. This helper remains for experiments that
+    explicitly pass a non-``None`` ``support_bonds`` set to the integrator.
 
     Returns:
-        Window-local bond indices receiving active support during sweeps, or
-        ``None`` when bond support is disabled under the current χ budget.
+        Crossed bond indices for optional explicit ``support_bonds=...``, or
+        ``None`` when ``max_bond_dim < 2``.
     """
     if not _support_enabled(sim_params):
         return None
-    protected_bonds = protected_bonds_for_two_site_gate(site0, site1, window[0], window[1])
-    min_dim = compute_min_keep(sim_params)
-    seed_bonds = select_protected_seed_bonds(protected_bonds)
-    state._ensure_internal_bond_dims(tuple(seed_bonds), min_dim, max_dim=sim_params.max_bond_dim)
-    return protected_bonds
-
-
-def select_protected_seed_bonds(protected_bonds: frozenset[int]) -> frozenset[int]:
-    """Select crossed bonds used to initialize protected virtual support.
-
-    The selected bonds are always a subset of the active gate-crossed bonds.
-    They are used only to initialize a nonzero virtual direction so dynamic
-    TDVP can leave rank-deficient product manifolds during long-range
-    entangling updates.
-
-    The rule is deterministic and independent of system size or TDVP window
-    size: sort the crossed-bond interval and seed the left half
-    (``floor(n/2)`` bonds). For a single crossed bond, seed that bond. This
-    provides a reproducible left-to-right support-initialization convention
-    without hardcoded anchors.
-
-    This helper does not override ``max_bond_dim``. If the effective bond cap
-    is one, no rank-2 support should be created by the caller.
-
-    Args:
-        protected_bonds: Gate-crossed bonds within the TDVP window.
-
-    Returns:
-        Subset of ``protected_bonds`` chosen for support seeding.
-    """
-    if not protected_bonds:
-        return frozenset()
-    ordered = sorted(protected_bonds)
-    split_at = len(ordered) // 2
-    if split_at <= 0:
-        return frozenset({ordered[0]})
-    return frozenset(ordered[:split_at])
+    crossed_bonds = crossed_bonds_for_two_site_gate(site0, site1, window[0], window[1])
+    prepare_lr_tdvp_seed_bonds(state, site0, site1, window, sim_params)
+    return crossed_bonds
 
 
 # --- Support policy ---
@@ -354,12 +397,7 @@ def _after_support_split(
     pre_ratio = _merged_second_schmidt_ratio(merged, physical_dimensions)
     merged_peak[bond_index] = max(merged_peak.get(bond_index, 0.0), pre_ratio)
     post_ratio = _second_schmidt_ratio(state, bond_index)
-    if (
-        bond_index in seed_bonds
-        and min_dim >= 2
-        and pre_ratio >= propagation
-        and post_ratio < threshold
-    ):
+    if bond_index in seed_bonds and min_dim >= 2 and pre_ratio >= propagation and post_ratio < threshold:
         _init_support_null_direction(state, bond_index, sim_params)
         post_ratio = _second_schmidt_ratio(state, bond_index)
     last_second[bond_index] = post_ratio

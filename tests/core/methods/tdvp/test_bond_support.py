@@ -18,9 +18,12 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.core.methods.tdvp import tdvp
 from mqt.yaqs.core.methods.tdvp.bond_support import (
+    crossed_bonds_for_two_site_gate,
+    prepare_lr_tdvp_seed_bonds,
     prepare_support_bonds,
     protected_bonds_for_two_site_gate,
     select_protected_seed_bonds,
+    select_seed_bonds,
 )
 from mqt.yaqs.digital.digital_tjm import apply_window, construct_generator_mpo
 from tests.core.methods.tdvp.conftest import _tdvp_params, assert_mps_bond_invariants
@@ -66,8 +69,13 @@ def test_internal_pair_no_protection_outside_crossed_interval() -> None:
 # --- prepare_support_bonds ---
 
 
-def test_prepare_support_bonds_returns_all_crossed_bonds() -> None:
-    """Active support bonds are exactly the gate-crossed bonds in the window."""
+def test_crossed_bonds_alias_matches_protected() -> None:
+    """Legacy protected_bonds name matches crossed_bonds geometry."""
+    assert crossed_bonds_for_two_site_gate(2, 7, 0, 9) == protected_bonds_for_two_site_gate(2, 7, 0, 9)
+
+
+def test_prepare_support_bonds_returns_crossed_for_lab() -> None:
+    """Lab helper returns crossed bonds after seed prep; production uses support_bonds=None."""
     length = 10
     sites = (2, 7)
     prep = copy.deepcopy(State(length, initial="x+").mps)
@@ -83,11 +91,10 @@ def test_prepare_support_bonds_returns_all_crossed_bonds() -> None:
         svd_threshold=1e-14,
         krylov_tol=1e-12,
     )
-    expected = protected_bonds_for_two_site_gate(sites[0], sites[1], win[0], win[1])
+    expected = crossed_bonds_for_two_site_gate(sites[0], sites[1], win[0], win[1])
     support = prepare_support_bonds(short_state, sites[0], sites[1], (win[0], win[1]), params)
     assert support is not None
     assert support == expected
-    assert support.issubset(expected)
 
 
 def test_prepare_support_bonds_none_when_chi_one() -> None:
@@ -110,8 +117,8 @@ def test_prepare_support_bonds_none_when_chi_one() -> None:
     assert prepare_support_bonds(short_state, sites[0], sites[1], (win[0], win[1]), params) is None
 
 
-def test_bond_invariants_after_support_padding() -> None:
-    """prepare_support_bonds + dynamic sweep preserve neighbor bond shapes."""
+def test_bond_invariants_after_seed_prep_and_dynamic_sweep() -> None:
+    """Seed prep + dynamic TDVP without support_bonds preserve neighbor bond shapes."""
     length = 8
     theta = 0.3
     gate = GateLibrary.rzz([theta])
@@ -120,14 +127,19 @@ def test_bond_invariants_after_support_padding() -> None:
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
     window_state, window_mpo, window = apply_window(prep, mpo, first_site, last_site, 1)
     params = _tdvp_params(max_bond_dim=8, tdvp_sweeps=4)
-    support = prepare_support_bonds(window_state, 0, length - 1, (window[0], window[1]), params)
-    assert support is not None
+    prepare_lr_tdvp_seed_bonds(window_state, 0, length - 1, (window[0], window[1]), params)
     assert_mps_bond_invariants(window_state, max_bond_dim=8)
-    tdvp(window_state, window_mpo, params, support_bonds=support)
+    tdvp(window_state, window_mpo, params, support_bonds=None)
     assert_mps_bond_invariants(window_state, max_bond_dim=8)
 
 
 # --- select_protected_seed_bonds ---
+
+
+def test_select_seed_bonds_alias_matches_protected_seed() -> None:
+    """select_seed_bonds is an alias for select_protected_seed_bonds."""
+    crossed = frozenset({2, 3, 4, 5, 6})
+    assert select_seed_bonds(crossed) == select_protected_seed_bonds(crossed)
 
 
 @pytest.mark.parametrize(

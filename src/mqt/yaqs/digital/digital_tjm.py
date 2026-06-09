@@ -34,7 +34,6 @@ from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp import tdvp
-from ..core.methods.tdvp.bond_support import prepare_support_bonds
 from ..core.methods.tdvp.sweep_utils import compute_min_keep
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
@@ -232,8 +231,11 @@ def apply_two_qubit_gate_tdvp(
 ) -> tuple[int, int]:
     """Apply a two-qubit gate via generator MPO and TDVP.
 
-    Long-range gates use local dynamic TDVP (``tdvp_mode="dynamic"``) with gate-local
-    protected-bond support on crossed internal bonds. Nearest-neighbor gates in hybrid
+    Long-range gates use local dynamic TDVP (``tdvp_mode="dynamic"``) with
+    ``support_bonds=None`` and ``renorm_after=False`` on the window-local MPS.
+    Seed-bond pre-padding is disabled by default; call
+    :func:`~mqt.yaqs.core.methods.tdvp.bond_support.prepare_lr_tdvp_seed_bonds`
+    explicitly in lab/ablation code when needed. Nearest-neighbor gates in hybrid
     ``gate_mode="tdvp"`` use TEBD instead; callers should route via
     :func:`apply_two_qubit_gate`.
 
@@ -250,13 +252,7 @@ def apply_two_qubit_gate_tdvp(
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 
-    site0, site1 = gate.sites[0], gate.sites[1]
-    support_bonds = (
-        prepare_support_bonds(short_state, site0, site1, (window[0], window[1]), sim_params)
-        if abs(site0 - site1) != 1
-        else None
-    )
-    tdvp(short_state, short_mpo, sim_params, support_bonds=support_bonds)
+    tdvp(short_state, short_mpo, sim_params, support_bonds=None, renorm_after=False)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
 

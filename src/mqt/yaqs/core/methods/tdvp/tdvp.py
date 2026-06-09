@@ -58,6 +58,7 @@ def tdvp(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
     support_bonds: frozenset[int] | None = None,
+    renorm_after: bool = True,
 ) -> None:
     """Evolve an MPS under an MPO operator via TDVP.
 
@@ -72,6 +73,8 @@ def tdvp(
         support_bonds: Optional window-local bond indices for long-range digital
             gate support during dynamic TDVP. Requires ``StrongSimParams`` or
             ``WeakSimParams``; analog callers should omit this.
+        renorm_after: When ``False``, skip the post-sweep fixed-χ renormalization.
+            Use for window-local TDVP whose tensors are grafted into a larger MPS.
 
     Raises:
         ValueError: If ``state`` and ``operator`` lengths mismatch, if
@@ -96,11 +99,19 @@ def tdvp(
     if tdvp_mode == "dynamic" and operator.length == 1:
         tdvp_mode = "1site"
 
+    renorm_kw = {"renorm_after": renorm_after}
     if tdvp_mode == "1site":
-        _run_sweeps(integrators._single_site_tdvp_sweep, state, operator, sim_params)
+        _run_sweeps(integrators._single_site_tdvp_sweep, state, operator, sim_params, **renorm_kw)
     elif tdvp_mode == "2site":
-        _run_sweeps(integrators._two_site_tdvp_sweep, state, operator, sim_params)
+        _run_sweeps(integrators._two_site_tdvp_sweep, state, operator, sim_params, **renorm_kw)
     elif support_bonds:
-        _run_sweeps(integrators._dynamic_tdvp_sweep, state, operator, sim_params, support_bonds)
+        _run_sweeps(
+            integrators._dynamic_tdvp_sweep,
+            state,
+            operator,
+            sim_params,
+            support_bonds,
+            **renorm_kw,
+        )
     else:
-        _run_sweeps(integrators._dynamic_tdvp_sweep, state, operator, sim_params)
+        _run_sweeps(integrators._dynamic_tdvp_sweep, state, operator, sim_params, **renorm_kw)

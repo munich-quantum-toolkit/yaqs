@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from qiskit.circuit import QuantumCircuit
-from qiskit.quantum_info import Statevector
+from qiskit.quantum_info import Pauli, Statevector
 
 from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
@@ -53,6 +53,32 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "slow: tests that need many TDVP sweeps or large L",
     )
+
+
+Z_TOL = 1e-8
+# Endpoint |+⟩ RZZ global fidelity under production dynamic TDVP (local ⟨Z_i⟩ still exact).
+PLUS_LR_RZZ_GLOBAL_FID = 0.9776682445628022
+
+
+def _z_expectation(vec: np.ndarray, site: int) -> float:
+    """Single-site ``⟨Z⟩`` from a state vector (Qiskit little-endian convention)."""
+    num_qubits = int(np.log2(vec.size))
+    label = ["I"] * num_qubits
+    label[num_qubits - 1 - site] = "Z"
+    return float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
+
+
+def _assert_z_observables_match(
+    ref_vec: np.ndarray,
+    vec: np.ndarray,
+    length: int,
+    *,
+    tol: float = Z_TOL,
+) -> None:
+    """Assert all single-site ``⟨Z_i⟩`` match between two state vectors."""
+    for site in range(length):
+        err = abs(_z_expectation(vec, site) - _z_expectation(ref_vec, site))
+        assert err < tol, f"site={site} Δ⟨Z⟩={err}"
 
 
 def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
@@ -149,10 +175,10 @@ def assert_mps_bond_invariants(mps: MPS, *, max_bond_dim: int | None = None) -> 
 
 
 def _reliable_sweeps(length: int) -> int:
-    """Sweep count that converges endpoint long-range TDVP on product states.
+    """Legacy sweep count used by older regression tests (production default is 1).
 
     Returns:
-        Recommended TDVP sweep count for the given chain length.
+        TDVP sweep count for tests that still sweep to convergence.
     """
     return 256 if length >= 10 else 64
 

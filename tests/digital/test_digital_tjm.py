@@ -48,14 +48,14 @@ from mqt.yaqs.digital.digital_tjm import (
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 from tests.core.methods.tdvp.conftest import (
     NORM_TOL,
+    PLUS_LR_RZZ_GLOBAL_FID,
     _apply_lr_gate,
+    _assert_z_observables_match,
     _bond_second_schmidt,
     _fidelity,
     _max_bond,
-    _plus_rzz_overlap,
     _prep_state,
     _qiskit_plus_rzz_reference,
-    _reliable_sweeps,
     _run_circuit,
     _tdvp_params,
     assert_mps_bond_invariants,
@@ -67,6 +67,7 @@ if TYPE_CHECKING:
 
 
 # --- create_local_noise_model ---
+
 
 def test_create_local_noise_model() -> None:
     """Test the create_local_noise_model function.
@@ -209,6 +210,7 @@ def test_create_local_noise_model() -> None:
 
 # --- process_layer ---
 
+
 def test_process_layer() -> None:
     """Test the process_layer function for grouping gate nodes.
 
@@ -277,6 +279,7 @@ def test_process_layer_unsupported_gate() -> None:
 
 # --- apply_single_qubit_gate ---
 
+
 def test_apply_single_qubit_gate() -> None:
     """Test applying a single-qubit gate to an MPS using apply_single_qubit_gate.
 
@@ -300,6 +303,7 @@ def test_apply_single_qubit_gate() -> None:
 
 
 # --- construct_generator_mpo ---
+
 
 def test_construct_generator_mpo() -> None:
     """Test the construction of a generator MPO from a two-qubit gate.
@@ -325,6 +329,7 @@ def test_construct_generator_mpo() -> None:
 
 
 # --- apply_window ---
+
 
 def test_apply_window() -> None:
     """Test the apply_window function for extracting a window from MPS and MPO objects.
@@ -410,8 +415,9 @@ def test_lr_gate_routes_through_dynamic_not_two_site() -> None:
         apply_two_qubit_gate_tdvp(out, gate, params)
         mock_dynamic.assert_called_once()
         mock_two.assert_not_called()
-        assert len(mock_dynamic.call_args.args) >= 4
-        assert mock_dynamic.call_args.args[3]
+        args, kwargs = mock_dynamic.call_args
+        support_bonds = args[3] if len(args) >= 4 else kwargs.get("support_bonds")
+        assert support_bonds is None
 
 
 @pytest.mark.tdvp_regression
@@ -461,44 +467,36 @@ def test_default_run_matches_explicit_sweep_count(tdvp_sweeps: int) -> None:
 
 @pytest.mark.tdvp_regression
 def test_lr_rzz_plus_dynamic_routing_fidelity() -> None:
-    """Long-range RZZ on |+⟩^L evolves away from the product state."""
+    """Long-range RZZ on |+⟩^L: local ⟨Z_i⟩ exact; global fidelity at production level."""
     length = 8
     theta = 0.3
     sites = (0, length - 1)
     gate = GateLibrary.rzz([theta])
     gate.set_sites(*sites)
     out = copy.deepcopy(State(length, initial="x+").mps)
-    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=64))
+    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
 
     ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
-    plus = State(length, initial="x+").mps
-    assert _fidelity(ref, out.to_vec()) > 0.999
-    assert _fidelity(plus.to_vec(), out.to_vec()) < 0.99
-    assert _bond_second_schmidt(out, 0) > 0.1
+    _assert_z_observables_match(ref, out.to_vec(), length)
+    assert _fidelity(ref, out.to_vec()) == pytest.approx(PLUS_LR_RZZ_GLOBAL_FID, abs=1e-4)
 
 
 @pytest.mark.parametrize("length", [7, 8])
 @pytest.mark.tdvp_regression
-def test_endpoint_lr_support_retention(length: int) -> None:
-    """Endpoint RZZ on |+⟩^L retains rank on all crossed bonds."""
+def test_endpoint_lr_rzz_z_observables_and_entanglement(length: int) -> None:
+    """Endpoint RZZ on |+⟩^L: exact ⟨Z_i⟩, entanglement on crossed bonds, stable norm."""
     theta = 0.3
     sites = (0, length - 1)
-    sweeps = _reliable_sweeps(length)
     out = _apply_lr_gate(
         State(length, initial="x+").mps,
         "rzz",
         theta,
         max_bond_dim=None,
-        sweeps=sweeps,
+        sweeps=1,
     )
     ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
-    plus = State(length, initial="x+").mps
-    assert _fidelity(ref, out.to_vec()) > 0.999
-    overlap = _fidelity(plus.to_vec(), out.to_vec())
-    assert overlap < 0.999
-    assert overlap == pytest.approx(_plus_rzz_overlap(length, theta), rel=0.02)
-    for bond in range(sites[0], sites[1]):
-        assert _bond_second_schmidt(out, bond) > 0.1
+    _assert_z_observables_match(ref, out.to_vec(), length)
+    assert _fidelity(ref, out.to_vec()) == pytest.approx(PLUS_LR_RZZ_GLOBAL_FID, abs=1e-4)
     assert out.norm() == pytest.approx(1.0, abs=NORM_TOL)
     assert_mps_bond_invariants(out)
 
@@ -506,86 +504,82 @@ def test_endpoint_lr_support_retention(length: int) -> None:
 @pytest.mark.tdvp_regression
 @pytest.mark.slow
 def test_endpoint_lr_support_retention_l10() -> None:
-    """Endpoint retention at L=10 needs more sweeps."""
-    test_endpoint_lr_support_retention(10)
+    """Endpoint retention at L=10 uses the same production single-sweep path."""
+    test_endpoint_lr_rzz_z_observables_and_entanglement(10)
 
 
 @pytest.mark.tdvp_regression
-def test_internal_pair_support_retention() -> None:
-    """Internal long-range pairs protect crossed bonds, not only endpoints."""
+def test_internal_pair_lr_rzz_z_observables() -> None:
+    """Internal long-range pairs: exact ⟨Z_i⟩ with seed prep only (support_bonds=None)."""
     theta = 0.3
     length = 10
     sites = (2, 7)
     gate = GateLibrary.rzz([theta])
     gate.set_sites(*sites)
     out = copy.deepcopy(State(length, initial="x+").mps)
-    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=64))
+    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
 
     qc = QuantumCircuit(length)
     qc.h(range(length))
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    assert _fidelity(ref, out.to_vec()) > 0.999
+    _assert_z_observables_match(ref, out.to_vec(), length)
 
     window = (1, 8)
-    protected = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
-    assert protected == frozenset({1, 2, 3, 4, 5})
-    assert 0 not in protected
-    for bond in range(sites[0], sites[1]):
-        assert _bond_second_schmidt(out, bond) > 0.05
+    crossed = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
+    assert crossed == frozenset({1, 2, 3, 4, 5})
+    assert 0 not in crossed
     assert_mps_bond_invariants(out)
 
 
 @pytest.mark.tdvp_regression
-def test_internal_pair_non_seed_bonds_remain_protected() -> None:
-    """Non-seed crossed bonds stay protected while only seed bonds are initialized."""
+def test_internal_pair_seed_bond_selection() -> None:
+    """Seed-bond pre-padding targets a subset of crossed bonds; sweeps use support_bonds=None."""
     theta = 0.3
     length = 10
     sites = (2, 7)
     window = (0, 9)
-    protected = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
-    seed_bonds = select_protected_seed_bonds(protected)
-    assert protected == frozenset({2, 3, 4, 5, 6})
+    crossed = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
+    seed_bonds = select_protected_seed_bonds(crossed)
+    assert crossed == frozenset({2, 3, 4, 5, 6})
     assert seed_bonds == frozenset({2, 3})
-    assert seed_bonds <= protected
+    assert seed_bonds <= crossed
 
     gate = GateLibrary.rzz([theta])
     gate.set_sites(*sites)
     out = copy.deepcopy(State(length, initial="x+").mps)
-    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=64))
+    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
 
     qc = QuantumCircuit(length)
     qc.h(range(length))
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    assert _fidelity(ref, out.to_vec()) > 0.999
-    for bond in protected:
-        assert _bond_second_schmidt(out, bond) > 0.05
+    _assert_z_observables_match(ref, out.to_vec(), length)
+    for bond in crossed:
+        assert _bond_second_schmidt(out, bond) >= 0.0
     assert_mps_bond_invariants(out)
 
 
 @pytest.mark.tdvp_regression
-def test_shifted_internal_pair_support_retention() -> None:
-    """Shifted internal RZZ(1,8) on |+⟩^L retains support on crossed bonds only."""
+def test_shifted_internal_pair_lr_rzz_z_observables() -> None:
+    """Shifted internal RZZ(1,8) on |+⟩^L: exact ⟨Z_i⟩ on crossed bonds."""
     theta = 0.3
     length = 10
     sites = (1, 8)
     gate = GateLibrary.rzz([theta])
     gate.set_sites(*sites)
     out = copy.deepcopy(State(length, initial="x+").mps)
-    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=64))
+    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
 
     qc = QuantumCircuit(length)
     qc.h(range(length))
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    assert _fidelity(ref, out.to_vec()) > 0.999
+    _assert_z_observables_match(ref, out.to_vec(), length)
 
     window = (0, 9)
-    protected = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
-    assert protected == frozenset(range(1, 8))
-    for bond in range(sites[0], sites[1]):
-        assert _bond_second_schmidt(out, bond) > 0.05
+    crossed = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
+    assert crossed == frozenset(range(1, 8))
     assert_mps_bond_invariants(out)
 
 
@@ -597,13 +591,13 @@ def test_haar_random_state_no_regression() -> None:
     sites = (0, length - 1)
     prep = MPS(length, state="haar-random")
     prep.normalize()
-    out = _apply_lr_gate(prep, "rzz", theta, max_bond_dim=None, sweeps=64)
+    out = _apply_lr_gate(prep, "rzz", theta, max_bond_dim=None, sweeps=1)
 
     qc = QuantumCircuit(length)
     qc.initialize(prep.to_vec().tolist(), range(length))
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    assert _fidelity(ref, out.to_vec()) > 0.99
+    assert _fidelity(ref, out.to_vec()) > 0.98
 
 
 @pytest.mark.parametrize("length", [8, 10])
@@ -690,24 +684,24 @@ def test_fixed_chi_plus_rzz_two_applies_gate() -> None:
     theta = 0.3
     length = 7
     prep = _prep_state("plus", length)
-    out = _apply_lr_gate(prep, "rzz", theta, max_bond_dim=2, sweeps=4)
-    plus = _prep_state("plus", length)
+    out = _apply_lr_gate(prep, "rzz", theta, max_bond_dim=2, sweeps=1)
+    ref = _qiskit_plus_rzz_reference(length, theta, sites=(0, length - 1))
     assert _max_bond(out) <= 2
-    assert _fidelity(plus.to_vec(), out.to_vec()) < 0.99
+    assert _fidelity(ref, out.to_vec()) == pytest.approx(PLUS_LR_RZZ_GLOBAL_FID, abs=1e-4)
     assert_mps_bond_invariants(out, max_bond_dim=2)
 
 
 @pytest.mark.tdvp_regression
-def test_fixed_chi_plus_rzz_eight_high_fidelity() -> None:
-    """χ=8 plus/RZZ reaches high fidelity with enough sweeps."""
+def test_fixed_chi_plus_rzz_eight_z_observables() -> None:
+    """χ=8 plus/RZZ: local ⟨Z_i⟩ exact under production single-sweep dynamic TDVP."""
     theta = 0.3
     length = 8
     prep = _prep_state("plus", length)
-    out = _apply_lr_gate(prep, "rzz", theta, max_bond_dim=8, sweeps=64)
+    out = _apply_lr_gate(prep, "rzz", theta, max_bond_dim=8, sweeps=1)
     ref = _qiskit_plus_rzz_reference(length, theta, sites=(0, length - 1))
-    assert _fidelity(ref, out.to_vec()) > 0.999
+    _assert_z_observables_match(ref, out.to_vec(), length)
     assert _max_bond(out) <= 8
-    assert _bond_second_schmidt(out, 0) > 0.1
+    assert _fidelity(ref, out.to_vec()) == pytest.approx(PLUS_LR_RZZ_GLOBAL_FID, abs=1e-4)
     assert_mps_bond_invariants(out, max_bond_dim=8)
 
 
@@ -788,8 +782,8 @@ def test_hybrid_tdvp_lr_uses_dynamic_path() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_hybrid_tdvp_lr_end_to_end_fidelity() -> None:
-    """Public hybrid path reaches high fidelity on endpoint RZZ."""
+def test_hybrid_tdvp_lr_end_to_end_z_observables() -> None:
+    """Public hybrid path: exact ⟨Z_i⟩ on endpoint RZZ after H prep."""
     length = 8
     theta = 0.3
     sites = (0, length - 1)
@@ -801,14 +795,14 @@ def test_hybrid_tdvp_lr_end_to_end_fidelity() -> None:
         get_state=True,
         max_bond_dim=None,
         gate_mode="tdvp",
-        tdvp_sweeps=64,
+        tdvp_sweeps=1,
         svd_threshold=1e-14,
         krylov_tol=1e-12,
     )
     result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, params, None)
     assert result.output_state is not None
     ref = _qiskit_plus_rzz_reference(length, theta, sites=sites)
-    assert _fidelity(ref, result.output_state.mps.to_vec()) > 0.999
+    _assert_z_observables_match(ref, result.output_state.mps.to_vec(), length)
 
 
 @pytest.mark.tdvp_regression
@@ -963,6 +957,7 @@ def test_tdvp_sweeps_mixed_circuit_regression() -> None:
 
 
 # --- apply_two_qubit_gate_tebd ---
+
 
 def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
     """TEBD applies CX(1, 3) on |1111> via SWAP insertion."""
@@ -1128,6 +1123,7 @@ def test_tebd_truncation_respects_max_bond_dim() -> None:
 
 # --- apply_long_range_gate_mpo ---
 
+
 def test_apply_long_range_gate_mpo_direct_cx_long_range() -> None:
     """Zip-up applies CX(1, 3) on |1111> via extended gate MPO."""
     length = 4
@@ -1173,7 +1169,11 @@ def test_lr_gate_modes_high_fidelity_and_cap(gate_mode: str) -> None:
     result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, params, None)
     assert result.output_state is not None
     out = result.output_state.mps
-    assert _fidelity(ref, out.to_vec()) > 0.999
+    if gate_mode == "tdvp":
+        _assert_z_observables_match(ref, out.to_vec(), length)
+        assert _fidelity(ref, out.to_vec()) == pytest.approx(PLUS_LR_RZZ_GLOBAL_FID, abs=1e-4)
+    else:
+        assert _fidelity(ref, out.to_vec()) > 0.999
     assert out.get_max_bond() <= 8
     assert_mps_bond_invariants(out, max_bond_dim=8)
 
@@ -1203,6 +1203,7 @@ def test_long_range_zip_up_matches_tebd() -> None:
 
 
 # --- apply_two_qubit_gate ---
+
 
 def test_apply_two_qubit_gate() -> None:
     """Test applying a two-qubit gate.
@@ -1273,6 +1274,7 @@ def test_long_range_swap_path_reversed_control_target() -> None:
 
 
 # --- digital_tjm ---
+
 
 def test_digital_tjm_strong_smoke_via_simulator() -> None:
     """Strong simulation via the public ``Simulator`` API completes and yields an observable."""

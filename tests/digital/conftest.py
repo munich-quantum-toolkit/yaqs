@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Licensed under the MIT License
+
 """Shared helpers for digital TJM tests."""
 
 from __future__ import annotations
