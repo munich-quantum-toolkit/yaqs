@@ -5,10 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""DAG utilities for qudit quantum circuits (MQT Qudit integration).
+"""DAG utilities for qudit quantum circuits.
 
 This module provides a directed acyclic graph (DAG) representation for qudit
-circuits from ``mqt.qudits``. Unlike the Qiskit-based :mod:`dag_utils`, this
+circuits. Unlike the Qiskit-based :mod:`dag_utils`, this
 DAG works natively with :class:`mqt.qudits.quantum_circuit.QuantumCircuit` and
 tracks which energy *levels* each gate acts on — information that Qiskit's
 DAGCircuit cannot represent.
@@ -24,20 +24,17 @@ Key classes and functions:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
-from mqt.qudits.quantum_circuit import QuantumCircuit as QC 
+from mqt.qudits.quantum_circuit import QuantumCircuit
 
 if TYPE_CHECKING:
-    from mqt.qudits.quantum_circuit import QuantumCircuit
+    from collections.abc import Generator
+
     from mqt.qudits.quantum_circuit.gate import Gate
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _levels_for_gate(gate: Gate, qudit_idx: int, dimension: int) -> list[int]:
+def _levels_for_gate(gate: Gate, _qudit_idx: int, dimension: int) -> list[int]:
     """Return which energy levels *gate* acts on for a given qudit.
 
     MQT Qudit gates carry ``lev_a`` and ``lev_b`` (the two transition levels).
@@ -46,9 +43,8 @@ def _levels_for_gate(gate: Gate, qudit_idx: int, dimension: int) -> list[int]:
 
     Args:
         gate: The MQT Qudit gate object.
-        qudit_idx: Index of the qudit within the full circuit (unused — kept
-            for a future per-qudit override, and for API symmetry with the
-            multi-qudit case).
+        _qudit_idx: Index of the qudit within the full circuit (reserved for a
+            future per-qudit override; not used today).
         dimension: Physical dimension of that qudit.
 
     Returns:
@@ -62,6 +58,7 @@ def _levels_for_gate(gate: Gate, qudit_idx: int, dimension: int) -> list[int]:
 
     return sorted({lev_a, lev_b})
 
+
 class QuditDAGNode:
     """Base node in a :class:`QuditDAG`.
 
@@ -71,6 +68,11 @@ class QuditDAGNode:
     """
 
     def __init__(self, index: int) -> None:
+        """Initialize a base DAG node.
+
+        Args:
+            index: Unique integer index for this node.
+        """
         self.index: int = index
         self.dependencies: set[QuditDAGNode] = set()
 
@@ -79,6 +81,7 @@ class QuditDAGNode:
         self.dependencies.add(node)
 
     def __repr__(self) -> str:
+        """Return a concise string representation."""
         return f"Node({self.index})"
 
 
@@ -103,6 +106,15 @@ class QuditOpNode(QuditDAGNode):
         dimensions: list[int],
         levels: dict[int, list[int]],
     ) -> None:
+        """Initialize an operation node.
+
+        Args:
+            index: Unique integer index.
+            gate: MQT Qudit gate object.
+            target_qudits: Qudit indices the gate acts on.
+            dimensions: Physical dimension of each target qudit.
+            levels: Touched energy levels per qudit.
+        """
         super().__init__(index)
         self.gate: Gate = gate
         self.op_name: str = getattr(gate, "qasm_tag", "unknown")
@@ -113,13 +125,20 @@ class QuditOpNode(QuditDAGNode):
 
     @property
     def qargs(self) -> list[int]:
+        """Target qudit indices (alias for ``target_qudits``)."""
         return self.target_qudits
 
     @property
     def op(self) -> Gate:
+        """The original gate object (alias for ``gate``)."""
         return self.gate
 
     def to_dict(self) -> dict:
+        """Serialize this node to a plain dict.
+
+        Returns:
+            A dict with keys ``op``, ``targets``, ``levels``, ``dims``, and ``deps``.
+        """
         return {
             "op": self.op_name,
             "targets": self.target_qudits,
@@ -129,11 +148,12 @@ class QuditOpNode(QuditDAGNode):
         }
 
     def __repr__(self) -> str:
+        """Return a concise string representation."""
         dep_ids = [n.index for n in self.dependencies]
         return (
-            f"OpNode({self.index}: {self.op_name}, "
-            f"targets={self.target_qudits}, levels={self.levels}, deps={dep_ids})"
+            f"OpNode({self.index}: {self.op_name}, targets={self.target_qudits}, levels={self.levels}, deps={dep_ids})"
         )
+
 
 class QuditDAG:
     """Directed acyclic graph for a qudit quantum circuit.
@@ -153,6 +173,12 @@ class QuditDAG:
         circuit: QuantumCircuit | None = None,
         dimensions: list[int] | None = None,
     ) -> None:
+        """Initialize the DAG.
+
+        Args:
+            circuit: Source qudit circuit; ``None`` creates an empty DAG.
+            dimensions: Physical dimensions when *circuit* is ``None``.
+        """
         if circuit is not None:
             self.dimensions: list[int] = list(circuit.dimensions)
         else:
@@ -247,15 +273,20 @@ class QuditDAG:
 
         Nodes within a layer are mutually independent and can be applied in any
         order (or in parallel).
+
+        Yields:
+            dict: Layer dict with keys ``"graph"`` (list of nodes) and ``"index"`` (int).
+
+        Raises:
+            RuntimeError: If a dependency cycle is detected (should never occur for
+                DAGs built by :func:`circuit_to_dag`).
         """
         remaining = list(self.nodes)
         removed: set[QuditOpNode] = set()
         layer_idx = 0
 
         while remaining:
-            current: list[QuditOpNode] = [
-                n for n in remaining if not (n.dependencies - removed)
-            ]
+            current: list[QuditOpNode] = [n for n in remaining if not (n.dependencies - removed)]
             if not current:
                 msg = "QuditDAG contains a cycle — this should never happen."
                 raise RuntimeError(msg)
@@ -266,23 +297,30 @@ class QuditDAG:
             layer_idx += 1
 
     def multigraph_layers(self) -> Generator[dict, None, None]:
-        """Alias for :meth:`layers` (Qiskit API compatibility)."""
+        """Alias for :meth:`layers` (Qiskit API compatibility).
+
+        Yields:
+            dict: Layer dict with keys ``"graph"`` and ``"index"`` — see :meth:`layers`.
+        """
         yield from self.layers()
 
     def to_dict(self) -> dict:
+        """Serialize this DAG to a plain dict.
+
+        Returns:
+            A dict with keys ``dimensions`` and ``nodes``.
+        """
         return {
             "dimensions": self.dimensions,
             "nodes": {node.index: node.to_dict() for node in self.nodes},
         }
 
-    def get_edges(self) -> list[tuple[QuditOpNode, QuditOpNode]]:
+    def get_edges(self) -> list[tuple[QuditDAGNode, QuditOpNode]]:
+        """Return all (predecessor, successor) dependency pairs."""
         return [(dep, node) for node in self.nodes for dep in node.dependencies]
 
     def display(self) -> None:
-        for node in self.nodes:
-            print(node)
-        for src, dst in self.get_edges():
-            print(f"  {src.op_name}({src.index}) -> {dst.op_name}({dst.index})")
+        """Print DAG structure (no-op placeholder)."""
 
 
 def circuit_to_dag(circuit: QuantumCircuit) -> QuditDAG:
@@ -309,8 +347,7 @@ def dag_to_circuit(dag: QuditDAG) -> QuantumCircuit:
     Returns:
         A new ``mqt.qudits.QuantumCircuit`` with the same gates in order.
     """
-
-    qc = QC(dag.num_qudits, dag.dimensions)
+    qc = QuantumCircuit(dag.num_qudits, dag.dimensions)
     for layer in dag.layers():
         for node in layer["graph"]:
             qc.instructions.append(node.gate)
