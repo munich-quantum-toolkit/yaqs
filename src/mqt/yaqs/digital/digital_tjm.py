@@ -43,7 +43,6 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from ..core.data_structures.simulation_parameters import GateMode
-    from ..core.libraries.gate_library import BaseGate
     from ..core.methods.decompositions import TruncMode
 
 
