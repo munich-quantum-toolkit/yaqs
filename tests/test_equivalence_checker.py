@@ -492,27 +492,27 @@ def test_long_range_mpo_parallel() -> None:
     assert serial["equivalent"] == parallel["equivalent"]
 
 
-def test_check_accepts_qasm2_path_object(tmp_path: Path) -> None:
+def test_check_accepts_qasm2_path_object() -> None:
     """Check that a QASM 2 file given as a Path object is accepted and returns equivalent."""
-    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    qasm_path = Path(__file__).parent / "circuit.qasm"
 
     checker = EquivalenceChecker(representation="mpo")
     result = checker.check(qasm_path, qasm_path)
     assert result["equivalent"] is True
 
 
-def test_check_accepts_qasm2_str_path(tmp_path: Path) -> None:
+def test_check_accepts_qasm2_str_path() -> None:
     """Check that a QASM 2 file given as a str path is accepted and returns equivalent."""
-    qasm_path = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
+    qasm_path = str(Path(__file__).parent / "circuit.qasm")
 
     checker = EquivalenceChecker(representation="mpo")
     result = checker.check(qasm_path, qasm_path)
     assert result["equivalent"] is True
 
 
-def test_check_qasm_path_vs_quantumcircuit_agree(tmp_path: Path) -> None:
+def test_check_qasm_path_vs_quantumcircuit_agree() -> None:
     """Verify that loading via path and via QuantumCircuit gives the same equivalence result."""
-    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    qasm_path = Path(__file__).parent / "circuit.qasm"
     qc = load(filename=str(qasm_path))
     checker = EquivalenceChecker(representation="mpo")
     result_path = checker.check(qasm_path, qasm_path)
@@ -520,20 +520,20 @@ def test_check_qasm_path_vs_quantumcircuit_agree(tmp_path: Path) -> None:
     assert result_path["equivalent"] == result_qc["equivalent"]
 
 
-@requires_qasm3_import
-def test_check_accepts_qasm3_path_object(tmp_path: Path) -> None:
+def test_check_accepts_qasm3_path_object() -> None:
     """Check that a QASM 3 file given as a Path object is accepted and returns equivalent."""
-    qasm_file = write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm")
+    pytest.importorskip("qiskit_qasm3_import")
+    qasm_file = Path(__file__).parent / "circuit3.qasm"
 
     checker = EquivalenceChecker(representation="matrix")
     result = checker.check(qasm_file, qasm_file)
     assert result["equivalent"] is True
 
 
-@requires_qasm3_import
-def test_check_accepts_qasm3_str_path(tmp_path: Path) -> None:
+def test_check_accepts_qasm3_str_path() -> None:
     """Check that a QASM 3 file given as a str path is accepted and returns equivalent."""
-    qasm_file = str(write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm"))
+    pytest.importorskip("qiskit_qasm3_import")
+    qasm_file = str(Path(__file__).parent / "circuit3.qasm")
 
     checker = EquivalenceChecker(representation="matrix")
     result = checker.check(qasm_file, qasm_file)
