@@ -12,7 +12,6 @@ iteration, ``check_longest_gate``, ``get_temporal_zone``, and the
 ``circuit_to_dag`` / ``dag_to_circuit`` round-trip.
 """
 
-# ruff: noqa: PLR6301
 from __future__ import annotations
 
 import numpy as np
