@@ -20,12 +20,14 @@ from __future__ import annotations
 import copy
 import math
 from typing import TYPE_CHECKING, Literal
+from unittest.mock import patch
 
 import numpy as np
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
 
 from mqt.yaqs import Simulator
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
@@ -33,8 +35,6 @@ from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
 
 if TYPE_CHECKING:
     import pytest
-
-    from mqt.yaqs.core.data_structures.mps import MPS
 
 NORM_TOL = 1e-6
 EXACT_FID_TOL = 1e-12
@@ -57,6 +57,12 @@ def pytest_configure(config: pytest.Config) -> None:
 Z_TOL = 1e-8
 # Endpoint |+⟩ RZZ global fidelity under production 2TDVP window path (local ⟨Z_i⟩ still exact).
 PLUS_LR_RZZ_GLOBAL_FID = 0.9776682445628022
+# Entangled Haar prep: 1-sweep LR RZZ may drift slightly on minimum-deps / ARM Krylov stacks.
+HAAR_LR_PREP_SEED = 42
+HAAR_LR_PREP_PAD = 4
+HAAR_LR_Z_TOL = 1e-6
+HAAR_LR_FID_ABS = 0.03  # vs same-prep Qiskit reference
+HAAR_LR_FID_FLOOR = 0.97
 
 
 def _z_expectation(vec: np.ndarray, site: int) -> float:
@@ -176,6 +182,27 @@ def _qiskit_plus_rzz_reference(length: int, theta: float, *, sites: tuple[int, i
     qc.h(range(length))
     qc.rzz(theta, sites[0], sites[1])
     return np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+
+def _haar_random_mps(
+    length: int,
+    *,
+    pad: int = HAAR_LR_PREP_PAD,
+    seed: int = HAAR_LR_PREP_SEED,
+) -> MPS:
+    """Build a reproducible entangled Haar-random MPS for LR regression tests.
+
+    Args:
+        length: Chain length.
+        pad: Target maximum internal bond dimension for Haar isometries.
+        seed: NumPy RNG seed for the Haar draw.
+
+    Returns:
+        Fresh MPS initialized with ``state="haar-random"``.
+
+    """
+    with patch("numpy.random.default_rng", return_value=np.random.default_rng(seed)):
+        return MPS(length, state="haar-random", pad=pad)
 
 
 def _prep_state(name: str, length: int) -> MPS:

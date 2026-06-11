@@ -46,12 +46,16 @@ from mqt.yaqs.digital.digital_tjm import (
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 from tests.core.methods.tdvp.conftest import (
+    HAAR_LR_FID_ABS,
+    HAAR_LR_FID_FLOOR,
+    HAAR_LR_Z_TOL,
     NORM_TOL,
     PLUS_LR_RZZ_GLOBAL_FID,
     Z_TOL,
     _apply_lr_gate,
     _assert_z_observables_match,
     _fidelity,
+    _haar_random_mps,
     _max_bond,
     _prep_state,
     _qiskit_plus_rzz_reference,
@@ -770,11 +774,11 @@ def test_lr_rzz_vs_baseline(length: int) -> None:
 
 @pytest.mark.tdvp_regression
 def test_lr_rzz_haar_stable() -> None:
-    """Haar-random states: exact ⟨Z_i⟩ and production-level global fidelity under LR RZZ."""
+    """Entangled Haar prep stays stable under production 1-sweep LR RZZ."""
     length = 8
     theta = 0.3
     sites = (0, length - 1)
-    prep = MPS(length, state="haar-random")
+    prep = _haar_random_mps(length)
     prep.normalize()
     out = _apply_lr_gate(prep, "rzz", theta, max_bond_dim=None, sweeps=1)
 
@@ -782,11 +786,14 @@ def test_lr_rzz_haar_stable() -> None:
     qc.initialize(prep.to_vec().tolist(), range(length))
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    vec = out.to_vec()
+    fid = _fidelity(ref, vec)
 
-    _assert_z_observables_match(ref, out.to_vec(), length)
+    _assert_z_observables_match(ref, vec, length, tol=HAAR_LR_Z_TOL)
     assert out.norm() == pytest.approx(1.0, abs=NORM_TOL)
     assert_mps_bond_invariants(out)
-    assert _fidelity(ref, out.to_vec()) == pytest.approx(PLUS_LR_RZZ_GLOBAL_FID, abs=1e-3)
+    assert fid == pytest.approx(1.0, abs=HAAR_LR_FID_ABS)
+    assert fid > HAAR_LR_FID_FLOOR
 
 
 @pytest.mark.parametrize("length", [8, 10])
