@@ -334,11 +334,12 @@ class MPS:
         *,
         max_dim: int | None = None,
     ) -> None:
-        """Raise selected internal bonds to at least ``min_dim`` without shrinking others.
+        """Zero-pad selected internal bonds to at least ``min_dim``.
 
-        Library-internal helper used by TDVP support retention. Bond ``b`` connects
-        sites ``b`` and ``b+1``. Only the listed bonds are modified; tensors are
-        zero-padded on the shared index when needed.
+        Library-internal padding helper for fixed-χ TDVP bond alignment. Bond ``b``
+        connects sites ``b`` and ``b+1``. Only the listed bonds are modified; tensors
+        are zero-padded on the shared index when needed. Shrinking a bond requires
+        SVD truncation via :func:`mqt.yaqs.core.methods.tdvp.sweep_utils._sync_bond_dim`.
 
         Args:
             bond_indices: Internal bond indices ``0 <= b < length - 1``.
@@ -347,7 +348,8 @@ class MPS:
                 value and no-op if ``min_dim`` exceeds ``max_dim``.
 
         Raises:
-            ValueError: If ``min_dim`` is less than 1 or a bond index is invalid.
+            ValueError: If ``min_dim`` is less than 1, a bond index is invalid, or a
+                listed bond must be truncated below its current dimension.
         """
         if min_dim < 1:
             msg = "min_dim must be at least 1."
@@ -365,12 +367,13 @@ class MPS:
             chi_in = int(right.shape[1])
             if chi_out == target_dim and chi_in == target_dim:
                 continue
-            if chi_out > target_dim:
-                self.tensors[bond] = left[:, :, :target_dim]
-                left = self.tensors[bond]
-            if chi_in > target_dim:
-                self.tensors[bond + 1] = right[:, :target_dim, :]
-                right = self.tensors[bond + 1]
+            if chi_out > target_dim or chi_in > target_dim:
+                msg = (
+                    f"Bond {bond} cannot be truncated from (chi_out={chi_out}, chi_in={chi_in}) "
+                    f"to target_dim={target_dim}; use "
+                    f"mqt.yaqs.core.methods.tdvp.sweep_utils._sync_bond_dim for SVD truncation."
+                )
+                raise ValueError(msg)
             chi_out = int(left.shape[2])
             chi_in = int(right.shape[1])
             if chi_out >= target_dim and chi_in >= target_dim:
