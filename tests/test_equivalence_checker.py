@@ -373,3 +373,22 @@ def test_check_accepts_qasm3_str_path() -> None:
     checker = EquivalenceChecker(representation="matrix")
     result = checker.check(qasm_file, qasm_file)
     assert result["equivalent"] is True
+
+
+def test_check_accepts_qasm2_raw_string() -> None:
+    """Check that a raw QASM 2 string (not a file path) is accepted and returns equivalent."""
+    qasm_str = (Path(__file__).parent / "circuit.qasm").read_text(encoding="utf-8")
+
+    checker = EquivalenceChecker(representation="mpo")
+    result = checker.check(qasm_str, qasm_str)
+    assert result["equivalent"] is True
+
+
+def test_check_accepts_qasm3_raw_string() -> None:
+    """Check that a raw QASM 3 string (not a file path) is accepted and returns equivalent."""
+    pytest.importorskip("qiskit_qasm3_import")
+    qasm_str = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
+
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qasm_str, qasm_str)
+    assert result["equivalent"] is True

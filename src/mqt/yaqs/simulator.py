@@ -652,7 +652,8 @@ class Simulator:
                 or a list of states for deterministic analog unitary ensemble evolution
                 (``AnalogSimParams`` only).
             operator: :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` for analog
-                simulations or a :class:`~qiskit.circuit.QuantumCircuit` for circuit simulations.
+                simulations, or a :class:`~qiskit.circuit.QuantumCircuit`, raw QASM ``str``, or
+                ``Path`` to a ``.qasm`` file for circuit simulations.
             sim_params: Simulation parameters specifying the simulation mode and settings.
             noise_model: The noise model to apply. If provided, it is sampled once at the
                 beginning of the run to generate a concrete noise realization (static disorder).
@@ -667,7 +668,7 @@ class Simulator:
             ValueError: If no output is specified (neither observables nor ``get_state``).
             TypeError: If the provided ``initial_state`` type is incompatible with the
         """
-        if isinstance(operator, (str, Path)):
+        if not isinstance(sim_params, AnalogSimParams) and isinstance(operator, (str, Path)):
             operator = load_circuit(operator)
 
         if isinstance(initial_state, list) and any(not isinstance(state, State) for state in initial_state):

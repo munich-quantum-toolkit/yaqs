@@ -179,8 +179,12 @@ class EquivalenceChecker:
         operator ``U2† U1`` approximates the identity.
 
         Args:
-            circuit1: First quantum circuit.
+            circuit1: First quantum circuit. Accepts a :class:`~qiskit.circuit.QuantumCircuit`,
+                a ``Path`` to a ``.qasm`` file, or a ``str`` — either a filesystem path to a
+                ``.qasm`` file or raw OpenQASM text (distinguished by whether the first
+                non-comment line starts with ``OPENQASM``).
             circuit2: Second quantum circuit (must have the same number of qubits).
+                Accepts the same types as ``circuit1``.
 
         Returns:
             dict[str, bool | float | str]: ``equivalent`` (bool), ``elapsed_time`` (float, seconds),

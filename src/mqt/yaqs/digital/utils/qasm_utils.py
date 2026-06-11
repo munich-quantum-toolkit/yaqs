@@ -19,6 +19,15 @@ if TYPE_CHECKING:
 
 
 def _first_non_comment_line(text: str) -> str:
+    """Return the first non-empty, non-comment line from QASM-like text.
+
+    Args:
+        text: Multiline string to scan.
+
+    Returns:
+        The first line that is not empty and does not start with ``//``,
+        or an empty string if no such line exists.
+    """
     for line in text.splitlines():
         stripped = line.strip()
         if stripped and not stripped.startswith("//"):
@@ -38,10 +47,12 @@ def load_circuit(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
     if not isinstance(circuit, (str, Path)):
         return circuit
 
-    if isinstance(circuit, str) and _first_non_comment_line(circuit).startswith("OPENQASM"):
-        if _first_non_comment_line(circuit).startswith("OPENQASM 3"):  # pragma: no cover
-            return qasm3.loads(circuit)
-        return qasm2.loads(circuit)
+    if isinstance(circuit, str):
+        header = _first_non_comment_line(circuit)
+        if header.startswith("OPENQASM"):
+            if header.startswith("OPENQASM 3"):  # pragma: no cover
+                return qasm3.loads(circuit)
+            return qasm2.loads(circuit)
 
     path = Path(circuit)
     content = path.read_text(encoding="utf-8")

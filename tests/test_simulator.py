@@ -1464,6 +1464,16 @@ def test_simulator_run_accepts_qasm2_str_path() -> None:
     assert sum(result.counts.values()) == sim_params.shots
 
 
+def test_simulator_run_accepts_qasm2_raw_string() -> None:
+    """Verify that Simulator.run accepts a raw QASM 2 string (not a file path)."""
+    qasm_string = (Path(__file__).parent / "circuit.qasm").read_text(encoding="utf-8")
+    state = State(6, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
 def test_simulator_run_accepts_qasm3_path_object() -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
     pytest.importorskip("qiskit_qasm3_import")
@@ -1497,7 +1507,7 @@ def test_simulator_run_strong_accepts_qasm_path() -> None:
 
 def test_simulator_run_strong_accepts_qasm_string() -> None:
     """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a str path."""
-    qasm_string = Path(__file__).parent / "circuit.qasm"
+    qasm_string = str(Path(__file__).parent / "circuit.qasm")
     state = State(6, initial="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)

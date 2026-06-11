@@ -15,7 +15,7 @@ import pytest
 from qiskit import QuantumCircuit
 
 from mqt.yaqs.digital.utils.qasm_utils import (
-    _first_non_comment_line,  # noqa: PLC2701
+    _first_non_comment_line,  # noqa: PLC2701 — tests exercise the private function directly
     load_circuit,
 )
 
