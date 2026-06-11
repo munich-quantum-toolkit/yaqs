@@ -410,6 +410,26 @@ def test_align_bond_syncs_mismatched_shapes() -> None:
     assert state.tensors[0].shape[2] <= 2
 
 
+def test_align_bond_noop_without_max_bond_dim() -> None:
+    """Bond alignment is skipped when no fixed bond cap is configured."""
+    state = MPS(2, state="x+")
+    params = StrongSimParams(preset="exact", get_state=True)
+    before = [tensor.copy() for tensor in state.tensors]
+    _align_bond(state, 0, params)
+    for original, updated in zip(before, state.tensors, strict=True):
+        np.testing.assert_array_equal(original, updated)
+
+
+def test_align_bond_noop_when_bonds_already_match() -> None:
+    """Bond alignment is a no-op when adjacent virtual indices already agree."""
+    state = MPS(2, state="x+")
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=4)
+    before = [tensor.copy() for tensor in state.tensors]
+    _align_bond(state, 0, params)
+    for original, updated in zip(before, state.tensors, strict=True):
+        np.testing.assert_array_equal(original, updated)
+
+
 def test_cap_bonds_truncates_oversized_internal_bonds() -> None:
     """Global bond capping shrinks bonds above max_bond_dim before a sweep."""
     state = MPS(4, state="haar-random", pad=4)

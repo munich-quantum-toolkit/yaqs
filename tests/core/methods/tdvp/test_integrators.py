@@ -297,6 +297,37 @@ def test_dynamic_sweep_plan() -> None:
         assert sum(sweep_plan) == pytest.approx(1.0)
 
 
+def test_1site_analog_sweep_plan_integration() -> None:
+    """One-site analog TDVP honors tdvp_sweeps via recursive sweep_plan dispatch."""
+    length = 4
+    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    state = MPS(length, state="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        tdvp_sweeps=2,
+        tdvp_mode="1site",
+    )
+    tdvp(state, hamiltonian, sim_params)
+    reference = deepcopy(MPS(length, state="zeros"))
+    single = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        tdvp_sweeps=1,
+        tdvp_mode="1site",
+    )
+    tdvp(reference, hamiltonian, single)
+    assert _fidelity(reference.to_vec(), state.to_vec()) > 0.99
+
+
 @pytest.mark.tdvp_regression
 def test_dynamic_ising_matches_expm() -> None:
     """Dynamic TDVP integrates a capped Ising chain against an expm reference."""
@@ -370,6 +401,27 @@ def test_fixed_chi_2site_capped_sweep() -> None:
         max_bond_dim=2,
         tdvp_sweeps=1,
         tdvp_mode="2site",
+        svd_threshold=1e-10,
+        krylov_tol=1e-12,
+    )
+    apply_two_qubit_gate_tdvp(prep, gate, params)
+    assert prep.get_max_bond() <= 2
+    assert prep.norm() == pytest.approx(1.0, abs=1e-8)
+
+
+@pytest.mark.tdvp_regression
+def test_dynamic_digital_fixed_chi_renorm() -> None:
+    """Fixed-χ digital dynamic TDVP runs end-of-sweep drift renorm."""
+    length = 4
+    gate = GateLibrary.rzz([0.2])
+    gate.set_sites(0, length - 1)
+    prep = deepcopy(State(length, initial="x+").mps)
+    params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=2,
+        tdvp_sweeps=1,
+        tdvp_mode="dynamic",
         svd_threshold=1e-10,
         krylov_tol=1e-12,
     )

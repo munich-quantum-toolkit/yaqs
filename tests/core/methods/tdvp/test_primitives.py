@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import pytest
 
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
@@ -24,6 +26,7 @@ from mqt.yaqs.core.methods.tdvp.primitives import (
     _build_dense_effective_operator,
     build_dense_heff_bond,
     build_dense_heff_site,
+    initialize_right_environments,
     merge_mpo_tensors,
     project_bond,
     project_site,
@@ -159,6 +162,25 @@ def test_update_site() -> None:
     dt = 0.05
     out = update_site(L_arr, R, W, A, dt, krylov_tol=1e-12)
     assert out.shape == A.shape, f"Expected shape {A.shape}, got {out.shape}"
+
+
+def test_initialize_right_environments_rejects_length_mismatch() -> None:
+    """Right-environment initialization requires matching MPS and MPO lengths."""
+    psi = MPS(3, state="zeros")
+    op = MPO.ising(4, 1.0, 0.5)
+    with pytest.raises(ValueError, match="lengths"):
+        initialize_right_environments(psi, op)
+
+
+def test_update_site_matrix_free_above_dense_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Large local tensors use the matrix-free Krylov path instead of dense H_eff."""
+    monkeypatch.setattr("mqt.yaqs.core.methods.tdvp.primitives.DENSE_THRESHOLD", 8)
+    ket = rng.random(size=(2, 4, 4)).astype(np.complex128)
+    left_env = rng.random(size=(4, 2, 4)).astype(np.complex128)
+    right_env = rng.random(size=(4, 2, 4)).astype(np.complex128)
+    op = rng.random(size=(2, 2, 2, 2)).astype(np.complex128)
+    out = update_site(left_env, right_env, op, ket, 0.05, krylov_tol=1e-10)
+    assert out.shape == ket.shape
 
 
 def test_update_bond() -> None:
