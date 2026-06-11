@@ -102,13 +102,13 @@ def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
     if chi_out > target_dim:
         state.tensors[bond_index] = left[:, :, :target_dim]
     elif chi_out < target_dim:
-        state._ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
+        state.ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
     right = state.tensors[bond_index + 1]
     chi_in = int(right.shape[1])
     if chi_in > target_dim:
         state.tensors[bond_index + 1] = right[:, :target_dim, :]
     elif chi_in < target_dim:
-        state._ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
+        state.ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
 
 
 def _get_bond_dim(

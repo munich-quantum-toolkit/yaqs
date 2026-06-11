@@ -172,7 +172,7 @@ def _apply_lr_gate(
 
 def assert_mps_bond_invariants(mps: MPS, *, max_bond_dim: int | None = None) -> None:
     """Check neighbor tensor virtual dimensions match and respect an optional χ cap."""
-    mps._assert_bond_shapes_consistent(max_bond_dim=max_bond_dim)
+    mps.assert_bond_shapes_consistent(max_bond_dim=max_bond_dim)
     if max_bond_dim is not None:
         assert all(dim <= max_bond_dim for dim in mps.bond_dimensions())
 

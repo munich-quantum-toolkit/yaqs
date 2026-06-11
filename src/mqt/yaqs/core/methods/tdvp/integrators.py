@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
 
-def _sweep_1site(
+def sweep_1site(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -47,9 +47,10 @@ def _sweep_1site(
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
 ) -> None:
+    """Run one symmetric 1TDVP sweep over ``state`` in place."""
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
-            _sweep_1site(
+            sweep_1site(
                 state,
                 operator,
                 sim_params,
@@ -143,7 +144,7 @@ def _sweep_1site(
         )
 
 
-def _sweep_2site(
+def sweep_2site(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -152,6 +153,7 @@ def _sweep_2site(
     sweep_plan: list[float] | None = None,
     drift_renorm: bool = True,
 ) -> None:
+    """Run one symmetric 2TDVP sweep over ``state`` in place."""
     num_sites = operator.length
     plan = sweep_plan if sweep_plan is not None else [step_scale]
 
@@ -259,7 +261,7 @@ def _sweep_2site(
             renorm_drift(state, sim_params)
 
 
-def _sweep_dynamic(
+def sweep_dynamic(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -267,9 +269,10 @@ def _sweep_dynamic(
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
 ) -> None:
+    """Run one dynamic TDVP sweep with adaptive bond updates in place."""
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
-            _sweep_dynamic(
+            sweep_dynamic(
                 state,
                 operator,
                 sim_params,

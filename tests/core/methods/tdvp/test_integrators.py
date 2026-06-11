@@ -33,10 +33,10 @@ from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window
 from tests.core.methods.tdvp.conftest import (
     EXACT_FID_TOL,
     GateName,
-    _double_theta_reference,  # noqa: PLC2701
-    _fidelity,  # noqa: PLC2701
-    _qiskit_two_site_reference,  # noqa: PLC2701
-    _tdvp_params,  # noqa: PLC2701
+    _double_theta_reference,
+    _fidelity,
+    _qiskit_two_site_reference,
+    _tdvp_params,
     assert_mps_bond_invariants,
 )
 
@@ -110,7 +110,7 @@ def test_2site_sweep_scaling() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact", tdvp_mode="2site")
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_2site") as mock_sweep:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
         assert mock_sweep.call_count == 1
         sweep_plan = mock_sweep.call_args.kwargs["sweep_plan"]
@@ -126,7 +126,7 @@ def test_2site_sweep_symmetric() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=1, preset="exact", tdvp_mode="2site")
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_2site") as mock_sweep:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
         assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
 
@@ -273,7 +273,7 @@ def test_dynamic_sweep_plan() -> None:
     prep = deepcopy(State(length, initial="x+").mps)
     params = _tdvp_params(max_bond_dim=8, tdvp_sweeps=16)
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_2site") as mock_two:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_two:
         mock_two.side_effect = lambda *_args, **_kwargs: None
         apply_two_qubit_gate_tdvp(prep, gate, params)
         sweep_plan = mock_two.call_args.kwargs["sweep_plan"]

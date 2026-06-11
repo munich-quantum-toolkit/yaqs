@@ -83,11 +83,11 @@ def tdvp(
         tdvp_mode = "1site"
 
     if tdvp_mode == "1site":
-        _run_sweeps(integrators._sweep_1site, state, operator, sim_params)
+        _run_sweeps(integrators.sweep_1site, state, operator, sim_params)
     elif tdvp_mode == "2site":
-        _run_sweeps(integrators._sweep_2site, state, operator, sim_params)
+        _run_sweeps(integrators.sweep_2site, state, operator, sim_params)
     else:
-        _run_sweeps(integrators._sweep_dynamic, state, operator, sim_params)
+        _run_sweeps(integrators.sweep_dynamic, state, operator, sim_params)
 
 
 def evolve_window(
@@ -106,7 +106,7 @@ def evolve_window(
         sim_params: Truncation and Krylov settings for TDVP.
     """
     _run_sweeps(
-        integrators._sweep_2site,
+        integrators.sweep_2site,
         state,
         operator,
         sim_params,

@@ -89,7 +89,7 @@ def test_dynamic_sweep_scaling() -> None:
         tdvp_mode="dynamic",
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_dynamic") as mock_sweep:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_dynamic") as mock_sweep:
         tdvp(state, H, sim_params)
         assert mock_sweep.call_count == 1
         assert len(mock_sweep.call_args.kwargs["sweep_plan"]) == 2
@@ -102,17 +102,17 @@ def test_tdvp_mode_dispatch() -> None:
     state = MPS(L, state="zeros")
 
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="1site")
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_1site") as mock_one:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_1site") as mock_one:
         tdvp(state, H, sim_params)
         mock_one.assert_called_once()
 
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="2site")
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_2site") as mock_two:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_two:
         tdvp(state, H, sim_params)
         mock_two.assert_called_once()
 
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="dynamic")
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_dynamic") as mock_dyn:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_dynamic") as mock_dyn:
         tdvp(state, H, sim_params)
         mock_dyn.assert_called_once()
 
@@ -129,7 +129,7 @@ def test_tdvp_default_mode_is_dynamic() -> None:
         sample_timesteps=False,
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_dynamic") as mock_dyn:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_dynamic") as mock_dyn:
         tdvp(state, H, sim_params)
         mock_dyn.assert_called_once()
 
@@ -141,7 +141,7 @@ def test_strong_default_mode_is_2site() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_2site") as mock_two:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_two:
         tdvp(state, H, sim_params)
         mock_two.assert_called_once()
 
@@ -153,7 +153,7 @@ def test_evolve_window_no_drift_renorm() -> None:
     state = MPS(L, state="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_2site") as mock_two:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_two:
         evolve_window(state, H, sim_params)
         mock_two.assert_called_once()
         assert mock_two.call_args.kwargs.get("drift_renorm") is False
@@ -170,6 +170,6 @@ def test_dynamic_fallback_1site() -> None:
         sample_timesteps=False,
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_1site") as mock_one:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_1site") as mock_one:
         tdvp(state, H, sim_params)
         mock_one.assert_called_once()

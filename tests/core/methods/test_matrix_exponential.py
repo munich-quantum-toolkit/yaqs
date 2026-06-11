@@ -29,6 +29,7 @@ import scipy.linalg
 
 from mqt.yaqs.core.methods import matrix_exponential
 from mqt.yaqs.core.methods.matrix_exponential import expm_krylov
+from tests.private_access import call_private
 
 
 def test_expm_krylov_2x2_exact() -> None:
@@ -181,7 +182,7 @@ def test_expm_krylov_linalg_error_fallback() -> None:
         nrm = 1.0
         dt = 0.1
 
-        matrix_exponential._compute_krylov_result(alpha, beta, lanczos_mat, nrm, dt)
+        call_private(matrix_exponential, "_compute_krylov_result", alpha, beta, lanczos_mat, nrm, dt)
 
         assert mock_eigh.call_count == 2
         # First call should be stemr
@@ -291,7 +292,7 @@ def test_compute_arnoldi_result() -> None:
     nrm = 2.0
     dt = 0.1
 
-    res = matrix_exponential._compute_arnoldi_result(h_mat, v_mat, nrm, dt)
+    res = call_private(matrix_exponential, "_compute_arnoldi_result", h_mat, v_mat, nrm, dt)
     direct = scipy.linalg.expm(-1j * dt * h_mat) @ np.array([nrm, 0.0], dtype=complex)
 
     np.testing.assert_allclose(res, direct, atol=1e-12)

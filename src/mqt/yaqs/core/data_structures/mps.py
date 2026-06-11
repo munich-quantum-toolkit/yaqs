@@ -327,7 +327,7 @@ class MPS:
         # renormalise the state
         self.normalize()
 
-    def _ensure_internal_bond_dims(
+    def ensure_internal_bond_dims(
         self,
         bond_indices: list[int] | tuple[int, ...],
         min_dim: int,
@@ -392,7 +392,7 @@ class MPS:
         """
         return [int(tensor.shape[2]) for tensor in self.tensors[:-1]]
 
-    def _assert_bond_shapes_consistent(self, *, max_bond_dim: int | None = None) -> None:
+    def assert_bond_shapes_consistent(self, *, max_bond_dim: int | None = None) -> None:
         """Validate adjacent tensor virtual dimensions and an optional bond cap.
 
         Library-internal invariant check used by fixed-χ TDVP.

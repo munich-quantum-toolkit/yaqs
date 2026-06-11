@@ -251,14 +251,14 @@ def test_process_layer() -> None:
     # Verify the grouping of two-qubit gates.
     # For each node in the even group, the lower qubit index should be even.
     for node in even:
-        q0 = node.qargs[0]._index
-        q1 = node.qargs[1]._index
+        q0 = dag.find_bit(node.qargs[0]).index
+        q1 = dag.find_bit(node.qargs[1]).index
         assert min(q0, q1) % 2 == 0, f"Node with qubits {q0, q1} not in even group."
 
     # For each node in the odd group, the lower qubit index should be odd.
     for node in odd:
-        q0 = node.qargs[0]._index
-        q1 = node.qargs[1]._index
+        q0 = dag.find_bit(node.qargs[0]).index
+        q1 = dag.find_bit(node.qargs[1]).index
         assert min(q0, q1) % 2 == 1, f"Node with qubits {q0, q1} not in odd group."
 
 
@@ -570,8 +570,8 @@ def test_lr_routes_2site() -> None:
     params = _tdvp_params(max_bond_dim=None, tdvp_sweeps=4)
 
     with (
-        patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_dynamic") as mock_dynamic,
-        patch("mqt.yaqs.core.methods.tdvp.integrators._sweep_2site") as mock_two,
+        patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_dynamic") as mock_dynamic,
+        patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_two,
     ):
         mock_two.side_effect = lambda *_args, **_kwargs: None
         apply_two_qubit_gate_tdvp(out, gate, params)
