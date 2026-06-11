@@ -110,5 +110,5 @@ def tdvp_window(
         state,
         operator,
         sim_params,
-        renorm_after=False,
+        apply_drift_renorm=False,
     )

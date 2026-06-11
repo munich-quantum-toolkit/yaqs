@@ -7,6 +7,9 @@
 
 """Tests for TDVP integrators (analog and sweep orchestration)."""
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -25,14 +28,15 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams,
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.tdvp import tdvp
+from mqt.yaqs.core.methods.tdvp.primitives import update_site
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
 from tests.core.methods.tdvp.conftest import (
     EXACT_FID_TOL,
     GateName,
-    _double_theta_reference,
-    _fidelity,
-    _qiskit_two_site_reference,
-    _tdvp_params,
+    _double_theta_reference,  # noqa: PLC2701
+    _fidelity,  # noqa: PLC2701
+    _qiskit_two_site_reference,  # noqa: PLC2701
+    _tdvp_params,  # noqa: PLC2701
     assert_mps_bond_invariants,
 )
 
@@ -166,7 +170,11 @@ def _evolve_l2_two_site(
     *,
     sites: tuple[int, int] = (0, 1),
 ) -> MPS:
-    """Apply one 2site TDVP gate on a length-2 chain."""
+    """Apply one 2site TDVP gate on a length-2 chain.
+
+    Returns:
+        Window MPS after one 2-site TDVP evolution step.
+    """
     if gate_name == "rzz":
         gate = GateLibrary.rzz([theta])
     elif gate_name == "rxx":
@@ -227,8 +235,6 @@ def test_two_site_l2_rzz_not_double_theta() -> None:
 @pytest.mark.tdvp_regression
 def test_two_site_l2_unit_evolution_time() -> None:
     """One 2TDVP substep integrates total generator time 1, not 2."""
-    from mqt.yaqs.core.methods.tdvp.primitives import update_site
-
     theta = 0.3
     prep = deepcopy(State(2, initial="x+").mps)
     gate = GateLibrary.rzz([theta])

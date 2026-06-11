@@ -60,7 +60,11 @@ PLUS_LR_RZZ_GLOBAL_FID = 0.9776682445628022
 
 
 def _z_expectation(vec: np.ndarray, site: int) -> float:
-    """Single-site ``⟨Z⟩`` from a state vector (Qiskit little-endian convention)."""
+    """Single-site ``⟨Z⟩`` from a state vector (Qiskit little-endian convention).
+
+    Returns:
+        Real expectation value ``⟨Z_site⟩``.
+    """
     num_qubits = int(np.log2(vec.size))
     label = ["I"] * num_qubits
     label[num_qubits - 1 - site] = "Z"

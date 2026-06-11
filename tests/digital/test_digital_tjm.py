@@ -30,7 +30,11 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
-from mqt.yaqs.core.methods.tdvp import tdvp
+from mqt.yaqs.core.methods.tdvp.sweep_utils import (
+    _is_fixed_chi_digital,  # noqa: PLC2701
+    _renorm_on_drift,  # noqa: PLC2701
+)
+from mqt.yaqs.core.methods.tdvp.tdvp import tdvp_window
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
     apply_single_qubit_gate,
@@ -540,7 +544,7 @@ def _apply_no_support_baseline(
     max_bond_dim: int | None = None,
     tdvp_sweeps: int = 1,
 ) -> np.ndarray:
-    """Window-local ``tdvp()`` path for equivalence checks against production LR routing.
+    """Window-local ``tdvp_window`` + graft + drift renorm (production LR contract).
 
     Returns:
         State vector after applying the gate.
@@ -551,9 +555,11 @@ def _apply_no_support_baseline(
     mpo, first_site, last_site = construct_generator_mpo(gate, length)
     short_state, short_mpo, window = apply_window(prep, mpo, first_site, last_site, 1)
     params = _tdvp_params(max_bond_dim=max_bond_dim, tdvp_sweeps=tdvp_sweeps)
-    tdvp(short_state, short_mpo, params)
+    tdvp_window(short_state, short_mpo, params)
     for i in range(window[0], window[1] + 1):
         prep.tensors[i] = short_state.tensors[i - window[0]]
+    if _is_fixed_chi_digital(params):
+        _renorm_on_drift(prep, params)
     return prep.to_vec()
 
 
@@ -574,7 +580,7 @@ def test_lr_gate_routes_through_two_site_not_dynamic() -> None:
         apply_two_qubit_gate_tdvp(out, gate, params)
         mock_two.assert_called_once()
         mock_dynamic.assert_not_called()
-        assert mock_two.call_args.kwargs.get("renorm_after") is False
+        assert mock_two.call_args.kwargs.get("apply_drift_renorm") is False
 
 
 @pytest.mark.tdvp_regression
@@ -759,7 +765,7 @@ def test_lr_rzz_round_trip_restores_z_observables(length: int) -> None:
 @pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
 @pytest.mark.tdvp_regression
 def test_production_matches_no_support_baseline(length: int) -> None:
-    """Production LR path matches direct window-local ``tdvp()``."""
+    """Production LR path matches window-local ``tdvp_window`` + post-graft drift renorm."""
     prod = _apply_production_lr_rzz(length, max_bond_dim=64, tdvp_sweeps=1)
     baseline = _apply_no_support_baseline(length, max_bond_dim=64, tdvp_sweeps=1)
     assert _fidelity(prod, baseline) == pytest.approx(1.0, abs=1e-12)

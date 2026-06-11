@@ -13,13 +13,18 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp.sweep_utils import (
+    _is_fixed_chi_digital,  # noqa: PLC2701
+    _renorm_on_drift,  # noqa: PLC2701
+    _renorm_on_trunc,  # noqa: PLC2701
     _split_two_site_tdvp,  # noqa: PLC2701
 )
 
@@ -265,3 +270,40 @@ def test_dynamic_split_matches_uncapped_when_rank_below_cap() -> None:
     assert right_u.shape == right_c.shape
     np.testing.assert_allclose(left_u, left_c, atol=1e-12)
     np.testing.assert_allclose(right_u, right_c, atol=1e-12)
+
+
+def test_is_fixed_chi_digital() -> None:
+    """Fixed-χ policy applies to digital params with a cap, not analog or uncapped digital."""
+    assert not _is_fixed_chi_digital(AnalogSimParams())
+    assert not _is_fixed_chi_digital(AnalogSimParams(max_bond_dim=4))
+    assert not _is_fixed_chi_digital(StrongSimParams(preset="exact", get_state=True))
+    assert _is_fixed_chi_digital(StrongSimParams(preset="exact", get_state=True, max_bond_dim=4))
+
+
+def test_renorm_on_trunc_always_normalizes() -> None:
+    """Truncation renorm always calls normalize when invoked."""
+    state = MPS(2, state="zeros")
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2)
+    with patch.object(MPS, "normalize") as mock_normalize:
+        _renorm_on_trunc(state, params)
+        mock_normalize.assert_called_once()
+
+
+def test_renorm_on_drift_skips_when_within_tolerance() -> None:
+    """Drift renorm is a no-op when the global norm is already unit."""
+    state = MPS(2, state="zeros")
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
+    with patch.object(MPS, "normalize") as mock_normalize:
+        _renorm_on_drift(state, params)
+        mock_normalize.assert_not_called()
+
+
+def test_renorm_on_drift_normalizes_large_drift() -> None:
+    """Drift renorm restores unit norm when truncation drifts far from unity."""
+    state = MPS(2, state="zeros")
+    state.tensors[0] *= 0.1
+    state.tensors[1] *= 0.1
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
+    with patch.object(MPS, "normalize") as mock_normalize:
+        _renorm_on_drift(state, params)
+        mock_normalize.assert_called_once()

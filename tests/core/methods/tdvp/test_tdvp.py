@@ -7,6 +7,9 @@
 
 """Tests for the public TDVP entry point and sweep orchestration."""
 
+# ignore non-lowercase variable names for physics notation
+# ruff: noqa: N806
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -18,7 +21,7 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp import tdvp
-from mqt.yaqs.core.methods.tdvp.tdvp import _run_sweeps  # noqa: PLC2701
+from mqt.yaqs.core.methods.tdvp.tdvp import _run_sweeps, tdvp_window  # noqa: PLC2701
 
 
 def test_run_sweeps_invokes_substeps() -> None:
@@ -141,6 +144,19 @@ def test_strong_default_mode_is_2site() -> None:
     with patch("mqt.yaqs.core.methods.tdvp.integrators._two_site_tdvp_sweep") as mock_two:
         tdvp(state, H, sim_params)
         mock_two.assert_called_once()
+
+
+def test_tdvp_window_skips_drift_renorm() -> None:
+    """Window-local TDVP disables per-sweep drift renorm before grafting."""
+    L = 4
+    H = MPO.ising(L, 1.0, 0.5)
+    state = MPS(L, state="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+
+    with patch("mqt.yaqs.core.methods.tdvp.integrators._two_site_tdvp_sweep") as mock_two:
+        tdvp_window(state, H, sim_params)
+        mock_two.assert_called_once()
+        assert mock_two.call_args.kwargs.get("apply_drift_renorm") is False
 
 
 def test_tdvp_dynamic_single_site_chain() -> None:

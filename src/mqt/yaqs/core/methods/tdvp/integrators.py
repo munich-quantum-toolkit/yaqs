@@ -25,8 +25,9 @@ from .primitives import (
 )
 from .sweep_utils import (
     _enforce_global_bond_cap,
+    _is_fixed_chi_digital,
     _prepare_substep_dt,
-    _renorm_if_digital,
+    _renorm_on_drift,
     _resize_bond,
     _split_two_site_tdvp,
     _sync_fixed_chi_bond,
@@ -149,7 +150,7 @@ def _two_site_tdvp_sweep(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
-    renorm_after: bool = True,
+    apply_drift_renorm: bool = True,
 ) -> None:
     num_sites = operator.length
     plan = sweep_plan if sweep_plan is not None else [step_scale]
@@ -254,8 +255,8 @@ def _two_site_tdvp_sweep(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
 
-        if renorm_after:
-            _renorm_if_digital(state, sim_params)
+        if apply_drift_renorm and _is_fixed_chi_digital(sim_params):
+            _renorm_on_drift(state, sim_params)
 
 
 def _dynamic_tdvp_sweep(
@@ -265,7 +266,6 @@ def _dynamic_tdvp_sweep(
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
-    renorm_after: bool = True,
 ) -> None:
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
@@ -274,7 +274,6 @@ def _dynamic_tdvp_sweep(
                 operator,
                 sim_params,
                 step_scale=plan_step_scale,
-                renorm_after=renorm_after,
             )
         return
 
@@ -322,13 +321,12 @@ def _dynamic_tdvp_sweep(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
-                if sim_params.max_bond_dim is not None:
-                    _sync_fixed_chi_bond(state, i, sim_params)
-                    bond_tensor = _resize_bond(
-                        bond_tensor,
-                        lead=int(state.tensors[i].shape[2]),
-                        trail=int(state.tensors[i + 1].shape[1]),
-                    )
+                _sync_fixed_chi_bond(state, i, sim_params)
+                bond_tensor = _resize_bond(
+                    bond_tensor,
+                    lead=int(state.tensors[i].shape[2]),
+                    trail=int(state.tensors[i + 1].shape[1]),
+                )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
                 _sync_fixed_chi_bond(state, i, sim_params)
         elif i == num_sites - 1:
@@ -421,13 +419,12 @@ def _dynamic_tdvp_sweep(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
-                if sim_params.max_bond_dim is not None:
-                    _sync_fixed_chi_bond(state, i - 1, sim_params)
-                    bond_tensor = _resize_bond(
-                        bond_tensor,
-                        lead=int(state.tensors[i - 1].shape[2]),
-                        trail=int(state.tensors[i].shape[1]),
-                    )
+                _sync_fixed_chi_bond(state, i - 1, sim_params)
+                bond_tensor = _resize_bond(
+                    bond_tensor,
+                    lead=int(state.tensors[i - 1].shape[2]),
+                    trail=int(state.tensors[i].shape[1]),
+                )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
                 _sync_fixed_chi_bond(state, i - 1, sim_params)
         elif i == 0:
@@ -464,5 +461,5 @@ def _dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
 
-    if renorm_after:
-        _renorm_if_digital(state, sim_params)
+    if _is_fixed_chi_digital(sim_params):
+        _renorm_on_drift(state, sim_params)

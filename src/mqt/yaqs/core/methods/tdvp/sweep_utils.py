@@ -126,24 +126,14 @@ def _compute_bond_target_dim(
     return max(chi_target, 1)
 
 
-def _check_renorm_after_chi(
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-) -> bool:
-    """Check whether a sweep should renormalize after χ capping (digital only).
+def _is_fixed_chi_digital(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> bool:
+    """Return whether fixed-χ digital renormalization policy applies.
 
     Returns:
         True when ``max_bond_dim`` is set on digital simulation parameters.
+        Analog Hamiltonian evolution is excluded (per-sweep renorm breaks ensembles).
     """
     return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
-
-
-def _norm_drift_renorm_tol(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
-    """Tolerance for renormalizing fixed-χ digital TDVP after global norm drift.
-
-    Returns:
-        Renormalization trigger tolerance derived from ``svd_threshold``.
-    """
-    return max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
 
 
 def _global_mps_norm(state: MPS) -> float:
@@ -153,24 +143,16 @@ def _global_mps_norm(state: MPS) -> float:
     return float(np.sqrt(max(norm_sq, 0.0)))
 
 
-def _renorm_if_digital(
-    state: MPS,
-    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    *,
-    force: bool = False,
-) -> None:
-    """Renormalize the MPS when fixed-χ digital TDVP requires it after truncation.
+def _renorm_on_trunc(state: MPS, _sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
+    """Renormalize after explicit bond truncation (call only when fixed-χ digital)."""
+    state.normalize()
 
-    Fixed-χ digital sweeps renormalize only after explicit truncation (``force=True``)
-    or when the full MPS norm drifts significantly from unity.
-    """
-    if not _check_renorm_after_chi(sim_params):
-        return
-    if force:
-        state.normalize()
-        return
+
+def _renorm_on_drift(state: MPS, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
+    """Renormalize when global norm drift exceeds tolerance (call only when fixed-χ digital)."""
+    drift_tol = max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
     norm = _global_mps_norm(state)
-    if abs(norm - 1.0) > _norm_drift_renorm_tol(sim_params):
+    if abs(norm - 1.0) > drift_tol:
         state.normalize()
 
 
@@ -187,7 +169,8 @@ def _sync_fixed_chi_bond(
     if int(left.shape[2]) == int(right.shape[1]):
         return
     _sync_bond_dim(state, bond_index, _compute_bond_target_dim(state, bond_index, sim_params))
-    _renorm_if_digital(state, sim_params, force=True)
+    if _is_fixed_chi_digital(sim_params):
+        _renorm_on_trunc(state, sim_params)
 
 
 def _enforce_global_bond_cap(
@@ -205,8 +188,8 @@ def _enforce_global_bond_cap(
         if chi_out > cap or chi_in > cap:
             _sync_bond_dim(state, bond, cap)
             changed = True
-    if changed:
-        _renorm_if_digital(state, sim_params, force=True)
+    if changed and _is_fixed_chi_digital(sim_params):
+        _renorm_on_trunc(state, sim_params)
 
 
 # --- Bond transfer geometry ---
