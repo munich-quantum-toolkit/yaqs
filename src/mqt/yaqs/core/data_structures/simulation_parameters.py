@@ -542,7 +542,7 @@ class StrongSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
                 Default is ``"2site"``. Selects the integrator for :func:`~mqt.yaqs.core.methods.tdvp.tdvp.tdvp`
                 (for example ``gate_mode="full-tdvp"``); hybrid long-range gates always use
-                2TDVP via :func:`~mqt.yaqs.core.methods.tdvp.tdvp.tdvp_window`.
+                2TDVP via :func:`~mqt.yaqs.core.methods.tdvp.tdvp.evolve_window`.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
