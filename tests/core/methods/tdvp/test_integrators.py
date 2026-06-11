@@ -103,7 +103,7 @@ def test_two_site_tdvp() -> None:
     assert np.allclose(state_vec, found)
 
 
-def test_two_site_tdvp_circuit_sweep_scaling() -> None:
+def test_2site_sweep_scaling() -> None:
     """Circuit-mode 2TDVP passes symmetric substeps when tdvp_sweeps>1."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
@@ -119,7 +119,7 @@ def test_two_site_tdvp_circuit_sweep_scaling() -> None:
         assert sweep_plan[1] == pytest.approx(0.5)
 
 
-def test_two_site_tdvp_circuit_single_sweep_uses_symmetric() -> None:
+def test_2site_sweep_symmetric() -> None:
     """Circuit tdvp_sweeps=1 uses one symmetric substep, matching analog geometry."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
@@ -131,7 +131,7 @@ def test_two_site_tdvp_circuit_single_sweep_uses_symmetric() -> None:
         assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
 
 
-def test_two_site_tdvp_analog_sweep_preservation() -> None:
+def test_2site_analog_sweep_dt() -> None:
     """Analog 2TDVP with tdvp_sweeps>1 still integrates over the full dt per step."""
     L = 5
     J = 1
@@ -221,7 +221,7 @@ def test_two_site_l2_haar_exact() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_two_site_l2_rzz_not_double_theta() -> None:
+def test_l2_rzz_no_double_theta() -> None:
     """|++⟩ + RZZ(θ) must match RZZ(θ), not the old RZZ(2θ) duplicate-update bug."""
     theta = 0.3
     prep = State(2, initial="x+").mps
@@ -233,7 +233,7 @@ def test_two_site_l2_rzz_not_double_theta() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_two_site_l2_unit_evolution_time() -> None:
+def test_l2_unit_time() -> None:
     """One 2TDVP substep integrates total generator time 1, not 2."""
     theta = 0.3
     prep = deepcopy(State(2, initial="x+").mps)
@@ -265,7 +265,7 @@ def test_two_site_l2_unit_evolution_time() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_dynamic_sweep_plan_matches_requested_sweeps() -> None:
+def test_dynamic_sweep_plan() -> None:
     """tdvp_sweeps=N produces N symmetric substeps summing to unit evolution time."""
     length = 6
     gate = GateLibrary.rzz([0.3])

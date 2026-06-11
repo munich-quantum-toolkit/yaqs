@@ -68,7 +68,7 @@ def test_build_dense_heff_bond_numba() -> None:
     np.testing.assert_allclose(heff_numba, heff_ref_flat, rtol=1e-12, atol=1e-12)
 
 
-def test_build_dense_heff_site_wired_path_under_capped_numba_threads(
+def test_heff_site_numba_threads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Wired build_dense_heff_site works when Numba thread pool is capped to one."""

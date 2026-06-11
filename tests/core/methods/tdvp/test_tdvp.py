@@ -77,7 +77,7 @@ def test_run_sweeps_invokes_substeps() -> None:
     assert captured_analog == captured_plan
 
 
-def test_local_dynamic_tdvp_circuit_sweep_scaling() -> None:
+def test_dynamic_sweep_scaling() -> None:
     """Explicit dynamic mode honors tdvp_sweeps via a sweep plan."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
@@ -146,7 +146,7 @@ def test_strong_default_mode_is_2site() -> None:
         mock_two.assert_called_once()
 
 
-def test_evolve_window_skips_drift_renorm() -> None:
+def test_evolve_window_no_drift_renorm() -> None:
     """Window-local TDVP disables per-sweep drift renorm before grafting."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
@@ -159,7 +159,7 @@ def test_evolve_window_skips_drift_renorm() -> None:
         assert mock_two.call_args.kwargs.get("drift_renorm") is False
 
 
-def test_tdvp_dynamic_single_site_chain() -> None:
+def test_dynamic_fallback_1site() -> None:
     """Dynamic mode on a one-site chain falls back to 1-site TDVP."""
     H = MPO.ising(1, 1.0, 0.5)
     state = MPS(1, state="zeros")

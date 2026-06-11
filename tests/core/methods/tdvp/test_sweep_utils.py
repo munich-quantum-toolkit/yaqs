@@ -83,9 +83,7 @@ def _as_input_tensor(theta: NDArray[np.complex128], d0: int, d1: int, d2: int, d
         (np.array([1.0, 0.2, 0.2, 0.2]), 0.2**2 * 3, 1),
     ],
 )
-def test_split_truncation_discarded_weight_kept_count(
-    svs: NDArray[np.float64], threshold: float, expected_keep: int
-) -> None:
+def test_split_discarded_weight(svs: NDArray[np.float64], threshold: float, expected_keep: int) -> None:
     """discarded_weight: keep count matches tail-power threshold; shapes consistent, robust at boundary."""
     d0, d1, D0, D2 = 2, 2, 3, 3
     theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=11)
@@ -139,7 +137,7 @@ def test_split_truncation_discarded_weight_kept_count(
         (np.array([1.0, 0.55, 0.3]), 0.5, 2),
     ],
 )
-def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the: float, expected_keep: int) -> None:
+def test_split_relative_kept(svs: NDArray[np.float64], rel_the: float, expected_keep: int) -> None:
     """relative: keep count matches s_i/s_max >= threshold; shapes consistent."""
     d0, d1, D0, D2 = 2, 3, 2, 3
     theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=12)
@@ -208,7 +206,7 @@ def test_split_tdvp_min_keep() -> None:
 
 
 @pytest.mark.parametrize("distr", ["left", "right", "sqrt"])
-def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> None:
+def test_split_distribution_rank(distr: str) -> None:
     """All SVD distribution choices reconstruct the optimal rank-k approximation."""
     svs = np.array([1.0, 0.7, 0.3, 0.1])
     d0, d1, D0, D2 = 2, 2, 3, 3
@@ -237,7 +235,7 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
     np.testing.assert_allclose(theta_recon, theta_opt_k, atol=1e-10, rtol=1e-8)
 
 
-def test_dynamic_split_matches_uncapped_when_rank_below_cap() -> None:
+def test_split_dynamic_below_cap() -> None:
     """Dynamic splits ignore ``max_bond_dim`` when the kept rank stays below the cap."""
     svs = np.array([1.0, 0.4, 0.2])
     d0, d1, D0, D2 = 2, 2, 2, 2

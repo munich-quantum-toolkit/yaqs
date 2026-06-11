@@ -561,7 +561,7 @@ def _apply_no_support_baseline(
 
 
 @pytest.mark.tdvp_regression
-def test_lr_gate_routes_through_two_site_not_dynamic() -> None:
+def test_lr_routes_2site() -> None:
     """Long-range digital TDVP window evolution uses the 2-site kernel."""
     length = 8
     gate = GateLibrary.rzz([0.3])
@@ -581,7 +581,7 @@ def test_lr_gate_routes_through_two_site_not_dynamic() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_chi_one_lr_rzz_caller_respects_cap() -> None:
+def test_lr_rzz_cap_chi1() -> None:
     """End-to-end χ=1 long-range RZZ respects the bond-dimension cap."""
     theta = 0.3
     length = 8
@@ -608,7 +608,7 @@ def test_chi_one_lr_rzz_caller_respects_cap() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_bond_invariants_after_full_lr_gate() -> None:
+def test_lr_bond_invariants() -> None:
     """Public LR TDVP gate application leaves consistent tensor shapes."""
     out = _apply_lr_gate(State(8, initial="x+").mps, "rzz", 0.3, max_bond_dim=8, sweeps=16)
     assert_mps_bond_invariants(out, max_bond_dim=8)
@@ -616,7 +616,7 @@ def test_bond_invariants_after_full_lr_gate() -> None:
 
 @pytest.mark.parametrize("tdvp_sweeps", [1, 4, 16])
 @pytest.mark.tdvp_regression
-def test_default_run_matches_explicit_sweep_count(tdvp_sweeps: int) -> None:
+def test_sweeps_default_explicit(tdvp_sweeps: int) -> None:
     """Normal runs do not require debug tracing and match explicit sweep counts."""
     length = 6
     theta = 0.3
@@ -626,7 +626,7 @@ def test_default_run_matches_explicit_sweep_count(tdvp_sweeps: int) -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_lr_rzz_plus_dynamic_routing_fidelity() -> None:
+def test_lr_rzz_routes_fidelity() -> None:
     """Long-range RZZ on |+⟩^L: local ⟨Z_i⟩ exact; global fidelity at production level."""
     length = 8
     theta = 0.3
@@ -643,7 +643,7 @@ def test_lr_rzz_plus_dynamic_routing_fidelity() -> None:
 
 @pytest.mark.parametrize("length", [7, 8])
 @pytest.mark.tdvp_regression
-def test_endpoint_lr_rzz_z_observables_and_entanglement(length: int) -> None:
+def test_lr_rzz_endpoint_z_obs(length: int) -> None:
     """Endpoint RZZ on |+⟩^L: exact ⟨Z_i⟩, entanglement on crossed bonds, stable norm."""
     theta = 0.3
     sites = (0, length - 1)
@@ -663,13 +663,13 @@ def test_endpoint_lr_rzz_z_observables_and_entanglement(length: int) -> None:
 
 @pytest.mark.tdvp_regression
 @pytest.mark.slow
-def test_endpoint_lr_rzz_l10() -> None:
+def test_lr_rzz_endpoint_l10() -> None:
     """Endpoint RZZ at L=10 uses the production single-sweep path."""
-    test_endpoint_lr_rzz_z_observables_and_entanglement(10)
+    test_lr_rzz_endpoint_z_obs(10)
 
 
 @pytest.mark.tdvp_regression
-def test_internal_pair_lr_rzz_z_observables() -> None:
+def test_lr_rzz_internal_z_obs() -> None:
     """Internal long-range pairs: exact ⟨Z_i⟩ on |+⟩^L."""
     theta = 0.3
     length = 10
@@ -688,7 +688,7 @@ def test_internal_pair_lr_rzz_z_observables() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_shifted_internal_pair_lr_rzz_z_observables() -> None:
+def test_lr_rzz_shifted_z_obs() -> None:
     """Shifted internal RZZ(1,8) on |+⟩^L: exact ⟨Z_i⟩."""
     theta = 0.3
     length = 10
@@ -708,7 +708,7 @@ def test_shifted_internal_pair_lr_rzz_z_observables() -> None:
 
 @pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
 @pytest.mark.tdvp_regression
-def test_single_lr_rzz_spectator_z_near_zero(length: int) -> None:
+def test_lr_rzz_spectator_z_zero(length: int) -> None:
     """Endpoint RZZ on |+⟩^L: interior |⟨Z_i⟩| ≈ 0 for spectators."""
     vec = _apply_production_lr_rzz(length, max_bond_dim=None, tdvp_sweeps=1)
     for site in range(1, length - 1):
@@ -717,7 +717,7 @@ def test_single_lr_rzz_spectator_z_near_zero(length: int) -> None:
 
 @pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
 @pytest.mark.tdvp_regression
-def test_single_lr_rzz_bond_dim_not_inflated(length: int) -> None:
+def test_lr_rzz_bond_not_inflated(length: int) -> None:
     """Bond dimension on crossed path stays minimal for endpoint |+⟩ RZZ."""
     gate = GateLibrary.rzz([_RZZ_ANGLE])
     gate.set_sites(0, length - 1)
@@ -728,7 +728,7 @@ def test_single_lr_rzz_bond_dim_not_inflated(length: int) -> None:
 
 @pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
 @pytest.mark.tdvp_regression
-def test_lr_rzz_round_trip_restores_plus_state(length: int) -> None:
+def test_lr_rzz_roundtrip_plus(length: int) -> None:
     """RZZ(theta) followed by RZZ(-theta) returns to |+⟩^L."""
     prep = copy.deepcopy(State(length, initial="x+").mps)
     gate_fwd = GateLibrary.rzz([_RZZ_ANGLE])
@@ -744,7 +744,7 @@ def test_lr_rzz_round_trip_restores_plus_state(length: int) -> None:
 
 @pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
 @pytest.mark.tdvp_regression
-def test_lr_rzz_round_trip_restores_z_observables(length: int) -> None:
+def test_lr_rzz_roundtrip_z_obs(length: int) -> None:
     """Round-trip LR RZZ restores all single-site ⟨Z_i⟩."""
     prep = copy.deepcopy(State(length, initial="x+").mps)
     gate_fwd = GateLibrary.rzz([_RZZ_ANGLE])
@@ -761,7 +761,7 @@ def test_lr_rzz_round_trip_restores_z_observables(length: int) -> None:
 
 @pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
 @pytest.mark.tdvp_regression
-def test_production_matches_no_support_baseline(length: int) -> None:
+def test_lr_rzz_vs_baseline(length: int) -> None:
     """Production LR path matches window-local ``evolve_window`` + post-graft drift renorm."""
     prod = _apply_production_lr_rzz(length, max_bond_dim=64, tdvp_sweeps=1)
     baseline = _apply_no_support_baseline(length, max_bond_dim=64, tdvp_sweeps=1)
@@ -769,7 +769,7 @@ def test_production_matches_no_support_baseline(length: int) -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_haar_random_state_no_regression() -> None:
+def test_lr_rzz_haar_stable() -> None:
     """Haar-random states remain accurate under long-range 2TDVP gates."""
     length = 8
     theta = 0.3
@@ -787,7 +787,7 @@ def test_haar_random_state_no_regression() -> None:
 
 @pytest.mark.parametrize("length", [8, 10])
 @pytest.mark.tdvp_regression
-def test_zeros_lr_rzz_uncapped_exact(length: int) -> None:
+def test_lr_rzz_zeros_exact(length: int) -> None:
     """|0⟩^L + long-range RZZ stays exact without spurious entanglement."""
     theta = 0.3
     sites = (0, length - 1)
@@ -808,7 +808,7 @@ def test_zeros_lr_rzz_uncapped_exact(length: int) -> None:
 
 @pytest.mark.parametrize("length", [8, 10])
 @pytest.mark.tdvp_regression
-def test_zeros_lr_rzz_fixed_chi_exact(length: int) -> None:
+def test_lr_rzz_zeros_fchi_exact(length: int) -> None:
     """Fixed-χ zeros control stays exact on product states."""
     theta = 0.3
     out = _apply_lr_gate(
@@ -832,7 +832,7 @@ def test_zeros_lr_rzz_fixed_chi_exact(length: int) -> None:
 @pytest.mark.parametrize("gate_name", ["rzz", "rxx"])
 @pytest.mark.parametrize("sweeps", [1, 4, 16])
 @pytest.mark.tdvp_regression
-def test_fixed_chi_lr_gate_respects_cap(
+def test_lr_fchi_cap(
     length: int,
     max_bond_dim: int,
     initial_state: str,
@@ -849,7 +849,7 @@ def test_fixed_chi_lr_gate_respects_cap(
 
 
 @pytest.mark.tdvp_regression
-def test_fixed_chi_plus_rzz_one_no_secret_pad() -> None:
+def test_fchi_plus_one_gate() -> None:
     """χ=1 plus/RZZ stays rank-1 limited and does not pad to χ=2."""
     theta = 0.3
     length = 8
@@ -864,7 +864,7 @@ def test_fixed_chi_plus_rzz_one_no_secret_pad() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_fixed_chi_plus_rzz_two_applies_gate() -> None:
+def test_fchi_plus_two_gates() -> None:
     """χ=2 plus/RZZ applies the gate rather than staying at |+⟩^L."""
     theta = 0.3
     length = 7
@@ -877,7 +877,7 @@ def test_fixed_chi_plus_rzz_two_applies_gate() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_fixed_chi_plus_rzz_eight_z_observables() -> None:
+def test_fchi_plus_eight_z_obs() -> None:
     """χ=8 plus/RZZ: local ⟨Z_i⟩ exact under production single-sweep 2TDVP."""
     theta = 0.3
     length = 8
@@ -891,7 +891,7 @@ def test_fixed_chi_plus_rzz_eight_z_observables() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_fixed_chi_rzz_lr_ladder_no_shape_error() -> None:
+def test_ladder_fchi_no_shape_error() -> None:
     """Multi-gate ladder circuits complete without bond-dimension violations."""
     length = 8
     prep = State(length, initial="zeros").mps
@@ -901,7 +901,7 @@ def test_fixed_chi_rzz_lr_ladder_no_shape_error() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_rzz_lr_ladder_enforces_cap_when_uncapped_exceeds() -> None:
+def test_ladder_enforces_cap() -> None:
     """When uncapped ladder reaches χ above the cap, capped evolution differs and respects χ."""
     length = LADDER_INVARIANT_LENGTH
     prep = _prep_state("plus", length)
@@ -915,7 +915,7 @@ def test_rzz_lr_ladder_enforces_cap_when_uncapped_exceeds() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_rzz_lr_ladder_fixed_chi_matches_uncapped_when_below_cap() -> None:
+def test_ladder_fchi_vs_uncapped() -> None:
     """L=10 |+⟩ ladder: χ=64 matches χ=None when no bond reaches the cap."""
     uncapped = State(LADDER_INVARIANT_LENGTH, initial="x+")
     capped = State(LADDER_INVARIANT_LENGTH, initial="x+")
@@ -932,7 +932,7 @@ def test_rzz_lr_ladder_fixed_chi_matches_uncapped_when_below_cap() -> None:
 
 @pytest.mark.parametrize("gate_index", range(5))
 @pytest.mark.tdvp_regression
-def test_rzz_lr_ladder_per_gate_fixed_chi_matches_uncapped(gate_index: int) -> None:
+def test_ladder_per_gate_fchi(gate_index: int) -> None:
     """Per-gate partial ladder: χ=64 matches χ=None while bonds stay below cap."""
     uncapped = State(LADDER_INVARIANT_LENGTH, initial="x+")
     capped = State(LADDER_INVARIANT_LENGTH, initial="x+")
@@ -959,7 +959,7 @@ def test_rzz_lr_ladder_per_gate_fixed_chi_matches_uncapped(gate_index: int) -> N
 
 
 @pytest.mark.tdvp_regression
-def test_fixed_chi_mixed_small_respects_cap() -> None:
+def test_mixed_fchi_cap() -> None:
     """Mixed NN+LR circuits respect χ under hybrid TDVP routing."""
     length = 8
     prep = _prep_state("plus", length)
@@ -970,7 +970,7 @@ def test_fixed_chi_mixed_small_respects_cap() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_ising_geometry_gate12_norm_stays_unit() -> None:
+def test_ising_gate12_norm_unit() -> None:
     """Gate 12 LR RZZ under hybrid gate_mode='tdvp' must not inflate global norm to sqrt(2)."""
     qc = _ising_2d_mapped_circuit()
     params = _hybrid_tdvp_replay_params(max_bond_dim=ISING_CHI)
@@ -983,7 +983,7 @@ def test_ising_geometry_gate12_norm_stays_unit() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_ising_geometry_full_circuit_observables() -> None:
+def test_ising_full_z_obs() -> None:
     """Full ising_2d_mapped zeros circuit stays near exact under hybrid gate_mode='tdvp'."""
     qc = _ising_2d_mapped_circuit()
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
@@ -995,7 +995,7 @@ def test_ising_geometry_full_circuit_observables() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_mixed_small_gate2_norm_stays_unit() -> None:
+def test_mixed_gate2_norm_unit() -> None:
     """Gate 2 LR CX under hybrid gate_mode='tdvp' must preserve global norm."""
     qc = _mixed_small_zeros_circuit()
     params = _hybrid_tdvp_replay_params(max_bond_dim=16)
@@ -1008,7 +1008,7 @@ def test_mixed_small_gate2_norm_stays_unit() -> None:
 
 @pytest.mark.parametrize("chi", [16, 32])
 @pytest.mark.tdvp_regression
-def test_mixed_small_zeros_full_circuit(chi: int) -> None:
+def test_mixed_zeros_full(chi: int) -> None:
     """Full mixed_small L=10 zeros circuit matches exact reference under hybrid gate_mode='tdvp'."""
     qc = _mixed_small_zeros_circuit(MIXED_SMALL_ZEROS_LENGTH)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
@@ -1022,7 +1022,7 @@ def test_mixed_small_zeros_full_circuit(chi: int) -> None:
 @pytest.mark.parametrize("max_bond_dim", [1, 2, 8, None])
 @pytest.mark.parametrize("sweeps", [1, 4, 16, 64])
 @pytest.mark.tdvp_regression
-def test_fixed_chi_norm_stability(
+def test_fchi_norm_stable(
     initial_state: str,
     max_bond_dim: int | None,
     sweeps: int,
@@ -1038,7 +1038,7 @@ def test_fixed_chi_norm_stability(
 
 @pytest.mark.parametrize("gate_name", ["rzz", "rxx"])
 @pytest.mark.tdvp_regression
-def test_fixed_chi_truncates_high_bond_initial_state(gate_name: str) -> None:
+def test_fchi_trunc_high_bond(gate_name: str) -> None:
     """Fixed-χ TDVP truncates incoming MPS bond dimensions before evolving."""
     length = 8
     prep = _prep_state("low_depth", length)
@@ -1049,7 +1049,7 @@ def test_fixed_chi_truncates_high_bond_initial_state(gate_name: str) -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_hybrid_tdvp_lr_uses_tdvp_path() -> None:
+def test_hybrid_lr_routes_tdvp() -> None:
     """Hybrid gate_mode='tdvp' routes LR gates through the TDVP window path."""
     length = 8
     gate = GateLibrary.rzz([0.3])
@@ -1074,7 +1074,7 @@ def test_hybrid_tdvp_lr_uses_tdvp_path() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_hybrid_tdvp_lr_end_to_end_z_observables() -> None:
+def test_hybrid_lr_z_obs() -> None:
     """Public hybrid path: exact ⟨Z_i⟩ on endpoint RZZ after H prep."""
     length = 8
     theta = 0.3
@@ -1098,7 +1098,7 @@ def test_hybrid_tdvp_lr_end_to_end_z_observables() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_low_depth_hybrid_tdvp_runs_without_crash() -> None:
+def test_hybrid_low_depth_smoke() -> None:
     """Low-depth entangled prep completes under hybrid TDVP."""
     length = 8
     prep_qc = QuantumCircuit(length)
@@ -1138,7 +1138,7 @@ def test_low_depth_hybrid_tdvp_runs_without_crash() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_long_range_hybrid_matches_tdvp() -> None:
+def test_hybrid_lr_vs_full_tdvp() -> None:
     """Long-range gates use TDVP in hybrid mode and match an all-TDVP run."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1150,7 +1150,7 @@ def test_long_range_hybrid_matches_tdvp() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_mixed_circuit_hybrid_matches_tdvp() -> None:
+def test_hybrid_mixed_vs_full_tdvp() -> None:
     """Circuits with both NN and long-range gates: hybrid vs all-TDVP."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1164,7 +1164,7 @@ def test_mixed_circuit_hybrid_matches_tdvp() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_tdvp_sweeps_preserves_gate_unitary() -> None:
+def test_sweeps_unitary() -> None:
     """Multiple TDVP substeps target the same gate, not its square."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1189,7 +1189,7 @@ def test_tdvp_sweeps_preserves_gate_unitary() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_tdvp_sweeps_hybrid_long_range_matches_qiskit() -> None:
+def test_sweeps_hybrid_lr_vs_qiskit() -> None:
     """Hybrid long-range TDVP with multiple sweeps matches Qiskit within truncation error."""
     qc = QuantumCircuit(4)
     qc.rx(0.2, 1)
@@ -1202,7 +1202,7 @@ def test_tdvp_sweeps_hybrid_long_range_matches_qiskit() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_tdvp_sweeps_hybrid_nn_unchanged() -> None:
+def test_sweeps_hybrid_nn_unchanged() -> None:
     """Nearest-neighbor hybrid circuits ignore tdvp_sweeps (TEBD path)."""
     qc = QuantumCircuit(3)
     qc.h(0)
@@ -1215,7 +1215,7 @@ def test_tdvp_sweeps_hybrid_nn_unchanged() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_tdvp_sweeps_mixed_circuit_regression() -> None:
+def test_sweeps_mixed_regression() -> None:
     """Mixed hybrid circuit: multi-sweep TDVP converges toward Qiskit on long-range gates.
 
     Nearest-neighbor gates use TEBD; long-range gates use symmetric TDVP substeps.
@@ -1251,7 +1251,7 @@ def test_tdvp_sweeps_mixed_circuit_regression() -> None:
 # --- apply_two_qubit_gate_tebd ---
 
 
-def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
+def test_tebd_lr_cx() -> None:
     """TEBD applies CX(1, 3) on |1111> via SWAP insertion."""
     length = 4
     mps = MPS(length, state="ones")
@@ -1272,7 +1272,7 @@ def test_apply_two_qubit_gate_tebd_direct_cx_long_range() -> None:
             np.testing.assert_allclose(np.abs(element), 0, atol=1e-10)
 
 
-def test_apply_two_qubit_gate_tebd_direct_cnot() -> None:
+def test_tebd_lr_cnot() -> None:
     """Direct TEBD helper matches CX on |11> (same check as apply_two_qubit_gate)."""
     length = 4
     mps = MPS(length, state="ones")
@@ -1299,7 +1299,7 @@ def test_apply_two_qubit_gate_tebd_direct_cnot() -> None:
 
 @pytest.mark.parametrize(("gate_name", "sites"), [("rzz", (0, 1)), ("rxx", (0, 1)), ("cx", (0, 1))])
 @pytest.mark.tdvp_regression
-def test_hybrid_tdvp_nn_uses_tebd(gate_name: str, sites: tuple[int, int]) -> None:
+def test_hybrid_nn_uses_tebd(gate_name: str, sites: tuple[int, int]) -> None:
     """Nearest-neighbor gates stay on TEBD/SVD in hybrid tdvp mode."""
     length = 4
     qc = QuantumCircuit(length)
@@ -1347,7 +1347,7 @@ def test_zip_up_nearest_neighbor_matches_tebd() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_long_range_tebd_matches_tdvp() -> None:
+def test_tebd_lr_vs_tdvp() -> None:
     """TEBD with SWAP insertion matches all-TDVP on a long-range gate."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1359,7 +1359,7 @@ def test_long_range_tebd_matches_tdvp() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_long_range_tebd_matches_qiskit_statevector() -> None:
+def test_tebd_lr_vs_qiskit() -> None:
     """TEBD with SWAP insertion matches Qiskit Statevector on small circuits."""
     qc = QuantumCircuit(4)
     qc.rx(0.37, 0)
@@ -1379,7 +1379,7 @@ def test_long_range_tebd_matches_qiskit_statevector() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_mixed_circuit_tebd_matches_tdvp() -> None:
+def test_tebd_mixed_vs_tdvp() -> None:
     """TEBD with SWAPs on a circuit mixing NN and long-range gates."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1416,7 +1416,7 @@ def test_tebd_truncation_respects_max_bond_dim() -> None:
 # --- apply_long_range_gate_mpo ---
 
 
-def test_apply_long_range_gate_mpo_direct_cx_long_range() -> None:
+def test_mpo_lr_cx() -> None:
     """Zip-up applies CX(1, 3) on |1111> via extended gate MPO."""
     length = 4
     mps = MPS(length, state="ones")
@@ -1439,7 +1439,7 @@ def test_apply_long_range_gate_mpo_direct_cx_long_range() -> None:
 
 @pytest.mark.parametrize("gate_mode", ["swaps", "mpo", "tdvp"])
 @pytest.mark.tdvp_regression
-def test_lr_gate_modes_high_fidelity_and_cap(gate_mode: str) -> None:
+def test_lr_modes_fid_cap(gate_mode: str) -> None:
     """swaps, MPO, and hybrid TDVP all run accurately on a small LR gate."""
     length = 6
     theta = 0.3
@@ -1471,7 +1471,7 @@ def test_lr_gate_modes_high_fidelity_and_cap(gate_mode: str) -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_long_range_zip_up_matches_tdvp() -> None:
+def test_zip_lr_vs_tdvp() -> None:
     """Long-range gates use MPO mode and match full-tdvp."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1483,7 +1483,7 @@ def test_long_range_zip_up_matches_tdvp() -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_long_range_zip_up_matches_tebd() -> None:
+def test_zip_lr_vs_tebd() -> None:
     """Zip-up on long-range gates matches SWAP+TEBD on small circuits."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1555,7 +1555,7 @@ def test_nearest_neighbor_gate_modes_agree(gate_mode: str) -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_long_range_swap_path_reversed_control_target() -> None:
+def test_swaps_lr_reversed_ctrl() -> None:
     """TEBD swap routing handles gates with descending site indices (``cx(3, 0)``)."""
     qc = QuantumCircuit(4)
     qc.h(0)
@@ -1897,7 +1897,7 @@ def test_bell_state_sanity() -> None:
     np.testing.assert_allclose(probs[1] + probs[2], 0.0, atol=1e-10)
 
 
-def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
+def test_statevector_vs_qiskit() -> None:
     """Lock down YAQS dense-vector convention against Qiskit on non-symmetric circuits.
 
     This guards qubit ordering conventions in YAQS' digital backend against Qiskit.
@@ -1934,7 +1934,7 @@ def test_statevector_matches_qiskit_on_nonsymmetric_probes() -> None:
         assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
 
 
-def test_observables_match_qiskit_statevector_qubit_ordering() -> None:
+def test_observables_vs_qiskit() -> None:
     """Digital observable expectations match Qiskit (guards qubit ordering)."""
 
     def qiskit_single_pauli_expectation(qc: QuantumCircuit, site: int, op: str) -> float:
@@ -1974,7 +1974,7 @@ def test_observables_match_qiskit_statevector_qubit_ordering() -> None:
         assert got == pytest.approx(expected, abs=1e-10)
 
 
-def test_statevector_observables_match_qiskit_paulis() -> None:
+def test_pauli_obs_vs_qiskit() -> None:
     """Observables computed from YAQS dense vector match Qiskit Pauli placement."""
 
     def qiskit_single_pauli_expectation_from_vec(vec: np.ndarray, site: int, op: str) -> float:
@@ -2017,7 +2017,7 @@ def test_statevector_observables_match_qiskit_paulis() -> None:
         assert got == pytest.approx(expected, abs=1e-10)
 
 
-def test_expectation_values_align_with_result_observables_order() -> None:
+def test_obs_order_aligned() -> None:
     """Ensure expectation_values[i] corresponds to result.observables[i] (user order)."""
     qc = QuantumCircuit(3)
     qc.rx(0.37, 0)
