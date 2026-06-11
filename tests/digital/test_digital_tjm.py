@@ -13,6 +13,7 @@ Test sections follow the public API order in ``digital_tjm.py``.
 from __future__ import annotations
 
 import copy
+import math
 from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
@@ -29,6 +30,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
+from mqt.yaqs.core.methods.tdvp import tdvp
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
     apply_single_qubit_gate,
@@ -45,6 +47,7 @@ from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 from tests.core.methods.tdvp.conftest import (
     NORM_TOL,
     PLUS_LR_RZZ_GLOBAL_FID,
+    Z_TOL,
     _apply_lr_gate,
     _assert_z_observables_match,
     _fidelity,
@@ -53,6 +56,7 @@ from tests.core.methods.tdvp.conftest import (
     _qiskit_plus_rzz_reference,
     _run_circuit,
     _tdvp_params,
+    _z_expectation,
     assert_mps_bond_invariants,
 )
 from tests.digital.conftest import _physical_second_schmidt, _run_strong_noiseless
@@ -393,6 +397,166 @@ def _mixed_small_circuit(length: int) -> QuantumCircuit:
     return qc
 
 
+def _mixed_small_zeros_circuit(length: int = 10) -> QuantumCircuit:
+    """NN+LR circuit on |0⟩^L with LR CX at topological gate index 2.
+
+    Returns:
+        Benchmark circuit for hybrid TDVP replay regressions.
+    """
+    qc = QuantumCircuit(length)
+    qc.h(0)
+    qc.cx(4, 5)
+    qc.cx(0, length - 1)
+    qc.rzz(_RZZ_ANGLE, 0, length - 1)
+    return qc
+
+
+def _grid_shape(num_qubits: int) -> tuple[int, int]:
+    for nrow in range(int(math.sqrt(num_qubits)), 0, -1):
+        if num_qubits % nrow == 0:
+            return nrow, num_qubits // nrow
+    return 1, num_qubits
+
+
+def _grid_index(row: int, col: int, ncol: int) -> int:
+    return row * ncol + col
+
+
+def _ising_2d_mapped_circuit(length: int = 6) -> QuantumCircuit:
+    """2D Ising-style RZZ layers mapped onto a 1D chain.
+
+    Returns:
+        Benchmark circuit for hybrid TDVP replay regressions.
+    """
+    qc = QuantumCircuit(length)
+    nrow, ncol = _grid_shape(length)
+    for r in range(nrow):
+        for c in range(ncol):
+            qc.h(_grid_index(r, c, ncol))
+    for r in range(nrow):
+        for c in range(ncol - 1):
+            qc.rzz(_RZZ_ANGLE, _grid_index(r, c, ncol), _grid_index(r, c + 1, ncol))
+    for r in range(nrow - 1):
+        for c in range(ncol):
+            qc.rzz(_RZZ_ANGLE, _grid_index(r, c, ncol), _grid_index(r + 1, c, ncol))
+    return qc
+
+
+def _hybrid_tdvp_replay_params(*, max_bond_dim: int, tdvp_sweeps: int = 1) -> StrongSimParams:
+    """StrongSimParams for hybrid ``gate_mode='tdvp'`` circuit replay.
+
+    Returns:
+        Simulation parameters routing LR gates through ``apply_two_qubit_gate_tdvp``.
+    """
+    return StrongSimParams(
+        preset="exact",
+        get_state=True,
+        gate_mode="tdvp",
+        max_bond_dim=max_bond_dim,
+        tdvp_sweeps=tdvp_sweeps,
+        tdvp_mode="2site",
+        svd_threshold=1e-10,
+        krylov_tol=1e-12,
+    )
+
+
+def _replay_hybrid_tdvp_through_gate(qc: QuantumCircuit, num_gates: int, *, params: StrongSimParams) -> State:
+    """Replay a circuit gate-by-gate through hybrid TDVP routing.
+
+    Returns:
+        State after applying the first ``num_gates`` topological operations.
+    """
+    state = State(qc.num_qubits, initial="zeros")
+    dag = circuit_to_dag(qc)
+    for gate_index, node in enumerate(dag.topological_op_nodes()):
+        if gate_index >= num_gates:
+            break
+        if len(node.qargs) == 1:
+            apply_single_qubit_gate(state.mps, node)
+        else:
+            apply_two_qubit_gate(state.mps, node, params)
+    return state
+
+
+def _ladder_pairs(length: int) -> list[tuple[int, int]]:
+    pairs: list[tuple[int, int]] = []
+    for left in range(length // 2):
+        right = length - 1 - left
+        if left < right:
+            pairs.append((left, right))
+    return pairs
+
+
+def _exact_ladder_reference(length: int, num_gates: int) -> np.ndarray:
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    for site_a, site_b in _ladder_pairs(length)[:num_gates]:
+        qc.rzz(_RZZ_ANGLE, site_a, site_b)
+    return np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+
+def _apply_ladder_gates(state: State, *, max_bond_dim: int | None, tdvp_sweeps: int) -> None:
+    params = _tdvp_params(max_bond_dim=max_bond_dim, tdvp_sweeps=tdvp_sweeps)
+    for site_a, site_b in _ladder_pairs(state.length):
+        gate = GateLibrary.rzz([_RZZ_ANGLE])
+        gate.set_sites(site_a, site_b)
+        if abs(site_a - site_b) == 1:
+            apply_two_qubit_gate_tebd(state.mps, gate, params)
+        else:
+            apply_two_qubit_gate_tdvp(state.mps, gate, params)
+
+
+PRODUCTION_LENGTHS = (6, 10, 14)
+ROUND_TRIP_TOL = 1e-10
+ISING_TARGET_GATE = 12
+ISING_CHI = 16
+MIXED_SMALL_ZEROS_LENGTH = 10
+MIXED_SMALL_TARGET_GATE = 2
+LADDER_INVARIANT_LENGTH = 10
+LADDER_INVARIANT_CHI = 64
+LADDER_INVARIANT_SWEEPS = 1
+INVARIANT_TOL = 1e-10
+SQRT2 = float(np.sqrt(2.0))
+
+
+def _apply_production_lr_rzz(
+    length: int,
+    *,
+    theta: float = _RZZ_ANGLE,
+    max_bond_dim: int | None = None,
+    tdvp_sweeps: int = 1,
+) -> np.ndarray:
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, length - 1)
+    out = copy.deepcopy(State(length, initial="x+").mps)
+    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=max_bond_dim, tdvp_sweeps=tdvp_sweeps))
+    return out.to_vec()
+
+
+def _apply_no_support_baseline(
+    length: int,
+    *,
+    theta: float = _RZZ_ANGLE,
+    max_bond_dim: int | None = None,
+    tdvp_sweeps: int = 1,
+) -> np.ndarray:
+    """Window-local ``tdvp()`` path for equivalence checks against production LR routing.
+
+    Returns:
+        State vector after applying the gate.
+    """
+    gate = GateLibrary.rzz([theta])
+    gate.set_sites(0, length - 1)
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    short_state, short_mpo, window = apply_window(prep, mpo, first_site, last_site, 1)
+    params = _tdvp_params(max_bond_dim=max_bond_dim, tdvp_sweeps=tdvp_sweeps)
+    tdvp(short_state, short_mpo, params)
+    for i in range(window[0], window[1] + 1):
+        prep.tensors[i] = short_state.tensors[i - window[0]]
+    return prep.to_vec()
+
+
 @pytest.mark.tdvp_regression
 def test_lr_gate_routes_through_two_site_not_dynamic() -> None:
     """Long-range digital TDVP window evolution uses the 2-site kernel."""
@@ -539,6 +703,68 @@ def test_shifted_internal_pair_lr_rzz_z_observables() -> None:
     assert_mps_bond_invariants(out)
 
 
+@pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
+@pytest.mark.tdvp_regression
+def test_single_lr_rzz_spectator_z_near_zero(length: int) -> None:
+    """Endpoint RZZ on |+⟩^L: interior |⟨Z_i⟩| ≈ 0 for spectators."""
+    vec = _apply_production_lr_rzz(length, max_bond_dim=None, tdvp_sweeps=1)
+    for site in range(1, length - 1):
+        assert abs(_z_expectation(vec, site)) < Z_TOL
+
+
+@pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
+@pytest.mark.tdvp_regression
+def test_single_lr_rzz_bond_dim_not_inflated(length: int) -> None:
+    """Bond dimension on crossed path stays minimal for endpoint |+⟩ RZZ."""
+    gate = GateLibrary.rzz([_RZZ_ANGLE])
+    gate.set_sites(0, length - 1)
+    out = copy.deepcopy(State(length, initial="x+").mps)
+    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
+    assert _max_bond(out) <= 2
+
+
+@pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
+@pytest.mark.tdvp_regression
+def test_lr_rzz_round_trip_restores_plus_state(length: int) -> None:
+    """RZZ(theta) followed by RZZ(-theta) returns to |+⟩^L."""
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    gate_fwd = GateLibrary.rzz([_RZZ_ANGLE])
+    gate_fwd.set_sites(0, length - 1)
+    gate_bwd = GateLibrary.rzz([-_RZZ_ANGLE])
+    gate_bwd.set_sites(0, length - 1)
+    params = _tdvp_params(max_bond_dim=None, tdvp_sweeps=1)
+    apply_two_qubit_gate_tdvp(prep, gate_fwd, params)
+    apply_two_qubit_gate_tdvp(prep, gate_bwd, params)
+    plus = State(length, initial="x+").mps.to_vec()
+    assert _fidelity(plus, prep.to_vec()) > 1.0 - ROUND_TRIP_TOL
+
+
+@pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
+@pytest.mark.tdvp_regression
+def test_lr_rzz_round_trip_restores_z_observables(length: int) -> None:
+    """Round-trip LR RZZ restores all single-site ⟨Z_i⟩."""
+    prep = copy.deepcopy(State(length, initial="x+").mps)
+    gate_fwd = GateLibrary.rzz([_RZZ_ANGLE])
+    gate_fwd.set_sites(0, length - 1)
+    gate_bwd = GateLibrary.rzz([-_RZZ_ANGLE])
+    gate_bwd.set_sites(0, length - 1)
+    params = _tdvp_params(max_bond_dim=None, tdvp_sweeps=1)
+    apply_two_qubit_gate_tdvp(prep, gate_fwd, params)
+    apply_two_qubit_gate_tdvp(prep, gate_bwd, params)
+    vec = prep.to_vec()
+    for site in range(length):
+        assert abs(_z_expectation(vec, site)) < Z_TOL
+
+
+@pytest.mark.parametrize("length", PRODUCTION_LENGTHS)
+@pytest.mark.tdvp_regression
+def test_production_matches_no_support_baseline(length: int) -> None:
+    """Production LR path matches direct window-local ``tdvp()``."""
+    prod = _apply_production_lr_rzz(length, max_bond_dim=64, tdvp_sweeps=1)
+    baseline = _apply_no_support_baseline(length, max_bond_dim=64, tdvp_sweeps=1)
+    assert _fidelity(prod, baseline) == pytest.approx(1.0, abs=1e-12)
+
+
 @pytest.mark.tdvp_regression
 def test_haar_random_state_no_regression() -> None:
     """Haar-random states remain accurate under long-range 2TDVP gates."""
@@ -672,6 +898,64 @@ def test_fixed_chi_rzz_lr_ladder_no_shape_error() -> None:
 
 
 @pytest.mark.tdvp_regression
+def test_rzz_lr_ladder_enforces_cap_when_uncapped_exceeds() -> None:
+    """When uncapped ladder reaches χ above the cap, capped evolution differs and respects χ."""
+    length = LADDER_INVARIANT_LENGTH
+    prep = _prep_state("plus", length)
+    uncapped = _run_circuit(copy.deepcopy(prep), _rzz_lr_ladder_circuit(length), max_bond_dim=64, sweeps=1)
+    capped = _run_circuit(copy.deepcopy(prep), _rzz_lr_ladder_circuit(length), max_bond_dim=2, sweeps=1)
+
+    assert _max_bond(uncapped) > 2
+    assert _max_bond(capped) <= 2
+    assert abs(float(np.linalg.norm(capped.to_vec())) - 1.0) < NORM_TOL
+    assert _fidelity(uncapped.to_vec(), capped.to_vec()) < 0.99
+
+
+@pytest.mark.tdvp_regression
+def test_rzz_lr_ladder_fixed_chi_matches_uncapped_when_below_cap() -> None:
+    """L=10 |+⟩ ladder: χ=64 matches χ=None when no bond reaches the cap."""
+    uncapped = State(LADDER_INVARIANT_LENGTH, initial="x+")
+    capped = State(LADDER_INVARIANT_LENGTH, initial="x+")
+    _apply_ladder_gates(uncapped, max_bond_dim=None, tdvp_sweeps=LADDER_INVARIANT_SWEEPS)
+    _apply_ladder_gates(capped, max_bond_dim=LADDER_INVARIANT_CHI, tdvp_sweeps=LADDER_INVARIANT_SWEEPS)
+
+    assert _max_bond(uncapped.mps) <= LADDER_INVARIANT_CHI
+    assert _max_bond(capped.mps) <= LADDER_INVARIANT_CHI
+
+    exact = _exact_ladder_reference(LADDER_INVARIANT_LENGTH, len(_ladder_pairs(LADDER_INVARIANT_LENGTH)))
+    assert _fidelity(exact, uncapped.mps.to_vec()) > 0.9
+    assert _fidelity(uncapped.mps.to_vec(), capped.mps.to_vec()) == pytest.approx(1.0, abs=INVARIANT_TOL)
+
+
+@pytest.mark.parametrize("gate_index", range(5))
+@pytest.mark.tdvp_regression
+def test_rzz_lr_ladder_per_gate_fixed_chi_matches_uncapped(gate_index: int) -> None:
+    """Per-gate partial ladder: χ=64 matches χ=None while bonds stay below cap."""
+    uncapped = State(LADDER_INVARIANT_LENGTH, initial="x+")
+    capped = State(LADDER_INVARIANT_LENGTH, initial="x+")
+    params_u = _tdvp_params(max_bond_dim=None, tdvp_sweeps=LADDER_INVARIANT_SWEEPS)
+    params_c = _tdvp_params(max_bond_dim=LADDER_INVARIANT_CHI, tdvp_sweeps=LADDER_INVARIANT_SWEEPS)
+
+    for idx, (site_a, site_b) in enumerate(_ladder_pairs(LADDER_INVARIANT_LENGTH)):
+        if idx > gate_index:
+            break
+        gate = GateLibrary.rzz([_RZZ_ANGLE])
+        gate.set_sites(site_a, site_b)
+        for state, params in ((uncapped, params_u), (capped, params_c)):
+            if abs(site_a - site_b) == 1:
+                apply_two_qubit_gate_tebd(state.mps, gate, params)
+            else:
+                apply_two_qubit_gate_tdvp(state.mps, gate, params)
+
+    ref = _exact_ladder_reference(LADDER_INVARIANT_LENGTH, gate_index + 1)
+    assert _max_bond(capped.mps) <= LADDER_INVARIANT_CHI
+    assert _fidelity(ref, uncapped.mps.to_vec()) == pytest.approx(
+        _fidelity(ref, capped.mps.to_vec()), abs=INVARIANT_TOL
+    )
+    assert _fidelity(uncapped.mps.to_vec(), capped.mps.to_vec()) == pytest.approx(1.0, abs=INVARIANT_TOL)
+
+
+@pytest.mark.tdvp_regression
 def test_fixed_chi_mixed_small_respects_cap() -> None:
     """Mixed NN+LR circuits respect χ under hybrid TDVP routing."""
     length = 8
@@ -680,6 +964,55 @@ def test_fixed_chi_mixed_small_respects_cap() -> None:
     assert _max_bond(out) <= 8
     assert out.norm() == pytest.approx(1.0, abs=NORM_TOL)
     assert_mps_bond_invariants(out, max_bond_dim=8)
+
+
+@pytest.mark.tdvp_regression
+def test_ising_geometry_gate12_norm_stays_unit() -> None:
+    """Gate 12 LR RZZ under hybrid gate_mode='tdvp' must not inflate global norm to sqrt(2)."""
+    qc = _ising_2d_mapped_circuit()
+    params = _hybrid_tdvp_replay_params(max_bond_dim=ISING_CHI)
+    state = _replay_hybrid_tdvp_through_gate(qc, ISING_TARGET_GATE + 1, params=params)
+    norm = float(state.mps.norm())
+    vec_norm = float(np.linalg.norm(state.mps.to_vec()))
+    assert abs(norm - 1.0) < NORM_TOL, f"scalar norm {norm}"
+    assert abs(vec_norm - 1.0) < NORM_TOL, f"vec norm {vec_norm}"
+    assert abs(vec_norm - SQRT2) > 0.1
+
+
+@pytest.mark.tdvp_regression
+def test_ising_geometry_full_circuit_observables() -> None:
+    """Full ising_2d_mapped zeros circuit stays near exact under hybrid gate_mode='tdvp'."""
+    qc = _ising_2d_mapped_circuit()
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    num_gates = len(list(circuit_to_dag(qc).topological_op_nodes()))
+    params = _hybrid_tdvp_replay_params(max_bond_dim=ISING_CHI)
+    state = _replay_hybrid_tdvp_through_gate(qc, num_gates, params=params)
+    assert abs(float(state.mps.norm()) - 1.0) < NORM_TOL
+    assert _fidelity(ref, state.mps.to_vec()) > 0.94
+
+
+@pytest.mark.tdvp_regression
+def test_mixed_small_gate2_norm_stays_unit() -> None:
+    """Gate 2 LR CX under hybrid gate_mode='tdvp' must preserve global norm."""
+    qc = _mixed_small_zeros_circuit()
+    params = _hybrid_tdvp_replay_params(max_bond_dim=16)
+    state = _replay_hybrid_tdvp_through_gate(qc, MIXED_SMALL_TARGET_GATE + 1, params=params)
+    norm = float(state.mps.norm())
+    vec_norm = float(np.linalg.norm(state.mps.to_vec()))
+    assert abs(norm - 1.0) < NORM_TOL, f"scalar norm {norm}"
+    assert abs(vec_norm - 1.0) < NORM_TOL, f"vec norm {vec_norm}"
+
+
+@pytest.mark.parametrize("chi", [16, 32])
+@pytest.mark.tdvp_regression
+def test_mixed_small_zeros_full_circuit(chi: int) -> None:
+    """Full mixed_small L=10 zeros circuit matches exact reference under hybrid gate_mode='tdvp'."""
+    qc = _mixed_small_zeros_circuit(MIXED_SMALL_ZEROS_LENGTH)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    params = _hybrid_tdvp_replay_params(max_bond_dim=chi)
+    state = _replay_hybrid_tdvp_through_gate(qc, len(list(circuit_to_dag(qc).topological_op_nodes())), params=params)
+    assert abs(float(state.mps.norm()) - 1.0) < NORM_TOL
+    assert _fidelity(ref, state.mps.to_vec()) > 0.99
 
 
 @pytest.mark.parametrize("initial_state", ["plus", "low_depth"])
