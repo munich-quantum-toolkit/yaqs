@@ -770,7 +770,7 @@ def test_lr_rzz_vs_baseline(length: int) -> None:
 
 @pytest.mark.tdvp_regression
 def test_lr_rzz_haar_stable() -> None:
-    """Haar-random states remain accurate under long-range 2TDVP gates."""
+    """Haar-random states: exact ⟨Z_i⟩ and production-level global fidelity under LR RZZ."""
     length = 8
     theta = 0.3
     sites = (0, length - 1)
@@ -782,7 +782,11 @@ def test_lr_rzz_haar_stable() -> None:
     qc.initialize(prep.to_vec().tolist(), range(length))
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    assert _fidelity(ref, out.to_vec()) > 0.98
+
+    _assert_z_observables_match(ref, out.to_vec(), length)
+    assert out.norm() == pytest.approx(1.0, abs=NORM_TOL)
+    assert_mps_bond_invariants(out)
+    assert _fidelity(ref, out.to_vec()) == pytest.approx(PLUS_LR_RZZ_GLOBAL_FID, abs=1e-3)
 
 
 @pytest.mark.parametrize("length", [8, 10])
