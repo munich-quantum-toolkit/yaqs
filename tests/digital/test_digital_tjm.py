@@ -30,10 +30,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
-from mqt.yaqs.core.methods.tdvp.sweep_utils import (
-    _is_fixed_chi_digital,  # noqa: PLC2701
-    _renorm_on_drift,  # noqa: PLC2701
-)
+from mqt.yaqs.core.methods.tdvp.sweep_utils import is_fixed_chi_digital, renorm_on_drift
 from mqt.yaqs.core.methods.tdvp.tdvp import tdvp_window
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
@@ -558,8 +555,8 @@ def _apply_no_support_baseline(
     tdvp_window(short_state, short_mpo, params)
     for i in range(window[0], window[1] + 1):
         prep.tensors[i] = short_state.tensors[i - window[0]]
-    if _is_fixed_chi_digital(params):
-        _renorm_on_drift(prep, params)
+    if is_fixed_chi_digital(params):
+        renorm_on_drift(prep, params)
     return prep.to_vec()
 
 

@@ -25,12 +25,12 @@ from .primitives import (
 )
 from .sweep_utils import (
     _enforce_global_bond_cap,
-    _is_fixed_chi_digital,
     _prepare_substep_dt,
-    _renorm_on_drift,
     _resize_bond,
-    _split_two_site_tdvp,
     _sync_fixed_chi_bond,
+    is_fixed_chi_digital,
+    renorm_on_drift,
+    split_two_site_tdvp,
 )
 
 if TYPE_CHECKING:
@@ -179,7 +179,7 @@ def _two_site_tdvp_sweep(
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
                 merged_tensor,
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
@@ -209,7 +209,7 @@ def _two_site_tdvp_sweep(
             substep_evolution_dt,
             krylov_tol=sim_params.krylov_tol,
         )
-        state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+        state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
             merged_tensor,
             sim_params,
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
@@ -244,7 +244,7 @@ def _two_site_tdvp_sweep(
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
                 merged_tensor,
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
@@ -255,8 +255,8 @@ def _two_site_tdvp_sweep(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
 
-        if apply_drift_renorm and _is_fixed_chi_digital(sim_params):
-            _renorm_on_drift(state, sim_params)
+        if apply_drift_renorm and is_fixed_chi_digital(sim_params):
+            renorm_on_drift(state, sim_params)
 
 
 def _dynamic_tdvp_sweep(
@@ -343,7 +343,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -369,7 +369,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            state.tensors[i], state.tensors[i + 1] = _split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -441,7 +441,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i - 1], state.physical_dimensions[i]]
-            state.tensors[i - 1], state.tensors[i] = _split_two_site_tdvp(
+            state.tensors[i - 1], state.tensors[i] = split_two_site_tdvp(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -461,5 +461,5 @@ def _dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
 
-    if _is_fixed_chi_digital(sim_params):
-        _renorm_on_drift(state, sim_params)
+    if is_fixed_chi_digital(sim_params):
+        renorm_on_drift(state, sim_params)
