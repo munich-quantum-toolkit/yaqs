@@ -112,6 +112,8 @@ error-on-warning = true
 [tool.ty.src]
 exclude = [
     "docs/**",
+    "src/mqt/yaqs/digital/utils/qudit_dag_utils.py",
+    "tests/digital/utils/test_qudit_dag_utils.py",
 ]
 
 

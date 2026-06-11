@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+
+pytest.importorskip("mqt.qudits")
+
 from mqt.qudits.quantum_circuit import QuantumCircuit
 
 from mqt.yaqs.digital.utils.qudit_dag_utils import (
