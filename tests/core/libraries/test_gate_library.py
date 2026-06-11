@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
+from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -343,6 +344,30 @@ def test_gate_u() -> None:
 
     base_gate = BaseGate.u([theta, phi, lam])
     assert_array_equal(gate.matrix, base_gate.matrix)
+
+
+def test_gate_unitary_two_qubit_dense_generator() -> None:
+    """Test Qiskit's generic unitary gate support with a dense two-site generator."""
+    generator = np.array(
+        [
+            [0.2, 0.1 + 0.3j, -0.2j, 0.4],
+            [0.1 - 0.3j, -0.1, 0.25, 0.05j],
+            [0.2j, 0.25, 0.3, -0.15 + 0.1j],
+            [0.4, -0.05j, -0.15 - 0.1j, -0.4],
+        ],
+        dtype=np.complex128,
+    )
+    unitary = expm(-1j * generator)
+    internal_unitary = np.reshape(unitary, (2, 2, 2, 2)).transpose(1, 0, 3, 2).reshape(4, 4)
+
+    gate = GateLibrary.unitary([unitary])
+    gate.set_sites(0, 1)
+
+    assert gate.sites == [0, 1]
+    assert gate.tensor.shape == (2, 2, 2, 2)
+    assert hasattr(gate, "mpo_tensors")
+    assert_allclose(gate.matrix, internal_unitary, atol=1e-12)
+    assert_allclose(expm(-1j * np.asarray(gate.generator, dtype=np.complex128)), internal_unitary, atol=1e-12)
 
 
 def test_gate_cx() -> None:

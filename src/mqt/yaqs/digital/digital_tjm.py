@@ -29,7 +29,7 @@ from ..core.data_structures.simulation_parameters import (
     StrongSimParams,
     WeakSimParams,
 )
-from ..core.libraries.gate_library import BaseGate, GateLibrary
+from ..core.libraries.gate_library import BaseGate, GateLibrary, extend_gate
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
@@ -148,6 +148,14 @@ def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
     state.tensors[gate.sites[0]] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[gate.sites[0]])
 
 
+def _two_site_tensor_lr_order(gate: BaseGate, matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Return a two-site matrix reshaped as a tensor in ascending MPS-site order."""
+    tensor = np.reshape(np.asarray(matrix, dtype=np.complex128), (2, 2, 2, 2))
+    if gate.sites[0] > gate.sites[1]:
+        tensor = np.transpose(tensor, (1, 0, 3, 2))
+    return tensor
+
+
 def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
     """Construct Generator MPO.
 
@@ -161,6 +169,21 @@ def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]
     Returns:
         A tuple containing the constructed MPO, the first site index, and the last site index.
     """
+    if isinstance(gate.generator, np.ndarray):
+        first_site = min(gate.sites[0], gate.sites[1])
+        last_site = max(gate.sites[0], gate.sites[1])
+        generator = np.asarray(gate.generator, dtype=np.complex128)
+        support = extend_gate(_two_site_tensor_lr_order(gate, generator), [first_site, last_site])
+        identity_site = np.eye(2, dtype=np.complex128).reshape(2, 2, 1, 1)
+        tensors = [
+            support[site - first_site] if first_site <= site <= last_site else identity_site.copy()
+            for site in range(length)
+        ]
+
+        mpo = MPO()
+        mpo.custom(tensors, transpose=False)
+        return mpo, first_site, last_site
+
     tensors = []
 
     if gate.sites[0] < gate.sites[1]:

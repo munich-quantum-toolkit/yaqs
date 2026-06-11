@@ -30,9 +30,12 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
+from qiskit.circuit.library import UnitaryGate
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Pauli, Statevector
+from scipy.linalg import expm
 
+import mqt.yaqs.digital.digital_tjm as digital_tjm_backend
 from mqt.yaqs import Simulator
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -685,6 +688,162 @@ def _run_strong_noiseless(
     exp = result.expectation_values[0]
     assert exp is not None
     return float(np.real(exp[0]))
+
+
+def _dense_two_qubit_unitary() -> np.ndarray:
+    """Build a deterministic non-product two-qubit unitary.
+
+    Returns:
+        Dense ``4x4`` unitary matrix.
+    """
+    generator = np.array(
+        [
+            [0.2, 0.1 + 0.3j, -0.2j, 0.4],
+            [0.1 - 0.3j, -0.1, 0.25, 0.05j],
+            [0.2j, 0.25, 0.3, -0.15 + 0.1j],
+            [0.4, -0.05j, -0.15 - 0.1j, -0.4],
+        ],
+        dtype=np.complex128,
+    )
+    return np.asarray(expm(-1j * generator), dtype=np.complex128)
+
+
+def _random_dense_two_qubit_unitary(seed: int, scale: float = 0.35) -> np.ndarray:
+    """Build a deterministic Haar-like dense two-qubit unitary.
+
+    Args:
+        seed: Random seed for the Hermitian generator.
+        scale: Overall generator scale.
+
+    Returns:
+        Dense ``4x4`` unitary matrix.
+    """
+    rng = np.random.default_rng(seed)
+    raw = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    generator = scale * (raw + raw.conj().T) / 2
+    return np.asarray(expm(-1j * generator), dtype=np.complex128)
+
+
+def _unitary_stress_circuit(*, long_range: bool) -> QuantumCircuit:
+    """Build a small circuit with several generic two-qubit unitaries.
+
+    Returns:
+        Circuit used for deterministic stress testing.
+    """
+    qc = QuantumCircuit(4)
+    for layer in range(4):
+        qc.rx(0.11 * (layer + 1), 0)
+        qc.ry(-0.07 * (layer + 1), 1)
+        qc.rz(0.05 * (layer + 1), 2)
+        if long_range:
+            qc.append(UnitaryGate(_random_dense_two_qubit_unitary(100 + layer)), [0, 3])
+        else:
+            qc.append(UnitaryGate(_random_dense_two_qubit_unitary(100 + layer)), [0, 1])
+        qc.append(UnitaryGate(_random_dense_two_qubit_unitary(200 + layer)), [1, 2])
+        qc.append(UnitaryGate(_random_dense_two_qubit_unitary(300 + layer)), [2, 3])
+    return qc
+
+
+@pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp", "mpo"])
+def test_qiskit_unitary_gate_matches_statevector(gate_mode: str) -> None:
+    """A generic Qiskit ``UnitaryGate`` is natively supported by digital TJM."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.append(UnitaryGate(_dense_two_qubit_unitary()), [0, 1])
+    qc.rz(0.17, 1)
+
+    vec = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode), get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp", "mpo"])
+def test_long_range_qiskit_unitary_gate_matches_statevector(gate_mode: str) -> None:
+    """Long-range generic ``UnitaryGate`` support works through TDVP and MPO paths."""
+    qc = QuantumCircuit(3)
+    qc.rx(0.23, 1)
+    qc.append(UnitaryGate(_dense_two_qubit_unitary()), [0, 2])
+    qc.ry(-0.31, 0)
+
+    vec = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode), get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp", "mpo"])
+def test_reversed_qargs_qiskit_unitary_gate_matches_statevector(gate_mode: str) -> None:
+    """Generic ``UnitaryGate`` supports Qiskit qargs in descending site order."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    qc.append(UnitaryGate(_random_dense_two_qubit_unitary(300)), [3, 2])
+    qc.ry(0.19, 1)
+
+    vec = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode), get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["tdvp", "full-tdvp"])
+def test_nearest_qiskit_unitary_gate_tdvp_stress_matches_statevector(gate_mode: str) -> None:
+    """Stress nearest-neighbor generic-unitary TDVP paths against Qiskit."""
+    qc = _unitary_stress_circuit(long_range=False)
+
+    vec = _run_strong_noiseless(qc, gate_mode=cast("GateMode", gate_mode), get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=5e-10)
+
+
+def test_long_range_qiskit_unitary_gate_tdvp_stress_characterizes_accuracy() -> None:
+    """Stress long-range generic-unitary TDVP paths against Qiskit."""
+    qc = _unitary_stress_circuit(long_range=True)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    dense_vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+    full_dense_vec = _run_strong_noiseless(qc, gate_mode="full-tdvp", get_state=True)
+    assert isinstance(dense_vec, np.ndarray)
+    assert isinstance(full_dense_vec, np.ndarray)
+
+    dense_fidelity = _fidelity(ref, dense_vec)
+    full_dense_fidelity = _fidelity(ref, full_dense_vec)
+    assert np.isfinite(dense_fidelity)
+    assert np.isfinite(full_dense_fidelity)
+    assert 0.0 <= dense_fidelity <= 1.0 + 1e-12
+    assert full_dense_fidelity == pytest.approx(dense_fidelity, abs=1e-12)
+
+
+def test_dense_log_unitary_gate_applies_noise_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The dense-log TDVP path applies noise once for the original ``UnitaryGate``."""
+    calls = {"dissipation": 0, "jump": 0}
+
+    def count_dissipation(*_args: object, **_kwargs: object) -> None:
+        calls["dissipation"] += 1
+
+    def count_jump(state: MPS, *_args: object, **_kwargs: object) -> MPS:
+        calls["jump"] += 1
+        return state
+
+    monkeypatch.setattr(digital_tjm_backend, "apply_dissipation", count_dissipation)
+    monkeypatch.setattr(digital_tjm_backend, "stochastic_process", count_jump)
+
+    qc = QuantumCircuit(2)
+    qc.append(UnitaryGate(_dense_two_qubit_unitary()), [0, 1])
+    noise_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.01},
+        {"name": "pauli_x", "sites": [1], "strength": 0.01},
+    ])
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        gate_mode="full-tdvp",
+        preset="exact",
+    )
+
+    digital_tjm((0, MPS(2, state="zeros"), noise_model, sim_params, qc))
+
+    assert calls == {"dissipation": 1, "jump": 1}
 
 
 @pytest.mark.parametrize("gate_mode", ["tdvp", "swaps"])

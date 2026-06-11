@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy.linalg import logm
 
 from .. import linalg
 
@@ -434,6 +435,18 @@ class BaseGate:
             An instance of the U2 gate.
         """
         return U2(params)
+
+    @classmethod
+    def unitary(cls, params: list[Parameter]) -> Unitary:
+        """Returns the generic unitary gate.
+
+        Args:
+            params: The unitary matrix parameter.
+
+        Returns:
+            An instance of the generic unitary gate.
+        """
+        return Unitary(params)
 
     @classmethod
     def cx(cls) -> CX:
@@ -965,6 +978,52 @@ class U(BaseGate):
             ],
         ])
         super().__init__(mat)
+
+
+class Unitary(BaseGate):
+    """Class representing a generic one- or two-qubit unitary gate."""
+
+    name = "unitary"
+
+    def __init__(self, params: list[Parameter]) -> None:
+        """Initializes the gate from a dense unitary matrix.
+
+        Args:
+            params: A list containing a single ``2x2`` or ``4x4`` unitary matrix.
+
+        Raises:
+            ValueError: If the gate is not one- or two-qubit, or if the matrix is not unitary.
+        """
+        if len(params) != 1:
+            msg = "UnitaryGate expects exactly one matrix parameter."
+            raise ValueError(msg)
+
+        qiskit_mat = np.asarray(params[0], dtype=np.complex128)
+        if qiskit_mat.shape not in {(2, 2), (4, 4)}:
+            msg = f"UnitaryGate supports only 2x2 or 4x4 matrices, got shape {qiskit_mat.shape}."
+            raise ValueError(msg)
+        if not np.allclose(
+            qiskit_mat.conj().T @ qiskit_mat, np.eye(qiskit_mat.shape[0], dtype=np.complex128), atol=1e-10
+        ):
+            msg = "UnitaryGate matrix must be unitary."
+            raise ValueError(msg)
+
+        self.qiskit_matrix = qiskit_mat
+        mat = qiskit_mat
+        if qiskit_mat.shape == (4, 4):
+            mat = np.reshape(qiskit_mat, (2, 2, 2, 2)).transpose(1, 0, 3, 2).reshape(4, 4)
+
+        super().__init__(mat)
+        if self.interaction == 2:
+            generator = 1j * logm(mat)
+            self.generator = np.asarray((generator + generator.conj().T) / 2, dtype=np.complex128)
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Sets the sites for the gate and prepares two-site tensor data."""
+        super().set_sites(*sites)
+        if self.interaction == 2:
+            self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+            self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
 
 class CX(BaseGate):
@@ -1587,6 +1646,7 @@ class GateLibrary:
         rz: Class for rotation about the Z-axis.
         u:  Class for the generic single-qubit U gate.
         u2: Class for the U2 (fixed-θ,φ) single-qubit gate.
+        unitary: Class for Qiskit's generic dense unitary gate.
 
         cx: Class for the controlled-NOT (CNOT) gate.
         cz: Class for the controlled-Z gate.
@@ -1628,6 +1688,7 @@ class GateLibrary:
     rz = Rz
     u = U
     u2 = U2
+    unitary = Unitary
 
     cx = CX
     cz = CZ
