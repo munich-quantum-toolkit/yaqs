@@ -411,7 +411,7 @@ def test_fixed_chi_2site_capped_sweep() -> None:
 
 @pytest.mark.tdvp_regression
 def test_dynamic_digital_fixed_chi_renorm() -> None:
-    """Fixed-χ digital dynamic TDVP runs end-of-sweep drift renorm."""
+    """Fixed-χ dynamic TDVP on a digital window runs end-of-sweep drift renorm."""
     length = 4
     gate = GateLibrary.rzz([0.2])
     gate.set_sites(0, length - 1)
@@ -425,6 +425,8 @@ def test_dynamic_digital_fixed_chi_renorm() -> None:
         svd_threshold=1e-10,
         krylov_tol=1e-12,
     )
-    apply_two_qubit_gate_tdvp(prep, gate, params)
-    assert prep.get_max_bond() <= 2
-    assert prep.norm() == pytest.approx(1.0, abs=1e-8)
+    mpo, first_site, last_site = construct_generator_mpo(gate, length)
+    short_state, short_mpo, _window = apply_window(prep, mpo, first_site, last_site, 1)
+    tdvp(short_state, short_mpo, params)
+    assert short_state.get_max_bond() <= 2
+    assert short_state.norm() == pytest.approx(1.0, abs=1e-8)
