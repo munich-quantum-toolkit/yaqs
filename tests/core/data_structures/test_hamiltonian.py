@@ -20,14 +20,17 @@ from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-from tests.private_access import call_private
 
 
 def _blank_hamiltonian(**attrs: object) -> Hamiltonian:
     """Construct an uninitialized Hamiltonian for error-path tests.
 
+    Args:
+        **attrs: Keyword attributes to set on the returned instance (``name=value``).
+
     Returns:
         A Hamiltonian instance with ``attrs`` set via :func:`setattr`.
+
     """
     h = Hamiltonian.__new__(Hamiltonian)
     for name, value in attrs.items():
@@ -155,7 +158,7 @@ def test_encode_sparse_raises_without_data() -> None:
         _sparse_matrix=None,
     )
     with pytest.raises(ValueError, match="Cannot build sparse matrix"):
-        call_private(h, "_encode", "sparse")
+        h._encode("sparse")
 
 
 def test_encode_dense_raises_without_data() -> None:
@@ -168,7 +171,7 @@ def test_encode_dense_raises_without_data() -> None:
         _sparse_matrix=None,
     )
     with pytest.raises(ValueError, match="Cannot build dense matrix"):
-        call_private(h, "_encode", "dense")
+        h._encode("dense")
 
 
 def test_ensure_encoded_mpo_idempotent_when_already_materialized() -> None:
@@ -354,7 +357,7 @@ def test_build_mpo_raises_without_tensors() -> None:
         _sparse_matrix=None,
     )
     with pytest.raises(ValueError, match="No MPO specification available"):
-        call_private(h, "_build_mpo")
+        h._build_mpo()
 
 
 def test_to_sparse_matrix_from_dense() -> None:
@@ -381,7 +384,7 @@ def test_build_mpo_raises_for_matrix_only() -> None:
     """Cannot build MPO from dense-only specification."""
     h = Hamiltonian(matrix=np.eye(4, dtype=np.complex128))
     with pytest.raises(ValueError, match="Cannot build an MPO from matrix"):
-        call_private(h, "_build_mpo")
+        h._build_mpo()
 
 
 def test_run_rejects_mpo_hamiltonian_with_mps_state() -> None:

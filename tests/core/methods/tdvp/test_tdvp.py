@@ -21,7 +21,7 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp import tdvp
-from mqt.yaqs.core.methods.tdvp.tdvp import _run_sweeps, evolve_window  # noqa: PLC2701
+from mqt.yaqs.core.methods.tdvp.tdvp import _run_sweeps, evolve_window
 
 
 def test_run_sweeps_invokes_substeps() -> None:
@@ -159,6 +159,26 @@ def test_evolve_window_no_drift_renorm() -> None:
         evolve_window(state, H, sim_params)
         mock_two.assert_called_once()
         assert mock_two.call_args.kwargs.get("drift_renorm") is False
+
+
+def test_tdvp_rejects_invalid_tdvp_sweeps_at_runtime() -> None:
+    """Mutated tdvp_sweeps below one fails fast in the sweep runner."""
+    state = MPS(4, state="zeros")
+    hamiltonian = MPO.ising(4, 1.0, 0.5)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params.tdvp_sweeps = 0
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        tdvp(state, hamiltonian, sim_params)
+
+
+def test_tdvp_rejects_unknown_tdvp_mode_at_runtime() -> None:
+    """Mutated tdvp_mode outside the supported set raises instead of falling through."""
+    state = MPS(4, state="zeros")
+    hamiltonian = MPO.ising(4, 1.0, 0.5)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params.tdvp_mode = "invalid"  # ty: ignore[invalid-assignment]
+    with pytest.raises(ValueError, match="tdvp_mode"):
+        tdvp(state, hamiltonian, sim_params)
 
 
 def test_dynamic_fallback_1site() -> None:

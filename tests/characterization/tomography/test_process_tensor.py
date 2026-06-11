@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho  # noqa: PLC2701
+from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

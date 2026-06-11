@@ -14,12 +14,12 @@ import pytest
 import scipy.sparse
 
 from mqt.yaqs.analog.utils import (
-    _embed_observable_dense,  # noqa: PLC2701
-    _embed_observable_sparse,  # noqa: PLC2701
-    _embed_operator_dense,  # noqa: PLC2701
-    _embed_operator_sparse,  # noqa: PLC2701
-    _kron_all_dense,  # noqa: PLC2701
-    _kron_all_sparse,  # noqa: PLC2701
+    _embed_observable_dense,
+    _embed_observable_sparse,
+    _embed_operator_dense,
+    _embed_operator_sparse,
+    _kron_all_dense,
+    _kron_all_sparse,
 )
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 

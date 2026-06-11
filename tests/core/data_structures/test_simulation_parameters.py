@@ -33,11 +33,10 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     Observable,
     StrongSimParams,
     WeakSimParams,
-    _validate_tdvp_sweeps,  # noqa: PLC2701
+    _validate_tdvp_sweeps,
 )
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
 from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
-from tests.private_access import call_private
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -320,9 +319,7 @@ def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -
 
     tensor = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
-    _ = call_private(
-        tdvp_primitives,
-        "_evolve_local_tensor_krylov",
+    _ = tdvp_primitives._evolve_local_tensor_krylov(
         projector=lambda x: x,
         tensor=tensor,
         dt=0.1,

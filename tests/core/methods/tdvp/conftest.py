@@ -68,10 +68,20 @@ HAAR_LR_FID_FLOOR = 0.97
 def _z_expectation(vec: np.ndarray, site: int) -> float:
     """Single-site ``⟨Z⟩`` from a state vector (Qiskit little-endian convention).
 
+    Args:
+        vec: State vector whose length is a power of two (dimension ``2^n``).
+        site: Qubit index for the ``Z`` expectation.
+
     Returns:
         Real expectation value ``⟨Z_site⟩``.
 
+    Raises:
+        ValueError: If ``vec.size`` is not a power of two.
+
     """
+    if vec.size & (vec.size - 1) != 0:
+        msg = f"State vector length must be a power of two, got {vec.size}."
+        raise ValueError(msg)
     num_qubits = int(np.log2(vec.size))
     label = ["I"] * num_qubits
     label[num_qubits - 1 - site] = "Z"
@@ -276,6 +286,8 @@ def _apply_lr_gate(
         gate = GateLibrary.rzz([theta])
     elif gate_name == "rxx":
         gate = GateLibrary.rxx([theta])
+    elif gate_name == "ryy":
+        gate = GateLibrary.ryy([theta])
     else:
         msg = f"Unknown gate {gate_name!r}"
         raise ValueError(msg)

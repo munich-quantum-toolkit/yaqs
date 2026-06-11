@@ -21,7 +21,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams,
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.decompositions import merge_two_site, split_two_site
 from mqt.yaqs.core.methods.tdvp.primitives import (
-    _build_dense_effective_operator,  # noqa: PLC2701
+    _build_dense_effective_operator,
     build_dense_heff_bond,
     build_dense_heff_site,
     merge_mpo_tensors,

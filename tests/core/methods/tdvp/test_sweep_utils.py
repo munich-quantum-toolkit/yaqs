@@ -22,6 +22,7 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp.sweep_utils import (
+    _sync_bond_dim,
     renorm_drift,
     renorm_trunc,
     split_tdvp,
@@ -341,3 +342,27 @@ def test_renorm_drift_normalizes_large_drift() -> None:
     with patch.object(MPS, "normalize") as mock_normalize:
         renorm_drift(state, params)
         mock_normalize.assert_called_once()
+
+
+def test_sync_bond_dim_truncates_with_consistent_shapes() -> None:
+    """SVD bond sync enforces a shared capped dimension on both adjacent tensors."""
+    state = MPS(4, state="haar-random", pad=4)
+    state.normalize()
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    reference = state.to_vec()
+    _sync_bond_dim(state, 1, 2, params)
+    assert state.tensors[1].shape[2] == 2
+    assert state.tensors[2].shape[1] == 2
+    overlap = abs(np.vdot(reference, state.to_vec())) ** 2
+    assert overlap >= 0.5
+
+
+def test_sync_bond_dim_preserves_low_rank_state() -> None:
+    """Bond sync is exact when the target dimension keeps the full Schmidt rank."""
+    state = MPS(2, state="x+")
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    reference = state.to_vec()
+    _sync_bond_dim(state, 0, 1, params)
+    assert state.tensors[0].shape[2] == 1
+    assert state.tensors[1].shape[1] == 1
+    assert abs(np.vdot(reference, state.to_vec())) ** 2 == pytest.approx(1.0, abs=1e-12)

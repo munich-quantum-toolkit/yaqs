@@ -19,8 +19,8 @@ from qiskit import QuantumCircuit
 from mqt.yaqs import EquivalenceChecker
 from mqt.yaqs.core.libraries.gate_library import BaseGate
 from mqt.yaqs.digital.utils.matrix_utils import (
-    _apply_gate_left,  # noqa: PLC2701
-    _identity_operator_tensor,  # noqa: PLC2701
+    _apply_gate_left,
+    _identity_operator_tensor,
     build_composed_operator_tensor,
     check_equivalence_matrix,
     check_operator_is_identity,

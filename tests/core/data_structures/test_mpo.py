@@ -18,7 +18,6 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
-from tests.private_access import call_private
 
 # ---- single-qubit ops ----
 _I2 = np.eye(2, dtype=complex)
@@ -901,7 +900,7 @@ def test_compress_one_sweep_raises_on_invalid_direction() -> None:
         np.zeros((2, 2, 1, 1), dtype=complex),
     ]
     with pytest.raises(ValueError, match=r"direction must be 'lr' or 'rl'\."):
-        call_private(mpo, "_compress_one_sweep", direction="xx", tol=1e-12, max_bond_dim=None)
+        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)
 
 
 def test_from_pauli_sum_empty_spec_is_identity_term() -> None:

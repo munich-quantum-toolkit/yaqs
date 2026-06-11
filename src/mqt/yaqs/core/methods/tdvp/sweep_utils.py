@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 
 from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
-from ..decompositions import split_two_site
+from ..decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -110,13 +110,22 @@ def _scale_dt(
 # --- Fixed-χ bond bookkeeping ---
 
 
-def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
+def _sync_bond_dim(
+    state: MPS,
+    bond_index: int,
+    target_dim: int,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams | None = None,
+) -> None:
     """Set both tensors on an internal bond to share dimension ``target_dim``.
+
+    When truncation is required, the two-site block is merged and re-split with
+    SVD rather than raw axis slicing so the bond is reduced in Schmidt space.
 
     Args:
         state: MPS updated in place.
         bond_index: Internal bond index ``0 <= b < length - 1``.
         target_dim: Bond dimension enforced on both adjacent virtual indices.
+        sim_params: Optional truncation settings for SVD compression.
 
     """
     left = state.tensors[bond_index]
@@ -125,16 +134,24 @@ def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
     chi_in = int(right.shape[1])
     if chi_out == target_dim and chi_in == target_dim:
         return
-    if chi_out > target_dim:
-        state.tensors[bond_index] = left[:, :, :target_dim]
-    elif chi_out < target_dim:
-        state.ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
-    right = state.tensors[bond_index + 1]
-    chi_in = int(right.shape[1])
-    if chi_in > target_dim:
-        state.tensors[bond_index + 1] = right[:, :target_dim, :]
-    elif chi_in < target_dim:
-        state.ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
+    if chi_out > target_dim or chi_in > target_dim or chi_out != chi_in:
+        trunc_mode = cast("TruncMode", sim_params.trunc_mode) if sim_params is not None else "relative"
+        threshold = sim_params.svd_threshold if sim_params is not None else 0.0
+        merged = merge_two_site(left, right)
+        phys_dims = [int(left.shape[0]), int(right.shape[0])]
+        left_new, right_new = split_two_site(
+            merged,
+            phys_dims,
+            svd_distribution="sqrt",
+            trunc_mode=trunc_mode,
+            threshold=threshold,
+            max_bond_dim=target_dim,
+            min_keep=1,
+        )
+        state.tensors[bond_index] = left_new
+        state.tensors[bond_index + 1] = right_new
+        return
+    state.ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
 
 
 def _get_bond_dim(
@@ -235,7 +252,7 @@ def _align_bond(
     right = state.tensors[bond_index + 1]
     if int(left.shape[2]) == int(right.shape[1]):
         return
-    _sync_bond_dim(state, bond_index, _get_bond_dim(state, bond_index, sim_params))
+    _sync_bond_dim(state, bond_index, _get_bond_dim(state, bond_index, sim_params), sim_params)
     if uses_fixed_chi(sim_params):
         renorm_trunc(state, sim_params)
 
@@ -259,7 +276,7 @@ def _cap_bonds(
         chi_out = int(state.tensors[bond].shape[2])
         chi_in = int(state.tensors[bond + 1].shape[1])
         if chi_out > cap or chi_in > cap:
-            _sync_bond_dim(state, bond, cap)
+            _sync_bond_dim(state, bond, cap, sim_params)
             changed = True
     if changed and uses_fixed_chi(sim_params):
         renorm_trunc(state, sim_params)

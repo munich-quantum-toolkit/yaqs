@@ -355,7 +355,6 @@ def sweep_dynamic(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
-                _align_bond(state, i, sim_params)
                 bond_tensor = _resize_bond(
                     bond_tensor,
                     lead=int(state.tensors[i].shape[2]),
@@ -453,7 +452,6 @@ def sweep_dynamic(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
-                _align_bond(state, i - 1, sim_params)
                 bond_tensor = _resize_bond(
                     bond_tensor,
                     lead=int(state.tensors[i - 1].shape[2]),

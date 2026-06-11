@@ -47,7 +47,13 @@ def _run_sweeps(
         *args: Extra positional arguments forwarded to ``evolve_once``.
         **kwargs: Extra keyword arguments forwarded to ``evolve_once``.
 
+    Raises:
+        ValueError: If ``sim_params.tdvp_sweeps`` is less than 1.
+
     """
+    if sim_params.tdvp_sweeps < 1:
+        msg = f"tdvp_sweeps must be >= 1, got {sim_params.tdvp_sweeps}."
+        raise ValueError(msg)
     step_scale = 1.0 / sim_params.tdvp_sweeps
     sweep_plan = [step_scale] * sim_params.tdvp_sweeps
     evolve_once(
@@ -96,8 +102,11 @@ def tdvp(
         _run_sweeps(integrators.sweep_1site, state, operator, sim_params)
     elif tdvp_mode == "2site":
         _run_sweeps(integrators.sweep_2site, state, operator, sim_params)
-    else:
+    elif tdvp_mode == "dynamic":
         _run_sweeps(integrators.sweep_dynamic, state, operator, sim_params)
+    else:
+        msg = f'tdvp_mode must be one of ("1site", "2site", "dynamic"), got {tdvp_mode!r}.'
+        raise ValueError(msg)
 
 
 def evolve_window(

@@ -33,6 +33,7 @@ from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window
 from tests.core.methods.tdvp.conftest import (
     EXACT_FID_TOL,
     GateName,
+    _apply_lr_gate,
     _double_theta_reference,
     _fidelity,
     _qiskit_two_site_reference,
@@ -269,6 +270,14 @@ def test_l2_unit_time() -> None:
         tdvp(window_state, window_mpo, params)
 
     assert recorded_dts == [pytest.approx(1.0)]
+
+
+@pytest.mark.tdvp_regression
+def test_apply_lr_gate_supports_ryy() -> None:
+    """Long-range helper accepts RYY in addition to RZZ/RXX."""
+    prep = State(2, initial="x+").mps
+    out = _apply_lr_gate(prep, "ryy", 0.2, max_bond_dim=2, sweeps=1)
+    assert out.norm() == pytest.approx(1.0, abs=1e-10)
 
 
 @pytest.mark.tdvp_regression
