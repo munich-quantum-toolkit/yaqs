@@ -295,3 +295,84 @@ def test_dynamic_sweep_plan() -> None:
         sweep_plan = mock_two.call_args.kwargs["sweep_plan"]
         assert len(sweep_plan) == 16
         assert sum(sweep_plan) == pytest.approx(1.0)
+
+
+@pytest.mark.tdvp_regression
+def test_dynamic_ising_matches_expm() -> None:
+    """Dynamic TDVP integrates a capped Ising chain against an expm reference."""
+    length = 4
+    dt = 0.1
+    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    prep = MPS(length, state="x+")
+    state = deepcopy(prep)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=dt,
+        dt=dt,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        max_bond_dim=2,
+        tdvp_sweeps=1,
+        tdvp_mode="dynamic",
+    )
+    tdvp(state, hamiltonian, sim_params)
+    exact_vec = expm(-1j * dt * hamiltonian.to_matrix()) @ prep.to_vec()
+    assert _fidelity(exact_vec, state.to_vec()) > 0.5
+    assert state.get_max_bond() <= 2
+
+
+@pytest.mark.tdvp_regression
+def test_dynamic_analog_sweep_plan_integration() -> None:
+    """Dynamic analog TDVP honors tdvp_sweeps without mocking sweep_dynamic."""
+    length = 4
+    hamiltonian = MPO.ising(length, 1.0, 0.5)
+    state = MPS(length, state="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        max_bond_dim=2,
+        tdvp_sweeps=2,
+        tdvp_mode="dynamic",
+    )
+    tdvp(state, hamiltonian, sim_params)
+    ref = deepcopy(MPS(length, state="zeros"))
+    single = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        sample_timesteps=False,
+        krylov_tol=1e-12,
+        preset="exact",
+        max_bond_dim=2,
+        tdvp_sweeps=1,
+        tdvp_mode="dynamic",
+    )
+    tdvp(ref, hamiltonian, single)
+    assert _fidelity(ref.to_vec(), state.to_vec()) > 0.99
+
+
+@pytest.mark.tdvp_regression
+def test_fixed_chi_2site_capped_sweep() -> None:
+    """Fixed-χ two-site TDVP runs on a capped digital window evolution."""
+    length = 4
+    gate = GateLibrary.rzz([0.2])
+    gate.set_sites(0, length - 1)
+    prep = deepcopy(State(length, initial="x+").mps)
+    params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        gate_mode="full-tdvp",
+        max_bond_dim=2,
+        tdvp_sweeps=1,
+        tdvp_mode="2site",
+        svd_threshold=1e-10,
+        krylov_tol=1e-12,
+    )
+    apply_two_qubit_gate_tdvp(prep, gate, params)
+    assert prep.get_max_bond() <= 2
+    assert prep.norm() == pytest.approx(1.0, abs=1e-8)

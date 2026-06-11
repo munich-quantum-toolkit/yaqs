@@ -181,6 +181,25 @@ def test_tdvp_rejects_unknown_tdvp_mode_at_runtime() -> None:
         tdvp(state, hamiltonian, sim_params)
 
 
+def test_tdvp_rejects_operator_length_mismatch() -> None:
+    """MPS and MPO length mismatch is rejected before sweep dispatch."""
+    state = MPS(3, state="zeros")
+    hamiltonian = MPO.ising(4, 1.0, 0.5)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    with pytest.raises(ValueError, match="same number of sites"):
+        tdvp(state, hamiltonian, sim_params)
+
+
+def test_run_sweeps_rejects_invalid_tdvp_sweeps() -> None:
+    """_run_sweeps validates tdvp_sweeps before invoking the integrator."""
+    state = MPS(3, state="zeros")
+    hamiltonian = MPO.ising(3, 1.0, 0.5)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    sim_params.tdvp_sweeps = 0
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        _run_sweeps(lambda *_a, **_k: None, state, hamiltonian, sim_params)
+
+
 def test_dynamic_fallback_1site() -> None:
     """Dynamic mode on a one-site chain falls back to 1-site TDVP."""
     H = MPO.ising(1, 1.0, 0.5)

@@ -22,7 +22,13 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp.sweep_utils import (
+    _align_bond,
+    _cap_bonds,
+    _get_bond_dim,
+    _resize_bond,
+    _scale_dt,
     _sync_bond_dim,
+    get_min_keep,
     renorm_drift,
     renorm_trunc,
     split_tdvp,
@@ -366,3 +372,72 @@ def test_sync_bond_dim_preserves_low_rank_state() -> None:
     assert state.tensors[0].shape[2] == 1
     assert state.tensors[1].shape[1] == 1
     assert abs(np.vdot(reference, state.to_vec())) ** 2 == pytest.approx(1.0, abs=1e-12)
+
+
+def test_get_min_keep_with_and_without_cap() -> None:
+    """Minimum retained bond rank respects an explicit max_bond_dim cap."""
+    uncapped = StrongSimParams(preset="exact", get_state=True)
+    capped = StrongSimParams(preset="exact", get_state=True, max_bond_dim=1)
+    assert get_min_keep(uncapped) == 2
+    assert get_min_keep(capped) == 1
+
+
+def test_scale_dt_analog_vs_digital() -> None:
+    """Analog sweeps scale by dt; digital gate sweeps use the substep fraction directly."""
+    analog = AnalogSimParams(observables=[Observable(Z(), 0)], elapsed_time=0.2, dt=0.1, sample_timesteps=True)
+    digital = StrongSimParams(preset="exact", get_state=True)
+    assert _scale_dt(analog, 0.5) == pytest.approx(0.05)
+    assert _scale_dt(digital, 0.5) == pytest.approx(0.5)
+
+
+def test_get_bond_dim_caps_target() -> None:
+    """Bond-dimension lookup respects max_bond_dim when tensors exceed the cap."""
+    t0 = np.zeros((2, 1, 4), dtype=np.complex128)
+    t1 = np.zeros((2, 4, 1), dtype=np.complex128)
+    state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2)
+    assert _get_bond_dim(state, 0, params) == 2
+
+
+def test_align_bond_syncs_mismatched_shapes() -> None:
+    """Bond alignment raises the smaller virtual index to the capped target."""
+    t0 = np.zeros((2, 1, 2), dtype=np.complex128)
+    t1 = np.zeros((2, 1, 1), dtype=np.complex128)
+    state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    _align_bond(state, 0, params)
+    assert state.tensors[0].shape[2] == state.tensors[1].shape[1]
+    assert state.tensors[0].shape[2] <= 2
+
+
+def test_cap_bonds_truncates_oversized_internal_bonds() -> None:
+    """Global bond capping shrinks bonds above max_bond_dim before a sweep."""
+    state = MPS(4, state="haar-random", pad=4)
+    state.normalize()
+    params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
+    _cap_bonds(state, params)
+    for bond in range(state.length - 1):
+        assert state.tensors[bond].shape[2] <= 2
+        assert state.tensors[bond + 1].shape[1] <= 2
+
+
+def test_resize_bond_lead_trail_branches() -> None:
+    """Bond transfer resize handles shrink, grow, and no-op paths."""
+    bond = np.ones((3, 2), dtype=np.complex128)
+    shrunk = _resize_bond(bond, lead=2, trail=1)
+    assert shrunk.shape == (2, 1)
+    grown = _resize_bond(np.ones((1, 1), dtype=np.complex128), lead=2, trail=3)
+    assert grown.shape == (2, 3)
+    assert np.isclose(grown[0, 0], 1.0)
+    unchanged = _resize_bond(bond, lead=3, trail=2)
+    assert unchanged.shape == (3, 2)
+
+
+def test_sync_bond_dim_padding_path() -> None:
+    """Bond sync uses padding when both sides are below the target dimension."""
+    t0 = np.zeros((2, 1, 1), dtype=np.complex128)
+    t1 = np.zeros((2, 1, 1), dtype=np.complex128)
+    state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
+    _sync_bond_dim(state, 0, 2, StrongSimParams(preset="exact", get_state=True, max_bond_dim=2))
+    assert state.tensors[0].shape[2] == 2
+    assert state.tensors[1].shape[1] == 2

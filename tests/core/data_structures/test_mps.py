@@ -1145,6 +1145,16 @@ def test_ensure_internal_bond_dims_pads_asymmetric_bond() -> None:
     assert mps.tensors[1].shape == (2, 4, 1)
 
 
+def test_ensure_internal_bond_dims_raises_on_truncation() -> None:
+    """Shrinking a bond via padding helper is rejected; SVD sync is required."""
+    t0 = np.zeros((2, 1, 4), dtype=complex)
+    t1 = np.zeros((2, 4, 1), dtype=complex)
+    t2 = np.zeros((2, 1, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    with pytest.raises(ValueError, match="cannot be truncated"):
+        mps.ensure_internal_bond_dims((0,), 2, max_dim=2)
+
+
 def test_get_cost() -> None:
     """get_cost sums cubes of internal left bonds over tensors[1:]."""
     # Cubes: 3^3 + 4^3 = 27 + 64 = 91
