@@ -136,6 +136,9 @@ def _validate_tdvp_sweeps(tdvp_sweeps: int) -> int:
 def _validate_tdvp_mode(tdvp_mode: TDVPMode) -> TDVPMode:
     """Validate ``tdvp_mode`` for TDVP integrator geometry.
 
+    Circuit simulation classes (:class:`StrongSimParams`, :class:`WeakSimParams`)
+    default to ``"2site"``; :class:`AnalogSimParams` defaults to ``"dynamic"``.
+
     Args:
         tdvp_mode: Integrator variant (``"1site"``, ``"2site"``, or ``"dynamic"``).
 
@@ -480,12 +483,11 @@ class StrongSimParams(_ObservableOrderingMixin):
         gate_mode: Two-qubit gate update mode on the MPS digital backend
             (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``). Default is
             ``"mpo"``. Hybrid ``"tdvp"`` applies TEBD to nearest-neighbor gates and
-            dynamic TDVP with protected-bond support to long-range gates.
+            two-site TDVP (2TDVP) on a local window for long-range gates.
         tdvp_sweeps: Number of symmetric TDVP substeps per gate. Each substep integrates
             evolution time ``1 / tdvp_sweeps`` of the unit gate. Default is ``1``.
         tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or
-            ``"dynamic"``). Long-range digital gates require ``"dynamic"`` when
-            ``support_bonds`` is set. Default is ``"dynamic"``.
+            ``"dynamic"``). Default is ``"2site"`` for circuit simulation.
     """
 
     # Properties set as placeholders for code compatibility
@@ -507,7 +509,7 @@ class StrongSimParams(_ObservableOrderingMixin):
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
         tdvp_sweeps: int = 1,
-        tdvp_mode: TDVPMode = "dynamic",
+        tdvp_mode: TDVPMode = "2site",
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -533,11 +535,14 @@ class StrongSimParams(_ObservableOrderingMixin):
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             gate_mode: Two-qubit gate update mode (default ``"mpo"``). Hybrid ``"tdvp"`` uses
-                TEBD for nearest-neighbor gates and dynamic TDVP for long-range gates.
+                TEBD for nearest-neighbor gates and two-site TDVP (2TDVP) on a local window
+                for long-range gates.
             tdvp_sweeps: Number of symmetric TDVP substeps per gate at evolution time
                 ``1 / tdvp_sweeps`` (default ``1``).
             tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-                Default is ``"dynamic"``.
+                Default is ``"2site"``. Selects the integrator for :func:`~mqt.yaqs.core.methods.tdvp.tdvp.tdvp`
+                (for example ``gate_mode="full-tdvp"``); hybrid long-range gates always use
+                2TDVP via :func:`~mqt.yaqs.core.methods.tdvp.tdvp.tdvp_window`.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -593,7 +598,7 @@ class WeakSimParams:
             symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
             of the unit gate time. Default is ``1``.
         tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-            Default is ``"dynamic"``.
+            Default is ``"2site"`` for circuit simulation.
     """
 
     # Properties set as placeholders for code compatibility
@@ -613,7 +618,7 @@ class WeakSimParams:
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
         tdvp_sweeps: int = 1,
-        tdvp_mode: TDVPMode = "dynamic",
+        tdvp_mode: TDVPMode = "2site",
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -640,7 +645,7 @@ class WeakSimParams:
                 symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
                 (default ``1``).
             tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-                Default is ``"dynamic"``.
+                Default is ``"2site"``.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]

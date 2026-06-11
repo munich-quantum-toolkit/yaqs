@@ -129,12 +129,20 @@ def _compute_bond_target_dim(
 def _check_renorm_after_chi(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> bool:
-    """Check whether a sweep should renormalize after χ capping (digital only)."""
+    """Check whether a sweep should renormalize after χ capping (digital only).
+
+    Returns:
+        True when ``max_bond_dim`` is set on digital simulation parameters.
+    """
     return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
 
 
 def _norm_drift_renorm_tol(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> float:
-    """Tolerance for renormalizing fixed-χ digital TDVP after global norm drift."""
+    """Tolerance for renormalizing fixed-χ digital TDVP after global norm drift.
+
+    Returns:
+        Renormalization trigger tolerance derived from ``svd_threshold``.
+    """
     return max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
 
 

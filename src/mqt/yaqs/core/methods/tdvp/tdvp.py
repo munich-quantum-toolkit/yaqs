@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ...data_structures.simulation_parameters import AnalogSimParams
 from . import integrators
 
 if TYPE_CHECKING:
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
 
     from ...data_structures.mpo import MPO
     from ...data_structures.mps import MPS
-    from ...data_structures.simulation_parameters import StrongSimParams, WeakSimParams
+    from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
 
 def _run_sweeps(
@@ -56,9 +55,6 @@ def tdvp(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
-    *,
-    support_bonds: frozenset[int] | None = None,
-    renorm_after: bool = True,
 ) -> None:
     """Evolve an MPS under an MPO operator via TDVP.
 
@@ -70,17 +66,10 @@ def tdvp(
         operator: MPO defining the local generator at each site.
         sim_params: Simulation parameters including ``dt`` or gate time,
             ``tdvp_sweeps``, ``tdvp_mode``, truncation, and Krylov settings.
-        support_bonds: Optional window-local bond indices for long-range digital
-            gate support during dynamic TDVP. Requires ``StrongSimParams`` or
-            ``WeakSimParams``; analog callers should omit this.
-        renorm_after: When ``False``, skip the post-sweep fixed-χ renormalization.
-            Use for window-local TDVP whose tensors are grafted into a larger MPS.
 
     Raises:
-        ValueError: If ``state`` and ``operator`` lengths mismatch, if
-            ``tdvp_mode="2site"`` with fewer than two sites, if ``support_bonds``
-            is set with a non-dynamic mode, or if ``support_bonds`` is set with
-            ``AnalogSimParams``.
+        ValueError: If ``state`` and ``operator`` lengths mismatch or if
+            ``tdvp_mode="2site"`` with fewer than two sites.
     """
     if operator.length != state.length:
         msg = "MPS and operator must have the same number of sites."
@@ -89,29 +78,37 @@ def tdvp(
     if tdvp_mode == "2site" and operator.length < 2:
         msg = "Operator is too short for a two-site update (2TDVP)."
         raise ValueError(msg)
-    if support_bonds is not None and tdvp_mode != "dynamic":
-        msg = "support_bonds is only supported with tdvp_mode='dynamic'."
-        raise ValueError(msg)
-    if support_bonds is not None and isinstance(sim_params, AnalogSimParams):
-        msg = "support_bonds is not supported with AnalogSimParams."
-        raise ValueError(msg)
 
     if tdvp_mode == "dynamic" and operator.length == 1:
         tdvp_mode = "1site"
 
-    renorm_kw = {"renorm_after": renorm_after}
     if tdvp_mode == "1site":
-        _run_sweeps(integrators._single_site_tdvp_sweep, state, operator, sim_params, **renorm_kw)
+        _run_sweeps(integrators._single_site_tdvp_sweep, state, operator, sim_params)
     elif tdvp_mode == "2site":
-        _run_sweeps(integrators._two_site_tdvp_sweep, state, operator, sim_params, **renorm_kw)
-    elif support_bonds:
-        _run_sweeps(
-            integrators._dynamic_tdvp_sweep,
-            state,
-            operator,
-            sim_params,
-            support_bonds,
-            **renorm_kw,
-        )
+        _run_sweeps(integrators._two_site_tdvp_sweep, state, operator, sim_params)
     else:
-        _run_sweeps(integrators._dynamic_tdvp_sweep, state, operator, sim_params, **renorm_kw)
+        _run_sweeps(integrators._dynamic_tdvp_sweep, state, operator, sim_params)
+
+
+def tdvp_window(
+    state: MPS,
+    operator: MPO,
+    sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
+) -> None:
+    """Evolve a window-local MPS without post-sweep renormalization before grafting.
+
+    Used by :func:`mqt.yaqs.digital.digital_tjm.apply_two_qubit_gate_tdvp` for
+    long-range gates whose tensors are copied back into a larger chain.
+
+    Args:
+        state: Window-local MPS updated in place.
+        operator: Window-local generator MPO.
+        sim_params: Truncation and Krylov settings for TDVP.
+    """
+    _run_sweeps(
+        integrators._two_site_tdvp_sweep,
+        state,
+        operator,
+        sim_params,
+        renorm_after=False,
+    )
