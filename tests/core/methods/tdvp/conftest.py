@@ -64,6 +64,7 @@ def _z_expectation(vec: np.ndarray, site: int) -> float:
 
     Returns:
         Real expectation value ``⟨Z_site⟩``.
+
     """
     num_qubits = int(np.log2(vec.size))
     label = ["I"] * num_qubits
@@ -78,17 +79,45 @@ def _assert_z_observables_match(
     *,
     tol: float = Z_TOL,
 ) -> None:
-    """Assert all single-site ``⟨Z_i⟩`` match between two state vectors."""
+    """Assert all single-site ``⟨Z_i⟩`` match between two state vectors.
+
+    Args:
+        ref_vec: Reference state vector.
+        vec: Candidate state vector.
+        length: Number of qubits compared.
+        tol: Maximum allowed absolute error per site.
+
+    """
     for site in range(length):
         err = abs(_z_expectation(vec, site) - _z_expectation(ref_vec, site))
         assert err < tol, f"site={site} Δ⟨Z⟩={err}"
 
 
 def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
+    """Return the squared overlap ``|⟨a|b⟩|²`` between two state vectors.
+
+    Args:
+        a: Reference state vector.
+        b: Candidate state vector.
+
+    Returns:
+        Real fidelity in ``[0, 1]``.
+
+    """
     return float(abs(np.vdot(a, b)) ** 2)
 
 
 def _bond_second_schmidt(mps: MPS, bond: int) -> float:
+    """Return the second Schmidt coefficient across an internal bond.
+
+    Args:
+        mps: MPS whose spectrum is measured.
+        bond: Internal bond index ``0 <= b < length - 1``.
+
+    Returns:
+        Second normalized Schmidt value, or ``0.0`` when unavailable.
+
+    """
     spec = mps.get_schmidt_spectrum([bond, bond + 1])
     vals = np.asarray(spec[~np.isnan(spec)], dtype=np.float64)
     norm = float(np.sum(vals**2))
@@ -98,10 +127,29 @@ def _bond_second_schmidt(mps: MPS, bond: int) -> float:
 
 
 def _max_bond(mps: MPS) -> int:
+    """Return the largest internal bond dimension of an MPS.
+
+    Args:
+        mps: MPS whose bond dimensions are read.
+
+    Returns:
+        Maximum bond dimension, or ``1`` for a single-site chain.
+
+    """
     return max(mps.bond_dimensions()) if mps.length > 1 else 1
 
 
 def _tdvp_params(*, max_bond_dim: int | None, tdvp_sweeps: int) -> StrongSimParams:
+    """Build tight digital TDVP parameters for regression tests.
+
+    Args:
+        max_bond_dim: Optional bond-dimension cap.
+        tdvp_sweeps: Number of symmetric TDVP substeps per gate.
+
+    Returns:
+        Strong-simulation parameters with exact preset and tight tolerances.
+
+    """
     return StrongSimParams(
         preset="exact",
         get_state=True,
@@ -113,6 +161,17 @@ def _tdvp_params(*, max_bond_dim: int | None, tdvp_sweeps: int) -> StrongSimPara
 
 
 def _qiskit_plus_rzz_reference(length: int, theta: float, *, sites: tuple[int, int]) -> np.ndarray:
+    """Build exact Qiskit reference for RZZ on ``|+⟩^L``.
+
+    Args:
+        length: Number of qubits.
+        theta: RZZ rotation angle.
+        sites: Qubit indices passed to :meth:`QuantumCircuit.rzz`.
+
+    Returns:
+        State vector after preparing ``|+⟩^L`` and applying one RZZ gate.
+
+    """
     qc = QuantumCircuit(length)
     qc.h(range(length))
     qc.rzz(theta, sites[0], sites[1])
@@ -120,6 +179,19 @@ def _qiskit_plus_rzz_reference(length: int, theta: float, *, sites: tuple[int, i
 
 
 def _prep_state(name: str, length: int) -> MPS:
+    """Prepare a named initial MPS for TDVP regression tests.
+
+    Args:
+        name: One of ``"plus"``, ``"zeros"``, ``"haar"``, or ``"low_depth"``.
+        length: Chain length.
+
+    Returns:
+        Initial MPS for the requested label.
+
+    Raises:
+        ValueError: If ``name`` is not supported.
+
+    """
     if name == "plus":
         return State(length, initial="x+").mps
     if name == "zeros":
@@ -157,6 +229,22 @@ def _apply_lr_gate(
     max_bond_dim: int | None,
     sweeps: int,
 ) -> MPS:
+    """Apply one long-range two-qubit Pauli rotation via windowed TDVP.
+
+    Args:
+        mps: Input MPS; not modified in place.
+        gate_name: One of ``"rzz"``, ``"rxx"``, or ``"ryy"``.
+        theta: Rotation angle.
+        max_bond_dim: Optional bond-dimension cap.
+        sweeps: Number of TDVP substeps.
+
+    Returns:
+        Deep-copied MPS after the gate application.
+
+    Raises:
+        ValueError: If ``gate_name`` is not supported.
+
+    """
     if gate_name == "rzz":
         gate = GateLibrary.rzz([theta])
     elif gate_name == "rxx":
@@ -171,7 +259,13 @@ def _apply_lr_gate(
 
 
 def assert_mps_bond_invariants(mps: MPS, *, max_bond_dim: int | None = None) -> None:
-    """Check neighbor tensor virtual dimensions match and respect an optional χ cap."""
+    """Check neighbor tensor virtual dimensions match and respect an optional χ cap.
+
+    Args:
+        mps: MPS whose bond shapes are validated.
+        max_bond_dim: Optional hard cap checked after shape consistency.
+
+    """
     mps.assert_bond_shapes_consistent(max_bond_dim=max_bond_dim)
     if max_bond_dim is not None:
         assert all(dim <= max_bond_dim for dim in mps.bond_dimensions())
@@ -182,6 +276,7 @@ def _reliable_sweeps(length: int) -> int:
 
     Returns:
         TDVP sweep count for tests that still sweep to convergence.
+
     """
     return 256 if length >= 10 else 64
 
@@ -202,6 +297,7 @@ def _qiskit_two_site_reference(
 
     Raises:
         ValueError: If ``initial`` is not a supported label.
+
     """
     qc = QuantumCircuit(length)
     if prep_vec is not None:
@@ -223,10 +319,11 @@ def _qiskit_two_site_reference(
 
 
 def _double_theta_reference(length: int, theta: float, *, sites: tuple[int, int]) -> np.ndarray:
-    """Reference for accidentally applying RZZ twice (the old 2θ bug).
+    """Build reference state from applying RZZ twice (the old 2θ bug).
 
     Returns:
         State vector after two identical RZZ applications on |+⟩^L.
+
     """
     qc = QuantumCircuit(length)
     qc.h(range(length))
@@ -236,10 +333,11 @@ def _double_theta_reference(length: int, theta: float, *, sites: tuple[int, int]
 
 
 def _plus_rzz_overlap(_length: int, theta: float) -> float:
-    """Expected |⟨+|ψ⟩|² after RZZ(0, L-1, θ) on |+⟩^L (global phase ignored).
+    """Return |⟨+|ψ⟩|² after RZZ(0, L-1, θ) on |+⟩^L (global phase ignored).
 
     Returns:
         Squared overlap with the uniform superposition state.
+
     """
     return math.cos(theta / 2.0) ** 2
 
@@ -251,6 +349,18 @@ def _run_circuit(
     max_bond_dim: int,
     sweeps: int,
 ) -> MPS:
+    """Evolve a prepared MPS through a Qiskit circuit with TDVP gates.
+
+    Args:
+        prep: Initial MPS copied before simulation.
+        qc: Circuit executed with ``gate_mode="tdvp"``.
+        max_bond_dim: Bond-dimension cap for the simulation.
+        sweeps: Number of TDVP substeps per gate.
+
+    Returns:
+        Output MPS from the simulator run.
+
+    """
     init = State(prep.length, tensors=[t.copy() for t in prep.tensors])
     params = StrongSimParams(
         preset="exact",

@@ -47,7 +47,17 @@ def sweep_1site(
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
 ) -> None:
-    """Run one symmetric 1TDVP sweep over ``state`` in place."""
+    """Run one symmetric 1TDVP sweep over ``state`` in place.
+
+    Args:
+        state: MPS updated in place.
+        operator: Generator MPO.
+        sim_params: Truncation, Krylov, and timestep settings.
+        step_scale: Fraction of one evolution step for this sweep when
+            ``sweep_plan`` is ``None``.
+        sweep_plan: Optional list of substep scales executed sequentially.
+
+    """
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
             sweep_1site(
@@ -153,7 +163,18 @@ def sweep_2site(
     sweep_plan: list[float] | None = None,
     drift_renorm: bool = True,
 ) -> None:
-    """Run one symmetric 2TDVP sweep over ``state`` in place."""
+    """Run one symmetric 2TDVP sweep over ``state`` in place.
+
+    Args:
+        state: MPS updated in place.
+        operator: Generator MPO.
+        sim_params: Truncation, Krylov, and timestep settings.
+        step_scale: Fraction of one evolution step for each planned substep.
+        sweep_plan: Optional list of substep scales; defaults to ``[step_scale]``.
+        drift_renorm: When True and fixed-χ digital simulation is active,
+            renormalize after norm drift at the end of the sweep.
+
+    """
     num_sites = operator.length
     plan = sweep_plan if sweep_plan is not None else [step_scale]
 
@@ -269,7 +290,17 @@ def sweep_dynamic(
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
 ) -> None:
-    """Run one dynamic TDVP sweep with adaptive bond updates in place."""
+    """Run one dynamic TDVP sweep with adaptive bond updates in place.
+
+    Args:
+        state: MPS updated in place.
+        operator: Generator MPO.
+        sim_params: Truncation, Krylov, and timestep settings.
+        step_scale: Fraction of one evolution step for this sweep when
+            ``sweep_plan`` is ``None``.
+        sweep_plan: Optional list of substep scales executed sequentially.
+
+    """
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
             sweep_dynamic(

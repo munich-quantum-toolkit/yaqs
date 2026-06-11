@@ -174,6 +174,7 @@ def _evolve_l2_two_site(
 
     Returns:
         Window MPS after one 2-site TDVP evolution step.
+
     """
     if gate_name == "rzz":
         gate = GateLibrary.rzz([theta])
@@ -255,6 +256,12 @@ def test_l2_unit_time() -> None:
         *,
         krylov_tol: float,
     ) -> NDArray[np.complex128]:
+        """Record local site evolution times and delegate to :func:`update_site`.
+
+        Returns:
+            Evolved site tensor from :func:`update_site`.
+
+        """
         recorded_dts.append(dt)
         return update_site(left_env, right_env, op, ket, dt, krylov_tol=krylov_tol)
 

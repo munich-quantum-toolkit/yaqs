@@ -31,7 +31,15 @@ if TYPE_CHECKING:
 
 
 def get_min_keep(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
-    """Return the minimum bond dimension to retain during TDVP truncation."""
+    """Return the minimum bond dimension to retain during TDVP truncation.
+
+    Args:
+        sim_params: Simulation parameters supplying ``max_bond_dim``.
+
+    Returns:
+        ``min(2, max_bond_dim)`` when a cap is set, otherwise ``2``.
+
+    """
     cap = sim_params.max_bond_dim
     if cap is None:
         return 2
@@ -63,6 +71,7 @@ def split_tdvp(
 
     Returns:
         Left and right MPS site tensors after split and truncation.
+
     """
     return split_two_site(
         merged,
@@ -82,7 +91,17 @@ def _scale_dt(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     step_scale: float,
 ) -> float:
-    """Return the TDVP evolution timestep for the current symmetric substep."""
+    """Return the TDVP evolution timestep for the current symmetric substep.
+
+    Args:
+        sim_params: Analog parameters use ``dt * step_scale``; digital gate
+            parameters treat ``step_scale`` as the full substep time.
+        step_scale: Fraction of one evolution step assigned to this substep.
+
+    Returns:
+        Effective local evolution time for site and bond updates.
+
+    """
     if not isinstance(sim_params, (StrongSimParams, WeakSimParams)):
         return float(sim_params.dt) * step_scale
     return step_scale
@@ -92,7 +111,14 @@ def _scale_dt(
 
 
 def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
-    """Set both tensors on an internal bond to share dimension ``target_dim``."""
+    """Set both tensors on an internal bond to share dimension ``target_dim``.
+
+    Args:
+        state: MPS updated in place.
+        bond_index: Internal bond index ``0 <= b < length - 1``.
+        target_dim: Bond dimension enforced on both adjacent virtual indices.
+
+    """
     left = state.tensors[bond_index]
     right = state.tensors[bond_index + 1]
     chi_out = int(left.shape[2])
@@ -116,7 +142,17 @@ def _get_bond_dim(
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> int:
-    """Return the shared bond dimension to use before a bond transfer contraction."""
+    """Return the shared bond dimension to use before a bond transfer contraction.
+
+    Args:
+        state: MPS whose bond shapes are read.
+        bond_index: Internal bond index ``0 <= b < length - 1``.
+        sim_params: Supplies optional ``max_bond_dim`` cap.
+
+    Returns:
+        Target bond dimension, at least ``1``.
+
+    """
     chi_left = int(state.tensors[bond_index].shape[2])
     chi_right = int(state.tensors[bond_index + 1].shape[1])
     chi_target = max(chi_left, chi_right)
@@ -129,27 +165,51 @@ def _get_bond_dim(
 def uses_fixed_chi(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> bool:
     """Return whether fixed-χ digital renormalization policy applies.
 
+    Args:
+        sim_params: Simulation parameters inspected for ``max_bond_dim``.
+
     Returns:
         True when ``max_bond_dim`` is set on digital simulation parameters.
         Analog Hamiltonian evolution is excluded (per-sweep renorm breaks ensembles).
+
     """
     return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
 
 
 def _get_norm(state: MPS) -> float:
-    """Return the L2 norm of the full MPS state vector."""
+    """Return the L2 norm of the full MPS state vector.
+
+    Args:
+        state: MPS whose norm is measured via ``scalar_product``.
+
+    Returns:
+        Non-negative Euclidean norm of the represented state vector.
+
+    """
     overlap = state.scalar_product(state)
     norm_sq = float(np.real(np.asarray(overlap, dtype=np.complex128).flat[0]))
     return float(np.sqrt(max(norm_sq, 0.0)))
 
 
 def renorm_trunc(state: MPS, _sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
-    """Renormalize after explicit bond truncation (call only when fixed-χ digital)."""
+    """Renormalize after explicit bond truncation (call only when fixed-χ digital).
+
+    Args:
+        state: MPS normalized in place.
+        _sim_params: Reserved for call-site symmetry with :func:`renorm_drift`.
+
+    """
     state.normalize()
 
 
 def renorm_drift(state: MPS, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
-    """Renormalize when global norm drift exceeds tolerance (call only when fixed-χ digital)."""
+    """Renormalize when global norm drift exceeds tolerance (call only when fixed-χ digital).
+
+    Args:
+        state: MPS normalized in place when drift exceeds tolerance.
+        sim_params: Supplies ``svd_threshold`` used to derive the drift tolerance.
+
+    """
     drift_tol = max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
     norm = _get_norm(state)
     if abs(norm - 1.0) > drift_tol:
@@ -161,7 +221,14 @@ def _align_bond(
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> None:
-    """Align a bond to the fixed-χ target and optionally renormalize (digital only)."""
+    """Align a bond to the fixed-χ target and optionally renormalize (digital only).
+
+    Args:
+        state: MPS updated in place when bond dimensions disagree.
+        bond_index: Internal bond index ``0 <= b < length - 1``.
+        sim_params: Fixed-χ digital parameters; no-op when ``max_bond_dim`` is unset.
+
+    """
     if sim_params.max_bond_dim is None:
         return
     left = state.tensors[bond_index]
@@ -177,7 +244,13 @@ def _cap_bonds(
     state: MPS,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> None:
-    """Truncate all internal bonds to ``max_bond_dim`` before a fixed-χ sweep."""
+    """Truncate all internal bonds to ``max_bond_dim`` before a fixed-χ sweep.
+
+    Args:
+        state: MPS whose bonds are truncated and optionally renormalized in place.
+        sim_params: Supplies ``max_bond_dim``; no-op when unset.
+
+    """
     cap = sim_params.max_bond_dim
     if cap is None:
         return
@@ -203,8 +276,14 @@ def _resize_bond(
 ) -> NDArray[np.complex128]:
     """Resize leading and/or trailing axes of a bond transfer matrix.
 
+    Args:
+        bond_tensor: Two-index bond transfer matrix.
+        lead: Optional target size for axis ``0``; unchanged when ``None``.
+        trail: Optional target size for axis ``1``; unchanged when ``None``.
+
     Returns:
         Resized bond tensor.
+
     """
     out = bond_tensor
     if lead is not None:

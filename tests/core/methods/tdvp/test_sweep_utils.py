@@ -54,6 +54,17 @@ def test_split_tdvp_left_right_sqrt() -> None:
 
 
 def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    """Return an ``m x n`` matrix with orthonormal columns.
+
+    Args:
+        m: Row count.
+        n: Column count.
+        seed: RNG seed for reproducibility.
+
+    Returns:
+        Complex matrix with orthonormal columns.
+
+    """
     rng_local = np.random.default_rng(seed)
     A = rng_local.normal(size=(m, n)) + 1j * rng_local.normal(size=(m, n))
     Q, _ = np.linalg.qr(A)
@@ -62,6 +73,18 @@ def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
 
 
 def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    """Build a rank-``r`` matrix with prescribed singular values.
+
+    Args:
+        s: Singular values to embed.
+        m: Row count.
+        n: Column count.
+        seed: RNG seed for the random unitary factors.
+
+    Returns:
+        Complex matrix with the requested singular spectrum.
+
+    """
     r = min(len(s), m, n)
     U = _rand_unitary_like(m, r, seed=seed)
     V = _rand_unitary_like(n, r, seed=seed + 1)
@@ -71,6 +94,19 @@ def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) 
 
 
 def _as_input_tensor(theta: NDArray[np.complex128], d0: int, d1: int, d2: int, d3: int) -> NDArray[np.complex128]:
+    """Reshape a matrix into the three-index MPS tensor layout used by split tests.
+
+    Args:
+        theta: Dense matrix to reshape.
+        d0: Left physical dimension.
+        d1: Right physical dimension.
+        d2: Left virtual dimension.
+        d3: Right virtual dimension.
+
+    Returns:
+        Three-index tensor with shape ``(d0 * d1, d2, d3)``.
+
+    """
     t = theta.reshape(d0, d2, d1, d3).transpose(0, 2, 1, 3)
     return cast("NDArray[np.complex128]", t.reshape(d0 * d1, d2, d3))
 

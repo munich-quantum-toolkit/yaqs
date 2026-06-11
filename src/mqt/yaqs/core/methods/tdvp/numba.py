@@ -59,6 +59,7 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
           D >= 16, with the speedup increasing for larger tensors.
         - The two-stage contraction pattern reduces peak memory usage compared to
           a single 6-index intermediate tensor.
+
     """
     o_dim, p_dim, mpo_l, mpo_r = op.shape
     a_in, _, a_out = left_env.shape
@@ -135,6 +136,7 @@ def build_dense_heff_bond_numba(left_env: np.ndarray, right_env: np.ndarray) -> 
         - Benchmarks show this is ~2-3x faster than ``einsum`` for bond dimensions
           D >= 16.
         - This function is called during the backward evolution steps in 1TDVP.
+
     """
     u_dim, a_dim, p_dim = left_env.shape
     v_dim, _, w_dim = right_env.shape

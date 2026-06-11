@@ -9,9 +9,18 @@
 
 from __future__ import annotations
 
-from typing import Any
 
+def call_private(obj: object, name: str, /, *args: object, **kwargs: object) -> object:
+    """Call ``name`` on ``obj`` without direct private-attribute syntax.
 
-def call_private(obj: object, name: str, /, *args: Any, **kwargs: Any) -> Any:
-    """Call ``name`` on ``obj`` without direct private-attribute syntax."""
+    Args:
+        obj: Object exposing the callable attribute.
+        name: Attribute name to resolve with :func:`getattr`.
+        *args: Positional arguments forwarded to the callable.
+        **kwargs: Keyword arguments forwarded to the callable.
+
+    Returns:
+        Whatever the invoked callable returns.
+
+    """
     return getattr(obj, name)(*args, **kwargs)

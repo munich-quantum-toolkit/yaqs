@@ -33,6 +33,7 @@ def test_run_sweeps_invokes_substeps() -> None:
     captured_analog: list[float] = []
 
     def _capture_analog(*_args: object, sweep_plan: list[float] | None = None, **_kwargs: object) -> None:
+        """Record analog substep scales passed via ``sweep_plan``."""
         if sweep_plan is not None:
             captured_analog.extend(sweep_plan)
 
@@ -51,6 +52,7 @@ def test_run_sweeps_invokes_substeps() -> None:
     captured_plan: list[float] = []
 
     def _capture_plan(*_args: object, sweep_plan: list[float] | None = None, **_kwargs: object) -> None:
+        """Record digital substep scales passed via ``sweep_plan``."""
         if sweep_plan is not None:
             captured_plan.extend(sweep_plan)
 

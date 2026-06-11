@@ -65,6 +65,7 @@ def merge_mpo_tensors(
 
     Returns:
         NDArray[np.complex128]: The merged MPO tensor.
+
     """
     merged_tensor = np.asarray(
         oe.contract("acei,bdif->abcdef", left_tensor, right_tensor, optimize=True), dtype=np.complex128
@@ -95,6 +96,7 @@ def update_right_environment(
 
     Returns:
         NDArray[np.complex128]: The updated right operator block.
+
     """
     assert ket.ndim == 3
     assert bra.ndim == 3
@@ -127,6 +129,7 @@ def update_left_environment(
 
     Returns:
         NDArray[np.complex128]: The updated left operator block.
+
     """
     tensor = np.tensordot(left_env, bra.conj(), axes=(2, 1))
     tensor = np.tensordot(op, tensor, axes=((0, 2), (2, 1)))
@@ -148,6 +151,7 @@ def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex1
 
     Raises:
         ValueError: If state and operator length does not match.
+
     """
     num_sites = psi.length
     if num_sites != op.length:
@@ -192,6 +196,7 @@ def project_site(
 
     Returns:
         NDArray[np.complex128]: The resulting tensor after applying the local Hamiltonian.
+
     """
     tensor = np.tensordot(ket, right_env, axes=1)
     tensor = np.tensordot(op, tensor, axes=((1, 3), (0, 2)))
@@ -215,6 +220,7 @@ def project_bond(
 
     Returns:
         NDArray[np.complex128]: The resulting tensor from the bond contraction.
+
     """
     tensor = np.tensordot(bond_tensor, right_env, axes=1)
     return np.tensordot(left_env, tensor, axes=((0, 1), (0, 1)))
@@ -271,6 +277,7 @@ def build_dense_heff_site(
           explicitly materializing the dense effective operator is efficient.
           For larger local dimensions, the matrix-free projector path should be
           preferred.
+
     """
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
@@ -330,6 +337,7 @@ def build_dense_heff_bond(
         typically faster than repeated tensor contractions inside a Krylov
         iteration.  For large bond dimensions, the matrix-free projector path
         should be preferred.
+
     """
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
@@ -386,6 +394,7 @@ def _build_dense_effective_operator(
         tensor contractions inside a Krylov iteration. For large local
         dimensions, the matrix-free path (projector applied directly inside
         Lanczos) is preferred.
+
     """
     # Fast paths
     if projector is project_site:
@@ -419,20 +428,21 @@ def _evolve_local_tensor_krylov(
     *,
     krylov_tol: float,
 ) -> NDArray[np.complex128]:
-    """Generic helper to evolve a local tensor with a matrix-free Krylov exponential.
+    """Evolve a local tensor with a matrix-free Krylov exponential.
 
     Args:
         projector: Function implementing the local operator action on a tensor,
-            e.g. project_site(left_env, right_env, op, ket) or
-                 project_bond(left_env, right_env, bond_tensor).
+            e.g. :func:`project_site` or :func:`project_bond`.
         tensor: Tensor to evolve (arbitrary shape).
         dt: Time step for evolution.
-        proj_args: Extra arguments passed to `projector` before the tensor.
-        dense_threshold: int, optional. Maximum size of flattened tensor to use dense operator.
-        krylov_tol: float. Tolerance for the adaptive Krylov/Lanczos matrix exponential.
+        proj_args: Extra arguments passed to ``projector`` before the tensor.
+        dense_threshold: Maximum flattened size for building a dense effective
+            operator instead of a matrix-free projector.
+        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
-        The evolved tensor with the same shape as `tensor`.
+        Evolved tensor with the same shape as ``tensor``.
+
     """
     tensor_shape = tensor.shape
     tensor_flat = tensor.reshape(-1)
@@ -443,11 +453,23 @@ def _evolve_local_tensor_krylov(
         h_eff = _build_dense_effective_operator(projector, proj_args, tensor_shape)
 
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            """Apply the pre-built dense effective operator.
+
+            Returns:
+                Flattened image of ``x_flat`` under ``h_eff``.
+
+            """
             return h_eff @ x_flat
 
     else:
         # Matrix-free projector path
         def apply_effective_operator(x_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+            """Apply the matrix-free local projector.
+
+            Returns:
+                Flattened image of ``x_flat`` under the local projector.
+
+            """
             x_tensor = x_flat.reshape(tensor_shape)
             y_tensor = projector(*proj_args, x_tensor)
             return y_tensor.reshape(-1)
@@ -483,6 +505,7 @@ def update_site(
 
     Returns:
         The updated MPS tensor after evolution.
+
     """
     proj_args = (left_env, right_env, op)
     return _evolve_local_tensor_krylov(
@@ -516,6 +539,7 @@ def update_bond(
 
     Returns:
         The updated bond tensor after evolution.
+
     """
     proj_args = (left_env, right_env)
     return _evolve_local_tensor_krylov(

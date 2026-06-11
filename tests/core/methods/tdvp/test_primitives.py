@@ -319,6 +319,12 @@ def test_build_dense_effective_operator_uses_generic_fallback() -> None:
     calls = {"n": 0}
 
     def custom_projector(mat: NDArray[np.complex128], x: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        """Apply a dense linear map and count basis-loop projector calls.
+
+        Returns:
+            Projected tensor with the input ``tensor_shape``.
+
+        """
         calls["n"] += 1
         y = mat @ x.reshape(-1)
         return y.reshape(tensor_shape)
@@ -344,6 +350,12 @@ def test_build_dense_effective_operator_generic_fallback_correctness() -> None:
     A = np.asarray(A, dtype=np.complex128)
 
     def custom_projector(mat: NDArray[np.complex128], x: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        """Apply a dense linear map for generic fallback correctness checks.
+
+        Returns:
+            Projected tensor with the input ``tensor_shape``.
+
+        """
         y = mat @ x.reshape(-1)
         return y.reshape(tensor_shape)
 

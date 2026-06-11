@@ -32,12 +32,21 @@ def _run_sweeps(
 ) -> None:
     """Run ``sim_params.tdvp_sweeps`` TDVP substeps per evolution step.
 
-    Public TDVP entry points validate inputs and delegate here. Private ``_*_sweep``
-    kernels perform one symmetric substep and accept ``step_scale``; they must not
+    Public TDVP entry points validate inputs and delegate here. Sweep kernels
+    perform one symmetric substep and accept ``step_scale``; they must not
     re-enter the public wrappers.
 
     Each substep is symmetric (LTR then RTL) at ``step_time / tdvp_sweeps`` for
     analog ``dt`` and digital gates.
+
+    Args:
+        evolve_once: One-sweep integrator, e.g. :func:`~integrators.sweep_2site`.
+        state: MPS updated in place.
+        operator: Generator MPO.
+        sim_params: Supplies ``tdvp_sweeps`` and evolution settings.
+        *args: Extra positional arguments forwarded to ``evolve_once``.
+        **kwargs: Extra keyword arguments forwarded to ``evolve_once``.
+
     """
     step_scale = 1.0 / sim_params.tdvp_sweeps
     sweep_plan = [step_scale] * sim_params.tdvp_sweeps
@@ -70,6 +79,7 @@ def tdvp(
     Raises:
         ValueError: If ``state`` and ``operator`` lengths mismatch or if
             ``tdvp_mode="2site"`` with fewer than two sites.
+
     """
     if operator.length != state.length:
         msg = "MPS and operator must have the same number of sites."
@@ -104,6 +114,7 @@ def evolve_window(
         state: Window-local MPS updated in place.
         operator: Window-local generator MPO.
         sim_params: Truncation and Krylov settings for TDVP.
+
     """
     _run_sweeps(
         integrators.sweep_2site,
