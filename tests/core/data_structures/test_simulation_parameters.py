@@ -177,10 +177,10 @@ def test_gate_mode_defaults_and_validation() -> None:
 
 
 def test_tdvp_mode_defaults_and_validation() -> None:
-    """Analog, strong, and weak params default tdvp_mode to dynamic and validate inputs."""
+    """Analog defaults to dynamic; strong/weak circuit params default to 2site."""
     assert AnalogSimParams().tdvp_mode == "dynamic"
-    assert StrongSimParams().tdvp_mode == "dynamic"
-    assert WeakSimParams(shots=1).tdvp_mode == "dynamic"
+    assert StrongSimParams().tdvp_mode == "2site"
+    assert WeakSimParams(shots=1).tdvp_mode == "2site"
     assert StrongSimParams(tdvp_mode="1site").tdvp_mode == "1site"
     assert StrongSimParams(tdvp_mode="2site").tdvp_mode == "2site"
     with pytest.raises(ValueError, match="tdvp_mode"):

@@ -10,7 +10,6 @@ r"""Shared helpers for TDVP unit and regression tests.
 PR TDVP regression smoke (fast subset)::
 
     uv run pytest tests/core/methods/tdvp/test_tdvp.py \\
-                  tests/core/methods/tdvp/test_bond_support.py \\
                   tests/core/methods/tdvp/test_integrators.py \\
                   tests/digital/test_digital_tjm.py \\
                   -m "tdvp_regression and not slow"
@@ -56,7 +55,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 Z_TOL = 1e-8
-# Endpoint |+⟩ RZZ global fidelity under production dynamic TDVP (local ⟨Z_i⟩ still exact).
+# Endpoint |+⟩ RZZ global fidelity under production 2TDVP window path (local ⟨Z_i⟩ still exact).
 PLUS_LR_RZZ_GLOBAL_FID = 0.9776682445628022
 
 

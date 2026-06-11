@@ -267,9 +267,9 @@ def test_dynamic_sweep_plan_matches_requested_sweeps() -> None:
     prep = deepcopy(State(length, initial="x+").mps)
     params = _tdvp_params(max_bond_dim=8, tdvp_sweeps=16)
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._dynamic_tdvp_sweep") as mock_dynamic:
-        mock_dynamic.side_effect = lambda *_args, **_kwargs: None
+    with patch("mqt.yaqs.core.methods.tdvp.integrators._two_site_tdvp_sweep") as mock_two:
+        mock_two.side_effect = lambda *_args, **_kwargs: None
         apply_two_qubit_gate_tdvp(prep, gate, params)
-        sweep_plan = mock_dynamic.call_args.kwargs["sweep_plan"]
+        sweep_plan = mock_two.call_args.kwargs["sweep_plan"]
         assert len(sweep_plan) == 16
         assert sum(sweep_plan) == pytest.approx(1.0)

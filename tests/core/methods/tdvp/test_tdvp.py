@@ -74,46 +74,17 @@ def test_run_sweeps_invokes_substeps() -> None:
     assert captured_analog == captured_plan
 
 
-def test_tdvp_support_bonds_requires_dynamic_mode() -> None:
-    """support_bonds is rejected when tdvp_mode is not dynamic."""
-    L = 4
-    H = MPO.ising(L, 1.0, 0.5)
-    state = MPS(L, state="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="1site")
-    with pytest.raises(ValueError, match="support_bonds is only supported"):
-        tdvp(state, H, sim_params, support_bonds=frozenset({0}))
-
-
-def test_tdvp_support_bonds_rejects_analog_sim_params() -> None:
-    """support_bonds is rejected for analog simulation parameters."""
-    L = 4
-    H = MPO.ising(L, 1.0, 0.5)
-    state = MPS(L, state="zeros")
-    sim_params = AnalogSimParams(elapsed_time=1.0, dt=0.1, preset="exact")
-    with pytest.raises(ValueError, match="support_bonds is not supported with AnalogSimParams"):
-        tdvp(state, H, sim_params, support_bonds=frozenset({0}))
-
-
-def test_tdvp_support_bonds_dynamic_dispatch() -> None:
-    """Dynamic TDVP with support_bonds passes the bond set to the sweep kernel."""
-    L = 4
-    H = MPO.ising(L, 1.0, 0.5)
-    state = MPS(L, state="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="dynamic")
-    bonds = frozenset({0})
-
-    with patch("mqt.yaqs.core.methods.tdvp.integrators._dynamic_tdvp_sweep") as mock_dyn:
-        tdvp(state, H, sim_params, support_bonds=bonds)
-        mock_dyn.assert_called_once()
-        assert mock_dyn.call_args.args[3] == bonds
-
-
 def test_local_dynamic_tdvp_circuit_sweep_scaling() -> None:
-    """Circuit-mode local dynamic TDVP honors tdvp_sweeps via a sweep plan."""
+    """Explicit dynamic mode honors tdvp_sweeps via a sweep plan."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
-    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], tdvp_sweeps=2, preset="exact")
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        tdvp_sweeps=2,
+        preset="exact",
+        tdvp_mode="dynamic",
+    )
 
     with patch("mqt.yaqs.core.methods.tdvp.integrators._dynamic_tdvp_sweep") as mock_sweep:
         tdvp(state, H, sim_params)
@@ -144,7 +115,7 @@ def test_tdvp_mode_dispatch() -> None:
 
 
 def test_tdvp_default_mode_is_dynamic() -> None:
-    """Default tdvp_mode uses local dynamic TDVP."""
+    """AnalogSimParams default tdvp_mode uses dynamic TDVP."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
@@ -158,6 +129,18 @@ def test_tdvp_default_mode_is_dynamic() -> None:
     with patch("mqt.yaqs.core.methods.tdvp.integrators._dynamic_tdvp_sweep") as mock_dyn:
         tdvp(state, H, sim_params)
         mock_dyn.assert_called_once()
+
+
+def test_strong_default_mode_is_2site() -> None:
+    """StrongSimParams default tdvp_mode uses two-site TDVP."""
+    L = 4
+    H = MPO.ising(L, 1.0, 0.5)
+    state = MPS(L, state="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+
+    with patch("mqt.yaqs.core.methods.tdvp.integrators._two_site_tdvp_sweep") as mock_two:
+        tdvp(state, H, sim_params)
+        mock_two.assert_called_once()
 
 
 def test_tdvp_dynamic_single_site_chain() -> None:

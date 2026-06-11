@@ -29,10 +29,6 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
-from mqt.yaqs.core.methods.tdvp.bond_support import (
-    protected_bonds_for_two_site_gate,
-    select_protected_seed_bonds,
-)
 from mqt.yaqs.digital.digital_tjm import (
     apply_long_range_gate_mpo,
     apply_single_qubit_gate,
@@ -51,7 +47,6 @@ from tests.core.methods.tdvp.conftest import (
     PLUS_LR_RZZ_GLOBAL_FID,
     _apply_lr_gate,
     _assert_z_observables_match,
-    _bond_second_schmidt,
     _fidelity,
     _max_bond,
     _prep_state,
@@ -399,8 +394,8 @@ def _mixed_small_circuit(length: int) -> QuantumCircuit:
 
 
 @pytest.mark.tdvp_regression
-def test_lr_gate_routes_through_dynamic_not_two_site() -> None:
-    """Long-range digital TDVP must use dynamic sweeps, not the 2-site kernel."""
+def test_lr_gate_routes_through_two_site_not_dynamic() -> None:
+    """Long-range digital TDVP window evolution uses the 2-site kernel."""
     length = 8
     gate = GateLibrary.rzz([0.3])
     gate.set_sites(0, length - 1)
@@ -411,18 +406,16 @@ def test_lr_gate_routes_through_dynamic_not_two_site() -> None:
         patch("mqt.yaqs.core.methods.tdvp.integrators._dynamic_tdvp_sweep") as mock_dynamic,
         patch("mqt.yaqs.core.methods.tdvp.integrators._two_site_tdvp_sweep") as mock_two,
     ):
-        mock_dynamic.side_effect = lambda *_args, **_kwargs: None
+        mock_two.side_effect = lambda *_args, **_kwargs: None
         apply_two_qubit_gate_tdvp(out, gate, params)
-        mock_dynamic.assert_called_once()
-        mock_two.assert_not_called()
-        args, kwargs = mock_dynamic.call_args
-        support_bonds = args[3] if len(args) >= 4 else kwargs.get("support_bonds")
-        assert support_bonds is None
+        mock_two.assert_called_once()
+        mock_dynamic.assert_not_called()
+        assert mock_two.call_args.kwargs.get("renorm_after") is False
 
 
 @pytest.mark.tdvp_regression
 def test_chi_one_lr_rzz_caller_respects_cap() -> None:
-    """End-to-end χ=1 long-range RZZ does not create rank-2 support from seeding."""
+    """End-to-end χ=1 long-range RZZ respects the bond-dimension cap."""
     theta = 0.3
     length = 8
     sites = (0, length - 1)
@@ -503,14 +496,14 @@ def test_endpoint_lr_rzz_z_observables_and_entanglement(length: int) -> None:
 
 @pytest.mark.tdvp_regression
 @pytest.mark.slow
-def test_endpoint_lr_support_retention_l10() -> None:
-    """Endpoint retention at L=10 uses the same production single-sweep path."""
+def test_endpoint_lr_rzz_l10() -> None:
+    """Endpoint RZZ at L=10 uses the production single-sweep path."""
     test_endpoint_lr_rzz_z_observables_and_entanglement(10)
 
 
 @pytest.mark.tdvp_regression
 def test_internal_pair_lr_rzz_z_observables() -> None:
-    """Internal long-range pairs: exact ⟨Z_i⟩ with seed prep only (support_bonds=None)."""
+    """Internal long-range pairs: exact ⟨Z_i⟩ on |+⟩^L."""
     theta = 0.3
     length = 10
     sites = (2, 7)
@@ -524,45 +517,12 @@ def test_internal_pair_lr_rzz_z_observables() -> None:
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     _assert_z_observables_match(ref, out.to_vec(), length)
-
-    window = (1, 8)
-    crossed = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
-    assert crossed == frozenset({1, 2, 3, 4, 5})
-    assert 0 not in crossed
-    assert_mps_bond_invariants(out)
-
-
-@pytest.mark.tdvp_regression
-def test_internal_pair_seed_bond_selection() -> None:
-    """Seed-bond pre-padding targets a subset of crossed bonds; sweeps use support_bonds=None."""
-    theta = 0.3
-    length = 10
-    sites = (2, 7)
-    window = (0, 9)
-    crossed = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
-    seed_bonds = select_protected_seed_bonds(crossed)
-    assert crossed == frozenset({2, 3, 4, 5, 6})
-    assert seed_bonds == frozenset({2, 3})
-    assert seed_bonds <= crossed
-
-    gate = GateLibrary.rzz([theta])
-    gate.set_sites(*sites)
-    out = copy.deepcopy(State(length, initial="x+").mps)
-    apply_two_qubit_gate_tdvp(out, gate, _tdvp_params(max_bond_dim=None, tdvp_sweeps=1))
-
-    qc = QuantumCircuit(length)
-    qc.h(range(length))
-    qc.rzz(theta, sites[0], sites[1])
-    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
-    _assert_z_observables_match(ref, out.to_vec(), length)
-    for bond in crossed:
-        assert _bond_second_schmidt(out, bond) >= 0.0
     assert_mps_bond_invariants(out)
 
 
 @pytest.mark.tdvp_regression
 def test_shifted_internal_pair_lr_rzz_z_observables() -> None:
-    """Shifted internal RZZ(1,8) on |+⟩^L: exact ⟨Z_i⟩ on crossed bonds."""
+    """Shifted internal RZZ(1,8) on |+⟩^L: exact ⟨Z_i⟩."""
     theta = 0.3
     length = 10
     sites = (1, 8)
@@ -576,16 +536,12 @@ def test_shifted_internal_pair_lr_rzz_z_observables() -> None:
     qc.rzz(theta, sites[0], sites[1])
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     _assert_z_observables_match(ref, out.to_vec(), length)
-
-    window = (0, 9)
-    crossed = protected_bonds_for_two_site_gate(sites[0], sites[1], window[0], window[1])
-    assert crossed == frozenset(range(1, 8))
     assert_mps_bond_invariants(out)
 
 
 @pytest.mark.tdvp_regression
 def test_haar_random_state_no_regression() -> None:
-    """Haar-random states remain accurate under long-range dynamic TDVP gates."""
+    """Haar-random states remain accurate under long-range 2TDVP gates."""
     length = 8
     theta = 0.3
     sites = (0, length - 1)
@@ -693,7 +649,7 @@ def test_fixed_chi_plus_rzz_two_applies_gate() -> None:
 
 @pytest.mark.tdvp_regression
 def test_fixed_chi_plus_rzz_eight_z_observables() -> None:
-    """χ=8 plus/RZZ: local ⟨Z_i⟩ exact under production single-sweep dynamic TDVP."""
+    """χ=8 plus/RZZ: local ⟨Z_i⟩ exact under production single-sweep 2TDVP."""
     theta = 0.3
     length = 8
     prep = _prep_state("plus", length)
@@ -757,8 +713,8 @@ def test_fixed_chi_truncates_high_bond_initial_state(gate_name: str) -> None:
 
 
 @pytest.mark.tdvp_regression
-def test_hybrid_tdvp_lr_uses_dynamic_path() -> None:
-    """Hybrid gate_mode='tdvp' routes LR gates through dynamic TDVP."""
+def test_hybrid_tdvp_lr_uses_tdvp_path() -> None:
+    """Hybrid gate_mode='tdvp' routes LR gates through the TDVP window path."""
     length = 8
     gate = GateLibrary.rzz([0.3])
     gate.set_sites(0, length - 1)
