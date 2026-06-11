@@ -24,13 +24,13 @@ from .primitives import (
     update_site,
 )
 from .sweep_utils import (
-    _enforce_global_bond_cap,
-    _prepare_substep_dt,
+    _align_bond,
+    _cap_bonds,
     _resize_bond,
-    _sync_fixed_chi_bond,
-    is_fixed_chi_digital,
-    renorm_on_drift,
-    split_two_site_tdvp,
+    _scale_dt,
+    renorm_drift,
+    split_tdvp,
+    uses_fixed_chi,
 )
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from ...data_structures.simulation_parameters import AnalogSimParams, StrongSimParams, WeakSimParams
 
 
-def _single_site_tdvp_sweep(
+def _sweep_1site(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -49,7 +49,7 @@ def _single_site_tdvp_sweep(
 ) -> None:
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
-            _single_site_tdvp_sweep(
+            _sweep_1site(
                 state,
                 operator,
                 sim_params,
@@ -70,7 +70,7 @@ def _single_site_tdvp_sweep(
             left_identity[i, a, i] = 1
     left_blocks[0] = left_identity
 
-    substep_evolution_dt = _prepare_substep_dt(sim_params, step_scale)
+    substep_evolution_dt = _scale_dt(sim_params, step_scale)
 
     # Left-to-right sweep: Update sites 0 to L-2.
     for i in range(num_sites - 1):
@@ -108,7 +108,7 @@ def _single_site_tdvp_sweep(
         krylov_tol=sim_params.krylov_tol,
     )
 
-    substep_evolution_dt = _prepare_substep_dt(sim_params, step_scale)
+    substep_evolution_dt = _scale_dt(sim_params, step_scale)
 
     # Right-to-left sweep: Update sites 1 to L-1.
     for i in reversed(range(1, num_sites)):
@@ -143,14 +143,14 @@ def _single_site_tdvp_sweep(
         )
 
 
-def _two_site_tdvp_sweep(
+def _sweep_2site(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     *,
     step_scale: float = 1.0,
     sweep_plan: list[float] | None = None,
-    apply_drift_renorm: bool = True,
+    drift_renorm: bool = True,
 ) -> None:
     num_sites = operator.length
     plan = sweep_plan if sweep_plan is not None else [step_scale]
@@ -166,7 +166,7 @@ def _two_site_tdvp_sweep(
     left_blocks[0] = left_identity
 
     for plan_step_scale in plan:
-        substep_evolution_dt = _prepare_substep_dt(sim_params, plan_step_scale)
+        substep_evolution_dt = _scale_dt(sim_params, plan_step_scale)
 
         for i in range(num_sites - 2):
             merged_tensor = merge_two_site(state.tensors[i], state.tensors[i + 1])
@@ -179,7 +179,7 @@ def _two_site_tdvp_sweep(
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_tdvp(
                 merged_tensor,
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
@@ -209,7 +209,7 @@ def _two_site_tdvp_sweep(
             substep_evolution_dt,
             krylov_tol=sim_params.krylov_tol,
         )
-        state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
+        state.tensors[i], state.tensors[i + 1] = split_tdvp(
             merged_tensor,
             sim_params,
             [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
@@ -221,7 +221,7 @@ def _two_site_tdvp_sweep(
             state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
         )
 
-        substep_evolution_dt = _prepare_substep_dt(sim_params, plan_step_scale)
+        substep_evolution_dt = _scale_dt(sim_params, plan_step_scale)
 
         # For ``num_sites == 2`` the RTL loop is empty; the LTR final-bond update above
         # already applies the full substep time once. Do not duplicate it here.
@@ -244,7 +244,7 @@ def _two_site_tdvp_sweep(
                 0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_tdvp(
                 merged_tensor,
                 sim_params,
                 [state.physical_dimensions[i], state.physical_dimensions[i + 1]],
@@ -255,11 +255,11 @@ def _two_site_tdvp_sweep(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
 
-        if apply_drift_renorm and is_fixed_chi_digital(sim_params):
-            renorm_on_drift(state, sim_params)
+        if drift_renorm and uses_fixed_chi(sim_params):
+            renorm_drift(state, sim_params)
 
 
-def _dynamic_tdvp_sweep(
+def _sweep_dynamic(
     state: MPS,
     operator: MPO,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -269,7 +269,7 @@ def _dynamic_tdvp_sweep(
 ) -> None:
     if sweep_plan is not None:
         for plan_step_scale in sweep_plan:
-            _dynamic_tdvp_sweep(
+            _sweep_dynamic(
                 state,
                 operator,
                 sim_params,
@@ -277,7 +277,7 @@ def _dynamic_tdvp_sweep(
             )
         return
 
-    _enforce_global_bond_cap(state, sim_params)
+    _cap_bonds(state, sim_params)
 
     num_sites = operator.length
 
@@ -290,7 +290,7 @@ def _dynamic_tdvp_sweep(
         eye[i, :, i] = 1
     left_blocks[0] = eye
 
-    substep_evolution_dt = _prepare_substep_dt(sim_params, step_scale)
+    substep_evolution_dt = _scale_dt(sim_params, step_scale)
 
     # ----- LEFT-TO-RIGHT DYNAMIC SWEEP -----
     for i in range(num_sites):
@@ -321,14 +321,14 @@ def _dynamic_tdvp_sweep(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
-                _sync_fixed_chi_bond(state, i, sim_params)
+                _align_bond(state, i, sim_params)
                 bond_tensor = _resize_bond(
                     bond_tensor,
                     lead=int(state.tensors[i].shape[2]),
                     trail=int(state.tensors[i + 1].shape[1]),
                 )
                 state.tensors[i + 1] = oe.contract(state.tensors[i + 1], (0, 3, 2), bond_tensor, (1, 3), (0, 1, 2))
-                _sync_fixed_chi_bond(state, i, sim_params)
+                _align_bond(state, i, sim_params)
         elif i == num_sites - 1:
             continue
         elif i == num_sites - 2:
@@ -343,7 +343,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_tdvp(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -369,7 +369,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i], state.physical_dimensions[i + 1]]
-            state.tensors[i], state.tensors[i + 1] = split_two_site_tdvp(
+            state.tensors[i], state.tensors[i + 1] = split_tdvp(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -387,7 +387,7 @@ def _dynamic_tdvp_sweep(
                 -0.5 * substep_evolution_dt,
                 krylov_tol=sim_params.krylov_tol,
             )
-    substep_evolution_dt = _prepare_substep_dt(sim_params, step_scale)
+    substep_evolution_dt = _scale_dt(sim_params, step_scale)
 
     # ----- RIGHT-TO-LEFT DYNAMIC SWEEP -----
     for i in reversed(range(num_sites)):
@@ -419,14 +419,14 @@ def _dynamic_tdvp_sweep(
                     -0.5 * substep_evolution_dt,
                     krylov_tol=sim_params.krylov_tol,
                 )
-                _sync_fixed_chi_bond(state, i - 1, sim_params)
+                _align_bond(state, i - 1, sim_params)
                 bond_tensor = _resize_bond(
                     bond_tensor,
                     lead=int(state.tensors[i - 1].shape[2]),
                     trail=int(state.tensors[i].shape[1]),
                 )
                 state.tensors[i - 1] = oe.contract(state.tensors[i - 1], (0, 1, 3), bond_tensor, (3, 2), (0, 1, 2))
-                _sync_fixed_chi_bond(state, i - 1, sim_params)
+                _align_bond(state, i - 1, sim_params)
         elif i == 0:
             continue
         else:
@@ -441,7 +441,7 @@ def _dynamic_tdvp_sweep(
                 krylov_tol=sim_params.krylov_tol,
             )
             phys_dims = [state.physical_dimensions[i - 1], state.physical_dimensions[i]]
-            state.tensors[i - 1], state.tensors[i] = split_two_site_tdvp(
+            state.tensors[i - 1], state.tensors[i] = split_tdvp(
                 merged_tensor,
                 sim_params,
                 phys_dims,
@@ -461,5 +461,5 @@ def _dynamic_tdvp_sweep(
                     krylov_tol=sim_params.krylov_tol,
                 )
 
-    if is_fixed_chi_digital(sim_params):
-        renorm_on_drift(state, sim_params)
+    if uses_fixed_chi(sim_params):
+        renorm_drift(state, sim_params)

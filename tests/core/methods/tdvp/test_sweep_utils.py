@@ -22,10 +22,10 @@ from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.methods.tdvp.sweep_utils import (
-    is_fixed_chi_digital,
-    renorm_on_drift,
-    renorm_on_trunc,
-    split_two_site_tdvp,
+    renorm_drift,
+    renorm_trunc,
+    split_tdvp,
+    uses_fixed_chi,
 )
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 rng = np.random.default_rng()
 
 
-def testsplit_two_site_tdvp_left_right_sqrt() -> None:
+def test_split_tdvp_left_right_sqrt() -> None:
     """Test splitting of an MPS tensor using different singular value distribution options."""
     A = rng.random(size=(4, 3, 5)).astype(np.complex128)
     sim_params = AnalogSimParams(
@@ -42,7 +42,7 @@ def testsplit_two_site_tdvp_left_right_sqrt() -> None:
     )
     physical_dimensions = [A.shape[0] // 2, A.shape[0] // 2]
     for distr in ["left", "right", "sqrt"]:
-        A0, A1 = split_two_site_tdvp(A, sim_params, physical_dimensions, distr, dynamic=False)
+        A0, A1 = split_tdvp(A, sim_params, physical_dimensions, distr, dynamic=False)
         assert A0.ndim == 3
         assert A1.ndim == 3
         r = A0.shape[2]
@@ -100,7 +100,7 @@ def test_split_truncation_discarded_weight_kept_count(
         sample_timesteps=True,
     )
 
-    A0, A1 = split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
+    A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     keep = A0.shape[2]
     assert A1.shape[1] == keep
 
@@ -154,7 +154,7 @@ def test_split_truncation_relative_kept_count(svs: NDArray[np.float64], rel_the:
         sample_timesteps=True,
     )
 
-    A0, A1 = split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
+    A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     keep = A0.shape[2]
     assert keep == expected_keep
     assert A1.shape[1] == keep
@@ -182,13 +182,13 @@ def test_split_truncation_max_bond_enforced() -> None:
         trunc_mode="relative",
         sample_timesteps=True,
     )
-    A0, A1 = split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=False)
+    A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=False)
     assert A0.shape[2] == 2
     assert A1.shape[1] == 2
 
 
-def testsplit_two_site_tdvp_min_keep() -> None:
-    """``split_two_site_tdvp`` enforces ``min_keep=2`` even when threshold would drop further."""
+def test_split_tdvp_min_keep() -> None:
+    """``split_tdvp`` enforces ``min_keep=2`` even when threshold would drop further."""
     svs = np.array([1.0, 1e-12, 1e-13, 1e-14], dtype=np.float64)
     d0, d1, D0, D2 = 2, 2, 2, 2
     theta = _theta_from_singulars(svs, d0 * D0, d1 * D2, seed=31)
@@ -202,7 +202,7 @@ def testsplit_two_site_tdvp_min_keep() -> None:
         trunc_mode="relative",
         sample_timesteps=True,
     )
-    A0, A1 = split_two_site_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
+    A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], "sqrt", dynamic=True)
     assert A0.shape[2] == 2
     assert A1.shape[1] == 2
 
@@ -225,7 +225,7 @@ def test_split_truncation_distribution_reconstructs_optimal_rank(distr: str) -> 
         sample_timesteps=True,
     )
 
-    A0, A1 = split_two_site_tdvp(A_in, sim_params, [d0, d1], distr, dynamic=True)
+    A0, A1 = split_tdvp(A_in, sim_params, [d0, d1], distr, dynamic=True)
     k = A0.shape[2]
 
     L = A0.reshape(d0 * D0, k)
@@ -263,8 +263,8 @@ def test_dynamic_split_matches_uncapped_when_rank_below_cap() -> None:
         sample_timesteps=True,
     )
 
-    left_u, right_u = split_two_site_tdvp(a_in, uncapped, [d0, d1], "sqrt", dynamic=True)
-    left_c, right_c = split_two_site_tdvp(a_in, capped, [d0, d1], "sqrt", dynamic=True)
+    left_u, right_u = split_tdvp(a_in, uncapped, [d0, d1], "sqrt", dynamic=True)
+    left_c, right_c = split_tdvp(a_in, capped, [d0, d1], "sqrt", dynamic=True)
 
     assert left_u.shape == left_c.shape
     assert right_u.shape == right_c.shape
@@ -272,38 +272,38 @@ def test_dynamic_split_matches_uncapped_when_rank_below_cap() -> None:
     np.testing.assert_allclose(right_u, right_c, atol=1e-12)
 
 
-def testis_fixed_chi_digital() -> None:
+def test_uses_fixed_chi() -> None:
     """Fixed-χ policy applies to digital params with a cap, not analog or uncapped digital."""
-    assert not is_fixed_chi_digital(AnalogSimParams())
-    assert not is_fixed_chi_digital(AnalogSimParams(max_bond_dim=4))
-    assert not is_fixed_chi_digital(StrongSimParams(preset="exact", get_state=True))
-    assert is_fixed_chi_digital(StrongSimParams(preset="exact", get_state=True, max_bond_dim=4))
+    assert not uses_fixed_chi(AnalogSimParams())
+    assert not uses_fixed_chi(AnalogSimParams(max_bond_dim=4))
+    assert not uses_fixed_chi(StrongSimParams(preset="exact", get_state=True))
+    assert uses_fixed_chi(StrongSimParams(preset="exact", get_state=True, max_bond_dim=4))
 
 
-def testrenorm_on_trunc_always_normalizes() -> None:
+def test_renorm_trunc_always_normalizes() -> None:
     """Truncation renorm always calls normalize when invoked."""
     state = MPS(2, state="zeros")
     params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2)
     with patch.object(MPS, "normalize") as mock_normalize:
-        renorm_on_trunc(state, params)
+        renorm_trunc(state, params)
         mock_normalize.assert_called_once()
 
 
-def testrenorm_on_drift_skips_when_within_tolerance() -> None:
+def test_renorm_drift_skips_when_within_tolerance() -> None:
     """Drift renorm is a no-op when the global norm is already unit."""
     state = MPS(2, state="zeros")
     params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
     with patch.object(MPS, "normalize") as mock_normalize:
-        renorm_on_drift(state, params)
+        renorm_drift(state, params)
         mock_normalize.assert_not_called()
 
 
-def testrenorm_on_drift_normalizes_large_drift() -> None:
+def test_renorm_drift_normalizes_large_drift() -> None:
     """Drift renorm restores unit norm when truncation drifts far from unity."""
     state = MPS(2, state="zeros")
     state.tensors[0] *= 0.1
     state.tensors[1] *= 0.1
     params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-10)
     with patch.object(MPS, "normalize") as mock_normalize:
-        renorm_on_drift(state, params)
+        renorm_drift(state, params)
         mock_normalize.assert_called_once()

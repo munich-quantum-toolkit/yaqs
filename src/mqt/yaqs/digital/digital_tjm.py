@@ -33,8 +33,8 @@ from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp.sweep_utils import compute_min_keep, is_fixed_chi_digital, renorm_on_drift
-from ..core.methods.tdvp.tdvp import tdvp_window
+from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fixed_chi
+from ..core.methods.tdvp.tdvp import evolve_window
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -249,11 +249,11 @@ def apply_two_qubit_gate_tdvp(
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 
-    tdvp_window(short_state, short_mpo, sim_params)
+    evolve_window(short_state, short_mpo, sim_params)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
-    if is_fixed_chi_digital(sim_params):
-        renorm_on_drift(state, sim_params)
+    if uses_fixed_chi(sim_params):
+        renorm_drift(state, sim_params)
 
     return first_site, last_site
 
@@ -319,7 +319,7 @@ def apply_two_qubit_gate_tebd(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
-        min_keep=compute_min_keep(sim_params),
+        min_keep=get_min_keep(sim_params),
     )
     state.tensors[left_site] = new_left
     state.tensors[right_site] = new_right

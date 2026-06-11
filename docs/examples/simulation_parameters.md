@@ -181,9 +181,9 @@ Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic 
 - **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + **two-site TDVP (2TDVP)** on a local window.
 - **`full-tdvp`** — TDVP (generator MPO + 2TDVP on a local window) on every two-qubit gate.
 
-Long-range gates in `gate_mode="tdvp"` use 2TDVP via `tdvp_window` without bond-support retention or seed prepadding.
+Long-range gates in `gate_mode="tdvp"` apply 2TDVP on the gate support window via `evolve_window`.
 
-Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Values greater than `1` are opt-in and may improve accuracy on some circuits, but are not guaranteed to match legacy integrators or exact simulation. The setting applies to all TDVP kernels on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
+Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Values greater than `1` are opt-in and may improve accuracy on some circuits. The setting applies to all TDVP kernels on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
 
 Use **`tdvp_mode`** to select the TDVP integrator: `"1site"` (1TDVP), `"2site"` (2TDVP), or `"dynamic"` (adaptive single/two-site updates). Defaults are **`"2site"`** on `StrongSimParams` and `WeakSimParams` (circuit simulation) and **`"dynamic"`** on `AnalogSimParams` (Hamiltonian evolution).
 

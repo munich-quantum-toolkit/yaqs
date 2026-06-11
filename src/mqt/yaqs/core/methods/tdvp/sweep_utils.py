@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 # --- Truncation policy ---
 
 
-def compute_min_keep(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
+def get_min_keep(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> int:
     """Return the minimum bond dimension to retain during TDVP truncation."""
     cap = sim_params.max_bond_dim
     if cap is None:
@@ -38,7 +38,7 @@ def compute_min_keep(sim_params: AnalogSimParams | StrongSimParams | WeakSimPara
     return min(2, cap)
 
 
-def split_two_site_tdvp(
+def split_tdvp(
     merged: NDArray[np.complex128],
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     physical_dimensions: list[int],
@@ -71,14 +71,14 @@ def split_two_site_tdvp(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=None if dynamic else sim_params.max_bond_dim,
-        min_keep=compute_min_keep(sim_params),
+        min_keep=get_min_keep(sim_params),
     )
 
 
 # --- Substep timing ---
 
 
-def _prepare_substep_dt(
+def _scale_dt(
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
     step_scale: float,
 ) -> float:
@@ -111,7 +111,7 @@ def _sync_bond_dim(state: MPS, bond_index: int, target_dim: int) -> None:
         state._ensure_internal_bond_dims((bond_index,), target_dim, max_dim=target_dim)
 
 
-def _compute_bond_target_dim(
+def _get_bond_dim(
     state: MPS,
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -126,7 +126,7 @@ def _compute_bond_target_dim(
     return max(chi_target, 1)
 
 
-def is_fixed_chi_digital(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> bool:
+def uses_fixed_chi(sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> bool:
     """Return whether fixed-χ digital renormalization policy applies.
 
     Returns:
@@ -136,27 +136,27 @@ def is_fixed_chi_digital(sim_params: AnalogSimParams | StrongSimParams | WeakSim
     return sim_params.max_bond_dim is not None and not isinstance(sim_params, AnalogSimParams)
 
 
-def _global_mps_norm(state: MPS) -> float:
+def _get_norm(state: MPS) -> float:
     """Return the L2 norm of the full MPS state vector."""
     overlap = state.scalar_product(state)
     norm_sq = float(np.real(np.asarray(overlap, dtype=np.complex128).flat[0]))
     return float(np.sqrt(max(norm_sq, 0.0)))
 
 
-def renorm_on_trunc(state: MPS, _sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
+def renorm_trunc(state: MPS, _sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
     """Renormalize after explicit bond truncation (call only when fixed-χ digital)."""
     state.normalize()
 
 
-def renorm_on_drift(state: MPS, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
+def renorm_drift(state: MPS, sim_params: AnalogSimParams | StrongSimParams | WeakSimParams) -> None:
     """Renormalize when global norm drift exceeds tolerance (call only when fixed-χ digital)."""
     drift_tol = max(1e-10, float(np.sqrt(sim_params.svd_threshold)))
-    norm = _global_mps_norm(state)
+    norm = _get_norm(state)
     if abs(norm - 1.0) > drift_tol:
         state.normalize()
 
 
-def _sync_fixed_chi_bond(
+def _align_bond(
     state: MPS,
     bond_index: int,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
@@ -168,12 +168,12 @@ def _sync_fixed_chi_bond(
     right = state.tensors[bond_index + 1]
     if int(left.shape[2]) == int(right.shape[1]):
         return
-    _sync_bond_dim(state, bond_index, _compute_bond_target_dim(state, bond_index, sim_params))
-    if is_fixed_chi_digital(sim_params):
-        renorm_on_trunc(state, sim_params)
+    _sync_bond_dim(state, bond_index, _get_bond_dim(state, bond_index, sim_params))
+    if uses_fixed_chi(sim_params):
+        renorm_trunc(state, sim_params)
 
 
-def _enforce_global_bond_cap(
+def _cap_bonds(
     state: MPS,
     sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
 ) -> None:
@@ -188,8 +188,8 @@ def _enforce_global_bond_cap(
         if chi_out > cap or chi_in > cap:
             _sync_bond_dim(state, bond, cap)
             changed = True
-    if changed and is_fixed_chi_digital(sim_params):
-        renorm_on_trunc(state, sim_params)
+    if changed and uses_fixed_chi(sim_params):
+        renorm_trunc(state, sim_params)
 
 
 # --- Bond transfer geometry ---
