@@ -243,7 +243,14 @@ def apply_two_qubit_gate_tdvp(
 
     Returns:
         ``(first_site, last_site)`` spanning the gate support in MPS order.
+
+    Raises:
+        ValueError: If ``sim_params.tdvp_mode`` is not ``"2site"``.
+
     """
+    if sim_params.tdvp_mode != "2site":
+        msg = f'apply_two_qubit_gate_tdvp only supports tdvp_mode="2site"; got {sim_params.tdvp_mode!r}.'
+        raise ValueError(msg)
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     window_size = 1

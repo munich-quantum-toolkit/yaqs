@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: SLF001 -- white-box tests exercise private MPO compression helpers
+
 """Tests for :class:`mqt.yaqs.core.data_structures.mpo.MPO`."""
 
 from __future__ import annotations

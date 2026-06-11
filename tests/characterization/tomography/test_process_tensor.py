@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: PLC2701 -- white-box tests import private process_tensor helpers
+
 """Unit tests for the ProcessTensor class."""
 
 from __future__ import annotations

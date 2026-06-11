@@ -18,10 +18,11 @@ quantum simulation. It verifies that:
 """
 
 # ignore non-lowercase variable names for physics notation
+# ruff: noqa: PLC2701, SLF001 -- white-box tests of parameter validation and TDVP internals
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -203,7 +204,7 @@ def test_tdvp_sweeps_defaults_and_validation() -> None:
 def test_tdvp_sweeps_rejects_non_int(invalid: object) -> None:
     """tdvp_sweeps must be a true int, not bool or float."""
     with pytest.raises(TypeError, match="tdvp_sweeps"):
-        _validate_tdvp_sweeps(invalid)  # ty: ignore[invalid-argument-type]
+        _validate_tdvp_sweeps(cast("Any", invalid))
 
 
 @pytest.mark.parametrize(

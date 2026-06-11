@@ -8,7 +8,7 @@
 """Tests for TDVP low-level primitives and dense effective operators."""
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff: noqa: N806, PLC2701
 
 from __future__ import annotations
 

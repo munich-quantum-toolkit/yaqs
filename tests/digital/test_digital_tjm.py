@@ -73,14 +73,12 @@ if TYPE_CHECKING:
 # --- create_local_noise_model ---
 
 
-def test_create_local_noise_model() -> None:
-    """Test the create_local_noise_model function.
+def _sample_global_noise_model() -> NoiseModel:
+    """Build the shared global noise model used in local-noise filtering tests.
 
-    This test creates a global noise model with various noise processes and tests the creation
-    of local noise models for different gate positions. It verifies that only the relevant
-    noise processes are included in the local model based on the gate's site range.
+    Returns:
+        Noise model with single- and two-qubit processes on a five-site span.
     """
-    # Create a global noise model with various processes
     global_processes = [
         {"name": "pauli_x", "sites": [0], "strength": 0.01},
         {"name": "pauli_x", "sites": [1], "strength": 0.02},
@@ -94,122 +92,89 @@ def test_create_local_noise_model() -> None:
         {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
         {"name": "crosstalk_xx", "sites": [1, 3], "strength": 0.06},
     ]
-    global_noise_model = NoiseModel(global_processes)
+    return NoiseModel(global_processes)
 
-    # Test case 1: Gate acting on sites [1, 2]
-    local_model_1 = create_local_noise_model(global_noise_model, 1, 2)
 
-    # Should include: bitflip on sites 1, 2 and crosstalk_xx, crosstalk_yx on [1, 2]
-    expected_processes_1 = [
-        {"name": "pauli_x", "sites": [1], "strength": 0.02},
-        {"name": "pauli_x", "sites": [2], "strength": 0.03},
-        {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
-        {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
-    ]
+def _assert_noise_processes_match(
+    actual: NoiseModel,
+    expected_processes: list[dict[str, object]],
+) -> None:
+    """Assert that a local noise model contains exactly the expected processes.
 
-    assert len(local_model_1.processes) == len(expected_processes_1)
-    for expected_process in expected_processes_1:
-        found = False
-        for actual_process in local_model_1.processes:
-            if (
-                actual_process["name"] == expected_process["name"]
-                and actual_process["sites"] == expected_process["sites"]
-                and actual_process["strength"] == expected_process["strength"]
-            ):
-                found = True
-                break
+    Args:
+        actual: Local noise model returned by :func:`create_local_noise_model`.
+        expected_processes: Expected process dictionaries with ``name``, ``sites``,
+            and ``strength`` keys.
+    """
+    assert len(actual.processes) == len(expected_processes)
+    for expected_process in expected_processes:
+        found = any(
+            actual_process["name"] == expected_process["name"]
+            and actual_process["sites"] == expected_process["sites"]
+            and actual_process["strength"] == expected_process["strength"]
+            for actual_process in actual.processes
+        )
         assert found, f"Expected process {expected_process} not found in local model"
 
-    # Test case 2: Gate acting on sites [0, 1]
-    local_model_2 = create_local_noise_model(global_noise_model, 0, 1)
 
-    # Should include: bitflip on sites 0, 1 and crosstalk_xx, crosstalk_xy on [0, 1]
-    expected_processes_2 = [
-        {"name": "pauli_x", "sites": [0], "strength": 0.01},
-        {"name": "pauli_x", "sites": [1], "strength": 0.02},
-        {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.05},
-        {"name": "crosstalk_xy", "sites": [0, 1], "strength": 0.09},
-    ]
-
-    assert len(local_model_2.processes) == len(expected_processes_2)
-    for expected_process in expected_processes_2:
-        found = False
-        for actual_process in local_model_2.processes:
-            if (
-                actual_process["name"] == expected_process["name"]
-                and actual_process["sites"] == expected_process["sites"]
-                and actual_process["strength"] == expected_process["strength"]
-            ):
-                found = True
-                break
-        assert found, f"Expected process {expected_process} not found in local model"
-
-    # Test case 3: Gate acting on sites [2, 3]
-    local_model_3 = create_local_noise_model(global_noise_model, 2, 3)
-
-    # Should include: bitflip on sites 2, 3 and crosstalk_xx on [2, 3]
-    expected_processes_3 = [
-        {"name": "pauli_x", "sites": [2], "strength": 0.03},
-        {"name": "pauli_x", "sites": [3], "strength": 0.04},
-        {"name": "crosstalk_xx", "sites": [2, 3], "strength": 0.07},
-    ]
-
-    assert len(local_model_3.processes) == len(expected_processes_3)
-    for expected_process in expected_processes_3:
-        found = False
-        for actual_process in local_model_3.processes:
-            if (
-                actual_process["name"] == expected_process["name"]
-                and actual_process["sites"] == expected_process["sites"]
-                and actual_process["strength"] == expected_process["strength"]
-            ):
-                found = True
-                break
-        assert found, f"Expected process {expected_process} not found in local model"
-
-    # Test case 4: Single-qubit gate on site 1
-    local_model_4 = create_local_noise_model(global_noise_model, 1, 1)
-
-    # Should include: bitflip on site 1 only
-    expected_processes_4 = [
-        {"name": "pauli_x", "sites": [1], "strength": 0.02},
-    ]
-
-    assert len(local_model_4.processes) == len(expected_processes_4)
-    for expected_process in expected_processes_4:
-        found = False
-        for actual_process in local_model_4.processes:
-            if (
-                actual_process["name"] == expected_process["name"]
-                and actual_process["sites"] == expected_process["sites"]
-                and actual_process["strength"] == expected_process["strength"]
-            ):
-                found = True
-                break
-        assert found, f"Expected process {expected_process} not found in local model"
-
-    # Test case 5: Gate acting on sites [1, 2, 3] (three-qubit gate)
-    local_model_5 = create_local_noise_model(global_noise_model, 1, 3)
-
-    # Should include: bitflip on sites 1, 2, 3 and crosstalk_xx, crosstalk_yx on [1, 2], crosstalk_xx on [2, 3]
-    expected_processes_5 = [
-        {"name": "pauli_x", "sites": [1], "strength": 0.02},
-        {"name": "pauli_x", "sites": [3], "strength": 0.04},
-        {"name": "crosstalk_xx", "sites": [1, 3], "strength": 0.06},
-    ]
-
-    assert len(local_model_5.processes) == len(expected_processes_5)
-    for expected_process in expected_processes_5:
-        found = False
-        for actual_process in local_model_5.processes:
-            if (
-                actual_process["name"] == expected_process["name"]
-                and actual_process["sites"] == expected_process["sites"]
-                and actual_process["strength"] == expected_process["strength"]
-            ):
-                found = True
-                break
-        assert found, f"Expected process {expected_process} not found in local model"
+@pytest.mark.parametrize(
+    ("start", "end", "expected_processes"),
+    [
+        (
+            1,
+            2,
+            [
+                {"name": "pauli_x", "sites": [1], "strength": 0.02},
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+                {"name": "crosstalk_xx", "sites": [1, 2], "strength": 0.06},
+                {"name": "crosstalk_yx", "sites": [1, 2], "strength": 0.10},
+            ],
+        ),
+        (
+            0,
+            1,
+            [
+                {"name": "pauli_x", "sites": [0], "strength": 0.01},
+                {"name": "pauli_x", "sites": [1], "strength": 0.02},
+                {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.05},
+                {"name": "crosstalk_xy", "sites": [0, 1], "strength": 0.09},
+            ],
+        ),
+        (
+            2,
+            3,
+            [
+                {"name": "pauli_x", "sites": [2], "strength": 0.03},
+                {"name": "pauli_x", "sites": [3], "strength": 0.04},
+                {"name": "crosstalk_xx", "sites": [2, 3], "strength": 0.07},
+            ],
+        ),
+        (
+            1,
+            1,
+            [
+                {"name": "pauli_x", "sites": [1], "strength": 0.02},
+            ],
+        ),
+        (
+            1,
+            3,
+            [
+                {"name": "pauli_x", "sites": [1], "strength": 0.02},
+                {"name": "pauli_x", "sites": [3], "strength": 0.04},
+                {"name": "crosstalk_xx", "sites": [1, 3], "strength": 0.06},
+            ],
+        ),
+    ],
+)
+def test_create_local_noise_model(
+    start: int,
+    end: int,
+    expected_processes: list[dict[str, object]],
+) -> None:
+    """Local noise models retain only processes overlapping the gate site range."""
+    local_model = create_local_noise_model(_sample_global_noise_model(), start, end)
+    _assert_noise_processes_match(local_model, expected_processes)
 
 
 # --- process_layer ---
@@ -361,14 +326,47 @@ def test_apply_window() -> None:
 
 # --- apply_two_qubit_gate_tdvp ---
 
+
+def test_apply_two_qubit_gate_tdvp_rejects_non_2site_mode() -> None:
+    """Long-range digital TDVP windows only support two-site integration."""
+    length = 4
+    gate = GateLibrary.rzz([0.2])
+    gate.set_sites(0, length - 1)
+    state = State(length, initial="x+").mps
+    params = StrongSimParams(
+        preset="exact",
+        get_state=True,
+        max_bond_dim=4,
+        tdvp_mode="dynamic",
+    )
+    with pytest.raises(ValueError, match='tdvp_mode="2site"'):
+        apply_two_qubit_gate_tdvp(state, gate, params)
+
+
 _RZZ_ANGLE = 0.3
 
 
 def _lr_pair(length: int) -> tuple[int, int]:
+    """Return the long-range benchmark qubit pair for a chain.
+
+    Args:
+        length: Number of qubits in the chain.
+
+    Returns:
+        ``(0, length - 1)`` spanning the chain ends.
+    """
     return (0, length - 1)
 
 
 def _nn_pair(_length: int) -> tuple[int, int]:
+    """Return the nearest-neighbor benchmark qubit pair.
+
+    Args:
+        _length: Chain length (unused; kept for a uniform helper signature).
+
+    Returns:
+        ``(0, 1)`` for the leftmost nearest-neighbor link.
+    """
     return (0, 1)
 
 
@@ -417,6 +415,14 @@ def _mixed_small_zeros_circuit(length: int = 10) -> QuantumCircuit:
 
 
 def _grid_shape(num_qubits: int) -> tuple[int, int]:
+    """Infer a near-square row/column layout for a 1D qubit chain.
+
+    Args:
+        num_qubits: Total number of qubits to lay out on a grid.
+
+    Returns:
+        ``(nrow, ncol)`` whose product equals ``num_qubits``.
+    """
     for nrow in range(int(math.sqrt(num_qubits)), 0, -1):
         if num_qubits % nrow == 0:
             return nrow, num_qubits // nrow
@@ -424,6 +430,16 @@ def _grid_shape(num_qubits: int) -> tuple[int, int]:
 
 
 def _grid_index(row: int, col: int, ncol: int) -> int:
+    """Map a 2D grid coordinate to a 1D chain index.
+
+    Args:
+        row: Row index on the grid.
+        col: Column index on the grid.
+        ncol: Number of columns in the grid.
+
+    Returns:
+        Linear qubit index ``row * ncol + col``.
+    """
     return row * ncol + col
 
 
@@ -484,6 +500,14 @@ def _replay_hybrid_tdvp_through_gate(qc: QuantumCircuit, num_gates: int, *, para
 
 
 def _ladder_pairs(length: int) -> list[tuple[int, int]]:
+    """Enumerate mirrored long-range RZZ pairs used in ladder regressions.
+
+    Args:
+        length: Number of qubits in the chain.
+
+    Returns:
+        Ordered list of disjoint ``(left, right)`` site pairs.
+    """
     pairs: list[tuple[int, int]] = []
     for left in range(length // 2):
         right = length - 1 - left
@@ -493,6 +517,15 @@ def _ladder_pairs(length: int) -> list[tuple[int, int]]:
 
 
 def _exact_ladder_reference(length: int, num_gates: int) -> np.ndarray:
+    r"""Build the exact state vector for a prefix of the RZZ ladder circuit.
+
+    Args:
+        length: Number of qubits in the chain.
+        num_gates: Number of ladder RZZ gates to include from the left.
+
+    Returns:
+        State vector after ``H^{\\otimes L}`` and the first ``num_gates`` RZZ gates.
+    """
     qc = QuantumCircuit(length)
     qc.h(range(length))
     for site_a, site_b in _ladder_pairs(length)[:num_gates]:
@@ -501,6 +534,13 @@ def _exact_ladder_reference(length: int, num_gates: int) -> np.ndarray:
 
 
 def _apply_ladder_gates(state: State, *, max_bond_dim: int | None, tdvp_sweeps: int) -> None:
+    """Apply the mirrored RZZ ladder through production digital gate routing.
+
+    Args:
+        state: MPS state updated in place.
+        max_bond_dim: Optional bond-dimension cap forwarded to TDVP parameters.
+        tdvp_sweeps: Number of symmetric TDVP substeps per long-range gate.
+    """
     params = _tdvp_params(max_bond_dim=max_bond_dim, tdvp_sweeps=tdvp_sweeps)
     for site_a, site_b in _ladder_pairs(state.length):
         gate = GateLibrary.rzz([_RZZ_ANGLE])

@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: PLC2701 -- white-box tests import private analog.utils helpers
+
 """Tests for analog solver utility functions."""
 
 from typing import Any, cast

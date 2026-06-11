@@ -8,10 +8,11 @@
 """Tests for the public TDVP entry point and sweep orchestration."""
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff: noqa: N806, PLC2701
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -148,6 +149,15 @@ def test_strong_default_mode_is_2site() -> None:
         mock_two.assert_called_once()
 
 
+def test_evolve_window_rejects_single_site_window() -> None:
+    """Window-local TDVP requires at least two sites."""
+    state = MPS(1, state="zeros")
+    hamiltonian = MPO.ising(1, 1.0, 0.5)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    with pytest.raises(ValueError, match="at least two sites"):
+        evolve_window(state, hamiltonian, sim_params)
+
+
 def test_evolve_window_no_drift_renorm() -> None:
     """Window-local TDVP disables per-sweep drift renorm before grafting."""
     L = 4
@@ -176,7 +186,7 @@ def test_tdvp_rejects_unknown_tdvp_mode_at_runtime() -> None:
     state = MPS(4, state="zeros")
     hamiltonian = MPO.ising(4, 1.0, 0.5)
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
-    sim_params.tdvp_mode = "invalid"  # ty: ignore[invalid-assignment]
+    sim_params.tdvp_mode = cast("Any", "invalid")
     with pytest.raises(ValueError, match="tdvp_mode"):
         tdvp(state, hamiltonian, sim_params)
 

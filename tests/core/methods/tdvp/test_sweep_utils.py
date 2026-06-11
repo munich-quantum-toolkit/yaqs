@@ -8,7 +8,7 @@
 """Tests for TDVP sweep utilities and truncation policy."""
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff: noqa: N806, PLC2701
 
 from __future__ import annotations
 
@@ -456,6 +456,16 @@ def test_resize_bond_lead_trail_branches() -> None:
 def test_sync_bond_dim_padding_path() -> None:
     """Bond sync uses padding when both sides are below the target dimension."""
     t0 = np.zeros((2, 1, 1), dtype=np.complex128)
+    t1 = np.zeros((2, 1, 1), dtype=np.complex128)
+    state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
+    _sync_bond_dim(state, 0, 2, StrongSimParams(preset="exact", get_state=True, max_bond_dim=2))
+    assert state.tensors[0].shape[2] == 2
+    assert state.tensors[1].shape[1] == 2
+
+
+def test_sync_bond_dim_aligns_mismatched_bond_widths() -> None:
+    """Bond sync pads mismatched virtual indices before targeting a shared dimension."""
+    t0 = np.zeros((2, 1, 2), dtype=np.complex128)
     t1 = np.zeros((2, 1, 1), dtype=np.complex128)
     state = MPS(length=2, tensors=[t0, t1], physical_dimensions=[2, 2])
     _sync_bond_dim(state, 0, 2, StrongSimParams(preset="exact", get_state=True, max_bond_dim=2))

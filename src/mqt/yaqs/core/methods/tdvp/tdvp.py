@@ -124,7 +124,13 @@ def evolve_window(
         operator: Window-local generator MPO.
         sim_params: Truncation and Krylov settings for TDVP.
 
+    Raises:
+        ValueError: If the window-local MPS has fewer than two sites.
+
     """
+    if state.length < 2:
+        msg = "evolve_window requires an MPS window with at least two sites."
+        raise ValueError(msg)
     _run_sweeps(
         integrators.sweep_2site,
         state,

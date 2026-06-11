@@ -134,7 +134,16 @@ def _sync_bond_dim(
     chi_in = int(right.shape[1])
     if chi_out == target_dim and chi_in == target_dim:
         return
-    if chi_out > target_dim or chi_in > target_dim or chi_out != chi_in:
+    if chi_out != chi_in:
+        align_dim = max(chi_out, chi_in)
+        state.ensure_internal_bond_dims((bond_index,), align_dim, max_dim=align_dim)
+        left = state.tensors[bond_index]
+        right = state.tensors[bond_index + 1]
+        chi_out = int(left.shape[2])
+        chi_in = int(right.shape[1])
+        if chi_out == target_dim and chi_in == target_dim:
+            return
+    if chi_out > target_dim or chi_in > target_dim:
         trunc_mode = cast("TruncMode", sim_params.trunc_mode) if sim_params is not None else "relative"
         threshold = sim_params.svd_threshold if sim_params is not None else 0.0
         merged = merge_two_site(left, right)

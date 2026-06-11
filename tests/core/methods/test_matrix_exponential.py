@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: SLF001 -- white-box tests of internal Krylov/Arnoldi helpers
+
 """Tests for Krylov subspace methods used for matrix exponential calculations.
 
 This module provides unit tests for the internal functions `lanczos_iteration` and `expm_krylov`,
