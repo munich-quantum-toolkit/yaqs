@@ -18,10 +18,11 @@ quantum simulation. It verifies that:
 """
 
 # ignore non-lowercase variable names for physics notation
+# ruff: noqa: PLC2701, SLF001 -- white-box tests of parameter validation and TDVP internals
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -33,9 +34,10 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
     Observable,
     StrongSimParams,
     WeakSimParams,
+    _validate_tdvp_sweeps,
 )
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X
-from mqt.yaqs.core.methods import tdvp
+from mqt.yaqs.core.methods.tdvp import primitives as tdvp_primitives
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -43,6 +45,7 @@ if TYPE_CHECKING:
     from mqt.yaqs.core.data_structures.simulation_parameters import (
         GateMode,
         SimulationPreset,
+        TDVPMode,
     )
 
 
@@ -174,6 +177,36 @@ def test_gate_mode_defaults_and_validation() -> None:
         StrongSimParams(gate_mode=cast("GateMode", "invalid"))
 
 
+def test_tdvp_mode_defaults_and_validation() -> None:
+    """Analog defaults to dynamic; strong/weak circuit params default to 2site."""
+    assert AnalogSimParams().tdvp_mode == "dynamic"
+    assert StrongSimParams().tdvp_mode == "2site"
+    assert WeakSimParams(shots=1).tdvp_mode == "2site"
+    assert StrongSimParams(tdvp_mode="1site").tdvp_mode == "1site"
+    assert StrongSimParams(tdvp_mode="2site").tdvp_mode == "2site"
+    with pytest.raises(ValueError, match="tdvp_mode"):
+        StrongSimParams(tdvp_mode=cast("TDVPMode", "invalid"))
+
+
+def test_tdvp_sweeps_defaults_and_validation() -> None:
+    """Analog, strong, and weak params default tdvp_sweeps to 1 and validate inputs."""
+    assert AnalogSimParams().tdvp_sweeps == 1
+    assert StrongSimParams().tdvp_sweeps == 1
+    assert WeakSimParams(shots=1).tdvp_sweeps == 1
+    assert StrongSimParams(tdvp_sweeps=3).tdvp_sweeps == 3
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        StrongSimParams(tdvp_sweeps=0)
+    with pytest.raises(ValueError, match="tdvp_sweeps"):
+        StrongSimParams(tdvp_sweeps=-1)
+
+
+@pytest.mark.parametrize("invalid", [1.5, True])
+def test_tdvp_sweeps_rejects_non_int(invalid: object) -> None:
+    """tdvp_sweeps must be a true int, not bool or float."""
+    with pytest.raises(TypeError, match="tdvp_sweeps"):
+        _validate_tdvp_sweeps(cast("Any", invalid))
+
+
 @pytest.mark.parametrize(
     ("preset", "expected"),
     [
@@ -283,11 +316,11 @@ def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -
         seen["tol"] = float(tol)
         return vec
 
-    monkeypatch.setattr(tdvp, "expm_krylov", fake_expm_krylov)
+    monkeypatch.setattr(tdvp_primitives, "expm_krylov", fake_expm_krylov)
 
     tensor = np.asarray([1.0 + 0.0j, 0.0 + 0.0j], dtype=np.complex128)
 
-    _ = tdvp._evolve_local_tensor_krylov(  # noqa: SLF001
+    _ = tdvp_primitives._evolve_local_tensor_krylov(
         projector=lambda x: x,
         tensor=tensor,
         dt=0.1,

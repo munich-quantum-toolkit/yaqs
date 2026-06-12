@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 SimulationPreset = Literal["fast", "balanced", "accurate", "exact"]
 GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
+TDVPMode = Literal["1site", "2site", "dynamic"]
 
 
 class PresetTypes(TypedDict):
@@ -47,6 +48,7 @@ SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
     "accurate": {"svd_threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
     "exact": {"svd_threshold": 1e-13, "max_bond_dim": None, "num_traj": 1024, "krylov_tol": 1e-12},
 }
+
 
 _USE_PRESET = object()
 
@@ -107,6 +109,50 @@ def _validate_gate_mode(mode: GateMode) -> GateMode:
         msg = f"gate_mode must be one of {allowed!r}, got {mode!r}."
         raise ValueError(msg)
     return mode
+
+
+def _validate_tdvp_sweeps(tdvp_sweeps: int) -> int:
+    """Validate ``tdvp_sweeps`` for TDVP evolution substeps.
+
+    Args:
+        tdvp_sweeps: Number of TDVP substeps per evolution step (analog ``dt`` or circuit gate).
+
+    Returns:
+        The validated sweep count.
+
+    Raises:
+        TypeError: If ``tdvp_sweeps`` is not an ``int``.
+        ValueError: If ``tdvp_sweeps`` is less than 1.
+    """
+    if isinstance(tdvp_sweeps, bool) or not isinstance(tdvp_sweeps, int):
+        msg = f"tdvp_sweeps must be int, got {type(tdvp_sweeps).__name__}."
+        raise TypeError(msg)
+    if tdvp_sweeps < 1:
+        msg = f"tdvp_sweeps must be >= 1, got {tdvp_sweeps}."
+        raise ValueError(msg)
+    return tdvp_sweeps
+
+
+def _validate_tdvp_mode(tdvp_mode: TDVPMode) -> TDVPMode:
+    """Validate ``tdvp_mode`` for TDVP integrator geometry.
+
+    Circuit simulation classes (:class:`StrongSimParams`, :class:`WeakSimParams`)
+    default to ``"2site"``; :class:`AnalogSimParams` defaults to ``"dynamic"``.
+
+    Args:
+        tdvp_mode: Integrator variant (``"1site"``, ``"2site"``, or ``"dynamic"``).
+
+    Returns:
+        The validated mode name.
+
+    Raises:
+        ValueError: If ``tdvp_mode`` is not a supported value.
+    """
+    allowed = ("1site", "2site", "dynamic")
+    if tdvp_mode not in allowed:
+        msg = f"tdvp_mode must be one of {allowed!r}, got {tdvp_mode!r}."
+        raise ValueError(msg)
+    return tdvp_mode
 
 
 def _validate_krylov_tol(krylov_tol: float) -> float:
@@ -310,6 +356,11 @@ class AnalogSimParams(_ObservableOrderingMixin):
         multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
             two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
             Autocorrelation is the special case ``(O, O)``. Results are indexed by pair position.
+        tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
+            symmetric integrator step (LTR then RTL) at evolution time ``dt / tdvp_sweeps``.
+            Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+            Default is ``"dynamic"``.
     """
 
     def __init__(
@@ -319,7 +370,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
         dt: float = 0.1,
         num_traj: int | None = None,
         max_bond_dim: int | object | None = _USE_PRESET,
-        min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
         krylov_tol: float | None = None,
@@ -331,6 +381,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
+        tdvp_sweeps: int = 1,
+        tdvp_mode: TDVPMode = "dynamic",
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -344,7 +396,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
             max_bond_dim: Maximum bond dimension allowed, or ``None`` for no cap. Omit to use
                 the preset value; pass ``None`` explicitly for no cap.
-            min_bond_dim: Minimum bond dimension used to improve TDVP accuracy when possible.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -362,7 +413,10 @@ class AnalogSimParams(_ObservableOrderingMixin):
             multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of ``(A, B)``
                 pairs evaluated as ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special
                 case ``(O, O)``.
-
+            tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
+                symmetric integrator step at ``dt / tdvp_sweeps`` (default ``1``).
+            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+                Default is ``"dynamic"``.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -379,7 +433,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.sample_timesteps = sample_timesteps
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
@@ -392,6 +445,8 @@ class AnalogSimParams(_ObservableOrderingMixin):
         self.multi_time_observables: list[tuple[Observable, Observable]] = (
             [] if multi_time_observables is None else list(multi_time_observables)
         )
+        self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
+        self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
 
 
 class StrongSimParams(_ObservableOrderingMixin):
@@ -419,8 +474,6 @@ class StrongSimParams(_ObservableOrderingMixin):
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
-        min_bond_dim: The minimum bond dimension if possible which gives TDVP
-            better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
             ``"discarded_weight"`` and ``"relative"``.
         svd_threshold: SVD truncation threshold for bond dimension control.
@@ -428,7 +481,13 @@ class StrongSimParams(_ObservableOrderingMixin):
         get_state: If ``True``, request the final state on the returned
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
-            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
+            (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``). Default is
+            ``"mpo"``. Hybrid ``"tdvp"`` applies TEBD to nearest-neighbor gates and
+            two-site TDVP (2TDVP) on a local window for long-range gates.
+        tdvp_sweeps: Number of symmetric TDVP substeps per gate. Each substep integrates
+            evolution time ``1 / tdvp_sweeps`` of the unit gate. Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or
+            ``"dynamic"``). Default is ``"2site"`` for circuit simulation.
     """
 
     # Properties set as placeholders for code compatibility
@@ -439,7 +498,6 @@ class StrongSimParams(_ObservableOrderingMixin):
         observables: list[Observable] | None = None,
         num_traj: int | None = None,
         max_bond_dim: int | object | None = _USE_PRESET,
-        min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
         krylov_tol: float | None = None,
@@ -450,6 +508,8 @@ class StrongSimParams(_ObservableOrderingMixin):
         num_mid_measurements: int = 0,
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
+        tdvp_sweeps: int = 1,
+        tdvp_mode: TDVPMode = "2site",
     ) -> None:
         """Strong circuit simulation parameters initialization.
 
@@ -460,7 +520,6 @@ class StrongSimParams(_ObservableOrderingMixin):
             num_traj: Number of trajectories to simulate.
             max_bond_dim: Maximum bond dimension allowed in simulation, or ``None`` for no cap. Omit
                 to use the preset value; pass ``None`` explicitly for no cap.
-            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -475,7 +534,15 @@ class StrongSimParams(_ObservableOrderingMixin):
             sample_layers: If ``True``, record observables at sampled circuit layers.
             num_mid_measurements: Number of mid-circuit measurement barriers when sampling layers.
             random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Two-qubit gate update mode (default ``"mpo"``).
+            gate_mode: Two-qubit gate update mode (default ``"mpo"``). Hybrid ``"tdvp"`` uses
+                TEBD for nearest-neighbor gates and two-site TDVP (2TDVP) on a local window
+                for long-range gates.
+            tdvp_sweeps: Number of symmetric TDVP substeps per gate at evolution time
+                ``1 / tdvp_sweeps`` (default ``1``).
+            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+                Default is ``"2site"``. Selects the integrator for :func:`~mqt.yaqs.core.methods.tdvp.tdvp.tdvp`
+                (for example ``gate_mode="full-tdvp"``); hybrid long-range gates always use
+                2TDVP via :func:`~mqt.yaqs.core.methods.tdvp.tdvp.evolve_window`.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -488,7 +555,6 @@ class StrongSimParams(_ObservableOrderingMixin):
 
         self.num_traj = num_traj if num_traj is not None else preset_values["num_traj"]
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
@@ -499,6 +565,8 @@ class StrongSimParams(_ObservableOrderingMixin):
         self.num_mid_measurements = num_mid_measurements
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
+        self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
+        self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)
 
 
 class WeakSimParams:
@@ -518,8 +586,6 @@ class WeakSimParams:
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in TDVP updates.
             Smaller values are more accurate but may require more Krylov vectors. Explicit values
             override the preset.
-        min_bond_dim: The minimum bond dimension if possible which gives TDVP
-            better accuracy. Default is 2.
         trunc_mode: The type of truncation performed in TDVP. Options are
             ``"discarded_weight"`` and ``"relative"``.
         svd_threshold: SVD truncation threshold for bond dimension control.
@@ -528,6 +594,11 @@ class WeakSimParams:
             :class:`~mqt.yaqs.Result`.
         gate_mode: Two-qubit gate update mode on the MPS digital backend
             (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``).
+        tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
+            symmetric integrator step (LTR then RTL) at evolution time ``1 / tdvp_sweeps``
+            of the unit gate time. Default is ``1``.
+        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+            Default is ``"2site"`` for circuit simulation.
     """
 
     # Properties set as placeholders for code compatibility
@@ -538,7 +609,6 @@ class WeakSimParams:
         self,
         shots: int,
         max_bond_dim: int | object | None = _USE_PRESET,
-        min_bond_dim: int = 2,
         trunc_mode: str = "discarded_weight",
         svd_threshold: float | None = None,
         krylov_tol: float | None = None,
@@ -547,6 +617,8 @@ class WeakSimParams:
         get_state: bool = False,
         random_seed: int | None = None,
         gate_mode: GateMode = "mpo",
+        tdvp_sweeps: int = 1,
+        tdvp_mode: TDVPMode = "2site",
     ) -> None:
         """Weak circuit simulation initialization.
 
@@ -556,7 +628,6 @@ class WeakSimParams:
             shots: Number of measurement shots to simulate.
             max_bond_dim: Maximum bond dimension for simulation, or ``None`` for no cap. Omit to
                 use the preset value; pass ``None`` explicitly for no cap.
-            min_bond_dim: Minimum bond dimension when TDVP can use it for better accuracy.
             preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, and ``krylov_tol``.
                 Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
                 examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
@@ -570,13 +641,17 @@ class WeakSimParams:
             get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
             random_seed: If set, makes per-shot jump RNG reproducible.
             gate_mode: Two-qubit gate update mode (default ``"mpo"``).
+            tdvp_sweeps: Number of TDVP substeps per evolution step. Each substep is a
+                symmetric integrator step at ``1 / tdvp_sweeps`` of the unit gate time
+                (default ``1``).
+            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
+                Default is ``"2site"``.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         self.shots = shots
         self.max_bond_dim = _resolve_max_bond_dim(max_bond_dim, preset_values["max_bond_dim"])
-        self.min_bond_dim = min_bond_dim
         self.trunc_mode = trunc_mode
         self.svd_threshold = _validate_svd_threshold(
             svd_threshold if svd_threshold is not None else preset_values["svd_threshold"]
@@ -585,3 +660,5 @@ class WeakSimParams:
         self.get_state = get_state
         self.random_seed = random_seed
         self.gate_mode = _validate_gate_mode(gate_mode)
+        self.tdvp_sweeps = _validate_tdvp_sweeps(tdvp_sweeps)
+        self.tdvp_mode = _validate_tdvp_mode(tdvp_mode)

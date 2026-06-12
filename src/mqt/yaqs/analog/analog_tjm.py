@@ -26,7 +26,7 @@ from ..core.methods.bug import bug
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import local_dynamic_tdvp
+from ..core.methods.tdvp import tdvp
 from ..core.random_utils import make_trajectory_rng
 
 if TYPE_CHECKING:
@@ -88,7 +88,7 @@ def step_through(
         MPS: The updated state after one time step evolution.
     """
     if sim_params.evolution_mode == EvolutionMode.TDVP:
-        local_dynamic_tdvp(state, hamiltonian, sim_params)
+        tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
     apply_dissipation(state, noise_model, sim_params.dt, sim_params)
@@ -129,7 +129,7 @@ def sample(
     """
     psi = copy.deepcopy(phi)
     if sim_params.evolution_mode == EvolutionMode.TDVP:
-        local_dynamic_tdvp(psi, hamiltonian, sim_params)
+        tdvp(psi, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(psi, hamiltonian, sim_params)
     apply_dissipation(psi, noise_model, sim_params.dt / 2, sim_params)
@@ -253,7 +253,7 @@ def analog_tjm_1(
         state.evaluate_observables(sim_params, results, 0)
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
-        local_dynamic_tdvp(state, hamiltonian, sim_params)
+        tdvp(state, hamiltonian, sim_params)
         if noise_model is not None:
             apply_dissipation(state, noise_model, sim_params.dt, sim_params)
             current_time = sim_params.times[j]

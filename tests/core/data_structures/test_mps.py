@@ -1097,6 +1097,64 @@ def test_get_total_bond() -> None:
     assert mps.get_total_bond() == 7
 
 
+def test_assert_bond_shapes_consistent_passes_for_valid_mps() -> None:
+    """Bond-shape check accepts matching neighbor bond dimensions."""
+    mps = MPS(length=3, state="zeros")
+    mps.ensure_internal_bond_dims((0,), 2)
+    mps.assert_bond_shapes_consistent(max_bond_dim=2)
+
+
+def test_assert_bond_shapes_consistent_raises_on_mismatch() -> None:
+    """Internal bond-shape check rejects inconsistent neighbor bond sizes."""
+    t0 = np.zeros((2, 1, 3), dtype=complex)
+    t1 = np.zeros((2, 2, 1), dtype=complex)
+    t2 = np.zeros((2, 1, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    with pytest.raises(ValueError, match="bond mismatch"):
+        mps.assert_bond_shapes_consistent()
+
+
+def test_ensure_internal_bond_dims_zero_pads_selected_bonds() -> None:
+    """Bond padding raises only listed bonds without touching others."""
+    mps = MPS(length=3, state="zeros")
+    mps.ensure_internal_bond_dims((0,), 2)
+
+    assert mps.tensors[0].shape == (2, 1, 2)
+    assert mps.tensors[1].shape == (2, 2, 1)
+    assert mps.tensors[2].shape == (2, 1, 1)
+
+
+def test_ensure_internal_bond_dims_respects_max_dim() -> None:
+    """Bond padding does not pad above an explicit max_dim cap."""
+    mps = MPS(length=3, state="zeros")
+    mps.ensure_internal_bond_dims((0,), 2, max_dim=1)
+
+    assert mps.tensors[0].shape == (2, 1, 1)
+    assert mps.tensors[1].shape == (2, 1, 1)
+
+
+def test_ensure_internal_bond_dims_pads_asymmetric_bond() -> None:
+    """Internal bond padding raises the smaller side when only one tensor is short."""
+    t0 = np.zeros((2, 1, 4), dtype=complex)
+    t1 = np.zeros((2, 2, 1), dtype=complex)
+    t2 = np.zeros((2, 1, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    mps.ensure_internal_bond_dims((0,), 4)
+
+    assert mps.tensors[0].shape == (2, 1, 4)
+    assert mps.tensors[1].shape == (2, 4, 1)
+
+
+def test_ensure_internal_bond_dims_raises_on_truncation() -> None:
+    """Shrinking a bond via padding helper is rejected; SVD sync is required."""
+    t0 = np.zeros((2, 1, 4), dtype=complex)
+    t1 = np.zeros((2, 4, 1), dtype=complex)
+    t2 = np.zeros((2, 1, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    with pytest.raises(ValueError, match="cannot be truncated"):
+        mps.ensure_internal_bond_dims((0,), 2, max_dim=2)
+
+
 def test_get_cost() -> None:
     """get_cost sums cubes of internal left bonds over tensors[1:]."""
     # Cubes: 3^3 + 4^3 = 27 + 64 = 91
