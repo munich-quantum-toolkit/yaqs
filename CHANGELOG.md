@@ -24,6 +24,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
 - overhauled TDVP backend ([#457]) ([**@aaronleesander**])
 - changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
 - refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
@@ -132,6 +133,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#458]: https://github.com/munich-quantum-toolkit/yaqs/pull/458
 [#457]: https://github.com/munich-quantum-toolkit/yaqs/pull/457
 [#449]: https://github.com/munich-quantum-toolkit/yaqs/pull/449
 [#448]: https://github.com/munich-quantum-toolkit/yaqs/pull/448

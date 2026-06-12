@@ -84,19 +84,19 @@ def tdvp(
 
     Raises:
         ValueError: If ``state`` and ``operator`` lengths mismatch or if
-            ``tdvp_mode="2site"`` with fewer than two sites.
+            ``tdvp_mode="2site"`` with fewer than two sites (except a one-site
+            chain, which falls back to 1TDVP).
 
     """
     if operator.length != state.length:
         msg = "MPS and operator must have the same number of sites."
         raise ValueError(msg)
     tdvp_mode = sim_params.tdvp_mode
-    if tdvp_mode == "2site" and operator.length < 2:
+    if tdvp_mode in {"2site", "dynamic"} and operator.length == 1:
+        tdvp_mode = "1site"
+    elif tdvp_mode == "2site" and operator.length < 2:
         msg = "Operator is too short for a two-site update (2TDVP)."
         raise ValueError(msg)
-
-    if tdvp_mode == "dynamic" and operator.length == 1:
-        tdvp_mode = "1site"
 
     if tdvp_mode == "1site":
         _run_sweeps(integrators.sweep_1site, state, operator, sim_params)

@@ -136,8 +136,7 @@ def _validate_tdvp_sweeps(tdvp_sweeps: int) -> int:
 def _validate_tdvp_mode(tdvp_mode: TDVPMode) -> TDVPMode:
     """Validate ``tdvp_mode`` for TDVP integrator geometry.
 
-    Circuit simulation classes (:class:`StrongSimParams`, :class:`WeakSimParams`)
-    default to ``"2site"``; :class:`AnalogSimParams` defaults to ``"dynamic"``.
+    All simulation parameter classes default to ``"2site"``.
 
     Args:
         tdvp_mode: Integrator variant (``"1site"``, ``"2site"``, or ``"dynamic"``).
@@ -360,7 +359,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             symmetric integrator step (LTR then RTL) at evolution time ``dt / tdvp_sweeps``.
             Default is ``1``.
         tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-            Default is ``"dynamic"``.
+            Default is ``"2site"``.
     """
 
     def __init__(
@@ -382,7 +381,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
         tdvp_sweeps: int = 1,
-        tdvp_mode: TDVPMode = "dynamic",
+        tdvp_mode: TDVPMode = "2site",
     ) -> None:
         """Physics simulation parameters initialization.
 
@@ -416,7 +415,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
                 symmetric integrator step at ``dt / tdvp_sweeps`` (default ``1``).
             tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-                Default is ``"dynamic"``.
+                Default is ``"2site"``.
         """
         _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
