@@ -178,8 +178,8 @@ def test_gate_mode_defaults_and_validation() -> None:
 
 
 def test_tdvp_mode_defaults_and_validation() -> None:
-    """Analog defaults to dynamic; strong/weak circuit params default to 2site."""
-    assert AnalogSimParams().tdvp_mode == "dynamic"
+    """All simulation params default to 2site TDVP."""
+    assert AnalogSimParams().tdvp_mode == "2site"
     assert StrongSimParams().tdvp_mode == "2site"
     assert WeakSimParams(shots=1).tdvp_mode == "2site"
     assert StrongSimParams(tdvp_mode="1site").tdvp_mode == "1site"

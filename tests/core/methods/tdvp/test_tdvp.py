@@ -120,8 +120,8 @@ def test_tdvp_mode_dispatch() -> None:
         mock_dyn.assert_called_once()
 
 
-def test_tdvp_default_mode_is_dynamic() -> None:
-    """AnalogSimParams default tdvp_mode uses dynamic TDVP."""
+def test_tdvp_default_mode_is_2site() -> None:
+    """AnalogSimParams default tdvp_mode uses two-site TDVP."""
     L = 4
     H = MPO.ising(L, 1.0, 0.5)
     state = MPS(L, state="zeros")
@@ -132,9 +132,9 @@ def test_tdvp_default_mode_is_dynamic() -> None:
         sample_timesteps=False,
     )
 
-    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_dynamic") as mock_dyn:
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_two:
         tdvp(state, H, sim_params)
-        mock_dyn.assert_called_once()
+        mock_two.assert_called_once()
 
 
 def test_strong_default_mode_is_2site() -> None:
@@ -200,13 +200,14 @@ def test_tdvp_rejects_operator_length_mismatch() -> None:
         tdvp(state, hamiltonian, sim_params)
 
 
-def test_tdvp_rejects_2site_on_single_site() -> None:
-    """Two-site TDVP requires at least two sites on the operator chain."""
+def test_tdvp_2site_falls_back_on_single_site() -> None:
+    """Two-site TDVP on a one-site chain falls back to 1-site TDVP."""
     state = MPS(1, state="zeros")
     hamiltonian = MPO.ising(1, 1.0, 0.5)
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="2site")
-    with pytest.raises(ValueError, match="too short"):
+    with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_1site") as mock_one:
         tdvp(state, hamiltonian, sim_params)
+        mock_one.assert_called_once()
 
 
 def test_run_sweeps_rejects_invalid_tdvp_sweeps() -> None:
@@ -219,8 +220,8 @@ def test_run_sweeps_rejects_invalid_tdvp_sweeps() -> None:
         _run_sweeps(lambda *_a, **_k: None, state, hamiltonian, sim_params)
 
 
-def test_dynamic_fallback_1site() -> None:
-    """Dynamic mode on a one-site chain falls back to 1-site TDVP."""
+def test_single_site_fallback_uses_1site() -> None:
+    """Two-site and dynamic modes on a one-site chain fall back to 1-site TDVP."""
     H = MPO.ising(1, 1.0, 0.5)
     state = MPS(1, state="zeros")
     sim_params = AnalogSimParams(

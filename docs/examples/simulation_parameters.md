@@ -185,7 +185,7 @@ Long-range gates in `gate_mode="tdvp"` apply 2TDVP on the gate support window vi
 
 Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Values greater than `1` are opt-in and may improve accuracy on some circuits. The setting applies to all TDVP kernels on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
 
-Use **`tdvp_mode`** to select the TDVP integrator: `"1site"` (1TDVP), `"2site"` (2TDVP), or `"dynamic"` (adaptive single/two-site updates). Defaults are **`"2site"`** on `StrongSimParams` and `WeakSimParams` (circuit simulation) and **`"dynamic"`** on `AnalogSimParams` (Hamiltonian evolution).
+Use **`tdvp_mode`** to select the TDVP integrator: `"1site"` (1TDVP), `"2site"` (2TDVP), or `"dynamic"` (adaptive single/two-site updates). The default is **`"2site"`** (2TDVP) on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`. Pass `"dynamic"` explicitly for adaptive 1/2-site switching during analog evolution.
 
 Substep geometry: each substep is **symmetric** (left-to-right then right-to-left) at evolution time `step_time / tdvp_sweeps` for analog (`dt`) and digital gates. The total generator time applied to one digital gate remains `1` across all substeps. Noise and dissipation after TDVP still use the full physical step `dt` in analog simulation.
 
