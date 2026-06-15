@@ -121,7 +121,15 @@ def _get_qubit_indices(dag: DAGCircuit | None, node: DAGOpNode) -> list[int]:
 
 
 def _has_unbound_params(op: object) -> bool:
-    """Return whether a Qiskit operation still has free symbolic parameters."""
+    """Return whether a Qiskit operation still has free symbolic parameters.
+
+    Args:
+        op: Qiskit instruction or gate.
+
+    Returns:
+        True if any entry in ``op.params`` is an unbound ``Parameter`` or
+        ``ParameterExpression`` with remaining free symbols.
+    """
     params = getattr(op, "params", ())
     return any(
         isinstance(param, Parameter) or (isinstance(param, ParameterExpression) and bool(param.parameters))
@@ -130,7 +138,15 @@ def _has_unbound_params(op: object) -> bool:
 
 
 def _is_unitary(matrix: NDArray[np.complex128], *, atol: float = 1e-10) -> bool:
-    """Return whether ``matrix`` is unitary within tolerance."""
+    """Return whether ``matrix`` is unitary within tolerance.
+
+    Args:
+        matrix: Square complex operator matrix.
+        atol: Absolute tolerance for ``matrix @ matrix.conj().T ≈ I``.
+
+    Returns:
+        True if the matrix is unitary within ``atol``.
+    """
     dim = matrix.shape[0]
     product = matrix @ matrix.conj().T
     return bool(np.allclose(product, np.eye(dim, dtype=np.complex128), atol=atol))

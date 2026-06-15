@@ -71,7 +71,18 @@ def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site
 
 
 def _is_terminal_measure(dag: DAGCircuit, node: DAGOpNode) -> bool:
-    """Return whether no later op nodes act on qubits measured by ``node``."""
+    """Return whether a measure node has no later gates on its qubits.
+
+    A measurement is terminal when no subsequent DAG operation acts on any qubit
+    that the measurement targets.
+
+    Args:
+        dag: Circuit DAG containing ``node``.
+        node: Measure operation node to classify.
+
+    Returns:
+        True if no later op nodes share qubits with ``node``; False otherwise.
+    """
     measured = {dag.find_bit(q).index for q in node.qargs}
     topo = list(dag.topological_op_nodes())
     try:

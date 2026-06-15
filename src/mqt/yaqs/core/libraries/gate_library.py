@@ -273,7 +273,18 @@ class BaseGate:
         return self._clone_with_matrix(self.matrix @ other.matrix)
 
     def _clone_with_matrix(self, matrix: NDArray[np.complex128]) -> BaseGate:
-        """Return a gate with the same interaction level and a new matrix."""
+        """Return a gate with the same interaction level and a new matrix.
+
+        Unlike :meth:`__init__`, this bypasses power-of-two dimension validation so
+        arithmetic on d-level ladder operators preserves non-qubit matrix sizes.
+
+        Args:
+            matrix: Replacement gate matrix.
+
+        Returns:
+            New gate with ``interaction`` copied from ``self`` and ``name`` set to
+            ``"custom"``.
+        """
         clone = BaseGate.__new__(BaseGate)
         clone.matrix = np.asarray(matrix, dtype=np.complex128)
         clone.tensor = clone.matrix
