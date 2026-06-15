@@ -89,7 +89,7 @@ objects raise `ValueError`.
   comparison; mid-circuit measurements raise `ValueError`.
 
 Plain `barrier` instructions are dropped in simulation except barriers labelled
-`SAMPLE_OBSERVABLES` (used for weak-simulation sampling).
+`SAMPLE_OBSERVABLES` (used for strong-simulation layer sampling).
 
 ### Equivalence checking
 
