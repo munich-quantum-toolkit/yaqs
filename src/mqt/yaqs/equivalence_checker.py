@@ -23,7 +23,7 @@ from qiskit.converters import circuit_to_dag
 
 from .core.data_structures.mpo import MPO
 from .digital.utils.contraction_utils import iterate
-from .digital.utils.matrix_utils import check_equivalence_matrix
+from .digital.utils.matrix_utils import check_matrix_equivalence, strip_final_measurements
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
@@ -184,17 +184,20 @@ class EquivalenceChecker:
             and ``representation`` (``"matrix"`` or ``"mpo"``) indicating the backend used.
 
         Raises:
-            ValueError: If the circuits have different numbers of qubits.
+            ValueError: If the circuits have different numbers of qubits or contain mid-circuit measurements.
         """
         if circuit1.num_qubits != circuit2.num_qubits:
             msg = "Circuits must have the same number of qubits."
             raise ValueError(msg)
 
+        circuit1 = strip_final_measurements(circuit1)
+        circuit2 = strip_final_measurements(circuit2)
+
         backend = self._resolve_representation(circuit1.num_qubits)
         start_time = time.time()
 
         if backend == "matrix":
-            equivalent = check_equivalence_matrix(
+            equivalent = check_matrix_equivalence(
                 circuit1,
                 circuit2,
                 fidelity=self.fidelity,
