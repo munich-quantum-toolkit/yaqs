@@ -18,17 +18,218 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter
+from qiskit.circuit.library import (
+    CXGate,
+    IGate,
+    SdgGate,
+    SGate,
+    SXdgGate,
+    TdgGate,
+    TGate,
+    U1Gate,
+    U3Gate,
+    UnitaryGate,
+)
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
+from qiskit.quantum_info import Statevector
 
-from mqt.yaqs.core.libraries.gate_library import Rx
+from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
 from mqt.yaqs.digital.utils.dag_utils import (
     check_longest_gate,
     convert_dag_to_tensor_algorithm,
     get_temporal_zone,
     select_starting_point,
 )
+from tests.core.methods.tdvp.conftest import _fidelity
+from tests.digital.conftest import _run_strong_noiseless
+
+
+def _qiskit_gate_matrix(gate_cls: type, *params: float) -> np.ndarray:
+    """Return the Qiskit dense matrix for a standard gate class."""
+    gate = gate_cls(*params) if params else gate_cls()
+    matrix = gate.to_matrix()
+    assert matrix is not None
+    return np.asarray(matrix, dtype=np.complex128)
+
+
+@pytest.mark.parametrize(
+    ("library_name", "qiskit_gate_cls", "params"),
+    [
+        ("s", SGate, ()),
+        ("sdg", SdgGate, ()),
+        ("t", TGate, ()),
+        ("tdg", TdgGate, ()),
+        ("sxdg", SXdgGate, ()),
+        ("i", IGate, ()),
+        ("iden", IGate, ()),
+        ("u1", U1Gate, (0.37,)),
+        ("u3", U3Gate, (0.2, 0.3, 0.4)),
+    ],
+)
+def test_qiskit_gate_aliases_match_qiskit_matrices(
+    library_name: str,
+    qiskit_gate_cls: type,
+    params: tuple[float, ...],
+) -> None:
+    """Hardcoded Qiskit aliases should match standard Qiskit gate matrices."""
+    gate_cls = getattr(GateLibrary, library_name)
+    yaqs_gate = gate_cls(list(params)) if params else gate_cls()
+    expected = _qiskit_gate_matrix(qiskit_gate_cls, *params)
+    assert_allclose(yaqs_gate.matrix, expected, atol=1e-12)
+
+
+def test_custom_one_qubit_unitary_gate_translation() -> None:
+    """Unknown 1-qubit UnitaryGate nodes should translate from the Qiskit matrix."""
+    unitary = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    qc = QuantumCircuit(1)
+    qc.append(UnitaryGate(unitary), [0])
+    dag = circuit_to_dag(qc)
+    node = dag.op_nodes()[0]
+    assert isinstance(node, DAGOpNode)
+
+    gate = convert_dag_to_tensor_algorithm(node)[0]
+    assert gate.name == "unitary"
+    assert gate.interaction == 1
+    assert gate.sites == [0]
+    assert_allclose(gate.matrix, unitary, atol=1e-12)
+    assert not hasattr(gate, "generator")
+
+
+def test_custom_two_qubit_unitary_gate_translation() -> None:
+    """Unknown 2-qubit UnitaryGate nodes should build tensor/MPO data like other 2Q gates."""
+    unitary = np.asarray(CXGate().to_matrix(), dtype=np.complex128)
+    qc = QuantumCircuit(2)
+    qc.append(UnitaryGate(unitary), [0, 1])
+    dag = circuit_to_dag(qc)
+
+    gate = convert_dag_to_tensor_algorithm(dag)[0]
+    expected = GateLibrary.cx()
+    expected.set_sites(0, 1)
+
+    assert gate.name == "unitary"
+    assert gate.interaction == 2
+    assert gate.sites == [0, 1]
+    assert_allclose(gate.matrix, expected.matrix, atol=1e-12)
+    assert_allclose(gate.tensor, expected.tensor, atol=1e-12)
+    assert len(gate.mpo_tensors) == 2
+
+
+def test_custom_two_qubit_unitary_gate_reversed_qargs() -> None:
+    """Reversed two-qubit qargs should transpose the gate tensor like built-in gates."""
+    unitary = np.asarray(CXGate().to_matrix(), dtype=np.complex128)
+    qc = QuantumCircuit(2)
+    qc.append(UnitaryGate(unitary), [1, 0])
+    dag = circuit_to_dag(qc)
+
+    gate = convert_dag_to_tensor_algorithm(dag)[0]
+    expected = GateLibrary.cx()
+    expected.set_sites(1, 0)
+
+    assert gate.sites == [1, 0]
+    assert_allclose(gate.tensor, expected.tensor, atol=1e-12)
+
+
+def test_unbound_parameterized_gate_raises() -> None:
+    """Unbound symbolic parameters should be rejected with a clear error."""
+    theta = Parameter("theta")
+    qc = QuantumCircuit(1)
+    qc.rx(theta, 0)
+    dag = circuit_to_dag(qc)
+    node = dag.op_nodes()[0]
+
+    with pytest.raises(ValueError, match="unbound parameters"):
+        convert_dag_to_tensor_algorithm(node)
+
+
+def test_unsupported_reset_instruction_raises() -> None:
+    """Reset instructions should be rejected with a clear error."""
+    qc = QuantumCircuit(1)
+    qc.reset(0)
+    dag = circuit_to_dag(qc)
+    node = dag.op_nodes()[0]
+
+    with pytest.raises(ValueError, match="reset is not supported"):
+        convert_dag_to_tensor_algorithm(node)
+
+
+def test_unsupported_control_flow_raises() -> None:
+    """Control-flow instructions should be rejected with a clear error."""
+    qc = QuantumCircuit(1, 1)
+    with qc.if_test((qc.clbits[0], 1)):
+        qc.x(0)
+    dag = circuit_to_dag(qc)
+    node = dag.op_nodes()[0]
+
+    with pytest.raises(ValueError, match="control-flow"):
+        convert_dag_to_tensor_algorithm(node)
+
+
+def _haar_unitary(dim: int, rng: np.random.Generator) -> np.ndarray:
+    """Sample a Haar-random unitary matrix of size ``dim x dim``.
+
+    Returns:
+        A ``dim x dim`` unitary matrix.
+    """
+    z = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+    q, r = np.linalg.qr(z)
+    phases = np.diagonal(r) / np.abs(np.diagonal(r))
+    return np.asarray(q * phases, dtype=np.complex128)
+
+
+def test_custom_one_qubit_unitary_matches_qiskit_statevector() -> None:
+    """Custom 1-qubit UnitaryGate circuits should match Qiskit statevectors."""
+    unitary = _haar_unitary(2, np.random.default_rng(0))
+    qc = QuantumCircuit(2)
+    qc.append(UnitaryGate(unitary), [1])
+    qc.h(0)
+
+    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_custom_two_qubit_unitary_matches_qiskit_statevector() -> None:
+    """Custom 2-qubit UnitaryGate circuits should match Qiskit statevectors."""
+    unitary = _haar_unitary(4, np.random.default_rng(1))
+    qc = QuantumCircuit(2)
+    qc.append(UnitaryGate(unitary), [0, 1])
+    qc.h(0)
+
+    vec = _run_strong_noiseless(qc, gate_mode="tdvp", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_custom_two_qubit_unitary_reversed_qargs_matches_qiskit() -> None:
+    """Reversed custom two-qubit qargs on a long-range pair should match Qiskit."""
+    unitary = _haar_unitary(4, np.random.default_rng(2))
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.append(UnitaryGate(unitary), [2, 0])
+
+    vec = _run_strong_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+def test_custom_long_range_two_qubit_unitary_matches_qiskit() -> None:
+    """Long-range custom two-qubit gates should work via the MPO application path."""
+    unitary = _haar_unitary(4, np.random.default_rng(3))
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.append(UnitaryGate(unitary), [0, 2])
+
+    vec = _run_strong_noiseless(qc, gate_mode="mpo", get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
 
 
 def test_convert_dag_to_tensor_algorithm_single_qubit_gate() -> None:
