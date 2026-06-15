@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -26,6 +27,7 @@ from qiskit.qasm2 import load, loads
 
 from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.digital.utils import matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 from mqt.yaqs.digital.utils.dag_utils import SUPPORTED_QISKIT_GATE_NAMES, convert_dag_to_tensor_algorithm
 
@@ -287,6 +289,22 @@ def test_equivalence_checker_rejects_mid_circuit_measurements() -> None:
 
     with pytest.raises(ValueError, match="Mid-circuit measurements are not supported"):
         _issue_checker(representation="mpo").check(qc1, qc2)
+    with pytest.raises(ValueError, match="Mid-circuit measurements are not supported"):
+        _issue_checker(representation="matrix").check(qc1, qc2)
+
+
+def test_equivalence_checker_matrix_backend_strips_measurements_once() -> None:
+    """The matrix backend should strip final measurements only inside ``compose_operator_tensor``."""
+    qc1 = QuantumCircuit(1, 1)
+    qc1.x(0)
+    qc1.measure(0, 0)
+    qc2 = qc1.copy()
+
+    with patch.object(matrix_utils, "strip_final_measurements", wraps=matrix_utils.strip_final_measurements) as strip:
+        result = _issue_checker(representation="matrix").check(qc1, qc2)
+
+    assert result["equivalent"] is True
+    assert strip.call_count == 2
 
 
 @pytest.mark.parametrize("representation", ["matrix", "mpo"])

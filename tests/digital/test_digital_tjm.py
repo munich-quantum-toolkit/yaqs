@@ -231,6 +231,18 @@ def test_process_layer() -> None:
         assert min(q0, q1) % 2 == 1, f"Node with qubits {q0, q1} not in odd group."
 
 
+def test_process_layer_rejects_mid_circuit_measure() -> None:
+    """Mid-circuit measurements must not be silently dropped during layer processing."""
+    qc = QuantumCircuit(2, 1)
+    qc.measure(0, 0)
+    qc.x(0)
+
+    dag = circuit_to_dag(qc)
+
+    with pytest.raises(ValueError, match="Non-terminal measure operations are not supported"):
+        process_layer(dag)
+
+
 def test_process_layer_unsupported_gate() -> None:
     """Test that process_layer raises an exception when encountering an unsupported gate.
 

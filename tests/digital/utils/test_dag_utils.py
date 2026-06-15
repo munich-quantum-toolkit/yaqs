@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
-from qiskit.circuit import Parameter
+from qiskit.circuit import Gate, Parameter
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
     CRZGate,
@@ -351,6 +351,30 @@ def test_fixed_nonsymmetric_two_qubit_unitary_qarg_ordering(
     assert isinstance(vec, np.ndarray)
     ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
     assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+class _CustomNamedUnitary(Gate):
+    """Qiskit gate whose ``name`` collides with a non-alias ``GateLibrary`` attribute."""
+
+    def __init__(self) -> None:
+        super().__init__("custom", 1, [])
+
+    def to_matrix(self) -> np.ndarray:  # noqa: PLR6301
+        return np.array([[0, 1], [1, 0]], dtype=np.complex128)
+
+
+def test_translate_unknown_name_skips_gate_library_attributes() -> None:
+    """Names outside ``SUPPORTED_QISKIT_GATE_NAMES`` must not bind ``GateLibrary`` helpers."""
+    assert "custom" not in SUPPORTED_QISKIT_GATE_NAMES
+    assert hasattr(GateLibrary, "custom")
+
+    qc = QuantumCircuit(1)
+    qc.append(_CustomNamedUnitary(), [0])
+    dag = circuit_to_dag(qc)
+    gate = convert_dag_to_tensor_algorithm(dag)[0]
+
+    assert gate.name == "custom"
+    assert_allclose(gate.matrix, _CustomNamedUnitary().to_matrix())
 
 
 @pytest.mark.parametrize(

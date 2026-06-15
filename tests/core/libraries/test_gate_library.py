@@ -31,7 +31,17 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, X, Y, Z, extend_gate, split_tensor
+from mqt.yaqs.core.libraries.gate_library import (
+    BaseGate,
+    Create,
+    Destroy,
+    GateLibrary,
+    X,
+    Y,
+    Z,
+    extend_gate,
+    split_tensor,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -679,6 +689,15 @@ def test_base_gate_three_by_three_matrix_raises() -> None:
     """A 3x3 matrix should be rejected because 3 is not a power of two."""
     with pytest.raises(ValueError, match="Matrix dimension 3 must be a power of 2"):
         BaseGate(np.eye(3, dtype=np.complex128))
+
+
+def test_destroy_d_level_arithmetic() -> None:
+    """Destroy/Create arithmetic on non-qubit dimensions should not re-validate matrix size."""
+    d = 3
+    destroy = Destroy(d)
+    create = Create(d)
+    combined = destroy.dag() @ destroy + create @ create.dag()
+    assert combined.matrix.shape == (d, d)
 
 
 @pytest.mark.parametrize(
