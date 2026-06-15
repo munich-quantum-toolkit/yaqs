@@ -102,7 +102,9 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     for node in current_layer:
         name = node.op.name
 
-        # Drop measurements during simulation; they are rejected by DAG-to-gate conversion.
+        # Drop measurements during simulation. Unlike ``convert_dag_to_tensor_algorithm``,
+        # which rejects ``measure`` when building a gate list, the live DAG path removes
+        # measurement nodes so terminal Qiskit measurements do not block evolution.
         if name == "measure":
             dag.remove_op_node(node)
             continue

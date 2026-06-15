@@ -40,7 +40,10 @@ if TYPE_CHECKING:
     from qiskit.dagcircuit import DAGCircuit
 
 # ``barrier`` is ignored during DAG-to-gate conversion. ``measure`` is rejected
-# here; circuit simulation drops measurements separately in ``process_layer``.
+# here because conversion builds a unitary gate list; mid-circuit measurements are
+# not representable in that form. Circuit simulation (`process_layer` in
+# ``digital_tjm``) still drops ``measure`` nodes from the live DAG before gate
+# application so terminal measurements in a Qiskit circuit do not block simulation.
 _SKIP_INSTRUCTIONS = frozenset({"barrier"})
 _ZONE_SKIP_INSTRUCTIONS = frozenset({"measure", "barrier"})
 _REJECTED_INSTRUCTIONS = frozenset({"reset", "delay", "store", "measure"})
@@ -269,6 +272,14 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
     parameters if present, and assigns the qubit indices (sites) on which the gate acts.
 
     Unknown one- and two-qubit unitary Qiskit gates are converted from their matrix representation.
+    Three-qubit and larger instructions (including Toffoli/CCX) raise ``ValueError``. ``barrier`` nodes
+    are skipped. ``measure``, ``reset``, ``delay``, classically controlled ops, and control-flow
+    instructions are rejected. See :data:`SUPPORTED_QISKIT_GATE_NAMES` for hardcoded gate names.
+
+    Note:
+        This conversion path rejects ``measure`` because it builds a unitary gate list. Circuit
+        simulation removes ``measure`` nodes from the live DAG separately (see ``process_layer`` in
+        ``digital_tjm``) so terminal Qiskit measurements do not block evolution.
 
     Args:
         dag: The DAGCircuit (or a single DAGOpNode) representing a quantum operation.
