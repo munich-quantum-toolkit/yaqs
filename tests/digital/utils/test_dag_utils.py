@@ -278,6 +278,33 @@ def test_custom_long_range_two_qubit_unitary_matches_qiskit() -> None:
 
 
 @pytest.mark.parametrize(
+    ("gate_name", "qargs", "gate_mode"),
+    [
+        ("swap", (0, 1), "tdvp"),
+        ("swap", (1, 0), "tdvp"),
+        ("cz", (0, 1), "tdvp"),
+        ("cz", (1, 0), "tdvp"),
+        ("cx", (0, 1), "tdvp"),
+        ("cx", (1, 0), "tdvp"),
+    ],
+)
+def test_builtin_two_qubit_gate_reversed_qargs_match_qiskit(
+    gate_name: str,
+    qargs: tuple[int, int],
+    gate_mode: Literal["tdvp"],
+) -> None:
+    """Built-in two-qubit gates should match Qiskit for forward and reversed qargs."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    getattr(qc, gate_name)(*qargs)
+
+    vec = _run_strong_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize(
     ("num_qubits", "qargs", "gate_mode"),
     [
         (2, (0, 1), "tdvp"),
