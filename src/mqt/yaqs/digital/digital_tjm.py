@@ -102,7 +102,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     for node in current_layer:
         name = node.op.name
 
-        # Drop measurements completely.
+        # Drop measurements during simulation; they are rejected by DAG-to-gate conversion.
         if name == "measure":
             dag.remove_op_node(node)
             continue
@@ -373,6 +373,8 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
     gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
+    # Matrix-backed custom gates have no ``generator`` and bypass the TDVP window
+    # path in ``tdvp`` / ``full-tdvp`` modes (TEBD for NN, MPO for LR).
     has_generator = getattr(gate, "generator", None) is not None
 
     if gate_mode == "full-tdvp":
