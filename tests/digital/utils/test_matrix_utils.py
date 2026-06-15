@@ -5,8 +5,6 @@
 #
 # Licensed under the MIT License
 
-# ruff: noqa: PLC2701 -- white-box tests import private matrix_utils helpers
-
 """Tests for matrix equivalence utilities."""
 
 from __future__ import annotations
@@ -21,21 +19,21 @@ from qiskit import QuantumCircuit
 from mqt.yaqs import EquivalenceChecker
 from mqt.yaqs.core.libraries.gate_library import BaseGate
 from mqt.yaqs.digital.utils.matrix_utils import (
-    _apply_gate_left,
-    _identity_operator_tensor,
-    build_composed_operator_tensor,
-    check_equivalence_matrix,
-    check_operator_is_identity,
+    apply_gate_left,
+    check_matrix_equivalence,
+    compose_operator_tensor,
+    is_identity_tensor,
+    make_identity_tensor,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-def test_build_composed_operator_tensor_rejects_mismatched_widths() -> None:
+def test_compose_operator_tensor_rejects_mismatched_widths() -> None:
     """Different qubit counts raise before tensor construction."""
     with pytest.raises(ValueError, match="same number of qubits"):
-        build_composed_operator_tensor(QuantumCircuit(2), QuantumCircuit(3))
+        compose_operator_tensor(QuantumCircuit(2), QuantumCircuit(3))
 
 
 def test_mid_circuit_measurement_rejected() -> None:
@@ -46,7 +44,7 @@ def test_mid_circuit_measurement_rejected() -> None:
     qc.cx(0, 1)
 
     with pytest.raises(ValueError, match="Mid-circuit measurements"):
-        build_composed_operator_tensor(qc, qc)
+        compose_operator_tensor(qc, qc)
 
 
 def test_final_measurements_are_stripped() -> None:
@@ -60,7 +58,7 @@ def test_final_measurements_are_stripped() -> None:
     qc2.h(0)
     qc2.cx(0, 1)
 
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is True
 
 
 def test_barriers_are_ignored() -> None:
@@ -74,16 +72,16 @@ def test_barriers_are_ignored() -> None:
     qc2.h(0)
     qc2.cx(0, 1)
 
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is True
 
 
-def test_check_equivalence_matrix_empty_circuits() -> None:
+def test_check_matrix_equivalence_empty_circuits() -> None:
     """Empty circuits compose to the identity."""
     qc = QuantumCircuit(3)
-    assert check_equivalence_matrix(qc, qc, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc, qc, fidelity=1 - 1e-12) is True
 
 
-def test_check_equivalence_matrix_identical_circuits() -> None:
+def test_check_matrix_equivalence_identical_circuits() -> None:
     """Identical non-trivial circuits are equivalent."""
     qc1 = QuantumCircuit(3)
     qc1.h(0)
@@ -91,10 +89,10 @@ def test_check_equivalence_matrix_identical_circuits() -> None:
     qc1.rz(np.pi / 4, 2)
     qc2 = qc1.copy()
 
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is True
 
 
-def test_check_equivalence_matrix_non_equivalent() -> None:
+def test_check_matrix_equivalence_non_equivalent() -> None:
     """An extra gate breaks equivalence."""
     qc1 = QuantumCircuit(2)
     qc1.h(0)
@@ -105,10 +103,10 @@ def test_check_equivalence_matrix_non_equivalent() -> None:
     qc2.cx(0, 1)
     qc2.x(1)
 
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is False
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is False
 
 
-def test_check_equivalence_matrix_global_phase() -> None:
+def test_check_matrix_equivalence_global_phase() -> None:
     """Circuits differing only by global phase are equivalent."""
     qc1 = QuantumCircuit(2)
     qc1.h(0)
@@ -117,20 +115,20 @@ def test_check_equivalence_matrix_global_phase() -> None:
     qc2 = qc1.copy()
     qc2.global_phase = np.pi / 5
 
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is True
 
 
-def test_check_equivalence_matrix_long_range_cx() -> None:
+def test_check_matrix_equivalence_long_range_cx() -> None:
     """Long-range two-qubit gates are supported."""
     qc1 = QuantumCircuit(3)
     qc1.h(0)
     qc1.cx(0, 2)
 
     qc2 = qc1.copy()
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is True
 
 
-def test_check_equivalence_matrix_different_single_qubit_gates() -> None:
+def test_check_matrix_equivalence_different_single_qubit_gates() -> None:
     """Distinct single-qubit circuits are not equivalent."""
     qc1 = QuantumCircuit(1)
     qc1.h(0)
@@ -138,10 +136,10 @@ def test_check_equivalence_matrix_different_single_qubit_gates() -> None:
     qc2 = QuantumCircuit(1)
     qc2.x(0)
 
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is False
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is False
 
 
-def test_check_equivalence_matrix_disjoint_single_qubit_layer() -> None:
+def test_check_matrix_equivalence_disjoint_single_qubit_layer() -> None:
     """A wide single-qubit layer applies all gates in one front layer."""
     qc1 = QuantumCircuit(4)
     qc1.h(0)
@@ -152,19 +150,19 @@ def test_check_equivalence_matrix_disjoint_single_qubit_layer() -> None:
     qc1.cx(2, 3)
 
     qc2 = qc1.copy()
-    assert check_equivalence_matrix(qc1, qc2, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc1, qc2, fidelity=1 - 1e-12) is True
 
 
-def test_check_equivalence_matrix_cx_with_swapped_sites() -> None:
+def test_check_matrix_equivalence_cx_with_swapped_sites() -> None:
     """Two-qubit gates with reversed site order compose correctly."""
     qc = QuantumCircuit(2)
     qc.cx(1, 0)
 
-    assert check_equivalence_matrix(qc, qc, fidelity=1 - 1e-12) is True
+    assert check_matrix_equivalence(qc, qc, fidelity=1 - 1e-12) is True
 
 
-def test_apply_gate_left_three_qubit_embedding() -> None:
-    """Multi-qubit gates use the dense embedding path in ``_apply_gate_left``."""
+def testapply_gate_left_three_qubit_embedding() -> None:
+    """Multi-qubit gates use the dense embedding path in ``apply_gate_left``."""
     swap = np.array(
         [
             [1, 0, 0, 0, 0, 0, 0, 0],
@@ -182,29 +180,29 @@ def test_apply_gate_left_three_qubit_embedding() -> None:
     gate.interaction = 3
     gate.set_sites(0, 1, 2)
 
-    op = _identity_operator_tensor(3)
-    updated = _apply_gate_left(op, gate, 3, dagger=False)
-    round_trip = _apply_gate_left(updated, gate, 3, dagger=True)
-    assert check_operator_is_identity(round_trip, fidelity=1 - 1e-12) is True
+    op = make_identity_tensor(3)
+    updated = apply_gate_left(op, gate, 3, dagger=False)
+    round_trip = apply_gate_left(updated, gate, 3, dagger=True)
+    assert is_identity_tensor(round_trip, fidelity=1 - 1e-12) is True
 
 
-def test_build_composed_operator_tensor_is_identity_for_matching_circuits() -> None:
+def test_compose_operator_tensor_is_identity_for_matching_circuits() -> None:
     """Matching circuits produce an identity-like composed operator tensor."""
     qc = QuantumCircuit(2)
     qc.h(0)
     qc.cx(0, 1)
 
-    composed = build_composed_operator_tensor(qc, qc)
+    composed = compose_operator_tensor(qc, qc)
     assert composed.shape == (2, 2, 2, 2)
-    assert check_operator_is_identity(composed, fidelity=1 - 1e-12) is True
+    assert is_identity_tensor(composed, fidelity=1 - 1e-12) is True
 
 
-def test_check_operator_is_identity_without_premature_rounding() -> None:
+def test_is_identity_tensor_without_premature_rounding() -> None:
     """Near-identity overlap is not lost to one-decimal rounding."""
     op = np.diag([1.0, 0.99995]).astype(np.complex128)
     tensor = op.reshape((2, 2))
-    assert check_operator_is_identity(tensor, fidelity=0.9999) is True
-    assert check_operator_is_identity(tensor, fidelity=1.0) is False
+    assert is_identity_tensor(tensor, fidelity=0.9999) is True
+    assert is_identity_tensor(tensor, fidelity=1.0) is False
 
 
 def _bell_pair() -> tuple[QuantumCircuit, QuantumCircuit]:

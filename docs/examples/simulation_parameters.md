@@ -181,6 +181,11 @@ Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic 
 - **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + **two-site TDVP (2TDVP)** on a local window.
 - **`full-tdvp`** — TDVP (generator MPO + 2TDVP on a local window) on every two-qubit gate.
 
+Matrix-backed custom gates (from Qiskit `UnitaryGate` or other unknown 1-/2-qubit unitaries) have no
+analytic generator. In `gate_mode="tdvp"` or `"full-tdvp"`, those gates use TEBD on nearest-neighbor
+pairs and the MPO path on long-range pairs instead of the TDVP generator window. See {doc}`custom_gates`
+for the full gate translation and custom-gate workflow.
+
 Long-range gates in `gate_mode="tdvp"` apply 2TDVP on the gate support window via `evolve_window`.
 
 Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Values greater than `1` are opt-in and may improve accuracy on some circuits. The setting applies to all TDVP kernels on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.

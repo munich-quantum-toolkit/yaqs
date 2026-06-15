@@ -37,7 +37,7 @@ _EINSUM_LETTERS = string.ascii_lowercase
 _GATE_EINSUM_LETTERS = string.ascii_uppercase
 
 
-def _circuit_without_measurements(circuit: QuantumCircuit) -> QuantumCircuit:
+def strip_final_measurements(circuit: QuantumCircuit) -> QuantumCircuit:
     """Return a copy of ``circuit`` with final measurements removed.
 
     Args:
@@ -53,12 +53,12 @@ def _circuit_without_measurements(circuit: QuantumCircuit) -> QuantumCircuit:
     qc.remove_final_measurements(inplace=True)
     dag = circuit_to_dag(qc)
     if any(isinstance(node, DAGOpNode) and node.op.name == "measure" for node in dag.op_nodes()):
-        msg = "Mid-circuit measurements are not supported by the matrix equivalence backend."
+        msg = "Mid-circuit measurements are not supported by the equivalence checker."
         raise ValueError(msg)
     return qc
 
 
-def _identity_operator_tensor(num_qubits: int) -> NDArray[np.complex128]:
+def make_identity_tensor(num_qubits: int) -> NDArray[np.complex128]:
     """Return the identity operator as a tensor with ``2 * num_qubits`` indices of size 2.
 
     Args:
@@ -71,7 +71,7 @@ def _identity_operator_tensor(num_qubits: int) -> NDArray[np.complex128]:
     return np.eye(dim, dtype=np.complex128).reshape((2,) * (2 * num_qubits))
 
 
-def _embed_unitary(local: NDArray[np.complex128], sites: list[int], num_qubits: int) -> NDArray[np.complex128]:
+def embed_unitary(local: NDArray[np.complex128], sites: list[int], num_qubits: int) -> NDArray[np.complex128]:
     """Embed a k-qubit unitary on the given sites (Qiskit little-endian ordering).
 
     Args:
@@ -90,7 +90,7 @@ def _embed_unitary(local: NDArray[np.complex128], sites: list[int], num_qubits: 
     return Operator(qc).data
 
 
-def _apply_single_qubit_left(
+def apply_1q_left(
     op: NDArray[np.complex128],
     matrix: NDArray[np.complex128],
     qubit: int,
@@ -113,7 +113,7 @@ def _apply_single_qubit_left(
     gate = matrix.conj().T if dagger else matrix
     if num_qubits > len(_EINSUM_LETTERS) // 2:
         op_mat = op.reshape(2**num_qubits, 2**num_qubits)
-        full = _embed_unitary(gate, [qubit], num_qubits)
+        full = embed_unitary(gate, [qubit], num_qubits)
         return (full @ op_mat).reshape((2,) * (2 * num_qubits))
 
     out_labels = list(_EINSUM_LETTERS[:num_qubits])
@@ -127,7 +127,7 @@ def _apply_single_qubit_left(
     return np.einsum(eq, gate, op, optimize=True)
 
 
-def _apply_two_qubit_left(
+def apply_2q_left(
     op: NDArray[np.complex128],
     gate_tensor: NDArray[np.complex128],
     site0: int,
@@ -150,7 +150,7 @@ def _apply_two_qubit_left(
         The updated operator tensor.
     """
     if site0 > site1:
-        return _apply_two_qubit_left(
+        return apply_2q_left(
             op,
             np.transpose(gate_tensor, (1, 0, 3, 2)),
             site1,
@@ -166,7 +166,7 @@ def _apply_two_qubit_left(
     if num_qubits > len(_EINSUM_LETTERS) // 2:
         op_mat = op.reshape(2**num_qubits, 2**num_qubits)
         local = np.transpose(gate, (0, 2, 1, 3)).reshape(4, 4)
-        full = _embed_unitary(local, [site0, site1], num_qubits)
+        full = embed_unitary(local, [site0, site1], num_qubits)
         return (full @ op_mat).reshape((2,) * (2 * num_qubits))
 
     out_labels = list(_EINSUM_LETTERS[:num_qubits])
@@ -182,7 +182,7 @@ def _apply_two_qubit_left(
     return np.einsum(eq, gate, op, optimize=True)
 
 
-def _apply_gate_left(
+def apply_gate_left(
     op: NDArray[np.complex128],
     gate: BaseGate,
     num_qubits: int,
@@ -201,19 +201,19 @@ def _apply_gate_left(
         The updated operator tensor.
     """
     if gate.interaction == 1:
-        return _apply_single_qubit_left(op, gate.matrix, gate.sites[0], num_qubits, dagger=dagger)
+        return apply_1q_left(op, gate.matrix, gate.sites[0], num_qubits, dagger=dagger)
     if gate.interaction == 2:
-        return _apply_two_qubit_left(op, gate.tensor, gate.sites[0], gate.sites[1], num_qubits, dagger=dagger)
+        return apply_2q_left(op, gate.tensor, gate.sites[0], gate.sites[1], num_qubits, dagger=dagger)
 
     local = gate.matrix
     if dagger:
         local = local.conj().T
     op_mat = op.reshape(2**num_qubits, 2**num_qubits)
-    full = _embed_unitary(local, gate.sites, num_qubits)
+    full = embed_unitary(local, gate.sites, num_qubits)
     return (full @ op_mat).reshape((2,) * (2 * num_qubits))
 
 
-def _pop_front_layer_gates(dag: DAGCircuit) -> list[BaseGate]:
+def pop_front_gates(dag: DAGCircuit) -> list[BaseGate]:
     """Remove and return gates from the current DAG front layer.
 
     Args:
@@ -234,7 +234,7 @@ def _pop_front_layer_gates(dag: DAGCircuit) -> list[BaseGate]:
     return gates
 
 
-def _apply_gate_batch(
+def apply_gate_batch(
     op: NDArray[np.complex128],
     gates: list[BaseGate],
     num_qubits: int,
@@ -253,11 +253,11 @@ def _apply_gate_batch(
         The operator tensor after applying all gates in the batch.
     """
     for gate in sorted(gates, key=lambda g: min(g.sites)):
-        op = _apply_gate_left(op, gate, num_qubits, dagger=dagger)
+        op = apply_gate_left(op, gate, num_qubits, dagger=dagger)
     return op
 
 
-def _apply_layer_gates(
+def apply_layer(
     op: NDArray[np.complex128],
     layer_gates: list[BaseGate],
     num_qubits: int,
@@ -276,11 +276,11 @@ def _apply_layer_gates(
         The operator tensor after applying the full layer.
     """
     for batch in partition_disjoint_gate_batches(layer_gates):
-        op = _apply_gate_batch(op, batch, num_qubits, dagger=dagger)
+        op = apply_gate_batch(op, batch, num_qubits, dagger=dagger)
     return op
 
 
-def _collect_layer_groups(dag: DAGCircuit) -> list[list[BaseGate]]:
+def collect_layers(dag: DAGCircuit) -> list[list[BaseGate]]:
     """Consume ``dag`` layer by layer and return gate lists per layer.
 
     Args:
@@ -291,13 +291,13 @@ def _collect_layer_groups(dag: DAGCircuit) -> list[list[BaseGate]]:
     """
     layers: list[list[BaseGate]] = []
     while dag.op_nodes():
-        layer_gates = _pop_front_layer_gates(dag)
+        layer_gates = pop_front_gates(dag)
         if layer_gates:
             layers.append(layer_gates)
     return layers
 
 
-def build_composed_operator_tensor(
+def compose_operator_tensor(
     circuit1: QuantumCircuit,
     circuit2: QuantumCircuit,
 ) -> NDArray[np.complex128]:
@@ -320,22 +320,22 @@ def build_composed_operator_tensor(
         msg = "Circuits must have the same number of qubits."
         raise ValueError(msg)
     num_qubits = circuit1.num_qubits
-    op = _identity_operator_tensor(num_qubits)
+    op = make_identity_tensor(num_qubits)
 
-    dag1 = circuit_to_dag(_circuit_without_measurements(circuit1))
-    dag2 = circuit_to_dag(_circuit_without_measurements(circuit2))
+    dag1 = circuit_to_dag(strip_final_measurements(circuit1))
+    dag2 = circuit_to_dag(strip_final_measurements(circuit2))
 
-    for layer_gates in _collect_layer_groups(dag1):
-        op = _apply_layer_gates(op, layer_gates, num_qubits, dagger=False)
+    for layer_gates in collect_layers(dag1):
+        op = apply_layer(op, layer_gates, num_qubits, dagger=False)
 
-    layers2 = _collect_layer_groups(dag2)
+    layers2 = collect_layers(dag2)
     for layer_gates in reversed(layers2):
-        op = _apply_layer_gates(op, layer_gates, num_qubits, dagger=True)
+        op = apply_layer(op, layer_gates, num_qubits, dagger=True)
 
     return op
 
 
-def check_operator_is_identity(
+def is_identity_tensor(
     operator_tensor: NDArray[np.complex128],
     fidelity: float,
 ) -> bool:
@@ -359,7 +359,7 @@ def check_operator_is_identity(
     return normalized >= fidelity
 
 
-def check_equivalence_matrix(
+def check_matrix_equivalence(
     circuit1: QuantumCircuit,
     circuit2: QuantumCircuit,
     *,
@@ -375,5 +375,5 @@ def check_equivalence_matrix(
     Returns:
         Whether the circuits are equivalent within ``fidelity``.
     """
-    composed = build_composed_operator_tensor(circuit1, circuit2)
-    return check_operator_is_identity(composed, fidelity)
+    composed = compose_operator_tensor(circuit1, circuit2)
+    return is_identity_tensor(composed, fidelity)

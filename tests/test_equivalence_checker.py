@@ -9,21 +9,27 @@
 
 This module provides unit tests for :class:`~mqt.yaqs.EquivalenceChecker`. It verifies
 the MPO and dense matrix backends by comparing quantum circuits, including automatic
-backend selection and global-phase equivalence.
+backend selection, global-phase equivalence, and regression coverage for QASM custom gates.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
-from qiskit.qasm2 import load
+from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
+from qiskit.converters import circuit_to_dag
+from qiskit.qasm2 import load, loads
 
 from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
+from mqt.yaqs.core.libraries.gate_library import GateLibrary
+from mqt.yaqs.digital.utils import matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
+from mqt.yaqs.digital.utils.dag_utils import SUPPORTED_QISKIT_GATE_NAMES, convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
     from mqt.yaqs.equivalence_checker import Representation
@@ -142,6 +148,163 @@ def test_large_equivalence() -> None:
     result = checker.check(qc, qc)
     assert result["equivalent"] is True, "Large scale test fails. Circuits should be equivalent."
     assert result["representation"] == "mpo"
+
+
+ISSUE_QASM_WITH_MEASURES = """
+OPENQASM 2.0;
+include "qelib1.inc";
+
+gate bellprep a,b {
+  h a;
+  cx a,b;
+}
+
+gate phase_kick(theta) q {
+  rz(theta) q;
+  x q;
+  rz(-theta) q;
+  x q;
+}
+
+qreg q[3];
+creg c[3];
+
+bellprep q[0], q[1];
+phase_kick(pi/4) q[2];
+
+cx q[1], q[2];
+h q[0];
+
+measure q -> c;
+"""
+
+ISSUE_QASM_CUSTOM = """
+OPENQASM 2.0;
+include "qelib1.inc";
+
+gate bellprep a,b {
+  h a;
+  cx a,b;
+}
+
+gate phase_kick(theta) q {
+  rz(theta) q;
+  x q;
+  rz(-theta) q;
+  x q;
+}
+
+qreg q[3];
+
+bellprep q[0], q[1];
+phase_kick(pi/4) q[2];
+cx q[1], q[2];
+h q[0];
+"""
+
+ISSUE_QASM_EXPANDED = """
+OPENQASM 2.0;
+include "qelib1.inc";
+
+qreg q[3];
+
+h q[0];
+cx q[0], q[1];
+rz(pi/4) q[2];
+x q[2];
+rz(-pi/4) q[2];
+x q[2];
+cx q[1], q[2];
+h q[0];
+"""
+
+
+def _issue_checker(*, representation: Literal["mpo", "matrix", "auto"] = "mpo") -> EquivalenceChecker:
+    """Return an equivalence checker configured for issue regression tests."""
+    return EquivalenceChecker(
+        threshold=1e-13,
+        fidelity=1 - 1e-13,
+        representation=representation,
+    )
+
+
+def test_issue_qasm_self_equivalence_with_final_measurements() -> None:
+    """The exact issue QASM circuit with custom gates and final measurements is self-equivalent."""
+    qc = loads(ISSUE_QASM_WITH_MEASURES)
+    result = _issue_checker(representation="mpo").check(qc, qc)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+
+
+def test_issue_qasm_custom_vs_expanded_equivalence() -> None:
+    """QASM custom gates should be equivalent to their manually expanded decomposition."""
+    qc_custom = loads(ISSUE_QASM_CUSTOM)
+    qc_expanded = loads(ISSUE_QASM_EXPANDED)
+    result = _issue_checker(representation="mpo").check(qc_custom, qc_expanded)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+
+
+@pytest.mark.parametrize("gate_name", ["u1", "u3", "ecr"])
+def test_u1_u3_ecr_self_equivalence(gate_name: str) -> None:
+    """Legacy Qiskit gate names from the issue should self-equivalence-check on the MPO path."""
+    if gate_name == "u1":
+        qc = QuantumCircuit(2)
+        qc.append(U1Gate(0.37), [0])
+    elif gate_name == "u3":
+        qc = QuantumCircuit(2)
+        qc.append(U3Gate(0.2, 0.3, 0.4), [0])
+    else:
+        qc = QuantumCircuit(2)
+        qc.append(ECRGate(), [0, 1])
+
+    result = _issue_checker(representation="mpo").check(qc, qc)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+
+
+def test_ecr_has_no_hardcoded_gate_library_path() -> None:
+    """``ecr`` must not use a hardcoded GateLibrary entry and should translate via matrix fallback."""
+    assert "ecr" not in SUPPORTED_QISKIT_GATE_NAMES
+    assert not hasattr(GateLibrary, "ecr")
+
+    qc = QuantumCircuit(2)
+    qc.append(ECRGate(), [0, 1])
+    gates = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+    assert len(gates) == 1
+    assert gates[0].name == "ecr"
+
+
+def test_equivalence_checker_rejects_mid_circuit_measurements() -> None:
+    """Mid-circuit measurements must be rejected clearly by the equivalence checker."""
+    qc1 = QuantumCircuit(2, 1)
+    qc1.x(0)
+    qc1.measure(0, 0)
+    qc1.x(0)
+
+    qc2 = QuantumCircuit(2, 1)
+    qc2.x(0)
+    qc2.measure(0, 0)
+    qc2.x(0)
+
+    with pytest.raises(ValueError, match="Mid-circuit measurements are not supported"):
+        _issue_checker(representation="mpo").check(qc1, qc2)
+    with pytest.raises(ValueError, match="Mid-circuit measurements are not supported"):
+        _issue_checker(representation="matrix").check(qc1, qc2)
+
+
+def test_equivalence_checker_matrix_backend_strips_measurements_once() -> None:
+    """The matrix backend should strip final measurements only inside ``compose_operator_tensor``."""
+    qc1 = QuantumCircuit(1, 1)
+    qc1.x(0)
+    qc1.measure(0, 0)
+    qc2 = qc1.copy()
+
+    with patch.object(matrix_utils, "strip_final_measurements", wraps=matrix_utils.strip_final_measurements) as strip:
+        result = _issue_checker(representation="matrix").check(qc1, qc2)
+
+    assert result["equivalent"] is True
+    assert strip.call_count == 2
 
 
 @pytest.mark.parametrize("representation", ["matrix", "mpo"])

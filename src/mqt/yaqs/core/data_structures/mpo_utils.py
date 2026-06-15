@@ -88,7 +88,7 @@ def contract_mpo_site_with_mpo_site(
     return np.transpose(fused, (0, 2, 1, 3))
 
 
-def identity_mpo_site(physical_dimension: int) -> NDArray[np.complex128]:
+def make_identity_site(physical_dimension: int) -> NDArray[np.complex128]:
     """Single-site identity MPO tensor ``(phys_out, phys_in, 1, 1)``.
 
     Args:
@@ -101,12 +101,40 @@ def identity_mpo_site(physical_dimension: int) -> NDArray[np.complex128]:
     return np.expand_dims(np.expand_dims(tensor, axis=2), axis=3)
 
 
-def gate_tensor_lr_order(
+def convert_nn_matrix(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Map a ``4 x 4`` two-qubit unitary into ``U[out_l, out_r, in_l, in_r]`` for TEBD.
+
+    The MPS merge uses ``ijkl,klab->ijab`` with ``k,l`` the left/right input physical
+    indices and ``i,j`` the outputs. Qiskit little-endian state indices use
+    ``index = q_left + 2 * q_right`` for the two-site support ``(left, right)``.
+
+    Args:
+        matrix: Unitary on the two-qubit computational basis in that index ordering.
+
+    Returns:
+        Rank-4 gate tensor for nearest-neighbor TEBD contraction.
+    """
+    mat = np.asarray(matrix, dtype=np.complex128)
+    tensor = np.zeros((2, 2, 2, 2), dtype=np.complex128)
+    for col in range(4):
+        in_left, in_right = col % 2, col // 2
+        for row in range(4):
+            out_left, out_right = row % 2, row // 2
+            tensor[out_left, out_right, in_left, in_right] = mat[row, col]
+    return tensor
+
+
+def resolve_lr_tensor(
     gate: BaseGate,
     left_site: int | None = None,
     right_site: int | None = None,
 ) -> NDArray[np.complex128]:
     """Return ``gate.tensor`` as ``U[out_l, out_r, in_l, in_r]`` on ascending MPS sites.
+
+    When ``gate.sites == (left_site, right_site)``, the gate matrix is reshaped directly.
+    When the declared sites are reversed on the same nearest-neighbor pair, the matrix
+    already encodes the operator for ``gate.sites`` and is mapped with
+    :func:`convert_nn_matrix` instead of transposing a naive reshape.
 
     Args:
         gate: Two-qubit gate with ``sites`` and ``tensor`` set.
@@ -126,12 +154,12 @@ def gate_tensor_lr_order(
     if gate.sites[0] == left_site and gate.sites[1] == right_site:
         return np.asarray(gate.tensor, dtype=np.complex128)
     if gate.sites[0] == right_site and gate.sites[1] == left_site:
-        return np.asarray(np.transpose(gate.tensor, (1, 0, 3, 2)), dtype=np.complex128)
+        return convert_nn_matrix(gate.matrix)
     msg = f"Gate sites {gate.sites!r} are not consistent with MPS sites ({left_site}, {right_site})."
     raise ValueError(msg)
 
 
-def gate_support_mpo_tensors(
+def get_support_mpo(
     gate: BaseGate,
     *,
     first_site: int,
@@ -155,7 +183,7 @@ def gate_support_mpo_tensors(
     if cached is not None and len(cached) == support_len:
         return list(cached)
     return extend_gate(
-        gate_tensor_lr_order(gate),
+        resolve_lr_tensor(gate),
         [first_site, last_site],
     )
 

@@ -22,7 +22,7 @@ import numpy as np
 from .. import linalg
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
     from qiskit.circuit import Parameter
 
 
@@ -141,25 +141,33 @@ class BaseGate:
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
     sites: list[int]
 
-    def __init__(self, mat: NDArray[np.complex128]) -> None:
+    def __init__(self, mat: ArrayLike) -> None:
         """Initializes a BaseGate instance with the given matrix.
 
         Args:
             mat: The matrix representation of the gate.
 
         Raises:
-            ValueError: If the matrix is not square.
-            ValueError: If the matrix size is not a power of 2.
+            ValueError: If the matrix is not a square 2-D array.
+            ValueError: If the matrix dimension is not a power of 2.
         """
-        if mat.shape[0] != mat.shape[1]:
+        matrix = np.asarray(mat, dtype=np.complex128)
+        if matrix.ndim != 2:
+            msg = "Matrix must be a 2-D array."
+            raise ValueError(msg)
+        if matrix.shape[0] != matrix.shape[1]:
             msg = "Matrix must be square"
             raise ValueError(msg)
 
-        log = np.log2(mat.shape[0])
+        dim = matrix.shape[0]
+        interaction = int(np.log2(dim))
+        if dim < 1 or 2**interaction != dim:
+            msg = f"Matrix dimension {dim} must be a power of 2."
+            raise ValueError(msg)
 
-        self.matrix = mat
-        self.tensor = mat
-        self.interaction = int(log)
+        self.matrix = matrix
+        self.tensor = matrix
+        self.interaction = interaction
 
     def set_sites(self, *sites: int | list[int]) -> None:
         """Sets the sites for the gate.
@@ -184,6 +192,9 @@ class BaseGate:
 
         # store as the proper type
         self.sites = sites_list
+        if self.interaction == 2:
+            self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+            self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
     def __add__(self, other: BaseGate) -> BaseGate:
         """Adds two gates together.
@@ -200,7 +211,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot add gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix + other.matrix)
+        return self._clone_with_matrix(self.matrix + other.matrix)
 
     def __sub__(self, other: BaseGate) -> BaseGate:
         """Subtracts one gate from another.
@@ -217,7 +228,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot subtract gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix - other.matrix)
+        return self._clone_with_matrix(self.matrix - other.matrix)
 
     def __mul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies two gates or scales a gate by a scalar.
@@ -235,9 +246,9 @@ class BaseGate:
             if self.interaction != other.interaction:
                 msg = "Cannot multiply gates with different interaction"
                 raise ValueError(msg)
-            return BaseGate(self.matrix @ other.matrix)
+            return self._clone_with_matrix(self.matrix @ other.matrix)
 
-        return BaseGate(self.matrix * other)
+        return self._clone_with_matrix(self.matrix * other)
 
     def __rmul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies a scalar or another gate with this gate (right multiplication).
@@ -259,7 +270,27 @@ class BaseGate:
         Returns:
             A new BaseGate resulting from matrix multiplication.
         """
-        return BaseGate(self.matrix @ other.matrix)
+        return self._clone_with_matrix(self.matrix @ other.matrix)
+
+    def _clone_with_matrix(self, matrix: NDArray[np.complex128]) -> BaseGate:
+        """Return a gate with the same interaction level and a new matrix.
+
+        Unlike :meth:`__init__`, this bypasses power-of-two dimension validation so
+        arithmetic on d-level ladder operators preserves non-qubit matrix sizes.
+
+        Args:
+            matrix: Replacement gate matrix.
+
+        Returns:
+            New gate with ``interaction`` copied from ``self`` and ``name`` set to
+            ``"custom"``.
+        """
+        clone = BaseGate.__new__(BaseGate)
+        clone.matrix = np.asarray(matrix, dtype=np.complex128)
+        clone.tensor = clone.matrix
+        clone.interaction = self.interaction
+        clone.name = "custom"
+        return clone
 
     def dag(self) -> BaseGate:
         """Returns the conjugate transpose (dagger) of the gate.
@@ -267,7 +298,7 @@ class BaseGate:
         Returns:
             A new gate representing the conjugate transpose of this gate.
         """
-        return BaseGate(np.conj(self.matrix).T)
+        return self._clone_with_matrix(np.conj(self.matrix).T)
 
     def conj(self) -> BaseGate:
         """Returns the complex conjugate of the gate.
@@ -275,7 +306,7 @@ class BaseGate:
         Returns:
             A new gate representing the complex conjugate of this gate.
         """
-        return BaseGate(np.conj(self.matrix))
+        return self._clone_with_matrix(np.conj(self.matrix))
 
     def trans(self) -> BaseGate:
         """Returns the transpose of the gate.
@@ -283,7 +314,7 @@ class BaseGate:
         Returns:
             A new gate representing the transpose of this gate.
         """
-        return BaseGate(self.matrix.T)
+        return self._clone_with_matrix(self.matrix.T)
 
     @classmethod
     def x(cls) -> X:
@@ -694,8 +725,9 @@ class Destroy(BaseGate):
             d: Physical dimension.
         """
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
-
-        super().__init__(mat)
+        self.matrix = np.asarray(mat, dtype=np.complex128)
+        self.tensor = self.matrix
+        self.interaction = 1
 
 
 class Create(BaseGate):
@@ -721,8 +753,9 @@ class Create(BaseGate):
             d: Physical dimension.
         """
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
-
-        super().__init__(mat)
+        self.matrix = np.asarray(mat, dtype=np.complex128)
+        self.tensor = self.matrix
+        self.interaction = 1
 
 
 class Id(BaseGate):
@@ -766,6 +799,116 @@ class SX(BaseGate):
     def __init__(self) -> None:
         """Initializes the square-root X gate."""
         mat = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class Sdg(BaseGate):
+    """Class representing the adjoint S (S-dagger) gate.
+
+    Attributes:
+        name: The name of the gate ("sdg").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "sdg"
+
+    def __init__(self) -> None:
+        """Initializes the adjoint S gate."""
+        mat = np.array([[1, 0], [0, -1j]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class S(BaseGate):
+    """Class representing the S gate.
+
+    Attributes:
+        name: The name of the gate ("s").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "s"
+
+    def __init__(self) -> None:
+        """Initializes the S gate."""
+        mat = np.array([[1, 0], [0, 1j]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class Tdg(BaseGate):
+    """Class representing the adjoint T (T-dagger) gate.
+
+    Attributes:
+        name: The name of the gate ("tdg").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "tdg"
+
+    def __init__(self) -> None:
+        """Initializes the adjoint T gate."""
+        mat = np.array([[1, 0], [0, np.exp(-1j * np.pi / 4)]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class T(BaseGate):
+    """Class representing the T gate.
+
+    Attributes:
+        name: The name of the gate ("t").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "t"
+
+    def __init__(self) -> None:
+        """Initializes the T gate."""
+        mat = np.array([[1, 0], [0, np.exp(1j * np.pi / 4)]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class SXdg(BaseGate):
+    """Class representing the adjoint SX (SX-dagger) gate.
+
+    Attributes:
+        name: The name of the gate ("sxdg").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "sxdg"
+
+    def __init__(self) -> None:
+        """Initializes the adjoint SX gate."""
+        mat = 0.5 * np.array([[1 - 1j, 1 + 1j], [1 + 1j, 1 - 1j]], dtype=np.complex128)
         super().__init__(mat)
 
 
@@ -1579,14 +1722,23 @@ class GateLibrary:
         y: Class for the Pauli-Y gate.
         z: Class for the Pauli-Z gate.
         sx: Class for the √X (SX) gate.
+        sxdg: Class for the adjoint √X (SX-dagger) gate.
+        s: Class for the S gate.
+        sdg: Class for the adjoint S (S-dagger) gate.
+        t: Class for the T gate.
+        tdg: Class for the adjoint T (T-dagger) gate.
         h: Class for the Hadamard gate.
         id: Class for the identity gate.
+        i: Alias for the identity gate.
+        iden: Alias for the identity gate.
 
         rx: Class for rotation about the X-axis.
         ry: Class for rotation about the Y-axis.
         rz: Class for rotation about the Z-axis.
         u:  Class for the generic single-qubit U gate.
+        u3: Alias for the generic single-qubit U gate.
         u2: Class for the U2 (fixed-θ,φ) single-qubit gate.
+        u1: Alias for the single-qubit phase gate.
 
         cx: Class for the controlled-NOT (CNOT) gate.
         cz: Class for the controlled-Z gate.
@@ -1620,14 +1772,23 @@ class GateLibrary:
     y = Y
     z = Z
     sx = SX
+    sxdg = SXdg
+    s = S
+    sdg = Sdg
+    t = T
+    tdg = Tdg
     h = H
     id = Id
+    i = Id
+    iden = Id
 
     rx = Rx
     ry = Ry
     rz = Rz
     u = U
+    u3 = U
     u2 = U2
+    u1 = Phase
 
     cx = CX
     cz = CZ

@@ -31,7 +31,17 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
-from mqt.yaqs.core.libraries.gate_library import BaseGate, Destroy, GateLibrary, X, Y, Z, extend_gate, split_tensor
+from mqt.yaqs.core.libraries.gate_library import (
+    BaseGate,
+    Create,
+    Destroy,
+    GateLibrary,
+    X,
+    Y,
+    Z,
+    extend_gate,
+    split_tensor,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -653,3 +663,85 @@ def test_meta_schmidt_spectrum_sites_len_flexible() -> None:
     g.set_sites(7, 8)
     assert g.sites == [7, 8]
     assert_array_equal(BaseGate.schmidt_spectrum().matrix, g.matrix)
+
+
+def test_base_gate_one_qubit_matrix_infers_interaction() -> None:
+    """A valid 1-qubit matrix should infer ``interaction == 1``."""
+    gate = BaseGate(np.array([[1, 0], [0, 1]], dtype=np.float64))
+    assert gate.interaction == 1
+    assert gate.matrix.dtype == np.complex128
+
+
+def test_base_gate_two_qubit_matrix_infers_interaction() -> None:
+    """A valid 2-qubit matrix should infer ``interaction == 2``."""
+    gate = BaseGate(np.eye(4, dtype=np.complex128))
+    assert gate.interaction == 2
+    assert gate.matrix.dtype == np.complex128
+
+
+def test_base_gate_non_square_matrix_raises() -> None:
+    """A non-square matrix should be rejected."""
+    with pytest.raises(ValueError, match="Matrix must be square"):
+        BaseGate(np.array([[1, 2, 3], [4, 5, 6]]))
+
+
+def test_base_gate_three_by_three_matrix_raises() -> None:
+    """A 3x3 matrix should be rejected because 3 is not a power of two."""
+    with pytest.raises(ValueError, match="Matrix dimension 3 must be a power of 2"):
+        BaseGate(np.eye(3, dtype=np.complex128))
+
+
+def test_destroy_d_level_arithmetic() -> None:
+    """Destroy/Create arithmetic on non-qubit dimensions should not re-validate matrix size."""
+    d = 3
+    destroy = Destroy(d)
+    create = Create(d)
+    combined = destroy.dag() @ destroy + create @ create.dag()
+    assert combined.matrix.shape == (d, d)
+
+
+@pytest.mark.parametrize(
+    ("factory", "sites", "expected_mpo_len"),
+    [
+        (GateLibrary.xx, [0, 1], 2),
+        (GateLibrary.yy, [1, 2], 2),
+        (GateLibrary.zz, [0, 2], 3),
+    ],
+)
+def test_two_qubit_correlator_set_sites_builds_mpo(
+    factory: type,
+    sites: list[int],
+    expected_mpo_len: int,
+) -> None:
+    """XX/YY/ZZ correlators should still build tensor/MPO data via ``BaseGate.set_sites``."""
+    gate = factory()
+    gate.set_sites(*sites)
+    assert gate.sites == sites
+    assert gate.tensor.shape == (2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == expected_mpo_len
+
+
+@pytest.mark.parametrize(
+    ("factory", "site"),
+    [
+        (GateLibrary.p0, 2),
+        (GateLibrary.p1, 3),
+    ],
+)
+def test_projector_set_sites_preserves_tensor(factory: type, site: int) -> None:
+    """Single-qubit projectors should keep their matrix/tensor after ``set_sites``."""
+    gate = factory()
+    matrix_before = gate.matrix.copy()
+    gate.set_sites(site)
+    assert gate.sites == [site]
+    assert_array_equal(gate.matrix, matrix_before)
+    assert gate.tensor.shape == (2, 2)
+
+
+def test_pvm_set_sites_preserves_placeholder_matrix() -> None:
+    """PVM should remain a 1-qubit placeholder after ``set_sites``."""
+    gate = GateLibrary.pvm("01")
+    gate.set_sites(4)
+    assert gate.sites == [4]
+    assert gate.interaction == 1
+    assert_array_equal(gate.matrix, np.eye(2))
