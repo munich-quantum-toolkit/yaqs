@@ -653,3 +653,29 @@ def test_meta_schmidt_spectrum_sites_len_flexible() -> None:
     g.set_sites(7, 8)
     assert g.sites == [7, 8]
     assert_array_equal(BaseGate.schmidt_spectrum().matrix, g.matrix)
+
+
+def test_base_gate_one_qubit_matrix_infers_interaction() -> None:
+    """A valid 1-qubit matrix should infer ``interaction == 1``."""
+    gate = BaseGate(np.array([[1, 0], [0, 1]], dtype=np.float64))
+    assert gate.interaction == 1
+    assert gate.matrix.dtype == np.complex128
+
+
+def test_base_gate_two_qubit_matrix_infers_interaction() -> None:
+    """A valid 2-qubit matrix should infer ``interaction == 2``."""
+    gate = BaseGate(np.eye(4, dtype=np.complex128))
+    assert gate.interaction == 2
+    assert gate.matrix.dtype == np.complex128
+
+
+def test_base_gate_non_square_matrix_raises() -> None:
+    """A non-square matrix should be rejected."""
+    with pytest.raises(ValueError, match="Matrix must be square"):
+        BaseGate(np.array([[1, 2, 3], [4, 5, 6]]))
+
+
+def test_base_gate_three_by_three_matrix_raises() -> None:
+    """A 3x3 matrix should be rejected because 3 is not a power of two."""
+    with pytest.raises(ValueError, match="Matrix dimension 3 must be a power of 2"):
+        BaseGate(np.eye(3, dtype=np.complex128))

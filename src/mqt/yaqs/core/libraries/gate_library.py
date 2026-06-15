@@ -22,7 +22,7 @@ import numpy as np
 from .. import linalg
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
     from qiskit.circuit import Parameter
 
 
@@ -141,25 +141,33 @@ class BaseGate:
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
     sites: list[int]
 
-    def __init__(self, mat: NDArray[np.complex128]) -> None:
+    def __init__(self, mat: ArrayLike) -> None:
         """Initializes a BaseGate instance with the given matrix.
 
         Args:
             mat: The matrix representation of the gate.
 
         Raises:
-            ValueError: If the matrix is not square.
-            ValueError: If the matrix size is not a power of 2.
+            ValueError: If the matrix is not a square 2-D array.
+            ValueError: If the matrix dimension is not a power of 2.
         """
-        if mat.shape[0] != mat.shape[1]:
+        matrix = np.asarray(mat, dtype=np.complex128)
+        if matrix.ndim != 2:
+            msg = "Matrix must be a 2-D array."
+            raise ValueError(msg)
+        if matrix.shape[0] != matrix.shape[1]:
             msg = "Matrix must be square"
             raise ValueError(msg)
 
-        log = np.log2(mat.shape[0])
+        dim = matrix.shape[0]
+        interaction = int(np.log2(dim))
+        if dim < 1 or 2**interaction != dim:
+            msg = f"Matrix dimension {dim} must be a power of 2."
+            raise ValueError(msg)
 
-        self.matrix = mat
-        self.tensor = mat
-        self.interaction = int(log)
+        self.matrix = matrix
+        self.tensor = matrix
+        self.interaction = interaction
 
     def set_sites(self, *sites: int | list[int]) -> None:
         """Sets the sites for the gate.
