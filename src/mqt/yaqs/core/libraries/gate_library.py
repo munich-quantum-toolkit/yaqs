@@ -195,8 +195,6 @@ class BaseGate:
         if self.interaction == 2:
             self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
             self.mpo_tensors = extend_gate(self.tensor, self.sites)
-            if self.sites[1] < self.sites[0]:
-                self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
     def __add__(self, other: BaseGate) -> BaseGate:
         """Adds two gates together.
