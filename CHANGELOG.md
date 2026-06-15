@@ -12,6 +12,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 ### Added
 
 improved Qiskit gate compatibility with matrix fallback ([#464]) ([**@aaronleesander**])
+
 - added MPO zip-up as default long-range gate application method ([#449]) ([**@aaronleesander**])
 - parallelized MPO equivalence checker ([#448]) ([**@aaronleesander**])
 - added tebd/hybrid/tdvp options for circuit simulation ([#441]) ([**@aaronleesander**])
