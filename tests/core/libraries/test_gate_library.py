@@ -679,3 +679,50 @@ def test_base_gate_three_by_three_matrix_raises() -> None:
     """A 3x3 matrix should be rejected because 3 is not a power of two."""
     with pytest.raises(ValueError, match="Matrix dimension 3 must be a power of 2"):
         BaseGate(np.eye(3, dtype=np.complex128))
+
+
+@pytest.mark.parametrize(
+    ("factory", "sites", "expected_mpo_len"),
+    [
+        (GateLibrary.xx, [0, 1], 2),
+        (GateLibrary.yy, [1, 2], 2),
+        (GateLibrary.zz, [0, 2], 3),
+    ],
+)
+def test_two_qubit_correlator_set_sites_builds_mpo(
+    factory: type,
+    sites: list[int],
+    expected_mpo_len: int,
+) -> None:
+    """XX/YY/ZZ correlators should still build tensor/MPO data via ``BaseGate.set_sites``."""
+    gate = factory()
+    gate.set_sites(*sites)
+    assert gate.sites == sites
+    assert gate.tensor.shape == (2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == expected_mpo_len
+
+
+@pytest.mark.parametrize(
+    ("factory", "site"),
+    [
+        (GateLibrary.p0, 2),
+        (GateLibrary.p1, 3),
+    ],
+)
+def test_projector_set_sites_preserves_tensor(factory: type, site: int) -> None:
+    """Single-qubit projectors should keep their matrix/tensor after ``set_sites``."""
+    gate = factory()
+    matrix_before = gate.matrix.copy()
+    gate.set_sites(site)
+    assert gate.sites == [site]
+    assert_array_equal(gate.matrix, matrix_before)
+    assert gate.tensor.shape == (2, 2)
+
+
+def test_pvm_set_sites_preserves_placeholder_matrix() -> None:
+    """PVM should remain a 1-qubit placeholder after ``set_sites``."""
+    gate = GateLibrary.pvm("01")
+    gate.set_sites(4)
+    assert gate.sites == [4]
+    assert gate.interaction == 1
+    assert_array_equal(gate.matrix, np.eye(2))
