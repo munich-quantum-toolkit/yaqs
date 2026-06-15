@@ -1826,23 +1826,23 @@ def test_counts_multiple_mid_measurement_barriers() -> None:
 
 
 def test_ignores_non_mid_barriers_and_handles_measures() -> None:
-    """Barriers without the label and measurements are ignored for sampling.
+    """Barriers without the label and terminal measurements are ignored for sampling.
 
     Creates a 2-qubit circuit that includes an unlabelled barrier (ignored), a labelled
-    'SAMPLE_OBSERVABLES' barrier (counted), a measurement operation (removed), and a barrier
-    with a non-matching label (ignored). With layer sampling enabled, the test asserts
-    that each observable's results has shape (3,), corresponding to initial, one mid,
-    and final sampling points.
+    'SAMPLE_OBSERVABLES' barrier (counted), a terminal measurement operation (removed),
+    and a barrier with a non-matching label (ignored). With layer sampling enabled, the
+    test asserts that each observable's results has shape (3,), corresponding to initial,
+    one mid, and final sampling points.
     """
     num_qubits = 2
     qc = QuantumCircuit(num_qubits, num_qubits)
     qc.barrier()  # no label -> ignored
     qc.rx(0.1, 0)
     qc.barrier(label="SAMPLE_OBSERVABLES")
-    qc.measure(0, 0)  # measurements are removed
     qc.cx(0, 1)
     qc.barrier(label="not-mid")  # ignored
     qc.rzz(0.2, 0, 1)
+    qc.measure(0, 0)  # terminal measurements are removed
 
     sim_params = StrongSimParams(observables=[Observable(Z(), i) for i in range(num_qubits)], sample_layers=True)
     state = State(num_qubits, initial="zeros")
