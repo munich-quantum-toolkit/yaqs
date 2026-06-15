@@ -88,7 +88,7 @@ def contract_mpo_site_with_mpo_site(
     return np.transpose(fused, (0, 2, 1, 3))
 
 
-def identity_mpo_site(physical_dimension: int) -> NDArray[np.complex128]:
+def make_identity_site(physical_dimension: int) -> NDArray[np.complex128]:
     """Single-site identity MPO tensor ``(phys_out, phys_in, 1, 1)``.
 
     Args:
@@ -101,7 +101,7 @@ def identity_mpo_site(physical_dimension: int) -> NDArray[np.complex128]:
     return np.expand_dims(np.expand_dims(tensor, axis=2), axis=3)
 
 
-def two_qubit_matrix_to_mps_tensor(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
+def convert_nn_matrix(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Map a ``4 x 4`` two-qubit unitary into ``U[out_l, out_r, in_l, in_r]`` for TEBD.
 
     The MPS merge uses ``ijkl,klab->ijab`` with ``k,l`` the left/right input physical
@@ -124,7 +124,7 @@ def two_qubit_matrix_to_mps_tensor(matrix: NDArray[np.complex128]) -> NDArray[np
     return tensor
 
 
-def gate_tensor_lr_order(
+def resolve_lr_tensor(
     gate: BaseGate,
     left_site: int | None = None,
     right_site: int | None = None,
@@ -134,7 +134,7 @@ def gate_tensor_lr_order(
     When ``gate.sites == (left_site, right_site)``, the gate matrix is reshaped directly.
     When the declared sites are reversed on the same nearest-neighbor pair, the matrix
     already encodes the operator for ``gate.sites`` and is mapped with
-    :func:`two_qubit_matrix_to_mps_tensor` instead of transposing a naive reshape.
+    :func:`convert_nn_matrix` instead of transposing a naive reshape.
 
     Args:
         gate: Two-qubit gate with ``sites`` and ``tensor`` set.
@@ -154,12 +154,12 @@ def gate_tensor_lr_order(
     if gate.sites[0] == left_site and gate.sites[1] == right_site:
         return np.asarray(gate.tensor, dtype=np.complex128)
     if gate.sites[0] == right_site and gate.sites[1] == left_site:
-        return two_qubit_matrix_to_mps_tensor(gate.matrix)
+        return convert_nn_matrix(gate.matrix)
     msg = f"Gate sites {gate.sites!r} are not consistent with MPS sites ({left_site}, {right_site})."
     raise ValueError(msg)
 
 
-def gate_support_mpo_tensors(
+def get_support_mpo(
     gate: BaseGate,
     *,
     first_site: int,
@@ -183,7 +183,7 @@ def gate_support_mpo_tensors(
     if cached is not None and len(cached) == support_len:
         return list(cached)
     return extend_gate(
-        gate_tensor_lr_order(gate),
+        resolve_lr_tensor(gate),
         [first_site, last_site],
     )
 

@@ -22,7 +22,7 @@ import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.mpo import MPO
-from ..core.data_structures.mpo_utils import gate_tensor_lr_order
+from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import (
@@ -310,7 +310,7 @@ def apply_two_qubit_gate_tebd(
 
     left_site = min(site0, site1)
     right_site = max(site0, site1)
-    u_gate = gate_tensor_lr_order(gate, left_site, right_site)
+    u_gate = resolve_lr_tensor(gate, left_site, right_site)
 
     left_tensor = state.tensors[left_site]
     right_tensor = state.tensors[right_site]
