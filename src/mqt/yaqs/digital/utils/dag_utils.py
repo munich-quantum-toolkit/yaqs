@@ -154,8 +154,11 @@ def _extract_matrix(op: Operation, *, name: str) -> NDArray[np.complex128]:
         try:
             matrix = to_matrix()
         except (TypeError, QiskitError) as exc:
-            msg = f"Cannot translate Qiskit instruction '{name}': failed to build a matrix representation."
-            raise ValueError(msg) from exc
+            try:
+                return np.asarray(Operator(op).data, dtype=np.complex128)
+            except (TypeError, QiskitError, ValueError):
+                msg = f"Cannot translate Qiskit instruction '{name}': failed to build a matrix representation."
+                raise ValueError(msg) from exc
         if matrix is not None:
             return np.asarray(matrix, dtype=np.complex128)
 

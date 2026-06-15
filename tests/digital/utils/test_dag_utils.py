@@ -25,6 +25,7 @@ import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
+from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
     CRZGate,
     CXGate,
@@ -41,6 +42,7 @@ from qiskit.circuit.library import (
 )
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
+from qiskit.qasm2 import loads
 from qiskit.quantum_info import Operator, Statevector
 
 from mqt.yaqs import EquivalenceChecker
@@ -115,6 +117,28 @@ def test_custom_one_qubit_unitary_gate_translation() -> None:
     assert gate.interaction == 1
     assert gate.sites == [0]
     assert_allclose(gate.matrix, unitary, atol=1e-12)
+    assert not hasattr(gate, "generator")
+
+
+def test_qasm_defined_gate_translates_when_to_matrix_raises() -> None:
+    """QASM custom gates without ``to_matrix`` (older Qiskit) still translate via ``Operator``."""
+    qasm = """
+    OPENQASM 2.0;
+    include "qelib1.inc";
+    gate prep a,b { h a; cx a,b; }
+    qreg q[2];
+    prep q[0], q[1];
+    """
+    qc = loads(qasm)
+    dag = circuit_to_dag(qc)
+    node = next(n for n in dag.op_nodes() if n.op.name == "prep")
+    reference = convert_dag_to_tensor_algorithm(node)[0]
+
+    with patch.object(node.op, "to_matrix", side_effect=CircuitError("to_matrix unavailable")):
+        gate = convert_dag_to_tensor_algorithm(node)[0]
+
+    assert gate.name == "prep"
+    assert_allclose(gate.matrix, reference.matrix, atol=1e-12)
     assert not hasattr(gate, "generator")
 
 
