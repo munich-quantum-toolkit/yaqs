@@ -22,27 +22,27 @@ from mqt.yaqs.core.data_structures.mpo_utils import (
     gate_support_mpo_tensors,
     gate_tensor_lr_order,
     identity_mpo_site,
+    two_qubit_matrix_to_mps_tensor,
 )
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, extend_gate
 
 
 def test_gate_tensor_lr_order_swaps_sites() -> None:
-    """Gate tensor axes follow ascending MPS site order."""
+    """Reversed nearest-neighbor qargs use the matrix MPS map, not a tensor transpose."""
     gate = GateLibrary.cx()
-    gate.set_sites(2, 0)
-    ordered = gate_tensor_lr_order(gate)
-    gate.set_sites(0, 2)
-    direct = gate_tensor_lr_order(gate)
-    np.testing.assert_allclose(ordered, direct)
+    gate.set_sites(1, 0)
+    reversed_tensor = gate_tensor_lr_order(gate)
+    expected = two_qubit_matrix_to_mps_tensor(gate.matrix)
+    np.testing.assert_allclose(reversed_tensor, expected)
 
 
 def test_gate_tensor_lr_order_explicit_sites() -> None:
-    """Explicit left/right sites select the transpose branch."""
+    """Explicit left/right sites select the reversed-qarg branch on long-range pairs."""
     gate = GateLibrary.cx()
     gate.set_sites(3, 1)
     tensor = gate_tensor_lr_order(gate, left_site=1, right_site=3)
-    gate.set_sites(1, 3)
-    np.testing.assert_allclose(tensor, gate.tensor)
+    expected = two_qubit_matrix_to_mps_tensor(gate.matrix)
+    np.testing.assert_allclose(tensor, expected)
 
 
 def test_gate_tensor_lr_order_inconsistent_sites_raises() -> None:
