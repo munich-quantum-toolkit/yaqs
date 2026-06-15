@@ -211,7 +211,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot add gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix + other.matrix)
+        return self._clone_with_matrix(self.matrix + other.matrix)
 
     def __sub__(self, other: BaseGate) -> BaseGate:
         """Subtracts one gate from another.
@@ -228,7 +228,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot subtract gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix - other.matrix)
+        return self._clone_with_matrix(self.matrix - other.matrix)
 
     def __mul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies two gates or scales a gate by a scalar.
@@ -246,9 +246,9 @@ class BaseGate:
             if self.interaction != other.interaction:
                 msg = "Cannot multiply gates with different interaction"
                 raise ValueError(msg)
-            return BaseGate(self.matrix @ other.matrix)
+            return self._clone_with_matrix(self.matrix @ other.matrix)
 
-        return BaseGate(self.matrix * other)
+        return self._clone_with_matrix(self.matrix * other)
 
     def __rmul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies a scalar or another gate with this gate (right multiplication).
@@ -270,7 +270,7 @@ class BaseGate:
         Returns:
             A new BaseGate resulting from matrix multiplication.
         """
-        return BaseGate(self.matrix @ other.matrix)
+        return self._clone_with_matrix(self.matrix @ other.matrix)
 
     def _clone_with_matrix(self, matrix: NDArray[np.complex128]) -> BaseGate:
         """Return a gate with the same interaction level and a new matrix."""
