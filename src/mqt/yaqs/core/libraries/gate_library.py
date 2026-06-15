@@ -272,13 +272,22 @@ class BaseGate:
         """
         return BaseGate(self.matrix @ other.matrix)
 
+    def _clone_with_matrix(self, matrix: NDArray[np.complex128]) -> BaseGate:
+        """Return a gate with the same interaction level and a new matrix."""
+        clone = BaseGate.__new__(BaseGate)
+        clone.matrix = np.asarray(matrix, dtype=np.complex128)
+        clone.tensor = clone.matrix
+        clone.interaction = self.interaction
+        clone.name = "custom"
+        return clone
+
     def dag(self) -> BaseGate:
         """Returns the conjugate transpose (dagger) of the gate.
 
         Returns:
             A new gate representing the conjugate transpose of this gate.
         """
-        return BaseGate(np.conj(self.matrix).T)
+        return self._clone_with_matrix(np.conj(self.matrix).T)
 
     def conj(self) -> BaseGate:
         """Returns the complex conjugate of the gate.
@@ -286,7 +295,7 @@ class BaseGate:
         Returns:
             A new gate representing the complex conjugate of this gate.
         """
-        return BaseGate(np.conj(self.matrix))
+        return self._clone_with_matrix(np.conj(self.matrix))
 
     def trans(self) -> BaseGate:
         """Returns the transpose of the gate.
@@ -294,7 +303,7 @@ class BaseGate:
         Returns:
             A new gate representing the transpose of this gate.
         """
-        return BaseGate(self.matrix.T)
+        return self._clone_with_matrix(self.matrix.T)
 
     @classmethod
     def x(cls) -> X:
@@ -705,8 +714,9 @@ class Destroy(BaseGate):
             d: Physical dimension.
         """
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
-
-        super().__init__(mat)
+        self.matrix = np.asarray(mat, dtype=np.complex128)
+        self.tensor = self.matrix
+        self.interaction = 1
 
 
 class Create(BaseGate):
@@ -732,8 +742,9 @@ class Create(BaseGate):
             d: Physical dimension.
         """
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
-
-        super().__init__(mat)
+        self.matrix = np.asarray(mat, dtype=np.complex128)
+        self.tensor = self.matrix
+        self.interaction = 1
 
 
 class Id(BaseGate):
