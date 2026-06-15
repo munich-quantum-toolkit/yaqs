@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+improved Qiskit gate compatibility with matrix fallback ([#464]) ([**@aaronleesander**])
 - added MPO zip-up as default long-range gate application method ([#449]) ([**@aaronleesander**])
 - parallelized MPO equivalence checker ([#448]) ([**@aaronleesander**])
 - added tebd/hybrid/tdvp options for circuit simulation ([#441]) ([**@aaronleesander**])
@@ -133,6 +134,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#464]: https://github.com/munich-quantum-toolkit/yaqs/pull/464
 [#458]: https://github.com/munich-quantum-toolkit/yaqs/pull/458
 [#457]: https://github.com/munich-quantum-toolkit/yaqs/pull/457
 [#449]: https://github.com/munich-quantum-toolkit/yaqs/pull/449
