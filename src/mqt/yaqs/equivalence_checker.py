@@ -190,9 +190,6 @@ class EquivalenceChecker:
             msg = "Circuits must have the same number of qubits."
             raise ValueError(msg)
 
-        circuit1 = strip_final_measurements(circuit1)
-        circuit2 = strip_final_measurements(circuit2)
-
         backend = self._resolve_representation(circuit1.num_qubits)
         start_time = time.time()
 
@@ -203,6 +200,8 @@ class EquivalenceChecker:
                 fidelity=self.fidelity,
             )
         else:
+            circuit1 = strip_final_measurements(circuit1)
+            circuit2 = strip_final_measurements(circuit2)
             mpo = MPO.identity(circuit1.num_qubits)
             circuit1_dag = circuit_to_dag(circuit1)
             circuit2_dag = circuit_to_dag(circuit2)

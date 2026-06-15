@@ -70,6 +70,21 @@ def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site
     return NoiseModel(local_processes)
 
 
+def _is_terminal_measure(dag: DAGCircuit, node: DAGOpNode) -> bool:
+    """Return whether no later op nodes act on qubits measured by ``node``."""
+    measured = {dag.find_bit(q).index for q in node.qargs}
+    topo = list(dag.topological_op_nodes())
+    try:
+        node_index = topo.index(node)
+    except ValueError:
+        return True
+    for later in topo[node_index + 1 :]:
+        later_qubits = {dag.find_bit(q).index for q in later.qargs}
+        if later_qubits & measured:
+            return False
+    return True
+
+
 def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
     """Process quantum circuit layer before applying to MPS.
 
@@ -88,6 +103,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
 
     Raises:
         NotImplementedError: If a node with more than two qubits is encountered.
+        ValueError: If a non-terminal ``measure`` operation is encountered.
     """
     # Extract the current layer
     current_layer = dag.front_layer()
@@ -102,11 +118,18 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     for node in current_layer:
         name = node.op.name
 
-        # Drop measurements during simulation. Unlike ``convert_dag_to_tensor_algorithm``,
+        # Drop terminal measurements during simulation. Unlike ``convert_dag_to_tensor_algorithm``,
         # which rejects ``measure`` when building a gate list, the live DAG path removes
         # measurement nodes so terminal Qiskit measurements do not block evolution.
         if name == "measure":
-            dag.remove_op_node(node)
+            if _is_terminal_measure(dag, node):
+                dag.remove_op_node(node)
+            else:
+                msg = (
+                    "Non-terminal measure operations are not supported during simulation; "
+                    "removing them would ignore state collapse and classical dependencies."
+                )
+                raise ValueError(msg)
             continue
 
         # Keep ONLY barriers with label "SAMPLE_OBSERVABLES" (case-insensitive). Remove all other barriers.

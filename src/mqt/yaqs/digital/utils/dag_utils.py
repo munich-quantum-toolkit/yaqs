@@ -257,6 +257,9 @@ def _translate_node(dag: DAGCircuit | None, node: DAGOpNode) -> BaseGate:
         msg = f"Cannot translate Qiskit instruction '{name}': {num_qubits}-qubit gates are not supported yet."
         raise ValueError(msg)
 
+    if name not in SUPPORTED_QISKIT_GATE_NAMES:
+        return _translate_matrix(node.op, name=name, sites=sites)
+
     try:
         gate_cls = getattr(GateLibrary, name)
     except AttributeError:
