@@ -373,9 +373,14 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
     gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
+    has_generator = getattr(gate, "generator", None) is not None
 
     if gate_mode == "full-tdvp":
-        return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        if has_generator:
+            return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        if is_nearest_neighbor:
+            return apply_two_qubit_gate_tebd(state, gate, sim_params)
+        return apply_long_range_gate_mpo(state, gate, sim_params)
 
     if gate_mode == "swaps":
         return apply_two_qubit_gate_tebd(state, gate, sim_params)
@@ -383,7 +388,9 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     if gate_mode == "tdvp":
         if is_nearest_neighbor:
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
-        return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        if has_generator:
+            return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        return apply_long_range_gate_mpo(state, gate, sim_params)
 
     if gate_mode == "mpo":
         if is_nearest_neighbor:
