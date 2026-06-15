@@ -15,8 +15,10 @@ using their DAG representations. It provides utilities to:
 - Determine the maximum distance (in terms of qubit indices) of multi-qubit gates.
 - Select starting points for gate application based on a checkerboard pattern.
 
-These functions facilitate the manipulation and analysis of quantum circuit
-representations.
+Qiskit instructions whose ``op.name`` matches one of the 28 entries in
+:data:`SUPPORTED_QISKIT_GATE_NAMES` are translated via hardcoded ``GateLibrary``
+classes. All other one- and two-qubit unitary gates fall back to matrix-backed
+:class:`~mqt.yaqs.core.libraries.gate_library.BaseGate` instances.
 """
 
 from __future__ import annotations
@@ -37,8 +39,42 @@ if TYPE_CHECKING:
     from qiskit.circuit import Qubit
     from qiskit.dagcircuit import DAGCircuit
 
-_SKIP_INSTRUCTIONS = frozenset({"measure", "barrier"})
-_REJECTED_INSTRUCTIONS = frozenset({"reset", "delay", "store"})
+# ``barrier`` is ignored during DAG-to-gate conversion. ``measure`` is rejected
+# here; circuit simulation drops measurements separately in ``process_layer``.
+_SKIP_INSTRUCTIONS = frozenset({"barrier"})
+_ZONE_SKIP_INSTRUCTIONS = frozenset({"measure", "barrier"})
+_REJECTED_INSTRUCTIONS = frozenset({"reset", "delay", "store", "measure"})
+# Qiskit ``op.name`` values resolved through ``getattr(GateLibrary, name)``.
+SUPPORTED_QISKIT_GATE_NAMES: tuple[str, ...] = (
+    "cp",
+    "cx",
+    "cz",
+    "h",
+    "i",
+    "id",
+    "iden",
+    "p",
+    "rx",
+    "ry",
+    "rz",
+    "rxx",
+    "ryy",
+    "rzz",
+    "s",
+    "sdg",
+    "swap",
+    "sx",
+    "sxdg",
+    "t",
+    "tdg",
+    "u",
+    "u1",
+    "u2",
+    "u3",
+    "x",
+    "y",
+    "z",
+)
 _CONTROL_FLOW_INSTRUCTIONS = frozenset({
     "for_loop",
     "while_loop",
@@ -138,7 +174,13 @@ def _reject_unsupported(node: DAGOpNode) -> None:
     """
     name = node.op.name
     if name in _REJECTED_INSTRUCTIONS:
-        msg = f"Cannot translate Qiskit instruction '{name}': {name} is not supported in YAQS circuit simulation."
+        if name == "measure":
+            msg = (
+                f"Cannot translate Qiskit instruction '{name}': mid-circuit measurements are not supported; "
+                "remove measure instructions before conversion."
+            )
+        else:
+            msg = f"Cannot translate Qiskit instruction '{name}': {name} is not supported in YAQS circuit simulation."
         raise ValueError(msg)
     if name in _CONTROL_FLOW_INSTRUCTIONS:
         msg = f"Cannot translate Qiskit instruction '{name}': control-flow operations are not supported."
@@ -297,14 +339,14 @@ def _build_temporal_zone(dag: DAGCircuit, qubits: list[int]) -> DAGCircuit:
 
                 # If the gate acts entirely within the current cone of qubits.
                 if qubit_set <= qubits_to_check:
-                    if node.op.name in _SKIP_INSTRUCTIONS:
+                    if node.op.name in _ZONE_SKIP_INSTRUCTIONS:
                         dag.remove_op_node(node)
                         continue
                     new_dag.apply_operation_back(node.op, node.qargs)
                     dag.remove_op_node(node)
                 else:
                     # For partial overlap, remove the overlapping qubits from the cone.
-                    if node.op.name in _SKIP_INSTRUCTIONS:
+                    if node.op.name in _ZONE_SKIP_INSTRUCTIONS:
                         dag.remove_op_node(node)
                         continue
                     for item in qubit_set & qubits_to_check:
