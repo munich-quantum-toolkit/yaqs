@@ -20,7 +20,7 @@ from mqt.yaqs.digital.utils.qasm_utils import (
     _parse_qasm_version,  # noqa: PLC2701 — unit tests target the private parser directly
     load_circuit,
 )
-from tests.conftest import requires_qasm3_import
+from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qasm3_import, write_qasm_file
 
 QASM2_STRING = """\
 OPENQASM 2.0;
@@ -71,16 +71,16 @@ def test_load_circuit_qasm2_string() -> None:
     assert qc.num_qubits == 1
 
 
-def test_load_circuit_qasm2_path_object() -> None:
+def test_load_circuit_qasm2_path_object(tmp_path: Path) -> None:
     """An OpenQASM 2 file given as a Path is loaded and returned as a QuantumCircuit."""
-    qasm_file = Path(__file__).parent.parent.parent / "circuit.qasm"
+    qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
 
 
-def test_load_circuit_qasm2_str_path() -> None:
+def test_load_circuit_qasm2_str_path(tmp_path: Path) -> None:
     """An OpenQASM 2 file given as a str path is loaded and returned as a QuantumCircuit."""
-    qasm_file = str(Path(__file__).parent.parent.parent / "circuit.qasm")
+    qasm_file = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
 
@@ -102,17 +102,17 @@ def test_load_circuit_qasm3_string() -> None:
 
 
 @requires_qasm3_import
-def test_load_circuit_qasm3_path_object() -> None:
+def test_load_circuit_qasm3_path_object(tmp_path: Path) -> None:
     """An OpenQASM 3 file given as a Path is loaded and returned as a QuantumCircuit."""
-    qasm_file = Path(__file__).parent.parent.parent / "circuit3.qasm"
+    qasm_file = write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm")
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
 
 
 @requires_qasm3_import
-def test_load_circuit_qasm3_str_path() -> None:
+def test_load_circuit_qasm3_str_path(tmp_path: Path) -> None:
     """An OpenQASM 3 file given as a str path is loaded and returned as a QuantumCircuit."""
-    qasm_file = str(Path(__file__).parent.parent.parent / "circuit3.qasm")
+    qasm_file = str(write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm"))
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
 
@@ -145,13 +145,12 @@ def test_load_circuit_rejects_file_without_openqasm_header(tmp_path: Path) -> No
         load_circuit(str(bad_file))
 
 
-def test_load_circuit_qasm2_path_and_string_match() -> None:
+def test_load_circuit_qasm2_path_and_string_match(tmp_path: Path) -> None:
     """Path and raw-string loading produce structurally equivalent QuantumCircuits."""
-    qasm_file = Path(__file__).parent.parent.parent / "circuit.qasm"
-    qasm_text = qasm_file.read_text(encoding="utf-8")
+    qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     from_path = load_circuit(qasm_file)
-    from_string = load_circuit(qasm_text)
-    expected = loads(qasm_text)
+    from_string = load_circuit(LARGE_QASM2_STRING)
+    expected = loads(LARGE_QASM2_STRING)
     assert from_path.num_qubits == expected.num_qubits == from_string.num_qubits
     assert len(from_path.data) == len(expected.data) == len(from_string.data)
     checker = EquivalenceChecker(representation="mpo")

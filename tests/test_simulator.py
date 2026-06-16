@@ -46,7 +46,7 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init
-from tests.conftest import YAQS_TEST_SEED, requires_qasm3_import
+from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, YAQS_TEST_SEED, requires_qasm3_import, write_qasm_file
 
 
 def test_simulator_defaults() -> None:
@@ -1444,9 +1444,9 @@ def test_analog_simulation_parallel_observables_no_state() -> None:
     assert result.runtime_cost is not None
 
 
-def test_simulator_run_accepts_qasm2_path_object() -> None:
+def test_simulator_run_accepts_qasm2_path_object(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 2 file passed as a Path object."""
-    qasm_file = Path(__file__).parent / "circuit.qasm"
+    qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
@@ -1454,9 +1454,9 @@ def test_simulator_run_accepts_qasm2_path_object() -> None:
     assert sum(result.counts.values()) == sim_params.shots
 
 
-def test_simulator_run_accepts_qasm2_str_path() -> None:
+def test_simulator_run_accepts_qasm2_str_path(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 2 file passed as a str path."""
-    qasm_file = str(Path(__file__).parent / "circuit.qasm")
+    qasm_file = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
     state = State(6, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
@@ -1466,18 +1466,17 @@ def test_simulator_run_accepts_qasm2_str_path() -> None:
 
 def test_simulator_run_accepts_qasm2_raw_string() -> None:
     """Verify that Simulator.run accepts a raw QASM 2 string (not a file path)."""
-    qasm_string = (Path(__file__).parent / "circuit.qasm").read_text(encoding="utf-8")
     state = State(6, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
-    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    result = Simulator(parallel=False, show_progress=False).run(state, LARGE_QASM2_STRING, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
 
 
 @requires_qasm3_import
-def test_simulator_run_accepts_qasm3_path_object() -> None:
+def test_simulator_run_accepts_qasm3_path_object(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
-    qasm_file = Path(__file__).parent / "circuit3.qasm"
+    qasm_file = write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm")
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
@@ -1486,9 +1485,9 @@ def test_simulator_run_accepts_qasm3_path_object() -> None:
 
 
 @requires_qasm3_import
-def test_simulator_run_accepts_qasm3_str_path() -> None:
+def test_simulator_run_accepts_qasm3_str_path(tmp_path: Path) -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a str path."""
-    qasm_file = str(Path(__file__).parent / "circuit3.qasm")
+    qasm_file = str(write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm"))
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
@@ -1496,18 +1495,18 @@ def test_simulator_run_accepts_qasm3_str_path() -> None:
     assert sum(result.counts.values()) == sim_params.shots
 
 
-def test_simulator_run_strong_accepts_qasm_path() -> None:
+def test_simulator_run_strong_accepts_qasm_path(tmp_path: Path) -> None:
     """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a Path."""
-    qasm_file = Path(__file__).parent / "circuit.qasm"
+    qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
     assert result.expectation_values[0] is not None
 
 
-def test_simulator_run_strong_accepts_qasm_string() -> None:
+def test_simulator_run_strong_accepts_qasm_string(tmp_path: Path) -> None:
     """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a str path."""
-    qasm_string = str(Path(__file__).parent / "circuit.qasm")
+    qasm_string = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
     state = State(6, initial="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
@@ -1517,10 +1516,9 @@ def test_simulator_run_strong_accepts_qasm_string() -> None:
 @requires_qasm3_import
 def test_simulator_run_strong_accepts_qasm3_raw_string() -> None:
     """Verify that Simulator.run with StrongSimParams accepts a raw OpenQASM 3 string."""
-    qasm_string = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
     state = State(2, initial="zeros")
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
-    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    result = Simulator(parallel=False, show_progress=False).run(state, SAMPLE_QASM3_STRING, sim_params)
     assert result.expectation_values[0] is not None
 
 
@@ -1541,18 +1539,16 @@ def test_simulator_run_analog_rejects_str_operator() -> None:
 @requires_qasm3_import
 def test_simulator_run_accepts_qasm3_raw_string_weak() -> None:
     """Verify that Simulator.run with WeakSimParams accepts a raw OpenQASM 3 string."""
-    qasm_string = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
-    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    result = Simulator(parallel=False, show_progress=False).run(state, SAMPLE_QASM3_STRING, sim_params)
     assert result.counts is not None
     assert sum(result.counts.values()) == sim_params.shots
 
 
-def test_simulator_run_qasm_path_and_string_strong_match() -> None:
+def test_simulator_run_qasm_path_and_string_strong_match(tmp_path: Path) -> None:
     """Strong simulation with fixed seed agrees for path and raw OpenQASM inputs."""
-    qasm_path = Path(__file__).parent / "circuit.qasm"
-    qasm_string = qasm_path.read_text(encoding="utf-8")
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     state = State(6, initial="zeros")
     sim_params = StrongSimParams(
         observables=[Observable(Z(), 0)],
@@ -1561,5 +1557,5 @@ def test_simulator_run_qasm_path_and_string_strong_match() -> None:
         random_seed=YAQS_TEST_SEED,
     )
     path_result = Simulator(parallel=False, show_progress=False).run(state, qasm_path, sim_params)
-    string_result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    string_result = Simulator(parallel=False, show_progress=False).run(state, LARGE_QASM2_STRING, sim_params)
     assert path_result.expectation_values[0] == string_result.expectation_values[0]
