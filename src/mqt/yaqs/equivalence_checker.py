@@ -180,9 +180,10 @@ class EquivalenceChecker:
 
         Args:
             circuit1: First quantum circuit. Accepts a :class:`~qiskit.circuit.QuantumCircuit`,
-                a ``Path`` to a ``.qasm`` file, or a ``str`` — either a filesystem path to a
-                ``.qasm`` file or raw OpenQASM text (distinguished by whether the first
-                non-comment line starts with ``OPENQASM``).
+                a ``Path`` to an OpenQASM file, or a ``str`` — either a filesystem path or raw
+                OpenQASM 2/3 source (when the first substantive line declares ``OPENQASM``).
+                Prefer file paths when the program uses ``include`` directives. OpenQASM 3
+                requires ``pip install mqt-yaqs[qasm3]``.
             circuit2: Second quantum circuit (must have the same number of qubits).
                 Accepts the same types as ``circuit1``.
 
@@ -192,6 +193,7 @@ class EquivalenceChecker:
 
         Raises:
             ValueError: If the circuits have different numbers of qubits or contain mid-circuit measurements.
+            ImportError: If OpenQASM 3 input is given but ``qiskit-qasm3-import`` is not installed.
         """
         circuit1 = load_circuit(circuit1)
         circuit2 = load_circuit(circuit2)

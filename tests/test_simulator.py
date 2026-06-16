@@ -1476,7 +1476,6 @@ def test_simulator_run_accepts_qasm2_raw_string() -> None:
 
 def test_simulator_run_accepts_qasm3_path_object() -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
-    pytest.importorskip("qiskit_qasm3_import")
     qasm_file = Path(__file__).parent / "circuit3.qasm"
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
@@ -1487,7 +1486,6 @@ def test_simulator_run_accepts_qasm3_path_object() -> None:
 
 def test_simulator_run_accepts_qasm3_str_path() -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a str path."""
-    pytest.importorskip("qiskit_qasm3_import")
     qasm_file = str(Path(__file__).parent / "circuit3.qasm")
     state = State(2, initial="zeros")
     sim_params = WeakSimParams(shots=4, max_bond_dim=4)
@@ -1512,3 +1510,26 @@ def test_simulator_run_strong_accepts_qasm_string() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
     result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
     assert result.expectation_values[0] is not None
+
+
+def test_simulator_run_strong_accepts_qasm3_raw_string() -> None:
+    """Verify that Simulator.run with StrongSimParams accepts a raw OpenQASM 3 string."""
+    qasm_string = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
+    state = State(2, initial="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    assert result.expectation_values[0] is not None
+
+
+def test_simulator_run_analog_rejects_str_operator() -> None:
+    """Analog simulation with a str operator requires a Hamiltonian, not OpenQASM."""
+    state = State(2, initial="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        sample_timesteps=False,
+    )
+    with pytest.raises(TypeError, match="Hamiltonian"):
+        Simulator(parallel=False, show_progress=False).run(state, "not-a-path.qasm", sim_params)

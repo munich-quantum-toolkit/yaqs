@@ -520,7 +520,6 @@ def test_check_qasm_path_vs_quantumcircuit_agree() -> None:
 
 def test_check_accepts_qasm3_path_object() -> None:
     """Check that a QASM 3 file given as a Path object is accepted and returns equivalent."""
-    pytest.importorskip("qiskit_qasm3_import")
     qasm_file = Path(__file__).parent / "circuit3.qasm"
 
     checker = EquivalenceChecker(representation="matrix")
@@ -530,7 +529,6 @@ def test_check_accepts_qasm3_path_object() -> None:
 
 def test_check_accepts_qasm3_str_path() -> None:
     """Check that a QASM 3 file given as a str path is accepted and returns equivalent."""
-    pytest.importorskip("qiskit_qasm3_import")
     qasm_file = str(Path(__file__).parent / "circuit3.qasm")
 
     checker = EquivalenceChecker(representation="matrix")
@@ -549,9 +547,24 @@ def test_check_accepts_qasm2_raw_string() -> None:
 
 def test_check_accepts_qasm3_raw_string() -> None:
     """Check that a raw QASM 3 string (not a file path) is accepted and returns equivalent."""
-    pytest.importorskip("qiskit_qasm3_import")
     qasm_str = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
 
     checker = EquivalenceChecker(representation="matrix")
     result = checker.check(qasm_str, qasm_str)
     assert result["equivalent"] is True
+
+
+def test_check_issue_qasm_raw_strings_custom_vs_expanded() -> None:
+    """Raw OpenQASM strings with custom gates are equivalent to their expanded form."""
+    result = _issue_checker(representation="mpo").check(ISSUE_QASM_CUSTOM, ISSUE_QASM_EXPANDED)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+
+
+def test_check_mixed_qasm_path_and_quantumcircuit() -> None:
+    """Mixed OpenQASM path and QuantumCircuit inputs agree with path-only checking."""
+    qasm_path = Path(__file__).parent / "circuit.qasm"
+    qc = load(filename=str(qasm_path))
+    checker = EquivalenceChecker(representation="mpo")
+    assert checker.check(qasm_path, qc)["equivalent"] is True
+    assert checker.check(qc, qasm_path)["equivalent"] is True

@@ -9,53 +9,139 @@
 
 from __future__ import annotations
 
+import importlib.util
+import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from qiskit import qasm2, qasm3
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
 
+_OPENQASM_VERSION_RE = re.compile(r"OPENQASM\s+(\d+)", re.IGNORECASE)
+_QASM3_IMPORT_MSG = (
+    "OpenQASM 3 loading requires the optional package qiskit-qasm3-import. "
+    "Install with: pip install mqt-yaqs[qasm3] or pip install qiskit[qasm3-import]"
+)
+_INVALID_INPUT_MSG = (
+    "Expected a QuantumCircuit, a filesystem path to an OpenQASM file, "
+    "or a raw OpenQASM string whose first substantive line declares OPENQASM."
+)
 
-def _first_non_comment_line(text: str) -> str:
-    """Return the first non-empty, non-comment line from QASM-like text.
+
+def _parse_qasm_version(text: str) -> Literal["2", "3"] | None:
+    """Parse the OpenQASM major version from source text.
+
+    Skips blank lines, ``//`` line comments, and ``/* ... */`` block comments before
+    matching the first ``OPENQASM`` declaration.
 
     Args:
-        text: Multiline string to scan.
+        text: OpenQASM source text.
 
     Returns:
-        The first line that is not empty and does not start with ``//``,
-        or an empty string if no such line exists.
+        ``"2"`` or ``"3"`` when a version is recognized, otherwise ``None``.
     """
+    in_block_comment = False
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped and not stripped.startswith("//"):
-            return stripped
-    return ""
+        if not stripped:
+            continue
+
+        if in_block_comment:
+            if "*/" in stripped:
+                in_block_comment = False
+                remainder = stripped.split("*/", maxsplit=1)[1].strip()
+                if not remainder or remainder.startswith("//"):
+                    continue
+                stripped = remainder
+            else:
+                continue
+
+        while "/*" in stripped:
+            before, _, after = stripped.partition("/*")
+            if before.strip() and not before.strip().startswith("//"):
+                stripped = before.strip()
+                break
+            if "*/" not in after:
+                in_block_comment = True
+                stripped = ""
+                break
+            stripped = after.split("*/", maxsplit=1)[1].strip()
+        else:
+            if not stripped or stripped.startswith("//"):
+                continue
+
+        if stripped.upper().startswith("OPENQASM"):
+            match = _OPENQASM_VERSION_RE.match(stripped)
+            if match is None:
+                return "2"
+            return "3" if match.group(1) == "3" else "2"
+    return None
+
+
+def _load_openqasm(text: str, *, path: Path | None = None) -> QuantumCircuit:
+    """Load a QuantumCircuit from OpenQASM source text.
+
+    Args:
+        text: OpenQASM program text.
+        path: Optional filesystem path for ``qasm*.load`` (preserves ``include`` resolution).
+
+    Returns:
+        The parsed ``QuantumCircuit``.
+
+    Raises:
+        ValueError: If ``text`` does not declare OpenQASM.
+        ImportError: If OpenQASM 3 is requested but ``qiskit-qasm3-import`` is not installed.
+    """
+    version = _parse_qasm_version(text)
+    if version is None:
+        raise ValueError(_INVALID_INPUT_MSG)
+
+    if version == "3":
+        if importlib.util.find_spec("qiskit_qasm3_import") is None:
+            raise ImportError(_QASM3_IMPORT_MSG)
+        if path is not None:
+            return qasm3.load(str(path))
+        loads_text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+        loads_text = "\n".join(line.split("//", maxsplit=1)[0] for line in loads_text.splitlines())
+        return qasm3.loads(loads_text)
+
+    if path is not None:
+        return qasm2.load(str(path))
+    loads_text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    loads_text = "\n".join(line.split("//", maxsplit=1)[0] for line in loads_text.splitlines())
+    return qasm2.loads(loads_text)
 
 
 def load_circuit(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
-    """Load a QuantumCircuit from a QASM string, file path, or return it unchanged.
+    """Load a QuantumCircuit from OpenQASM or return it unchanged.
+
+    Accepts a ``QuantumCircuit``, a ``Path`` to an OpenQASM file, or a ``str`` that is
+    either raw OpenQASM source (when the first substantive line declares ``OPENQASM``)
+    or a filesystem path. Prefer file paths when the program uses ``include`` directives.
+
+    OpenQASM 3 requires the optional package ``qiskit-qasm3-import``
+    (``pip install mqt-yaqs[qasm3]``).
 
     Args:
-        circuit: A ``QuantumCircuit``, a raw QASM string, or a path to a ``.qasm`` file.
+        circuit: Circuit object, OpenQASM path, or OpenQASM source string.
 
     Returns:
         The corresponding ``QuantumCircuit``.
+
+    Raises:
+        ValueError: If ``circuit`` is not a recognized input form.
+        ImportError: If OpenQASM 3 is requested but ``qiskit-qasm3-import`` is not installed.
     """
     if not isinstance(circuit, (str, Path)):
         return circuit
 
-    if isinstance(circuit, str):
-        header = _first_non_comment_line(circuit)
-        if header.startswith("OPENQASM"):
-            if header.startswith("OPENQASM 3"):  # pragma: no cover
-                return qasm3.loads(circuit)
-            return qasm2.loads(circuit)
+    if isinstance(circuit, str) and _parse_qasm_version(circuit) is not None:
+        return _load_openqasm(circuit)
 
     path = Path(circuit)
-    content = path.read_text(encoding="utf-8")
-    if _first_non_comment_line(content).startswith("OPENQASM 3"):  # pragma: no cover
-        return qasm3.load(str(path))
-    return qasm2.load(str(path))
+    if isinstance(circuit, str) and not path.is_file():
+        raise ValueError(_INVALID_INPUT_MSG)
+
+    return _load_openqasm(path.read_text(encoding="utf-8"), path=path)

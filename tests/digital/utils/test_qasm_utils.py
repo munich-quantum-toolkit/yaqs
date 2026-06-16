@@ -9,13 +9,14 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
 from qiskit import QuantumCircuit
 
 from mqt.yaqs.digital.utils.qasm_utils import (
-    _first_non_comment_line,  # noqa: PLC2701 — tests exercise the private function directly
+    _parse_qasm_version,  # noqa: PLC2701 — unit tests target the private parser directly
     load_circuit,
 )
 
@@ -28,21 +29,27 @@ h q[0];
 
 QASM3_STRING = """\
 OPENQASM 3.0;
+include "stdgates.inc";
 qubit[1] q;
 h q[0];
 """
 
 
-def test_first_non_comment_line_skips_comments() -> None:
-    """Lines starting with // are skipped; the first real line is returned."""
-    text = "// comment\n// another\nOPENQASM 2.0;"
-    assert _first_non_comment_line(text) == "OPENQASM 2.0;"
-
-
-def test_first_non_comment_line_empty_returns_empty() -> None:
-    """An all-comment or blank text returns an empty string."""
-    assert not _first_non_comment_line("// only comments\n// still comments")
-    assert not _first_non_comment_line("")
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("// comment\n// another\nOPENQASM 2.0;", "2"),
+        ("/* preamble */\nOPENQASM 2.0;", "2"),
+        ("/*\n multiline\n */\nOPENQASM 3.0;", "3"),
+        ("OPENQASM;", "2"),
+        ("OPENQASM 3.0;", "3"),
+        ("// only comments\n// still comments", None),
+        ("", None),
+    ],
+)
+def test_parse_qasm_version(text: str, expected: str | None) -> None:
+    """Parse OpenQASM major versions from source text, skipping comments."""
+    assert _parse_qasm_version(text) == expected
 
 
 def test_load_circuit_passthrough_quantum_circuit() -> None:
@@ -54,45 +61,76 @@ def test_load_circuit_passthrough_quantum_circuit() -> None:
 
 
 def test_load_circuit_qasm2_string() -> None:
-    """A raw QASM 2 string is parsed and returned as a QuantumCircuit."""
+    """A raw OpenQASM 2 string is parsed and returned as a QuantumCircuit."""
     qc = load_circuit(QASM2_STRING)
     assert isinstance(qc, QuantumCircuit)
     assert qc.num_qubits == 1
 
 
 def test_load_circuit_qasm2_path_object() -> None:
-    """A QASM 2 file given as a Path is loaded and returned as a QuantumCircuit."""
+    """An OpenQASM 2 file given as a Path is loaded and returned as a QuantumCircuit."""
     qasm_file = Path(__file__).parent.parent.parent / "circuit.qasm"
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
 
 
 def test_load_circuit_qasm2_str_path() -> None:
-    """A QASM 2 file given as a str path is loaded and returned as a QuantumCircuit."""
+    """An OpenQASM 2 file given as a str path is loaded and returned as a QuantumCircuit."""
     qasm_file = str(Path(__file__).parent.parent.parent / "circuit.qasm")
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
 
 
+def test_load_circuit_qasm2_string_with_leading_block_comment() -> None:
+    """Block comments before the OPENQASM header do not prevent parsing."""
+    text = f"/* header */\n{QASM2_STRING}"
+    qc = load_circuit(text)
+    assert isinstance(qc, QuantumCircuit)
+    assert qc.num_qubits == 1
+
+
 def test_load_circuit_qasm3_string() -> None:
-    """A raw QASM 3 string is parsed and returned as a QuantumCircuit."""
-    pytest.importorskip("qiskit_qasm3_import")
+    """A raw OpenQASM 3 string is parsed and returned as a QuantumCircuit."""
     qc = load_circuit(QASM3_STRING)
     assert isinstance(qc, QuantumCircuit)
     assert qc.num_qubits == 1
 
 
 def test_load_circuit_qasm3_path_object() -> None:
-    """A QASM 3 file given as a Path is loaded and returned as a QuantumCircuit."""
-    pytest.importorskip("qiskit_qasm3_import")
+    """An OpenQASM 3 file given as a Path is loaded and returned as a QuantumCircuit."""
     qasm_file = Path(__file__).parent.parent.parent / "circuit3.qasm"
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
 
 
 def test_load_circuit_qasm3_str_path() -> None:
-    """A QASM 3 file given as a str path is loaded and returned as a QuantumCircuit."""
-    pytest.importorskip("qiskit_qasm3_import")
+    """An OpenQASM 3 file given as a str path is loaded and returned as a QuantumCircuit."""
     qasm_file = str(Path(__file__).parent.parent.parent / "circuit3.qasm")
     qc = load_circuit(qasm_file)
     assert isinstance(qc, QuantumCircuit)
+
+
+def test_load_circuit_rejects_invalid_string() -> None:
+    """A str that is neither OpenQASM nor a valid path raises ValueError."""
+    with pytest.raises(ValueError, match="Expected a QuantumCircuit"):
+        load_circuit("not-a-qasm-program")
+
+
+def test_load_circuit_rejects_missing_path() -> None:
+    """A str path to a missing file raises ValueError."""
+    with pytest.raises(ValueError, match="Expected a QuantumCircuit"):
+        load_circuit("definitely/missing/file.qasm")
+
+
+def test_load_circuit_qasm3_missing_importer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenQASM 3 without qiskit-qasm3-import raises ImportError with install hint."""
+    original_find_spec = importlib.util.find_spec
+
+    def fake_find_spec(name: str, package: str | None = None) -> object | None:
+        if name == "qiskit_qasm3_import":
+            return None
+        return original_find_spec(name, package)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    with pytest.raises(ImportError, match="mqt-yaqs\\[qasm3\\]"):
+        load_circuit(QASM3_STRING)

@@ -667,6 +667,7 @@ class Simulator:
         Raises:
             ValueError: If no output is specified (neither observables nor ``get_state``).
             TypeError: If the provided ``initial_state`` type is incompatible with the
+                selected simulation mode.
         """
         if not isinstance(sim_params, AnalogSimParams) and isinstance(operator, (str, Path)):
             operator = load_circuit(operator)
