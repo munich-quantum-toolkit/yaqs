@@ -10,10 +10,13 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from qiskit.utils.optionals import HAS_QASM3_IMPORT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Cap BLAS/OpenMP threads in pytest-xdist workers before numerical libraries spin
 # up pools (reduces intermittent OpenBLAS segfaults on some Linux aarch64 setups).
