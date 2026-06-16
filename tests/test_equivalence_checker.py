@@ -14,7 +14,6 @@ backend selection, global-phase equivalence, and regression coverage for QASM cu
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 from unittest.mock import patch
@@ -31,6 +30,7 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils import matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 from mqt.yaqs.digital.utils.dag_utils import SUPPORTED_QISKIT_GATE_NAMES, convert_dag_to_tensor_algorithm
+from tests.conftest import requires_qasm3_import
 
 if TYPE_CHECKING:
     from mqt.yaqs.equivalence_checker import Representation
@@ -519,6 +519,7 @@ def test_check_qasm_path_vs_quantumcircuit_agree() -> None:
     assert result_path["equivalent"] == result_qc["equivalent"]
 
 
+@requires_qasm3_import
 def test_check_accepts_qasm3_path_object() -> None:
     """Check that a QASM 3 file given as a Path object is accepted and returns equivalent."""
     qasm_file = Path(__file__).parent / "circuit3.qasm"
@@ -528,6 +529,7 @@ def test_check_accepts_qasm3_path_object() -> None:
     assert result["equivalent"] is True
 
 
+@requires_qasm3_import
 def test_check_accepts_qasm3_str_path() -> None:
     """Check that a QASM 3 file given as a str path is accepted and returns equivalent."""
     qasm_file = str(Path(__file__).parent / "circuit3.qasm")
@@ -546,6 +548,7 @@ def test_check_accepts_qasm2_raw_string() -> None:
     assert result["equivalent"] is True
 
 
+@requires_qasm3_import
 def test_check_accepts_qasm3_raw_string() -> None:
     """Check that a raw QASM 3 string (not a file path) is accepted and returns equivalent."""
     qasm_str = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
@@ -599,14 +602,7 @@ def test_check_qasm2_self_equivalence_uses_matrix_backend() -> None:
 
 def test_check_qasm3_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """EquivalenceChecker propagates ImportError when OpenQASM 3 importer is missing."""
-    original_find_spec = importlib.util.find_spec
     qasm_str = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
-
-    def fake_find_spec(name: str, package: str | None = None) -> object | None:
-        if name == "qiskit_qasm3_import":
-            return None
-        return original_find_spec(name, package)
-
-    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    monkeypatch.setattr("mqt.yaqs.digital.utils.qasm_utils.HAS_QASM3_IMPORT", False)
     with pytest.raises(ImportError, match="mqt-yaqs\\[qasm3\\]"):
         EquivalenceChecker(representation="matrix").check(qasm_str, qasm_str)

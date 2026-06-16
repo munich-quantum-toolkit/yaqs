@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
@@ -21,6 +20,7 @@ from mqt.yaqs.digital.utils.qasm_utils import (
     _parse_qasm_version,  # noqa: PLC2701 — unit tests target the private parser directly
     load_circuit,
 )
+from tests.conftest import requires_qasm3_import
 
 QASM2_STRING = """\
 OPENQASM 2.0;
@@ -93,6 +93,7 @@ def test_load_circuit_qasm2_string_with_leading_block_comment() -> None:
     assert qc.num_qubits == 1
 
 
+@requires_qasm3_import
 def test_load_circuit_qasm3_string() -> None:
     """A raw OpenQASM 3 string is parsed and returned as a QuantumCircuit."""
     qc = load_circuit(QASM3_STRING)
@@ -100,6 +101,7 @@ def test_load_circuit_qasm3_string() -> None:
     assert qc.num_qubits == 1
 
 
+@requires_qasm3_import
 def test_load_circuit_qasm3_path_object() -> None:
     """An OpenQASM 3 file given as a Path is loaded and returned as a QuantumCircuit."""
     qasm_file = Path(__file__).parent.parent.parent / "circuit3.qasm"
@@ -107,6 +109,7 @@ def test_load_circuit_qasm3_path_object() -> None:
     assert isinstance(qc, QuantumCircuit)
 
 
+@requires_qasm3_import
 def test_load_circuit_qasm3_str_path() -> None:
     """An OpenQASM 3 file given as a str path is loaded and returned as a QuantumCircuit."""
     qasm_file = str(Path(__file__).parent.parent.parent / "circuit3.qasm")
@@ -151,29 +154,15 @@ def test_load_circuit_qasm2_path_and_string_match() -> None:
 
 def test_load_circuit_qasm3_missing_importer(monkeypatch: pytest.MonkeyPatch) -> None:
     """OpenQASM 3 without qiskit-qasm3-import raises ImportError with install hint."""
-    original_find_spec = importlib.util.find_spec
-
-    def fake_find_spec(name: str, package: str | None = None) -> object | None:
-        if name == "qiskit_qasm3_import":
-            return None
-        return original_find_spec(name, package)
-
-    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    monkeypatch.setattr("mqt.yaqs.digital.utils.qasm_utils.HAS_QASM3_IMPORT", False)
     with pytest.raises(ImportError, match="mqt-yaqs\\[qasm3\\]"):
         load_circuit(QASM3_STRING)
 
 
 def test_load_circuit_qasm3_missing_importer_on_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """OpenQASM 3 file paths also raise ImportError when the importer is absent."""
-    original_find_spec = importlib.util.find_spec
     qasm3_file = tmp_path / "prog.qasm"
     qasm3_file.write_text(QASM3_STRING, encoding="utf-8")
-
-    def fake_find_spec(name: str, package: str | None = None) -> object | None:
-        if name == "qiskit_qasm3_import":
-            return None
-        return original_find_spec(name, package)
-
-    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    monkeypatch.setattr("mqt.yaqs.digital.utils.qasm_utils.HAS_QASM3_IMPORT", False)
     with pytest.raises(ImportError, match="mqt-yaqs\\[qasm3\\]"):
         load_circuit(qasm3_file)

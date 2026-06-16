@@ -46,7 +46,7 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init
-from tests.conftest import YAQS_TEST_SEED
+from tests.conftest import YAQS_TEST_SEED, requires_qasm3_import
 
 
 def test_simulator_defaults() -> None:
@@ -1474,6 +1474,7 @@ def test_simulator_run_accepts_qasm2_raw_string() -> None:
     assert sum(result.counts.values()) == sim_params.shots
 
 
+@requires_qasm3_import
 def test_simulator_run_accepts_qasm3_path_object() -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
     qasm_file = Path(__file__).parent / "circuit3.qasm"
@@ -1484,6 +1485,7 @@ def test_simulator_run_accepts_qasm3_path_object() -> None:
     assert sum(result.counts.values()) == sim_params.shots
 
 
+@requires_qasm3_import
 def test_simulator_run_accepts_qasm3_str_path() -> None:
     """Verify that Simulator.run accepts a QASM 3 file passed as a str path."""
     qasm_file = str(Path(__file__).parent / "circuit3.qasm")
@@ -1512,6 +1514,7 @@ def test_simulator_run_strong_accepts_qasm_string() -> None:
     assert result.expectation_values[0] is not None
 
 
+@requires_qasm3_import
 def test_simulator_run_strong_accepts_qasm3_raw_string() -> None:
     """Verify that Simulator.run with StrongSimParams accepts a raw OpenQASM 3 string."""
     qasm_string = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
@@ -1535,6 +1538,7 @@ def test_simulator_run_analog_rejects_str_operator() -> None:
         Simulator(parallel=False, show_progress=False).run(state, "not-a-path.qasm", sim_params)
 
 
+@requires_qasm3_import
 def test_simulator_run_accepts_qasm3_raw_string_weak() -> None:
     """Verify that Simulator.run with WeakSimParams accepts a raw OpenQASM 3 string."""
     qasm_string = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")

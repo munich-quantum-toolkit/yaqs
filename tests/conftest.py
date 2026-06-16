@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import os
 
+import pytest
+from qiskit.utils.optionals import HAS_QASM3_IMPORT
+
 # Cap BLAS/OpenMP threads in pytest-xdist workers before numerical libraries spin
 # up pools (reduces intermittent OpenBLAS segfaults on some Linux aarch64 setups).
 for _name, _val in (
@@ -23,3 +26,8 @@ for _name, _val in (
 
 # Default seed for stochastic integration tests (TJM, noisy simulator.run, etc.).
 YAQS_TEST_SEED = 42
+
+requires_qasm3_import = pytest.mark.skipif(
+    not HAS_QASM3_IMPORT,
+    reason="qiskit-qasm3-import is not installed",
+)

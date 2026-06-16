@@ -9,12 +9,13 @@
 
 from __future__ import annotations
 
-import importlib.util
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from qiskit import qasm2, qasm3
+from qiskit.exceptions import MissingOptionalLibraryError
+from qiskit.utils.optionals import HAS_QASM3_IMPORT
 
 if TYPE_CHECKING:
     from qiskit.circuit import QuantumCircuit
@@ -99,13 +100,16 @@ def _load_openqasm(text: str, *, path: Path | None = None) -> QuantumCircuit:
         raise ValueError(_INVALID_INPUT_MSG)
 
     if version == "3":
-        if importlib.util.find_spec("qiskit_qasm3_import") is None:
+        if not HAS_QASM3_IMPORT:
             raise ImportError(_QASM3_IMPORT_MSG)
-        if path is not None:
-            return qasm3.load(str(path))
-        loads_text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-        loads_text = "\n".join(line.split("//", maxsplit=1)[0] for line in loads_text.splitlines())
-        return qasm3.loads(loads_text)
+        try:
+            if path is not None:
+                return qasm3.load(str(path))
+            loads_text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+            loads_text = "\n".join(line.split("//", maxsplit=1)[0] for line in loads_text.splitlines())
+            return qasm3.loads(loads_text)
+        except MissingOptionalLibraryError as exc:
+            raise ImportError(_QASM3_IMPORT_MSG) from exc
 
     if path is not None:
         return qasm2.load(str(path))
