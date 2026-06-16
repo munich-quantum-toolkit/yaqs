@@ -138,7 +138,7 @@ class NoiseModel:
                     filled_processes.append(proc)
                     continue
 
-                # Long-range two-site with canonical legacy label
+                # Long-range two-site with canonical label
                 if str(name).startswith(CROSSTALK_PREFIX):
                     if "factors" not in proc:
                         suffix = str(name).rsplit("_", 1)[-1]

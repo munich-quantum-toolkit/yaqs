@@ -134,9 +134,8 @@ def create_probability_distribution(
                             [state.physical_dimensions[site], state.physical_dimensions[site + 1]],
                             svd_distribution="right",
                             trunc_mode=cast("TruncMode", sim_params.trunc_mode),
-                            threshold=sim_params.threshold,
+                            threshold=sim_params.svd_threshold,
                             max_bond_dim=sim_params.max_bond_dim,
-                            min_bond_dim=sim_params.min_bond_dim,
                         )
                         jumped_state.tensors[site], jumped_state.tensors[site + 1] = tensor_left_new, tensor_right_new
                         # compute the norm at `site` from the updated post-jump tensors
@@ -232,9 +231,8 @@ def stochastic_process(
                 [state.physical_dimensions[i], state.physical_dimensions[j]],
                 svd_distribution="right",
                 trunc_mode=cast("TruncMode", sim_params.trunc_mode),
-                threshold=sim_params.threshold,
+                threshold=sim_params.svd_threshold,
                 max_bond_dim=sim_params.max_bond_dim,
-                min_bond_dim=sim_params.min_bond_dim,
             )
             state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
 

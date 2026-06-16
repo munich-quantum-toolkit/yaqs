@@ -11,7 +11,8 @@ This module provides JIT-compiled, parallelized implementations of the dense
 effective Hamiltonian construction for both single-site and bond updates in
 Time-Dependent Variational Principle (TDVP) simulations. These kernels replace
 slower einsum-based implementations with explicit nested loops optimized by
-Numba's LLVM backend, achieving 2-3x speedups for bond dimensions D >= 16.
+Numba's LLVM backend. Internal ``parallel`` loops respect ``numba.set_num_threads``
+(``1`` in parallel ``Simulator`` workers via ``worker_init``).
 """
 
 from __future__ import annotations
@@ -58,6 +59,7 @@ def build_dense_heff_site_numba(left_env: np.ndarray, right_env: np.ndarray, op:
           D >= 16, with the speedup increasing for larger tensors.
         - The two-stage contraction pattern reduces peak memory usage compared to
           a single 6-index intermediate tensor.
+
     """
     o_dim, p_dim, mpo_l, mpo_r = op.shape
     a_in, _, a_out = left_env.shape
@@ -134,6 +136,7 @@ def build_dense_heff_bond_numba(left_env: np.ndarray, right_env: np.ndarray) -> 
         - Benchmarks show this is ~2-3x faster than ``einsum`` for bond dimensions
           D >= 16.
         - This function is called during the backward evolution steps in 1TDVP.
+
     """
     u_dim, a_dim, p_dim = left_env.shape
     v_dim, _, w_dim = right_env.shape

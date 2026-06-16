@@ -46,7 +46,7 @@ def make_params(num_traj: int = 8) -> AnalogSimParams:
         dt=0.05,
         num_traj=num_traj,
         max_bond_dim=8,
-        threshold=1e-9,
+        svd_threshold=1e-9,
         sample_timesteps=False,
         random_seed=0,
     )
@@ -132,7 +132,7 @@ print("available CPUs YAQS would use:", available_cpus())
 print("default max_workers:          ", Simulator().max_workers)
 ```
 
-{func}`~mqt.yaqs.simulator.available_cpus` is deliberately cgroup- and scheduler-aware. In priority order it honours:
+{func}`~mqt.yaqs.parallel_utils.available_cpus` (re-exported as {func}`~mqt.yaqs.simulator.available_cpus`) is deliberately cgroup- and scheduler-aware. In priority order it honours:
 
 1. `YAQS_MAX_WORKERS` (explicit user override; positive integer).
 2. `PYTEST_XDIST_WORKER` (returns `1` to avoid nested parallelism in tests).
@@ -175,11 +175,11 @@ The bar is suppressed regardless of `parallel`, so the same flag also silences s
 | `"spawn"` | Fresh interpreter per worker. Required on Windows/macOS; slower startup but more isolated.                      |
 
 ```{code-cell} ipython3
-from mqt.yaqs.simulator import _get_parallel_context
+from mqt.yaqs.parallel_utils import get_parallel_context
 
 for choice in ("auto", "fork", "spawn"):
     try:
-        ctx = _get_parallel_context(choice)
+        ctx = get_parallel_context(choice)
     except ValueError as exc:
         print(f"{choice}: not available on this platform ({exc})")
     else:
@@ -283,4 +283,4 @@ print("restored observable count:", len(restored.observables))
 | Mixing with GPU / non-fork-safe code              | `Simulator(mp_context="spawn")`                                        |
 | Long unattended run on a flaky cluster            | `Simulator(max_retries=20)` with broadened `retry_exceptions`          |
 
-For physics-side settings (`num_traj`, `max_bond_dim`, `threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`solver_comparison`, and {doc}`state_initialization`.
+For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`solver_comparison`, and {doc}`state_initialization`.

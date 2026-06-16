@@ -89,11 +89,13 @@ sim_params = AnalogSimParams(
     dt=0.1,
     num_traj=100,
     max_bond_dim=4,
-    threshold=1e-6,
+    svd_threshold=1e-6,
     order=2,
     sample_timesteps=True,
 )
 ```
+
+Optional **`tdvp_sweeps`** (default `1`) runs multiple TDVP substeps per time step `dt`. Each substep is a **symmetric** integrator step (left-to-right then right-to-left within the substep) at evolution time `dt / tdvp_sweeps`, which can improve accuracy without changing the physical step size used for noise and dissipation.
 
 ## Reproducible (deterministic) stochastic runs
 
@@ -123,7 +125,7 @@ repro_params = AnalogSimParams(
     dt=0.1,
     num_traj=50,
     max_bond_dim=4,
-    threshold=1e-6,
+    svd_threshold=1e-6,
     order=2,
     sample_timesteps=True,
     random_seed=42,

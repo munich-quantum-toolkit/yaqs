@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: PLC2701 -- white-box tests import private process_tensor helpers
+
 """Unit tests for the ProcessTensor class."""
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho  # noqa: PLC2701
+from mqt.yaqs.characterization.tomography.process_tensor import ProcessTensor, _vec_to_rho
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

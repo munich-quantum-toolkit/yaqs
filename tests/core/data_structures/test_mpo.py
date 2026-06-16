@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff: noqa: SLF001 -- white-box tests exercise private MPO compression helpers
+
 """Tests for :class:`mqt.yaqs.core.data_structures.mpo.MPO`."""
 
 from __future__ import annotations
@@ -20,7 +22,8 @@ import pytest
 import mqt.yaqs.core.data_structures.mpo as mpo_module
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.libraries.gate_library import Destroy, Id
+from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -456,11 +459,10 @@ def test_identity() -> None:
     This test checks that an identity MPO has the correct length, physical dimension,
     and that each tensor corresponds to the identity operator.
     """
-    mpo = MPO()
     length = 3
     pdim = 2
 
-    mpo.identity(length, physical_dimension=pdim)
+    mpo = MPO.identity(length, physical_dimension=pdim)
 
     assert mpo.length == length
     assert mpo.physical_dimension == pdim
@@ -743,26 +745,115 @@ def test_check_if_identity() -> None:
     This test initializes an identity MPO and verifies that check_if_identity returns True
     when a fidelity threshold is provided.
     """
-    mpo = MPO()
-    length = 3
-    pdim = 2
-
-    mpo.identity(length, pdim)
+    mpo = MPO.identity(length=3, physical_dimension=2)
     fidelity_threshold = 0.9
     assert mpo.check_if_identity(fidelity_threshold) is True
 
 
 def test_identity_mpo_tensors_are_independent() -> None:
     """Each site tensor in identity() must be a distinct array."""
-    mpo = MPO()
-    mpo.identity(3, physical_dimension=2)
+    mpo = MPO.identity(3, physical_dimension=2)
     assert mpo.tensors[0] is not mpo.tensors[1]
+
+
+def test_multiply_mps_identity_preserves_state() -> None:
+    """Identity MPO.multiply(MPS) leaves the dense state unchanged."""
+    length = 4
+    state = MPS(length, state="ones")
+    state.normalize()
+    expected = np.asarray(state.to_vec(), dtype=np.complex128)
+
+    identity = MPO.identity(length)
+    identity.multiply(state, compress=False)
+
+    np.testing.assert_allclose(state.to_vec(), expected, atol=1e-10)
+
+
+def test_multiply_mpo_matches_dense_operator_product() -> None:
+    """Site-wise MPO.multiply(MPO) matches the dense matrix product."""
+    length = 4
+    left = MPO.ising(length, 1.0, 0.5)
+    right = MPO.ising(length, 1.0, 0.3)
+    reference = left.to_matrix() @ right.to_matrix()
+
+    left.multiply(right, compress=False)
+    np.testing.assert_allclose(right.to_matrix(), reference, atol=1e-10)
+
+
+def test_multiply_mps_with_compression() -> None:
+    """``multiply(MPS, compress=True)`` runs an SVD sweep using ``sim_params``."""
+    length = 3
+    state = MPS(length, state="ones")
+    state.normalize()
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    gate_mpo = MPO.from_gate(gate, length)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    gate_mpo.multiply(state, sim_params=sim_params, compress=True)
+    state.check_if_valid_mps()
+
+
+def test_multiply_mps_compress_requires_sim_params() -> None:
+    """Compression without ``sim_params`` raises ``ValueError``."""
+    state = MPS(2, state="zeros")
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    gate_mpo = MPO.from_gate(gate, 2)
+    with pytest.raises(ValueError, match="sim_params is required"):
+        gate_mpo.multiply(state, compress=True)
+
+
+def test_multiply_mps_length_mismatch_raises() -> None:
+    """MPO and MPS length mismatch raises ``ValueError``."""
+    state = MPS(2, state="zeros")
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    gate_mpo = MPO.from_gate(gate, 3)
+    with pytest.raises(ValueError, match="does not match MPS length"):
+        gate_mpo.multiply(state, compress=False)
+
+
+def test_multiply_invalid_target_type_raises() -> None:
+    """``multiply`` rejects non-MPS/MPO targets."""
+    mpo = MPO.identity(2)
+    with pytest.raises(TypeError, match="multiply expects MPS or MPO"):
+        mpo.multiply(object())  # ty: ignore[no-matching-overload]
+
+
+def test_multiply_mpo_embedded_start_site() -> None:
+    """A shorter gate MPO can be embedded at a non-zero ``start_site``."""
+    target = MPO.identity(4)
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    support = MPO.from_gate(gate, 2)
+    support.multiply(target, start_site=1, compress=False)
+    assert target.length == 4
+    target.check_if_valid_mpo()
+
+
+def test_multiply_mpo_with_compression() -> None:
+    """``multiply(MPO, compress=True)`` runs bond-dimension compression on the target."""
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    support = MPO.from_gate(gate, 2)
+    target = MPO.identity(2)
+    support.multiply(target, compress=True, tol=1e-12, n_sweeps=1)
+    target.check_if_valid_mpo()
+
+
+def test_multiply_mpo_invalid_embed_raises() -> None:
+    """Embedding a gate MPO outside the target chain raises ``ValueError``."""
+    target = MPO.identity(3)
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    support = MPO.from_gate(gate, 2)
+    with pytest.raises(ValueError, match="Cannot embed MPO"):
+        support.multiply(target, start_site=2, compress=False)
 
 
 def test_check_if_identity_non_qubit_physical_dimension() -> None:
     """Identity check uses the MPO physical dimension, not the qubit default."""
-    mpo = MPO()
-    mpo.identity(2, physical_dimension=3)
+    mpo = MPO.identity(2, physical_dimension=3)
     assert mpo.check_if_identity(0.9) is True
 
 
@@ -1242,7 +1333,7 @@ def test_compress_one_sweep_raises_on_invalid_direction() -> None:
         np.zeros((2, 2, 1, 1), dtype=complex),
     ]
     with pytest.raises(ValueError, match=r"direction must be 'lr' or 'rl'\."):
-        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)  # noqa: SLF001
+        mpo._compress_one_sweep(direction="xx", tol=1e-12, max_bond_dim=None)
 
 
 def test_from_pauli_sum_empty_spec_is_identity_term() -> None:

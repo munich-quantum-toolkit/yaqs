@@ -975,7 +975,7 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
     assert before_center == center
 
     # do a "no-real" truncation (tiny threshold, generous max bond)
-    mps.truncate(threshold=1e-16, max_bond_dim=100)
+    mps.compress(threshold=1e-16, max_bond_dim=100)
     after_center = mps.check_canonical_form()[0]
     assert after_center == center
 
@@ -1012,7 +1012,7 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
     # put it into a known canonical form
     mps.set_canonical_form(2)
     # perform a truncation that will cut back to max_bond=3
-    mps.truncate(threshold=1e-12, max_bond_dim=3)
+    mps.compress(threshold=1e-12, max_bond_dim=3)
 
     # check validity and that every bond dim <= 3
     mps.check_if_valid_mps()
@@ -1022,6 +1022,15 @@ def test_truncate_reduces_bond_dimensions_and_truncates() -> None:
         _, bond_left, bond_right = T.shape
         assert bond_left <= 3
         assert bond_right <= 3
+
+
+def test_compress_single_site_returns_immediately() -> None:
+    """``compress`` is a no-op on a one-site MPS."""
+    mps = MPS(1, state="zeros")
+    before = copy.deepcopy(mps.tensors)
+    mps.compress(threshold=1e-12)
+    for before_tensor, after_tensor in zip(before, mps.tensors, strict=True):
+        np.testing.assert_allclose(before_tensor, after_tensor)
 
 
 def _bell_pair_mps() -> MPS:
@@ -1086,6 +1095,64 @@ def test_get_total_bond() -> None:
     mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=[2, 2, 2])
 
     assert mps.get_total_bond() == 7
+
+
+def test_assert_bond_shapes_consistent_passes_for_valid_mps() -> None:
+    """Bond-shape check accepts matching neighbor bond dimensions."""
+    mps = MPS(length=3, state="zeros")
+    mps.ensure_internal_bond_dims((0,), 2)
+    mps.assert_bond_shapes_consistent(max_bond_dim=2)
+
+
+def test_assert_bond_shapes_consistent_raises_on_mismatch() -> None:
+    """Internal bond-shape check rejects inconsistent neighbor bond sizes."""
+    t0 = np.zeros((2, 1, 3), dtype=complex)
+    t1 = np.zeros((2, 2, 1), dtype=complex)
+    t2 = np.zeros((2, 1, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    with pytest.raises(ValueError, match="bond mismatch"):
+        mps.assert_bond_shapes_consistent()
+
+
+def test_ensure_internal_bond_dims_zero_pads_selected_bonds() -> None:
+    """Bond padding raises only listed bonds without touching others."""
+    mps = MPS(length=3, state="zeros")
+    mps.ensure_internal_bond_dims((0,), 2)
+
+    assert mps.tensors[0].shape == (2, 1, 2)
+    assert mps.tensors[1].shape == (2, 2, 1)
+    assert mps.tensors[2].shape == (2, 1, 1)
+
+
+def test_ensure_internal_bond_dims_respects_max_dim() -> None:
+    """Bond padding does not pad above an explicit max_dim cap."""
+    mps = MPS(length=3, state="zeros")
+    mps.ensure_internal_bond_dims((0,), 2, max_dim=1)
+
+    assert mps.tensors[0].shape == (2, 1, 1)
+    assert mps.tensors[1].shape == (2, 1, 1)
+
+
+def test_ensure_internal_bond_dims_pads_asymmetric_bond() -> None:
+    """Internal bond padding raises the smaller side when only one tensor is short."""
+    t0 = np.zeros((2, 1, 4), dtype=complex)
+    t1 = np.zeros((2, 2, 1), dtype=complex)
+    t2 = np.zeros((2, 1, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    mps.ensure_internal_bond_dims((0,), 4)
+
+    assert mps.tensors[0].shape == (2, 1, 4)
+    assert mps.tensors[1].shape == (2, 4, 1)
+
+
+def test_ensure_internal_bond_dims_raises_on_truncation() -> None:
+    """Shrinking a bond via padding helper is rejected; SVD sync is required."""
+    t0 = np.zeros((2, 1, 4), dtype=complex)
+    t1 = np.zeros((2, 4, 1), dtype=complex)
+    t2 = np.zeros((2, 1, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t0, t1, t2], physical_dimensions=[2, 2, 2])
+    with pytest.raises(ValueError, match="cannot be truncated"):
+        mps.ensure_internal_bond_dims((0,), 2, max_dim=2)
 
 
 def test_get_cost() -> None:

@@ -24,6 +24,7 @@ from ..methods.decompositions import merge_two_site, right_qr, split_two_site
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+    from ..methods.decompositions import TruncMode
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 
 
@@ -326,6 +327,101 @@ class MPS:
         # renormalise the state
         self.normalize()
 
+    def ensure_internal_bond_dims(
+        self,
+        bond_indices: list[int] | tuple[int, ...],
+        min_dim: int,
+        *,
+        max_dim: int | None = None,
+    ) -> None:
+        """Zero-pad selected internal bonds to at least ``min_dim``.
+
+        Library-internal padding helper for fixed-χ TDVP bond alignment. Bond ``b``
+        connects sites ``b`` and ``b+1``. Only the listed bonds are modified; tensors
+        are zero-padded on the shared index when needed. Shrinking a bond requires
+        SVD truncation via :func:`mqt.yaqs.core.methods.tdvp.sweep_utils._sync_bond_dim`.
+
+        Args:
+            bond_indices: Internal bond indices ``0 <= b < length - 1``.
+            min_dim: Minimum bond dimension to enforce on each listed bond.
+            max_dim: Optional hard cap; when set, bonds are never padded above this
+                value and no-op if ``min_dim`` exceeds ``max_dim``.
+
+        Raises:
+            ValueError: If ``min_dim`` is less than 1, a bond index is invalid, or a
+                listed bond must be truncated below its current dimension.
+        """
+        if min_dim < 1:
+            msg = "min_dim must be at least 1."
+            raise ValueError(msg)
+        if max_dim is not None and min_dim > max_dim:
+            return
+        target_dim = min_dim if max_dim is None else min(min_dim, max_dim)
+        for bond in bond_indices:
+            if bond < 0 or bond >= self.length - 1:
+                msg = f"Bond index {bond} out of range for length {self.length}."
+                raise ValueError(msg)
+            left = self.tensors[bond]
+            right = self.tensors[bond + 1]
+            chi_out = int(left.shape[2])
+            chi_in = int(right.shape[1])
+            if chi_out == target_dim and chi_in == target_dim:
+                continue
+            if chi_out > target_dim or chi_in > target_dim:
+                msg = (
+                    f"Bond {bond} cannot be truncated from (chi_out={chi_out}, chi_in={chi_in}) "
+                    f"to target_dim={target_dim}; use "
+                    f"mqt.yaqs.core.methods.tdvp.sweep_utils._sync_bond_dim for SVD truncation."
+                )
+                raise ValueError(msg)
+            chi_out = int(left.shape[2])
+            chi_in = int(right.shape[1])
+            if chi_out >= target_dim and chi_in >= target_dim:
+                continue
+            phys_l, chi_l, _ = left.shape
+            phys_r, _, chi_r = right.shape
+            new_left = np.zeros((phys_l, chi_l, target_dim), dtype=left.dtype)
+            new_left[:, :, :chi_out] = left
+            new_right = np.zeros((phys_r, target_dim, chi_r), dtype=right.dtype)
+            new_right[:, :chi_in, :] = right
+            self.tensors[bond] = new_left
+            self.tensors[bond + 1] = new_right
+
+    def bond_dimensions(self) -> list[int]:
+        """Return outgoing bond dimension at each internal bond ``b``.
+
+        Returns:
+            List of bond dimensions ``[chi_0, ..., chi_{L-2}]``.
+        """
+        return [int(tensor.shape[2]) for tensor in self.tensors[:-1]]
+
+    def assert_bond_shapes_consistent(self, *, max_bond_dim: int | None = None) -> None:
+        """Validate adjacent tensor virtual dimensions and an optional bond cap.
+
+        Library-internal invariant check used by fixed-χ TDVP.
+
+        Args:
+            max_bond_dim: When set, each internal bond must not exceed this value.
+
+        Raises:
+            ValueError: If outgoing/incoming bond dimensions disagree or exceed the cap.
+        """
+        for bond in range(self.length - 1):
+            left = self.tensors[bond]
+            right = self.tensors[bond + 1]
+            chi_out = int(left.shape[2])
+            chi_in = int(right.shape[1])
+            if chi_out != chi_in:
+                msg = (
+                    f"MPS bond mismatch at bond {bond}: left outgoing {chi_out} "
+                    f"!= right incoming {chi_in}; left shape {left.shape}, "
+                    f"right shape {right.shape}"
+                )
+                raise ValueError(msg)
+            if max_bond_dim is not None and chi_out > max_bond_dim:
+                msg = f"MPS bond cap violated at bond {bond}: chi={chi_out} > max_bond_dim={max_bond_dim}"
+                raise ValueError(msg)
+
     def get_max_bond(self) -> int:
         """Write max bond dim.
 
@@ -528,7 +624,6 @@ class MPS:
                 trunc_mode="discarded_weight",
                 threshold=1e-12,
                 max_bond_dim=None,
-                min_bond_dim=2,
             )
             (
                 self.tensors[current_orthogonality_center],
@@ -597,44 +692,57 @@ class MPS:
         if form == "B":
             self.flip_network()
 
-    def truncate(self, threshold: float = 1e-12, max_bond_dim: int | None = None) -> None:
-        """In-place MPS truncation via repeated two-site SVDs."""
-        orth_center = self.check_canonical_form()[0]
+    def compress(
+        self,
+        threshold: float,
+        *,
+        max_bond_dim: int | None = None,
+        trunc_mode: TruncMode = "discarded_weight",
+    ) -> None:
+        """Compress in place via left-to-center and right-to-left two-site SVD sweeps.
+
+        Args:
+            threshold: SVD truncation threshold (e.g. ``sim_params.svd_threshold``).
+            max_bond_dim: Optional cap on bond dimension.
+            trunc_mode: ``"discarded_weight"`` or ``"relative"``.
+        """
         if self.length == 1:
             return
 
-        # ——— left­-to-­center sweep ———
-        for i in range(orth_center):
-            a, b = self.tensors[i], self.tensors[i + 1]
-            merged = merge_two_site(a, b)
-            a_new, b_new = split_two_site(
+        canonical = self.check_canonical_form()
+        orth_center = canonical[0] if canonical and canonical[0] >= 0 else self.length - 1
+
+        for site in range(orth_center):
+            left_tensor = self.tensors[site]
+            right_tensor = self.tensors[site + 1]
+            merged = merge_two_site(left_tensor, right_tensor)
+            left_new, right_new = split_two_site(
                 merged,
-                [a.shape[0], b.shape[0]],
+                [left_tensor.shape[0], right_tensor.shape[0]],
                 svd_distribution="right",
-                trunc_mode="discarded_weight",
+                trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=2,
             )
-            self.tensors[i], self.tensors[i + 1] = a_new, b_new
+            self.tensors[site] = left_new
+            self.tensors[site + 1] = right_new
 
-        # flip the network and sweep back
         self.flip_network()
         orth_flipped = self.length - 1 - orth_center
-        for i in range(orth_flipped):
-            a, b = self.tensors[i], self.tensors[i + 1]
-            merged = merge_two_site(a, b)
-            a_new, b_new = split_two_site(
+        for site in range(orth_flipped):
+            left_tensor = self.tensors[site]
+            right_tensor = self.tensors[site + 1]
+            merged = merge_two_site(left_tensor, right_tensor)
+            left_new, right_new = split_two_site(
                 merged,
-                [a.shape[0], b.shape[0]],
+                [left_tensor.shape[0], right_tensor.shape[0]],
                 svd_distribution="right",
-                trunc_mode="discarded_weight",
+                trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
-                min_bond_dim=2,
             )
-            self.tensors[i], self.tensors[i + 1] = a_new, b_new
-
+            self.tensors[site] = left_new
+            self.tensors[site + 1] = right_new
         self.flip_network()
 
     def scalar_product(self, other: MPS, sites: int | list[int] | None = None) -> np.complex128:

@@ -20,7 +20,7 @@ import numpy as np
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import left_qr, right_qr
-from .tdvp import update_left_environment, update_right_environment, update_site
+from .tdvp.primitives import update_left_environment, update_right_environment, update_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -158,7 +158,14 @@ def local_update(
         new_right_block: The right environment of this site.
     """
     old_tensor = canon_center_tensors[site]
-    updated_tensor = update_site(left_blocks[site], right_block, mpo.tensors[site], old_tensor, sim_params.dt)
+    updated_tensor = update_site(
+        left_blocks[site],
+        right_block,
+        mpo.tensors[site],
+        old_tensor,
+        sim_params.dt,
+        krylov_tol=sim_params.krylov_tol,
+    )
     old_stack_tensor = choose_stack_tensor(site, canon_center_tensors, state)
     new_q = find_new_q(old_stack_tensor, updated_tensor)
     old_q = state.tensors[site]
@@ -203,7 +210,14 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
             state, mpo, left_envs, right_block, canon_center_tensors, site, right_m_block, sim_params
         )
     # Update the first site.
-    updated_tensor = update_site(left_envs[0], right_block, mpo.tensors[0], canon_center_tensors[0], sim_params.dt)
+    updated_tensor = update_site(
+        left_envs[0],
+        right_block,
+        mpo.tensors[0],
+        canon_center_tensors[0],
+        sim_params.dt,
+        krylov_tol=sim_params.krylov_tol,
+    )
     state.tensors[0] = updated_tensor
     # Truncation
-    state.truncate(sim_params.threshold, sim_params.max_bond_dim)
+    state.compress(sim_params.svd_threshold, max_bond_dim=sim_params.max_bond_dim)

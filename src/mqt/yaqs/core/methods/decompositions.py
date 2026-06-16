@@ -101,7 +101,7 @@ def split_two_site(
     trunc_mode: TruncMode,
     threshold: float,
     max_bond_dim: int | None,
-    min_bond_dim: int,
+    min_keep: int = 1,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
     """Split a merged two-site MPS tensor back into two sites via truncated SVD.
 
@@ -116,7 +116,7 @@ def split_two_site(
         threshold: Truncation threshold for the chosen mode.
         max_bond_dim: Optional hard cap on bond dimension passed to
             :func:`mqt.yaqs.core.linalg.truncate` (``None`` for no cap).
-        min_bond_dim: Minimum bond dimension (capped by the number of singular values internally).
+        min_keep: Minimum number of singular values to retain (default ``1``).
 
     Returns:
         Left tensor ``(d_left, D0, keep)`` and right tensor ``(d_right, keep, D2)``.
@@ -151,7 +151,7 @@ def split_two_site(
             mode="discarded_weight",
             threshold=threshold,
             max_bond_dim=max_bond_dim,
-            min_keep=min_bond_dim,
+            min_keep=min_keep,
         )
     elif trunc_mode == "relative":
         keep = linalg.truncate(
@@ -159,7 +159,7 @@ def split_two_site(
             mode="relative",
             threshold=threshold,
             max_bond_dim=max_bond_dim,
-            min_keep=min_bond_dim,
+            min_keep=min_keep,
         )
     else:
         msg = f"Unknown truncation mode: {trunc_mode!r}"

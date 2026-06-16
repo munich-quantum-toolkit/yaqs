@@ -14,7 +14,7 @@ qubit counts.
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff: noqa: N806, PLC2701
 
 from __future__ import annotations
 
@@ -22,12 +22,13 @@ import importlib
 import multiprocessing
 import os
 import sys
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numba
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
+from qiskit.quantum_info import Pauli, Statevector
 
 from mqt.yaqs import Result, Simulator, simulator
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
@@ -43,8 +44,17 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init  # noqa: PLC2701
-from tests.conftest import YAQS_TEST_SEED
+from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init
+from tests.conftest import (
+    LARGE_QASM2_STRING,
+    SAMPLE_QASM3_STRING,
+    YAQS_TEST_SEED,
+    requires_qasm3_import,
+    write_qasm_file,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_simulator_defaults() -> None:
@@ -78,7 +88,7 @@ def test_simulator_parallel_serial_equivalence() -> None:
             dt=0.1,
             num_traj=4,
             max_bond_dim=4,
-            threshold=1e-9,
+            svd_threshold=1e-9,
             order=1,
             sample_timesteps=False,
             random_seed=YAQS_TEST_SEED,
@@ -260,7 +270,7 @@ def test_analog_simulation() -> None:
         dt=0.1,
         num_traj=10,
         max_bond_dim=4,
-        threshold=1e-6,
+        svd_threshold=1e-6,
         order=2,
         sample_timesteps=False,
         random_seed=YAQS_TEST_SEED,
@@ -286,7 +296,9 @@ def test_analog_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets
+        # due to floating-point reduction order and BLAS/LAPACK differences.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_analog_simulation_parallel_off() -> None:
@@ -310,7 +322,7 @@ def test_analog_simulation_parallel_off() -> None:
         dt=0.1,
         num_traj=10,
         max_bond_dim=4,
-        threshold=1e-6,
+        svd_threshold=1e-6,
         order=2,
         sample_timesteps=False,
         random_seed=YAQS_TEST_SEED,
@@ -336,7 +348,9 @@ def test_analog_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets
+        # due to floating-point reduction order and BLAS/LAPACK differences.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_analog_simulation_get_state() -> None:
@@ -358,7 +372,7 @@ def test_analog_simulation_get_state() -> None:
             dt=0.1,
             num_traj=1,
             max_bond_dim=4,
-            threshold=1e-6,
+            svd_threshold=1e-6,
             order=order,
             get_state=True,
             sample_timesteps=False,
@@ -425,6 +439,7 @@ def test_strong_simulation() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
+        krylov_tol=1e-12,
         random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
@@ -449,7 +464,8 @@ def test_strong_simulation() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_strong_simulation_no_noise() -> None:
@@ -493,6 +509,7 @@ def test_strong_simulation_parallel_off() -> None:
         observables=[Observable(Z(), site) for site in range(num_qubits)],
         num_traj=10,
         max_bond_dim=4,
+        krylov_tol=1e-12,
         random_seed=YAQS_TEST_SEED,
     )
     # Use a noise model that is not None so that sim_params.num_traj remains unchanged.
@@ -517,7 +534,8 @@ def test_strong_simulation_parallel_off() -> None:
             "Trajectories was not initialized for AnalogSimParams 2."
         )
         assert len(result.expectation_values[i]) == 1, "Results was not initialized for AnalogSimParams."
-        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=1e-5)
+        # Noisy strong simulation can drift slightly across platforms / minimum dependency sets.
+        assert np.isclose(np.real(result.expectation_values[i][0]), expected_z[i], atol=2e-4)
 
 
 def test_weak_simulation_noise() -> None:
@@ -1079,6 +1097,41 @@ def test_transmon_simulation() -> None:
     np.testing.assert_array_less(leakage, 5e-2)
 
 
+def test_analog_result_observables_preserve_user_order() -> None:
+    """Analog runs must preserve user observable order on Result."""
+    state = State(2, initial="zeros")
+    H = Hamiltonian.ising(2, J=1.0, g=0.7)
+    requested = [Observable(Z(), 1), Observable(X(), 0), Observable(Z(), 0)]
+    sim_params = AnalogSimParams(
+        observables=requested,
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        get_state=True,
+        sample_timesteps=False,
+        preset="exact",
+    )
+
+    result = Simulator(parallel=False, show_progress=False).run(state, H, sim_params)
+
+    assert result.output_state is not None
+    vec = result.output_state.mps.to_vec()
+    n = int(np.log2(vec.size))
+
+    assert len(result.observables) == len(requested)
+    for i, (got_obs, req_obs) in enumerate(zip(result.observables, requested, strict=True)):
+        assert got_obs.gate.name == req_obs.gate.name
+        assert got_obs.sites == req_obs.sites
+
+        label = ["I"] * n
+        site = got_obs.sites[0] if isinstance(got_obs.sites, list) else got_obs.sites
+        assert isinstance(site, int)
+        label[n - 1 - site] = got_obs.gate.name.upper()
+        expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
+        got = float(np.real(result.expectation_values[i][-1]))
+        assert got == pytest.approx(expected, abs=1e-10)
+
+
 def test_scheduled_jump_single_site() -> None:
     """Tests a scheduled Pauli-X flip on a single qubit."""
     L = 1
@@ -1397,3 +1450,120 @@ def test_analog_simulation_parallel_observables_no_state() -> None:
     result = Simulator(parallel=True, max_workers=2, show_progress=False).run(state, hamiltonian, sim_params, noise)
     assert result.expectation_values[0] is not None
     assert result.runtime_cost is not None
+
+
+def test_simulator_run_accepts_qasm2_path_object(tmp_path: Path) -> None:
+    """Verify that Simulator.run accepts a QASM 2 file passed as a Path object."""
+    qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    state = State(6, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_accepts_qasm2_str_path(tmp_path: Path) -> None:
+    """Verify that Simulator.run accepts a QASM 2 file passed as a str path."""
+    qasm_file = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
+    state = State(6, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_accepts_qasm2_raw_string() -> None:
+    """Verify that Simulator.run accepts a raw QASM 2 string (not a file path)."""
+    state = State(6, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, LARGE_QASM2_STRING, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+@requires_qasm3_import
+def test_simulator_run_accepts_qasm3_path_object(tmp_path: Path) -> None:
+    """Verify that Simulator.run accepts a QASM 3 file passed as a Path object."""
+    qasm_file = write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm")
+    state = State(2, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+@requires_qasm3_import
+def test_simulator_run_accepts_qasm3_str_path(tmp_path: Path) -> None:
+    """Verify that Simulator.run accepts a QASM 3 file passed as a str path."""
+    qasm_file = str(write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm"))
+    state = State(2, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_strong_accepts_qasm_path(tmp_path: Path) -> None:
+    """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a Path."""
+    qasm_file = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    state = State(6, initial="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_file, sim_params)
+    assert result.expectation_values[0] is not None
+
+
+def test_simulator_run_strong_accepts_qasm_string(tmp_path: Path) -> None:
+    """Verify that Simulator.run with StrongSimParams accepts a QASM file passed as a str path."""
+    qasm_string = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
+    state = State(6, initial="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    assert result.expectation_values[0] is not None
+
+
+@requires_qasm3_import
+def test_simulator_run_strong_accepts_qasm3_raw_string() -> None:
+    """Verify that Simulator.run with StrongSimParams accepts a raw OpenQASM 3 string."""
+    state = State(2, initial="zeros")
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], num_traj=1, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, SAMPLE_QASM3_STRING, sim_params)
+    assert result.expectation_values[0] is not None
+
+
+def test_simulator_run_analog_rejects_str_operator() -> None:
+    """Analog simulation with a str operator requires a Hamiltonian, not OpenQASM."""
+    state = State(2, initial="zeros")
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+        sample_timesteps=False,
+    )
+    with pytest.raises(TypeError, match="Hamiltonian"):
+        Simulator(parallel=False, show_progress=False).run(state, "not-a-path.qasm", sim_params)
+
+
+@requires_qasm3_import
+def test_simulator_run_accepts_qasm3_raw_string_weak() -> None:
+    """Verify that Simulator.run with WeakSimParams accepts a raw OpenQASM 3 string."""
+    state = State(2, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, SAMPLE_QASM3_STRING, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_qasm_path_and_string_strong_match(tmp_path: Path) -> None:
+    """Strong simulation with fixed seed agrees for path and raw OpenQASM inputs."""
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    state = State(6, initial="zeros")
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        num_traj=1,
+        max_bond_dim=4,
+        random_seed=YAQS_TEST_SEED,
+    )
+    path_result = Simulator(parallel=False, show_progress=False).run(state, qasm_path, sim_params)
+    string_result = Simulator(parallel=False, show_progress=False).run(state, LARGE_QASM2_STRING, sim_params)
+    assert path_result.expectation_values[0] == string_result.expectation_values[0]

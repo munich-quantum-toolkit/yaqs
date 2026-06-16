@@ -34,6 +34,28 @@ result = sim.run(state, op, sim_params, noise_model)
 `WeakSimParams`. Pass `show_progress` to `Simulator` instead; `num_threads` was unused and has been
 deleted.
 
+### `threshold` renamed to `svd_threshold` on `*SimParams`
+
+The SVD bond-truncation setting on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams` is now
+`svd_threshold` (attribute and constructor keyword). Simulation presets use the key `svd_threshold`
+in `SIMULATION_PRESETS`. This distinguishes SVD truncation from `krylov_tol` (Krylov/Lanczos matrix
+exponential) and from unrelated `threshold` parameters elsewhere (for example
+`EquivalenceChecker(threshold=...)`).
+
+**Before:**
+
+```python
+params = AnalogSimParams(threshold=1e-8)
+value = params.threshold
+```
+
+**After:**
+
+```python
+params = AnalogSimParams(svd_threshold=1e-8)
+value = params.svd_threshold
+```
+
 ### `digital.equivalence_checker.run` becomes `EquivalenceChecker(...).check(...)`
 
 The free `mqt.yaqs.digital.equivalence_checker.run` function has been replaced by

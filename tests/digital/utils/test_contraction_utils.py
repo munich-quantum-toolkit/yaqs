@@ -5,9 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""Tests for the MPO utility functions used in the equivalence checking framework.
+"""Tests for contraction utilities used in the equivalence checking framework.
 
-This module contains unit tests for the MPO utility functions used in the equivalence checking framework.
+This module contains unit tests for the digital contraction utilities used in the equivalence checking framework.
 It verifies the correct functionality of tensor operations including:
   - SVD-based splitting of MPS tensors (decompose_theta)
   - Gate application routines (apply_gate, apply_temporal_zone)
@@ -24,7 +24,8 @@ for simulating quantum circuits are performed correctly.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
@@ -32,17 +33,20 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mpo_utils import decompose_theta
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.digital.utils.dag_utils import select_starting_point
-from mqt.yaqs.digital.utils.mpo_utils import (
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
+from mqt.yaqs.digital.utils.contraction_utils import (
+    MIN_QUBITS_FOR_MPO_PARALLEL,
     apply_gate,
     apply_layer,
     apply_long_range_layer,
     apply_temporal_zone,
-    decompose_theta,
+    compute_pair_update,
+    iterate,
     update_mpo,
 )
+from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -133,6 +137,21 @@ def test_decompose_theta() -> None:
 
     # Check if the original tensor is approximately reconstructed.
     approximate_reconstruction(tensor1, tensor2, theta, atol=1e-5)
+
+
+def test_apply_gate_identity_is_noop() -> None:
+    """Identity gates skip contraction and return ``theta`` unchanged."""
+    theta = random_theta_6d()
+    gate = cast(
+        "BaseGate",
+        type(
+            "IdentityGate",
+            (),
+            {"name": "I", "interaction": 1, "sites": [0], "matrix": np.eye(2, dtype=np.complex128)},
+        )(),
+    )
+    updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=False)
+    np.testing.assert_allclose(updated, theta)
 
 
 @pytest.mark.parametrize("conjugate", [False, True])
@@ -233,9 +252,8 @@ def test_update_mpo() -> None:
     This test initializes an identity MPO for 2 qubits, creates an Ising circuit,
     and applies update_mpo. It then checks that each tensor in the updated MPO is a rank-4 tensor.
     """
-    mpo = MPO()
     length = 2
-    mpo.identity(length)
+    mpo = MPO.identity(length)
     circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -255,9 +273,8 @@ def test_apply_layer() -> None:
     This test initializes an identity MPO for 3 qubits and applies a layer update using two sweeps.
     It then checks if the final MPO is (approximately) the identity.
     """
-    mpo = MPO()
     length = 3
-    mpo.identity(length)
+    mpo = MPO.identity(length)
     circuit = create_ising_circuit(L=5, J=1, g=1, dt=0.1, timesteps=1)
     dag1 = circuit_to_dag(circuit)
     dag2 = copy.deepcopy(dag1)
@@ -276,9 +293,8 @@ def test_apply_long_range_layer() -> None:
     then applies the long-range layer with both conjugated and non-conjugated settings.
     Checks that the final MPO approximates the identity.
     """
-    mpo = MPO()
     num_qubits = 3
-    mpo.identity(num_qubits)
+    mpo = MPO.identity(num_qubits)
     circuit = QuantumCircuit(num_qubits)
     circuit.cx(0, 2)
     dag1 = circuit_to_dag(circuit)
@@ -288,3 +304,212 @@ def test_apply_long_range_layer() -> None:
     apply_long_range_layer(mpo, dag1, dag2, conjugate=True, threshold=threshold)
 
     assert mpo.check_if_identity(1 - 1e-6), "MPO should approximate identity after long-range layer."
+
+
+def test_apply_long_range_layer_skips_leading_single_qubit_gate() -> None:
+    """The first layer may begin with a single-qubit gate before a long-range CX."""
+    mpo = MPO.identity(3)
+    circuit = QuantumCircuit(3)
+    circuit.h(1)
+    circuit.cx(0, 2)
+    dag1 = circuit_to_dag(circuit)
+    dag2 = copy.deepcopy(dag1)
+    apply_long_range_layer(mpo, dag1, dag2, conjugate=False, threshold=1e-12)
+    assert mpo.check_if_valid_mpo()
+
+
+def test_apply_long_range_layer_on_wider_mpo() -> None:
+    """Long-range updates embed gate support inside a longer identity MPO."""
+    mpo = MPO.identity(5)
+    circuit = QuantumCircuit(5)
+    circuit.cx(0, 2)
+    dag1 = circuit_to_dag(circuit)
+    dag2 = copy.deepcopy(dag1)
+    apply_long_range_layer(mpo, dag1, dag2, conjugate=False, threshold=1e-12)
+    assert mpo.length == 5
+    assert mpo.check_if_valid_mpo()
+
+
+def test_iterate_serial_and_parallel() -> None:
+    """``iterate`` drives checkerboard sweeps with and without a thread pool."""
+    qc = QuantumCircuit(MIN_QUBITS_FOR_MPO_PARALLEL)
+    qc.cx(0, 2)
+    dag1 = circuit_to_dag(qc)
+
+    mpo_serial = MPO.identity(MIN_QUBITS_FOR_MPO_PARALLEL)
+    iterate(mpo_serial, copy.deepcopy(dag1), copy.deepcopy(dag1), threshold=1e-12, parallel=False)
+    assert mpo_serial.check_if_identity(1 - 1e-6)
+
+    mpo_parallel = MPO.identity(MIN_QUBITS_FOR_MPO_PARALLEL)
+    iterate(
+        mpo_parallel,
+        circuit_to_dag(qc),
+        circuit_to_dag(qc),
+        threshold=1e-12,
+        parallel=True,
+        max_workers=2,
+    )
+    assert mpo_parallel.check_if_identity(1 - 1e-6)
+
+
+def test_apply_layer_parallel_single_pair_uses_serial_path() -> None:
+    """Parallel sweeps with one pair fall back to the serial worker path."""
+    qc = QuantumCircuit(2)
+    qc.cx(0, 1)
+    dag1 = circuit_to_dag(qc)
+    dag2 = circuit_to_dag(qc)
+    mpo = MPO.identity(2)
+    first_iterator, second_iterator = select_starting_point(2, dag1)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        apply_layer(
+            mpo,
+            dag1,
+            dag2,
+            first_iterator,
+            second_iterator,
+            1e-12,
+            parallel=True,
+            thread_pool=pool,
+        )
+    assert mpo.check_if_valid_mpo()
+
+
+def _make_n_by_n_circuit(num_qubits: int) -> QuantumCircuit:
+    """Build an ``n`` x ``n`` layered circuit (``n`` qubits, ``n`` repetitions).
+
+    Returns:
+        A layered circuit with all-qubit ``h`` gates and linear ``cx`` chains.
+    """
+    qc = QuantumCircuit(num_qubits)
+    for _ in range(num_qubits):
+        for q in range(num_qubits):
+            qc.h(q)
+        for q in range(num_qubits - 1):
+            qc.cx(q, q + 1)
+    return qc
+
+
+def test_compute_pair_update_matches_update_mpo_step() -> None:
+    """Pure pair kernel reproduces a single update_mpo step on two sites."""
+    qc1 = QuantumCircuit(2)
+    qc1.h(0)
+    qc1.cx(0, 1)
+    qc2 = qc1.copy()
+
+    mpo_ref = MPO.identity(2)
+    dag1 = circuit_to_dag(qc1)
+    dag2 = circuit_to_dag(qc2)
+    update_mpo(mpo_ref, dag1, dag2, [0, 1], 1e-12)
+
+    mpo_test = MPO.identity(2)
+
+    dag1b = circuit_to_dag(qc1)
+    dag2b = circuit_to_dag(qc2)
+    zone1 = get_temporal_zone(dag1b, [0, 1])
+    zone2 = get_temporal_zone(dag2b, [0, 1])
+    gates1 = convert_dag_to_tensor_algorithm(zone1)
+    gates2 = convert_dag_to_tensor_algorithm(zone2)
+    t0, t1 = compute_pair_update(
+        mpo_test.tensors[0],
+        mpo_test.tensors[1],
+        gates1,
+        gates2,
+        1e-12,
+        [0, 1],
+        apply_conjugate_on_second=True,
+    )
+    mpo_test.tensors[0] = t0
+    mpo_test.tensors[1] = t1
+
+    for a, b in zip(mpo_ref.tensors, mpo_test.tensors, strict=True):
+        assert np.allclose(a, b, atol=1e-10)
+
+
+def test_compute_pair_update_conjugates_second_zone() -> None:
+    """``gates2`` are conjugated whenever the second zone is non-empty."""
+    rz_gate = GateLibrary.rz([np.pi / 4])
+    rz_gate.set_sites(0)
+
+    tensor_n = MPO.identity(2).tensors[0]
+    tensor_n1 = MPO.identity(2).tensors[1]
+
+    with_conjugate = compute_pair_update(
+        tensor_n,
+        tensor_n1,
+        [],
+        [rz_gate],
+        1e-12,
+        [0, 1],
+        apply_conjugate_on_second=True,
+    )
+    without_conjugate = compute_pair_update(
+        tensor_n,
+        tensor_n1,
+        [],
+        [rz_gate],
+        1e-12,
+        [0, 1],
+        apply_conjugate_on_second=False,
+    )
+
+    assert not np.allclose(with_conjugate[0], without_conjugate[0], atol=1e-10)
+
+
+def test_apply_layer_parallel_requires_thread_pool() -> None:
+    """Parallel layer updates without a thread pool raise at runtime."""
+    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc = _make_n_by_n_circuit(num_qubits)
+    dag1 = circuit_to_dag(qc)
+    dag2 = circuit_to_dag(qc)
+    mpo = MPO.identity(num_qubits)
+    first_iterator, second_iterator = select_starting_point(num_qubits, dag1)
+
+    with pytest.raises(RuntimeError, match="thread pool"):
+        apply_layer(
+            mpo,
+            dag1,
+            dag2,
+            first_iterator,
+            second_iterator,
+            1e-6,
+            parallel=True,
+            max_workers=2,
+            thread_pool=None,
+        )
+
+
+def test_apply_layer_parallel_with_thread_pool() -> None:
+    """Parallel apply_layer succeeds when a thread pool is provided."""
+    num_qubits = MIN_QUBITS_FOR_MPO_PARALLEL
+    qc = _make_n_by_n_circuit(num_qubits)
+    dag1 = circuit_to_dag(qc)
+    dag2 = circuit_to_dag(qc)
+    mpo_serial = MPO.identity(num_qubits)
+    mpo_parallel = MPO.identity(num_qubits)
+    first_iterator, second_iterator = select_starting_point(num_qubits, dag1)
+
+    apply_layer(
+        mpo_serial,
+        dag1,
+        dag2,
+        first_iterator,
+        second_iterator,
+        1e-6,
+        parallel=False,
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        apply_layer(
+            mpo_parallel,
+            dag1,
+            dag2,
+            first_iterator,
+            second_iterator,
+            1e-6,
+            parallel=True,
+            max_workers=2,
+            thread_pool=pool,
+        )
+
+    for serial_tensor, parallel_tensor in zip(mpo_serial.tensors, mpo_parallel.tensors, strict=True):
+        assert np.allclose(serial_tensor, parallel_tensor, atol=1e-8)
