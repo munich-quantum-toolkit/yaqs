@@ -69,6 +69,7 @@ are not supported for unitary equivalence on either backend. See
 | `fidelity`                       | `float`           | Measured normalized overlap of $W=U_2^\dagger U_1$ with the identity   |
 | `elapsed_time`                   | `float`           | Wall time in seconds                                                    |
 | `representation`                 | `str`             | `"matrix"` or `"mpo"` — which backend ran                               |
+| `matrix`                         | `ndarray` or `None` | Dense composed operator $W$ as a $(2^n, 2^n)$ matrix; matrix backend only |
 | `mpo`                            | `MPO` or `None`   | Composed operator on the MPO backend; `None` on matrix                  |
 | `schmidt_values`                 | `ndarray` or `None` | Center-cut operator Schmidt values (`length // 2`); MPO backend only |
 | `center_cut_entanglement_entropy`| `float` or `None` | Operator entanglement entropy at `length // 2`; MPO backend only      |

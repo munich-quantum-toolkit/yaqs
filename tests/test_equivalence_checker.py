@@ -619,6 +619,7 @@ def test_check_mpo_path_returns_operator_diagnostics() -> None:
 
     mpo = result["mpo"]
     assert mpo is not None
+    assert result["matrix"] is None
     assert mpo.length == 2
 
     schmidt = result["schmidt_values"]
@@ -635,8 +636,8 @@ def test_check_mpo_path_returns_operator_diagnostics() -> None:
     assert float(center_entropy) == pytest.approx(0.0, abs=1e-10)
 
 
-def test_check_matrix_path_returns_fidelity_only_diagnostics() -> None:
-    """Matrix backend returns measured fidelity and leaves MPO diagnostics unset."""
+def test_check_matrix_path_returns_fidelity_and_matrix() -> None:
+    """Matrix backend returns measured fidelity and the dense composed operator."""
     qc = QuantumCircuit(2)
     qc.h(0)
 
@@ -645,6 +646,10 @@ def test_check_matrix_path_returns_fidelity_only_diagnostics() -> None:
     assert result["representation"] == "matrix"
     assert isinstance(result["fidelity"], float)
     assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-10)
+    matrix = result["matrix"]
+    assert matrix is not None
+    assert matrix.shape == (4, 4)
+    assert matrix.dtype == np.complex128
     assert result["mpo"] is None
     assert result["schmidt_values"] is None
     assert result["center_cut_entanglement_entropy"] is None
@@ -666,6 +671,7 @@ def test_check_non_equivalent_pair_still_returns_diagnostics() -> None:
 
     assert result["equivalent"] is False
     assert float(result["fidelity"]) < 1.0
+    assert result["matrix"] is None
     assert result["mpo"] is not None
     assert result["schmidt_values"] is not None
     assert result["center_cut_entanglement_entropy"] is not None

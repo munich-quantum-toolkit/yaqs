@@ -178,7 +178,7 @@ class EquivalenceChecker:
         self,
         circuit1: QuantumCircuit | str | Path,
         circuit2: QuantumCircuit | str | Path,
-    ) -> dict[str, MPO | NDArray[np.float64] | bool | float | str | None]:
+    ) -> dict[str, MPO | NDArray[np.complex128] | NDArray[np.float64] | bool | float | str | None]:
         """Check whether two quantum circuits are equivalent.
 
         If the circuits differ only up to global phase and numerical error, the composed
@@ -196,9 +196,10 @@ class EquivalenceChecker:
         Returns:
             dict: ``equivalent`` (bool), ``fidelity`` (float, measured overlap with identity),
             ``elapsed_time`` (float, seconds), ``representation`` (``"matrix"`` or ``"mpo"``),
-            and on the MPO backend also ``mpo``, ``schmidt_values``,
+            ``matrix`` (dense composed operator on the matrix backend), ``mpo`` (composed
+            operator on the MPO backend), and on the MPO backend also ``schmidt_values``,
             ``center_cut_entanglement_entropy``, and ``global_entanglement_entropy``.
-            MPO-only diagnostic keys are ``None`` on the matrix backend.
+            Backend-specific keys are ``None`` when the other backend ran.
 
         Raises:
             ValueError: If the circuits have different numbers of qubits or contain mid-circuit measurements.
@@ -216,11 +217,13 @@ class EquivalenceChecker:
         if backend == "matrix":
             composed = compose_operator_tensor(circuit1, circuit2)
             measured_fidelity = compute_identity_fidelity(composed)
+            hilbert_dim = 2**circuit1.num_qubits
             return {
                 "equivalent": measured_fidelity >= self.fidelity,
                 "fidelity": measured_fidelity,
                 "elapsed_time": time.time() - start_time,
                 "representation": backend,
+                "matrix": composed.reshape(hilbert_dim, hilbert_dim),
                 "mpo": None,
                 "schmidt_values": None,
                 "center_cut_entanglement_entropy": None,
@@ -248,6 +251,7 @@ class EquivalenceChecker:
             "fidelity": measured_fidelity,
             "elapsed_time": time.time() - start_time,
             "representation": backend,
+            "matrix": None,
             "mpo": mpo,
             "schmidt_values": mpo.compute_schmidt_spectrum(center_cut),
             "center_cut_entanglement_entropy": mpo.compute_entanglement_entropy(center_cut),
