@@ -122,7 +122,6 @@ def test_split_two_site_reconstructs_full_rank(distr: str) -> None:
         trunc_mode="discarded_weight",
         threshold=0.0,
         max_bond_dim=None,
-        min_bond_dim=1,
     )
     merged_back = merge_two_site(a_new, b_new)
     np.testing.assert_allclose(merged_back, merged, atol=1e-10, rtol=1e-8)
@@ -142,10 +141,28 @@ def test_split_two_site_truncates_to_max_bond_dim() -> None:
         trunc_mode="discarded_weight",
         threshold=0.0,
         max_bond_dim=k,
-        min_bond_dim=1,
     )
     assert a_new.shape[2] == k
     assert b_new.shape[1] == k
+
+
+def test_split_two_site_min_keep() -> None:
+    """``min_keep`` enforces a truncation floor even when threshold would drop further."""
+    svs = np.array([1.0, 1e-12, 1e-13, 1e-14], dtype=np.float64)
+    d0, d1, d_left, d_right = 2, 2, 2, 2
+    theta = _theta_from_singulars(svs, d0 * d_left, d1 * d_right, seed=31)
+    merged = _as_merged_two_site(theta, d0, d1, d_left, d_right)
+    a_new, b_new = split_two_site(
+        merged,
+        [d0, d1],
+        svd_distribution="sqrt",
+        trunc_mode="relative",
+        threshold=1e-6,
+        max_bond_dim=None,
+        min_keep=2,
+    )
+    assert a_new.shape[2] == 2
+    assert b_new.shape[1] == 2
 
 
 def test_split_two_site_unknown_mode_raises() -> None:
@@ -159,7 +176,6 @@ def test_split_two_site_unknown_mode_raises() -> None:
             trunc_mode=cast("Any", "invalid"),
             threshold=1e-9,
             max_bond_dim=None,
-            min_bond_dim=1,
         )
 
 

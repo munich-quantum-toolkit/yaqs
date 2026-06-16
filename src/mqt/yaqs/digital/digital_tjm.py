@@ -22,7 +22,7 @@ import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
 from ..core.data_structures.mpo import MPO
-from ..core.data_structures.mpo_utils import gate_tensor_lr_order
+from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
 from ..core.data_structures.simulation_parameters import (
@@ -33,7 +33,8 @@ from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.stochastic_process import stochastic_process
-from ..core.methods.tdvp import two_site_tdvp
+from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fixed_chi
+from ..core.methods.tdvp.tdvp import evolve_window
 from ..core.random_utils import make_trajectory_rng
 from .utils.dag_utils import convert_dag_to_tensor_algorithm
 
@@ -69,6 +70,32 @@ def create_local_noise_model(noise_model: NoiseModel, first_site: int, last_site
     return NoiseModel(local_processes)
 
 
+def _is_terminal_measure(dag: DAGCircuit, node: DAGOpNode) -> bool:
+    """Return whether a measure node has no later gates on its qubits.
+
+    A measurement is terminal when no subsequent DAG operation acts on any qubit
+    that the measurement targets.
+
+    Args:
+        dag: Circuit DAG containing ``node``.
+        node: Measure operation node to classify.
+
+    Returns:
+        True if no later op nodes share qubits with ``node``; False otherwise.
+    """
+    measured = {dag.find_bit(q).index for q in node.qargs}
+    topo = list(dag.topological_op_nodes())
+    try:
+        node_index = topo.index(node)
+    except ValueError:
+        return True
+    for later in topo[node_index + 1 :]:
+        later_qubits = {dag.find_bit(q).index for q in later.qargs}
+        if later_qubits & measured:
+            return False
+    return True
+
+
 def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], list[DAGOpNode], list[DAGOpNode]]:
     """Process quantum circuit layer before applying to MPS.
 
@@ -87,6 +114,7 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
 
     Raises:
         NotImplementedError: If a node with more than two qubits is encountered.
+        ValueError: If a non-terminal ``measure`` operation is encountered.
     """
     # Extract the current layer
     current_layer = dag.front_layer()
@@ -101,9 +129,18 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
     for node in current_layer:
         name = node.op.name
 
-        # Drop measurements completely.
+        # Drop terminal measurements during simulation. Unlike ``convert_dag_to_tensor_algorithm``,
+        # which rejects ``measure`` when building a gate list, the live DAG path removes
+        # measurement nodes so terminal Qiskit measurements do not block evolution.
         if name == "measure":
-            dag.remove_op_node(node)
+            if _is_terminal_measure(dag, node):
+                dag.remove_op_node(node)
+            else:
+                msg = (
+                    "Non-terminal measure operations are not supported during simulation; "
+                    "removing them would ignore state collapse and classical dependencies."
+                )
+                raise ValueError(msg)
             continue
 
         # Keep ONLY barriers with label "SAMPLE_OBSERVABLES" (case-insensitive). Remove all other barriers.
@@ -228,7 +265,12 @@ def apply_two_qubit_gate_tdvp(
     gate: BaseGate,
     sim_params: StrongSimParams | WeakSimParams,
 ) -> tuple[int, int]:
-    """Apply a two-qubit gate via generator MPO and two-site TDVP.
+    """Apply a two-qubit gate via generator MPO and TDVP.
+
+    Long-range gates use local two-site TDVP (2TDVP) on a window-local MPS without
+    post-sweep renormalization before grafting tensors back into the full chain.
+    Nearest-neighbor gates in hybrid ``gate_mode="tdvp"`` use TEBD instead;
+    callers should route via :func:`apply_two_qubit_gate`.
 
     Args:
         state: MPS updated in place.
@@ -237,14 +279,24 @@ def apply_two_qubit_gate_tdvp(
 
     Returns:
         ``(first_site, last_site)`` spanning the gate support in MPS order.
+
+    Raises:
+        ValueError: If ``sim_params.tdvp_mode`` is not ``"2site"``.
+
     """
+    if sim_params.tdvp_mode != "2site":
+        msg = f'apply_two_qubit_gate_tdvp only supports tdvp_mode="2site"; got {sim_params.tdvp_mode!r}.'
+        raise ValueError(msg)
     mpo, first_site, last_site = construct_generator_mpo(gate, state.length)
 
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
-    two_site_tdvp(short_state, short_mpo, sim_params)
+
+    evolve_window(short_state, short_mpo, sim_params)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
+    if uses_fixed_chi(sim_params):
+        renorm_drift(state, sim_params)
 
     return first_site, last_site
 
@@ -292,7 +344,7 @@ def apply_two_qubit_gate_tebd(
 
     left_site = min(site0, site1)
     right_site = max(site0, site1)
-    u_gate = gate_tensor_lr_order(gate, left_site, right_site)
+    u_gate = resolve_lr_tensor(gate, left_site, right_site)
 
     left_tensor = state.tensors[left_site]
     right_tensor = state.tensors[right_site]
@@ -310,7 +362,7 @@ def apply_two_qubit_gate_tebd(
         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         threshold=sim_params.svd_threshold,
         max_bond_dim=sim_params.max_bond_dim,
-        min_bond_dim=sim_params.min_bond_dim,
+        min_keep=get_min_keep(sim_params),
     )
     state.tensors[left_site] = new_left
     state.tensors[right_site] = new_right
@@ -357,9 +409,16 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     site0, site1 = gate.sites[0], gate.sites[1]
     is_nearest_neighbor = abs(site0 - site1) == 1
     gate_mode: GateMode = getattr(sim_params, "gate_mode", "mpo")
+    # Matrix-backed custom gates have no ``generator`` and bypass the TDVP window
+    # path in ``tdvp`` / ``full-tdvp`` modes (TEBD for NN, MPO for LR).
+    has_generator = getattr(gate, "generator", None) is not None
 
     if gate_mode == "full-tdvp":
-        return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        if has_generator:
+            return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        if is_nearest_neighbor:
+            return apply_two_qubit_gate_tebd(state, gate, sim_params)
+        return apply_long_range_gate_mpo(state, gate, sim_params)
 
     if gate_mode == "swaps":
         return apply_two_qubit_gate_tebd(state, gate, sim_params)
@@ -367,7 +426,9 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: StrongSimParam
     if gate_mode == "tdvp":
         if is_nearest_neighbor:
             return apply_two_qubit_gate_tebd(state, gate, sim_params)
-        return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        if has_generator:
+            return apply_two_qubit_gate_tdvp(state, gate, sim_params)
+        return apply_long_range_gate_mpo(state, gate, sim_params)
 
     if gate_mode == "mpo":
         if is_nearest_neighbor:

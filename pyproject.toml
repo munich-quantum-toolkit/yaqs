@@ -162,7 +162,7 @@ future-annotations = true
 known-first-party = ["mqt.yaqs"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests" = ["T20", "INP001"]
+"tests/**" = ["T20", "INP001"]
 "docs/**" = ["T20", "INP001"]
 "scripts" = ["T20", "INP001"]
 "noxfile.py" = ["T20", "TID251"]
@@ -206,5 +206,4 @@ docs = [
 dev = [
     {include-group = "test"},
     "nox>=2025.11.12",
-    "ty==0.0.40",
 ]

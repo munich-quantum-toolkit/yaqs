@@ -22,8 +22,8 @@ from ..libraries.gate_library import BaseGate, Destroy
 from .mpo_utils import (
     contract_mpo_site_with_mpo_site,
     contract_mpo_site_with_mps_site,
-    gate_support_mpo_tensors,
-    identity_mpo_site,
+    get_support_mpo,
+    make_identity_site,
 )
 from .mps import MPS
 
@@ -644,12 +644,12 @@ class MPO:
             msg = f"chain_length {chain_length} is smaller than gate support length {support_len}."
             raise ValueError(msg)
 
-        support = gate_support_mpo_tensors(gate, first_site=first_site, last_site=last_site)
+        support = get_support_mpo(gate, first_site=first_site, last_site=last_site)
         if chain_length == support_len:
             tensors = support
         else:
             phys_dim = support[0].shape[0]
-            identity_site = identity_mpo_site(phys_dim)
+            identity_site = make_identity_site(phys_dim)
             tensors = []
             for site in range(chain_length):
                 if site < first_site or site > last_site:
@@ -670,7 +670,7 @@ class MPO:
             length: Number of sites.
             physical_dimension: Local dimension per site (default 2).
         """
-        site = identity_mpo_site(physical_dimension)
+        site = make_identity_site(physical_dimension)
         self.length = length
         self.physical_dimension = physical_dimension
 
@@ -1097,7 +1097,6 @@ class MPO:
         state.compress(
             sim_params.svd_threshold,
             max_bond_dim=sim_params.max_bond_dim,
-            min_bond_dim=sim_params.min_bond_dim,
             trunc_mode=cast("TruncMode", sim_params.trunc_mode),
         )
 

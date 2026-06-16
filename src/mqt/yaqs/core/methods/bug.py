@@ -20,7 +20,7 @@ import numpy as np
 
 from ..data_structures.simulation_parameters import StrongSimParams, WeakSimParams
 from .decompositions import left_qr, right_qr
-from .tdvp import update_left_environment, update_right_environment, update_site
+from .tdvp.primitives import update_left_environment, update_right_environment, update_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

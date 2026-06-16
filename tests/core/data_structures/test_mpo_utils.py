@@ -18,76 +18,76 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import (
     contract_mpo_site_with_mpo_site,
     contract_mpo_site_with_mps_site,
+    convert_nn_matrix,
     decompose_theta,
-    gate_support_mpo_tensors,
-    gate_tensor_lr_order,
-    identity_mpo_site,
+    get_support_mpo,
+    make_identity_site,
+    resolve_lr_tensor,
 )
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, extend_gate
 
 
-def test_gate_tensor_lr_order_swaps_sites() -> None:
-    """Gate tensor axes follow ascending MPS site order."""
+def test_resolve_lr_tensor_swaps_sites() -> None:
+    """Reversed nearest-neighbor qargs use the matrix MPS map, not a tensor transpose."""
     gate = GateLibrary.cx()
-    gate.set_sites(2, 0)
-    ordered = gate_tensor_lr_order(gate)
-    gate.set_sites(0, 2)
-    direct = gate_tensor_lr_order(gate)
-    np.testing.assert_allclose(ordered, direct)
+    gate.set_sites(1, 0)
+    reversed_tensor = resolve_lr_tensor(gate)
+    expected = convert_nn_matrix(gate.matrix)
+    np.testing.assert_allclose(reversed_tensor, expected)
 
 
-def test_gate_tensor_lr_order_explicit_sites() -> None:
-    """Explicit left/right sites select the transpose branch."""
+def test_resolve_lr_tensor_explicit_sites() -> None:
+    """Explicit left/right sites select the reversed-qarg branch on long-range pairs."""
     gate = GateLibrary.cx()
     gate.set_sites(3, 1)
-    tensor = gate_tensor_lr_order(gate, left_site=1, right_site=3)
-    gate.set_sites(1, 3)
-    np.testing.assert_allclose(tensor, gate.tensor)
+    tensor = resolve_lr_tensor(gate, left_site=1, right_site=3)
+    expected = convert_nn_matrix(gate.matrix)
+    np.testing.assert_allclose(tensor, expected)
 
 
-def test_gate_tensor_lr_order_inconsistent_sites_raises() -> None:
+def test_resolve_lr_tensor_inconsistent_sites_raises() -> None:
     """Mismatched site indices raise ValueError."""
     gate = GateLibrary.cx()
     gate.set_sites(0, 2)
     with pytest.raises(ValueError, match="not consistent"):
-        gate_tensor_lr_order(gate, left_site=0, right_site=3)
+        resolve_lr_tensor(gate, left_site=0, right_site=3)
 
 
-def test_identity_mpo_site_shape() -> None:
+def test_make_identity_site_shape() -> None:
     """Identity MPO site has bond dimension one."""
-    site = identity_mpo_site(2)
+    site = make_identity_site(2)
     assert site.shape == (2, 2, 1, 1)
     np.testing.assert_allclose(site[:, :, 0, 0], np.eye(2))
 
 
-def test_gate_support_mpo_tensors_uses_cached_mpo_tensors() -> None:
+def test_get_support_mpo_uses_cached_mpo_tensors() -> None:
     """Cached gate MPO tensors are returned when the support length matches."""
     gate = GateLibrary.cx()
     gate.set_sites(1, 3)
-    first = gate_support_mpo_tensors(gate, first_site=1, last_site=3)
-    second = gate_support_mpo_tensors(gate, first_site=1, last_site=3)
+    first = get_support_mpo(gate, first_site=1, last_site=3)
+    second = get_support_mpo(gate, first_site=1, last_site=3)
     assert len(first) == len(second) == 3
     np.testing.assert_allclose(first[0], second[0])
 
 
-def test_gate_support_mpo_tensors_reextends_when_cache_length_mismatches() -> None:
+def test_get_support_mpo_reextends_when_cache_length_mismatches() -> None:
     """A cached tensor list with the wrong length triggers ``extend_gate``."""
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
-    nn_support = gate_support_mpo_tensors(gate, first_site=0, last_site=1)
+    nn_support = get_support_mpo(gate, first_site=0, last_site=1)
     assert len(nn_support) == 2
-    wide = gate_support_mpo_tensors(gate, first_site=0, last_site=2)
+    wide = get_support_mpo(gate, first_site=0, last_site=2)
     assert len(wide) == 3
 
 
-def test_gate_support_mpo_tensors_calls_extend_gate_without_cache() -> None:
+def test_get_support_mpo_calls_extend_gate_without_cache() -> None:
     """Gates without ``mpo_tensors`` build support tensors via ``extend_gate``."""
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
     tensor = np.asarray(gate.tensor, dtype=np.complex128)
     stub = cast("BaseGate", type("GateStub", (), {"interaction": 2, "sites": [0, 1], "tensor": tensor})())
-    support = gate_support_mpo_tensors(stub, first_site=0, last_site=1)
-    expected = extend_gate(gate_tensor_lr_order(gate), [0, 1])
+    support = get_support_mpo(stub, first_site=0, last_site=1)
+    expected = extend_gate(resolve_lr_tensor(gate), [0, 1])
     assert len(support) == 2
     np.testing.assert_allclose(support[0], expected[0])
     np.testing.assert_allclose(support[1], expected[1])
@@ -95,7 +95,7 @@ def test_gate_support_mpo_tensors_calls_extend_gate_without_cache() -> None:
 
 def test_contract_mpo_site_with_mps_site() -> None:
     """MPO--MPS site contraction fuses virtual bonds in library order."""
-    mpo_site = identity_mpo_site(2)
+    mpo_site = make_identity_site(2)
     mps_site = np.ones((2, 1, 1), dtype=np.complex128)
     out = contract_mpo_site_with_mps_site(mpo_site, mps_site)
     assert out.shape == (2, 1, 1)
@@ -103,8 +103,8 @@ def test_contract_mpo_site_with_mps_site() -> None:
 
 def test_contract_mpo_site_with_mpo_site_conjugate_flag() -> None:
     """MPO--MPO contraction supports the conjugated equivalence-checking path."""
-    left = identity_mpo_site(2)
-    right = identity_mpo_site(2)
+    left = make_identity_site(2)
+    right = make_identity_site(2)
     plain = contract_mpo_site_with_mpo_site(left, right, conjugate=False)
     conj = contract_mpo_site_with_mpo_site(left, right, conjugate=True)
     assert plain.shape == conj.shape == (2, 2, 1, 1)

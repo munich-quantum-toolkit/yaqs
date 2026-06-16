@@ -16,7 +16,7 @@ import numpy as np
 
 from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
-from ..core.methods.tdvp import local_dynamic_tdvp
+from ..core.methods.tdvp import tdvp
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -35,7 +35,7 @@ def _unitary_step(state: MPS, hamiltonian: MPO, sim_params: AnalogSimParams) -> 
         sim_params (AnalogSimParams): Analog simulation parameters (time step, bond limits, etc.).
     """
     if sim_params.evolution_mode == EvolutionMode.TDVP:
-        local_dynamic_tdvp(state, hamiltonian, sim_params)
+        tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
 

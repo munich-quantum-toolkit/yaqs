@@ -145,7 +145,6 @@ def apply_dissipation(
                         trunc_mode=cast("TruncMode", sim_params.trunc_mode),
                         threshold=sim_params.svd_threshold,
                         max_bond_dim=sim_params.max_bond_dim,
-                        min_bond_dim=sim_params.min_bond_dim,
                     )
                     state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
 

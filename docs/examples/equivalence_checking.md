@@ -214,6 +214,7 @@ everything larger.
 
 ## See also
 
+- {doc}`custom_gates` — Qiskit translation, matrix fallback, and TDVP generators
 - {doc}`simulator_initialization` — running simulations with {class}`~mqt.yaqs.Simulator`
 - {doc}`simulation_parameters` — presets and truncation for **simulation** (separate from
   equivalence `threshold`)

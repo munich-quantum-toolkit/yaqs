@@ -37,7 +37,7 @@ All three `*SimParams` classes accept a keyword-only `preset` argument (default 
 - **`"accurate"`** — high-quality production settings.
 - **`"exact"`** — strict reference/debug preset with minimal internal numerical relaxation. Stochastic trajectory sampling, finite time steps, and model error still apply; this is not mathematically exact.
 
-`svd_threshold` controls **tensor-network SVD truncation** (bond truncation). `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. These are independent: tightening one does not change the other. `min_bond_dim` (default `2`) and `trunc_mode` (default `"discarded_weight"`) are unchanged across presets. The chosen preset name is stored on the object as `params.preset`.
+`svd_threshold` controls **tensor-network SVD truncation** (bond truncation). `krylov_tol` controls the **adaptive Krylov/Lanczos matrix exponential** inside TDVP updates. These are independent: tightening one does not change the other. `trunc_mode` (default `"discarded_weight"`) is unchanged across presets. The chosen preset name is stored on the object as `params.preset`.
 
 ## Override only what you need
 
@@ -178,15 +178,38 @@ Used for noisy strong circuit simulation. Provide observables and optionally ena
 Digital circuit simulation on an MPS defaults to **`gate_mode="mpo"`** (generic MPO--MPS application): nearest-neighbor gates use the same local TEBD/SVD path as `swaps`, and long-range gates contract an extended gate MPO site-wise (library leg ordering, MPS virtual index before MPO virtual index) followed by compression with `svd_threshold` and `max_bond_dim`. Other modes differ only in how two-qubit gates are applied:
 
 - **`swaps`** — TEBD/SVD for every two-qubit gate; long-range gates are routed with adjacent SWAP insertion before and after the local update.
-- **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + two-site TDVP path.
-- **`full-tdvp`** — TDVP (generator MPO + two-site TDVP) on every two-qubit gate.
+- **`tdvp`** — TEBD/SVD on nearest-neighbor gates; long-range gates use the generator MPO + **two-site TDVP (2TDVP)** on a local window.
+- **`full-tdvp`** — TDVP (generator MPO + 2TDVP on a local window) on every two-qubit gate.
+
+Matrix-backed custom gates (from Qiskit `UnitaryGate` or other unknown 1-/2-qubit unitaries) have no
+analytic generator. In `gate_mode="tdvp"` or `"full-tdvp"`, those gates use TEBD on nearest-neighbor
+pairs and the MPO path on long-range pairs instead of the TDVP generator window. See {doc}`custom_gates`
+for the full gate translation and custom-gate workflow.
+
+Long-range gates in `gate_mode="tdvp"` apply 2TDVP on the gate support window via `evolve_window`.
+
+Use **`tdvp_sweeps`** (default `1`) to split each TDVP evolution step into multiple substeps of equal total time. Values greater than `1` are opt-in and may improve accuracy on some circuits. The setting applies to all TDVP kernels on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`.
+
+Use **`tdvp_mode`** to select the TDVP integrator: `"1site"` (1TDVP), `"2site"` (2TDVP), or `"dynamic"` (adaptive single/two-site updates). The default is **`"2site"`** (2TDVP) on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`. Pass `"dynamic"` explicitly for adaptive 1/2-site switching during analog evolution.
+
+Substep geometry: each substep is **symmetric** (left-to-right then right-to-left) at evolution time `step_time / tdvp_sweeps` for analog (`dt`) and digital gates. The total generator time applied to one digital gate remains `1` across all substeps. Noise and dissipation after TDVP still use the full physical step `dt` in analog simulation.
 
 ```{code-cell} ipython3
 strong = StrongSimParams(
     observables=[Observable(Z(), 0)],
+    gate_mode="tdvp",
+    tdvp_sweeps=2,
     preset="accurate",
 )
 _trunc_summary(strong)
+```
+
+```{code-cell} ipython3
+strong_default = StrongSimParams(
+    observables=[Observable(Z(), 0)],
+    preset="accurate",
+)
+_trunc_summary(strong_default)
 ```
 
 ## `WeakSimParams`

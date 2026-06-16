@@ -14,7 +14,7 @@ qubit counts.
 """
 
 # ignore non-lowercase variable names for physics notation
-# ruff: noqa: N806
+# ruff: noqa: N806, PLC2701
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import (
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init  # noqa: PLC2701
+from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init
 from tests.conftest import YAQS_TEST_SEED
 
 
