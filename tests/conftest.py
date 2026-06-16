@@ -10,10 +10,13 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from qiskit.utils.optionals import HAS_QASM3_IMPORT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Cap BLAS/OpenMP threads in pytest-xdist workers before numerical libraries spin
 # up pools (reduces intermittent OpenBLAS segfaults on some Linux aarch64 setups).
@@ -94,7 +97,16 @@ c = measure q;
 
 
 def write_qasm_file(directory: Path, content: str, *, filename: str = "circuit.qasm") -> Path:
-    """Write OpenQASM source to a temporary file for path-based loading tests."""
+    """Write OpenQASM source to a temporary file for path-based loading tests.
+
+    Args:
+        directory: Directory in which to create the file.
+        content: OpenQASM source text to write.
+        filename: Name of the file to create within ``directory``.
+
+    Returns:
+        Path to the written OpenQASM file.
+    """
     path = directory / filename
     path.write_text(content, encoding="utf-8")
     return path

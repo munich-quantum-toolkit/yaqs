@@ -22,8 +22,7 @@ import importlib
 import multiprocessing
 import os
 import sys
-from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numba
 import numpy as np
@@ -46,7 +45,16 @@ from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init
-from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, YAQS_TEST_SEED, requires_qasm3_import, write_qasm_file
+from tests.conftest import (
+    LARGE_QASM2_STRING,
+    SAMPLE_QASM3_STRING,
+    YAQS_TEST_SEED,
+    requires_qasm3_import,
+    write_qasm_file,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_simulator_defaults() -> None:
