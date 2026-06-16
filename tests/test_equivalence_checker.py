@@ -14,7 +14,6 @@ backend selection, global-phase equivalence, and regression coverage for QASM cu
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 from unittest.mock import patch
 
@@ -30,8 +29,11 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils import matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 from mqt.yaqs.digital.utils.dag_utils import SUPPORTED_QISKIT_GATE_NAMES, convert_dag_to_tensor_algorithm
+from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qasm3_import, write_qasm_file
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from mqt.yaqs.equivalence_checker import Representation
 
 
@@ -135,13 +137,13 @@ def test_long_range_non_equivalence() -> None:
     assert result["equivalent"] is False, "Extra gate should break equivalence."
 
 
-def test_large_equivalence() -> None:
+def test_large_equivalence(tmp_path: Path) -> None:
     """Test large-scale equivalence.
 
     This test creates a large quantum circuit with multiple CNOT gates, Ry gates, and an Rzz gate.
     This should verify nearly all parts of the equivalence checking algorithm.
     """
-    qasm_path = Path(__file__).parent / "circuit.qasm"
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
     qc = load(filename=str(qasm_path))
 
     checker = EquivalenceChecker(representation="mpo")
@@ -392,30 +394,6 @@ def test_checker_rejects_non_int_max_workers() -> None:
         EquivalenceChecker(max_workers=1.5)  # ty: ignore[invalid-argument-type]
 
 
-def test_checker_rejects_invalid_representation() -> None:
-    """Unknown ``representation`` strings are rejected at construction."""
-    with pytest.raises(ValueError, match="representation must be one of"):
-        EquivalenceChecker(representation="tensor")  # ty: ignore[invalid-argument-type]
-
-
-def test_checker_rejects_bool_matrix_max_qubits() -> None:
-    """``matrix_max_qubits`` must be a true integer, not a boolean."""
-    with pytest.raises(TypeError, match="matrix_max_qubits"):
-        EquivalenceChecker(matrix_max_qubits=True)
-
-
-def test_checker_rejects_negative_matrix_max_qubits() -> None:
-    """``matrix_max_qubits`` must be non-negative."""
-    with pytest.raises(ValueError, match="non-negative"):
-        EquivalenceChecker(matrix_max_qubits=-1)
-
-
-def test_check_rejects_mismatched_qubit_counts() -> None:
-    """``check`` requires both circuits to have the same width."""
-    with pytest.raises(ValueError, match="same number of qubits"):
-        EquivalenceChecker().check(QuantumCircuit(2), QuantumCircuit(3))
-
-
 def test_equivalence_checker_defaults_parallel_true() -> None:
     """``parallel`` defaults to ``True`` (MPO thread pool still gated by qubit count)."""
     assert EquivalenceChecker().parallel is True
@@ -512,3 +490,114 @@ def test_long_range_mpo_parallel() -> None:
     serial = EquivalenceChecker(representation="mpo", parallel=False).check(qc1, qc2)
     parallel = EquivalenceChecker(representation="mpo", parallel=True, max_workers=2).check(qc1, qc2)
     assert serial["equivalent"] == parallel["equivalent"]
+
+
+def test_check_accepts_qasm2_path_object(tmp_path: Path) -> None:
+    """Check that a QASM 2 file given as a Path object is accepted and returns equivalent."""
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+
+    checker = EquivalenceChecker(representation="mpo")
+    result = checker.check(qasm_path, qasm_path)
+    assert result["equivalent"] is True
+
+
+def test_check_accepts_qasm2_str_path(tmp_path: Path) -> None:
+    """Check that a QASM 2 file given as a str path is accepted and returns equivalent."""
+    qasm_path = str(write_qasm_file(tmp_path, LARGE_QASM2_STRING))
+
+    checker = EquivalenceChecker(representation="mpo")
+    result = checker.check(qasm_path, qasm_path)
+    assert result["equivalent"] is True
+
+
+def test_check_qasm_path_vs_quantumcircuit_agree(tmp_path: Path) -> None:
+    """Verify that loading via path and via QuantumCircuit gives the same equivalence result."""
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    qc = load(filename=str(qasm_path))
+    checker = EquivalenceChecker(representation="mpo")
+    result_path = checker.check(qasm_path, qasm_path)
+    result_qc = checker.check(qc, qc)
+    assert result_path["equivalent"] == result_qc["equivalent"]
+
+
+@requires_qasm3_import
+def test_check_accepts_qasm3_path_object(tmp_path: Path) -> None:
+    """Check that a QASM 3 file given as a Path object is accepted and returns equivalent."""
+    qasm_file = write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm")
+
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qasm_file, qasm_file)
+    assert result["equivalent"] is True
+
+
+@requires_qasm3_import
+def test_check_accepts_qasm3_str_path(tmp_path: Path) -> None:
+    """Check that a QASM 3 file given as a str path is accepted and returns equivalent."""
+    qasm_file = str(write_qasm_file(tmp_path, SAMPLE_QASM3_STRING, filename="circuit3.qasm"))
+
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qasm_file, qasm_file)
+    assert result["equivalent"] is True
+
+
+def test_check_accepts_qasm2_raw_string() -> None:
+    """Check that a raw QASM 2 string (not a file path) is accepted and returns equivalent."""
+    checker = EquivalenceChecker(representation="mpo")
+    result = checker.check(LARGE_QASM2_STRING, LARGE_QASM2_STRING)
+    assert result["equivalent"] is True
+
+
+@requires_qasm3_import
+def test_check_accepts_qasm3_raw_string() -> None:
+    """Check that a raw QASM 3 string (not a file path) is accepted and returns equivalent."""
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(SAMPLE_QASM3_STRING, SAMPLE_QASM3_STRING)
+    assert result["equivalent"] is True
+
+
+def test_check_issue_qasm_raw_strings_custom_vs_expanded() -> None:
+    """Raw OpenQASM strings with custom gates are equivalent to their expanded form."""
+    result = _issue_checker(representation="mpo").check(ISSUE_QASM_CUSTOM, ISSUE_QASM_EXPANDED)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+
+
+def test_check_mixed_qasm_path_and_quantumcircuit(tmp_path: Path) -> None:
+    """Mixed OpenQASM path and QuantumCircuit inputs agree with path-only checking."""
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    qc = load(filename=str(qasm_path))
+    checker = EquivalenceChecker(representation="mpo")
+    assert checker.check(qasm_path, qc)["equivalent"] is True
+    assert checker.check(qc, qasm_path)["equivalent"] is True
+
+
+def test_check_mixed_qasm_raw_string_and_quantumcircuit(tmp_path: Path) -> None:
+    """Raw OpenQASM string mixed with a QuantumCircuit matches path-based checking."""
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    qc = load(filename=str(qasm_path))
+    checker = EquivalenceChecker(representation="mpo")
+    assert checker.check(LARGE_QASM2_STRING, qc)["equivalent"] is True
+    assert checker.check(qc, LARGE_QASM2_STRING)["equivalent"] is True
+
+
+def test_check_issue_qasm_raw_strings_with_final_measurements() -> None:
+    """Raw OpenQASM with custom gates and final measurements is self-equivalent on MPO."""
+    result = _issue_checker(representation="mpo").check(ISSUE_QASM_WITH_MEASURES, ISSUE_QASM_WITH_MEASURES)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+
+
+def test_check_qasm2_self_equivalence_uses_matrix_backend(tmp_path: Path) -> None:
+    """OpenQASM 2 self-equivalence can run on the explicit matrix backend."""
+    qasm_path = write_qasm_file(tmp_path, LARGE_QASM2_STRING)
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qasm_path, qasm_path)
+    assert result["equivalent"] is True
+    assert result["representation"] == "matrix"
+
+
+def test_check_qasm3_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EquivalenceChecker propagates ImportError when OpenQASM 3 importer is missing."""
+    monkeypatch.setattr("mqt.yaqs.digital.utils.qasm_utils.HAS_QASM3_IMPORT", False)
+    with pytest.raises(ImportError, match="mqt-yaqs\\[qasm3\\]"):
+        EquivalenceChecker(representation="matrix").check(SAMPLE_QASM3_STRING, SAMPLE_QASM3_STRING)

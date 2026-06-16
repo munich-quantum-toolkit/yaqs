@@ -122,7 +122,9 @@ attribute.
 ### OpenQASM 2 custom gates
 
 OpenQASM 2 lets you declare reusable gate bodies (fixed or parameterized) and call them like
-built-in instructions. Load a program with `qiskit.qasm2.loads` or `load`; Qiskit produces a
+built-in instructions. Pass a file path or raw OpenQASM string directly to
+{meth}`~mqt.yaqs.EquivalenceChecker.check` or {meth}`~mqt.yaqs.Simulator.run`, or load with
+`qiskit.qasm2.loads` / `load` first. Qiskit produces a
 {class}`qiskit.circuit.QuantumCircuit` whose operations retain the **user-defined gate names**.
 
 YAQS does not maintain a separate registry of QASM gate definitions. Each DAG node is translated
@@ -132,7 +134,9 @@ matrix-backed gate from Qiskit's unitary representation (matrix fallback). You d
 inline or transpile custom gates to a fixed basis set before simulation or equivalence checking.
 
 ```python
-from qiskit.qasm2 import loads
+from mqt.yaqs import EquivalenceChecker, Simulator
+from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
+from mqt.yaqs.core.data_structures.state import State
 
 qasm = """
 OPENQASM 2.0;
@@ -146,7 +150,12 @@ gate entangle a,b {
 qreg q[2];
 entangle q[0], q[1];
 """
-qc = loads(qasm)
+
+checker = EquivalenceChecker(representation="mpo")
+checker.check(qasm, qasm)
+
+state = State(2, initial="zeros")
+Simulator(show_progress=False).run(state, qasm, WeakSimParams(shots=128, max_bond_dim=4))
 ```
 
 The same rules apply to **legacy or backend-specific Qiskit gate names** that are not in the

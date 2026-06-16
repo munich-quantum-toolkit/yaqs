@@ -20,6 +20,10 @@ in the $\ket{0}$ state (MPS representation), a noise model is applied, and weak 
 After running the simulation, the measurement results (bitstring counts) are displayed
 as a bar chart.
 
+You can pass an OpenQASM file path or raw OpenQASM string to
+{meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit`
+in Python (OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`).
+
 Create the circuit
 
 ```{code-cell} ipython3

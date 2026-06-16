@@ -124,13 +124,17 @@ if TYPE_CHECKING:
 
     from .core.data_structures.noise_model import NoiseModel
 
+from pathlib import Path
+
 from .analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from .analog.ensemble import ensemble_member_worker
 from .analog.lindblad import lindblad_evolve, preprocess_lindblad
 from .analog.mcwf import mcwf, preprocess_mcwf
 from .digital.digital_tjm import digital_tjm
+from .digital.utils.qasm_utils import load_circuit
 
 __all__ = ["Simulator", "available_cpus", "run_backend_parallel"]
+
 
 # ---------------------------------------------------------------------------
 # 4) TYPE VARS FOR GENERIC PARALLEL RUNNERS
@@ -630,7 +634,7 @@ class Simulator:
     def run(
         self,
         initial_state: State | list[State],
-        operator: Hamiltonian | QuantumCircuit,
+        operator: Hamiltonian | QuantumCircuit | str | Path,
         sim_params: AnalogSimParams | StrongSimParams | WeakSimParams,
         noise_model: NoiseModel | None = None,
     ) -> Result:
@@ -648,7 +652,8 @@ class Simulator:
                 or a list of states for deterministic analog unitary ensemble evolution
                 (``AnalogSimParams`` only).
             operator: :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` for analog
-                simulations or a :class:`~qiskit.circuit.QuantumCircuit` for circuit simulations.
+                simulations, or a :class:`~qiskit.circuit.QuantumCircuit`, raw QASM ``str``, or
+                ``Path`` to a ``.qasm`` file for circuit simulations.
             sim_params: Simulation parameters specifying the simulation mode and settings.
             noise_model: The noise model to apply. If provided, it is sampled once at the
                 beginning of the run to generate a concrete noise realization (static disorder).
@@ -664,6 +669,9 @@ class Simulator:
             TypeError: If the provided ``initial_state`` type is incompatible with the
                 selected simulation mode.
         """
+        if not isinstance(sim_params, AnalogSimParams) and isinstance(operator, (str, Path)):
+            operator = load_circuit(operator)
+
         if isinstance(initial_state, list) and any(not isinstance(state, State) for state in initial_state):
             msg = "initial_state list must contain only State objects."
             raise TypeError(msg)

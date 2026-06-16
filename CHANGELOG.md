@@ -11,8 +11,8 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- OpenQASM2 and 3 files can now be read directly by the Simulator and EquivalenceChecker ([#464]) ([**@Marerido**])
 - improved Qiskit gate compatibility with matrix fallback ([#464]) ([**@aaronleesander**])
-
 - added MPO zip-up as default long-range gate application method ([#449]) ([**@aaronleesander**])
 - parallelized MPO equivalence checker ([#448]) ([**@aaronleesander**])
 - added tebd/hybrid/tdvp options for circuit simulation ([#441]) ([**@aaronleesander**])
@@ -135,6 +135,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#450]: https://github.com/munich-quantum-toolkit/yaqs/pull/450
 [#464]: https://github.com/munich-quantum-toolkit/yaqs/pull/464
 [#458]: https://github.com/munich-quantum-toolkit/yaqs/pull/458
 [#457]: https://github.com/munich-quantum-toolkit/yaqs/pull/457
@@ -190,6 +191,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@Gauthameshwar**]: https://github.com/Gauthameshwar
 [**@thilomueller**]: https://github.com/thilomueller
 [**@lucello**]: https://github.com/lucello
+[**@Marerido**]: https://github.com/Marerido
 
 <!-- General links -->
 

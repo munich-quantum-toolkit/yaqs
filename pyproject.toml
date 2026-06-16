@@ -53,6 +53,9 @@ dependencies = [
     "numba>=0.63.0; python_version >= '3.14'",
 ]
 
+[project.optional-dependencies]
+qasm3 = ["qiskit-qasm3-import>=0.4.1"]
+
 [project.urls]
 Homepage = "https://github.com/munich-quantum-toolkit/yaqs"
 Documentation = "https://mqt.readthedocs.io/projects/yaqs"
@@ -189,6 +192,7 @@ test = [
     "pytest-cov>=7.0.0",
     "pytest-sugar>=1.1.1",
     "pytest-xdist>=3.8.0",
+    "qiskit-qasm3-import>=0.4.1",
 ]
 docs = [
     "furo>=2025.09.25",

@@ -24,8 +24,11 @@ from qiskit.converters import circuit_to_dag
 from .core.data_structures.mpo import MPO
 from .digital.utils.contraction_utils import iterate
 from .digital.utils.matrix_utils import check_matrix_equivalence, strip_final_measurements
+from .digital.utils.qasm_utils import load_circuit
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from qiskit.circuit import QuantumCircuit
 
     from .parallel_utils import MPContext
@@ -167,8 +170,8 @@ class EquivalenceChecker:
 
     def check(
         self,
-        circuit1: QuantumCircuit,
-        circuit2: QuantumCircuit,
+        circuit1: QuantumCircuit | str | Path,
+        circuit2: QuantumCircuit | str | Path,
     ) -> dict[str, bool | float | str]:
         """Check whether two quantum circuits are equivalent.
 
@@ -176,8 +179,13 @@ class EquivalenceChecker:
         operator ``U2† U1`` approximates the identity.
 
         Args:
-            circuit1: First quantum circuit.
+            circuit1: First quantum circuit. Accepts a :class:`~qiskit.circuit.QuantumCircuit`,
+                a ``Path`` to an OpenQASM file, or a ``str`` — either a filesystem path or raw
+                OpenQASM 2/3 source (when the first substantive line declares ``OPENQASM``).
+                Prefer file paths when the program uses ``include`` directives. OpenQASM 3
+                requires ``pip install mqt-yaqs[qasm3]``.
             circuit2: Second quantum circuit (must have the same number of qubits).
+                Accepts the same types as ``circuit1``.
 
         Returns:
             dict[str, bool | float | str]: ``equivalent`` (bool), ``elapsed_time`` (float, seconds),
@@ -186,6 +194,9 @@ class EquivalenceChecker:
         Raises:
             ValueError: If the circuits have different numbers of qubits or contain mid-circuit measurements.
         """
+        circuit1 = load_circuit(circuit1)
+        circuit2 = load_circuit(circuit2)
+
         if circuit1.num_qubits != circuit2.num_qubits:
             msg = "Circuits must have the same number of qubits."
             raise ValueError(msg)

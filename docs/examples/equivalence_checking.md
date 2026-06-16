@@ -104,6 +104,26 @@ auto_checker = EquivalenceChecker(representation="auto")
 print(f"Auto matrix cutover: {DEFAULT_MATRIX_MAX_QUBITS} qubits")
 ```
 
+## Loading from OpenQASM
+
+{meth}`~mqt.yaqs.EquivalenceChecker.check` accepts OpenQASM 2 and OpenQASM 3 inputs directly —
+no need to call Qiskit's loaders first. Pass a filesystem path, a `pathlib.Path`, or a raw
+OpenQASM string (when the first substantive line declares `OPENQASM`):
+
+```python
+checker = EquivalenceChecker(representation="mpo")
+
+# File paths (preferred when the program uses include directives)
+result = checker.check("original.qasm", "transpiled.qasm")
+
+# Raw source strings
+result = checker.check(qasm_source_a, qasm_source_b)
+```
+
+OpenQASM 3 requires the optional package `qiskit-qasm3-import`
+(`pip install mqt-yaqs[qasm3]`). The same path and string forms work with
+{meth}`~mqt.yaqs.Simulator.run` for circuit simulation.
+
 ## Example: compare original and transpiled circuits
 
 The workflow below builds a parameterized circuit, transpiles it to another gate set, and
