@@ -24,6 +24,7 @@ from qiskit.converters import circuit_to_dag
 from .core.data_structures.mpo import MPO
 from .digital.utils.contraction_utils import iterate
 from .digital.utils.matrix_utils import check_matrix_equivalence, strip_final_measurements
+from .digital.utils.qasm_utils import load_circuit
 
 if TYPE_CHECKING:
     from pathlib import Path
