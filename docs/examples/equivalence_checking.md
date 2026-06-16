@@ -63,11 +63,16 @@ are not supported for unitary equivalence on either backend. See
 
 `check` returns a dictionary:
 
-| Key              | Type    | Meaning                                     |
-| ---------------- | ------- | ------------------------------------------- |
-| `equivalent`     | `bool`  | Whether the circuits pass the identity test |
-| `elapsed_time`   | `float` | Wall time in seconds                        |
-| `representation` | `str`   | `"matrix"` or `"mpo"` — which backend ran   |
+| Key                              | Type              | Meaning                                                                 |
+| -------------------------------- | ----------------- | ----------------------------------------------------------------------- |
+| `equivalent`                     | `bool`            | Whether the circuits pass the identity test                             |
+| `fidelity`                       | `float`           | Measured normalized overlap of $W=U_2^\dagger U_1$ with the identity   |
+| `elapsed_time`                   | `float`           | Wall time in seconds                                                    |
+| `representation`                 | `str`             | `"matrix"` or `"mpo"` — which backend ran                               |
+| `mpo`                            | `MPO` or `None`   | Composed operator on the MPO backend; `None` on matrix                  |
+| `schmidt_values`                 | `ndarray` or `None` | Center-cut operator Schmidt values (`length // 2`); MPO backend only |
+| `center_cut_entanglement_entropy`| `float` or `None` | Operator entanglement entropy at `length // 2`; MPO backend only      |
+| `global_entanglement_entropy`    | `float` or `None` | Sum of operator entanglement entropies over internal bonds; MPO only  |
 
 ## Parameters
 

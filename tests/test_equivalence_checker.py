@@ -601,3 +601,72 @@ def test_check_qasm3_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("mqt.yaqs.digital.utils.qasm_utils.HAS_QASM3_IMPORT", False)
     with pytest.raises(ImportError, match="mqt-yaqs\\[qasm3\\]"):
         EquivalenceChecker(representation="matrix").check(SAMPLE_QASM3_STRING, SAMPLE_QASM3_STRING)
+
+
+def test_check_mpo_path_returns_operator_diagnostics() -> None:
+    """MPO backend returns composed-operator diagnostics and measured fidelity."""
+    qc1 = QuantumCircuit(2)
+    qc1.h(0)
+    qc1.cx(0, 1)
+    qc2 = qc1.copy()
+
+    result = EquivalenceChecker(representation="mpo").check(qc1, qc2)
+
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+    assert isinstance(result["fidelity"], float)
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-10)
+
+    mpo = result["mpo"]
+    assert mpo is not None
+    assert mpo.length == 2
+
+    schmidt = result["schmidt_values"]
+    assert schmidt is not None
+    assert schmidt.ndim == 1
+    assert schmidt.dtype == np.float64
+
+    center_entropy = result["center_cut_entanglement_entropy"]
+    global_entropy = result["global_entanglement_entropy"]
+    assert center_entropy is not None
+    assert global_entropy is not None
+    assert float(center_entropy) >= 0.0
+    assert float(global_entropy) >= 0.0
+    assert float(center_entropy) == pytest.approx(0.0, abs=1e-10)
+
+
+def test_check_matrix_path_returns_fidelity_only_diagnostics() -> None:
+    """Matrix backend returns measured fidelity and leaves MPO diagnostics unset."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+
+    result = EquivalenceChecker(representation="matrix").check(qc, qc)
+
+    assert result["representation"] == "matrix"
+    assert isinstance(result["fidelity"], float)
+    assert float(result["fidelity"]) == pytest.approx(1.0, abs=1e-10)
+    assert result["mpo"] is None
+    assert result["schmidt_values"] is None
+    assert result["center_cut_entanglement_entropy"] is None
+    assert result["global_entanglement_entropy"] is None
+
+
+def test_check_non_equivalent_pair_still_returns_diagnostics() -> None:
+    """Diagnostics describe the composed operator even when circuits differ."""
+    qc1 = QuantumCircuit(2)
+    qc1.h(0)
+    qc1.cx(0, 1)
+
+    qc2 = QuantumCircuit(2)
+    qc2.h(0)
+    qc2.cx(0, 1)
+    qc2.x(1)
+
+    result = EquivalenceChecker(representation="mpo").check(qc1, qc2)
+
+    assert result["equivalent"] is False
+    assert float(result["fidelity"]) < 1.0
+    assert result["mpo"] is not None
+    assert result["schmidt_values"] is not None
+    assert result["center_cut_entanglement_entropy"] is not None
+    assert result["global_entanglement_entropy"] is not None

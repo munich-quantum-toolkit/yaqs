@@ -17,8 +17,6 @@ import numpy as np
 import opt_einsum as oe
 import scipy.sparse
 from numpy.typing import NDArray
-from scipy import linalg as scipy_linalg
-
 from .. import linalg
 from ..libraries.gate_library import BaseGate, Destroy
 from .mpo_utils import (
@@ -69,7 +67,8 @@ class MPO:
     **Conversion / checks**
 
     - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix.
-    - ``schmidt_values()`` / ``operator_entanglement_entropy()``: bond-spectrum diagnostics.
+    - ``compute_schmidt_spectrum()`` / ``compute_entanglement_entropy()``: operator bond diagnostics.
+    - ``compute_identity_fidelity()``: normalized overlap with the identity.
     - ``check_if_valid_mpo()``: structural bond-dimension consistency check.
     - ``check_if_identity(...)``: heuristic identity check (qubit systems).
 
@@ -1185,28 +1184,11 @@ class MPO:
 
         return MPS(self.length, converted_tensors)
 
-    def _full_schmidt_values_for_bond(
-        self,
-        sites: list[int],
-        decomposition: str = "QR",
-    ) -> NDArray[np.float64]:
-        """Return the complete operator Schmidt values across a nearest-neighbor bond.
-
-        Returns:
-            Singular values for the requested bond.
-
-        Raises:
-            ValueError: If ``decomposition`` is unsupported.
-        """
-        assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
+    def _compute_bond_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
+        """Return operator Schmidt singular values across a nearest-neighbor bond."""
         i, j = sites
-        assert i + 1 == j, "Schmidt spectrum is only defined for nearest-neighbor cut."
-        if decomposition not in {"QR", "SVD"}:
-            msg = f"Unsupported decomposition: {decomposition!r}"
-            raise ValueError(msg)
-
         mps = self.to_mps()
-        mps.set_canonical_form(orthogonality_center=j, decomposition=decomposition)
+        mps.set_canonical_form(orthogonality_center=j, decomposition="QR")
 
         a, b = mps.tensors[i], mps.tensors[j]
         theta = np.tensordot(a, b, axes=(2, 1))
@@ -1214,615 +1196,89 @@ class MPO:
         if theta_matrix.size == 0:
             return np.array([], dtype=np.float64)
 
-        return self._svd_values_with_fallback(
+        singular_values = np.linalg.svd(
             np.asarray(theta_matrix, dtype=np.complex128),
-            stage=f"MPO._full_schmidt_values_for_bond sites={sites}",
-        )
-
-    def _full_schmidt_values_for_cut(
-        self,
-        cut: str | int = "center",
-        decomposition: str = "QR",
-    ) -> NDArray[np.float64]:
-        """Return the complete operator Schmidt values across a spatial cut."""
-        cut_index = self._resolve_cut_index(cut=cut, length=len(self.tensors))
-        if cut_index in {0, len(self.tensors)}:
-            fro_norm = float(np.linalg.norm(np.asarray(self.to_matrix(), dtype=np.complex128), ord="fro"))
-            return np.array([fro_norm], dtype=np.float64)
-
-        singular_values = self._full_schmidt_values_for_bond(
-            [cut_index - 1, cut_index],
-            decomposition=decomposition,
+            compute_uv=False,
+            full_matrices=False,
         )
         return np.asarray(singular_values, dtype=np.float64)
 
-    def get_entropy(self, sites: list[int], decomposition: str = "QR") -> np.float64:
-        """Return the operator entanglement entropy across a nearest-neighbor MPO bond."""
-        assert len(sites) == 2, "Entropy is defined on a bond (two adjacent sites)."
-        i, j = sites
-        assert i + 1 == j, "Entropy is only defined for nearest-neighbor cut."
+    def compute_schmidt_spectrum(self, cut: int) -> NDArray[np.float64]:
+        """Compute operator Schmidt singular values across an integer bond cut.
 
-        singular_values = self._full_schmidt_values_for_bond(sites, decomposition=decomposition)
-        if singular_values.size == 0:
-            return np.float64(0.0)
-
-        return np.float64(self.entropy_from_schmidt_values(singular_values))
-
-    def get_schmidt_spectrum(self, sites: list[int], decomposition: str = "QR") -> NDArray[np.float64]:
-        """Return the operator Schmidt spectrum across a nearest-neighbor MPO bond."""
-        assert len(sites) == 2, "Schmidt spectrum is defined on a bond (two adjacent sites)."
-        i, j = sites
-        assert i + 1 == j, "Schmidt spectrum is only defined for nearest-neighbor cut."
-
-        singular_values = self._full_schmidt_values_for_bond(sites, decomposition=decomposition)
-
-        top_schmidt_vals = 500
-        padded = np.full(top_schmidt_vals, np.nan, dtype=np.float64)
-        padded[: min(top_schmidt_vals, singular_values.size)] = singular_values[:top_schmidt_vals]
-        return padded
-
-    @staticmethod
-    def _resolve_cut_index(cut: str | int, length: int) -> int:
-        """Resolve a cut specifier to a valid integer cut index.
+        Args:
+            cut: Bond cut index in ``[0, length]``. Internal cuts use bond ``(cut - 1, cut)``;
+                boundary cuts ``0`` and ``length`` return the operator Frobenius norm.
 
         Returns:
-            Integer cut index in ``[0, length]``.
+            One-dimensional array of singular values.
 
         Raises:
-            ValueError: If ``cut`` is invalid or out of range.
+            ValueError: If ``cut`` is not a valid integer cut index.
         """
-        if cut == "center":
-            cut_index = length // 2
-        elif isinstance(cut, int) and not isinstance(cut, bool):
-            cut_index = cut
-        else:
-            msg = f"cut must be 'center' or int, got {cut!r}"
+        if isinstance(cut, bool) or not isinstance(cut, int):
+            msg = f"cut must be int, got {cut!r}"
             raise ValueError(msg)
-
-        if cut_index < 0 or cut_index > length:
-            msg = f"cut out of range: {cut_index} for length={length}"
+        if cut < 0 or cut > self.length:
+            msg = f"cut out of range: {cut} for length={self.length}"
             raise ValueError(msg)
-        return cut_index
+        if cut in {0, self.length}:
+            fro_norm = float(np.linalg.norm(np.asarray(self.to_matrix(), dtype=np.complex128), ord="fro"))
+            return np.array([fro_norm], dtype=np.float64)
 
-    @staticmethod
-    def _array_norm(array: NDArray[np.complex128] | NDArray[np.float64]) -> float:
-        """Return a stable norm summary for diagnostics and validation."""
-        arr = np.asarray(array)
-        if arr.ndim == 0:
-            return float(abs(arr))
-        if arr.ndim == 2:
-            return float(np.linalg.norm(arr, ord="fro"))
-        return float(np.linalg.norm(arr.reshape(-1)))
+        return self._compute_bond_schmidt_spectrum([cut - 1, cut])
 
-    @classmethod
-    def _validate_numeric_array(
-        cls,
-        array: NDArray[np.complex128] | NDArray[np.float64],
-        *,
-        stage: str,
-        ndim: int | None = None,
-        expected_shape: tuple[int, ...] | None = None,
-        dtype: type[np.complex128 | np.float64] = np.complex128,
-    ) -> NDArray[np.complex128] | NDArray[np.float64]:
-        """Validate numerical arrays before dense reshapes or decompositions.
+    def compute_entanglement_entropy(self, cut: int, *, base: float = math.e) -> float:
+        """Compute operator entanglement entropy across an integer bond cut.
+
+        Args:
+            cut: Bond cut index passed to :meth:`compute_schmidt_spectrum`.
+            base: Logarithm base for the entropy (default natural log).
 
         Returns:
-            Validated array cast to ``dtype``.
+            Von Neumann entropy of the normalized Schmidt spectrum.
 
         Raises:
-            ValueError: If shape, dimensionality, finiteness, or norm validation fails.
-        """
-        arr = np.asarray(array, dtype=dtype)
-        if ndim is not None and arr.ndim != int(ndim):
-            msg = f"Expected {stage} to have ndim={int(ndim)}, got shape={arr.shape}, dtype={arr.dtype}"
-            raise ValueError(msg)
-        if expected_shape is not None and arr.shape != expected_shape:
-            msg = f"Expected {stage} to have shape={expected_shape}, got shape={arr.shape}, dtype={arr.dtype}"
-            raise ValueError(msg)
-        finite_mask = np.isfinite(arr)
-        if not np.all(finite_mask):
-            nonfinite_count = int(arr.size - np.count_nonzero(finite_mask))
-            msg = (
-                f"Non-finite values detected at {stage}: shape={arr.shape}, dtype={arr.dtype}, "
-                f"nonfinite_count={nonfinite_count}"
-            )
-            raise ValueError(msg)
-        norm_value = cls._array_norm(arr)
-        if not np.isfinite(norm_value):
-            msg = f"Invalid norm detected at {stage}: shape={arr.shape}, dtype={arr.dtype}, norm={norm_value!r}"
-            raise ValueError(msg)
-        return arr
-
-    @classmethod
-    def _validated_dense_channel_matrix(
-        cls,
-        channel_dense: NDArray[np.complex128],
-        *,
-        n_sites: int,
-        local_dim: int,
-        stage: str,
-    ) -> NDArray[np.complex128]:
-        expected_dim = int(local_dim) ** int(n_sites)
-        channel = cls._validate_numeric_array(
-            channel_dense,
-            stage=stage,
-            ndim=2,
-            expected_shape=(expected_dim, expected_dim),
-            dtype=np.complex128,
-        )
-        return np.asarray(channel, dtype=np.complex128)
-
-    @classmethod
-    def _svd_values_with_fallback(
-        cls,
-        matrix: NDArray[np.complex128],
-        *,
-        stage: str,
-    ) -> NDArray[np.float64]:
-        """Compute singular values with a SciPy fallback on convergence failure.
-
-        Returns:
-            One-dimensional singular-value array.
-
-        Raises:
-            RuntimeError: If both SVD backends fail.
-        """
-        validated = np.asarray(
-            cls._validate_numeric_array(matrix, stage=stage, ndim=2, dtype=np.complex128),
-            dtype=np.complex128,
-        )
-        try:
-            singular_values = np.linalg.svd(validated, compute_uv=False, full_matrices=False)
-        except np.linalg.LinAlgError:
-            try:
-                singular_values = scipy_linalg.svd(
-                    validated,
-                    compute_uv=False,
-                    full_matrices=False,
-                    check_finite=True,
-                    lapack_driver="gesvd",
-                )
-            except Exception as fallback_exc:
-                norm_value = cls._array_norm(validated)
-                msg = f"SVD failed at {stage}: shape={validated.shape}, dtype={validated.dtype}, norm={norm_value!r}"
-                raise RuntimeError(msg) from fallback_exc
-        svals = np.asarray(singular_values, dtype=np.float64)
-        cls._validate_numeric_array(svals, stage=f"{stage} singular_values", ndim=1, dtype=np.float64)
-        return svals
-
-    @classmethod
-    def _svd_with_fallback(
-        cls,
-        matrix: NDArray[np.complex128],
-        *,
-        stage: str,
-    ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
-        """Compute a full SVD with a SciPy fallback on convergence failure.
-
-        Returns:
-            Tuple ``(U, S, Vh)`` from the decomposition.
-
-        Raises:
-            RuntimeError: If both SVD backends fail.
-        """
-        validated = np.asarray(
-            cls._validate_numeric_array(matrix, stage=stage, ndim=2, dtype=np.complex128),
-            dtype=np.complex128,
-        )
-        try:
-            u_mat, s_vals, vh_mat = np.linalg.svd(validated, full_matrices=False)
-        except np.linalg.LinAlgError:
-            try:
-                u_mat, s_vals, vh_mat = scipy_linalg.svd(
-                    validated,
-                    full_matrices=False,
-                    check_finite=True,
-                    lapack_driver="gesvd",
-                )
-            except Exception as fallback_exc:
-                norm_value = cls._array_norm(validated)
-                msg = f"SVD failed at {stage}: shape={validated.shape}, dtype={validated.dtype}, norm={norm_value!r}"
-                raise RuntimeError(msg) from fallback_exc
-        u_valid = np.asarray(
-            cls._validate_numeric_array(u_mat, stage=f"{stage} left_vectors", ndim=2, dtype=np.complex128),
-            dtype=np.complex128,
-        )
-        s_valid = np.asarray(
-            cls._validate_numeric_array(s_vals, stage=f"{stage} singular_values", ndim=1, dtype=np.float64),
-            dtype=np.float64,
-        )
-        vh_valid = np.asarray(
-            cls._validate_numeric_array(vh_mat, stage=f"{stage} right_vectors", ndim=2, dtype=np.complex128),
-            dtype=np.complex128,
-        )
-        return u_valid, s_valid, vh_valid
-
-    @staticmethod
-    def entropy_from_probabilities(probabilities: NDArray[np.float64], *, base: float = math.e) -> float:
-        """Compute entropy from a normalized probability vector.
-
-        Returns:
-            Entropy in the requested logarithm base.
-
-        Raises:
-            ValueError: If ``base`` or probabilities are invalid.
-            RuntimeError: If probability normalization or the entropy is invalid.
+            ValueError: If ``cut`` or ``base`` is invalid.
         """
         base_float = float(base)
         if not np.isfinite(base_float) or base_float <= 0.0 or math.isclose(base_float, 1.0):
             msg = f"Entropy base must be finite, >0, and !=1; got {base!r}"
             raise ValueError(msg)
 
-        probs = np.array(probabilities, dtype=np.float64, copy=True).reshape(-1)
-        if probs.size == 0:
+        schmidt_values = self.compute_schmidt_spectrum(cut)
+        if schmidt_values.size == 0:
             return 0.0
-        if not np.all(np.isfinite(probs)):
-            msg = f"Non-finite probabilities encountered while computing entropy: shape={probs.shape}"
-            raise ValueError(msg)
-        if np.any(probs < 0.0):
-            min_probability = float(np.min(probs))
-            msg = f"Negative probabilities encountered while computing entropy: min={min_probability!r}"
-            raise ValueError(msg)
 
-        normalization = float(np.sum(probs, dtype=np.float64))
-        if not np.isfinite(normalization) or normalization <= 0.0:
-            msg = f"Invalid probability normalization while computing entropy: sum={normalization!r}"
-            raise RuntimeError(msg)
+        max_schmidt = float(np.max(np.abs(schmidt_values)))
+        if not np.isfinite(max_schmidt) or max_schmidt <= 0.0:
+            return 0.0
 
-        probs = np.divide(probs, normalization)
-        nonzero = probs > np.finfo(np.float64).tiny
-        entropy = -np.sum(probs[nonzero] * np.log(probs[nonzero]), dtype=np.float64) / math.log(base_float)
-        if not np.isfinite(entropy):
-            msg = f"Invalid entropy computed from probabilities: entropy={entropy!r}"
-            raise RuntimeError(msg)
+        probabilities = np.square(schmidt_values / max_schmidt)
+        normalization = float(np.sum(probabilities, dtype=np.float64))
+        if normalization <= 0.0:
+            return 0.0
+        probabilities = probabilities / normalization
+
+        eps = np.finfo(np.float64).tiny
+        nonzero = probabilities > eps
+        entropy = -np.sum(probabilities[nonzero] * np.log(probabilities[nonzero]), dtype=np.float64) / math.log(
+            base_float
+        )
         return float(max(entropy, 0.0))
 
-    @classmethod
-    def entropy_from_schmidt_values(
-        cls,
-        schmidt_values: NDArray[np.float64],
-        *,
-        base: float = math.e,
-    ) -> float:
-        """Compute entropy directly from Schmidt values.
+    def compute_identity_fidelity(self) -> float:
+        """Compute normalized overlap of this MPO with the identity operator.
 
         Returns:
-            Entropy of the normalized Schmidt spectrum.
+            ``|Tr(O)| / d`` where ``d`` is the Hilbert-space dimension.
         """
-        probabilities = cls.normalized_schmidt_probabilities(schmidt_values)
-        return cls.entropy_from_probabilities(probabilities, base=base)
-
-    def _dense_fused_site_schmidt_matrix(self, cut: str | int = "center") -> NDArray[np.complex128]:
-        """Build the exact dense Schmidt matrix across a spatial cut.
-
-        Returns:
-            Dense Schmidt matrix for the requested cut.
-
-        Raises:
-            ValueError: If the MPO has no tensors or ``cut`` is invalid.
-            RuntimeError: If the dense operator shape is inconsistent.
-        """
-        tensors_raw = [np.asarray(tensor, dtype=np.complex128) for tensor in self.tensors]
-        if not tensors_raw:
-            msg = "MPO has no tensors."
-            raise ValueError(msg)
-
-        cut_index = self._resolve_cut_index(cut=cut, length=len(tensors_raw))
-        out_dims = [int(tensor.shape[0]) for tensor in tensors_raw]
-        in_dims = [int(tensor.shape[1]) for tensor in tensors_raw]
-        dense_operator = np.asarray(self.to_matrix(), dtype=np.complex128)
-        expected_shape = (math.prod(out_dims), math.prod(in_dims))
-        if dense_operator.shape != expected_shape:
-            msg = (
-                "Dense MPO matrix shape does not match the product of local legs: "
-                f"{dense_operator.shape} vs {expected_shape}"
-            )
-            raise RuntimeError(msg)
-
-        dense_tensor = np.reshape(dense_operator, (*out_dims, *in_dims))
-        interleaved_axes: list[int] = []
-        num_sites = len(tensors_raw)
-        for site_index in range(num_sites):
-            interleaved_axes.extend([site_index, num_sites + site_index])
-        fused_tensor = np.transpose(dense_tensor, axes=interleaved_axes)
-
-        left_dim = math.prod(out_dims[:cut_index]) * math.prod(in_dims[:cut_index])
-        right_dim = math.prod(out_dims[cut_index:]) * math.prod(in_dims[cut_index:])
-        return np.reshape(fused_tensor, (left_dim, right_dim))
-
-    @staticmethod
-    def normalized_schmidt_probabilities(schmidt_values: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Normalize Schmidt values into probabilities.
-
-        Returns:
-            Normalized probability vector.
-
-        Raises:
-            ValueError: If Schmidt values or probabilities are non-finite.
-        """
-        svals = np.asarray(schmidt_values, dtype=np.float64).reshape(-1)
-        if svals.size == 0:
-            return np.array([1.0], dtype=np.float64)
-        if not np.all(np.isfinite(svals)):
-            msg = f"Non-finite Schmidt values encountered: shape={svals.shape}"
-            raise ValueError(msg)
-
-        max_schmidt = float(np.max(np.abs(svals)))
-        if not np.isfinite(max_schmidt) or max_schmidt <= 0.0:
-            return np.array([1.0], dtype=np.float64)
-
-        probabilities = np.square(svals / max_schmidt)
-        if not np.all(np.isfinite(probabilities)):
-            msg = f"Non-finite Schmidt probabilities encountered: shape={probabilities.shape}"
-            raise ValueError(msg)
-        normalization = float(np.sum(probabilities, dtype=np.float64))
-        if not np.isfinite(normalization) or normalization <= 0.0:
-            return np.array([1.0], dtype=np.float64)
-        return np.asarray(probabilities / normalization, dtype=np.float64)
-
-    @staticmethod
-    def weighted_spectrum_distance(
-        probabilities: NDArray[np.float64],
-        reference: NDArray[np.float64],
-    ) -> float:
-        """Return the normalized weighted L1 Schmidt-spectrum distance.
-
-        Raises:
-            ValueError: If either spectrum contains non-finite values.
-        """
-        lhs = np.asarray(probabilities, dtype=np.float64).reshape(-1)
-        rhs = np.asarray(reference, dtype=np.float64).reshape(-1)
-        if not np.all(np.isfinite(lhs)) or not np.all(np.isfinite(rhs)):
-            msg = (
-                "Weighted spectrum distance requires finite probabilities: "
-                f"lhs_finite={bool(np.all(np.isfinite(lhs)))}, rhs_finite={bool(np.all(np.isfinite(rhs)))}"
-            )
-            raise ValueError(msg)
-        size = max(int(lhs.size), int(rhs.size), 1)
-        lhs_pad = np.zeros(size, dtype=np.float64)
-        rhs_pad = np.zeros(size, dtype=np.float64)
-        lhs_pad[: lhs.size] = lhs
-        rhs_pad[: rhs.size] = rhs
-        weights = 1.0 / (1.0 + np.arange(size, dtype=np.float64))
-        return float(np.sum(weights * np.abs(lhs_pad - rhs_pad), dtype=np.float64) / np.sum(weights, dtype=np.float64))
-
-    @classmethod
-    def dense_channel_to_tensors(
-        cls,
-        channel_dense: NDArray[np.complex128],
-        *,
-        n_sites: int,
-        local_dim: int = 4,
-        svd_cutoff: float = 1e-12,
-    ) -> list[NDArray[np.complex128]]:
-        """Decompose a dense channel matrix into MPO tensors.
-
-        Returns:
-            MPO tensors in YAQS storage order.
-        """
-        channel = cls._validated_dense_channel_matrix(
-            channel_dense,
-            n_sites=n_sites,
-            local_dim=local_dim,
-            stage="dense_channel_to_tensors input",
-        )
-
-        tensor = channel.reshape([int(local_dim)] * (2 * int(n_sites)))
-        interleaved_axes: list[int] = []
-        for site_index in range(int(n_sites)):
-            interleaved_axes.extend((site_index, site_index + int(n_sites)))
-        remainder = np.transpose(tensor, interleaved_axes)
-
-        tensors: list[NDArray[np.complex128]] = []
-        chi_left = 1
-        cutoff = float(svd_cutoff)
-        for site_index in range(int(n_sites) - 1):
-            remainder = np.reshape(remainder, (chi_left * int(local_dim) * int(local_dim), -1))
-            remainder = np.asarray(
-                cls._validate_numeric_array(
-                    remainder,
-                    stage=f"dense_channel_to_tensors remainder site={site_index}",
-                    ndim=2,
-                    dtype=np.complex128,
-                ),
-                dtype=np.complex128,
-            )
-            u_mat, s_vals, vh_mat = cls._svd_with_fallback(
-                remainder,
-                stage=f"dense_channel_to_tensors SVD site={site_index}",
-            )
-            keep = max(1, int(np.count_nonzero(np.asarray(s_vals) > cutoff)))
-            u_keep = np.asarray(u_mat[:, :keep], dtype=np.complex128)
-            s_keep = np.asarray(s_vals[:keep], dtype=np.float64)
-            vh_keep = np.asarray(vh_mat[:keep, :], dtype=np.complex128)
-            site_tensor = u_keep.reshape(chi_left, int(local_dim), int(local_dim), keep)
-            tensors.append(np.transpose(site_tensor, (1, 2, 0, 3)).copy())
-            remainder = np.diag(np.asarray(s_keep, dtype=np.complex128)) @ vh_keep
-            remainder = np.asarray(
-                cls._validate_numeric_array(
-                    remainder,
-                    stage=f"dense_channel_to_tensors propagated_remainder site={site_index}",
-                    ndim=2,
-                    dtype=np.complex128,
-                ),
-                dtype=np.complex128,
-            )
-            chi_left = keep
-
-        last_tensor = remainder.reshape(chi_left, int(local_dim), int(local_dim), 1)
-        tensors.append(np.transpose(last_tensor, (1, 2, 0, 3)).copy())
-        return tensors
-
-    @classmethod
-    def from_dense_channel(
-        cls,
-        channel_dense: NDArray[np.complex128],
-        *,
-        n_sites: int,
-        local_dim: int = 4,
-        svd_cutoff: float = 1e-12,
-    ) -> MPO:
-        """Construct an MPO from a dense channel matrix.
-
-        Returns:
-            MPO whose dense matrix reconstructs ``channel_dense``.
-        """
-        tensors = cls.dense_channel_to_tensors(
-            channel_dense,
-            n_sites=n_sites,
-            local_dim=local_dim,
-            svd_cutoff=svd_cutoff,
-        )
-        mpo = cls()
-        mpo.custom([np.asarray(tensor, dtype=np.complex128).copy() for tensor in tensors], transpose=False)
-        return mpo
-
-    @classmethod
-    def dense_center_cut_schmidt_values(
-        cls,
-        channel_dense: NDArray[np.complex128],
-        *,
-        n_sites: int,
-        cut: str | int = "center",
-        local_dim: int = 4,
-    ) -> NDArray[np.float64]:
-        """Compute dense fused-site Schmidt values directly from a channel matrix.
-
-        Returns:
-            Singular values across the requested fused-site cut.
-        """
-        cut_index = cls._resolve_cut_index(cut=cut, length=int(n_sites))
-        if cut_index in {0, int(n_sites)}:
-            return np.array([1.0], dtype=np.float64)
-
-        channel = cls._validated_dense_channel_matrix(
-            channel_dense,
-            n_sites=n_sites,
-            local_dim=local_dim,
-            stage="dense_center_cut_schmidt_values input",
-        )
-
-        tensor = channel.reshape([int(local_dim)] * (2 * int(n_sites)))
-        interleaved_axes: list[int] = []
-        for site_index in range(int(n_sites)):
-            interleaved_axes.extend((site_index, site_index + int(n_sites)))
-        fused_tensor = np.transpose(tensor, interleaved_axes)
-        left_dim = (int(local_dim) * int(local_dim)) ** int(cut_index)
-        right_dim = (int(local_dim) * int(local_dim)) ** (int(n_sites) - int(cut_index))
-        schmidt_matrix = fused_tensor.reshape(left_dim, right_dim)
-        svals = cls._svd_values_with_fallback(schmidt_matrix, stage="dense_center_cut_schmidt_values")
-        return np.asarray(svals, dtype=np.float64)
-
-    @classmethod
-    def dense_channel_diagnostics(
-        cls,
-        channel_dense: NDArray[np.complex128],
-        *,
-        n_sites: int,
-        cut: str | int = "center",
-        local_dim: int = 4,
-        svd_cutoff: float = 1e-12,
-        rank_tol: float = 1e-12,
-        target_dense: NDArray[np.complex128] | None = None,
-        target_probabilities: NDArray[np.float64] | None = None,
-        target_entropy: float | None = None,
-        dense_cross_check: bool = False,
-    ) -> dict[str, float | int | NDArray[np.float64] | None]:
-        """Return canonical operator-entanglement diagnostics for a dense channel."""
-        channel = cls._validated_dense_channel_matrix(
-            channel_dense,
-            n_sites=n_sites,
-            local_dim=local_dim,
-            stage="dense_channel_diagnostics input",
-        )
-        mpo = cls.from_dense_channel(
-            channel,
-            n_sites=n_sites,
-            local_dim=local_dim,
-            svd_cutoff=svd_cutoff,
-        )
-        reconstructed = np.asarray(mpo.to_matrix(), dtype=np.complex128)
-        cls._validate_numeric_array(
-            reconstructed, stage="dense_channel_diagnostics reconstructed", ndim=2, dtype=np.complex128
-        )
-        denom = max(1.0, float(np.linalg.norm(channel, ord="fro")))
-        rel_error = float(np.linalg.norm(reconstructed - channel, ord="fro") / denom)
-
-        schmidt_values = np.asarray(mpo.schmidt_values(cut=cut), dtype=np.float64)
-        probabilities = cls.normalized_schmidt_probabilities(schmidt_values)
-        entropy = float(cls.entropy_from_probabilities(probabilities))
-
-        dense_entropy_diff = float("nan")
-        dense_spec_diff = float("nan")
-        if dense_cross_check:
-            dense_svals = cls.dense_center_cut_schmidt_values(
-                channel,
-                n_sites=n_sites,
-                cut=cut,
-                local_dim=local_dim,
-            )
-            dense_probs = cls.normalized_schmidt_probabilities(dense_svals)
-            dense_entropy = float(cls.entropy_from_probabilities(dense_probs))
-            dense_entropy_diff = float(abs(entropy - dense_entropy))
-            dense_spec_diff = float(cls.weighted_spectrum_distance(probabilities, dense_probs))
-
-        entropy_error = None if target_entropy is None else float(abs(entropy - float(target_entropy)))
-        weighted_spectrum_distance = None
-        if target_probabilities is not None:
-            cls._validate_numeric_array(
-                np.asarray(target_probabilities, dtype=np.float64),
-                stage="dense_channel_diagnostics target_probabilities",
-                ndim=1,
-                dtype=np.float64,
-            )
-            weighted_spectrum_distance = float(
-                cls.weighted_spectrum_distance(
-                    probabilities,
-                    np.asarray(target_probabilities, dtype=np.float64),
-                )
-            )
-
-        hs_to_target = None
-        if target_dense is not None:
-            reference = cls._validated_dense_channel_matrix(
-                target_dense,
-                n_sites=n_sites,
-                local_dim=local_dim,
-                stage="dense_channel_diagnostics target_dense",
-            )
-            hs_to_target = float(np.linalg.norm(channel - reference, ord="fro"))
-
-        return {
-            "entropy": float(entropy),
-            "schmidt_values": schmidt_values,
-            "probabilities": probabilities,
-            "rank_tol": int(np.count_nonzero(probabilities > float(rank_tol))),
-            "p1": float(probabilities[0]) if probabilities.size > 0 else 1.0,
-            "largest_sv": float(schmidt_values[0]) if schmidt_values.size > 0 else 0.0,
-            "mpo_rel_reconstruction_error": float(rel_error),
-            "entropy_error": entropy_error,
-            "weighted_spectrum_distance": weighted_spectrum_distance,
-            "hs_to_target": hs_to_target,
-            "dense_entropy_diff": float(dense_entropy_diff),
-            "dense_spec_diff": float(dense_spec_diff),
-        }
-
-    def schmidt_values(self, cut: str | int = "center") -> NDArray[np.float64]:
-        """Compute Schmidt singular values across a bond cut.
-
-        Returns:
-            Singular values at the selected cut.
-        """
-        return self._full_schmidt_values_for_cut(cut=cut)
-
-    def operator_entanglement_entropy(self, cut: str | int = "center", base: float = math.e) -> float:
-        """Compute operator entanglement entropy for an MPO cut.
-
-        Returns:
-            Entropy computed from normalized Schmidt weights.
-        """
-        schmidt_values = np.asarray(self.schmidt_values(cut=cut), dtype=np.float64)
-        return self.entropy_from_schmidt_values(schmidt_values, base=base)
+        identity_mpo = MPO.identity(self.length, physical_dimension=self.physical_dimension)
+        identity_mps = identity_mpo.to_mps()
+        mps = self.to_mps()
+        trace = mps.scalar_product(identity_mps)
+        hilbert_dim = self.physical_dimension**self.length
+        return float(np.abs(trace) / hilbert_dim)
 
     def to_matrix(self) -> NDArray[np.complex128]:
         """MPO to matrix conversion.
@@ -2062,15 +1518,7 @@ class MPO:
         Returns:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
-        identity_mpo = MPO.identity(self.length, physical_dimension=self.physical_dimension)
-
-        identity_mps = identity_mpo.to_mps()
-        mps = self.to_mps()
-        trace = mps.scalar_product(identity_mps)
-
-        hilbert_dim = self.physical_dimension**self.length
-        # Checks if trace is not a singular values for partial trace
-        return not np.round(np.abs(trace), 1) / hilbert_dim < fidelity
+        return self.compute_identity_fidelity() >= fidelity
 
     @classmethod
     def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
