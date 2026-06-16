@@ -1533,3 +1533,29 @@ def test_simulator_run_analog_rejects_str_operator() -> None:
     )
     with pytest.raises(TypeError, match="Hamiltonian"):
         Simulator(parallel=False, show_progress=False).run(state, "not-a-path.qasm", sim_params)
+
+
+def test_simulator_run_accepts_qasm3_raw_string_weak() -> None:
+    """Verify that Simulator.run with WeakSimParams accepts a raw OpenQASM 3 string."""
+    qasm_string = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
+    state = State(2, initial="zeros")
+    sim_params = WeakSimParams(shots=4, max_bond_dim=4)
+    result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    assert result.counts is not None
+    assert sum(result.counts.values()) == sim_params.shots
+
+
+def test_simulator_run_qasm_path_and_string_strong_match() -> None:
+    """Strong simulation with fixed seed agrees for path and raw OpenQASM inputs."""
+    qasm_path = Path(__file__).parent / "circuit.qasm"
+    qasm_string = qasm_path.read_text(encoding="utf-8")
+    state = State(6, initial="zeros")
+    sim_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        num_traj=1,
+        max_bond_dim=4,
+        random_seed=YAQS_TEST_SEED,
+    )
+    path_result = Simulator(parallel=False, show_progress=False).run(state, qasm_path, sim_params)
+    string_result = Simulator(parallel=False, show_progress=False).run(state, qasm_string, sim_params)
+    assert path_result.expectation_values[0] == string_result.expectation_values[0]

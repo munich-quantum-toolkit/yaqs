@@ -132,7 +132,6 @@ def load_circuit(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
 
     Raises:
         ValueError: If ``circuit`` is not a recognized input form.
-        ImportError: If OpenQASM 3 is requested but ``qiskit-qasm3-import`` is not installed.
     """
     if not isinstance(circuit, (str, Path)):
         return circuit

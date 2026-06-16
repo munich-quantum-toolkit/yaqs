@@ -193,7 +193,6 @@ class EquivalenceChecker:
 
         Raises:
             ValueError: If the circuits have different numbers of qubits or contain mid-circuit measurements.
-            ImportError: If OpenQASM 3 input is given but ``qiskit-qasm3-import`` is not installed.
         """
         circuit1 = load_circuit(circuit1)
         circuit2 = load_circuit(circuit2)

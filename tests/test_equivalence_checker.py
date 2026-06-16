@@ -14,6 +14,7 @@ backend selection, global-phase equivalence, and regression coverage for QASM cu
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 from unittest.mock import patch
@@ -568,3 +569,44 @@ def test_check_mixed_qasm_path_and_quantumcircuit() -> None:
     checker = EquivalenceChecker(representation="mpo")
     assert checker.check(qasm_path, qc)["equivalent"] is True
     assert checker.check(qc, qasm_path)["equivalent"] is True
+
+
+def test_check_mixed_qasm_raw_string_and_quantumcircuit() -> None:
+    """Raw OpenQASM string mixed with a QuantumCircuit matches path-based checking."""
+    qasm_path = Path(__file__).parent / "circuit.qasm"
+    qasm_str = qasm_path.read_text(encoding="utf-8")
+    qc = load(filename=str(qasm_path))
+    checker = EquivalenceChecker(representation="mpo")
+    assert checker.check(qasm_str, qc)["equivalent"] is True
+    assert checker.check(qc, qasm_str)["equivalent"] is True
+
+
+def test_check_issue_qasm_raw_strings_with_final_measurements() -> None:
+    """Raw OpenQASM with custom gates and final measurements is self-equivalent on MPO."""
+    result = _issue_checker(representation="mpo").check(ISSUE_QASM_WITH_MEASURES, ISSUE_QASM_WITH_MEASURES)
+    assert result["equivalent"] is True
+    assert result["representation"] == "mpo"
+
+
+def test_check_qasm2_self_equivalence_uses_matrix_backend() -> None:
+    """OpenQASM 2 self-equivalence can run on the explicit matrix backend."""
+    qasm_path = Path(__file__).parent / "circuit.qasm"
+    checker = EquivalenceChecker(representation="matrix")
+    result = checker.check(qasm_path, qasm_path)
+    assert result["equivalent"] is True
+    assert result["representation"] == "matrix"
+
+
+def test_check_qasm3_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EquivalenceChecker propagates ImportError when OpenQASM 3 importer is missing."""
+    original_find_spec = importlib.util.find_spec
+    qasm_str = (Path(__file__).parent / "circuit3.qasm").read_text(encoding="utf-8")
+
+    def fake_find_spec(name: str, package: str | None = None) -> object | None:
+        if name == "qiskit_qasm3_import":
+            return None
+        return original_find_spec(name, package)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    with pytest.raises(ImportError, match="mqt-yaqs\\[qasm3\\]"):
+        EquivalenceChecker(representation="matrix").check(qasm_str, qasm_str)
