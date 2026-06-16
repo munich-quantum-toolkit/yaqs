@@ -129,6 +129,12 @@ def test_load_circuit_rejects_missing_path() -> None:
         load_circuit("definitely/missing/file.qasm")
 
 
+def test_load_circuit_rejects_missing_path_object() -> None:
+    """A Path to a missing file raises ValueError, not FileNotFoundError."""
+    with pytest.raises(ValueError, match="Expected a QuantumCircuit"):
+        load_circuit(Path("definitely/missing/file.qasm"))
+
+
 def test_load_circuit_rejects_file_without_openqasm_header(tmp_path: Path) -> None:
     """A file that exists but lacks an OPENQASM header raises ValueError."""
     bad_file = tmp_path / "bad.qasm"

@@ -18,6 +18,8 @@ from qiskit.exceptions import MissingOptionalLibraryError
 from qiskit.utils.optionals import HAS_QASM3_IMPORT
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from qiskit.circuit import QuantumCircuit
 
 _OPENQASM_VERSION_RE = re.compile(r"OPENQASM\s+(\d+)", re.IGNORECASE)
@@ -31,17 +33,14 @@ _INVALID_INPUT_MSG = (
 )
 
 
-def _parse_qasm_version(text: str) -> Literal["2", "3"] | None:
-    """Parse the OpenQASM major version from source text.
-
-    Skips blank lines, ``//`` line comments, and ``/* ... */`` block comments before
-    matching the first ``OPENQASM`` declaration.
+def _iter_substantive_lines(text: str) -> Iterator[str]:
+    """Yield non-comment, non-blank lines from OpenQASM source text.
 
     Args:
         text: OpenQASM source text.
 
-    Returns:
-        ``"2"`` or ``"3"`` when a version is recognized, otherwise ``None``.
+    Yields:
+        Stripped substantive lines suitable for header and version detection.
     """
     in_block_comment = False
     for line in text.splitlines():
@@ -73,6 +72,19 @@ def _parse_qasm_version(text: str) -> Literal["2", "3"] | None:
             if not stripped or stripped.startswith("//"):
                 continue
 
+        yield stripped
+
+
+def _parse_qasm_version(text: str) -> Literal["2", "3"] | None:
+    """Parse the OpenQASM major version from source text.
+
+    Args:
+        text: OpenQASM source text.
+
+    Returns:
+        ``"2"`` or ``"3"`` when a version is recognized, otherwise ``None``.
+    """
+    for stripped in _iter_substantive_lines(text):
         if stripped.upper().startswith("OPENQASM"):
             match = _OPENQASM_VERSION_RE.match(stripped)
             if match is None:
@@ -144,7 +156,7 @@ def load_circuit(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
         return _load_openqasm(circuit)
 
     path = Path(circuit)
-    if isinstance(circuit, str) and not path.is_file():
+    if not path.is_file():
         raise ValueError(_INVALID_INPUT_MSG)
 
     return _load_openqasm(path.read_text(encoding="utf-8"), path=path)
