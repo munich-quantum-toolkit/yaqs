@@ -645,12 +645,18 @@ def test_compute_schmidt_spectrum_trivial_cut_returns_frobenius_norm() -> None:
     assert mpo.compute_entanglement_entropy(mpo.length) == pytest.approx(0.0, abs=1e-12)
 
 
-@pytest.mark.parametrize("invalid_cut", [True, -1, 5, "left"])
-def test_compute_schmidt_spectrum_rejects_invalid_cut(invalid_cut: int | str) -> None:
-    """Invalid cut specifiers raise ValueError."""
+@pytest.mark.parametrize(
+    ("invalid_cut", "exc_type"),
+    [(True, TypeError), ("left", TypeError), (-1, ValueError), (5, ValueError)],
+)
+def test_compute_schmidt_spectrum_rejects_invalid_cut(
+    invalid_cut: int | str | bool,  # noqa: FBT001
+    exc_type: type[Exception],
+) -> None:
+    """Invalid cut specifiers raise TypeError or ValueError."""
     mpo = MPO.identity(length=4, physical_dimension=2)
 
-    with pytest.raises(ValueError, match="cut"):
+    with pytest.raises(exc_type, match="cut"):
         _ = mpo.compute_schmidt_spectrum(invalid_cut)  # ty: ignore[invalid-argument-type]
 
 

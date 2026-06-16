@@ -1215,11 +1215,12 @@ class MPO:
             One-dimensional array of singular values.
 
         Raises:
-            ValueError: If ``cut`` is not a valid integer cut index.
+            TypeError: If ``cut`` is not an ``int``.
+            ValueError: If ``cut`` is out of range.
         """
         if isinstance(cut, bool) or not isinstance(cut, int):
             msg = f"cut must be int, got {cut!r}"
-            raise ValueError(msg)
+            raise TypeError(msg)
         if cut < 0 or cut > self.length:
             msg = f"cut out of range: {cut} for length={self.length}"
             raise ValueError(msg)

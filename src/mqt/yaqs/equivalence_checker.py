@@ -17,7 +17,7 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 from qiskit.converters import circuit_to_dag
 
@@ -39,10 +39,24 @@ if TYPE_CHECKING:
 
     from .parallel_utils import MPContext
 
-__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "Representation"]
+__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceCheckResult", "EquivalenceChecker", "Representation"]
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
+
+
+class EquivalenceCheckResult(TypedDict):
+    """Return type of :meth:`EquivalenceChecker.check`."""
+
+    equivalent: bool
+    fidelity: float
+    elapsed_time: float
+    representation: str
+    matrix: NDArray[np.complex128] | None
+    mpo: MPO | None
+    schmidt_values: NDArray[np.float64] | None
+    center_cut_entanglement_entropy: float | None
+    global_entanglement_entropy: float | None
 
 
 def _validate_representation(representation: str) -> Representation:
@@ -178,7 +192,7 @@ class EquivalenceChecker:
         self,
         circuit1: QuantumCircuit | str | Path,
         circuit2: QuantumCircuit | str | Path,
-    ) -> dict[str, MPO | NDArray[np.complex128] | NDArray[np.float64] | bool | float | str | None]:
+    ) -> EquivalenceCheckResult:
         """Check whether two quantum circuits are equivalent.
 
         If the circuits differ only up to global phase and numerical error, the composed
