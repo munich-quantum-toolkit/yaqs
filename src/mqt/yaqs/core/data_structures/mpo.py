@@ -17,6 +17,7 @@ import numpy as np
 import opt_einsum as oe
 import scipy.sparse
 from numpy.typing import NDArray
+
 from .. import linalg
 from ..libraries.gate_library import BaseGate, Destroy
 from .mpo_utils import (
@@ -1258,7 +1259,7 @@ class MPO:
         normalization = float(np.sum(probabilities, dtype=np.float64))
         if normalization <= 0.0:
             return 0.0
-        probabilities = probabilities / normalization
+        probabilities /= normalization
 
         eps = np.finfo(np.float64).tiny
         nonzero = probabilities > eps

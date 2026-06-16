@@ -255,7 +255,5 @@ class EquivalenceChecker:
             "mpo": mpo,
             "schmidt_values": mpo.compute_schmidt_spectrum(center_cut),
             "center_cut_entanglement_entropy": mpo.compute_entanglement_entropy(center_cut),
-            "global_entanglement_entropy": sum(
-                mpo.compute_entanglement_entropy(cut) for cut in range(1, mpo.length)
-            ),
+            "global_entanglement_entropy": sum(mpo.compute_entanglement_entropy(cut) for cut in range(1, mpo.length)),
         }
