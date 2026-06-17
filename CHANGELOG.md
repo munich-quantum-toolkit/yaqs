@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- extended EquivalenceChecker output to include entropy and the resulting diff data structure ([#364]) ([**@yiranwang-phys**])
 - OpenQASM2 and 3 files can now be read directly by the Simulator and EquivalenceChecker ([#464]) ([**@Marerido**])
 - improved Qiskit gate compatibility with matrix fallback ([#464]) ([**@aaronleesander**])
 - added MPO zip-up as default long-range gate application method ([#449]) ([**@aaronleesander**])
@@ -192,6 +193,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@thilomueller**]: https://github.com/thilomueller
 [**@lucello**]: https://github.com/lucello
 [**@Marerido**]: https://github.com/Marerido
+[**@yiranwang-phys**]: https://github.com/yiranwang-phys
 
 <!-- General links -->
 

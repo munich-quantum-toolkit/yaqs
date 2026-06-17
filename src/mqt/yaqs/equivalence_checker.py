@@ -17,26 +17,46 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 from qiskit.converters import circuit_to_dag
 
 from .core.data_structures.mpo import MPO
 from .digital.utils.contraction_utils import iterate
-from .digital.utils.matrix_utils import check_matrix_equivalence, strip_final_measurements
+from .digital.utils.matrix_utils import (
+    compose_operator_tensor,
+    compute_identity_fidelity,
+    strip_final_measurements,
+)
 from .digital.utils.qasm_utils import load_circuit
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import numpy as np
+    from numpy.typing import NDArray
     from qiskit.circuit import QuantumCircuit
 
     from .parallel_utils import MPContext
 
-__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "Representation"]
+__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceCheckResult", "EquivalenceChecker", "Representation"]
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
+
+
+class EquivalenceCheckResult(TypedDict):
+    """Return type of :meth:`EquivalenceChecker.check`."""
+
+    equivalent: bool
+    fidelity: float
+    elapsed_time: float
+    representation: str
+    matrix: NDArray[np.complex128] | None
+    mpo: MPO | None
+    schmidt_values: NDArray[np.float64] | None
+    center_cut_entanglement_entropy: float | None
+    global_entanglement_entropy: float | None
 
 
 def _validate_representation(representation: str) -> Representation:
@@ -172,7 +192,7 @@ class EquivalenceChecker:
         self,
         circuit1: QuantumCircuit | str | Path,
         circuit2: QuantumCircuit | str | Path,
-    ) -> dict[str, bool | float | str]:
+    ) -> EquivalenceCheckResult:
         """Check whether two quantum circuits are equivalent.
 
         If the circuits differ only up to global phase and numerical error, the composed
@@ -188,8 +208,13 @@ class EquivalenceChecker:
                 Accepts the same types as ``circuit1``.
 
         Returns:
-            dict[str, bool | float | str]: ``equivalent`` (bool), ``elapsed_time`` (float, seconds),
-            and ``representation`` (``"matrix"`` or ``"mpo"``) indicating the backend used.
+            :class:`EquivalenceCheckResult` with keys ``equivalent`` (bool),
+            ``fidelity`` (float, measured overlap with identity), ``elapsed_time`` (float,
+            seconds), ``representation`` (``"matrix"`` or ``"mpo"``), ``matrix`` (dense
+            composed operator on the matrix backend), ``mpo`` (composed operator on the MPO
+            backend), and on the MPO backend also ``schmidt_values``,
+            ``center_cut_entanglement_entropy``, and ``global_entanglement_entropy``.
+            Backend-specific keys are ``None`` when the other backend ran.
 
         Raises:
             ValueError: If the circuits have different numbers of qubits or contain mid-circuit measurements.
@@ -205,30 +230,45 @@ class EquivalenceChecker:
         start_time = time.time()
 
         if backend == "matrix":
-            equivalent = check_matrix_equivalence(
-                circuit1,
-                circuit2,
-                fidelity=self.fidelity,
-            )
-        else:
-            circuit1 = strip_final_measurements(circuit1)
-            circuit2 = strip_final_measurements(circuit2)
-            mpo = MPO.identity(circuit1.num_qubits)
-            circuit1_dag = circuit_to_dag(circuit1)
-            circuit2_dag = circuit_to_dag(circuit2)
-            iterate(
-                mpo,
-                circuit1_dag,
-                circuit2_dag,
-                self.threshold,
-                parallel=self.parallel,
-                max_workers=self.max_workers,
-                mp_context=self.mp_context,
-            )
-            equivalent = mpo.check_if_identity(self.fidelity)
+            composed = compose_operator_tensor(circuit1, circuit2)
+            measured_fidelity = compute_identity_fidelity(composed)
+            hilbert_dim = 2**circuit1.num_qubits
+            return {
+                "equivalent": measured_fidelity >= self.fidelity,
+                "fidelity": measured_fidelity,
+                "elapsed_time": time.time() - start_time,
+                "representation": backend,
+                "matrix": composed.reshape(hilbert_dim, hilbert_dim),
+                "mpo": None,
+                "schmidt_values": None,
+                "center_cut_entanglement_entropy": None,
+                "global_entanglement_entropy": None,
+            }
 
+        circuit1 = strip_final_measurements(circuit1)
+        circuit2 = strip_final_measurements(circuit2)
+        mpo = MPO.identity(circuit1.num_qubits)
+        circuit1_dag = circuit_to_dag(circuit1)
+        circuit2_dag = circuit_to_dag(circuit2)
+        iterate(
+            mpo,
+            circuit1_dag,
+            circuit2_dag,
+            self.threshold,
+            parallel=self.parallel,
+            max_workers=self.max_workers,
+            mp_context=self.mp_context,
+        )
+        measured_fidelity = mpo.compute_identity_fidelity()
+        center_cut = mpo.length // 2
         return {
-            "equivalent": equivalent,
+            "equivalent": measured_fidelity >= self.fidelity,
+            "fidelity": measured_fidelity,
             "elapsed_time": time.time() - start_time,
             "representation": backend,
+            "matrix": None,
+            "mpo": mpo,
+            "schmidt_values": mpo.compute_schmidt_spectrum(center_cut),
+            "center_cut_entanglement_entropy": mpo.compute_entanglement_entropy(center_cut),
+            "global_entanglement_entropy": sum(mpo.compute_entanglement_entropy(cut) for cut in range(1, mpo.length)),
         }

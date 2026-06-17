@@ -12,14 +12,19 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 # ---- single-qubit ops ----
 _I2 = np.eye(2, dtype=complex)
@@ -301,6 +306,44 @@ def _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals: int, t: float, u: float)
     return h
 
 
+def dense_operator_schmidt_values(mpo: MPO, cut: int) -> NDArray[np.float64]:
+    """Compute Schmidt values from dense contraction for a given MPO cut.
+
+    Args:
+        mpo: MPO whose operator Schmidt spectrum is computed.
+        cut: Bond index between sites ``cut - 1`` and ``cut``.
+
+    Returns:
+        Dense Schmidt singular values for the requested cut.
+    """
+    mps = mpo.to_mps()
+
+    state = mps.tensors[0][:, 0, :]
+    for tensor in mps.tensors[1:]:
+        state = np.tensordot(state, tensor, axes=([-1], [1]))
+
+    state = np.squeeze(state, axis=-1)
+    left_dim = int(np.prod(state.shape[:cut], dtype=np.int64))
+    right_dim = int(np.prod(state.shape[cut:], dtype=np.int64))
+    matrix = np.reshape(state, (left_dim, right_dim))
+    singular_values = np.linalg.svd(matrix, compute_uv=False, full_matrices=False)
+    return np.asarray(singular_values, dtype=np.float64)
+
+
+def significant_schmidt_values(values: NDArray[np.float64], tol: float = 1e-12) -> NDArray[np.float64]:
+    """Return the numerically significant part of a Schmidt spectrum.
+
+    Args:
+        values: Schmidt singular values to filter.
+        tol: Drop values less than or equal to this threshold.
+
+    Returns:
+        Subset of ``values`` strictly greater than ``tol``.
+    """
+    spectrum = np.asarray(values, dtype=np.float64)
+    return spectrum[spectrum > tol]
+
+
 rng = np.random.default_rng()
 
 
@@ -558,6 +601,97 @@ def test_from_matrix() -> None:
     mat = np.eye(1)
     with pytest.raises(ValueError, match="invalid"):
         MPO.from_matrix(mat, d=100)
+
+
+def test_compute_identity_fidelity_and_check_if_identity() -> None:
+    """Identity MPO reports unit fidelity and passes the identity check."""
+    mpo = MPO.identity(length=3, physical_dimension=2)
+    measured = mpo.compute_identity_fidelity()
+
+    assert measured == pytest.approx(1.0, abs=1e-12)
+    assert mpo.check_if_identity(0.9) is True
+    assert mpo.check_if_identity(1.0 + 1e-12) is False
+
+
+def test_compute_identity_fidelity_heterogeneous_physical_dimensions() -> None:
+    """Identity fidelity normalizes by the product of per-site local dimensions."""
+    local_dims = [2, 3, 2]
+    mpo = MPO()
+    mpo.custom([make_identity_site(d) for d in local_dims], transpose=False)
+
+    measured = mpo.compute_identity_fidelity()
+
+    assert measured == pytest.approx(1.0, abs=1e-12)
+
+
+def test_compute_entanglement_entropy_identity_is_zero() -> None:
+    """Identity MPO has vanishing operator entanglement entropy at the center cut."""
+    mpo = MPO.identity(length=4, physical_dimension=2)
+    center_cut = mpo.length // 2
+
+    assert mpo.compute_entanglement_entropy(center_cut) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_compute_entanglement_entropy_is_finite_and_non_negative() -> None:
+    """Entropy is finite and non-negative for a deterministic Ising MPO."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+    entropy = mpo.compute_entanglement_entropy(2)
+
+    assert np.isfinite(entropy)
+    assert entropy >= -1e-12
+
+
+def test_compute_schmidt_spectrum_and_entropy_match_dense_reference() -> None:
+    """Schmidt spectrum and entropy match a dense reference contraction."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+    cut = 2
+    schmidt = mpo.compute_schmidt_spectrum(cut)
+    dense_schmidt = dense_operator_schmidt_values(mpo, cut)
+    dense_schmidt = dense_schmidt[dense_schmidt > 1e-12]
+
+    np.testing.assert_allclose(significant_schmidt_values(schmidt), dense_schmidt, rtol=1e-10, atol=1e-12)
+
+    probabilities = np.square(dense_schmidt)
+    probabilities /= np.sum(probabilities)
+    reference_entropy = -np.sum(probabilities * np.log(probabilities))
+
+    assert mpo.compute_entanglement_entropy(cut) == pytest.approx(reference_entropy, abs=1e-12)
+
+
+def test_compute_schmidt_spectrum_trivial_cut_returns_frobenius_norm() -> None:
+    """Boundary cuts return the operator Frobenius norm with zero entropy."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.7)
+    fro_norm = float(np.linalg.norm(np.asarray(mpo.to_matrix(), dtype=np.complex128), ord="fro"))
+
+    np.testing.assert_allclose(mpo.compute_schmidt_spectrum(0), np.array([fro_norm]))
+    np.testing.assert_allclose(mpo.compute_schmidt_spectrum(mpo.length), np.array([fro_norm]))
+    assert mpo.compute_entanglement_entropy(0) == pytest.approx(0.0, abs=1e-12)
+    assert mpo.compute_entanglement_entropy(mpo.length) == pytest.approx(0.0, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("invalid_cut", "exc_type"),
+    [(True, TypeError), ("left", TypeError), (-1, ValueError), (5, ValueError)],
+)
+def test_compute_schmidt_spectrum_rejects_invalid_cut(
+    invalid_cut: int | str | bool,  # noqa: FBT001
+    exc_type: type[Exception],
+) -> None:
+    """Invalid cut specifiers raise TypeError or ValueError."""
+    mpo = MPO.identity(length=4, physical_dimension=2)
+
+    with pytest.raises(exc_type, match="cut"):
+        # Intentionally pass an invalid cut type to exercise runtime validation.
+        _ = mpo.compute_schmidt_spectrum(invalid_cut)  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("invalid_base", [0.0, -2.0, 1.0, np.inf, np.nan])
+def test_compute_entanglement_entropy_rejects_invalid_base(invalid_base: float) -> None:
+    """Invalid logarithm bases are rejected."""
+    mpo = MPO.ising(length=4, J=1.0, g=0.5)
+
+    with pytest.raises(ValueError, match="base"):
+        _ = mpo.compute_entanglement_entropy(2, base=invalid_base)
 
 
 def test_to_mps() -> None:

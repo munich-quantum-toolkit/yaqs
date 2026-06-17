@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import TYPE_CHECKING, ClassVar, cast, overload
 
@@ -67,6 +68,8 @@ class MPO:
     **Conversion / checks**
 
     - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix.
+    - ``compute_schmidt_spectrum()`` / ``compute_entanglement_entropy()``: operator bond diagnostics.
+    - ``compute_identity_fidelity()``: normalized overlap with the identity.
     - ``check_if_valid_mpo()``: structural bond-dimension consistency check.
     - ``check_if_identity(...)``: heuristic identity check (qubit systems).
 
@@ -1182,6 +1185,108 @@ class MPO:
 
         return MPS(self.length, converted_tensors)
 
+    def _compute_bond_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
+        """Return operator Schmidt singular values across a nearest-neighbor bond."""
+        i, j = sites
+        mps = self.to_mps()
+        mps.set_canonical_form(orthogonality_center=j, decomposition="QR")
+
+        a, b = mps.tensors[i], mps.tensors[j]
+        theta = np.tensordot(a, b, axes=(2, 1))
+        theta_matrix = np.reshape(theta, (a.shape[0] * a.shape[1], b.shape[0] * b.shape[2]))
+        if theta_matrix.size == 0:
+            return np.array([], dtype=np.float64)
+
+        singular_values = np.linalg.svd(
+            np.asarray(theta_matrix, dtype=np.complex128),
+            compute_uv=False,
+            full_matrices=False,
+        )
+        return np.asarray(singular_values, dtype=np.float64)
+
+    def compute_schmidt_spectrum(self, cut: int) -> NDArray[np.float64]:
+        """Compute operator Schmidt singular values across an integer bond cut.
+
+        Args:
+            cut: Bond cut index in ``[0, length]``. Internal cuts use bond ``(cut - 1, cut)``;
+                boundary cuts ``0`` and ``length`` return the operator Frobenius norm.
+
+        Returns:
+            One-dimensional array of singular values.
+
+        Raises:
+            TypeError: If ``cut`` is not an ``int``.
+            ValueError: If ``cut`` is out of range.
+        """
+        if isinstance(cut, bool) or not isinstance(cut, int):
+            msg = f"cut must be int, got {cut!r}"
+            raise TypeError(msg)
+        if cut < 0 or cut > self.length:
+            msg = f"cut out of range: {cut} for length={self.length}"
+            raise ValueError(msg)
+        if cut in {0, self.length}:
+            fro_norm = float(np.linalg.norm(np.asarray(self.to_matrix(), dtype=np.complex128), ord="fro"))
+            return np.array([fro_norm], dtype=np.float64)
+
+        return self._compute_bond_schmidt_spectrum([cut - 1, cut])
+
+    def compute_entanglement_entropy(self, cut: int, *, base: float = math.e) -> float:
+        """Compute operator entanglement entropy across an integer bond cut.
+
+        Args:
+            cut: Bond cut index passed to :meth:`compute_schmidt_spectrum`.
+            base: Logarithm base for the entropy (default natural log).
+
+        Returns:
+            Von Neumann entropy of the normalized Schmidt spectrum.
+
+        Raises:
+            ValueError: If ``cut`` or ``base`` is invalid.
+        """
+        base_float = float(base)
+        if not np.isfinite(base_float) or base_float <= 0.0 or math.isclose(base_float, 1.0):
+            msg = f"Entropy base must be finite, >0, and !=1; got {base!r}"
+            raise ValueError(msg)
+
+        schmidt_values = self.compute_schmidt_spectrum(cut)
+        if schmidt_values.size == 0:
+            return 0.0
+
+        max_schmidt = float(np.max(np.abs(schmidt_values)))
+        if not np.isfinite(max_schmidt) or max_schmidt <= 0.0:
+            return 0.0
+
+        probabilities = np.square(schmidt_values / max_schmidt)
+        normalization = float(np.sum(probabilities, dtype=np.float64))
+        if normalization <= 0.0:
+            return 0.0
+        probabilities /= normalization
+
+        eps = np.finfo(np.float64).tiny
+        nonzero = probabilities > eps
+        entropy = -np.sum(probabilities[nonzero] * np.log(probabilities[nonzero]), dtype=np.float64) / math.log(
+            base_float
+        )
+        return float(max(entropy, 0.0))
+
+    def compute_identity_fidelity(self) -> float:
+        """Compute normalized overlap of this MPO with the identity operator.
+
+        Returns:
+            ``|Tr(O)| / d`` where ``d`` is the Hilbert-space dimension.
+        """
+        local_dims = [int(tensor.shape[0]) for tensor in self.tensors]
+        identity_mpo = MPO()
+        identity_mpo.custom(
+            [make_identity_site(d) for d in local_dims],
+            transpose=False,
+        )
+        identity_mps = identity_mpo.to_mps()
+        mps = self.to_mps()
+        trace = mps.scalar_product(identity_mps)
+        hilbert_dim = int(np.prod(local_dims, dtype=np.int64))
+        return float(np.abs(trace) / hilbert_dim)
+
     def to_matrix(self) -> NDArray[np.complex128]:
         """MPO to matrix conversion.
 
@@ -1420,15 +1525,7 @@ class MPO:
         Returns:
             bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
         """
-        identity_mpo = MPO.identity(self.length, physical_dimension=self.physical_dimension)
-
-        identity_mps = identity_mpo.to_mps()
-        mps = self.to_mps()
-        trace = mps.scalar_product(identity_mps)
-
-        hilbert_dim = self.physical_dimension**self.length
-        # Checks if trace is not a singular values for partial trace
-        return not np.round(np.abs(trace), 1) / hilbert_dim < fidelity
+        return self.compute_identity_fidelity() >= fidelity
 
     @classmethod
     def _parse_pauli_string(cls, spec: str) -> dict[int, str]:

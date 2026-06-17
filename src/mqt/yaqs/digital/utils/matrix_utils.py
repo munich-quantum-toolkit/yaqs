@@ -335,6 +335,23 @@ def compose_operator_tensor(
     return op
 
 
+def compute_identity_fidelity(operator_tensor: NDArray[np.complex128]) -> float:
+    """Return normalized trace overlap of an operator tensor with the identity.
+
+    Args:
+        operator_tensor: Operator as a tensor with ``2 * n`` indices of size 2.
+
+    Returns:
+        ``|Tr(O)| / d`` where ``d`` is the Hilbert-space dimension.
+    """
+    num_qubits = operator_tensor.ndim // 2
+    hilbert_dim = 2**num_qubits
+    dense = operator_tensor.reshape(hilbert_dim, hilbert_dim)
+    identity = np.eye(hilbert_dim, dtype=np.complex128)
+    trace = np.vdot(dense.ravel(), identity.ravel())
+    return float(np.abs(trace) / hilbert_dim)
+
+
 def is_identity_tensor(
     operator_tensor: NDArray[np.complex128],
     fidelity: float,
@@ -350,13 +367,7 @@ def is_identity_tensor(
     Returns:
         True if the operator is equivalent to the identity up to global phase within ``fidelity``.
     """
-    num_qubits = operator_tensor.ndim // 2
-    hilbert_dim = 2**num_qubits
-    dense = operator_tensor.reshape(hilbert_dim, hilbert_dim)
-    identity = np.eye(hilbert_dim, dtype=np.complex128)
-    trace = np.vdot(dense.ravel(), identity.ravel())
-    normalized = float(np.abs(trace) / hilbert_dim)
-    return normalized >= fidelity
+    return compute_identity_fidelity(operator_tensor) >= fidelity
 
 
 def check_matrix_equivalence(
