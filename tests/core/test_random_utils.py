@@ -17,11 +17,7 @@ import copy
 import numpy as np
 import pytest
 
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.random_utils import make_trajectory_rng
 

@@ -19,14 +19,8 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import (
-    AnalogSimParams,
-    Observable,
-    StrongSimParams,
-)
-from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
 
 _I2 = np.eye(2, dtype=complex)
