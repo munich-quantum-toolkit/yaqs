@@ -26,7 +26,7 @@ from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Z
+from mqt.yaqs.core.libraries.gate_library import Z
 from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
 
@@ -166,28 +166,6 @@ def test_longrange_two_site_factors_explicit() -> None:
     assert _allclose(a_op, PauliY.matrix)
     assert _allclose(b_op, PauliX.matrix)
     assert "matrix" not in p
-
-
-def test_adjacent_two_site_basegate_swaps_operator_with_unsorted_sites() -> None:
-    """A two-site BaseGate must be transposed when site indices are normalized."""
-    operator = BaseGate(np.kron(PauliX.matrix, PauliZ.matrix))
-    nm = NoiseModel([{"name": operator, "sites": [2, 1], "strength": 0.2}])
-    p = nm.processes[0]
-    assert p["sites"] == [1, 2]
-    assert _allclose(p["matrix"], np.kron(PauliZ.matrix, PauliX.matrix))
-
-
-def test_get_operator_with_basegate_instance() -> None:
-    """get_operator returns the matrix when a BaseGate instance is passed."""
-    gate = X()
-    result = NoiseModel.get_operator(gate)
-    assert _allclose(result, gate.matrix)
-
-
-def test_one_site_process_accepts_basegate_name() -> None:
-    """One-site processes accept a BaseGate in the name field."""
-    nm = NoiseModel([{"name": X(), "sites": [0], "strength": 0.1}])
-    assert _allclose(nm.processes[0]["matrix"], X().matrix)
 
 
 def test_longrange_unknown_label_without_factors_raises() -> None:

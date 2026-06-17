@@ -23,11 +23,12 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from scipy.stats import truncnorm
 
-from ..libraries.gate_library import BaseGate
 from ..libraries.noise_library import NoiseLibrary
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+    from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 
 CROSSTALK_PREFIX = "longrange_crosstalk_"
@@ -38,12 +39,6 @@ PAULI_MAP = {
 }
 
 logger = logging.getLogger(__name__)
-
-
-def _swap_two_qubit_matrix(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Return the same operator with the two qubit tensor factors exchanged."""
-    tensor = matrix.reshape(2, 2, 2, 2)
-    return np.transpose(tensor, (1, 0, 3, 2)).reshape(4, 4)
 
 
 class NoiseModel:
@@ -106,7 +101,6 @@ class NoiseModel:
             name = proc["name"]
             sites = proc["sites"]
             user_factors = original.get("factors")
-            user_matrix = original.get("matrix")
 
             # Normalize two-site ordering
             if isinstance(sites, list) and len(sites) == 2:
@@ -131,8 +125,6 @@ class NoiseModel:
                     elif "matrix" not in proc:
                         proc["matrix"] = NoiseModel.get_operator(name)
                     filled_processes.append(proc)
-                    if swapped:
-                        NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
                     continue
 
                 # Non-adjacent two-site: attach per-site factors for crosstalk labels
@@ -146,8 +138,8 @@ class NoiseModel:
                         a, b = suffix[0], suffix[1]
                         proc["factors"] = (PAULI_MAP[a], PAULI_MAP[b])
                     filled_processes.append(proc)
-                    if swapped:
-                        NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
+                    if swapped and user_factors is not None:
+                        proc["factors"] = (proc["factors"][1], proc["factors"][0])
                     continue
 
                 # Long-range two-site with canonical label
@@ -163,8 +155,8 @@ class NoiseModel:
                         a, b = suffix[0], suffix[1]
                         proc["factors"] = (PAULI_MAP[a], PAULI_MAP[b])
                     filled_processes.append(proc)
-                    if swapped:
-                        NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
+                    if swapped and user_factors is not None:
+                        proc["factors"] = (proc["factors"][1], proc["factors"][0])
                     continue
 
                 # Other long-range two-site: require explicit factors
@@ -172,8 +164,8 @@ class NoiseModel:
                     "Non-adjacent 2-site processes must specify 'factors' unless named 'crosstalk_{ab}'."
                 )
                 filled_processes.append(proc)
-                if swapped:
-                    NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
+                if swapped and user_factors is not None:
+                    proc["factors"] = (proc["factors"][1], proc["factors"][0])
                 continue
 
             # One-site: ensure matrix
@@ -182,25 +174,6 @@ class NoiseModel:
             filled_processes.append(proc)
 
         self.processes = filled_processes
-
-    @staticmethod
-    def _apply_two_site_swap(
-        proc: dict[str, Any],
-        name: str | BaseGate,
-        user_factors: tuple[NDArray[np.complex128], NDArray[np.complex128]] | None,
-        user_matrix: NDArray[np.complex128] | None,
-    ) -> None:
-        """Reorder stored operators to match ascending site indices."""
-        if user_factors is not None and "factors" in proc:
-            proc["factors"] = (proc["factors"][1], proc["factors"][0])
-            return
-
-        matrix = proc.get("matrix")
-        if matrix is None or matrix.shape != (4, 4):
-            return
-
-        if user_matrix is not None or (isinstance(name, BaseGate) and name.interaction == 2):
-            proc["matrix"] = _swap_two_qubit_matrix(matrix)
 
     def sample(self, rng: np.random.Generator | int | None = None) -> NoiseModel:
         """Sample a concrete NoiseModel from any distribution-based strengths.
@@ -278,18 +251,15 @@ class NoiseModel:
         return new_model
 
     @staticmethod
-    def get_operator(name: str | BaseGate) -> NDArray[np.complex128]:
-        """Retrieve the operator matrix for a noise process name or gate.
+    def get_operator(name: str) -> NDArray[np.complex128]:
+        """Retrieve the operator from NoiseLibrary, possibly as a tensor product if needed.
 
         Args:
-            name: Noise process name (e.g. ``'pauli_x'``) or a ``BaseGate`` instance.
+            name: Name of the noise process (e.g., 'xx', 'zz').
 
         Returns:
             The matrix representation of the operator.
         """
-        if isinstance(name, BaseGate):
-            return name.matrix
-
         if name in PAULI_MAP:
             return PAULI_MAP[name]
         operator_class = getattr(NoiseLibrary, name)
