@@ -17,6 +17,7 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 from qiskit.converters import circuit_to_dag
@@ -31,8 +32,6 @@ from .digital.utils.matrix_utils import (
 from .digital.utils.qasm_utils import load_circuit
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     import numpy as np
     from numpy.typing import NDArray
     from qiskit.circuit import QuantumCircuit

@@ -14,6 +14,7 @@ backend selection, global-phase equivalence, and regression coverage for QASM cu
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 from unittest.mock import patch
 
@@ -32,8 +33,6 @@ from mqt.yaqs.digital.utils.dag_utils import SUPPORTED_QISKIT_GATE_NAMES, conver
 from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qasm3_import, write_qasm_file
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from mqt.yaqs.equivalence_checker import Representation
 
 

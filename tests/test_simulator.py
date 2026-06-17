@@ -22,7 +22,8 @@ import importlib
 import multiprocessing
 import os
 import sys
-from typing import TYPE_CHECKING, Any, cast
+from pathlib import Path
+from typing import Any, cast
 
 import numba
 import numpy as np
@@ -52,9 +53,6 @@ from tests.conftest import (
     requires_qasm3_import,
     write_qasm_file,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_simulator_defaults() -> None:
