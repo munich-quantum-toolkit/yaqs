@@ -7,22 +7,34 @@
 
 """Tests for decompositions.
 
-This module tests the left and right qr and svd decompositions.
+This module covers the left and right QR decompositions, ``split_two_site``
+behavior (full-rank reconstruction, ``max_bond_dim`` truncation, error
+handling), and ``linalg.svd`` edge-cases (reduced/full shapes, unitarity,
+reconstruction, and the gesdd-to-gesvd fallback path).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
+import pytest
 import scipy.linalg
 
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.methods.decompositions import left_qr, right_qr, right_svd, robust_svd, truncated_right_svd
+from mqt.yaqs.core import linalg
+from mqt.yaqs.core.methods.decompositions import (
+    left_qr,
+    merge_two_site,
+    right_qr,
+    split_two_site,
+)
 
 if TYPE_CHECKING:
-    import pytest
     from numpy.typing import NDArray
+
+    from mqt.yaqs.core.methods.decompositions import (
+        SvdDistribution,
+    )
 
 
 def crandn(
@@ -97,94 +109,146 @@ def test_left_qr() -> None:
     assert np.allclose(contr, tensor)
 
 
-def test_right_svd() -> None:
-    """Test that the svd produces the correct shapes and tensors."""
-    tensor = crandn(2, 3, 4)
-    u_tensor, s_vec, v_matrix = right_svd(tensor)
-    # Check shapes
-    assert u_tensor.shape[0] == 2
-    assert u_tensor.shape[1] == 3
-    assert v_matrix.shape[1] == 4
-    assert u_tensor.shape[2] == s_vec.shape[0]
-    assert s_vec.shape[0] == v_matrix.shape[0]
-    # Check that u_tensor is unitary
-    iden = np.eye(u_tensor.shape[2])
-    result = np.tensordot(u_tensor, u_tensor.conj(), axes=([0, 1], [0, 1]))
-    assert np.allclose(result, iden)
-    # Check that v_matrix is unitary
-    iden = np.eye(v_matrix.shape[1])
-    result = v_matrix.conj().T @ v_matrix
-    assert np.allclose(result, iden)
-    # Check that svd = tensor
-    contr = np.tensordot(u_tensor, np.diag(s_vec) @ v_matrix, axes=(2, 0))
-    assert np.allclose(contr, tensor)
-
-
-def test_truncated_right_svd_thresh() -> None:
-    """Test that the tensor is correctly truncated."""
-    # Placeholder
-    sim_params = AnalogSimParams(
-        elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=True,
-        max_bond_dim=4,
-        threshold=0.2,
-        order=1,
-        show_progress=False,
-        get_state=True,
+@pytest.mark.parametrize("distr", ["left", "right", "sqrt"])
+def test_split_two_site_reconstructs_full_rank(distr: str) -> None:
+    """``split_two_site`` with no truncation reconstructs the merged tensor for each distribution."""
+    a = crandn(2, 3, 4)
+    b = crandn(2, 4, 5)
+    merged = merge_two_site(a, b)
+    a_new, b_new = split_two_site(
+        merged,
+        [a.shape[0], b.shape[0]],
+        svd_distribution=cast("SvdDistribution", distr),
+        trunc_mode="discarded_weight",
+        threshold=0.0,
+        max_bond_dim=None,
     )
-    s_vector_i = np.array([1, 0.5, 0.1, 0.01])
-    u_tensor_i, _ = right_qr(crandn(2, 3, 4))
-    v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
-    tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
-
-    # Thus the values 0.1 and 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
-    # Check shapes
-    assert u_tensor.shape[0] == 2
-    assert u_tensor.shape[1] == 3
-    assert v_matrix.shape[1] == 4
-    assert u_tensor.shape[2] == 2
-    assert v_matrix.shape[0] == 2
-    assert s_vector.shape[0] == 2
-    assert np.allclose(s_vector, s_vector_i[:2])
+    merged_back = merge_two_site(a_new, b_new)
+    np.testing.assert_allclose(merged_back, merged, atol=1e-10, rtol=1e-8)
 
 
-def test_truncated_right_svd_maxbd() -> None:
-    """Test that the tensor is correctly truncated."""
-    # Placeholder
-    sim_params = AnalogSimParams(
-        elapsed_time=0.2,
-        dt=0.1,
-        sample_timesteps=True,
-        max_bond_dim=3,
-        threshold=1e-4,
-        order=1,
-        show_progress=False,
-        get_state=True,
+def test_split_two_site_truncates_to_max_bond_dim() -> None:
+    """``max_bond_dim`` caps the bond dimension returned by ``split_two_site``."""
+    svs = np.array([1.0, 0.9, 0.8, 0.7], dtype=np.float64)
+    d0, d1, d_left, d_right = 2, 2, 3, 4
+    theta = _theta_from_singulars(svs, d0 * d_left, d1 * d_right, seed=21)
+    merged = _as_merged_two_site(theta, d0, d1, d_left, d_right)
+    k = 2
+    a_new, b_new = split_two_site(
+        merged,
+        [d0, d1],
+        svd_distribution="sqrt",
+        trunc_mode="discarded_weight",
+        threshold=0.0,
+        max_bond_dim=k,
     )
-
-    s_vector_i = np.array([1, 0.5, 0.1, 0.01])
-    u_tensor_i, _ = right_qr(crandn(2, 3, 4))
-    v_matrix_i, _ = np.linalg.qr(crandn(4, 4))
-    tensor = np.tensordot(u_tensor_i, np.diag(s_vector_i) @ v_matrix_i, axes=(2, 0))
-
-    # Thus the value 0.01 should be truncated
-    u_tensor, s_vector, v_matrix = truncated_right_svd(tensor, sim_params.threshold, sim_params.max_bond_dim)
-    # Check shapes
-    assert u_tensor.shape[0] == 2
-    assert u_tensor.shape[1] == 3
-    assert v_matrix.shape[1] == 4
-    assert u_tensor.shape[2] == sim_params.max_bond_dim
-    assert sim_params.max_bond_dim == v_matrix.shape[0]
-    assert sim_params.max_bond_dim == s_vector.shape[0]
-    assert np.allclose(s_vector, s_vector_i[: sim_params.max_bond_dim])
+    assert a_new.shape[2] == k
+    assert b_new.shape[1] == k
 
 
-def test_robust_svd_reduced_shapes_unitary_and_reconstruction() -> None:
-    """robust_svd: reduced SVD has correct shapes, unitary factors, and reconstructs A."""
+def test_split_two_site_min_keep() -> None:
+    """``min_keep`` enforces a truncation floor even when threshold would drop further."""
+    svs = np.array([1.0, 1e-12, 1e-13, 1e-14], dtype=np.float64)
+    d0, d1, d_left, d_right = 2, 2, 2, 2
+    theta = _theta_from_singulars(svs, d0 * d_left, d1 * d_right, seed=31)
+    merged = _as_merged_two_site(theta, d0, d1, d_left, d_right)
+    a_new, b_new = split_two_site(
+        merged,
+        [d0, d1],
+        svd_distribution="sqrt",
+        trunc_mode="relative",
+        threshold=1e-6,
+        max_bond_dim=None,
+        min_keep=2,
+    )
+    assert a_new.shape[2] == 2
+    assert b_new.shape[1] == 2
+
+
+def test_split_two_site_unknown_mode_raises() -> None:
+    """Invalid ``trunc_mode`` raises ``ValueError``."""
+    merged = crandn(4, 3, 5)
+    with pytest.raises(ValueError, match="Unknown truncation mode"):
+        split_two_site(
+            merged,
+            [2, 2],
+            svd_distribution="right",
+            trunc_mode=cast("Any", "invalid"),
+            threshold=1e-9,
+            max_bond_dim=None,
+        )
+
+
+def _rand_unitary_like(m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    """Build a random complex matrix with orthonormal columns via QR.
+
+    Args:
+        m: Number of rows.
+        n: Number of columns (``n <= m``); the first ``n`` columns of the
+            Q factor are returned.
+        seed: Seed for the random number generator.
+
+    Returns:
+        Complex matrix of shape ``(m, n)`` whose columns are orthonormal.
+    """
+    rng_local = np.random.default_rng(seed)
+    mat = rng_local.normal(size=(m, n)) + 1j * rng_local.normal(size=(m, n))
+    q, _ = np.linalg.qr(mat)
+    q = np.asarray(q, dtype=np.complex128)
+    return cast("NDArray[np.complex128]", q[:, :n])
+
+
+def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) -> NDArray[np.complex128]:
+    """Construct a complex matrix with a prescribed singular spectrum.
+
+    Builds ``theta = U @ diag(s) @ V^H`` where ``U`` and ``V`` are random
+    orthonormal factors, so ``theta``'s singular values match ``s`` (truncated
+    to ``min(len(s), m, n)`` if needed).
+
+    Args:
+        s: Target singular values (non-increasing, non-negative).
+        m: Number of rows of the output matrix.
+        n: Number of columns of the output matrix.
+        seed: Seed for the random number generator; ``seed + 1`` is used for
+            the right factor so ``U`` and ``V`` are independent.
+
+    Returns:
+        Complex matrix of shape ``(m, n)`` with singular values ``s``.
+    """
+    r = min(len(s), m, n)
+    u = _rand_unitary_like(m, r, seed=seed)
+    v = _rand_unitary_like(n, r, seed=seed + 1)
+    sigma = np.diag(s[:r].astype(np.complex128))
+    return cast("NDArray[np.complex128]", (u @ sigma @ v.conj().T).astype(np.complex128, copy=False))
+
+
+def _as_merged_two_site(
+    theta: NDArray[np.complex128], d0: int, d1: int, d_left: int, d_right: int
+) -> NDArray[np.complex128]:
+    """Reshape a flat ``theta`` matrix into a merged two-site MPS tensor.
+
+    Interprets ``theta`` as having combined physical/bond indices
+    ``(d0 * d_left, d1 * d_right)`` and converts it to the canonical merged
+    two-site layout expected by ``split_two_site``.
+
+    Args:
+        theta: Matrix of shape ``(d0 * d_left, d1 * d_right)``.
+        d0: Physical dimension of the left site.
+        d1: Physical dimension of the right site.
+        d_left: Left bond dimension.
+        d_right: Right bond dimension.
+
+    Returns:
+        Merged two-site tensor of shape ``(d0 * d1, d_left, d_right)``.
+    """
+    tensor = theta.reshape(d0, d_left, d1, d_right).transpose(0, 2, 1, 3)
+    return cast("NDArray[np.complex128]", tensor.reshape(d0 * d1, d_left, d_right))
+
+
+def test_linalg_svd_reduced_shapes_unitary_and_reconstruction() -> None:
+    """linalg.svd: reduced SVD has correct shapes, unitary factors, and reconstructs A."""
     a = crandn(7, 5)  # m > n (k = 5)
-    u, s, vh = robust_svd(a, full_matrices=False)
+    u, s, vh = linalg.svd(a, full_matrices=False)
 
     k = min(a.shape)
     assert u.shape == (a.shape[0], k)
@@ -207,15 +271,15 @@ def test_robust_svd_reduced_shapes_unitary_and_reconstruction() -> None:
     assert np.allclose(a_rec, a)
 
 
-def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
-    """robust_svd: full SVD has correct shapes, unitary factors, and reconstructs A.
+def test_linalg_svd_full_shapes_unitary_and_reconstruction() -> None:
+    """linalg.svd: full SVD has correct shapes, unitary factors, and reconstructs A.
 
     Reconstruction uses the standard full-SVD identity:
         A = U[:, :k] @ diag(s) @ Vh[:k, :]
     where k = min(m, n).
     """
     a = crandn(4, 6)
-    u, s, vh = robust_svd(a, full_matrices=True)
+    u, s, vh = linalg.svd(a, full_matrices=True)
 
     m, n = a.shape
     k = min(m, n)
@@ -237,8 +301,8 @@ def test_robust_svd_full_shapes_unitary_and_reconstruction() -> None:
 LapackDriver = Literal["gesdd", "gesvd"]
 
 
-def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None:
-    """robust_svd: if the fast driver fails, it retries with the robust driver."""
+def test_linalg_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """linalg.svd: if the fast driver fails, it retries with the robust driver."""
     calls: list[tuple[LapackDriver, bool]] = []
     real_svd = scipy.linalg.svd
 
@@ -246,6 +310,7 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
         a_mat: NDArray[np.complex128],
         *,
         full_matrices: bool,
+        compute_uv: bool = True,
         lapack_driver: LapackDriver,
         check_finite: bool,
     ) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
@@ -257,6 +322,7 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
         u, s, vh = real_svd(
             a_mat,
             full_matrices=full_matrices,
+            compute_uv=compute_uv,
             lapack_driver=lapack_driver,
             check_finite=check_finite,
         )
@@ -266,7 +332,7 @@ def test_robust_svd_falls_back_to_gesvd(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(scipy.linalg, "svd", fake_svd)
 
     a = crandn(6, 6)
-    u, s, vh = robust_svd(a, full_matrices=False)
+    u, s, vh = linalg.svd(a, full_matrices=False)
 
     assert calls[0] == ("gesdd", False)
     assert calls[1] == ("gesvd", True)

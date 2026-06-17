@@ -16,12 +16,13 @@ import numpy as np
 
 from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
-from ..core.methods.tdvp import local_dynamic_tdvp
+from ..core.methods.tdvp import tdvp
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..core.data_structures.networks import MPO, MPS
+    from ..core.data_structures.mpo import MPO
+    from ..core.data_structures.mps import MPS
     from ..core.data_structures.simulation_parameters import AnalogSimParams
 
 
@@ -34,7 +35,7 @@ def _unitary_step(state: MPS, hamiltonian: MPO, sim_params: AnalogSimParams) -> 
         sim_params (AnalogSimParams): Analog simulation parameters (time step, bond limits, etc.).
     """
     if sim_params.evolution_mode == EvolutionMode.TDVP:
-        local_dynamic_tdvp(state, hamiltonian, sim_params)
+        tdvp(state, hamiltonian, sim_params)
     elif sim_params.evolution_mode == EvolutionMode.BUG:
         bug(state, hamiltonian, sim_params)
 
@@ -57,7 +58,7 @@ def _step_correlator_phis(
 
 def ensemble_member_worker(
     args: tuple[int, MPS, AnalogSimParams, MPO],
-) -> tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128] | None]:
     r"""Run one deterministic unitary ensemble member (no stochastic noise).
 
     For each pair ``(A, B)`` in ``sim_params.multi_time_observables`` the worker builds
@@ -73,8 +74,8 @@ def ensemble_member_worker(
             the evolution but is kept for TJM-style parallel worker signatures.
 
     Returns:
-        tuple[NDArray[np.float64], NDArray[np.complex128] | None]:
-            ``(observable_results, multi_time_results)``. ``multi_time_results`` is ``None``
+        tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.complex128] | None]:
+            ``(observable_results, diagnostics, multi_time_results)``. ``multi_time_results`` is ``None``
             when ``sim_params.multi_time_observables`` is empty; otherwise it has shape
             ``(n_pairs, n_times)`` if ``sample_timesteps`` else ``(n_pairs, 1)``.
     """
@@ -84,6 +85,8 @@ def ensemble_member_worker(
     pairs = sim_params.multi_time_observables
     n_pairs = len(pairs)
 
+    num_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
+    diagnostics = np.zeros((3, num_cols), dtype=np.float64)
     if sim_params.sample_timesteps:
         observable_results = np.zeros((len(sim_params.sorted_observables), len(sim_params.times)), dtype=np.float64)
     else:
@@ -102,11 +105,13 @@ def ensemble_member_worker(
             phis.append(phi_b)
 
     if sim_params.sample_timesteps:
+        state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, observable_results, 0)
         if multi_time_results is not None:
             for p, (probe_a, _b_op) in enumerate(pairs):
                 multi_time_results[p, 0] = phis[p].mixed_expectation(state, probe_a)
     elif last_index == 0:
+        state.record_diagnostics(diagnostics, 0)
         state.evaluate_observables(sim_params, observable_results)
         if multi_time_results is not None:
             for p, (probe_a, _b_op) in enumerate(pairs):
@@ -117,14 +122,16 @@ def ensemble_member_worker(
         _step_correlator_phis(sim_params, hamiltonian, phis)
 
         if sim_params.sample_timesteps:
+            state.record_diagnostics(diagnostics, j)
             state.evaluate_observables(sim_params, observable_results, j)
             if multi_time_results is not None:
                 for p, (probe_a, _b_op) in enumerate(pairs):
                     multi_time_results[p, j] = phis[p].mixed_expectation(state, probe_a)
         elif j == last_index:
+            state.record_diagnostics(diagnostics, 0)
             state.evaluate_observables(sim_params, observable_results)
             if multi_time_results is not None:
                 for p, (probe_a, _b_op) in enumerate(pairs):
                     multi_time_results[p, 0] = phis[p].mixed_expectation(state, probe_a)
 
-    return observable_results, multi_time_results
+    return observable_results, diagnostics, multi_time_results

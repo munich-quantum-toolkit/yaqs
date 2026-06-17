@@ -11,7 +11,45 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- extended EquivalenceChecker output to include entropy and the resulting diff data structure ([#364]) ([**@yiranwang-phys**])
+- OpenQASM2 and 3 files can now be read directly by the Simulator and EquivalenceChecker ([#464]) ([**@Marerido**])
+- improved Qiskit gate compatibility with matrix fallback ([#464]) ([**@aaronleesander**])
+- added MPO zip-up as default long-range gate application method ([#449]) ([**@aaronleesander**])
+- parallelized MPO equivalence checker ([#448]) ([**@aaronleesander**])
+- added tebd/hybrid/tdvp options for circuit simulation ([#441]) ([**@aaronleesander**])
+- added Krylov tolerance as high-level parameter ([#439]) ([**@aaronleesander**])
+- added accuracy presets to simulation parameters ([#438]) ([**@aaronleesander**])
+- added [`Simulator`](src/mqt/yaqs/simulator.py) class that owns execution-side configuration and dispatches to all simulation backends, and a [`Result`](src/mqt/yaqs/core/data_structures/result.py) dataclass returned by `Simulator.run` ([#430]) ([**@aaronleesander**])
+- added linalg submodule to open a new path for optimizations and stop BLAS thread oversubscription for stability ([#429]) ([**@aaronleesander**])
+- added high-level State and Hamiltonian classes at user-facing level ([#426]) ([**@aaronleesander**])
+- added Fermionic and Jordan-Wigner MPO encodings of 1D Fermi-Hubbard model ([#220]) ([**@thilomueller**])
 - added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
+
+### Changed
+
+- changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
+- overhauled TDVP backend ([#457]) ([**@aaronleesander**])
+- changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
+- refactored public API to use Simulator, Result, and EquivalenceChecker classes ([#430]) ([**@aaronleesander**])
+- sped up and stabilized test suite ([#428]) ([**@aaronleesander**])
+- changed [`simulator.run`](src/mqt/yaqs/simulator.py) to accept `State | list[State]` and `Hamiltonian` for analog simulations instead of `MPS` / `MPO` ([#422]) ([**@aaronleesander**])
+- changed solver to representation and updated noise-free simulation paths ([#422]) ([**@aaronleesander**])
+
+### Removed
+
+- removed the free `mqt.yaqs.simulator.run` function; call sites must migrate to `Simulator(...).run(...)` ([#430]) ([**@aaronleesander**])
+- removed `show_progress` and (unused) `num_threads` keyword arguments from `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams`; pass `show_progress` to `Simulator` instead ([#430]) ([**@aaronleesander**])
+
+### Fixed
+
+- refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
+- added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
+- minor cleanup ([#420]) ([**@aaronleesander**])
+
+## [0.5.0] - 2026-05-12
+
+### Added
+
 - added `MPS(..., state="haar-random")` initializer using Haar-random isometries with optional bond-dimension cap via `pad` ([#400]) ([**@Gauthameshwar**])
 - added process tomography for non-Markovian noise ([#344]) ([**@aaronleesander**])
 - added ability to measure in X or Y basis ([#339]) ([**@aaronleesander**])
@@ -89,7 +127,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Version links -->
 
-[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0
 [0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
 [0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
@@ -97,6 +136,25 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#450]: https://github.com/munich-quantum-toolkit/yaqs/pull/450
+[#464]: https://github.com/munich-quantum-toolkit/yaqs/pull/464
+[#458]: https://github.com/munich-quantum-toolkit/yaqs/pull/458
+[#457]: https://github.com/munich-quantum-toolkit/yaqs/pull/457
+[#449]: https://github.com/munich-quantum-toolkit/yaqs/pull/449
+[#448]: https://github.com/munich-quantum-toolkit/yaqs/pull/448
+[#447]: https://github.com/munich-quantum-toolkit/yaqs/pull/447
+[#446]: https://github.com/munich-quantum-toolkit/yaqs/pull/446
+[#445]: https://github.com/munich-quantum-toolkit/yaqs/pull/445
+[#441]: https://github.com/munich-quantum-toolkit/yaqs/pull/441
+[#439]: https://github.com/munich-quantum-toolkit/yaqs/pull/439
+[#438]: https://github.com/munich-quantum-toolkit/yaqs/pull/438
+[#430]: https://github.com/munich-quantum-toolkit/yaqs/pull/430
+[#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
+[#428]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
+[#426]: https://github.com/munich-quantum-toolkit/yaqs/pull/426
+[#422]: https://github.com/munich-quantum-toolkit/yaqs/pull/422
+[#220]: https://github.com/munich-quantum-toolkit/yaqs/pull/220
+[#420]: https://github.com/munich-quantum-toolkit/yaqs/pull/420
 [#409]: https://github.com/munich-quantum-toolkit/yaqs/pull/409
 [#344]: https://github.com/munich-quantum-toolkit/yaqs/pull/344
 [#400]: https://github.com/munich-quantum-toolkit/yaqs/pull/400
@@ -129,11 +187,13 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- Contributor -->
 
-[**@denialhaag**]: https://github.com/denialhaag
 [**@aaronleesander**]: https://github.com/aaronleesander
+[**@denialhaag**]: https://github.com/denialhaag
 [**@Gauthameshwar**]: https://github.com/Gauthameshwar
 [**@thilomueller**]: https://github.com/thilomueller
 [**@lucello**]: https://github.com/lucello
+[**@Marerido**]: https://github.com/Marerido
+[**@yiranwang-phys**]: https://github.com/yiranwang-phys
 
 <!-- General links -->
 

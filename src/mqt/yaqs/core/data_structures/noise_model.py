@@ -31,23 +31,19 @@ logger = logging.getLogger(__name__)
 class NoiseModel:
     """A class to represent a noise model with arbitrary-site jump operators.
 
-     Attributes.
-    ----------
-    processes : list of str
-        A list of noise processes affecting the system.
-        Each process is a dict with:
-            - name: process name or identifier
-            - sites: indices of sites this process acts on
-            - strength: noise strength
-            - matrix: matrix representing the operator on those sites (for 1-site and adjacent 2-site processes)
-            - factors: tuple of two 1-site operator matrices (for long-range 2-site processes)
+    Attributes:
+        processes: A list of noise processes affecting the system. Each process is
+            a ``dict`` with:
 
-    Methods:
-    -------
-    __init__:
-        Initializes the NoiseModel with given processes.
-    get_operator:
-        Static method to retrieve the operator matrix for a given noise process name.
+            - ``name``: process name or identifier.
+            - ``sites``: indices of sites this process acts on.
+            - ``strength``: noise strength.
+            - ``matrix``: matrix representing the operator on those sites (for
+              1-site and adjacent 2-site processes).
+            - ``factors``: tuple of two 1-site operator matrices (for long-range
+              2-site processes).
+        scheduled_jumps: A list of scheduled jump dictionaries applied at specific
+            times.
     """
 
     def __init__(
@@ -55,12 +51,11 @@ class NoiseModel:
     ) -> None:
         """Initialize the NoiseModel.
 
-        Parameters
-        ----------
-        processes :
-            A list of noise process dictionaries affecting the quantum system. Default is None.
-        scheduled_jumps :
-            A list of scheduled jumps to apply at specific times. Default is None.
+        Args:
+            processes: A list of noise process dictionaries affecting the quantum
+                system. Default is ``None``.
+            scheduled_jumps: A list of scheduled jumps to apply at specific times.
+                Default is ``None``.
 
         Note:
             Input validation is performed and assertion errors may be raised by
@@ -129,17 +124,18 @@ class NoiseModel:
         """Sample a concrete NoiseModel from any distribution-based strengths.
 
         For each process:
-            - If 'strength' is a float, it is kept as is.
-            - If 'strength' is a dict describing a distribution, a value is sampled.
+
+        - If ``strength`` is a float, it is kept as is.
+        - If ``strength`` is a dict describing a distribution, a value is sampled.
 
         Args:
             rng: The random number generator or seed to use for sampling.
-                 If None, a new generator is created.
+                If None, a new generator is created.
 
         Returns:
-            NoiseModel: A new NoiseModel instance where all process strengths are concrete floats.
-                        This sampled model represents the specific realization of static disorder used
-                        for a simulation run.
+            A new NoiseModel instance where all process strengths are concrete
+            floats. This sampled model represents the specific realization of
+            static disorder used for a simulation run.
 
         Raises:
             ValueError: If an unsupported distribution type is provided.
@@ -207,7 +203,7 @@ class NoiseModel:
             name: Name of the noise process (e.g., 'xx', 'zz').
 
         Returns:
-            BaseGate: The matrix representation of the operator.
+            The matrix representation of the operator.
         """
         if isinstance(name, BaseGate):
             return name

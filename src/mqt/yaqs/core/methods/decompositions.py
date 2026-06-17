@@ -7,82 +7,24 @@
 
 """Tensor Network Decompositions.
 
-This module implements left and right moving versions of the QR and SVD decompositions which are used throughout YAQS.
+This module implements left and right moving versions of the QR decomposition,
+two-site MPS merge/split with SVD truncation, which are used throughout YAQS.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import scipy.linalg
+import opt_einsum as oe
+
+from .. import linalg
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-
-def robust_svd(
-    a_mat: NDArray[np.complex128],
-    *,
-    full_matrices: bool = False,
-) -> tuple[NDArray[np.complex128], NDArray[np.float64], NDArray[np.complex128]]:
-    """Robust SVD with fast-path + fallback LAPACK drivers.
-
-    Computes the singular value decomposition (SVD) of `a` using SciPy/LAPACK:
-
-        a = U @ np.diag(s) @ Vh
-
-    where `U` and `Vh` are unitary (up to numerical precision) and `s` contains the
-    non-negative singular values in descending order.
-
-    This routine is intended for performance-critical tensor network code where rare
-    numerical pathologies can cause the default fast SVD to fail to converge. We try
-    a fast divide-and-conquer driver first and fall back to a more robust driver if
-    needed:
-
-        1) 'gesdd' (fast, divide-and-conquer)
-        2) 'gesvd' (more robust, typically slower)
-
-    The fallback also enables finite checks to catch NaNs/Infs early, producing a
-    clearer failure mode when upstream numerics are broken.
-
-    Args:
-        a_mat: Input matrix of shape (m, n). Must be finite (no NaNs/Infs) for reliable
-            results; if not, the fallback path uses `check_finite=True` to detect it.
-        full_matrices: If False, compute the reduced/economy SVD with:
-            - U shape: (m, k)
-            - s shape: (k,)
-            - Vh shape: (k, n)
-            where k = min(m, n).
-            If True, compute the full SVD with:
-            - U shape: (m, m)
-            - Vh shape: (n, n)
-
-    Returns:
-        u_mat: Left singular vectors (complex128), shape depends on `full_matrices`.
-        s_vec: Singular values (float64), sorted in non-increasing order.
-        v_mat: Right singular vectors conjugate-transposed (complex128), shape depends
-            on `full_matrices`.
-    """
-    try:
-        u_mat, s_vec, v_mat = scipy.linalg.svd(
-            a_mat,
-            full_matrices=full_matrices,
-            lapack_driver="gesdd",  # fast
-            check_finite=False,
-        )
-    except (scipy.linalg.LinAlgError, ValueError, FloatingPointError):
-        # Retry with more robust driver
-        u_mat, s_vec, v_mat = scipy.linalg.svd(
-            a_mat,
-            full_matrices=full_matrices,
-            lapack_driver="gesvd",  # robust
-            check_finite=True,  # Adds safety
-        )
-    else:
-        return u_mat, s_vec, v_mat
-
-    return u_mat, s_vec, v_mat
+SvdDistribution = Literal["left", "right", "sqrt"]
+TruncMode = Literal["discarded_weight", "relative"]
 
 
 def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
@@ -94,9 +36,9 @@ def right_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128]
         mps_tensor: The tensor to be decomposed.
 
     Returns:
-        q_tensor: The Q tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        r_mat: The R matrix with the right virtual leg (new,right).
+        Tuple ``(q_tensor, r_mat)`` where ``q_tensor`` is the Q tensor with the
+        left virtual leg and the physical leg ``(phys, left, new)`` and
+        ``r_mat`` is the R matrix with the right virtual leg ``(new, right)``.
     """
     phys, left, right = mps_tensor.shape
     mat = mps_tensor.reshape(phys * left, right)
@@ -116,10 +58,9 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
         mps_tensor: The tensor to be decomposed.
 
     Returns:
-        q_tensor: The Q tensor with the physical leg and the right virtual
-            leg (phys,new,right).
-        r_mat: The R matrix with the left virtual leg (left,new).
-
+        Tuple ``(q_tensor, r_mat)`` where ``q_tensor`` is the Q tensor with the
+        physical leg and the right virtual leg ``(phys, new, right)`` and
+        ``r_mat`` is the R matrix with the left virtual leg ``(left, new)``.
     """
     old_shape = mps_tensor.shape
     mps_tensor_t = mps_tensor.transpose(0, 2, 1)
@@ -134,120 +75,114 @@ def left_qr(mps_tensor: NDArray[np.complex128]) -> tuple[NDArray[np.complex128],
     return q_tensor, r_mat
 
 
-def right_svd(
-    mps_tensor: NDArray[np.complex128],
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
-    """Right SVD.
+def merge_two_site(left_tensor: NDArray[np.complex128], right_tensor: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Merge two neighboring MPS site tensors into one two-site tensor.
 
-    Performs the singular value decomposition of an MPS tensor.
+    Contracts over the shared bond and reshapes so the two physical legs become
+    one composite leg of dimension ``d_left * d_right``.
 
     Args:
-        mps_tensor: The tensor to be decomposed.
+        left_tensor: Left MPS tensor, shape ``(d_left, D0, D1)``.
+        right_tensor: Right MPS tensor, shape ``(d_right, D1, D2)``.
 
     Returns:
-        NDArray[np.complex128]: The U tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        NDArray[np.complex128]: The S vector with the singular values.
-        NDArray[np.complex128]: The V matrix with the right virtual leg (new,right).
-
+        Merged tensor of shape ``(d_left * d_right, D0, D2)``.
     """
-    old_shape = mps_tensor.shape
-    svd_shape = (old_shape[0] * old_shape[1], old_shape[2])
-    mps_tensor = mps_tensor.reshape(svd_shape)
-    u_mat, s_vec, v_mat = np.linalg.svd(mps_tensor, full_matrices=False)
-    new_shape = (old_shape[0], old_shape[1], -1)
-    u_tensor = u_mat.reshape(new_shape)
-    return u_tensor, s_vec, v_mat
+    merged_tensor = np.asarray(oe.contract("abc,dce->adbe", left_tensor, right_tensor), dtype=np.complex128)
+    merged_shape = merged_tensor.shape
+    return merged_tensor.reshape((merged_shape[0] * merged_shape[1], merged_shape[2], merged_shape[3]))
 
 
-def truncated_right_svd(
-    mps_tensor: NDArray[np.complex128],
+def split_two_site(
+    merged: NDArray[np.complex128],
+    physical_dimensions: list[int],
+    *,
+    svd_distribution: SvdDistribution,
+    trunc_mode: TruncMode,
     threshold: float,
     max_bond_dim: int | None,
-) -> tuple[NDArray[np.complex128], NDArray[np.complex128], NDArray[np.complex128]]:
-    """Truncated right SVD.
-
-    Performs the truncated singular value decomposition of an MPS tensor.
-
-    Args:
-        mps_tensor: The tensor to be decomposed.
-        threshold: SVD threshold
-        max_bond_dim: Maximum bond dimension of MPS
-
-    Returns:
-        a_new: The U tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        b_new: The V matrix with the right virtual leg (new,right).
-
-    """
-    u_tensor, s_vec, v_mat = right_svd(mps_tensor)
-    cut_sum = 0
-    cut_index = 1
-    for i, s_val in enumerate(np.flip(s_vec)):
-        cut_sum += s_val**2
-        if cut_sum >= threshold:
-            cut_index = len(s_vec) - i
-            break
-    if max_bond_dim is not None:
-        cut_index = min(cut_index, max_bond_dim)
-    u_tensor = u_tensor[:, :, :cut_index]
-    s_vec = s_vec[:cut_index]
-    v_mat = v_mat[:cut_index, :]
-    return u_tensor, s_vec, v_mat
-
-
-def two_site_svd(
-    a: NDArray[np.complex128],
-    b: NDArray[np.complex128],
-    threshold: float,
-    max_bond_dim: int | None = None,
+    min_keep: int = 1,
 ) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:
-    """Two site SVD.
+    """Split a merged two-site MPS tensor back into two sites via truncated SVD.
 
-    Performs the truncated singular value decomposition of two MPS tensors.
+    The merged tensor must have shape ``(d_left * d_right, D0, D2)`` with
+    ``physical_dimensions == [d_left, d_right]``.
 
     Args:
-        a: The left tensor to be decomposed.
-        b: The right tensor to be decomposed.
-        threshold: SVD threshold
-        max_bond_dim: Maximum bond dimension of MPS
+        merged: Two-site tensor ``(d_left * d_right, D0, D2)``.
+        physical_dimensions: ``[d_left, d_right]`` physical dimensions.
+        svd_distribution: How to absorb singular values: ``"left"``, ``"right"``, or ``"sqrt"``.
+        trunc_mode: ``"discarded_weight"`` or ``"relative"`` (see :func:`mqt.yaqs.core.linalg.truncate`).
+        threshold: Truncation threshold for the chosen mode.
+        max_bond_dim: Optional hard cap on bond dimension passed to
+            :func:`mqt.yaqs.core.linalg.truncate` (``None`` for no cap).
+        min_keep: Minimum number of singular values to retain (default ``1``).
 
     Returns:
-        a_new: The U tensor with the left virtual leg and the physical
-            leg (phys,left,new).
-        b_new: The V matrix with the right virtual leg (new,right).
+        Left tensor ``(d_left, D0, keep)`` and right tensor ``(d_right, keep, D2)``.
 
+    Raises:
+        ValueError: If ``physical_dimensions`` does not have exactly two
+            elements, if it does not match the first axis of ``merged``,
+            ``trunc_mode`` is not recognized, or ``svd_distribution`` is invalid.
     """
-    # 1) build the two-site tensor theta_{(phys_i,L),(phys_j,R)}
-    theta = np.tensordot(a, b, axes=(2, 1))
-    phys_i, left = a.shape[0], a.shape[1]
-    phys_j, right = b.shape[0], b.shape[2]
+    if len(physical_dimensions) != 2:
+        msg = f"physical_dimensions must have exactly 2 elements (d_left, d_right); got {len(physical_dimensions)}."
+        raise ValueError(msg)
+    d_left = physical_dimensions[0]
+    d_right = physical_dimensions[1]
+    if merged.shape[0] != d_left * d_right:
+        msg = "The first dimension of the tensor must be a combination of the given physical dimensions."
+        raise ValueError(msg)
 
-    # 2) reshape to matrix M of shape (L*phys_i) x (phys_j*R)
-    theta_mat = theta.reshape(left * phys_i, phys_j * right)
+    tensor_reshaped = merged.reshape(d_left, d_right, merged.shape[1], merged.shape[2])
+    tensor_transposed = tensor_reshaped.transpose((0, 2, 1, 3))
+    shape_transposed = tensor_transposed.shape
 
-    # 3) full SVD
-    u_mat, s_vec, v_mat = robust_svd(theta_mat, full_matrices=False)
+    theta_mat = tensor_transposed.reshape(
+        shape_transposed[0] * shape_transposed[1],
+        shape_transposed[2] * shape_transposed[3],
+    )
+    u_mat, s_vec, v_mat = linalg.svd(theta_mat, full_matrices=False)
 
-    # 4) decide how many singular values to keep:
-    #    sum of squares of discarded values ≤ threshold
-    discard = 0.0
-    keep = len(s_vec)
-    min_keep = 2  # Prevents pathological dimension-1 truncation
-    for idx, s in enumerate(reversed(s_vec)):
-        discard += s**2
-        if discard >= threshold:
-            keep = max(len(s_vec) - idx, min_keep)
-            break
-    if max_bond_dim is not None:
-        keep = min(keep, max_bond_dim)
+    if trunc_mode == "discarded_weight":
+        keep = linalg.truncate(
+            s_vec,
+            mode="discarded_weight",
+            threshold=threshold,
+            max_bond_dim=max_bond_dim,
+            min_keep=min_keep,
+        )
+    elif trunc_mode == "relative":
+        keep = linalg.truncate(
+            s_vec,
+            mode="relative",
+            threshold=threshold,
+            max_bond_dim=max_bond_dim,
+            min_keep=min_keep,
+        )
+    else:
+        msg = f"Unknown truncation mode: {trunc_mode!r}"
+        raise ValueError(msg)
 
-    # 5) build the truncated A' of shape (phys_i, L, keep)
-    a_new = u_mat[:, :keep].reshape(phys_i, left, keep)
+    left_tensor = u_mat[:, :keep]
+    s_vec = s_vec[:keep]
+    right_tensor = v_mat[:keep, :]
 
-    # 6) absorb S into Vh and reshape to B' of shape (phys_j, keep, R)
-    v_tensor = np.diag(s_vec[:keep]) @ v_mat[:keep, :]  # shape (keep, phys_j*R)
-    v_tensor = v_tensor.reshape(keep, phys_j, right)  # (keep, phys_j, R)
-    b_new = v_tensor.transpose(1, 0, 2)  # (phys_j, keep, R)
+    left_tensor = left_tensor.reshape((shape_transposed[0], shape_transposed[1], keep))
+    right_tensor = right_tensor.reshape((keep, shape_transposed[2], shape_transposed[3]))
 
-    return a_new, b_new
+    if svd_distribution == "left":
+        left_tensor *= s_vec
+    elif svd_distribution == "right":
+        right_tensor *= s_vec[:, None, None]
+    elif svd_distribution == "sqrt":
+        sqrt_sigma = np.sqrt(s_vec)
+        left_tensor *= sqrt_sigma
+        right_tensor *= sqrt_sigma[:, None, None]
+    else:
+        msg = "svd_distribution parameter must be left, right, or sqrt."
+        raise ValueError(msg)
+
+    right_tensor = right_tensor.transpose((1, 0, 2))
+    return left_tensor, right_tensor

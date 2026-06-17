@@ -16,13 +16,13 @@ mystnb:
 
 This example demonstrates how to run an analog simulation of a chain consisting of transmon qubits and resonators using YAQS.
 
-An MPO Hamiltonian is initialized using a coupled transmon-resonator model. An MPS is prepared in a specific computational basis state. The system is evolved under a noise-free analog simulation using the Tensor Jump Method (TJM). Finally, expectation values for all computational basis states are collected and visualized.
+A {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` is initialized using a coupled transmon-resonator model. A {class}`~mqt.yaqs.core.data_structures.state.State` is prepared in a specific computational basis state. The system is evolved under a noise-free analog simulation using the Tensor Jump Method (TJM). Finally, expectation values for all computational basis states are collected and visualized.
 
 ## Define the system Hamiltonian
 
 ```{code-cell} ipython3
 import numpy as np
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 
 length = 3 # Qubit - resonator - qubit
 qubit_dim = 2
@@ -32,7 +32,7 @@ w_r = 4/(2*np.pi)
 alpha = 0
 g = 2/(2*np.pi)
 
-H_0 = MPO.coupled_transmon(
+H_0 = Hamiltonian.coupled_transmon(
     length=length,
     qubit_dim=qubit_dim,
     resonator_dim=resonator_dim,
@@ -46,10 +46,15 @@ H_0 = MPO.coupled_transmon(
 ## Define the initial state
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.state import State
 
 # Initialize in state |100⟩: left qubit excited
-state = MPS(length, state="basis", basis_string='100', physical_dimensions=[qubit_dim, resonator_dim, qubit_dim])
+state = State(
+    length,
+    initial="basis",
+    basis_string="100",
+    physical_dimensions=[qubit_dim, resonator_dim, qubit_dim],
+)
 ```
 
 ## Define the noise model
@@ -86,9 +91,10 @@ sim_params = AnalogSimParams(
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import simulator
+from mqt.yaqs import Simulator
 
-simulator.run(state, H_0, sim_params, noise_model)
+sim = Simulator()
+result = sim.run(state, H_0, sim_params, noise_model)
 ```
 
 ## Plot the results
@@ -102,12 +108,13 @@ mystnb:
 ---
 
 import matplotlib.pyplot as plt
+import numpy as np
 
-measurements = sim_params.observables
-leakage = [1 for _ in measurements[0].results]
-for measurement in measurements:
-    leakage -= measurement.results
-    plt.plot(measurement.results, label=measurement.gate.bitstring)
+pvm_observables = result.observables
+leakage = np.ones_like(result.expectation_values[0])
+for measurement, values in zip(pvm_observables, result.expectation_values, strict=True):
+    leakage -= values
+    plt.plot(values, label=measurement.gate.bitstring)
 plt.plot(leakage, label="Leakage")
 
 plt.xlabel("Timestep")

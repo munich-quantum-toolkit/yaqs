@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import copy
 import itertools
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 
 from mqt.yaqs.analog.analog_tjm import analog_tjm_1, analog_tjm_2
 from mqt.yaqs.analog.mcwf import mcwf, preprocess_mcwf
-from mqt.yaqs.core.data_structures.networks import MPS
+from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import X, Y, Z
 from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
@@ -31,7 +31,7 @@ from mqt.yaqs.simulator import WORKER_CTX, available_cpus, run_backend_parallel
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from mqt.yaqs.core.data_structures.networks import MPO
+    from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
     from mqt.yaqs.core.data_structures.noise_model import NoiseModel
     from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 
@@ -71,10 +71,10 @@ def get_basis_states() -> list[tuple[str, NDArray[np.complex128], NDArray[np.com
 def get_choi_basis() -> tuple[list[NDArray[np.complex128]], list[tuple[int, int]]]:
     r"""Generate the 16 basis CP maps (Choi matrices) from the 4 basis states.
 
-    A basis CP map is A_{p,m}(rho) = Tr(E_m rho) rho_p.
-    Its Choi matrix is B_{p,m} = rho_p \\otimes E_m^T,
-    because J(A) = sum_{ij} A(|i><j|) otimes |i><j| = rho_p otimes sum_{ij} Tr(E_m |i><j|) |i><j|
-    = rho_p otimes E_m^T.
+    A basis CP map is ``A_{p,m}(rho) = Tr(E_m rho) rho_p``.
+    Its Choi matrix is ``B_{p,m} = rho_p \otimes E_m^T``,
+    because ``J(A) = sum_{ij} A(|i><j|) otimes |i><j| = rho_p otimes sum_{ij} Tr(E_m |i><j|) |i><j|
+    = rho_p otimes E_m^T``.
 
     Returns:
         tuple containing:
@@ -227,7 +227,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
     traj_idx = job_idx % num_trajectories
 
     # 2. Get segment parameters
-    operator = WORKER_CTX["operator"]
+    hamiltonian: Hamiltonian = WORKER_CTX["operator"]
     sim_params = WORKER_CTX["sim_params"]
     timesteps = WORKER_CTX["timesteps"]
     basis_set = WORKER_CTX["basis_set"]
@@ -238,18 +238,21 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
     alpha_seq = worker_sequences[seq_idx]
 
     # 3. Initialize state to |0...0>
-    is_mcwf = sim_params.solver == "MCWF"
+    is_vector = WORKER_CTX["representation"] == "vector"
     current_state: MPS | NDArray[np.complex128]
 
-    if is_mcwf:
-        num_sites = operator.length
+    if is_vector:
+        num_sites = hamiltonian.length
         current_state = np.array([1.0], dtype=np.complex128)
         for _ in range(num_sites):
             current_state = np.kron(current_state, np.array([1.0, 0.0], dtype=np.complex128))
     else:
-        current_state = MPS(length=operator.length, state="zeros")
+        current_state = MPS(length=hamiltonian.length, state="zeros")
 
     sequence_weight = 1.0
+
+    if not is_vector:
+        hamiltonian.ensure_encoded("mpo")
 
     # We only need the final output state after all evolution steps
     def _get_rho_site_zero(state: MPS | NDArray[np.complex128]) -> NDArray[np.complex128]:
@@ -276,7 +279,7 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         _, psi_next, _ = basis_set[p_t]
         _, psi_proj, _ = basis_set[m_t]
 
-        if is_mcwf:
+        if is_vector:
             assert isinstance(current_state, np.ndarray)
             current_state, step_prob = _reprepare_site_zero_vector_forced(
                 cast("NDArray[np.complex128]", current_state), psi_proj, psi_next
@@ -296,38 +299,40 @@ def _tomography_sequence_worker(job_idx: int) -> tuple[int, int, list[NDArray[np
         step_params.elapsed_time = duration
         step_params.dt = sim_params.dt
         step_params.num_traj = 1
-        step_params.show_progress = False
         step_params.get_state = True
 
         n_steps = int(np.round(duration / step_params.dt))
         step_params.times = np.linspace(0, n_steps * step_params.dt, n_steps + 1)
 
-        if is_mcwf:
+        if is_vector:
             static_ctx = WORKER_CTX["mcwf_static_ctx"]
             dynamic_ctx = copy.copy(static_ctx)
             dynamic_ctx.psi_initial = current_state
             dynamic_ctx.sim_params = step_params
 
-            mcwf((traj_idx, dynamic_ctx))
-            assert dynamic_ctx.output_state is not None
-            current_state = cast("NDArray[np.complex128]", dynamic_ctx.output_state)
+            _, _, psi_final = mcwf((traj_idx, dynamic_ctx))
+            assert psi_final is not None
+            current_state = psi_final
         else:
             backend = analog_tjm_1 if step_params.order == 1 else analog_tjm_2
             assert isinstance(current_state, MPS)
-            backend((traj_idx, current_state, noise_model, step_params, operator))
-            assert step_params.output_state is not None
-            current_state = cast("MPS", step_params.output_state)
+            _, _, final_mps = backend((traj_idx, current_state, noise_model, step_params, hamiltonian.mpo))
+            assert final_mps is not None
+            current_state = final_mps
 
     sequence_results = [_get_rho_site_zero(current_state)]
     return (seq_idx, traj_idx, sequence_results, sequence_weight)
 
 
 def run(
-    operator: MPO,
+    operator: Hamiltonian,
     sim_params: AnalogSimParams,
     timesteps: list[float] | None = None,
     num_trajectories: int = 100,
     noise_model: NoiseModel | None = None,
+    *,
+    representation: Literal["mps", "vector", "density_matrix"] = "mps",
+    show_progress: bool = True,
 ) -> ProcessTensor:
     """Run Process Tomography / Process Tensor Tomography using parallelized backend.
 
@@ -338,12 +343,15 @@ def run(
     of the basis set.
 
     Args:
-        operator: System evolution MPO.
+        operator: System evolution Hamiltonian.
         sim_params: Simulation parameters.
         timesteps: List of time durations for each evolution segment.
                    If None, defaults to [sim_params.elapsed_time] (standard 1-step tomography).
         num_trajectories: Number of trajectories to average per sequence (for noise unravelling).
-        noise_model: Noise model to apply. If None, uses sim_params.noise_model.
+        noise_model: Noise model to apply. If None, evolution is noise-free.
+        representation: State representation for evolution inside tomography workers
+            (``"mps"``, ``"vector"``, or ``"density_matrix"``).
+        show_progress: If ``True``, display a tqdm progress bar over tomography sequences.
 
     Returns:
         ProcessTensor object representing the final-time map conditioned on preparation sequences.
@@ -382,15 +390,28 @@ def run(
 
     # 2. Prepare Simulation Context
     if noise_model is None:
-        noise_model = sim_params.noise_model
-
-    if noise_model is None:
         num_trajectories = 1
 
+    if representation == "density_matrix":
+        msg = "Process tomography does not support representation='density_matrix'; use 'mps' or 'vector'."
+        raise ValueError(msg)
+
+    operator.ensure_encoded("mpo")
+    if representation == "vector":
+        operator.ensure_encoded("sparse")
+
     mcwf_static_ctx = None
-    if sim_params.solver == "MCWF":
+    if representation == "vector":
+        # Shape-only placeholder: preprocess_mcwf uses length and static operators only.
+        # Workers override dynamic_ctx.psi_initial with the real state vector each step.
         dummy_mps = MPS(length=operator.length, state="zeros")
-        mcwf_static_ctx = preprocess_mcwf(dummy_mps, operator, noise_model, sim_params)
+        mcwf_static_ctx = preprocess_mcwf(
+            dummy_mps,
+            None,
+            noise_model,
+            sim_params,
+            h_sparse=operator.sparse_matrix,
+        )
 
     payload = {
         "operator": operator,
@@ -402,6 +423,7 @@ def run(
         "noise_model": noise_model,
         "num_trajectories": num_trajectories,
         "mcwf_static_ctx": mcwf_static_ctx,
+        "representation": representation,
     }
 
     # 3. Parallel Execution
@@ -416,7 +438,7 @@ def run(
         payload=payload,
         n_jobs=total_jobs,
         max_workers=max_workers,
-        show_progress=sim_params.show_progress,
+        show_progress=show_progress,
         desc="Simulating Tomography Sequences",
     )
 

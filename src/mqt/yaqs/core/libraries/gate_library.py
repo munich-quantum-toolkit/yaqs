@@ -19,8 +19,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .. import linalg
+
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
     from qiskit.circuit import Parameter
 
 
@@ -41,10 +43,11 @@ def split_tensor(tensor: NDArray[np.complex128]) -> list[NDArray[np.complex128]]
     matrix = np.transpose(tensor, (0, 2, 1, 3))
     dims = matrix.shape
     matrix = np.reshape(matrix, (dims[0] * dims[1], dims[2] * dims[3]))
-    u_mat, s_list, v_mat = np.linalg.svd(matrix, full_matrices=False)
-    s_list = s_list[s_list > 1e-6]
-    u_mat = u_mat[:, 0 : len(s_list)]
-    v_mat = v_mat[0 : len(s_list), :]
+    u_mat, s_list, v_mat = linalg.svd(matrix, full_matrices=False)
+    keep = linalg.truncate(s_list, mode="hard_cutoff", threshold=1e-6, min_keep=1)
+    s_list = s_list[:keep]
+    u_mat = u_mat[:, :keep]
+    v_mat = v_mat[:keep, :]
 
     tensor1 = u_mat
     tensor2 = np.diag(s_list) @ v_mat
@@ -138,7 +141,7 @@ class BaseGate:
     generator: NDArray[np.complex128] | list[NDArray[np.complex128]]
     sites: list[int]
 
-    def __init__(self, mat: NDArray[np.complex128], local_dim: int = 2) -> None:
+    def __init__(self, mat: ArrayLike, local_dim: int = 2) -> None:
         """Initializes a BaseGate instance with the given matrix.
 
         Args:
@@ -146,23 +149,26 @@ class BaseGate:
             local_dim: Local Hilbert space dimension per site (e.g. 2 for qubits, 3 for qutrits).
 
         Raises:
-            ValueError: If the matrix is not square.
+            ValueError: If the matrix is not a square 2-D array.
             ValueError: If the matrix size is not a power of local_dim.
         """
-        if mat.shape[0] != mat.shape[1]:
+        matrix = np.asarray(mat, dtype=np.complex128)
+        if matrix.ndim != 2:
+            msg = "Matrix must be a 2-D array."
+            raise ValueError(msg)
+        if matrix.shape[0] != matrix.shape[1]:
             msg = "Matrix must be square"
             raise ValueError(msg)
 
-        n = mat.shape[0]
-
+        n = matrix.shape[0]
         interaction = np.log(n) / np.log(local_dim)
         if not np.isclose(interaction, round(interaction)):
             msg = f"Matrix size {n} is not a power of {local_dim}"
             raise ValueError(msg)
 
         self.local_dim = local_dim
-        self.matrix = mat
-        self.tensor = mat
+        self.matrix = matrix
+        self.tensor = matrix
         self.interaction = round(interaction)
 
     def set_sites(self, *sites: int | list[int]) -> None:
@@ -188,6 +194,9 @@ class BaseGate:
 
         # store as the proper type
         self.sites = sites_list
+        if self.interaction == 2:
+            self.tensor = np.reshape(self.matrix, (2, 2, 2, 2))
+            self.mpo_tensors = extend_gate(self.tensor, self.sites)
 
     def __add__(self, other: BaseGate) -> BaseGate:
         """Adds two gates together.
@@ -204,7 +213,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot add gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix + other.matrix, local_dim=self.local_dim)
+        return self._clone_with_matrix(self.matrix + other.matrix)
 
     def __sub__(self, other: BaseGate) -> BaseGate:
         """Subtracts one gate from another.
@@ -221,7 +230,7 @@ class BaseGate:
         if self.interaction != other.interaction:
             msg = "Cannot subtract gates with different interaction"
             raise ValueError(msg)
-        return BaseGate(self.matrix - other.matrix, local_dim=self.local_dim)
+        return self._clone_with_matrix(self.matrix - other.matrix)
 
     def __mul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies two gates or scales a gate by a scalar.
@@ -239,9 +248,9 @@ class BaseGate:
             if self.interaction != other.interaction:
                 msg = "Cannot multiply gates with different interaction"
                 raise ValueError(msg)
-            return BaseGate(self.matrix @ other.matrix, local_dim=self.local_dim)
+            return self._clone_with_matrix(self.matrix @ other.matrix)
 
-        return BaseGate(self.matrix * other, local_dim=self.local_dim)
+        return self._clone_with_matrix(self.matrix * other)
 
     def __rmul__(self, other: BaseGate | complex) -> BaseGate:
         """Multiplies a scalar or another gate with this gate (right multiplication).
@@ -263,7 +272,28 @@ class BaseGate:
         Returns:
             A new BaseGate resulting from matrix multiplication.
         """
-        return BaseGate(self.matrix @ other.matrix, local_dim=self.local_dim)
+        return self._clone_with_matrix(self.matrix @ other.matrix)
+
+    def _clone_with_matrix(self, matrix: NDArray[np.complex128]) -> BaseGate:
+        """Return a gate with the same interaction level and a new matrix.
+
+        Unlike :meth:`__init__`, this bypasses power-of-local_dim dimension validation so
+        arithmetic on d-level ladder operators preserves non-standard matrix sizes.
+
+        Args:
+            matrix: Replacement gate matrix.
+
+        Returns:
+            New gate with ``interaction`` and ``local_dim`` copied from ``self`` and
+            ``name`` set to ``"custom"``.
+        """
+        clone = BaseGate.__new__(BaseGate)
+        clone.matrix = np.asarray(matrix, dtype=np.complex128)
+        clone.tensor = clone.matrix
+        clone.interaction = self.interaction
+        clone.local_dim = self.local_dim
+        clone.name = "custom"
+        return clone
 
     def dag(self) -> BaseGate:
         """Returns the conjugate transpose (dagger) of the gate.
@@ -271,7 +301,7 @@ class BaseGate:
         Returns:
             A new gate representing the conjugate transpose of this gate.
         """
-        return BaseGate(np.conj(self.matrix).T, local_dim=self.local_dim)
+        return self._clone_with_matrix(np.conj(self.matrix).T)
 
     def conj(self) -> BaseGate:
         """Returns the complex conjugate of the gate.
@@ -279,7 +309,7 @@ class BaseGate:
         Returns:
             A new gate representing the complex conjugate of this gate.
         """
-        return BaseGate(np.conj(self.matrix), local_dim=self.local_dim)
+        return self._clone_with_matrix(np.conj(self.matrix))
 
     def trans(self) -> BaseGate:
         """Returns the transpose of the gate.
@@ -287,7 +317,7 @@ class BaseGate:
         Returns:
             A new gate representing the transpose of this gate.
         """
-        return BaseGate(self.matrix.T, local_dim=self.local_dim)
+        return self._clone_with_matrix(self.matrix.T)
 
     @classmethod
     def x(cls) -> X:
@@ -568,42 +598,6 @@ class BaseGate:
         return PVM(bitstring)
 
     @classmethod
-    def runtime_cost(cls) -> RuntimeCost:
-        """Create a runtime cost diagnostic operator.
-
-        This is not a physical observable but a diagnostic metric that estimates
-        the computational cost of simulating the network.
-
-        Returns:
-            An instance of the runtime cost diagnostic gate.
-        """
-        return RuntimeCost()
-
-    @classmethod
-    def max_bond(cls) -> MaxBond:
-        """Create a maximum bond dimension diagnostic operator.
-
-        This is not a physical observable but a diagnostic metric that reports
-        the maximum bond dimension in the tensor network.
-
-        Returns:
-            An instance of the max bond dimension diagnostic gate.
-        """
-        return MaxBond()
-
-    @classmethod
-    def total_bond(cls) -> TotalBond:
-        """Create a total bond dimension diagnostic operator.
-
-        This is not a physical observable but a diagnostic metric that reports
-        the sum of internal bond dimensions in the tensor network.
-
-        Returns:
-            An instance of the total bond dimension diagnostic gate.
-        """
-        return TotalBond()
-
-    @classmethod
     def entropy(cls) -> Entropy:
         """Create an entropy diagnostic operator.
 
@@ -757,7 +751,6 @@ class Destroy(BaseGate):
         """
         assert d > 0, f"d must be positive, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=1)
-
         super().__init__(mat, local_dim=d)
 
 
@@ -785,7 +778,6 @@ class Create(BaseGate):
         """
         assert d > 0, f"d must be positive, got {d}"
         mat = np.diag(np.sqrt(np.arange(1, d)), k=-1)
-
         super().__init__(mat, local_dim=d)
 
 
@@ -852,6 +844,116 @@ class SX(BaseGate):
     def __init__(self) -> None:
         """Initializes the square-root X gate."""
         mat = 0.5 * np.array([[1 + 1j, 1 - 1j], [1 - 1j, 1 + 1j]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class Sdg(BaseGate):
+    """Class representing the adjoint S (S-dagger) gate.
+
+    Attributes:
+        name: The name of the gate ("sdg").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "sdg"
+
+    def __init__(self) -> None:
+        """Initializes the adjoint S gate."""
+        mat = np.array([[1, 0], [0, -1j]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class S(BaseGate):
+    """Class representing the S gate.
+
+    Attributes:
+        name: The name of the gate ("s").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "s"
+
+    def __init__(self) -> None:
+        """Initializes the S gate."""
+        mat = np.array([[1, 0], [0, 1j]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class Tdg(BaseGate):
+    """Class representing the adjoint T (T-dagger) gate.
+
+    Attributes:
+        name: The name of the gate ("tdg").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "tdg"
+
+    def __init__(self) -> None:
+        """Initializes the adjoint T gate."""
+        mat = np.array([[1, 0], [0, np.exp(-1j * np.pi / 4)]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class T(BaseGate):
+    """Class representing the T gate.
+
+    Attributes:
+        name: The name of the gate ("t").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "t"
+
+    def __init__(self) -> None:
+        """Initializes the T gate."""
+        mat = np.array([[1, 0], [0, np.exp(1j * np.pi / 4)]], dtype=np.complex128)
+        super().__init__(mat)
+
+
+class SXdg(BaseGate):
+    """Class representing the adjoint SX (SX-dagger) gate.
+
+    Attributes:
+        name: The name of the gate ("sxdg").
+        matrix: The 2x2 matrix representation of the gate.
+        interaction: The interaction level (1 for single-qubit gates).
+        tensor: The tensor representation of the gate (same as the matrix).
+
+    Methods:
+        set_sites(*sites: int) -> None:
+            Sets the site(s) where the gate is applied.
+    """
+
+    name = "sxdg"
+
+    def __init__(self) -> None:
+        """Initializes the adjoint SX gate."""
+        mat = 0.5 * np.array([[1 - 1j, 1 + 1j], [1 + 1j, 1 - 1j]], dtype=np.complex128)
         super().__init__(mat)
 
 
@@ -1687,7 +1789,7 @@ class CrosstalkCreateDestroy(Crosstalk):
 
 
 class P0(BaseGate):
-    """Class representing the projector onto |0⟩⟨0|.
+    """Class representing the projector onto ``|0⟩⟨0|``.
 
     Attributes:
         name: The name of the gate ("p0").
@@ -1703,13 +1805,13 @@ class P0(BaseGate):
     name = "p0"
 
     def __init__(self) -> None:
-        """Initializes the |0⟩⟨0| projector."""
+        """Initializes the ``|0⟩⟨0|`` projector."""
         mat = np.array([[1, 0], [0, 0]], dtype=complex)
         super().__init__(mat)
 
 
 class P1(BaseGate):
-    """Class representing the projector onto |1⟩⟨1|.
+    """Class representing the projector onto ``|1⟩⟨1|``.
 
     Attributes:
         name: The name of the gate ("p1").
@@ -1725,7 +1827,7 @@ class P1(BaseGate):
     name = "p1"
 
     def __init__(self) -> None:
-        """Initializes the |1⟩⟨1| projector."""
+        """Initializes the ``|1⟩⟨1|`` projector."""
         mat = np.array([[0, 0], [0, 1]], dtype=complex)
         super().__init__(mat)
 
@@ -1745,51 +1847,6 @@ class PVM(BaseGate):
 
         # Identity array as placeholder for compatibility
         mat = np.array([[1, 0], [0, 1]])
-        super().__init__(mat)
-
-
-class RuntimeCost(BaseGate):
-    """Diagnostic gate representing an estimated runtime/contraction cost.
-
-    This is not a physical observable. It exposes a simulation-level metric
-    (e.g., sum of internal bond dimensions cubed) via the measurement interface.
-    """
-
-    name = "runtime_cost"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-
-class MaxBond(BaseGate):
-    """Diagnostic gate for the maximum bond dimension in the MPS.
-
-    Not a physical observable; provides simulation diagnostics through the
-    same interface used for operator expectation values.
-    """
-
-    name = "max_bond"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
-        super().__init__(mat)
-
-
-class TotalBond(BaseGate):
-    """Diagnostic gate for the total (summed) internal bond dimension.
-
-    Not a physical observable; returns the sum of internal bond dimensions
-    as a scalar diagnostic of network complexity.
-    """
-
-    name = "total_bond"
-
-    def __init__(self) -> None:
-        """Creates a no-op placeholder matrix for BaseGate compatibility."""
-        mat = np.array([[1, 0], [0, 1]], dtype=complex)
         super().__init__(mat)
 
 
@@ -1865,14 +1922,23 @@ class GateLibrary:
         y: Class for the Pauli-Y gate.
         z: Class for the Pauli-Z gate.
         sx: Class for the √X (SX) gate.
+        sxdg: Class for the adjoint √X (SX-dagger) gate.
+        s: Class for the S gate.
+        sdg: Class for the adjoint S (S-dagger) gate.
+        t: Class for the T gate.
+        tdg: Class for the adjoint T (T-dagger) gate.
         h: Class for the Hadamard gate.
         id: Class for the identity gate.
+        i: Alias for the identity gate.
+        iden: Alias for the identity gate.
 
         rx: Class for rotation about the X-axis.
         ry: Class for rotation about the Y-axis.
         rz: Class for rotation about the Z-axis.
         u:  Class for the generic single-qubit U gate.
+        u3: Alias for the generic single-qubit U gate.
         u2: Class for the U2 (fixed-θ,φ) single-qubit gate.
+        u1: Alias for the single-qubit phase gate.
 
         cx: Class for the controlled-NOT (CNOT) gate.
         cz: Class for the controlled-Z gate.
@@ -1892,13 +1958,10 @@ class GateLibrary:
         yy: Class for the YY interaction (non-parameterized).
         zz: Class for the ZZ interaction (non-parameterized).
 
-        p0: Class for projector |0⟩⟨0|.
-        p1: Class for projector |1⟩⟨1|.
+        p0: Class for projector ``|0⟩⟨0|``.
+        p1: Class for projector ``|1⟩⟨1|``.
         pvm: Class for projection-valued measurement onto a given bitstring.
 
-        runtime_cost: Class representing a diagnostic "runtime/contraction cost" metric.
-        max_bond:     Class representing a diagnostic for maximum bond dimension.
-        total_bond:   Class representing a diagnostic for the sum of internal bond dimensions.
         entropy:      Class representing a request for bipartite entanglement entropy across a cut.
         schmidt_spectrum: Class representing a request for the Schmidt spectrum across a cut.
 
@@ -1919,14 +1982,23 @@ class GateLibrary:
     y = Y
     z = Z
     sx = SX
+    sxdg = SXdg
+    s = S
+    sdg = Sdg
+    t = T
+    tdg = Tdg
     h = H
     id = Id
+    i = Id
+    iden = Id
 
     rx = Rx
     ry = Ry
     rz = Rz
     u = U
+    u3 = U
     u2 = U2
+    u1 = Phase
 
     cx = CX
     cz = CZ
@@ -1984,9 +2056,6 @@ class GateLibrary:
     p1 = P1
     pvm = PVM
 
-    runtime_cost = RuntimeCost
-    max_bond = MaxBond
-    total_bond = TotalBond
     entropy = Entropy
     schmidt_spectrum = SchmidtSpectrum
 

@@ -21,11 +21,12 @@ from typing import Any
 import numpy as np
 import pytest
 
-from mqt.yaqs.core.data_structures.networks import MPO, MPS
+from mqt.yaqs import Simulator
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import XX, X, Y, Z
-from mqt.yaqs.simulator import run
 
 
 def _allclose(a: np.ndarray, b: np.ndarray) -> bool:
@@ -186,7 +187,7 @@ def test_noise_distribution_integration() -> None:
     """
     num_qubits = 2
     # Define Hamiltonian: Ising model
-    hamiltonian = MPO.ising(num_qubits, J=1.0, g=0.5)
+    hamiltonian = Hamiltonian.ising(num_qubits, J=1.0, g=0.5)
 
     # Define noise model with distribution
     processes = [
@@ -199,24 +200,24 @@ def test_noise_distribution_integration() -> None:
     noise_model = NoiseModel(processes)
 
     # Initial state
-    initial_state = MPS(num_qubits)
+    initial_state = State(num_qubits)
 
     # Simulation parameters
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
         dt=0.1,
-        elapsed_time=1.0,
+        elapsed_time=0.2,
         num_traj=10,  # Run multiple trajectories to confirm it runs
         sample_timesteps=False,
+        random_seed=42,
     )
 
-    # Run simulation
-    run(initial_state, hamiltonian, sim_params, noise_model)
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
 
     # Verify that the noise model was sampled and stored
-    assert sim_params.noise_model is not None, "Simulation parameters should store the sampled noise model."
-    assert len(sim_params.noise_model.processes) == 1, "Sampled noise model should have one process."
-    assert isinstance(sim_params.noise_model.processes[0]["strength"], float), "Process strength should be a float."
+    assert result.noise_model is not None, "Simulation parameters should store the sampled noise model."
+    assert len(result.noise_model.processes) == 1, "Sampled noise model should have one process."
+    assert isinstance(result.noise_model.processes[0]["strength"], float), "Process strength should be a float."
 
 
 def test_static_noise_strength() -> None:

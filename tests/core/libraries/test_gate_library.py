@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
-from mqt.yaqs.core.data_structures.networks import MPO
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
 from mqt.yaqs.core.libraries.gate_library import (
     P0,
@@ -39,6 +39,7 @@ from mqt.yaqs.core.libraries.gate_library import (
     YY,
     ZZ,
     BaseGate,
+    Create,
     Crosstalk,
     CrosstalkCreateCreate,
     CrosstalkCreateDestroy,
@@ -661,46 +662,6 @@ def _assert_identity_gate_like(g: BaseGate) -> None:
     assert g.interaction == 1  # because matrix is 2x2
 
 
-def test_diagnostic_runtime_cost() -> None:
-    """Test the runtime_cost diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be assigned to a site, and that its BaseGate factory produces
-    the same matrix.
-    """
-    g = GateLibrary.runtime_cost()
-    _assert_identity_gate_like(g)
-    g.set_sites(0)
-    assert g.sites == [0]
-    assert_array_equal(BaseGate.runtime_cost().matrix, g.matrix)
-
-
-def test_diagnostic_max_bond() -> None:
-    """Test the max_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.max_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(1)
-    assert g.sites == [1]
-    assert_array_equal(BaseGate.max_bond().matrix, g.matrix)
-
-
-def test_diagnostic_total_bond() -> None:
-    """Test the total_bond diagnostic operator.
-
-    Ensures that the operator behaves like a single-qubit identity gate,
-    can be bound to a site, and matches the BaseGate factory.
-    """
-    g = GateLibrary.total_bond()
-    _assert_identity_gate_like(g)
-    g.set_sites(3)
-    assert g.sites == [3]
-    assert_array_equal(BaseGate.total_bond().matrix, g.matrix)
-
-
 def test_meta_entropy_sites_len_flexible() -> None:
     """Test the entropy meta-observable operator.
 
@@ -977,3 +938,79 @@ def test_schmidt_spectrum_set_sites_list_input() -> None:
     g = GateLibrary.schmidt_spectrum()
     g.set_sites([5, 6])
     assert g.sites == [5, 6]
+
+
+def test_base_gate_one_qubit_matrix_infers_interaction() -> None:
+    """A valid 1-qubit matrix should infer ``interaction == 1``."""
+    gate = BaseGate(np.array([[1, 0], [0, 1]], dtype=np.float64))
+    assert gate.interaction == 1
+    assert gate.matrix.dtype == np.complex128
+
+
+def test_base_gate_two_qubit_matrix_infers_interaction() -> None:
+    """A valid 2-qubit matrix should infer ``interaction == 2``."""
+    gate = BaseGate(np.eye(4, dtype=np.complex128))
+    assert gate.interaction == 2
+    assert gate.matrix.dtype == np.complex128
+
+
+def test_base_gate_non_square_matrix_raises() -> None:
+    """A non-square matrix should be rejected."""
+    with pytest.raises(ValueError, match="Matrix must be square"):
+        BaseGate(np.array([[1, 2, 3], [4, 5, 6]]))
+
+
+def test_destroy_d_level_arithmetic() -> None:
+    """Destroy/Create arithmetic on non-qubit dimensions should not re-validate matrix size."""
+    d = 3
+    destroy = Destroy(d)
+    create = Create(d)
+    combined = destroy.dag() @ destroy + create @ create.dag()
+    assert combined.matrix.shape == (d, d)
+
+
+@pytest.mark.parametrize(
+    ("factory", "sites", "expected_mpo_len"),
+    [
+        (GateLibrary.xx, [0, 1], 2),
+        (GateLibrary.yy, [1, 2], 2),
+        (GateLibrary.zz, [0, 2], 3),
+    ],
+)
+def test_two_qubit_correlator_set_sites_builds_mpo(
+    factory: type,
+    sites: list[int],
+    expected_mpo_len: int,
+) -> None:
+    """XX/YY/ZZ correlators should still build tensor/MPO data via ``BaseGate.set_sites``."""
+    gate = factory()
+    gate.set_sites(*sites)
+    assert gate.sites == sites
+    assert gate.tensor.shape == (2, 2, 2, 2)
+    assert len(gate.mpo_tensors) == expected_mpo_len
+
+
+@pytest.mark.parametrize(
+    ("factory", "site"),
+    [
+        (GateLibrary.p0, 2),
+        (GateLibrary.p1, 3),
+    ],
+)
+def test_projector_set_sites_preserves_tensor(factory: type, site: int) -> None:
+    """Single-qubit projectors should keep their matrix/tensor after ``set_sites``."""
+    gate = factory()
+    matrix_before = gate.matrix.copy()
+    gate.set_sites(site)
+    assert gate.sites == [site]
+    assert_array_equal(gate.matrix, matrix_before)
+    assert gate.tensor.shape == (2, 2)
+
+
+def test_pvm_set_sites_preserves_placeholder_matrix() -> None:
+    """PVM should remain a 1-qubit placeholder after ``set_sites``."""
+    gate = GateLibrary.pvm("01")
+    gate.set_sites(4)
+    assert gate.sites == [4]
+    assert gate.interaction == 1
+    assert_array_equal(gate.matrix, np.eye(2))
