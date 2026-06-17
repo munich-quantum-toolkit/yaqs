@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from mqt import yaqs
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 # Intentional contract: update when the top-level API changes (see UPGRADING.md).
 EXPECTED_PUBLIC_API = frozenset({
@@ -39,18 +40,18 @@ INTERNAL_AT_PACKAGE_ROOT = frozenset({
 
 
 def test_public_api_all_matches_documented_surface() -> None:
+    """``__all__`` matches the documented top-level export list."""
     assert frozenset(yaqs.__all__) == EXPECTED_PUBLIC_API
 
 
 def test_internal_symbols_not_exposed_at_package_root() -> None:
+    """Implementation details are not re-exported on ``mqt.yaqs``."""
     for name in INTERNAL_AT_PACKAGE_ROOT:
         assert not hasattr(yaqs, name), name
 
 
 def test_top_level_import_smoke() -> None:
     """Exercise the documented import path without ``core.data_structures``."""
-    from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
-
     state = State(2, initial="zeros")
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
     params = AnalogSimParams(
