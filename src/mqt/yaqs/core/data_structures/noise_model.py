@@ -100,11 +100,13 @@ class NoiseModel:
             proc = dict(original)
             name = proc["name"]
             sites = proc["sites"]
+            user_factors = original.get("factors")
 
             # Normalize two-site ordering
             if isinstance(sites, list) and len(sites) == 2:
                 sorted_sites = sorted(sites)
-                if sorted_sites != sites:
+                swapped = sorted_sites != sites
+                if swapped:
                     proc["sites"] = sorted_sites
                 i, j = proc["sites"]
                 is_adjacent = abs(j - i) == 1
@@ -136,6 +138,8 @@ class NoiseModel:
                         a, b = suffix[0], suffix[1]
                         proc["factors"] = (PAULI_MAP[a], PAULI_MAP[b])
                     filled_processes.append(proc)
+                    if swapped and user_factors is not None:
+                        proc["factors"] = (proc["factors"][1], proc["factors"][0])
                     continue
 
                 # Long-range two-site with canonical label
@@ -151,6 +155,8 @@ class NoiseModel:
                         a, b = suffix[0], suffix[1]
                         proc["factors"] = (PAULI_MAP[a], PAULI_MAP[b])
                     filled_processes.append(proc)
+                    if swapped and user_factors is not None:
+                        proc["factors"] = (proc["factors"][1], proc["factors"][0])
                     continue
 
                 # Other long-range two-site: require explicit factors
@@ -158,6 +164,8 @@ class NoiseModel:
                     "Non-adjacent 2-site processes must specify 'factors' unless named 'crosstalk_{ab}'."
                 )
                 filled_processes.append(proc)
+                if swapped and user_factors is not None:
+                    proc["factors"] = (proc["factors"][1], proc["factors"][0])
                 continue
 
             # One-site: ensure matrix
