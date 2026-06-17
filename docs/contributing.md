@@ -268,8 +268,6 @@ These are written in Markdown using [myst-nb](https://myst-nb.readthedocs.io/en/
 The code blocks are executed during the documentation build process, and the output is included in the documentation.
 This allows us to provide up-to-date examples and tutorials that are guaranteed to work with the latest version of the library.
 
-In runnable example notebooks under {code}`docs/examples/`, construct {class}`~mqt.yaqs.Simulator` with {code}`show_progress=False` so {code}`tqdm` progress bars do not clutter the built HTML output. Reserve the default {code}`show_progress=True` for {doc}`simulator_initialization`, which documents that option explicitly.
-
 You can build the documentation using the {code}`nox` session {code}`docs`.
 
 ```console
