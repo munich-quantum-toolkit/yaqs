@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-import mqt.yaqs as yaqs
+from mqt import yaqs
 
 # Intentional contract: update when the top-level API changes (see UPGRADING.md).
 EXPECTED_PUBLIC_API = frozenset({
