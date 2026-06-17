@@ -208,10 +208,11 @@ class EquivalenceChecker:
                 Accepts the same types as ``circuit1``.
 
         Returns:
-            dict: ``equivalent`` (bool), ``fidelity`` (float, measured overlap with identity),
-            ``elapsed_time`` (float, seconds), ``representation`` (``"matrix"`` or ``"mpo"``),
-            ``matrix`` (dense composed operator on the matrix backend), ``mpo`` (composed
-            operator on the MPO backend), and on the MPO backend also ``schmidt_values``,
+            :class:`EquivalenceCheckResult` with keys ``equivalent`` (bool),
+            ``fidelity`` (float, measured overlap with identity), ``elapsed_time`` (float,
+            seconds), ``representation`` (``"matrix"`` or ``"mpo"``), ``matrix`` (dense
+            composed operator on the matrix backend), ``mpo`` (composed operator on the MPO
+            backend), and on the MPO backend also ``schmidt_values``,
             ``center_cut_entanglement_entropy``, and ``global_entanglement_entropy``.
             Backend-specific keys are ``None`` when the other backend ran.
 

@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
@@ -308,6 +309,10 @@ def _fermi_hubbard_1d_jordan_wigner_dense(num_orbitals: int, t: float, u: float)
 def dense_operator_schmidt_values(mpo: MPO, cut: int) -> NDArray[np.float64]:
     """Compute Schmidt values from dense contraction for a given MPO cut.
 
+    Args:
+        mpo: MPO whose operator Schmidt spectrum is computed.
+        cut: Bond index between sites ``cut - 1`` and ``cut``.
+
     Returns:
         Dense Schmidt singular values for the requested cut.
     """
@@ -326,7 +331,15 @@ def dense_operator_schmidt_values(mpo: MPO, cut: int) -> NDArray[np.float64]:
 
 
 def significant_schmidt_values(values: NDArray[np.float64], tol: float = 1e-12) -> NDArray[np.float64]:
-    """Return the numerically significant part of a Schmidt spectrum."""
+    """Return the numerically significant part of a Schmidt spectrum.
+
+    Args:
+        values: Schmidt singular values to filter.
+        tol: Drop values less than or equal to this threshold.
+
+    Returns:
+        Subset of ``values`` strictly greater than ``tol``.
+    """
     spectrum = np.asarray(values, dtype=np.float64)
     return spectrum[spectrum > tol]
 
@@ -600,6 +613,17 @@ def test_compute_identity_fidelity_and_check_if_identity() -> None:
     assert mpo.check_if_identity(1.0 + 1e-12) is False
 
 
+def test_compute_identity_fidelity_heterogeneous_physical_dimensions() -> None:
+    """Identity fidelity normalizes by the product of per-site local dimensions."""
+    local_dims = [2, 3, 2]
+    mpo = MPO()
+    mpo.custom([make_identity_site(d) for d in local_dims], transpose=False)
+
+    measured = mpo.compute_identity_fidelity()
+
+    assert measured == pytest.approx(1.0, abs=1e-12)
+
+
 def test_compute_entanglement_entropy_identity_is_zero() -> None:
     """Identity MPO has vanishing operator entanglement entropy at the center cut."""
     mpo = MPO.identity(length=4, physical_dimension=2)
@@ -657,6 +681,7 @@ def test_compute_schmidt_spectrum_rejects_invalid_cut(
     mpo = MPO.identity(length=4, physical_dimension=2)
 
     with pytest.raises(exc_type, match="cut"):
+        # Intentionally pass an invalid cut type to exercise runtime validation.
         _ = mpo.compute_schmidt_spectrum(invalid_cut)  # ty: ignore[invalid-argument-type]
 
 

@@ -1275,11 +1275,16 @@ class MPO:
         Returns:
             ``|Tr(O)| / d`` where ``d`` is the Hilbert-space dimension.
         """
-        identity_mpo = MPO.identity(self.length, physical_dimension=self.physical_dimension)
+        local_dims = [int(tensor.shape[0]) for tensor in self.tensors]
+        identity_mpo = MPO()
+        identity_mpo.custom(
+            [make_identity_site(d) for d in local_dims],
+            transpose=False,
+        )
         identity_mps = identity_mpo.to_mps()
         mps = self.to_mps()
         trace = mps.scalar_product(identity_mps)
-        hilbert_dim = self.physical_dimension**self.length
+        hilbert_dim = int(np.prod(local_dims, dtype=np.int64))
         return float(np.abs(trace) / hilbert_dim)
 
     def to_matrix(self) -> NDArray[np.complex128]:
