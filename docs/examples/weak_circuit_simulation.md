@@ -14,7 +14,7 @@ mystnb:
 
 # Weak Circuit Simulation
 
-**Weak** digital simulation samples computational-basis **shots** after a noisy circuit evolution, mimicking hardware readout statistics. Use {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` and read bitstring counts from {attr}`~mqt.yaqs.Result.counts`.
+**Weak** digital simulation samples computational-basis **shots** after a noisy circuit evolution, mimicking hardware readout statistics. Use {class}`~mqt.yaqs.WeakSimParams` and read bitstring counts from {attr}`~mqt.yaqs.Result.counts`.
 
 For expectation-value simulation and mid-circuit observables, see {doc}`circuit_simulation`. For parameter presets and truncation settings, see {doc}`simulation_parameters`.
 
@@ -37,8 +37,7 @@ circuit.draw(output="mpl")
 ## 2. Initial state and noise model
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs import NoiseModel, State
 
 state = State(num_qubits, initial="zeros")
 
@@ -60,8 +59,7 @@ For bell-curve noise strengths, see {doc}`realistic_noise_models`.
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
+from mqt.yaqs import Simulator, WeakSimParams
 
 sim_params = WeakSimParams(shots=1024, max_bond_dim=4, svd_threshold=1e-6)
 

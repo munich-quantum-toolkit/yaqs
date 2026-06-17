@@ -138,9 +138,7 @@ matrix-backed gate from Qiskit's unitary representation (matrix fallback). You d
 inline or transpile custom gates to a fixed basis set before simulation or equivalence checking.
 
 ```python
-from mqt.yaqs import EquivalenceChecker, Simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import EquivalenceChecker, Simulator, State, WeakSimParams
 
 qasm = """
 OPENQASM 2.0;

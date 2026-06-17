@@ -14,15 +14,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
-from mqt.yaqs import Simulator
+from mqt.yaqs import (
+    AnalogSimParams,
+    Hamiltonian,
+    NoiseModel,
+    Observable,
+    Simulator,
+    State,
+)
 from mqt.yaqs.analog.lindblad import MAX_LIOUVILLIAN_VECTOR_DIM, preprocess_lindblad
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import Z
 
 if TYPE_CHECKING:
     import pytest
@@ -207,7 +209,7 @@ def test_lindblad_result_has_no_auto_diagnostics() -> None:
     state = State(length, initial="zeros", representation="density_matrix")
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", sites=0)],
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,

@@ -37,9 +37,8 @@ We build an Ising-style circuit, prepare $\ket{0}^{\otimes n}$, and sweep a glob
 ### 1.1 Circuit and initial state
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import Z
 
 num_qubits = 5
 circuit = create_ising_circuit(L=num_qubits, J=1, g=0.5, dt=0.1, timesteps=10)
@@ -52,10 +51,10 @@ state = State(num_qubits, initial="zeros")
 ### 1.2 Simulation parameters
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs import Observable, StrongSimParams
 
 sim_params = StrongSimParams(
-    observables=[Observable(Z(), site) for site in range(num_qubits)],
+    observables=[Observable("z", site) for site in range(num_qubits)],
     num_traj=100,
     max_bond_dim=4,
     svd_threshold=1e-6,
@@ -70,7 +69,7 @@ tags: [remove-output]
 ---
 import numpy as np
 
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs import NoiseModel
 
 gammas = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 heatmap = np.empty((num_qubits, len(gammas)))
@@ -144,8 +143,7 @@ Five entangler layers with four labelled barriers yield **six** sampling points:
 ```{code-cell} ipython3
 import numpy as np
 
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs import Observable, StrongSimParams
 
 noise_factor = 0.01
 layer_noise = NoiseModel(
@@ -154,7 +152,7 @@ layer_noise = NoiseModel(
 )
 
 layer_state = State(layer_qubits, initial="zeros", pad=2)
-layer_observables = [Observable(Z(), i) for i in range(layer_qubits)]
+layer_observables = [Observable("z", i) for i in range(layer_qubits)]
 layer_params = StrongSimParams(layer_observables, num_traj=1000, sample_layers=True)
 ```
 
@@ -211,7 +209,7 @@ plt.show()
 Pass an OpenQASM 2 source string (or file path) directly to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python. Custom gate bodies declared in the program are translated like any other Qiskit operation.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
+from mqt.yaqs import State, WeakSimParams
 
 qasm = """
 OPENQASM 2.0;
@@ -253,7 +251,7 @@ lr_qc.cx(0, 2)
 lr_state = State(3, initial="zeros")
 for mode in ("mpo", "tdvp"):
     mode_params = StrongSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", 0)],
         num_traj=1,
         gate_mode=mode,
         max_bond_dim=8,

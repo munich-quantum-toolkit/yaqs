@@ -15,14 +15,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.analog.ensemble import ensemble_member_worker
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode, Observable
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Y, Z
 
 

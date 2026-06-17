@@ -34,8 +34,7 @@ object that can be used to:
 ## 1. Define the system
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
+from mqt.yaqs import AnalogSimParams, Hamiltonian
 
 # Two-site Ising chain: H = -J Σ ZZ - g Σ X
 num_sites = 2

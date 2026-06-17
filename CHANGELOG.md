@@ -27,6 +27,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- simplified user-facing top-level imports ([#467]) ([**@aaronleesander**])
 - updated documentation structure and content ([#465]) ([**@aaronleesander**])
 - changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
 - overhauled TDVP backend ([#457]) ([**@aaronleesander**])
@@ -138,6 +139,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#467]: https://github.com/munich-quantum-toolkit/yaqs/pull/467
 [#465]: https://github.com/munich-quantum-toolkit/yaqs/pull/465
 [#396]: https://github.com/munich-quantum-toolkit/yaqs/pull/396
 [#364]: https://github.com/munich-quantum-toolkit/yaqs/pull/364
@@ -154,7 +156,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [#439]: https://github.com/munich-quantum-toolkit/yaqs/pull/439
 [#438]: https://github.com/munich-quantum-toolkit/yaqs/pull/438
 [#430]: https://github.com/munich-quantum-toolkit/yaqs/pull/430
-[#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
+[#429]: https://github.com/munich-quantum-toolkit/yaqs/pull/429
 [#428]: https://github.com/munich-quantum-toolkit/yaqs/pull/428
 [#426]: https://github.com/munich-quantum-toolkit/yaqs/pull/426
 [#422]: https://github.com/munich-quantum-toolkit/yaqs/pull/422

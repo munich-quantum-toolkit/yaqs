@@ -28,8 +28,7 @@ Scheduled jump times must lie on the simulation time grid: choose `time` as a mu
 First, we define the Hamiltonian and the initial state. We'll use a standard transverse-field Ising model.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import Hamiltonian, State
 
 L = 10
 J = 1.0
@@ -51,7 +50,7 @@ We define a scheduled jump using a list of dictionaries in the `NoiseModel`. Eac
 - `name`: The name of the jump operator (e.g., "x", "y", "z", "crosstalk_xx").
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs import NoiseModel
 
 jump_time = 1.0
 jump_site = 5 # Apply jump to the middle site
@@ -66,10 +65,9 @@ noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
 We measure the $Z$ expectation value on the **jumped site** ($\langle Z_5 \rangle$). A Pauli-X jump flips that site's magnetization; measuring a distant site would show only a weak entanglement signal and can look like no jump occurred.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs import AnalogSimParams, Observable
 
-z_obs = Observable(Z(), sites=jump_site)
+z_obs = Observable("z", sites=jump_site)
 
 sim_params = AnalogSimParams(
     elapsed_time=5.0,

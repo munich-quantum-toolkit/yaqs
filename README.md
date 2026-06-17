@@ -82,16 +82,12 @@ To support this endeavor, please consider:
 ```
 
 ```python
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 sim = Simulator()
 state = State(3, initial="zeros")
 H = Hamiltonian.ising(3, J=1.0, g=0.5)
-params = AnalogSimParams(observables=[Observable(Z(), sites=0)], elapsed_time=0.5, dt=0.1, preset="fast")
+params = AnalogSimParams(observables=[Observable("z", sites=0)], elapsed_time=0.5, dt=0.1, preset="fast")
 print(sim.run(state, H, params).expectation_values[0])
 ```
 

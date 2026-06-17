@@ -36,14 +36,17 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import (
+    AnalogSimParams,
+    Hamiltonian,
+    NoiseModel,
+    Observable,
+    Simulator,
+    State,
+)
 from mqt.yaqs.analog.analog_tjm import initialize, step_through
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import X, Z
 from tests.conftest import YAQS_TEST_SEED
 
