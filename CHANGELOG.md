@@ -26,6 +26,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 - added deterministic ensemble evolution with optional autocorrelator and two-time correlator outputs, including periodic-wrap two-site observable support on `(L-1, 0)` ([#409]) ([**@Gauthameshwar**])
 
 ### Changed
+
 - simplified user-facing top-level imports ([#467]) ([**@aaronleesander**])
 - updated documentation structure and content ([#465]) ([**@aaronleesander**])
 - changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
