@@ -193,13 +193,14 @@ class NoiseModel:
         """Reorder stored operators to match ascending site indices."""
         if user_factors is not None and "factors" in proc:
             proc["factors"] = (proc["factors"][1], proc["factors"][0])
-        elif user_matrix is not None and "matrix" in proc and proc["matrix"].shape == (4, 4):
-            proc["matrix"] = _swap_two_qubit_matrix(proc["matrix"])
-        elif isinstance(name, BaseGate) and name.interaction == 2 and "matrix" in proc and proc["matrix"].shape == (
-            4,
-            4,
-        ):
-            proc["matrix"] = _swap_two_qubit_matrix(proc["matrix"])
+            return
+
+        matrix = proc.get("matrix")
+        if matrix is None or matrix.shape != (4, 4):
+            return
+
+        if user_matrix is not None or (isinstance(name, BaseGate) and name.interaction == 2):
+            proc["matrix"] = _swap_two_qubit_matrix(matrix)
 
     def sample(self, rng: np.random.Generator | int | None = None) -> NoiseModel:
         """Sample a concrete NoiseModel from any distribution-based strengths.
