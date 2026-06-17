@@ -1,5 +1,12 @@
 # MQT YAQS — A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
 
+```{only} html
+[![PyPI](https://img.shields.io/pypi/v/mqt.yaqs?logo=pypi&style=flat-square)](https://pypi.org/project/mqt.yaqs/)
+[![CI](https://img.shields.io/github/actions/workflow/status/munich-quantum-toolkit/yaqs/ci.yml?branch=main&style=flat-square&logo=github&label=ci)](https://github.com/munich-quantum-toolkit/yaqs/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/readthedocs/mqt-yaqs?logo=readthedocs&style=flat-square)](https://mqt.readthedocs.io/projects/yaqs)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+```
+
 ```{raw} latex
 \begin{abstract}
 ```
@@ -30,14 +37,42 @@ self
 
 ## User guide
 
-The pages below are **executable notebooks**: code cells run during the documentation build, so examples stay in sync with the library. Start with {doc}`installation`, then {doc}`state_initialization` and {doc}`simulation_parameters`.
+The pages below are **executable notebooks**: code cells run during the documentation build, so examples stay in sync with the library. New users should start with {doc}`installation`, then {doc}`examples/quickstart`.
+
+```{mermaid}
+flowchart LR
+  state[State]
+  op[Hamiltonian or QuantumCircuit]
+  params["AnalogSimParams / StrongSimParams / WeakSimParams"]
+  sim[Simulator]
+  result[Result]
+  state --> sim
+  op --> sim
+  params --> sim
+  sim --> result
+```
+
+### Learning paths
+
+| I want to…                                             | Read                                      |
+| ------------------------------------------------------ | ----------------------------------------- |
+| Run my first simulation in under a minute              | {doc}`examples/quickstart`                |
+| Configure truncation, presets, and trajectories        | {doc}`examples/simulation_parameters`     |
+| Simulate open-system (analog) dynamics with noise      | {doc}`examples/analog_simulation`         |
+| Model calibration spread with Gaussian noise strengths | {doc}`examples/realistic_noise_models`    |
+| Compare MPS, MCWF, and Lindblad backends               | {doc}`examples/representation_comparison` |
+| Simulate a noisy circuit and read observables          | {doc}`examples/circuit_simulation`        |
+| Get hardware-like shot histograms                      | {doc}`examples/weak_circuit_simulation`   |
+| Verify two circuits are equivalent                     | {doc}`examples/equivalence_checking`      |
 
 ```{toctree}
 :caption: Getting started
 :hidden:
 :maxdepth: 1
+:titlesonly:
 
 installation
+examples/quickstart
 examples/state_initialization
 examples/simulator_initialization
 examples/simulation_parameters
@@ -47,6 +82,7 @@ examples/simulation_parameters
 :caption: Analog simulation
 :hidden:
 :maxdepth: 1
+:titlesonly:
 
 examples/analog_simulation
 examples/realistic_noise_models
@@ -62,6 +98,7 @@ examples/process_tomography
 :caption: Digital circuits
 :hidden:
 :maxdepth: 1
+:titlesonly:
 
 examples/circuit_simulation
 examples/weak_circuit_simulation
@@ -73,6 +110,7 @@ examples/equivalence_checking
 :caption: Reference
 :hidden:
 :maxdepth: 1
+:titlesonly:
 
 references
 CHANGELOG

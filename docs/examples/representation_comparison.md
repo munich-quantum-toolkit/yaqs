@@ -14,15 +14,25 @@ mystnb:
 
 # Representation Comparison
 
-YAQS supports multiple state **representations** for analog evolution. This page compares them on the same open-system benchmark so you can choose the right backend and validate results.
-
-| Representation | Scaling | Noise | Typical use |
-| -------------- | ------- | ----- | ----------- |
-| `"mps"` | Polynomial (bond-limited) | Stochastic trajectories (TJM) | Default; large systems |
-| `"vector"` | Exponential in qubits | MCWF trajectories | Small systems, trajectory debugging |
-| `"density_matrix"` | Exponential in qubits | Exact Lindblad master equation | Reference on few qubits |
+YAQS supports multiple state **representations** for analog evolution. Each path targets a different scaling regime; the table below summarizes when each is appropriate.
 
 For how to set `representation` on {class}`~mqt.yaqs.core.data_structures.state.State`, see {doc}`state_initialization`.
+
+## Choosing a representation
+
+| Path               | When to use                                             | Notes                                                                                                  |
+| ------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `"mps"` (default)  | Larger systems and tensor-network-friendly Hamiltonians | TJM trajectories; tune `num_traj`, `max_bond_dim`, and {doc}`accuracy presets <simulation_parameters>` |
+| `"vector"`         | MCWF / state-vector quantum trajectories                | Exponential memory in qubits; single-trajectory wavefunction dynamics                                  |
+| `"density_matrix"` | Lindblad master-equation evolution                      | Exponential memory; deterministic ensemble average without trajectory sampling                         |
+
+Practical guidance:
+
+- Start with `preset="balanced"` (or `"fast"` while exploring) on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` and increase `num_traj` until observables stabilize.
+- Tighten `max_bond_dim` / `svd_threshold` when entanglement growth demands it.
+- For trade-offs between unravellings and trajectory cost, see {cite:p}`sander2026_computationalregimes` ({doc}`references`).
+
+The sections below run the **same** noisy benchmark on all three paths so you can validate agreement on small systems.
 
 ## 1. Noisy open-system benchmark
 
@@ -104,3 +114,5 @@ print(f"Noiseless ⟨Z₀⟩ at t=1: mps={z_mps:.6f}, density_matrix={z_rho:.6f}
 
 - {doc}`analog_simulation` — TJM workflow with MPS
 - {doc}`state_initialization` — choosing a representation
+- {doc}`simulation_parameters` — presets, `num_traj`, and truncation
+- {doc}`quickstart` — minimal first simulation

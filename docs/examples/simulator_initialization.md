@@ -284,3 +284,10 @@ print("restored observable count:", len(restored.observables))
 | Long unattended run on a flaky cluster            | `Simulator(max_retries=20)` with broadened `retry_exceptions`          |
 
 For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`representation_comparison`, and {doc}`state_initialization`.
+
+## Related topics
+
+- {doc}`quickstart` — minimal first simulation
+- {doc}`simulation_parameters` — physics-side presets and truncation
+- {doc}`analog_simulation` — TJM workflow with noise
+- {doc}`circuit_simulation` — digital simulation entry point

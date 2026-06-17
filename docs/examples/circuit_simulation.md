@@ -16,11 +16,11 @@ mystnb:
 
 **Strong** digital simulation evolves a matrix-product state (MPS) through a Qiskit circuit while applying tensor-jump noise between gates. You choose which Pauli (or other) observables to measure and how many Monte Carlo trajectories to average.
 
-| Workflow | Typical use | Key settings |
-| -------- | ----------- | ------------ |
-| **Final observables** | Noise scaling, benchmarking, device studies | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` with observables evaluated after the last gate |
-| **Mid-circuit observables** | Layer-wise diagnostics, depth-dependent calibration | `StrongSimParams(sample_layers=True)` plus `barrier(label="SAMPLE_OBSERVABLES")` markers in the circuit |
-| **Shot-based readout** | Hardware-like bitstring statistics | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` — see {doc}`weak_circuit_simulation` |
+| Workflow                    | Typical use                                         | Key settings                                                                                                                 |
+| --------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Final observables**       | Noise scaling, benchmarking, device studies         | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` with observables evaluated after the last gate |
+| **Mid-circuit observables** | Layer-wise diagnostics, depth-dependent calibration | `StrongSimParams(sample_layers=True)` plus `barrier(label="SAMPLE_OBSERVABLES")` markers in the circuit                      |
+| **Shot-based readout**      | Hardware-like bitstring statistics                  | {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` — see {doc}`weak_circuit_simulation`             |
 
 Circuits enter YAQS as {class}`qiskit.circuit.QuantumCircuit` objects (or OpenQASM strings). The initial state must use `representation="mps"` (the default for {class}`~mqt.yaqs.core.data_structures.state.State` presets). For accuracy presets, truncation knobs, and `random_seed`, see {doc}`simulation_parameters`. For bell-curve (Gaussian) noise strengths, see {doc}`realistic_noise_models`.
 
@@ -109,6 +109,12 @@ plt.show()
 ```
 
 ## 2. Mid-circuit observables
+
+(mid-circuit-observables)=
+
+```{note}
+This section uses `num_traj=1000` and may take one to two minutes during a documentation build. Reduce `num_traj` for faster local runs.
+```
 
 Set `sample_layers=True` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and insert barriers labelled `SAMPLE_OBSERVABLES` (case-insensitive) where you want measurements. YAQS records observables at the circuit start, after each labelled barrier, and after the final gate layer.
 
@@ -200,9 +206,67 @@ plt.tight_layout()
 plt.show()
 ```
 
-## 3. Related topics
+## 4. OpenQASM inputs
+
+Pass an OpenQASM 2 source string (or file path) directly to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python. Custom gate bodies declared in the program are translated like any other Qiskit operation.
+
+```{code-cell} ipython3
+from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
+
+qasm = """
+OPENQASM 2.0;
+include "qelib1.inc";
+
+gate entangle a,b {
+  h a;
+  cx a,b;
+}
+
+qreg q[2];
+entangle q[0], q[1];
+"""
+
+qasm_state = State(2, initial="zeros")
+qasm_result = sim.run(
+    qasm_state,
+    qasm,
+    WeakSimParams(shots=128, max_bond_dim=4),
+)
+print(f"Top bitstrings: {list(qasm_result.counts.items())[:3]}")
+```
+
+OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`. {class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms; see {doc}`equivalence_checking`.
+
+## 5. Gate application modes
+
+`StrongSimParams.gate_mode` (and `WeakSimParams.gate_mode`) selects how two-qubit gates are applied to the MPS. The default `"mpo"` uses extended gate MPOs for long-range pairs; `"tdvp"` uses a local TDVP window when an analytic generator is available. See {doc}`simulation_parameters` and {doc}`custom_gates` for the full matrix.
+
+Below, a long-range `cx` on qubits 0 and 2 is simulated noiselessly with both modes:
+
+```{code-cell} ipython3
+from qiskit.circuit import QuantumCircuit
+
+lr_qc = QuantumCircuit(3)
+lr_qc.h(0)
+lr_qc.cx(0, 2)
+
+lr_state = State(3, initial="zeros")
+for mode in ("mpo", "tdvp"):
+    mode_params = StrongSimParams(
+        observables=[Observable(Z(), 0)],
+        num_traj=1,
+        gate_mode=mode,
+        max_bond_dim=8,
+    )
+    mode_result = sim.run(lr_state, lr_qc, mode_params)
+    z0 = float(mode_result.expectation_values[0][0])
+    print(f"gate_mode={mode!r}: ⟨Z₀⟩ = {z0:.6f}")
+```
+
+## 6. Related topics
 
 - {doc}`weak_circuit_simulation` — shot-based readout with {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`
 - {doc}`custom_gates` — Qiskit gate translation and custom unitaries
 - {doc}`realistic_noise_models` — Gaussian and other distributed noise strengths
 - {doc}`equivalence_checking` — verify that two circuits implement the same unitary
+- {doc}`quickstart` — minimal analog, digital, and equivalence-check workflows

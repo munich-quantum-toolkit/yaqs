@@ -293,7 +293,7 @@ MPS contraction; there is no single-qubit TDVP gate path in circuit simulation.
 
 ---
 
-## See also
+## Related topics
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
 - {doc}`equivalence_checking` — comparing original and transpiled circuits

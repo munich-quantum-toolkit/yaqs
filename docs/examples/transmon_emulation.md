@@ -113,3 +113,9 @@ plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 plt.tight_layout()
 plt.show()
 ```
+
+## Related topics
+
+- {doc}`analog_simulation` — TJM time evolution
+- {doc}`state_initialization` — custom `physical_dimensions` and basis states
+- {doc}`simulation_parameters` — `sample_timesteps` and observables

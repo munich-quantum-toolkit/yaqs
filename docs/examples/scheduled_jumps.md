@@ -132,3 +132,9 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 plt.show()
 ```
+
+## Related topics
+
+- {doc}`analog_simulation` — TJM workflow and noise models
+- {doc}`realistic_noise_models` — distributed noise strengths
+- {doc}`simulation_parameters` — time grids and `dt` alignment

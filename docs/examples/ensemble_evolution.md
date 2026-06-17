@@ -282,3 +282,9 @@ The illustrative curves here use small $L$ and a handful of Haar-random states; 
 - **MPS entanglement:** under unitary evolution, entanglement entropy and required bond dimension typically **grow** with time (until truncation or saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten `svd_threshold` only with care, or shorten the window so the MPS remains an accurate ansatz for your observable.
 
 :::
+
+## Related topics
+
+- {doc}`analog_simulation` — noisy and unitary TJM evolution
+- {doc}`state_initialization` — Haar-random and ensemble `list[State]` inputs
+- {doc}`simulator_initialization` — `Simulator(parallel=True)` for ensemble runs

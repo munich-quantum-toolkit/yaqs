@@ -67,11 +67,11 @@ disordered_model = NoiseModel(disordered_processes)
 
 Other supported distributions:
 
-| `distribution`       | Parameters        | Use when                                                                 |
-| -------------------- | ----------------- | ------------------------------------------------------------------------ |
-| `"normal"`           | `mean`, `std`     | Symmetric spread around a target rate; negatives are clamped to `0`.     |
-| `"truncated_normal"` | `mean`, `std`     | Same shape as normal but sampled only for non-negative strengths.        |
-| `"lognormal"`        | `mean`, `std`     | Log-normal rates (strictly positive; `mean`/`std` are the underlying normal parameters). |
+| `distribution`       | Parameters    | Use when                                                                                 |
+| -------------------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `"normal"`           | `mean`, `std` | Symmetric spread around a target rate; negatives are clamped to `0`.                     |
+| `"truncated_normal"` | `mean`, `std` | Same shape as normal but sampled only for non-negative strengths.                        |
+| `"lognormal"`        | `mean`, `std` | Log-normal rates (strictly positive; `mean`/`std` are the underlying normal parameters). |
 
 Sample many independent disorder realizations and plot the bell curve:
 
@@ -196,3 +196,24 @@ sampled = [proc["strength"] for proc in circuit_result.noise_model.processes]
 print(f"truncated-normal bit-flip rates: {[f'{s:.4f}' for s in sampled]}")
 print(f"final <Z_0>: {circuit_result.expectation_values[0][0]:.4f}")
 ```
+
+## 5. Long-range crosstalk
+
+Non-adjacent pairs use the `longrange_crosstalk_{ab}` naming convention; YAQS attaches per-site Pauli factors automatically:
+
+```{code-cell} ipython3
+lr_model = NoiseModel([
+    {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.05},
+])
+sampled = lr_model.sample(rng=0)
+print("sites:", sampled.processes[0]["sites"])
+print("strength:", sampled.processes[0]["strength"])
+print("factors:", [f.shape for f in sampled.processes[0]["factors"]])
+```
+
+## Related topics
+
+- {doc}`analog_simulation` — TJM workflow with static noise strengths
+- {doc}`circuit_simulation` — noisy digital simulation
+- {doc}`simulation_parameters` — presets and `random_seed` for reproducible trajectories
+- {doc}`quickstart` — minimal first simulation

@@ -27,7 +27,7 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 ## Key Features
 
-- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a parallelized implementation using the Tensor Jump Method (TJM) [1]
+- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a parallelized implementation using the Tensor Jump Method (TJM) [1]; see [4] for guidance on trajectory cost and unravelling trade-offs
 - **Noisy Quantum Circuit Simulation (Digital Simulation)**: Investigate the effect of noise on large quantum circuits [3]
 - **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method [2]
 - **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods

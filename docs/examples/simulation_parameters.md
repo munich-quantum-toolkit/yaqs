@@ -234,3 +234,10 @@ The built-in values are defined in {data}`~mqt.yaqs.core.data_structures.simulat
 ```{code-cell} ipython3
 SIMULATION_PRESETS
 ```
+
+## Related topics
+
+- {doc}`quickstart` — minimal first simulation
+- {doc}`analog_simulation` — analog parameters in context
+- {doc}`circuit_simulation` — `StrongSimParams`, `gate_mode`, and layer sampling
+- {doc}`weak_circuit_simulation` — `WeakSimParams` and shot readout

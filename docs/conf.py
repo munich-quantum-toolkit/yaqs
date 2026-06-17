@@ -59,7 +59,14 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinxcontrib.inkscapeconverter",
     "sphinxcontrib.bibtex",
+    "sphinx_reredirects",
 ]
+
+redirects = {
+    "examples/strong_circuit_simulation": "examples/circuit_simulation.html",
+    "examples/sample_observable_digital_tjm": "examples/circuit_simulation.html#mid-circuit-observables",
+    "examples/solver_comparison": "examples/representation_comparison.html",
+}
 
 source_suffix = [".rst", ".md"]
 

@@ -14,6 +14,10 @@ mystnb:
 
 # Process Tensor Tomography
 
+```{note}
+This page runs several trajectory-heavy tomography steps and may take one to two minutes during a documentation build (`execution_timeout: 600`).
+```
+
 Process Tensor Tomography (PTT) characterises multi-time correlations in an open quantum system
 by reconstructing a _process tensor_, a generalisation of the quantum channel concept to several
 time steps.
@@ -138,3 +142,9 @@ print(np.round(rho_pred, 4))
 
 The result `rho_pred` is a `(2, 2)` density matrix giving the expected output state at the final
 time step given the initial state and the local unitary intervention applied to the system between the two segments.
+
+## Related topics
+
+- {doc}`analog_simulation` — open-system dynamics underlying the process tensor
+- {doc}`realistic_noise_models` — noise models for non-Markovian environments
+- {doc}`simulation_parameters` — `num_traj` and truncation settings
