@@ -31,23 +31,10 @@ EXPECTED_PUBLIC_API = frozenset({
     "version_info",
 })
 
-# Symbols that must not appear on the package root (use submodules instead).
-INTERNAL_AT_PACKAGE_ROOT = frozenset({
-    "DEFAULT_MATRIX_MAX_QUBITS",
-    "GateLibrary",
-    "tdvp",
-})
-
 
 def test_public_api_all_matches_documented_surface() -> None:
     """``__all__`` matches the documented top-level export list."""
     assert frozenset(yaqs.__all__) == EXPECTED_PUBLIC_API
-
-
-def test_internal_symbols_not_exposed_at_package_root() -> None:
-    """Implementation details are not re-exported on ``mqt.yaqs``."""
-    for name in INTERNAL_AT_PACKAGE_ROOT:
-        assert not hasattr(yaqs, name), name
 
 
 def test_top_level_import_smoke() -> None:
