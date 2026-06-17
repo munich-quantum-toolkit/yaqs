@@ -65,7 +65,7 @@ noise_model = NoiseModel([
 ])
 ```
 
-Pass a float for each `strength` here. For distribution-valued strengths (calibration spread), see {doc}`realistic_noise_models`.
+Pass a float for each `strength` here. For distribution-valued strengths (Gaussian and other distributions), see {doc}`realistic_noise_models`.
 
 ## 3. Simulation parameters
 

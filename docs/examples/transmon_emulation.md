@@ -121,7 +121,7 @@ assert leakage_at_t(result_clean, -1) < 0.05 + 1e-9
 
 ## 4. Noisy SWAP
 
-Relaxation and dephasing on transmon sites (even indices). Built-in `lowering` and `pauli_z` processes are 2×2; for `qubit_dim = 3` we pass explicit jump matrices ({class}`~mqt.yaqs.core.libraries.gate_library.Destroy` and a computational-subspace dephasing operator). For bell-curve calibration spread, see {doc}`realistic_noise_models`.
+Relaxation and dephasing on transmon sites (even indices). Built-in `lowering` and `pauli_z` processes are 2×2; for `qubit_dim = 3` we pass explicit jump matrices ({class}`~mqt.yaqs.core.libraries.gate_library.Destroy` and a computational-subspace dephasing operator). For Gaussian and other distributed noise strengths, see {doc}`realistic_noise_models`.
 
 ```{code-cell} ipython3
 ---
