@@ -49,7 +49,7 @@ Noisy or noise-free evolution through a Qiskit circuit on an MPS:
 ```{code-cell} ipython3
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs import StrongSimParams
+from mqt.yaqs import Observable, StrongSimParams
 
 qc = QuantumCircuit(3)
 qc.h(0)

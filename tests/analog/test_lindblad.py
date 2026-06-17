@@ -209,7 +209,7 @@ def test_lindblad_result_has_no_auto_diagnostics() -> None:
     state = State(length, initial="zeros", representation="density_matrix")
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable("z", 0)],
+        observables=[Observable("z", sites=0)],
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,
