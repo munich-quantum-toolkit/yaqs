@@ -128,6 +128,11 @@ A. Sander, M. Fröhlich, M. Ali, M. Eigel, J. Eisert, M. Hintermüller, C. B. Me
 Quantum circuit simulation with a local time-dependent variational principle.
 _arXiv:2508.10096 (2025)._
 
+[[4]](https://arxiv.org/abs/2606.13779)
+A. Sander, S. Cichy, M. Eigel, J. Eisert, M. Fröhlich, T. Peham, R. Wille.
+Computational regimes in matrix-product-state-based quantum trajectory simulations.
+_arXiv:2606.13779 (2026)._
+
 ---
 
 ## Acknowledgements
