@@ -146,10 +146,10 @@ def test_longrange_two_site_factors_auto() -> None:
 
 
 def test_longrange_two_site_factors_explicit() -> None:
-    """Test that explicit 'factors' for long-range are accepted and sites normalize.
+    """Explicit long-range factors follow the original site order before normalization.
 
-    Supplying (A,B) and unsorted endpoints should result in stored ascending sites,
-    preserving factors and omitting a full 'matrix'.
+    Factors are listed in the same order as ``sites``. Reordering sites to ascending
+    indices must swap the per-site operators accordingly.
     """
     nm = NoiseModel([
         {
@@ -160,13 +160,11 @@ def test_longrange_two_site_factors_explicit() -> None:
         }
     ])
     p = nm.processes[0]
-    # Sites must be normalized to ascending order
     assert p["sites"] == [1, 3]
     assert "factors" in p
-    assert len(p["factors"]) == 2
     a_op, b_op = p["factors"]
-    assert _allclose(a_op, PauliX.matrix)
-    assert _allclose(b_op, PauliY.matrix)
+    assert _allclose(a_op, PauliY.matrix)
+    assert _allclose(b_op, PauliX.matrix)
     assert "matrix" not in p
 
 

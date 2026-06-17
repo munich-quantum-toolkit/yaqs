@@ -42,6 +42,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
@@ -136,6 +137,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#396]: https://github.com/munich-quantum-toolkit/yaqs/pull/396
+[#364]: https://github.com/munich-quantum-toolkit/yaqs/pull/364
 [#450]: https://github.com/munich-quantum-toolkit/yaqs/pull/450
 [#464]: https://github.com/munich-quantum-toolkit/yaqs/pull/464
 [#458]: https://github.com/munich-quantum-toolkit/yaqs/pull/458
@@ -194,6 +197,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@lucello**]: https://github.com/lucello
 [**@Marerido**]: https://github.com/Marerido
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
+[**@aleramos119**]: https://github.com/aleramos119
 
 <!-- General links -->
 
