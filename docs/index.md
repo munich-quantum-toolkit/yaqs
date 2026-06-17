@@ -39,6 +39,7 @@ examples/simulator_initialization
 examples/simulation_parameters
 examples/custom_gates
 examples/analog_simulation
+examples/realistic_noise_models
 examples/ensemble_evolution
 examples/solver_comparison
 examples/scheduled_jumps
