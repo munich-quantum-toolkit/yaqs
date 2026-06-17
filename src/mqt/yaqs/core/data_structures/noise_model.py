@@ -9,7 +9,7 @@
 
 This module defines the NoiseModel class, which represents a noise model in a quantum system.
 It stores a list of noise processes and their corresponding strengths, and automatically retrieves
-the associated jump operator matrices from the GateLibrary. These jump operators are used to simulate
+the associated jump operator matrices from the NoiseLibrary. These jump operators are used to simulate
 the effects of noise in quantum simulations.
 """
 
@@ -18,14 +18,32 @@ from __future__ import annotations
 import copy
 import logging
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from scipy.stats import truncnorm
 
-from ..libraries.gate_library import BaseGate, Crosstalk, GateLibrary
+from ..libraries.gate_library import BaseGate
+from ..libraries.noise_library import NoiseLibrary
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+
+CROSSTALK_PREFIX = "longrange_crosstalk_"
+PAULI_MAP = {
+    "x": NoiseLibrary.pauli_x().matrix,
+    "y": NoiseLibrary.pauli_y().matrix,
+    "z": NoiseLibrary.pauli_z().matrix,
+}
 
 logger = logging.getLogger(__name__)
+
+
+def _swap_two_qubit_matrix(matrix: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Return the same operator with the two qubit tensor factors exchanged."""
+    tensor = matrix.reshape(2, 2, 2, 2)
+    return np.transpose(tensor, (1, 0, 3, 2)).reshape(4, 4)
 
 
 class NoiseModel:
@@ -70,9 +88,8 @@ class NoiseModel:
                 assert "name" in jump, "Each scheduled jump must have a 'name' key"
                 assert len(jump["sites"]) <= 2, "Each scheduled jump must have at most 2 sites"
                 jump_dict = dict(jump)  # Copy to avoid mutating caller's dict
-                jump_op = NoiseModel.get_operator(jump_dict["name"])
                 if "matrix" not in jump_dict:
-                    jump_dict["matrix"] = jump_op.matrix
+                    jump_dict["matrix"] = NoiseModel.get_operator(jump_dict["name"])
                 self.scheduled_jumps.append(jump_dict)
 
         if processes is None:
@@ -88,37 +105,101 @@ class NoiseModel:
             proc = dict(original)
             name = proc["name"]
             sites = proc["sites"]
+            user_factors = original.get("factors")
+            user_matrix = original.get("matrix")
 
-            name_op = NoiseModel.get_operator(name)
-
-            if len(sites) == 1:
-                proc["matrix"] = name_op.matrix
-
-            else:  # Two-site: normalize site ordering
+            # Normalize two-site ordering
+            if isinstance(sites, list) and len(sites) == 2:
                 sorted_sites = sorted(sites)
                 swapped = sorted_sites != sites
                 if swapped:
                     proc["sites"] = sorted_sites
                 i, j = proc["sites"]
+                is_adjacent = abs(j - i) == 1
 
-                if abs(j - i) == 1:  # Adjacent: store full matrix
-                    if isinstance(name_op, Crosstalk):
-                        proc["matrix"] = name_op.swapped_matrix if swapped else name_op.matrix
-                    else:
-                        proc["matrix"] = name_op.matrix
+                # Adjacent two-site: use full matrix
+                if is_adjacent:
+                    if str(name).startswith("crosstalk_"):
+                        # infer matrix from suffix ab
+                        suffix = str(name).rsplit("_", 1)[-1]
+                        assert len(suffix) == 2, "Invalid crosstalk label. Expected 'crosstalk_ab' with a,b in {x,y,z}."
+                        assert all(c in "xyz" for c in suffix), (
+                            "Invalid crosstalk label. Expected 'crosstalk_ab' with a,b in {x,y,z}."
+                        )
+                        a, b = suffix[0], suffix[1]
+                        proc["matrix"] = np.kron(PAULI_MAP[a], PAULI_MAP[b])
+                    elif "matrix" not in proc:
+                        proc["matrix"] = NoiseModel.get_operator(name)
+                    filled_processes.append(proc)
+                    if swapped:
+                        NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
+                    continue
 
-                elif isinstance(name_op, Crosstalk):
-                    proc["factors"] = (
-                        (name_op.matrix2, name_op.matrix1) if swapped else (name_op.matrix1, name_op.matrix2)
-                    )
-                else:
-                    assert "factors" in proc, (
-                        "Non-adjacent 2-site processes must specify 'factors' unless a Crosstalk gate is provided."
-                    )
+                # Non-adjacent two-site: attach per-site factors for crosstalk labels
+                if str(name).startswith("crosstalk_"):
+                    if "factors" not in proc:
+                        suffix = str(name).rsplit("_", 1)[-1]
+                        assert len(suffix) == 2, "Invalid crosstalk label. Expected 'crosstalk_ab' with a,b in {x,y,z}."
+                        assert all(c in "xyz" for c in suffix), (
+                            "Invalid crosstalk label. Expected 'crosstalk_ab' with a,b in {x,y,z}."
+                        )
+                        a, b = suffix[0], suffix[1]
+                        proc["factors"] = (PAULI_MAP[a], PAULI_MAP[b])
+                    filled_processes.append(proc)
+                    if swapped:
+                        NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
+                    continue
 
+                # Long-range two-site with canonical label
+                if str(name).startswith(CROSSTALK_PREFIX):
+                    if "factors" not in proc:
+                        suffix = str(name).rsplit("_", 1)[-1]
+                        assert len(suffix) == 2, (
+                            f"Invalid crosstalk label. Expected '{CROSSTALK_PREFIX}ab' with a,b in {{x,y,z}}."
+                        )
+                        assert all(c in "xyz" for c in suffix), (
+                            f"Invalid crosstalk label. Expected '{CROSSTALK_PREFIX}ab' with a,b in {{x,y,z}}."
+                        )
+                        a, b = suffix[0], suffix[1]
+                        proc["factors"] = (PAULI_MAP[a], PAULI_MAP[b])
+                    filled_processes.append(proc)
+                    if swapped:
+                        NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
+                    continue
+
+                # Other long-range two-site: require explicit factors
+                assert "factors" in proc, (
+                    "Non-adjacent 2-site processes must specify 'factors' unless named 'crosstalk_{ab}'."
+                )
+                filled_processes.append(proc)
+                if swapped:
+                    NoiseModel._apply_two_site_swap(proc, name, user_factors, user_matrix)
+                continue
+
+            # One-site: ensure matrix
+            if "matrix" not in proc:
+                proc["matrix"] = NoiseModel.get_operator(name)
             filled_processes.append(proc)
 
         self.processes = filled_processes
+
+    @staticmethod
+    def _apply_two_site_swap(
+        proc: dict[str, Any],
+        name: str | BaseGate,
+        user_factors: tuple[NDArray[np.complex128], NDArray[np.complex128]] | None,
+        user_matrix: NDArray[np.complex128] | None,
+    ) -> None:
+        """Reorder stored operators to match ascending site indices."""
+        if user_factors is not None and "factors" in proc:
+            proc["factors"] = (proc["factors"][1], proc["factors"][0])
+        elif user_matrix is not None and "matrix" in proc and proc["matrix"].shape == (4, 4):
+            proc["matrix"] = _swap_two_qubit_matrix(proc["matrix"])
+        elif isinstance(name, BaseGate) and name.interaction == 2 and "matrix" in proc and proc["matrix"].shape == (
+            4,
+            4,
+        ):
+            proc["matrix"] = _swap_two_qubit_matrix(proc["matrix"])
 
     def sample(self, rng: np.random.Generator | int | None = None) -> NoiseModel:
         """Sample a concrete NoiseModel from any distribution-based strengths.
@@ -196,18 +277,21 @@ class NoiseModel:
         return new_model
 
     @staticmethod
-    def get_operator(name: str | BaseGate) -> BaseGate:
-        """Retrieve the operator from GateLibrary, possibly as a tensor product if needed.
+    def get_operator(name: str | BaseGate) -> NDArray[np.complex128]:
+        """Retrieve the operator matrix for a noise process name or gate.
 
         Args:
-            name: Name of the noise process (e.g., 'xx', 'zz').
+            name: Noise process name (e.g. ``'pauli_x'``) or a ``BaseGate`` instance.
 
         Returns:
             The matrix representation of the operator.
         """
         if isinstance(name, BaseGate):
-            return name
+            return name.matrix
 
-        operator_class = getattr(GateLibrary, name)
+        if name in PAULI_MAP:
+            return PAULI_MAP[name]
+        operator_class = getattr(NoiseLibrary, name)
 
-        return operator_class()
+        operator: BaseGate = operator_class()
+        return operator.matrix

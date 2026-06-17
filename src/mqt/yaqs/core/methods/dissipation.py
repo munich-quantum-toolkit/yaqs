@@ -21,20 +21,6 @@ import numpy as np
 import opt_einsum as oe
 
 from .. import linalg
-from ..libraries.gate_library import (
-    CrosstalkXX,
-    CrosstalkXY,
-    CrosstalkXZ,
-    CrosstalkYX,
-    CrosstalkYY,
-    CrosstalkYZ,
-    CrosstalkZX,
-    CrosstalkZY,
-    CrosstalkZZ,
-    X,
-    Y,
-    Z,
-)
 from ..methods.decompositions import merge_two_site, split_two_site
 
 if TYPE_CHECKING:
@@ -59,49 +45,25 @@ def is_longrange(proc: dict[str, Any]) -> bool:
     return bool(abs(s[1] - s[0]) > 1)
 
 
-_PAULI_STRINGS = {
-    "pauli_x",
-    "pauli_y",
-    "pauli_z",
-    "crosstalk_xx",
-    "crosstalk_yy",
-    "crosstalk_zz",
-    "crosstalk_xy",
-    "crosstalk_yx",
-    "crosstalk_zy",
-    "crosstalk_zx",
-    "crosstalk_yz",
-    "crosstalk_xz",
-    "longrange_crosstalk_xx",
-    "longrange_crosstalk_yy",
-    "longrange_crosstalk_zz",
-    "longrange_crosstalk_xy",
-    "longrange_crosstalk_yx",
-    "longrange_crosstalk_zy",
-    "longrange_crosstalk_zx",
-    "longrange_crosstalk_yz",
-    "longrange_crosstalk_xz",
-}
-_PAULI_CLASSES = (
-    X,
-    Y,
-    Z,
-    CrosstalkXX,
-    CrosstalkYY,
-    CrosstalkZZ,
-    CrosstalkXY,
-    CrosstalkYX,
-    CrosstalkZY,
-    CrosstalkZX,
-    CrosstalkYZ,
-    CrosstalkXZ,
-)
-
-
 def is_pauli(proc: dict[str, Any]) -> bool:
     """Return True if the process is a Pauli process."""
-    name = proc["name"]
-    return name in _PAULI_STRINGS or isinstance(name, _PAULI_CLASSES)
+    return bool(
+        proc["name"]
+        in {
+            "pauli_x",
+            "pauli_y",
+            "pauli_z",
+            "crosstalk_xx",
+            "crosstalk_yy",
+            "crosstalk_zz",
+            "crosstalk_xy",
+            "crosstalk_yx",
+            "crosstalk_zy",
+            "crosstalk_zx",
+            "crosstalk_yz",
+            "crosstalk_xz",
+        }
+    )
 
 
 def apply_dissipation(

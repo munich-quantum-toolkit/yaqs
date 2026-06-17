@@ -26,7 +26,8 @@ from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import XX, X, Y, Z
+from mqt.yaqs.core.libraries.gate_library import BaseGate, X, Z
+from mqt.yaqs.core.libraries.noise_library import PauliX, PauliY, PauliZ
 
 
 def _allclose(a: np.ndarray, b: np.ndarray) -> bool:
@@ -110,7 +111,7 @@ def test_one_site_matrix_auto() -> None:
     p = nm.processes[0]
     assert "matrix" in p, "1-site process should have matrix auto-filled"
     assert p["matrix"].shape == (2, 2)
-    assert _allclose(p["matrix"], X().matrix)
+    assert _allclose(p["matrix"], PauliX.matrix)
 
 
 def test_adjacent_two_site_matrix_auto() -> None:
@@ -123,7 +124,7 @@ def test_adjacent_two_site_matrix_auto() -> None:
     p = nm.processes[0]
     assert "matrix" in p, "Adjacent 2-site process should have matrix auto-filled"
     assert p["matrix"].shape == (4, 4)
-    expected = np.kron(X().matrix, Z().matrix)
+    expected = np.kron(PauliX.matrix, PauliZ.matrix)
     assert _allclose(p["matrix"], expected)
 
 
@@ -139,44 +140,72 @@ def test_longrange_two_site_factors_auto() -> None:
     a_op, b_op = p["factors"]
     assert a_op.shape == (2, 2)
     assert b_op.shape == (2, 2)
-    assert _allclose(a_op, X().matrix)
-    assert _allclose(b_op, Y().matrix)
+    assert _allclose(a_op, PauliX.matrix)
+    assert _allclose(b_op, PauliY.matrix)
     assert "matrix" not in p, "Long-range processes should not attach a full matrix"
 
 
 def test_longrange_two_site_factors_explicit() -> None:
-    """Test that explicit 'factors' for long-range are accepted and sites normalize.
+    """Explicit long-range factors follow the original site order before normalization.
 
-    Supplying (A,B) and unsorted endpoints should result in stored ascending sites,
-    preserving factors and omitting a full 'matrix'.
+    Factors are listed in the same order as ``sites``. Reordering sites to ascending
+    indices must swap the per-site operators accordingly.
     """
     nm = NoiseModel([
         {
-            "name": "longrange_crosstalk_xy",
+            "name": "custom_longrange_xy",
             "sites": [3, 1],  # intentionally unsorted
             "strength": 0.3,
-            "factors": (X().matrix, Y().matrix),
+            "factors": (PauliX.matrix, PauliY.matrix),
         }
     ])
     p = nm.processes[0]
-    # Sites must be normalized to ascending order
     assert p["sites"] == [1, 3]
     assert "factors" in p
-    assert len(p["factors"]) == 2
     a_op, b_op = p["factors"]
-    assert _allclose(a_op, Y().matrix)
-    assert _allclose(b_op, X().matrix)
+    assert _allclose(a_op, PauliY.matrix)
+    assert _allclose(b_op, PauliX.matrix)
     assert "matrix" not in p
+
+
+def test_adjacent_two_site_basegate_swaps_operator_with_unsorted_sites() -> None:
+    """A two-site BaseGate must be transposed when site indices are normalized."""
+    operator = BaseGate(np.kron(PauliX.matrix, PauliZ.matrix))
+    nm = NoiseModel([{"name": operator, "sites": [2, 1], "strength": 0.2}])
+    p = nm.processes[0]
+    assert p["sites"] == [1, 2]
+    assert _allclose(p["matrix"], np.kron(PauliZ.matrix, PauliX.matrix))
+
+
+def test_get_operator_with_basegate_instance() -> None:
+    """get_operator returns the matrix when a BaseGate instance is passed."""
+    gate = X()
+    result = NoiseModel.get_operator(gate)
+    assert _allclose(result, gate.matrix)
+
+
+def test_one_site_process_accepts_basegate_name() -> None:
+    """One-site processes accept a BaseGate in the name field."""
+    nm = NoiseModel([{"name": X(), "sites": [0], "strength": 0.1}])
+    assert _allclose(nm.processes[0]["matrix"], X().matrix)
 
 
 def test_longrange_unknown_label_without_factors_raises() -> None:
     """Test that unknown long-range labels without 'factors' raise.
 
-    If the name is not a recognized GateLibrary alias and no factors are provided,
+    If the name is not 'longrange_crosstalk_{ab}' and no factors are provided,
     initialization must fail to avoid guessing operators.
+
+    Raises:
+        AssertionError: If the model accepts an unknown long-range label without factors.
     """
-    with pytest.raises((AttributeError, AssertionError)):
+    try:
+        # Name is not a recognized non-adjacent 'crosstalk_{ab}' and no factors provided
         _ = NoiseModel([{"name": "foo_bar", "sites": [0, 2], "strength": 0.1}])
+    except AssertionError:
+        return
+    msg = "Expected AssertionError for unknown long-range label without factors."
+    raise AssertionError(msg)
 
 
 def test_noise_distribution_integration() -> None:
@@ -445,39 +474,6 @@ def test_truncated_normal_negative_mean_zero_std() -> None:
     rng = np.random.default_rng(42)
     sampled_nm = nm.sample(rng=rng)
     assert sampled_nm.processes[0]["strength"] == pytest.approx(0.0, abs=1e-8)
-
-
-def test_adjacent_two_site_non_crosstalk_uses_matrix() -> None:
-    """Adjacent two-site non-Crosstalk operator stores its full matrix (line 113).
-
-    XX is a BaseGate, not a Crosstalk, so the else-branch that copies
-    name_op.matrix directly must be exercised.
-    """
-    nm = NoiseModel([{"name": "xx", "sites": [0, 1], "strength": 0.1}])
-    p = nm.processes[0]
-    assert "matrix" in p
-    assert p["matrix"].shape == (4, 4)
-    np.testing.assert_allclose(p["matrix"], XX().matrix)
-
-
-def test_longrange_non_crosstalk_with_explicit_factors() -> None:
-    """Non-adjacent, non-Crosstalk process with pre-supplied factors passes the assert (line 120).
-
-    Passing 'xx' (not a Crosstalk) for non-adjacent sites [0, 2] with explicit
-    factors already in the dict exercises the assert branch that guards against
-    missing factors.
-    """
-    factors = (X().matrix, X().matrix)
-    nm = NoiseModel([{"name": "xx", "sites": [0, 2], "strength": 0.1, "factors": factors}])
-    p = nm.processes[0]
-    assert "factors" in p
-
-
-def test_get_operator_with_basegate_instance() -> None:
-    """get_operator returns a BaseGate instance unchanged when one is passed directly (line 213)."""
-    gate = X()
-    result = NoiseModel.get_operator(gate)
-    assert result is gate
 
 
 def test_missing_distribution_key() -> None:
