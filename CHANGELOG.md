@@ -27,7 +27,6 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
-- fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
 - overhauled TDVP backend ([#457]) ([**@aaronleesander**])
 - changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
@@ -43,6 +42,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
 - minor cleanup ([#420]) ([**@aaronleesander**])
