@@ -1,5 +1,9 @@
 # Custom and Qiskit Gates in YAQS
 
+```{note}
+This is a **reference guide** with static code blocks; it is not executed during the documentation build. Runnable circuit examples are in {doc}`circuit_simulation` and {doc}`equivalence_checking`.
+```
+
 YAQS represents every digital gate as a {class}`~mqt.yaqs.core.libraries.gate_library.BaseGate`
 instance from {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary`. Circuits enter YAQS as
 Qiskit {class}`qiskit.circuit.QuantumCircuit` objects; the library converts each DAG operation

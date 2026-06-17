@@ -106,8 +106,9 @@ params_mps_u = AnalogSimParams(observables=[obs_z], elapsed_time=1.0, dt=0.1, ma
 params_rho_u = AnalogSimParams(observables=[obs_z], elapsed_time=1.0, dt=0.1)
 
 z_mps = sim.run(State(L, initial="zeros", representation="mps"), H, params_mps_u, None).expectation_values[0][-1]
+z_vec = sim.run(State(L, initial="zeros", representation="vector"), H, params_mps_u, None).expectation_values[0][-1]
 z_rho = sim.run(State(L, initial="zeros", representation="density_matrix"), H, params_rho_u, None).expectation_values[0][-1]
-print(f"Noiseless ⟨Z₀⟩ at t=1: mps={z_mps:.6f}, density_matrix={z_rho:.6f}")
+print(f"Noiseless ⟨Z₀⟩ at t=1: mps={z_mps:.6f}, vector={z_vec:.6f}, density_matrix={z_rho:.6f}")
 ```
 
 ## Related topics

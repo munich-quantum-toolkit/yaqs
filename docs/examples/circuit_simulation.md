@@ -206,7 +206,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-## 4. OpenQASM inputs
+## 3. OpenQASM inputs
 
 Pass an OpenQASM 2 source string (or file path) directly to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python. Custom gate bodies declared in the program are translated like any other Qiskit operation.
 
@@ -237,7 +237,7 @@ print(f"Top bitstrings: {list(qasm_result.counts.items())[:3]}")
 
 OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`. {class}`~mqt.yaqs.EquivalenceChecker` accepts the same path and string forms; see {doc}`equivalence_checking`.
 
-## 5. Gate application modes
+## 4. Gate application modes
 
 `StrongSimParams.gate_mode` (and `WeakSimParams.gate_mode`) selects how two-qubit gates are applied to the MPS. The default `"mpo"` uses extended gate MPOs for long-range pairs; `"tdvp"` uses a local TDVP window when an analytic generator is available. See {doc}`simulation_parameters` and {doc}`custom_gates` for the full matrix.
 
@@ -263,7 +263,7 @@ for mode in ("mpo", "tdvp"):
     print(f"gate_mode={mode!r}: ⟨Z₀⟩ = {z0:.6f}")
 ```
 
-## 6. Related topics
+## 5. Related topics
 
 - {doc}`weak_circuit_simulation` — shot-based readout with {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`
 - {doc}`custom_gates` — Qiskit gate translation and custom unitaries

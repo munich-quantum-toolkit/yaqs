@@ -64,6 +64,12 @@ flowchart LR
 | Simulate a noisy circuit and read observables          | {doc}`examples/circuit_simulation`        |
 | Get hardware-like shot histograms                      | {doc}`examples/weak_circuit_simulation`   |
 | Verify two circuits are equivalent                     | {doc}`examples/equivalence_checking`      |
+| Two-time correlations and typicality ensembles         | {doc}`examples/ensemble_evolution`        |
+| Scheduled jumps at fixed times                         | {doc}`examples/scheduled_jumps`           |
+| Fermi–Hubbard MPO and analog evolution                 | {doc}`examples/fermi_hubbard_mpo`         |
+| Transmon–resonator SWAP (noiseless vs noisy)           | {doc}`examples/transmon_emulation`        |
+| Process tensor tomography                              | {doc}`examples/process_tomography`        |
+| Custom gate translation from Qiskit                    | {doc}`examples/custom_gates`              |
 
 ```{toctree}
 :caption: Getting started

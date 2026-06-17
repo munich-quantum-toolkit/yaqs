@@ -14,6 +14,8 @@ mystnb:
 
 # Ensemble Evolution
 
+Use this page when you need **two-time correlators** (`multi_time_observables` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`) or **ensemble averages** over `list[State]` inputs—for dynamical typicality studies, transport correlators, and finite-temperature observables estimated from random pure states.
+
 This page demonstrates workflows for computing two-time correlations in a deterministic (noiseless, unitary) ensemble in YAQS.
 The focus is on compact, executable examples:
 

@@ -18,9 +18,9 @@ This page runs three minimal workflows end-to-end plus a circuit equivalence che
 
 Every example in this guide uses `Simulator(show_progress=False)` so progress bars do not clutter the built documentation.
 
-## 1. Analog simulation (primary workflow)
+## 1. Analog simulation
 
-Open-system time evolution with the tensor jump method (TJM) on an MPS:
+Tensor-network time evolution on an MPS. Attach a `NoiseModel` for open-system TJM trajectories; without noise, the simulator performs a single unitary trajectory regardless of `num_traj`:
 
 ```{code-cell} ipython3
 from mqt.yaqs import Simulator
@@ -100,13 +100,13 @@ For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence
 
 ## 4. Where to go next
 
-| Goal | Start here |
-| ---- | ---------- |
-| Open-system dynamics, noise, time grids | {doc}`analog_simulation` |
-| Bell-curve (Gaussian) noise strengths | {doc}`realistic_noise_models` |
-| Circuit observables, mid-circuit sampling, OpenQASM | {doc}`circuit_simulation` |
-| Accuracy presets and truncation knobs | {doc}`simulation_parameters` |
-| Check two circuits for equivalence | {doc}`equivalence_checking` |
+| Goal                                                | Start here                    |
+| --------------------------------------------------- | ----------------------------- |
+| Open-system dynamics, noise, time grids             | {doc}`analog_simulation`      |
+| Bell-curve (Gaussian) noise strengths               | {doc}`realistic_noise_models` |
+| Circuit observables, mid-circuit sampling, OpenQASM | {doc}`circuit_simulation`     |
+| Accuracy presets and truncation knobs               | {doc}`simulation_parameters`  |
+| Check two circuits for equivalence                  | {doc}`equivalence_checking`   |
 
 ## Related topics
 

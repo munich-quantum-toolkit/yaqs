@@ -84,8 +84,34 @@ params = AnalogSimParams(
 
 sim = Simulator(show_progress=False)
 result = sim.run(psi0, H_small, params)
-print("P(|00⟩):", [float(v) for v in result.expectation_values[0]])
-print("P(|11⟩) on site basis string:", [float(v) for v in result.expectation_values[1]])
+times = params.times
+p_vacuum = [float(v) for v in result.expectation_values[0]]
+p_down_down = [float(v) for v in result.expectation_values[1]]
+print("P(vacuum |00⟩):", p_vacuum)
+print("P(|↓⟩⊗|↓⟩) basis string '11':", p_down_down)
+```
+
+Hopping spreads population out of the vacuum; `"11"` indexes $|{\downarrow}\rangle \otimes |{\downarrow}\rangle$, not double occupancy (index `3` = $|{\uparrow\downarrow}\rangle$ per site).
+
+```{code-cell} ipython3
+---
+mystnb:
+  image:
+    width: 70%
+    align: center
+---
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(5, 3))
+ax.plot(times, p_vacuum, "o-", label=r"$P(|00\rangle)$ vacuum")
+ax.plot(times, p_down_down, "s--", label=r"$P(|\!\downarrow\rangle^{\otimes 2})$ ('11')")
+ax.set_xlabel("time")
+ax.set_ylabel("probability")
+ax.set_title("Two-site Fermi–Hubbard from vacuum")
+ax.legend()
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
 ```
 
 ## 4. Relation to the Trotter circuit helper
