@@ -27,6 +27,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- updated documentation structure and content ([#465]) ([**@aaronleesander**])
 - changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
 - overhauled TDVP backend ([#457]) ([**@aaronleesander**])
 - changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
@@ -137,6 +138,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#465]: https://github.com/munich-quantum-toolkit/yaqs/pull/465
 [#396]: https://github.com/munich-quantum-toolkit/yaqs/pull/396
 [#364]: https://github.com/munich-quantum-toolkit/yaqs/pull/364
 [#450]: https://github.com/munich-quantum-toolkit/yaqs/pull/450
