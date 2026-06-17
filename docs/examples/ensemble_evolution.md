@@ -14,6 +14,8 @@ mystnb:
 
 # Ensemble Evolution
 
+Use this page when you need **two-time correlators** (`multi_time_observables` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`) or **ensemble averages** over `list[State]` inputs—for dynamical typicality studies, transport correlators, and finite-temperature observables estimated from random pure states.
+
 This page demonstrates workflows for computing two-time correlations in a deterministic (noiseless, unitary) ensemble in YAQS.
 The focus is on compact, executable examples:
 
@@ -24,7 +26,7 @@ The focus is on compact, executable examples:
 ## 1. Unitary analog evolution primer
 
 In unitary analog evolution, we have no noise or tensor jumps.
-To trigger the backend to perform a unitary dynamics, you can avoid passing `noise_model=''` to `Simulator.run` because `noise_model` is set to `None` by default.
+Omit `noise_model` in {meth}`~mqt.yaqs.Simulator.run` (it defaults to `None`).
 
 ```{code-cell} ipython3
 import numpy as np
@@ -282,3 +284,9 @@ The illustrative curves here use small $L$ and a handful of Haar-random states; 
 - **MPS entanglement:** under unitary evolution, entanglement entropy and required bond dimension typically **grow** with time (until truncation or saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten `svd_threshold` only with care, or shorten the window so the MPS remains an accurate ansatz for your observable.
 
 :::
+
+## Related topics
+
+- {doc}`analog_simulation` — noisy and unitary TJM evolution
+- {doc}`state_initialization` — Haar-random and ensemble `list[State]` inputs
+- {doc}`simulator_initialization` — `Simulator(parallel=True)` for ensemble runs

@@ -14,12 +14,13 @@ mystnb:
 
 # Noisy Analog Simulation
 
-This module demonstrates how to run a analog simulation using the YAQS simulator visualize the results.
-In this example, an Ising Hamiltonian is built as a {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`, and a {class}`~mqt.yaqs.core.data_structures.state.State` is prepared in the $\ket{0}$ state.
-A noise model is applied, and simulation parameters are defined for an analog simulation using the Tensor Jump Method (TJM).
-After running the simulation, the expectation values of the $X$ observable are extracted and displayed as a heatmap.
+This guide walks through an open-system **analog** simulation with the tensor jump method (TJM): build a Hamiltonian, attach a noise model, configure {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`, and visualize time-resolved observables.
 
-Define the system Hamiltonian. We show 3 possible ways to define the Ising Hamiltonian as an example.
+For Gaussian (bell-curve) noise strengths and static disorder, see {doc}`realistic_noise_models`. For execution options (parallelism, progress bars), see {doc}`simulator_initialization`.
+
+## 1. Hamiltonian
+
+Three equivalent ways to define the transverse-field Ising model $H = -J \sum_i Z_i Z_{i+1} - g \sum_i X_i$ on an open chain:
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
@@ -29,10 +30,10 @@ L = 3
 J = 1
 g = 0.5
 
-# Method 1: Pre-implemented Hamiltonians
+# Method 1: built-in constructor
 H_0 = Hamiltonian.ising(L, J, g)
 
-# Method 2: Same Ising Hamiltonian built via the generic Pauli interaction interface
+# Method 2: generic Pauli interface
 H_0 = Hamiltonian.pauli(
     length=L,
     two_body=[(-J, "Z", "Z")],
@@ -40,47 +41,36 @@ H_0 = Hamiltonian.pauli(
     bc="open",
 )
 
-# Method 3: Explicit Pauli-string expansion
-terms = []
-
-# -J Σ Z_i Z_{i+1}
-for i in range(L - 1):
-    terms.append((-J, f"Z{i} Z{i+1}"))
-
-# -g Σ X_i
-for i in range(L):
-    terms.append((-g, f"X{i}"))
-
+# Method 3: explicit Pauli-string MPO
+terms = [(-J, f"Z{i} Z{i+1}") for i in range(L - 1)] + [(-g, f"X{i}") for i in range(L)]
 mpo = MPO()
 mpo.from_pauli_sum(terms=terms, length=L)
 H_0 = Hamiltonian.from_mpo(mpo)
 ```
 
-Define the initial state
+## 2. Initial state and noise model
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 
 state = State(L, initial="zeros")
-# Alternative: initialize an entangled random state with capped bond dimension.
-# state = State(L, initial="haar-random", pad=4)
-```
-
-Define the noise model
-
-```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+# Alternative: State(L, initial="haar-random", pad=4)
 
 gamma = 0.1
 noise_model = NoiseModel([
-    {"name": name, "sites": [i], "strength": gamma} for i in range(L) for name in ["lowering", "pauli_z"]
+    {"name": name, "sites": [i], "strength": gamma}
+    for i in range(L)
+    for name in ["lowering", "pauli_z"]
 ])
 ```
 
-Define the simulation parameters
+Pass a float for each `strength` here. For distribution-valued strengths (Gaussian and other distributions), see {doc}`realistic_noise_models`.
+
+## 3. Simulation parameters
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, AnalogSimParams
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import X
 
 sim_params = AnalogSimParams(
@@ -95,21 +85,13 @@ sim_params = AnalogSimParams(
 )
 ```
 
-Optional **`tdvp_sweeps`** (default `1`) runs multiple TDVP substeps per time step `dt`. Each substep is a **symmetric** integrator step (left-to-right then right-to-left within the substep) at evolution time `dt / tdvp_sweeps`, which can improve accuracy without changing the physical step size used for noise and dissipation.
+Optional `tdvp_sweeps` (default `1`) runs multiple symmetric TDVP substeps per physical step `dt`, improving unitary accuracy without changing the noise timestep.
 
-## Reproducible (deterministic) stochastic runs
+**Evolution integrator:** analog simulations default to `EvolutionMode.TDVP` (two-site TDVP sweeps). `EvolutionMode.BUG` is available as an alternative on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` when you want the BUG integrator instead.
 
-Open-system simulations with `num_traj > 1` average over independent quantum-jump trajectories.
-By default, each call to {meth}`~mqt.yaqs.Simulator.run` draws a new random jump sequence, so aggregated observables can differ slightly from run to run.
+## 4. Reproducible stochastic runs
 
-Set {attr}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams.random_seed` to fix the pseudorandom stream:
-
-- Each trajectory uses `numpy.random.default_rng(random_seed + traj_idx)`, so parallel workers stay reproducible and independent.
-- If the noise model has distribution-valued strengths, {meth}`~mqt.yaqs.Simulator.run` samples static disorder once using the same seed.
-
-Leave `random_seed=None` (the default) for genuine Monte Carlo sampling in production.
-
-The example below runs the same noisy setup twice; with a seed, the trajectory-averaged $\langle X \rangle$ curves match exactly.
+With `num_traj > 1`, each {meth}`~mqt.yaqs.Simulator.run` call averages independent quantum-jump trajectories. Set {attr}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams.random_seed` to fix the pseudorandom stream across trajectories (and for distribution-valued noise strengths):
 
 ```{code-cell} ipython3
 import copy
@@ -147,23 +129,16 @@ assert all(np.allclose(a, b) for a, b in zip(first_run, second_run, strict=True)
 print("Both runs produced identical trajectory-averaged observables.")
 ```
 
-The same `random_seed` field exists on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` for noisy digital simulations.
+The same `random_seed` field exists on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` and {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`.
 
-After choosing a seed, you can tune `num_traj` for a fixed bias–variance trade-off instead of widening numerical tolerances to absorb run-to-run noise.
-
-Run the simulation
+## 5. Run and visualize
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs import Simulator
-
-sim = Simulator()
 result = sim.run(state, H_0, sim_params, noise_model)
 ```
-
-Plot the results
 
 ```{code-cell} ipython3
 ---
@@ -176,16 +151,23 @@ import matplotlib.pyplot as plt
 
 heatmap = result.expectation_values
 
-fig, ax = plt.subplots(1, 1)
-im = plt.imshow(heatmap, aspect="auto", extent=(0, 10, L, 0), vmin=0, vmax=0.5)
-plt.xlabel("Site")
-plt.yticks([x - 0.5 for x in list(range(1, L + 1))], [str(x) for x in range(1, L + 1)])
-plt.ylabel("t")
+fig, ax = plt.subplots(figsize=(5, 3))
+im = ax.imshow(heatmap, aspect="auto", extent=(0, 10, L, 0), vmin=0, vmax=0.5)
+ax.set_xlabel("Time")
+ax.set_yticks([x - 0.5 for x in range(1, L + 1)], [str(x) for x in range(L)])
+ax.set_ylabel("Site")
 
 fig.subplots_adjust(top=0.95, right=0.88)
 cbar_ax = fig.add_axes(rect=(0.9, 0.11, 0.025, 0.8))
 cbar = fig.colorbar(im, cax=cbar_ax)
-cbar.ax.set_title("$\\langle X \\rangle$")
-
+cbar.ax.set_title(r"$\langle X \rangle$")
+plt.tight_layout()
 plt.show()
 ```
+
+## Related topics
+
+- {doc}`representation_comparison` — MPS, MCWF, and Lindblad backends
+- {doc}`scheduled_jumps` — deterministic jumps at specified times
+- {doc}`ensemble_evolution` — unitary ensemble correlations
+- {doc}`quickstart` — minimal first simulation

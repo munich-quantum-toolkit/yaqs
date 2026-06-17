@@ -12,12 +12,16 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Scheduled Noise Jumps
+# Scheduled Jumps
 
 This example demonstrates how to use **scheduled noise jumps** in YAQS.
 Scheduled jumps allow you to apply specific operators at predetermined times during an analog simulation. This is useful for simulating controlled gates, sudden noise events, or time-dependent perturbations without needing a full time-dependent Hamiltonian.
 
-In this notebook, we simulate a 10-site Ising chain and apply a scheduled Pauli-X flip to a specific site at $t=1.0$.
+In this example, we simulate a 10-site Ising chain and apply a scheduled Pauli-X flip to a specific site at $t=1.0$.
+
+```{important}
+Scheduled jump times must lie on the simulation time grid: choose `time` as a multiple of `dt` (for example `dt=0.1` → `0.0, 0.1, 0.2, …`).
+```
 
 ## 1. Setup
 
@@ -59,13 +63,13 @@ noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
 
 ## 3. Simulation Parameters
 
-We measure the $Z$ expectation value on the first site ($Z_0$) to see how the jump at site 5 affects the dynamics through entanglement.
+We measure the $Z$ expectation value on the **jumped site** ($\langle Z_5 \rangle$). A Pauli-X jump flips that site's magnetization; measuring a distant site would show only a weak entanglement signal and can look like no jump occurred.
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
 from mqt.yaqs.core.libraries.gate_library import Z
 
-z_obs = Observable(Z(), sites=0)
+z_obs = Observable(Z(), sites=jump_site)
 
 sim_params = AnalogSimParams(
     elapsed_time=5.0,
@@ -101,7 +105,7 @@ result_jump = sim.run(state_jump, hamiltonian, sim_params_jump, noise_model=nois
 
 ## 5. Visualize Results
 
-We plot the expectation value $\langle Z_0 \rangle$ over time.
+We plot the expectation value $\langle Z_{\text{jump site}} \rangle$ over time.
 
 ```{code-cell} ipython3
 ---
@@ -122,9 +126,15 @@ plt.plot(times, res_jump, label=f"Jump on site {jump_site}", color="tab:blue")
 plt.axvline(x=jump_time, color='red', linestyle=':', label="Jump Time")
 
 plt.xlabel("Time (t)")
-plt.ylabel("$\langle Z_0 \\rangle$")
+plt.ylabel(f"$\\langle Z_{{{jump_site}}} \\rangle$")
 plt.title(f"Effect of a Scheduled Jump at $t={jump_time}$ on site {jump_site}")
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.show()
 ```
+
+## Related topics
+
+- {doc}`analog_simulation` — TJM workflow and noise models
+- {doc}`realistic_noise_models` — distributed noise strengths
+- {doc}`simulation_parameters` — time grids and `dt` alignment

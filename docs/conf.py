@@ -59,7 +59,14 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinxcontrib.inkscapeconverter",
     "sphinxcontrib.bibtex",
+    "sphinx_reredirects",
 ]
+
+redirects = {
+    "examples/strong_circuit_simulation": "examples/circuit_simulation.html",
+    "examples/sample_observable_digital_tjm": "examples/circuit_simulation.html#mid-circuit-observables",
+    "examples/solver_comparison": "examples/representation_comparison.html",
+}
 
 source_suffix = [".rst", ".md"]
 
@@ -181,8 +188,8 @@ latex_documents = [
         master_doc,
         "mqt_yaqs.tex",
         (
-            r"MQT YAQS\\{\large A Tool for Simulating"
-            r"Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware}"
+            r"MQT YAQS\\{\large Scalable simulation for open systems,"
+            r" noisy circuits, and realistic hardware}"
         ),
         r"Chair for Design Automation\\Technical University of Munich",
         "howto",

@@ -12,76 +12,64 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Weak Circuit Simulation (Shots)
+# Weak Circuit Simulation
 
-This module demonstrates how to run a weak simulation using the YAQS simulator
-with a TwoLocal circuit generated via Qiskit's circuit library. A [`State`](mqt.yaqs.core.data_structures.state.State) is initialized
-in the $\ket{0}$ state (MPS representation), a noise model is applied, and weak simulation parameters are set.
-After running the simulation, the measurement results (bitstring counts) are displayed
-as a bar chart.
+**Weak** digital simulation samples computational-basis **shots** after a noisy circuit evolution, mimicking hardware readout statistics. Use {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams` and read bitstring counts from {attr}`~mqt.yaqs.Result.counts`.
 
-You can pass an OpenQASM file path or raw OpenQASM string to
-{meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit`
-in Python (OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`).
+For expectation-value simulation and mid-circuit observables, see {doc}`circuit_simulation`. For parameter presets and truncation settings, see {doc}`simulation_parameters`.
 
-Create the circuit
+You can pass an OpenQASM file path or raw OpenQASM string to {meth}`~mqt.yaqs.Simulator.run` instead of building a {class}`qiskit.circuit.QuantumCircuit` in Python (OpenQASM 3 requires `pip install mqt-yaqs[qasm3]`).
+
+## 1. Circuit
 
 ```{code-cell} ipython3
-from qiskit.circuit.library.n_local import TwoLocal
-
 import numpy as np
+from qiskit.circuit.library.n_local import TwoLocal
 
 num_qubits = 5
 circuit = TwoLocal(num_qubits, ["rx"], ["rzz"], entanglement="linear", reps=num_qubits).decompose()
-num_pars = len(circuit.parameters)
 rng = np.random.default_rng()
-values = rng.uniform(-np.pi, np.pi, size=num_pars)
-circuit.assign_parameters(values, inplace=True)
+circuit.assign_parameters(rng.uniform(-np.pi, np.pi, size=len(circuit.parameters)), inplace=True)
 circuit.measure_all()
 circuit.draw(output="mpl")
 ```
 
-Define the initial state
+## 2. Initial state and noise model
 
 ```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.state import State
-
-# Circuit simulation requires representation="mps" (the default for presets).
-state = State(num_qubits, initial="zeros")
-```
-
-Define the noise model
-
-```{code-cell} ipython3
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+
+state = State(num_qubits, initial="zeros")
 
 gamma = 0.1
 noise_model = NoiseModel([
-    {"name": name, "sites": [i], "strength": gamma} for i in range(num_qubits) for name in ["lowering", "pauli_z"]
+    {"name": name, "sites": [i], "strength": gamma}
+    for i in range(num_qubits)
+    for name in ["lowering", "pauli_z"]
 ])
 ```
 
-Define the simulation parameters
+For bell-curve noise strengths, see {doc}`realistic_noise_models`.
 
-```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
+## 3. Simulation parameters and run
 
-sim_params = WeakSimParams(shots=1024, max_bond_dim=4, svd_threshold=1e-6)
-```
-
-Run the simulation
+`WeakSimParams` requires an explicit `shots` count (not covered by accuracy presets).
 
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
 from mqt.yaqs import Simulator
+from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
 
-sim = Simulator()
+sim_params = WeakSimParams(shots=1024, max_bond_dim=4, svd_threshold=1e-6)
+
+sim = Simulator(show_progress=False)
 result = sim.run(state, circuit, sim_params, noise_model)
 ```
 
-Plot the measurement outcomes as a bar chart
+## 4. Readout histogram
 
 ```{code-cell} ipython3
 ---
@@ -92,9 +80,17 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-plt.bar(result.counts.keys(), result.counts.values())
-plt.xlabel("Bitstring")
-plt.ylabel("Counts")
-plt.title("Measurement Results")
+fig, ax = plt.subplots(figsize=(8, 3.5))
+ax.bar(result.counts.keys(), result.counts.values(), color="tab:blue", alpha=0.8)
+ax.set_xlabel("Bitstring")
+ax.set_ylabel("Counts")
+ax.set_title("Weak-simulation measurement outcomes")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
 plt.show()
 ```
+
+## Related topics
+
+- {doc}`circuit_simulation` — strong simulation with final and mid-circuit observables
+- {doc}`custom_gates` — gate translation from Qiskit

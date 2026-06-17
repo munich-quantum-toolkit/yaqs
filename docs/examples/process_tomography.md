@@ -14,9 +14,16 @@ mystnb:
 
 # Process Tensor Tomography
 
+```{note}
+This page runs several trajectory-heavy tomography steps and may take one to two minutes during a documentation build (`execution_timeout: 600`).
+```
+
 Process Tensor Tomography (PTT) characterises multi-time correlations in an open quantum system
 by reconstructing a _process tensor_, a generalisation of the quantum channel concept to several
 time steps.
+The cells below use **noise-free** unitary evolution for a quick demonstration; attach a
+{class}`~mqt.yaqs.core.data_structures.noise_model.NoiseModel` in production runs to characterise
+open-system channels.
 Given a {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` and a set of state preparations and measurement projections, YAQS runs the simulation in parallel,
 applies these interventions at each time point, and assembles the result into a {class}`ProcessTensor`
 object that can be used to:
@@ -95,8 +102,6 @@ pt_two = run(
 print(f"Process tensor shape: {pt_two.tensor.shape}")  # (4, 16, 16)
 ```
 
-````
-
 ## 5. Predicting held-out states
 
 Once the process tensor is available, you can predict the output for _any_ initial density matrix
@@ -134,7 +139,13 @@ rho_pred = pt_two.predict_final_state(
 )
 print("Predicted output density matrix:")
 print(np.round(rho_pred, 4))
-````
+```
 
 The result `rho_pred` is a `(2, 2)` density matrix giving the expected output state at the final
 time step given the initial state and the local unitary intervention applied to the system between the two segments.
+
+## Related topics
+
+- {doc}`analog_simulation` — open-system dynamics underlying the process tensor
+- {doc}`realistic_noise_models` — noise models for non-Markovian environments
+- {doc}`simulation_parameters` — `num_traj` and truncation settings

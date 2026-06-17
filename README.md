@@ -14,9 +14,9 @@
   </a>
 </p>
 
-# MQT YAQS - A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
+# MQT YAQS — Scalable simulation for open systems, noisy circuits, and realistic hardware
 
-MQT YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
+MQT YAQS (pronounced "yaks" like the animals) is a Python library designed for **scalable, computationally efficient** simulation of open quantum dynamics, noisy quantum circuits, and hardware-realistic device models. YAQS uses state-of-the-art techniques in these areas such as parallelized trajectories, tensor network compression, and problem-size-appropriate backends wherever possible (see [Cite This](#cite-this)).
 It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 <p align="center">
@@ -27,10 +27,11 @@ It is part of the [_Munich Quantum Toolkit (MQT)_](https://mqt.readthedocs.io).
 
 ## Key Features
 
-- **Simulation of Open Quantum Systems (Analog Simulation)**: Simulate large-scale open quantum systems with a parallelized implementation using the Tensor Jump Method (TJM) [1]
-- **Noisy Quantum Circuit Simulation (Digital Simulation)**: Investigate the effect of noise on large quantum circuits [3]
-- **Equivalence Checking of Quantum Circuits**: Check the equivalence or non-equivalence of quantum circuits with a scalable MPO-based method [2]
-- **WIP: Quantum Hardware Design**: Design better quantum hardware with realistic simulation methods
+- **Analog simulation**: Large-scale open-system and unitary time evolution using parallelized quantum trajectories when a noise model is attached [1] (trajectory guidance [4]).
+- **Digital circuit simulation**: Noisy circuits at scale, final and mid-circuit observables, shot-based readout, and OpenQASM 2 inputs [3] (`pip install mqt-yaqs[qasm3]` for OpenQASM 3).
+- **Equivalence checking**: Scalable comparison of quantum circuits [2].
+- **Hardware-oriented modeling**: Realistic noise models including Gaussian and other strength distributions, plus hardware dynamics such as transmon–resonator systems, and heterogeneous site dimensions ([examples](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/realistic_noise_models.html)).
+- **Multiple backends**: Monte Carlo wavefunction and master equation evolution are available for analog simulation on smaller systems, alongside the scalable MPS trajectory path.
 
 If you have any questions, feel free to create a [discussion](https://github.com/munich-quantum-toolkit/yaqs/discussions) or an [issue](https://github.com/munich-quantum-toolkit/yaqs/issues) on [GitHub](https://github.com/munich-quantum-toolkit/yaqs).
 
@@ -80,7 +81,21 @@ To support this endeavor, please consider:
 (.venv) $ pip install mqt.yaqs
 ```
 
-**Detailed documentation and examples are available at [ReadTheDocs](https://mqt.readthedocs.io/projects/yaqs).**
+```python
+from mqt.yaqs import Simulator
+from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.core.libraries.gate_library import Z
+
+sim = Simulator()
+state = State(3, initial="zeros")
+H = Hamiltonian.ising(3, J=1.0, g=0.5)
+params = AnalogSimParams(observables=[Observable(Z(), sites=0)], elapsed_time=0.5, dt=0.1, preset="fast")
+print(sim.run(state, H, params).expectation_values[0])
+```
+
+**Documentation:** [Quickstart](https://mqt.readthedocs.io/projects/yaqs/en/latest/examples/quickstart.html) · [full guide](https://mqt.readthedocs.io/projects/yaqs)
 
 ## System Requirements
 
@@ -127,6 +142,11 @@ _Phys. Rev. Research_ _7_, 023261 (2025).
 A. Sander, M. Fröhlich, M. Ali, M. Eigel, J. Eisert, M. Hintermüller, C. B. Mendl, R. M. Milbradt, R. Wille.
 Quantum circuit simulation with a local time-dependent variational principle.
 _arXiv:2508.10096 (2025)._
+
+[[4]](https://arxiv.org/abs/2606.13779)
+A. Sander, S. Cichy, M. Eigel, J. Eisert, M. Fröhlich, T. Peham, R. Wille.
+Computational regimes in matrix-product-state-based quantum trajectory simulations.
+_arXiv:2606.13779 (2026)._
 
 ---
 

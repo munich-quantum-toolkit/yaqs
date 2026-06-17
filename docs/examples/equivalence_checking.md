@@ -238,7 +238,7 @@ is faster from roughly eight qubits upward on those workloads. That aligns with 
 auto cutover at seven qubits: auto uses matrix only where it is still affordable, and MPO for
 everything larger.
 
-## See also
+## Related topics
 
 - {doc}`custom_gates` — Qiskit translation, matrix fallback, and TDVP generators
 - {doc}`simulator_initialization` — running simulations with {class}`~mqt.yaqs.Simulator`
