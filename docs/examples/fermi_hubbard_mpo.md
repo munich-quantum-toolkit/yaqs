@@ -38,7 +38,7 @@ $$
 ## 1. Fermionic Hamiltonian
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
+from mqt.yaqs import Hamiltonian
 
 num_sites = 4
 t = 1.0
@@ -66,9 +66,7 @@ print(f"orbitals={H_jw.length}, local dim={H_jw.mpo.physical_dimension}, matrix 
 Evolve a two-site fermionic chain in the vacuum $|00\rangle$ and track the probability of remaining in that sector. Fermionic sites use local dimension 4, so pass `physical_dimensions=[4, 4]` on {class}`~mqt.yaqs.core.data_structures.state.State`.
 
 ```{code-cell} ipython3
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import AnalogSimParams, Observable, Simulator, State
 
 hubbard_sites = 2
 H_small = Hamiltonian.fermi_hubbard_1d(hubbard_sites, t=1.0, u=0.5)

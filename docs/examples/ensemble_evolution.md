@@ -32,11 +32,8 @@ Omit `noise_model` in {meth}`~mqt.yaqs.Simulator.run` (it defaults to `None`).
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import BaseGate, Z, X, Y
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 sim = Simulator(show_progress=False)
 ```
@@ -60,7 +57,7 @@ mid = L // 2
 psi0 = State(L, initial="haar-random", pad=2)
 
 primer_params = AnalogSimParams(
-    observables=[Observable(Z(), mid)],
+    observables=[Observable("z", mid)],
     elapsed_time=5.0,
     dt=0.15,
     max_bond_dim=64,
@@ -103,8 +100,8 @@ The unitary-ensemble backend computes `multi_time_observables` pairs for `list[S
 Autocorrelation is the special case where both the observables are the same `(O, O)`. For a single-state demonstration, we pass a list with one element.
 
 ```{code-cell} ipython3
-sz_mid = Observable(Z(), mid)
-sx_mid = Observable(X(), mid)
+sz_mid = Observable("z", mid)
+sx_mid = Observable("x", mid)
 
 single_state_params = AnalogSimParams(
     observables=[],
@@ -159,8 +156,8 @@ ensemble_params = AnalogSimParams(
     svd_threshold=1e-10,
     sample_timesteps=True,
     multi_time_observables=[
-        (Observable(Z(), mid), Observable(Z(), mid)),  # C_zz(t) autocorrelation
-        (Observable(Z(), mid), Observable(X(), mid)),  # C_zx(t)
+        (Observable("z", mid), Observable("z", mid)),  # C_zz(t) autocorrelation
+        (Observable("z", mid), Observable("x", mid)),  # C_zx(t)
     ],
 )
 

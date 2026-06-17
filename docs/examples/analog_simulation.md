@@ -23,8 +23,7 @@ For Gaussian (bell-curve) noise strengths and static disorder, see {doc}`realist
 Three equivalent ways to define the transverse-field Ising model $H = -J \sum_i Z_i Z_{i+1} - g \sum_i X_i$ on an open chain:
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs import Hamiltonian, MPO
 
 L = 3
 J = 1
@@ -51,8 +50,7 @@ H_0 = Hamiltonian.from_mpo(mpo)
 ## 2. Initial state and noise model
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs import NoiseModel, State
 
 state = State(L, initial="zeros")
 # Alternative: State(L, initial="haar-random", pad=4)
@@ -70,11 +68,10 @@ Pass a float for each `strength` here. For distribution-valued strengths (Gaussi
 ## 3. Simulation parameters
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.libraries.gate_library import X
+from mqt.yaqs import AnalogSimParams, Observable
 
 sim_params = AnalogSimParams(
-    observables=[Observable(X(), site) for site in range(L)],
+    observables=[Observable("x", site) for site in range(L)],
     elapsed_time=10,
     dt=0.1,
     num_traj=100,
@@ -98,11 +95,10 @@ import copy
 
 import numpy as np
 
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs import AnalogSimParams, Observable, Simulator
 
 repro_params = AnalogSimParams(
-    observables=[Observable(X(), site) for site in range(L)],
+    observables=[Observable("x", site) for site in range(L)],
     elapsed_time=1.0,
     dt=0.1,
     num_traj=50,

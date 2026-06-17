@@ -23,18 +23,14 @@ Every example in this guide uses `Simulator(show_progress=False)` so progress ba
 Tensor-network time evolution on an MPS. Attach a `NoiseModel` for open-system TJM trajectories; without noise, the simulator performs a single unitary trajectory regardless of `num_traj`:
 
 ```{code-cell} ipython3
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 L = 3
 state = State(L, initial="zeros")
 hamiltonian = Hamiltonian.ising(L, J=1.0, g=0.5)
 
 params = AnalogSimParams(
-    observables=[Observable(Z(), sites=0)],
+    observables=[Observable("z", sites=0)],
     elapsed_time=0.5,
     dt=0.1,
     preset="fast",
@@ -53,7 +49,7 @@ Noisy or noise-free evolution through a Qiskit circuit on an MPS:
 ```{code-cell} ipython3
 from qiskit.circuit import QuantumCircuit
 
-from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
+from mqt.yaqs import StrongSimParams
 
 qc = QuantumCircuit(3)
 qc.h(0)
@@ -62,7 +58,7 @@ qc.cx(1, 2)
 
 circuit_state = State(3, initial="zeros")
 circuit_params = StrongSimParams(
-    observables=[Observable(Z(), sites=i) for i in range(3)],
+    observables=[Observable("z", sites=i) for i in range(3)],
     preset="fast",
     num_traj=8,
 )

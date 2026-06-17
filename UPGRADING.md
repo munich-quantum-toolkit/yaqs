@@ -4,90 +4,86 @@ This document describes breaking changes and how to upgrade. For a complete list
 
 ## [Unreleased]
 
-### `simulator.run` becomes `Simulator(...).run(...)`
+The unreleased API refresh replaces free functions and deep module paths with a small set of
+top-level types. The pieces fit together: construct physics objects and parameters, run through
+`Simulator`, read everything from `Result`.
 
-The free `mqt.yaqs.simulator.run` function has been replaced by a `Simulator` class.
-`Simulator` owns the execution-side configuration (parallel vs. serial execution, worker count,
-progress reporting, multiprocessing context, retry policy); the physics inputs are passed to
-`Simulator.run`. `Simulator.run` returns a `Result` (from
-`mqt.yaqs.core.data_structures.result`) that holds all simulation outputs. The `*SimParams`
-object you pass in is never mutated.
+### Recommended migration (end-to-end)
 
 **Before:**
 
 ```python
-from mqt.yaqs import simulator
+from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, simulator
+from mqt.yaqs.core.data_structures.mpo import MPO
+from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs.digital.equivalence_checker import run as check_equivalent
 
-simulator.run(state, op, sim_params, noise_model, parallel=True)
+psi = MPS(4, state="zeros")
+H = MPO.ising(4, J=1.0, g=0.5)
+params = AnalogSimParams(
+    observables=[Observable(Z(), sites=0), Observable("max_bond")],
+    threshold=1e-8,
+    solver="MCWF",
+)
+
+simulator.run(psi, H, params, noise_model, parallel=True)
+print(params.observables[0].results)
+
+equiv = check_equivalent(circuit1, circuit2, threshold=1e-6)
+print(DEFAULT_MATRIX_MAX_QUBITS)
 ```
 
 **After:**
 
 ```python
-from mqt.yaqs import Simulator
+from mqt.yaqs import (
+    AnalogSimParams,
+    EquivalenceChecker,
+    Hamiltonian,
+    Observable,
+    Simulator,
+    State,
+)
 
-sim = Simulator()
-result = sim.run(state, op, sim_params, noise_model)
-```
+psi = State(4, initial="zeros", representation="vector")
+H = Hamiltonian.ising(4, J=1.0, g=0.5)
+params = AnalogSimParams(
+    observables=[Observable("z", sites=0)],
+    svd_threshold=1e-8,
+)
 
-`show_progress` and `num_threads` were removed from `AnalogSimParams`, `StrongSimParams`, and
-`WeakSimParams`. Pass `show_progress` to `Simulator` instead; `num_threads` was unused and has been
-deleted.
-
-### `threshold` renamed to `svd_threshold` on `*SimParams`
-
-The SVD bond-truncation setting on `AnalogSimParams`, `StrongSimParams`, and `WeakSimParams` is now
-`svd_threshold` (attribute and constructor keyword). Simulation presets use the key `svd_threshold`
-in `SIMULATION_PRESETS`. This distinguishes SVD truncation from `krylov_tol` (Krylov/Lanczos matrix
-exponential) and from unrelated `threshold` parameters elsewhere (for example
-`EquivalenceChecker(threshold=...)`).
-
-**Before:**
-
-```python
-params = AnalogSimParams(threshold=1e-8)
-value = params.threshold
-```
-
-**After:**
-
-```python
-params = AnalogSimParams(svd_threshold=1e-8)
-value = params.svd_threshold
-```
-
-### `digital.equivalence_checker.run` becomes `EquivalenceChecker(...).check(...)`
-
-The free `mqt.yaqs.digital.equivalence_checker.run` function has been replaced by
-`EquivalenceChecker` (now exposed at `mqt.yaqs.EquivalenceChecker`). `EquivalenceChecker` owns the
-numerical thresholds (`threshold`, `fidelity`); the two circuits are passed to
-`EquivalenceChecker.check`. The return value is unchanged: a `dict` with keys `equivalent` and
-`elapsed_time`.
-
-**Before:**
-
-```python
-from mqt.yaqs.digital.equivalence_checker import run
-
-result = run(circuit1, circuit2, threshold=1e-6, fidelity=1 - 1e-13)
-```
-
-**After:**
-
-```python
-from mqt.yaqs import EquivalenceChecker
+sim = Simulator(show_progress=False)
+result = sim.run(psi, H, params, noise_model)
+print(result.expectation_values[0])
+print(result.max_bond)  # bond diagnostics; no longer an Observable
 
 checker = EquivalenceChecker(threshold=1e-6, fidelity=1 - 1e-13)
-result = checker.check(circuit1, circuit2)
+equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 qubits
 ```
 
-### Read outputs from `Result`, not `*SimParams`
+### Breaking changes at a glance
 
-`Simulator.run` no longer writes outputs onto the `*SimParams` instance you pass in. Capture the
-return value and read fields from `Result`. `result.sim_params` still references your original
-configuration object (unchanged).
+| Area                     | Before                                                            | After                                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Entry point**          | `mqt.yaqs.simulator.run(...)`                                     | `Simulator(...).run(...)` → returns `Result`                                                                           |
+| **Imports**              | `mqt.yaqs.core.data_structures.*`, `gate_library` for observables | `from mqt.yaqs import State, Hamiltonian, Observable, ...`                                                             |
+| **State / Hamiltonian**  | Raw `MPS` / `MPO` passed to `run`                                 | `State` and `Hamiltonian` (set `representation` on `State`)                                                            |
+| **Observables**          | `Observable(Z(), sites=0)` via `gate_library`                     | `Observable("z", sites=0)` — also `"entropy"`, `"schmidt_spectrum"`, etc.                                              |
+| **Outputs**              | Written onto `*SimParams` / `Observable.results`                  | Read from `Result` (`expectation_values`, `counts`, `output_state`, …)                                                 |
+| **SVD truncation**       | `threshold` on `*SimParams`                                       | `svd_threshold` (presets use the same key in `SIMULATION_PRESETS`)                                                     |
+| **Execution UI**         | `show_progress` on `*SimParams`                                   | `show_progress` on `Simulator`; `num_threads` removed (unused)                                                         |
+| **Equivalence checking** | `digital.equivalence_checker.run(...)`                            | `EquivalenceChecker(...).check(...)`                                                                                   |
+| **Matrix auto cutover**  | `from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS`                  | Default is **7** on `EquivalenceChecker(matrix_max_qubits=...)`; constant lives in `mqt.yaqs.equivalence_checker` only |
+| **Bond diagnostics**     | `Observable("max_bond")` etc. in `observables`                    | `result.max_bond`, `result.total_bond`, `result.runtime_cost`                                                          |
 
-| Old (`sim_params`)                          | New (`result`)                 |
+### `Result` field map
+
+`Simulator.run` no longer mutates the `*SimParams` you pass in. `result.sim_params` references
+your original configuration unchanged.
+
+| Old (`sim_params` / `Observable`)           | New (`result`)                 |
 | ------------------------------------------- | ------------------------------ |
 | `sim_params.observables[i].results`         | `result.expectation_values[i]` |
 | `sim_params.output_state`                   | `result.output_state`          |
@@ -99,92 +95,40 @@ configuration object (unchanged).
 
 Removed from `*SimParams`: `noise_model`, `output_state`, `multi_time_observables_times`,
 `multi_time_observables_results`, `measurements`, `results`, `aggregate_trajectories`,
-`aggregate_measurements`. Observable configuration (`observables`, `multi_time_observables`, etc.)
-remains on `*SimParams`.
+`aggregate_measurements`. Observable _configuration_ (`observables`, `multi_time_observables`,
+etc.) stays on `*SimParams`.
 
-`Observable` no longer carries run outputs. After `Simulator.run`, read
-`result.expectation_values[i]` (aggregated expectations), `result.trajectories[i]` (per-trajectory
-data), and `result.times` (shared analog time grid). `result.observables[i]` is still the gate/sites
-metadata for observable _i_.
+For MPS-backed analog and strong-digital runs, `result.runtime_cost`, `result.max_bond`, and
+`result.total_bond` are filled automatically (aligned with `result.times` or the strong-sim layer
+grid). MCWF, Lindblad, and weak digital runs leave these as `None`.
 
-### MPS bond diagnostics are automatic on `Result`
-
-`runtime_cost`, `max_bond`, and `total_bond` are no longer configured as `Observable` instances.
-For MPS-backed analog and strong-digital runs, `Simulator.run` fills `result.runtime_cost`,
-`result.max_bond`, and `result.total_bond` (1D arrays aligned with `result.times` or the
-strong-sim layer grid). MCWF, Lindblad, and weak digital runs leave these fields as `None`.
-
-**Before:**
+### Top-level public API
 
 ```python
-sim_params = AnalogSimParams(observables=[Observable(Z(), 0), Observable("max_bond")])
-result = sim.run(state, H, sim_params)
-max_bond_curve = result.expectation_values[-1]
+from mqt.yaqs import (
+    AnalogSimParams,
+    EquivalenceChecker,
+    Hamiltonian,
+    MPO,
+    MPS,
+    NoiseModel,
+    Observable,
+    Result,
+    SIMULATION_PRESETS,
+    Simulator,
+    State,
+    StrongSimParams,
+    WeakSimParams,
+)
 ```
 
-**After:**
+`Representation` is not exported at the top level (the name means different things on `State` vs
+`Hamiltonian`). Custom gates and circuits still use `mqt.yaqs.core.libraries` when needed.
 
-```python
-sim_params = AnalogSimParams(observables=[Observable(Z(), 0)])
-result = sim.run(state, H, sim_params)
-max_bond_curve = result.max_bond
-```
+### Platform note
 
-**Before:**
-
-```python
-sim = Simulator()
-sim.run(state, op, sim_params, noise_model)
-print(sim_params.observables[0].results)
-```
-
-**After:**
-
-```python
-sim = Simulator()
-result = sim.run(state, op, sim_params, noise_model)
-print(result.expectation_values[0])
-```
-
-### `simulator.run` uses `State` and `Hamiltonian`
-
-Analog and circuit entry points no longer accept raw `MPS` / `MPO` objects. Use `State` (from
-`mqt.yaqs.core.data_structures.state`) and `Hamiltonian` (from
-`mqt.yaqs.core.data_structures.hamiltonian`) instead.
-
-**Before:**
-
-```python
-from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.simulator import run
-
-psi = MPS(4, state="zeros")
-H = MPO.ising(4, J=1.0, g=0.5)
-params = AnalogSimParams(..., solver="MCWF")
-run(psi, H, params, noise_model)
-```
-
-**After:**
-
-```python
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
-from mqt.yaqs.core.data_structures.state import State
-
-psi = State(4, initial="zeros", representation="vector")
-H = Hamiltonian.ising(4, J=1.0, g=0.5)
-params = AnalogSimParams(...)
-sim = Simulator()
-result = sim.run(psi, H, params, noise_model)
-```
-
-### End of support for x86 macOS systems
-
-Starting with this release, we can no longer guarantee support for x86 macOS systems.
-x86 macOS systems are no longer tested in our CI and we can no longer guarantee that MQT YAQS installs and runs correctly on them.
+Starting with this release, x86 macOS is no longer tested in CI; we cannot guarantee that MQT YAQS
+installs and runs correctly on those systems.
 
 ## [0.3.2]
 

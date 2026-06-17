@@ -29,7 +29,7 @@ This page shows:
 Each process is a dictionary with `name`, `sites`, and `strength`. YAQS fills in the operator `matrix` (or per-site `factors` for long-range crosstalk) from {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs import NoiseModel
 
 L = 4
 processes = [
@@ -107,15 +107,11 @@ We evolve a short Ising chain and compare:
 - **Disordered:** strengths are drawn from the bell curve once at the start of each run.
 
 ```{code-cell} ipython3
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 hamiltonian = Hamiltonian.ising(length=L, J=1.0, g=0.5)
 state = State(L, initial="zeros")
-z_obs = Observable(Z(), sites=0)
+z_obs = Observable("z", sites=0)
 
 sim_params = AnalogSimParams(
     observables=[z_obs],
@@ -169,7 +165,7 @@ Re-running with the same `random_seed` reproduces the same sampled strengths and
 The same distribution syntax works in digital simulation. Below, bit-flip rates on each qubit follow independent bell curves; one sample is drawn per `Simulator.run` call.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
+from mqt.yaqs import Observable, StrongSimParams
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
 num_qubits = 3
@@ -185,7 +181,7 @@ circuit_noise = NoiseModel([
 ])
 
 circuit_params = StrongSimParams(
-    observables=[Observable(Z(), site) for site in range(num_qubits)],
+    observables=[Observable("z", site) for site in range(num_qubits)],
     num_traj=32,
     max_bond_dim=8,
     random_seed=11,

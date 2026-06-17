@@ -24,7 +24,7 @@ YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.s
 **Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`Simulator.run`](mqt.yaqs.Simulator) — including in parameter loops.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import State
 
 preset = State(4, initial="x+")
 print("preset representation:", preset.representation)  # default "mps"
@@ -87,7 +87,7 @@ Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation
 ### MPS cores (`tensors=`)
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs import MPS
 
 mps_ref = MPS(3, state="zeros")
 spec = State(tensors=list(mps_ref.tensors))
@@ -127,9 +127,7 @@ Set **`representation` on `State`**, not on `AnalogSimParams`. [`Simulator.run`]
 ### Default: MPS / TJM
 
 ```{code-cell} ipython3
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs import Hamiltonian, MPS, Simulator, AnalogSimParams, Observable
 
 sim = Simulator(show_progress=False)
 

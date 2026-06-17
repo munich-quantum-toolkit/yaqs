@@ -15,15 +15,36 @@ from __future__ import annotations
 
 from ._version import version as __version__
 from ._version import version_tuple as version_info
+from .core.data_structures.hamiltonian import Hamiltonian
+from .core.data_structures.mpo import MPO
+from .core.data_structures.mps import MPS
+from .core.data_structures.noise_model import NoiseModel
 from .core.data_structures.result import Result
-from .equivalence_checker import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
+from .core.data_structures.simulation_parameters import (
+    SIMULATION_PRESETS,
+    AnalogSimParams,
+    Observable,
+    StrongSimParams,
+    WeakSimParams,
+)
+from .core.data_structures.state import State
+from .equivalence_checker import EquivalenceChecker
 from .simulator import Simulator
 
 __all__ = [
-    "DEFAULT_MATRIX_MAX_QUBITS",
+    "MPO",
+    "MPS",
+    "SIMULATION_PRESETS",
+    "AnalogSimParams",
     "EquivalenceChecker",
+    "Hamiltonian",
+    "NoiseModel",
+    "Observable",
     "Result",
     "Simulator",
+    "State",
+    "StrongSimParams",
+    "WeakSimParams",
     "__version__",
     "version_info",
 ]

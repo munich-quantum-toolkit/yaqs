@@ -39,11 +39,7 @@ The sections below run the **same** noisy benchmark on all three paths so you ca
 ```{code-cell} ipython3
 import matplotlib.pyplot as plt
 
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
 
 sim = Simulator(show_progress=False)
 

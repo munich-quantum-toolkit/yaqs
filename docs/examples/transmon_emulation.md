@@ -27,8 +27,7 @@ PVM observables track probabilities for bitstrings using only local indices $0$ 
 
 ```{code-cell} ipython3
 import numpy as np
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import Hamiltonian, State
 
 length = 3  # qubit – resonator – qubit
 qubit_dim = 3
@@ -63,7 +62,7 @@ state = State(
 ## 2. Observables and shared parameters
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs import AnalogSimParams, Observable
 
 all_bitstrings = ["000", "001", "010", "011", "100", "101", "110", "111"]
 
@@ -127,7 +126,7 @@ Relaxation and dephasing on transmon sites (even indices). Built-in `lowering` a
 ---
 tags: [remove-output]
 ---
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
+from mqt.yaqs import NoiseModel
 from mqt.yaqs.core.libraries.gate_library import Destroy
 
 relax = Destroy(qubit_dim).matrix
