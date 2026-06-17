@@ -57,19 +57,6 @@ state = State(
 )
 ```
 
-## Define the noise model
-
-```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-
-gamma = 0.0  # No noise for this simulation
-noise_model = NoiseModel([
-    {"name": name, "sites": [i], "strength": gamma}
-    for i in range(length)
-    for name in ["lowering"]
-])
-```
-
 ## Define the simulation parameters
 
 ```{code-cell} ipython3
@@ -87,14 +74,16 @@ sim_params = AnalogSimParams(
 
 ## Run the simulation
 
+This is a noise-free unitary evolution; omit `noise_model` (it defaults to `None`).
+
 ```{code-cell} ipython3
 ---
 tags: [remove-output]
 ---
 from mqt.yaqs import Simulator
 
-sim = Simulator()
-result = sim.run(state, H_0, sim_params, noise_model)
+sim = Simulator(show_progress=False)
+result = sim.run(state, H_0, sim_params)
 ```
 
 ## Plot the results

@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Initializing quantum states
+# Initializing Quantum States
 
 YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.state.State)) from **how evolution runs** ([`AnalogSimParams`](mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams), Hamiltonian, noise).
 
@@ -175,7 +175,7 @@ result = sim.run(state_dm, H, params_dm, None)
 print("Lindblad Z_0:", result.expectation_values[0][-1])
 ```
 
-See {doc}`solver_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
+See {doc}`representation_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
 
 ### Passing dense data directly
 

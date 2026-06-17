@@ -171,7 +171,7 @@ Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a {cl
 
 ## `StrongSimParams`
 
-Used for noisy strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`strong_circuit_simulation`).
+Used for noisy strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`circuit_simulation`).
 
 ### Two-qubit gate mode (`gate_mode`)
 

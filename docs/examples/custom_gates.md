@@ -297,7 +297,7 @@ MPS contraction; there is no single-qubit TDVP gate path in circuit simulation.
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
 - {doc}`equivalence_checking` — comparing original and transpiled circuits
-- {doc}`strong_circuit_simulation` — running circuits with {class}`~mqt.yaqs.Simulator`
+- {doc}`circuit_simulation` — running circuits with {class}`~mqt.yaqs.Simulator`
 - {mod}`~mqt.yaqs.digital.utils.dag_utils` — translation implementation and
   `SUPPORTED_QISKIT_GATE_NAMES`
 - {mod}`~mqt.yaqs.core.libraries.gate_library` — built-in gate definitions and generator examples

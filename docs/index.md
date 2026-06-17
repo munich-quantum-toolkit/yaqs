@@ -28,8 +28,12 @@ A live version of this document is available at [mqt.readthedocs.io/projects/yaq
 self
 ```
 
+## User guide
+
+The pages below are **executable notebooks**: code cells run during the documentation build, so examples stay in sync with the library. Start with {doc}`installation`, then {doc}`state_initialization` and {doc}`simulation_parameters`.
+
 ```{toctree}
-:caption: User Guide
+:caption: Getting started
 :hidden:
 :maxdepth: 1
 
@@ -37,19 +41,39 @@ installation
 examples/state_initialization
 examples/simulator_initialization
 examples/simulation_parameters
-examples/custom_gates
+```
+
+```{toctree}
+:caption: Analog simulation
+:hidden:
+:maxdepth: 1
+
 examples/analog_simulation
 examples/realistic_noise_models
-examples/ensemble_evolution
-examples/solver_comparison
 examples/scheduled_jumps
+examples/ensemble_evolution
+examples/representation_comparison
 examples/transmon_emulation
 examples/fermi_hubbard_mpo
 examples/process_tomography
-examples/strong_circuit_simulation
-examples/sample_observable_digital_tjm
+```
+
+```{toctree}
+:caption: Digital circuits
+:hidden:
+:maxdepth: 1
+
+examples/circuit_simulation
 examples/weak_circuit_simulation
+examples/custom_gates
 examples/equivalence_checking
+```
+
+```{toctree}
+:caption: Reference
+:hidden:
+:maxdepth: 1
+
 references
 CHANGELOG
 UPGRADING

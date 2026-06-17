@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Scheduled Noise Jumps
+# Scheduled Jumps
 
 This example demonstrates how to use **scheduled noise jumps** in YAQS.
 Scheduled jumps allow you to apply specific operators at predetermined times during an analog simulation. This is useful for simulating controlled gates, sudden noise events, or time-dependent perturbations without needing a full time-dependent Hamiltonian.

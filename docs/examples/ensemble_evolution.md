@@ -24,7 +24,7 @@ The focus is on compact, executable examples:
 ## 1. Unitary analog evolution primer
 
 In unitary analog evolution, we have no noise or tensor jumps.
-To trigger the backend to perform a unitary dynamics, you can avoid passing `noise_model=''` to `Simulator.run` because `noise_model` is set to `None` by default.
+Omit `noise_model` in {meth}`~mqt.yaqs.Simulator.run` (it defaults to `None`).
 
 ```{code-cell} ipython3
 import numpy as np
