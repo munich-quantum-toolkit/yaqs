@@ -27,6 +27,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Changed
 
+- fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - changed analog simulation default mode to 2TDVP ([#458]) ([**@aaronleesander**])
 - overhauled TDVP backend ([#457]) ([**@aaronleesander**])
 - changed default to TEBD in digital circuit simulation ([#445]) ([**@aaronleesander**])
@@ -136,6 +137,8 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#396]: https://github.com/munich-quantum-toolkit/yaqs/pull/396
+[#364]: https://github.com/munich-quantum-toolkit/yaqs/pull/364
 [#450]: https://github.com/munich-quantum-toolkit/yaqs/pull/450
 [#464]: https://github.com/munich-quantum-toolkit/yaqs/pull/464
 [#458]: https://github.com/munich-quantum-toolkit/yaqs/pull/458
@@ -194,6 +197,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@lucello**]: https://github.com/lucello
 [**@Marerido**]: https://github.com/Marerido
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
+[**@aleramos119**]: https://github.com/aleramos119
 
 <!-- General links -->
 
