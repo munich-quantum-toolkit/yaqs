@@ -41,7 +41,7 @@ about. Auto only avoids thinking about backend choice on tiny circuits; it does 
 the fact that MPO is the primary algorithm in YAQS.
 ```
 
-With the default cutover {data}`~mqt.yaqs.DEFAULT_MATRIX_MAX_QUBITS` (= **7**), auto uses the
+With the default cutover of **7** qubits (`matrix_max_qubits` on {class}`~mqt.yaqs.EquivalenceChecker`), auto uses the
 matrix backend only for circuits with **at most seven qubits**. From eight qubits upward, auto
 selects MPO. Override the cutover with `matrix_max_qubits` if needed.
 
@@ -86,7 +86,7 @@ are not supported for unitary equivalence on either backend. See
 - **`fidelity`** (default `1 - 1e-13`): minimum normalized overlap between $W$ and the
   identity (global phase removed). Used by **both** backends.
 - **`representation`**: `"mpo"`, `"matrix"`, or `"auto"`.
-- **`matrix_max_qubits`** (default {data}`~mqt.yaqs.DEFAULT_MATRIX_MAX_QUBITS`): only affects
+- **`matrix_max_qubits`** (default **7**): only affects
   `"auto"`.
 - **`parallel`** (default `True`): when enabled, checkerboard **MPO** pair updates run in a
   **thread pool** from 12 qubits upward (ignored for the matrix backend and below the cutoff).
@@ -95,7 +95,7 @@ are not supported for unitary equivalence on either backend. See
 - **`mp_context`**: reserved for a future process-pool mode; MPO parallelism uses threads today.
 
 ```{code-cell} ipython3
-from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
+from mqt.yaqs import EquivalenceChecker
 
 # Recommended: MPO for the circuits you care about
 mpo_checker = EquivalenceChecker(
@@ -107,7 +107,7 @@ mpo_checker = EquivalenceChecker(
 # Auto: matrix if num_qubits <= 7, else MPO
 auto_checker = EquivalenceChecker(representation="auto")
 
-print(f"Auto matrix cutover: {DEFAULT_MATRIX_MAX_QUBITS} qubits")
+print("Auto matrix cutover: 7 qubits")
 ```
 
 ## Loading from OpenQASM
@@ -238,7 +238,7 @@ is faster from roughly eight qubits upward on those workloads. That aligns with 
 auto cutover at seven qubits: auto uses matrix only where it is still affordable, and MPO for
 everything larger.
 
-## See also
+## Related topics
 
 - {doc}`custom_gates` — Qiskit translation, matrix fallback, and TDVP generators
 - {doc}`simulator_initialization` — running simulations with {class}`~mqt.yaqs.Simulator`

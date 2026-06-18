@@ -1,5 +1,9 @@
 # Custom and Qiskit Gates in YAQS
 
+```{note}
+This is a **reference guide** with static code blocks; it is not executed during the documentation build. Runnable circuit examples are in {doc}`circuit_simulation` and {doc}`equivalence_checking`.
+```
+
 YAQS represents every digital gate as a {class}`~mqt.yaqs.core.libraries.gate_library.BaseGate`
 instance from {class}`~mqt.yaqs.core.libraries.gate_library.GateLibrary`. Circuits enter YAQS as
 Qiskit {class}`qiskit.circuit.QuantumCircuit` objects; the library converts each DAG operation
@@ -134,9 +138,7 @@ matrix-backed gate from Qiskit's unitary representation (matrix fallback). You d
 inline or transpile custom gates to a fixed basis set before simulation or equivalence checking.
 
 ```python
-from mqt.yaqs import EquivalenceChecker, Simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import WeakSimParams
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import EquivalenceChecker, Simulator, State, WeakSimParams
 
 qasm = """
 OPENQASM 2.0;
@@ -293,11 +295,11 @@ MPS contraction; there is no single-qubit TDVP gate path in circuit simulation.
 
 ---
 
-## See also
+## Related topics
 
 - {doc}`simulation_parameters` — `gate_mode`, `tdvp_sweeps`, `tdvp_mode`
 - {doc}`equivalence_checking` — comparing original and transpiled circuits
-- {doc}`strong_circuit_simulation` — running circuits with {class}`~mqt.yaqs.Simulator`
+- {doc}`circuit_simulation` — running circuits with {class}`~mqt.yaqs.Simulator`
 - {mod}`~mqt.yaqs.digital.utils.dag_utils` — translation implementation and
   `SUPPORTED_QISKIT_GATE_NAMES`
 - {mod}`~mqt.yaqs.core.libraries.gate_library` — built-in gate definitions and generator examples

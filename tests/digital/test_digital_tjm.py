@@ -23,11 +23,8 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Pauli, Statevector
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import NoiseModel, Observable, Simulator, State, StrongSimParams, WeakSimParams
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams, WeakSimParams
-from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, X, Y, Z
 from mqt.yaqs.core.methods.tdvp.sweep_utils import renorm_drift, uses_fixed_chi

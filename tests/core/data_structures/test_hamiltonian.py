@@ -17,11 +17,9 @@ import numpy as np
 import pytest
 import scipy.sparse
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import AnalogSimParams, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
 
 
 def _blank_hamiltonian(**attrs: object) -> Hamiltonian:

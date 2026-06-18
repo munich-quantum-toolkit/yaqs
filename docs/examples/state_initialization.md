@@ -12,7 +12,7 @@ mystnb:
 %config InlineBackend.figure_formats = ['svg']
 ```
 
-# Initializing quantum states
+# Initializing Quantum States
 
 YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.state.State)) from **how evolution runs** ([`AnalogSimParams`](mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams), Hamiltonian, noise).
 
@@ -24,7 +24,7 @@ YAQS separates **what you specify** (a [`State`](mqt.yaqs.core.data_structures.s
 **Workflow:** build a [`State`](mqt.yaqs.core.data_structures.state.State) and a [`Hamiltonian`](mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian) once (both materialize at construction), then pass them to [`Simulator.run`](mqt.yaqs.Simulator) — including in parameter loops.
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import State
 
 preset = State(4, initial="x+")
 print("preset representation:", preset.representation)  # default "mps"
@@ -87,7 +87,7 @@ Pass **exactly one** of `tensors`, `vector`, or `density_matrix`. Representation
 ### MPS cores (`tensors=`)
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs import MPS
 
 mps_ref = MPS(3, state="zeros")
 spec = State(tensors=list(mps_ref.tensors))
@@ -127,9 +127,7 @@ Set **`representation` on `State`**, not on `AnalogSimParams`. [`Simulator.run`]
 ### Default: MPS / TJM
 
 ```{code-cell} ipython3
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
+from mqt.yaqs import Hamiltonian, MPS, Simulator, AnalogSimParams, Observable
 
 sim = Simulator(show_progress=False)
 
@@ -149,6 +147,8 @@ print("TJM Z_0:", result.expectation_values[0][-1])
 
 ### MCWF (`representation="vector"`)
 
+For guidance on choosing a representation, see {doc}`representation_comparison`.
+
 ```{code-cell} ipython3
 state_vec = State(L, initial="zeros", representation="vector")
 obs_vec = Observable("z", sites=[0])
@@ -163,6 +163,8 @@ print("MCWF Z_0:", result.expectation_values[0][-1])
 
 ### Lindblad (`representation="density_matrix"`)
 
+For guidance on choosing a representation, see {doc}`representation_comparison`.
+
 ```{code-cell} ipython3
 state_dm = State(L, initial="zeros", representation="density_matrix")
 obs_dm = Observable("z", sites=[0])
@@ -175,7 +177,7 @@ result = sim.run(state_dm, H, params_dm, None)
 print("Lindblad Z_0:", result.expectation_values[0][-1])
 ```
 
-See {doc}`solver_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
+See {doc}`representation_comparison` for a side-by-side comparison of the three representations on the same Hamiltonian.
 
 ### Passing dense data directly
 
@@ -198,3 +200,10 @@ print("From vector=, MCWF Z_0:", result.expectation_values[0][-1])
 - **`get_state`**: when supported, `result.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State) (use `.mps` for the underlying MPS). Not supported with `representation="density_matrix"` or with stochastic noise.
 
 For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) API reference.
+
+## Related topics
+
+- {doc}`quickstart` — minimal first simulation
+- {doc}`representation_comparison` — MPS, MCWF, and Lindblad backends
+- {doc}`analog_simulation` — TJM evolution workflow
+- {doc}`simulation_parameters` — presets and trajectory settings

@@ -16,19 +16,15 @@ mystnb:
 
 YAQS draws a sharp line between **what** you simulate and **how** it runs:
 
-| Layer                                                                                                                                                                                                                                                                                                                                                                                             | Role                                                                                                                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.core.data_structures.state.State`, {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian`, {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` / {class}`StrongSimParams <mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams>` / {class}`WeakSimParams <mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams>` | The physics: initial state, operator, time grid, observables, trajectory count, truncation, noise.                                                             |
-| {class}`~mqt.yaqs.Simulator`                                                                                                                                                                                                                                                                                                                                                                      | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors. |
+| Layer                                                                                                                                                                                                | Role                                                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| {class}`~mqt.yaqs.State`, {class}`~mqt.yaqs.Hamiltonian`, {class}`~mqt.yaqs.AnalogSimParams` / {class}`StrongSimParams <mqt.yaqs.StrongSimParams>` / {class}`WeakSimParams <mqt.yaqs.WeakSimParams>` | The physics: initial state, operator, time grid, observables, trajectory count, truncation, noise.                                                             |
+| {class}`~mqt.yaqs.Simulator`                                                                                                                                                                         | The execution: parallel vs. serial trajectories, worker count, progress reporting, multiprocessing start method, and retry policy for transient worker errors. |
 
 This page walks through every option on the {class}`~mqt.yaqs.Simulator` class so you can tune execution without touching the physics.
 
 ```{code-cell} ipython3
-from mqt.yaqs import Result, Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import Z
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Result, Simulator, State
 ```
 
 A small reusable analog problem we will simulate throughout:
@@ -41,7 +37,7 @@ H = Hamiltonian.ising(L, J=1.0, g=0.5)
 def make_params(num_traj: int = 8) -> AnalogSimParams:
     """A short Ising evolution measuring `<Z>` on every site."""
     return AnalogSimParams(
-        observables=[Observable(Z(), site) for site in range(L)],
+        observables=[Observable("z", site) for site in range(L)],
         elapsed_time=0.2,
         dt=0.05,
         num_traj=num_traj,
@@ -283,4 +279,11 @@ print("restored observable count:", len(restored.observables))
 | Mixing with GPU / non-fork-safe code              | `Simulator(mp_context="spawn")`                                        |
 | Long unattended run on a flaky cluster            | `Simulator(max_retries=20)` with broadened `retry_exceptions`          |
 
-For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`solver_comparison`, and {doc}`state_initialization`.
+For physics-side settings (`num_traj`, `max_bond_dim`, `svd_threshold`, `random_seed`, `sample_timesteps`, observables, noise), see {doc}`analog_simulation`, {doc}`representation_comparison`, and {doc}`state_initialization`.
+
+## Related topics
+
+- {doc}`quickstart` — minimal first simulation
+- {doc}`simulation_parameters` — physics-side presets and truncation
+- {doc}`analog_simulation` — TJM workflow with noise
+- {doc}`circuit_simulation` — digital simulation entry point

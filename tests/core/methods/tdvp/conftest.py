@@ -26,10 +26,8 @@ import numpy as np
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
 
-from mqt.yaqs import Simulator
+from mqt.yaqs import Simulator, State, StrongSimParams
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
-from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp
 

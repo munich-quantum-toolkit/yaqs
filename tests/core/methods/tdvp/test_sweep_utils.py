@@ -34,11 +34,26 @@ from mqt.yaqs.core.methods.tdvp.sweep_utils import (
     split_tdvp,
     uses_fixed_chi,
 )
+from tests.conftest import YAQS_TEST_SEED
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 rng = np.random.default_rng()
+
+
+def _seeded_haar_random_mps(length: int, *, pad: int) -> MPS:
+    """Build a reproducible Haar-random MPS for truncation tests.
+
+    Args:
+        length: Chain length.
+        pad: Target maximum internal bond dimension.
+
+    Returns:
+        MPS initialized with ``state="haar-random"`` using ``YAQS_TEST_SEED``.
+    """
+    with patch("numpy.random.default_rng", return_value=np.random.default_rng(YAQS_TEST_SEED)):
+        return MPS(length, state="haar-random", pad=pad)
 
 
 def test_split_tdvp_left_right_sqrt() -> None:
@@ -352,7 +367,7 @@ def test_renorm_drift_normalizes_large_drift() -> None:
 
 def test_sync_bond_dim_truncates_with_consistent_shapes() -> None:
     """SVD bond sync enforces a shared capped dimension on both adjacent tensors."""
-    state = MPS(4, state="haar-random", pad=4)
+    state = _seeded_haar_random_mps(4, pad=4)
     state.normalize()
     params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     reference = state.to_vec()
@@ -432,7 +447,7 @@ def test_align_bond_noop_when_bonds_already_match() -> None:
 
 def test_cap_bonds_truncates_oversized_internal_bonds() -> None:
     """Global bond capping shrinks bonds above max_bond_dim before a sweep."""
-    state = MPS(4, state="haar-random", pad=4)
+    state = _seeded_haar_random_mps(4, pad=4)
     state.normalize()
     params = StrongSimParams(preset="exact", get_state=True, max_bond_dim=2, svd_threshold=1e-12)
     _cap_bonds(state, params)

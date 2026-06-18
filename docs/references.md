@@ -30,8 +30,9 @@ If you want to cite the Munich Quantum Toolkit, please use the following BibTeX 
 If you use *MQT YAQS* in your work, we would appreciate if you cited
 
 - {cite:p}`sander2025_TJM` for simulating open analog quantum systems,
-- {cite:p}`sander2025_CircuitTDVP` for quantum circuit (digital) simulation, and
-- {cite:p}`sander2025_EquivalenceChecking` for the equivalence checking algorithm.
+- {cite:p}`sander2025_CircuitTDVP` for quantum circuit (digital) simulation,
+- {cite:p}`sander2025_EquivalenceChecking` for the equivalence checking algorithm, and
+- {cite:p}`sander2026_computationalregimes` for information about selecting unravellings and their computational implications.
 
 A full list of references is given below.
 ````

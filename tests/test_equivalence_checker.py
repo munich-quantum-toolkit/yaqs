@@ -25,11 +25,12 @@ from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
 
-from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS, EquivalenceChecker
+from mqt.yaqs import EquivalenceChecker
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
 from mqt.yaqs.digital.utils import matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 from mqt.yaqs.digital.utils.dag_utils import SUPPORTED_QISKIT_GATE_NAMES, convert_dag_to_tensor_algorithm
+from mqt.yaqs.equivalence_checker import DEFAULT_MATRIX_MAX_QUBITS
 from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qasm3_import, write_qasm_file
 
 if TYPE_CHECKING:

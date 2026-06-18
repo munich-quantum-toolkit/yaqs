@@ -31,18 +31,20 @@ import pytest
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
 
-from mqt.yaqs import Result, Simulator, simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.mpo import MPO
-from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import (
+from mqt.yaqs import (
+    MPO,
+    MPS,
     AnalogSimParams,
+    Hamiltonian,
+    NoiseModel,
     Observable,
+    Result,
+    Simulator,
+    State,
     StrongSimParams,
     WeakSimParams,
+    simulator,
 )
-from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
 from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init

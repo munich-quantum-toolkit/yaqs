@@ -9,15 +9,30 @@ mystnb:
 
 # Configuring Simulation Parameters
 
-YAQS separates **what you evolve** ({class}`~mqt.yaqs.core.data_structures.state.State`, circuits, Hamiltonians) from **how you truncate and sample** via parameter objects passed to {meth}`~mqt.yaqs.Simulator.run`:
+YAQS separates **what you evolve** ({class}`~mqt.yaqs.State`, circuits, Hamiltonians) from **how you truncate and sample** via parameter objects passed to {meth}`~mqt.yaqs.Simulator.run`:
 
-| Class                                                                         | Use when                                                                                     |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams` | Open-system or unitary time evolution (TDVP / BUG, MCWF trajectories, Lindblad-style paths). |
-| {class}`~mqt.yaqs.core.data_structures.simulation_parameters.StrongSimParams` | Noisy **strong** digital simulation (per-trajectory MPS evolution with observables).         |
-| {class}`~mqt.yaqs.core.data_structures.simulation_parameters.WeakSimParams`   | Noisy **weak** digital simulation (shot-based sampling; you set `shots` explicitly).         |
+| Class                              | Use when                                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| {class}`~mqt.yaqs.AnalogSimParams` | Open-system or unitary time evolution (TDVP / BUG, MCWF trajectories, Lindblad-style paths). |
+| {class}`~mqt.yaqs.StrongSimParams` | Noisy **strong** digital simulation (per-trajectory MPS evolution with observables).         |
+| {class}`~mqt.yaqs.WeakSimParams`   | Noisy **weak** digital simulation (shot-based sampling; you set `shots` explicitly).         |
 
 This page shows how to construct each class. For {class}`~mqt.yaqs.Simulator` execution options (parallelism, progress bars), see {doc}`simulator_initialization`.
+
+## Observable string names
+
+{class}`~mqt.yaqs.Observable` accepts a **string gate name** as its first argument. YAQS resolves the name to the corresponding operator internally — you do not import gate classes for standard measurements.
+
+| String                         | Meaning                                                        | Example                                     |
+| ------------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
+| `"x"`, `"y"`, `"z"`            | Single-qubit Pauli operators                                   | `Observable("z", sites=0)`                  |
+| `"h"`, `"s"`, `"t"`, `"rx"`, … | Other single-qubit gates from the built-in library             | `Observable("h", sites=0)`                  |
+| `"xx"`, `"yy"`, `"zz"`         | Two-qubit Pauli strings                                        | `Observable("zz", sites=[0, 1])`            |
+| `"entropy"`                    | Bipartite entanglement entropy across a cut                    | `Observable("entropy", sites=cut)`          |
+| `"schmidt_spectrum"`           | Schmidt spectrum across a cut                                  | `Observable("schmidt_spectrum", sites=cut)` |
+| bitstring / `"pvm"`            | Projection-valued measurement onto a computational basis state | see {doc}`circuit_simulation`               |
+
+For custom unitaries and circuit gates, use {doc}`custom_gates` — those workflows still use `GateLibrary` or Qiskit circuits directly.
 
 ## Start with a preset
 
@@ -65,14 +80,13 @@ If you omit an overridable argument, the preset supplies it. If you pass a value
 ## Recommended usage
 
 ```{code-cell} ipython3
-from mqt.yaqs.core.data_structures.simulation_parameters import (
+from mqt.yaqs import (
     SIMULATION_PRESETS,
     AnalogSimParams,
     Observable,
     StrongSimParams,
     WeakSimParams,
 )
-from mqt.yaqs.core.libraries.gate_library import Z
 
 
 def _trunc_summary(params: AnalogSimParams | StrongSimParams | WeakSimParams) -> dict[str, object]:
@@ -143,7 +157,7 @@ Besides the preset (and any overrides), you typically set the time grid (`elapse
 
 ```{code-cell} ipython3
 L = 4
-observables = [Observable(Z(), site) for site in range(L)]
+observables = [Observable("z", site) for site in range(L)]
 
 analog = AnalogSimParams(
     observables=observables,
@@ -167,11 +181,11 @@ analog_quick = AnalogSimParams(
 _trunc_summary(analog_quick)
 ```
 
-Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a {class}`~mqt.yaqs.core.data_structures.state.State` and {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` (see {doc}`analog_simulation`).
+Pass the resulting object to {meth}`~mqt.yaqs.Simulator.run` together with a {class}`~mqt.yaqs.State` and {class}`~mqt.yaqs.Hamiltonian` (see {doc}`analog_simulation`).
 
 ## `StrongSimParams`
 
-Used for noisy strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`strong_circuit_simulation`).
+Used for noisy strong circuit simulation. Provide observables and optionally enable layer sampling (see {doc}`circuit_simulation`).
 
 ### Two-qubit gate mode (`gate_mode`)
 
@@ -196,7 +210,7 @@ Substep geometry: each substep is **symmetric** (left-to-right then right-to-lef
 
 ```{code-cell} ipython3
 strong = StrongSimParams(
-    observables=[Observable(Z(), 0)],
+    observables=[Observable("z", 0)],
     gate_mode="tdvp",
     tdvp_sweeps=2,
     preset="accurate",
@@ -206,7 +220,7 @@ _trunc_summary(strong)
 
 ```{code-cell} ipython3
 strong_default = StrongSimParams(
-    observables=[Observable(Z(), 0)],
+    observables=[Observable("z", 0)],
     preset="accurate",
 )
 _trunc_summary(strong_default)
@@ -229,8 +243,15 @@ See {doc}`weak_circuit_simulation` for a full example with measurement histogram
 
 ## Reference: preset table in code
 
-The built-in values are defined in {data}`~mqt.yaqs.core.data_structures.simulation_parameters.SIMULATION_PRESETS`:
+The built-in values are defined in {data}`~mqt.yaqs.SIMULATION_PRESETS`:
 
 ```{code-cell} ipython3
 SIMULATION_PRESETS
 ```
+
+## Related topics
+
+- {doc}`quickstart` — minimal first simulation
+- {doc}`analog_simulation` — analog parameters in context
+- {doc}`circuit_simulation` — `StrongSimParams`, `gate_mode`, and layer sampling
+- {doc}`weak_circuit_simulation` — `WeakSimParams` and shot readout

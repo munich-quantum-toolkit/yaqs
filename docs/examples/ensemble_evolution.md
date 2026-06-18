@@ -14,6 +14,8 @@ mystnb:
 
 # Ensemble Evolution
 
+Use this page when you need **two-time correlators** (`multi_time_observables` on {class}`~mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams`) or **ensemble averages** over `list[State]` inputs—for dynamical typicality studies, transport correlators, and finite-temperature observables estimated from random pure states.
+
 This page demonstrates workflows for computing two-time correlations in a deterministic (noiseless, unitary) ensemble in YAQS.
 The focus is on compact, executable examples:
 
@@ -24,17 +26,14 @@ The focus is on compact, executable examples:
 ## 1. Unitary analog evolution primer
 
 In unitary analog evolution, we have no noise or tensor jumps.
-To trigger the backend to perform a unitary dynamics, you can avoid passing `noise_model=''` to `Simulator.run` because `noise_model` is set to `None` by default.
+Omit `noise_model` in {meth}`~mqt.yaqs.Simulator.run` (it defaults to `None`).
 
 ```{code-cell} ipython3
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import BaseGate, Z, X, Y
+from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
+from mqt.yaqs.core.libraries.gate_library import BaseGate
 
 sim = Simulator(show_progress=False)
 ```
@@ -58,7 +57,7 @@ mid = L // 2
 psi0 = State(L, initial="haar-random", pad=2)
 
 primer_params = AnalogSimParams(
-    observables=[Observable(Z(), mid)],
+    observables=[Observable("z", mid)],
     elapsed_time=5.0,
     dt=0.15,
     max_bond_dim=64,
@@ -101,8 +100,8 @@ The unitary-ensemble backend computes `multi_time_observables` pairs for `list[S
 Autocorrelation is the special case where both the observables are the same `(O, O)`. For a single-state demonstration, we pass a list with one element.
 
 ```{code-cell} ipython3
-sz_mid = Observable(Z(), mid)
-sx_mid = Observable(X(), mid)
+sz_mid = Observable("z", mid)
+sx_mid = Observable("x", mid)
 
 single_state_params = AnalogSimParams(
     observables=[],
@@ -157,8 +156,8 @@ ensemble_params = AnalogSimParams(
     svd_threshold=1e-10,
     sample_timesteps=True,
     multi_time_observables=[
-        (Observable(Z(), mid), Observable(Z(), mid)),  # C_zz(t) autocorrelation
-        (Observable(Z(), mid), Observable(X(), mid)),  # C_zx(t)
+        (Observable("z", mid), Observable("z", mid)),  # C_zz(t) autocorrelation
+        (Observable("z", mid), Observable("x", mid)),  # C_zx(t)
     ],
 )
 
@@ -282,3 +281,9 @@ The illustrative curves here use small $L$ and a handful of Haar-random states; 
 - **MPS entanglement:** under unitary evolution, entanglement entropy and required bond dimension typically **grow** with time (until truncation or saturation). For longer times or larger $L$, increase `max_bond_dim`, tighten `svd_threshold` only with care, or shorten the window so the MPS remains an accurate ansatz for your observable.
 
 :::
+
+## Related topics
+
+- {doc}`analog_simulation` — noisy and unitary TJM evolution
+- {doc}`state_initialization` — Haar-random and ensemble `list[State]` inputs
+- {doc}`simulator_initialization` — `Simulator(parallel=True)` for ensemble runs

@@ -14,9 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from mqt.yaqs import Simulator
-from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import Observable, Simulator, State, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import Z
 
 if TYPE_CHECKING:

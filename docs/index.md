@@ -1,10 +1,17 @@
-# MQT YAQS — A Tool for Simulating Open Quantum Systems, Noisy Quantum Circuits, and Realistic Quantum Hardware
+# MQT YAQS — Scalable simulation for open systems, noisy circuits, and realistic hardware
+
+```{only} html
+[![PyPI](https://img.shields.io/pypi/v/mqt.yaqs?logo=pypi&style=flat-square)](https://pypi.org/project/mqt.yaqs/)
+[![CI](https://img.shields.io/github/actions/workflow/status/munich-quantum-toolkit/yaqs/ci.yml?branch=main&style=flat-square&logo=github&label=ci)](https://github.com/munich-quantum-toolkit/yaqs/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/readthedocs/mqt-yaqs?logo=readthedocs&style=flat-square)](https://mqt.readthedocs.io/projects/yaqs)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+```
 
 ```{raw} latex
 \begin{abstract}
 ```
 
-YAQS (pronounced "yaks" like the animals) is a Python library, primarily focused on simulating open quantum systems, noisy quantum circuits, and designing realistic quantum hardware.
+YAQS (pronounced "yaks" like the animals) is a Python library designed for **scalable, computationally efficient** simulation of open quantum dynamics, noisy quantum circuits, and hardware-realistic device models. YAQS applies state-of-the-art techniques in these areas—parallelized trajectories, tensor-network compression, and backends matched to problem size—wherever possible (see {doc}`references`).
 It is developed as part of the [Munich Quantum Toolkit (MQT)](https://mqt.readthedocs.io) by the [Chair for Design Automation](https://www.cda.cit.tum.de/) at the [Technical University of Munich](https://www.tum.de).
 
 This documentation provides a comprehensive guide to the MQT YAQS library, including {doc}`installation instructions <installation>`, notebook-like examples, and detailed {doc}`API documentation <api/mqt/yaqs/index>`.
@@ -28,27 +35,91 @@ A live version of this document is available at [mqt.readthedocs.io/projects/yaq
 self
 ```
 
+## User guide
+
+YAQS targets workloads that need **scale and efficiency**: large noisy circuits, long analog time evolution, and hardware models with many degrees of freedom. For smaller systems, **MCWF** (`vector`) and **Lindblad** (`density_matrix`) analog backends are available as well; see {doc}`examples/representation_comparison`.
+
+The pages below are **executable notebooks**: code cells run during the documentation build, so examples stay in sync with the library. New users should start with {doc}`installation`, then {doc}`examples/quickstart`.
+
+```{mermaid}
+flowchart LR
+  state[State]
+  op[Hamiltonian or QuantumCircuit]
+  params["AnalogSimParams / StrongSimParams / WeakSimParams"]
+  sim[Simulator]
+  result[Result]
+  state --> sim
+  op --> sim
+  params --> sim
+  sim --> result
+```
+
+### Learning paths
+
+| I want to…                                               | Read                                      |
+| -------------------------------------------------------- | ----------------------------------------- |
+| Run my first simulation in under a minute                | {doc}`examples/quickstart`                |
+| Configure truncation, presets, and trajectories          | {doc}`examples/simulation_parameters`     |
+| Simulate open-system (analog) dynamics with noise        | {doc}`examples/analog_simulation`         |
+| Model realistic noise (Gaussian and other distributions) | {doc}`examples/realistic_noise_models`    |
+| Compare scalable MPS, MCWF, and Lindblad analog paths    | {doc}`examples/representation_comparison` |
+| Simulate a noisy circuit and read observables            | {doc}`examples/circuit_simulation`        |
+| Get hardware-like shot histograms                        | {doc}`examples/weak_circuit_simulation`   |
+| Verify two circuits are equivalent                       | {doc}`examples/equivalence_checking`      |
+| Two-time correlations and typicality ensembles           | {doc}`examples/ensemble_evolution`        |
+| Scheduled jumps at fixed times                           | {doc}`examples/scheduled_jumps`           |
+| Fermi–Hubbard MPO and analog evolution                   | {doc}`examples/fermi_hubbard_mpo`         |
+| Transmon–resonator SWAP (noiseless vs noisy)             | {doc}`examples/transmon_emulation`        |
+| Process tensor tomography                                | {doc}`examples/process_tomography`        |
+| Custom gate translation from Qiskit                      | {doc}`examples/custom_gates`              |
+
 ```{toctree}
-:caption: User Guide
+:caption: Getting started
 :hidden:
 :maxdepth: 1
+:titlesonly:
 
 installation
+examples/quickstart
 examples/state_initialization
 examples/simulator_initialization
 examples/simulation_parameters
-examples/custom_gates
+```
+
+```{toctree}
+:caption: Analog simulation
+:hidden:
+:maxdepth: 1
+:titlesonly:
+
 examples/analog_simulation
-examples/ensemble_evolution
-examples/solver_comparison
+examples/realistic_noise_models
 examples/scheduled_jumps
+examples/ensemble_evolution
+examples/representation_comparison
 examples/transmon_emulation
 examples/fermi_hubbard_mpo
 examples/process_tomography
-examples/strong_circuit_simulation
-examples/sample_observable_digital_tjm
+```
+
+```{toctree}
+:caption: Digital circuits
+:hidden:
+:maxdepth: 1
+:titlesonly:
+
+examples/circuit_simulation
 examples/weak_circuit_simulation
+examples/custom_gates
 examples/equivalence_checking
+```
+
+```{toctree}
+:caption: Reference
+:hidden:
+:maxdepth: 1
+:titlesonly:
+
 references
 CHANGELOG
 UPGRADING

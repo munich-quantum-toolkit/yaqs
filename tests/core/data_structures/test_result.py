@@ -20,17 +20,18 @@ import pickle  # noqa: S403  # test-only: controlled Result round-trip; no untru
 
 import numpy as np
 
-from mqt.yaqs import Result, Simulator
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.result import aggregate_counts
-from mqt.yaqs.core.data_structures.simulation_parameters import (
+from mqt.yaqs import (
     AnalogSimParams,
+    Hamiltonian,
+    NoiseModel,
     Observable,
+    Result,
+    Simulator,
+    State,
     StrongSimParams,
     WeakSimParams,
 )
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs.core.data_structures.result import aggregate_counts
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import Z
 

@@ -14,15 +14,17 @@ import pytest
 import scipy.sparse
 
 import mqt.yaqs.analog.mcwf as mcwf_mod
-from mqt.yaqs import Simulator
+from mqt.yaqs import (
+    AnalogSimParams,
+    Hamiltonian,
+    NoiseModel,
+    Observable,
+    Simulator,
+    State,
+)
 from mqt.yaqs.analog.mcwf import MAX_PRECOMPUTE_DIM, preprocess_mcwf
-from mqt.yaqs.core.data_structures.hamiltonian import Hamiltonian
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.noise_model import NoiseModel
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, Observable
-from mqt.yaqs.core.data_structures.state import State
-from mqt.yaqs.core.libraries.gate_library import Z
 from tests.conftest import YAQS_TEST_SEED
 
 
@@ -226,7 +228,7 @@ def test_mcwf_result_has_no_auto_diagnostics() -> None:
     state = State(length, initial="zeros", representation="vector")
     hamiltonian = Hamiltonian.ising(length, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
-        observables=[Observable(Z(), 0)],
+        observables=[Observable("z", sites=0)],
         elapsed_time=0.1,
         dt=0.1,
         sample_timesteps=False,

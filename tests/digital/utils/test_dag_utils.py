@@ -45,9 +45,7 @@ from qiskit.dagcircuit import DAGOpNode
 from qiskit.qasm2 import loads
 from qiskit.quantum_info import Operator, Statevector
 
-from mqt.yaqs import EquivalenceChecker
-from mqt.yaqs.core.data_structures.simulation_parameters import StrongSimParams
-from mqt.yaqs.core.data_structures.state import State
+from mqt.yaqs import EquivalenceChecker, State, StrongSimParams
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate
 from mqt.yaqs.digital.utils.dag_utils import (
