@@ -17,7 +17,6 @@ Pass ``representation="mpo"`` explicitly for production workloads.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 from qiskit.converters import circuit_to_dag
@@ -32,41 +31,15 @@ from .digital.utils.matrix_utils import (
 from .digital.utils.qasm_utils import load_circuit
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import numpy as np
     from numpy.typing import NDArray
     from qiskit.circuit import QuantumCircuit
 
     from .parallel_utils import MPContext
 
-__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceChecker", "Representation"]
-
-
-def _first_non_comment_line(text: str) -> str:
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("//"):
-            return stripped
-    return ""
-
-
-def _load_if_path(circuit: QuantumCircuit | str | Path) -> QuantumCircuit:
-    """Load a QuantumCircuit from a QASM string, file path, or pass through an existing circuit.
-
-    Returns:
-        The loaded or passed-through ``QuantumCircuit``.
-    """
-    if isinstance(circuit, str) and _first_non_comment_line(circuit).startswith("OPENQASM"):
-        if _first_non_comment_line(circuit).startswith("OPENQASM 3"):
-            return qasm3.loads(circuit)
-        return qasm2.loads(circuit)
-    if isinstance(circuit, (str, Path)):
-        path = Path(circuit)
-        content = path.read_text(encoding="utf-8")
-        if _first_non_comment_line(content).startswith("OPENQASM 3"):
-            return qasm3.load(str(path))
-        return qasm2.load(str(path))
-    return circuit
-
+__all__ = ["DEFAULT_MATRIX_MAX_QUBITS", "EquivalenceCheckResult", "EquivalenceChecker", "Representation"]
 
 Representation = Literal["auto", "matrix", "mpo"]
 DEFAULT_MATRIX_MAX_QUBITS = 7
