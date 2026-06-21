@@ -92,6 +92,10 @@ filterwarnings = ["error"]
 
 [tool.coverage]
 run.source = ["mqt.yaqs"]
+run.omit = [
+    "src/mqt/yaqs/digital/utils/qudit_dag_utils.py",
+]
+
 report.exclude_also = [
     '\.\.\.',
     'if TYPE_CHECKING:',
