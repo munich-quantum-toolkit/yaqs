@@ -309,17 +309,17 @@ class State:
             elif self._vector is not None:
                 vec = normalize_vector(self._vector)
                 dim = vec.size
-                self._density_matrix = np.outer(vec, vec.conj()).reshape(dim, dim)
+                self._density_matrix = np.asarray(np.outer(vec, vec.conj()).reshape(dim, dim), dtype=np.complex128)
             elif self._can_build_dense_from_preset():
                 vec = self._dense_vector_from_preset()
                 self._vector = vec
                 dim = vec.size
-                self._density_matrix = np.outer(vec, vec.conj()).reshape(dim, dim)
+                self._density_matrix = np.asarray(np.outer(vec, vec.conj()).reshape(dim, dim), dtype=np.complex128)
             else:
                 mps = self._build_mps()
                 vec = normalize_vector(mps.to_vec())
                 dim = vec.size
-                self._density_matrix = np.outer(vec, vec.conj()).reshape(dim, dim)
+                self._density_matrix = np.asarray(np.outer(vec, vec.conj()).reshape(dim, dim), dtype=np.complex128)
         else:
             msg = f"Unknown representation: {rep!r}"
             raise ValueError(msg)

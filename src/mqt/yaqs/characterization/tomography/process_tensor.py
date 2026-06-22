@@ -141,7 +141,7 @@ class ProcessTensor:
             # Multiply and sum out the last axis (axis -1) with c_maps[step]
             result_tensor = np.tensordot(result_tensor, c_maps[step], axes=([-1], [0]))
 
-        return result_tensor.reshape(2, 2)
+        return result_tensor.reshape(2, 2).astype(np.complex128)
 
     def quantum_mutual_information(self, base: int = 2) -> float:
         """Calculate the Quantum Mutual Information between the input sequence and the output state.

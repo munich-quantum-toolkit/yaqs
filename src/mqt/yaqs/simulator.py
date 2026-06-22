@@ -1257,10 +1257,9 @@ class Simulator:
         multi_time_matrix: NDArray[np.complex128] | None = None
         if n_pairs > 0:
             multi_time_matrix = np.zeros((len(initial_states), n_pairs, n_cols), dtype=np.complex128)
-            result.multi_time_times = (
-                sim_params.times
-                if sim_params.sample_timesteps
-                else np.array([sim_params.elapsed_time], dtype=np.float64)
+            result.multi_time_times = np.asarray(
+                sim_params.times if sim_params.sample_timesteps else [sim_params.elapsed_time],
+                dtype=np.float64,
             )
 
         payload: dict[str, Any] = {

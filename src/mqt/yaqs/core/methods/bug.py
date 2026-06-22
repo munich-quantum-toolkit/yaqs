@@ -58,7 +58,7 @@ def prepare_canonical_site_tensors(
         # Leg order of local_tensor: (left, phys, right)
         local_tensor = local_tensor.transpose(1, 0, 2)
         # Correct leg order: (phys, left, right) and orth center
-        canon_tensors[i] = local_tensor
+        canon_tensors[i] = np.asarray(local_tensor, dtype=np.complex128)
         new_env = update_left_environment(left_q, left_q, mpo.tensors[i - 1], left_blocks[i - 1])
         left_blocks.append(new_env)
     return canon_tensors, left_blocks
@@ -126,7 +126,7 @@ def build_basis_change_tensor(
 
     """
     new_m = np.tensordot(old_q, old_m, axes=(2, 0))
-    return np.tensordot(new_m, new_q.conj(), axes=([0, 2], [0, 2]))
+    return np.asarray(np.tensordot(new_m, new_q.conj(), axes=([0, 2], [0, 2])), dtype=np.complex128)
 
 
 def local_update(
@@ -171,7 +171,10 @@ def local_update(
     old_q = state.tensors[site]
     basis_change_m = build_basis_change_tensor(old_q, new_q, right_m_block)
     state.tensors[site] = new_q
-    canon_center_tensors[site - 1] = np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0))
+    canon_center_tensors[site - 1] = np.asarray(
+        np.tensordot(canon_center_tensors[site - 1], basis_change_m, axes=(2, 0)),
+        dtype=np.complex128,
+    )
     new_right_block = update_right_environment(new_q, new_q, mpo.tensors[site], right_block)
     return basis_change_m, new_right_block
 

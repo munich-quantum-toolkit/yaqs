@@ -134,11 +134,11 @@ def preprocess_lindblad(
             raise ValueError(msg)
         if not np.isclose(trace, 1.0):
             rho_mat /= trace
-        rho_vec = rho_mat.flatten(order="F")
+        rho_vec = np.asarray(rho_mat.flatten(order="F"), dtype=np.complex128)
     else:
         assert initial_state is not None
         psi = initial_state.to_vec()
-        rho_vec = np.outer(psi, psi.conj()).flatten(order="F")
+        rho_vec = np.asarray(np.outer(psi, psi.conj()).flatten(order="F"), dtype=np.complex128)
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     if h_sparse is not None:
