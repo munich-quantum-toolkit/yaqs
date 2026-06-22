@@ -1161,15 +1161,17 @@ class MPS:
     ) -> None:
         """Evaluate and record expectation values of observables for a given MPS state.
 
-        This method performs a deep copy of the current MPS (`self`) and iterates over
-        the observables defined in the `sim_params` object. For each observable, it ensures
-        the orthogonality center of the MPS is correctly positioned before computing the
-        expectation value, which is then stored in the corresponding column of the `results` array.
+        Args:
+            sim_params: Simulation parameters containing sorted observables.
+            results: 2D array where ``results[observable_index, column_index]`` stores
+                expectation values.
+            column_index: Time or trajectory index for the column to fill.
 
-        Parameters:
-            sim_params: Simulation parameters containing a list of sorted observables.
-            results: 2D array where results[observable_index, column_index] stores expectation values.
-            column_index: The time or trajectory index indicating which column of the result array to fill.
+        Notes:
+            Deep-copies ``self`` once and reuses that working state for all observables.
+            When :attr:`orthogonality_center` covers the observable site(s), uses fast
+            local contraction; otherwise shifts the center on the copy or falls back to
+            full contraction when the gauge is unknown (``None``).
         """
         temp_state = copy.deepcopy(self)
         for obs_index, observable in enumerate(sim_params.sorted_observables):
@@ -1304,7 +1306,7 @@ class MPS:
             rotated_tensor = oe.contract("ab, bcd->acd", rotation, tensor)
 
             reduced_density_matrix = oe.contract("abc, dbc->ad", rotated_tensor, np.conj(rotated_tensor))
-            probabilities = np.diag(reduced_density_matrix).real
+            probabilities = np.diag(reduced_density_matrix).real.copy()
             norm_factor = np.sum(probabilities)
             probabilities /= norm_factor
             chosen_index = rng.choice(len(probabilities), p=probabilities)
@@ -1523,6 +1525,12 @@ class MPS:
 
         Returns:
             The norm of the state or the specified site.
+
+        Notes:
+            For a site-specific norm, uses fast local contraction when
+            :attr:`orthogonality_center` covers that site; shifts on a copy when the
+            center is known but misaligned; falls back to the global norm when the
+            gauge is unknown (``None``).
         """
         if site is not None:
             if self.orthogonality_center is not None:

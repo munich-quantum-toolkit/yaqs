@@ -1086,7 +1086,9 @@ class MPO:
 
         Notes:
             Applies the MPO at every site and invalidates the tracked orthogonality
-            center (``set_center(None)``). Compression re-establishes a center via
+            center (``set_center(None)``). With ``compress=False`` the center remains
+            ``None`` until canonicalization or compression is performed elsewhere.
+            Compression re-establishes a center via
             :meth:`~mqt.yaqs.core.data_structures.mps.MPS.compress`.
         """
         if len(self.tensors) != state.length:

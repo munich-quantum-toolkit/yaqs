@@ -186,9 +186,9 @@ def stochastic_process(
 
     dp = calculate_stochastic_factor(state)
     if noise_model is None or rng.random() >= dp:
-        if state.orthogonality_center is not None and state.orthogonality_center != 0:
-            state.shift_center_to(0)
-        elif state.orthogonality_center is None:
+        if state.orthogonality_center is not None:
+            state.shift_orthogonality_center_left(0)
+        else:
             state.set_canonical_form(0)
         return state
 
@@ -196,9 +196,11 @@ def stochastic_process(
     probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
 
     if len(probabilities) == 0:
-        if state.orthogonality_center is not None and state.orthogonality_center != 0:
-            state.shift_center_to(0)
-        elif state.orthogonality_center is None:
+        if state.orthogonality_center is not None:
+            if state.orthogonality_center != 0:
+                state.shift_center_to(0)
+            state.shift_orthogonality_center_left(0)
+        else:
             state.set_canonical_form(0)
         return state
 
