@@ -238,8 +238,12 @@ def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], None, np.ndarray |
 def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
 
+    Args:
+        _traj_idx: Trajectory index (unused; Lindblad evolution is deterministic in rho).
+
     Returns:
-        Observable expectation values over time and optional final density matrix.
+        tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
+            Observable expectation values over time and optional final density matrix.
     """
     return lindblad_evolve(WORKER_CTX["ctx"])
 
@@ -425,9 +429,30 @@ def _store_mcwf_final_state(result: Result, psi: np.ndarray | None) -> None:
         result.output_state = State(vector=psi)
 
 
-def _store_lindblad_final_state(result: Result, rho: np.ndarray | None) -> None:
+def _store_lindblad_final_state(
+    result: Result,
+    rho: np.ndarray | None,
+    *,
+    length: int,
+    physical_dimensions: list[int] | int | None,
+) -> None:
+    """Store the final Lindblad density matrix on ``result.output_state``.
+
+    Args:
+        result: Output container for the simulation run.
+        rho: Final density matrix, or ``None`` when ``get_state`` is ``False``.
+        length: Number of lattice sites from the initial state.
+        physical_dimensions: Per-site physical dimensions from the initial state.
+
+    Returns:
+        None. Mutates ``result.output_state`` when ``rho`` is not ``None``.
+    """
     if rho is not None:
-        result.output_state = State(density_matrix=rho)
+        result.output_state = State(
+            density_matrix=rho,
+            length=length,
+            physical_dimensions=physical_dimensions,
+        )
 
 
 def _expect_shot_counts(payload: NDArray[np.float64] | dict[int, int]) -> dict[int, int]:
@@ -903,7 +928,12 @@ class Simulator:
         if state_rep == "vector":
             _store_mcwf_final_state(result, final_psi)
         elif state_rep == "density_matrix":
-            _store_lindblad_final_state(result, final_rho)
+            _store_lindblad_final_state(
+                result,
+                final_rho,
+                length=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
+            )
         else:
             _store_final_mps(result, final_mps)
 

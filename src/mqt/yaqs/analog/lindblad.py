@@ -273,15 +273,69 @@ def _measure_rho(
             obs_results[i, t_idx] = 0.0
 
 
-def _evolve_with_propagator(ctx: LindbladContext) -> tuple[NDArray[np.float64], NDArray[np.complex128]]:
+def _rho_vec_at_elapsed_time(ctx: LindbladContext) -> NDArray[np.complex128]:
+    """Evolve ``vec(rho)`` to ``sim_params.elapsed_time`` (not ``times[-1]``).
+
+    Args:
+        ctx: Preprocessed Lindblad context.
+
+    Returns:
+        Flattened density matrix at ``sim_params.elapsed_time``.
+
+    Raises:
+        RuntimeError: If the ODE integration fails on the large-system fallback path.
+    """
+    sim_params = ctx.sim_params
+    dim = ctx.dim
+    target_t = sim_params.elapsed_time
+    if target_t <= 0.0:
+        return ctx.rho_initial.copy()
+
+    dt = sim_params.dt
+    n_full = int(target_t // dt)
+    remainder = target_t - n_full * dt
+
+    if ctx.step_propagator is not None:
+        rho_vec = ctx.rho_initial.copy()
+        for _ in range(n_full):
+            rho_vec = ctx.step_propagator @ rho_vec
+        if remainder > 1e-12:
+            liouvillian = _build_liouvillian_superoperator(dim, ctx.h_mat, ctx.jump_ops, ctx.l_dag_l_sum)
+            rho_vec = linalg.expm(liouvillian * remainder) @ rho_vec
+        return rho_vec
+
+    def lindblad_rhs(_t: float, rho_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        return _lindblad_rhs_flat(rho_flat, dim, ctx.h_mat, ctx.jump_ops, ctx.l_dag_l_sum)
+
+    result = solve_ivp(
+        lindblad_rhs,
+        (0.0, target_t),
+        ctx.rho_initial,
+        t_eval=[target_t],
+        method="RK45",
+        rtol=sim_params.svd_threshold,
+        atol=sim_params.svd_threshold * 1e-2,
+    )
+    if not result.success:
+        msg = (
+            f"Lindblad integration to elapsed_time={target_t} failed: {result.message} "
+            f"(rtol={sim_params.svd_threshold}, atol={sim_params.svd_threshold * 1e-2})"
+        )
+        raise RuntimeError(msg)
+    return result.y.T[0]
+
+
+def _evolve_with_propagator(ctx: LindbladContext) -> NDArray[np.float64]:
     """Evolve rho on the fixed grid ``sim_params.times`` via vec(rho) <- exp(L dt) vec(rho).
 
     Matches the user ``dt`` step used elsewhere in YAQS (not adaptive substeps).
     Noiseless runs use the same map but without separate dissipator terms in L.
 
+    Args:
+        ctx: Preprocessed Lindblad context.
+
     Returns:
-        Observable expectation values at each sampled time and the final flattened
-        ``vec(rho)`` at ``sim_params.elapsed_time``.
+        Observable expectation values at each sampled time on ``sim_params.times``.
     """
     sim_params = ctx.sim_params
     dim = ctx.dim
@@ -304,18 +358,20 @@ def _evolve_with_propagator(ctx: LindbladContext) -> tuple[NDArray[np.float64], 
     if not sim_params.sample_timesteps:
         _measure_rho(rho_vec, dim, ctx, obs_results, 0)
 
-    return obs_results, rho_vec
+    return obs_results
 
 
-def _evolve_with_ode(ctx: LindbladContext) -> tuple[NDArray[np.float64], NDArray[np.complex128]]:
+def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
     """Adaptive RK45 integration when ``vec(rho)`` is too large to store ``exp(L dt)``.
 
     Uses the same ``_lindblad_rhs_flat`` as the propagator path; tolerances come from
     ``sim_params.svd_threshold``.
 
+    Args:
+        ctx: Preprocessed Lindblad context.
+
     Returns:
-        Observable expectation values at each sampled time and the final flattened
-        ``vec(rho)`` at ``sim_params.elapsed_time``.
+        Observable expectation values at each sampled time on ``sim_params.times``.
 
     Raises:
         RuntimeError: If the ODE integration fails.
@@ -359,19 +415,23 @@ def _evolve_with_ode(ctx: LindbladContext) -> tuple[NDArray[np.float64], NDArray
         obs_results = np.zeros((num_obs, 1), dtype=np.float64)
         _measure_rho(result.y.T[-1], dim, ctx, obs_results, 0)
 
-    rho_vec = result.y.T[-1]
-    return obs_results, rho_vec
+    return obs_results
 
 
 def lindblad_evolve(ctx: LindbladContext) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Evolve a preprocessed Lindblad context and return observable trajectories.
 
+    Args:
+        ctx: Preprocessed Lindblad context.
+
     Returns:
         tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]: Observable data,
-        no diagnostics, and optional final density matrix when ``get_state`` is set.
+        no diagnostics, and optional final density matrix at ``sim_params.elapsed_time``
+        when ``get_state`` is set.
     """
-    obs, rho_vec = _evolve_with_propagator(ctx) if ctx.step_propagator is not None else _evolve_with_ode(ctx)
+    obs = _evolve_with_propagator(ctx) if ctx.step_propagator is not None else _evolve_with_ode(ctx)
     if ctx.sim_params.get_state:
+        rho_vec = _rho_vec_at_elapsed_time(ctx)
         rho_mat = rho_vec.reshape((ctx.dim, ctx.dim), order="F")
         return obs, None, rho_mat
     return obs, None, None

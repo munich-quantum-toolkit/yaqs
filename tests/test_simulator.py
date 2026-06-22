@@ -419,20 +419,56 @@ def test_density_matrix_get_state_noisy() -> None:
     initial_state = State(n_sites, initial="ones", representation="density_matrix")
     hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=0.0)
     sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    gamma = 1.0
+    t = 1.0
     noise_model = NoiseModel(
-        processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": sigma_minus}],
+        processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}],
     )
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
-        elapsed_time=1.0,
+        elapsed_time=t,
         dt=0.1,
         get_state=True,
     )
     result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
     assert result.output_state is not None
     rho = result.output_state.density_matrix
-    # Amplitude damping from |1>: rho_11 = exp(-gamma t)
-    assert np.isclose(rho[1, 1].real, np.exp(-1.0), atol=1e-4)
+    expected = np.array(
+        [[1.0 - np.exp(-gamma * t), 0.0], [0.0, np.exp(-gamma * t)]],
+        dtype=np.complex128,
+    )
+    np.testing.assert_allclose(rho, expected, atol=1e-4)
+    assert np.isclose(np.trace(rho), 1.0)
+    assert np.allclose(rho.imag, 0.0, atol=1e-10)
+
+
+def test_density_matrix_get_state_at_elapsed_time() -> None:
+    """get_state returns rho at elapsed_time, not the overshot final grid point."""
+    n_sites = 1
+    initial_state = State(n_sites, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=0.0)
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    gamma = 1.0
+    elapsed_time = 0.25
+    noise_model = NoiseModel(
+        processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": sigma_minus}],
+    )
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=elapsed_time,
+        dt=0.1,
+        get_state=True,
+        sample_timesteps=False,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    assert result.output_state is not None
+    rho = result.output_state.density_matrix
+    expected = np.array(
+        [[1.0 - np.exp(-gamma * elapsed_time), 0.0], [0.0, np.exp(-gamma * elapsed_time)]],
+        dtype=np.complex128,
+    )
+    np.testing.assert_allclose(rho, expected, atol=1e-4)
+    assert not np.isclose(rho[1, 1].real, np.exp(-gamma * sim_params.times[-1]), atol=1e-3)
 
 
 @pytest.mark.parametrize(
