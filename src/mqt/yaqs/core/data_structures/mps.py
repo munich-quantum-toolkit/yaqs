@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..methods.decompositions import TruncMode
-
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 
 # Worker-global state for parallel ``measure_shots`` (initialized once per process).
