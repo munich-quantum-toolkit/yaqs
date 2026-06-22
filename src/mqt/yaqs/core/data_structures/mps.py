@@ -1291,7 +1291,9 @@ class MPS:
 
         # Normalize and update the site tensor
         self.tensors[site] = (1.0 / np.sqrt(probabilities[chosen_index])) * oe.contract(
-            "a, cd->acd", original_basis_selection, projected_rotated_tensor,
+            "a, cd->acd",
+            original_basis_selection,
+            projected_rotated_tensor,
         )
 
         return int(chosen_index)
