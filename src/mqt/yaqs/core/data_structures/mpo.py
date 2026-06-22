@@ -623,9 +623,9 @@ class MPO:
         H = sum_i[-hbar^2/(2*m_i) * d^2/dx_i^2 + (1/2)*m_i*omega^2*(x_i - q)^2]
             + g / sqrt((x_1 - x_2)^2 + a^2)
 
-        The kinetic energy uses a centered second-order finite difference. For two ions, 
-        an SVD of the diagonal Coulomb coefficient matrix produces the MPO interaction 
-        channels. Discarding singular values according to ``coulomb_cutoff`` or 
+        The kinetic energy uses a centered second-order finite difference. For two ions,
+        an SVD of the diagonal Coulomb coefficient matrix produces the MPO interaction
+        channels. Discarding singular values according to ``coulomb_cutoff`` or
         ``max_bond_dim`` approximates only the Coulomb term.
 
         Args:
@@ -635,7 +635,7 @@ class MPO:
             trap_center: Center ``q`` of the static harmonic trap.
             hbar: Positive reduced Planck constant.
             coulomb_strength: Coulomb prefactor ``g``. Must be zero for one ion.
-            softening_length: Positive short-distance regularizer ``a`` to avoid Coulomb 
+            softening_length: Positive short-distance regularizer ``a`` to avoid Coulomb
                 singularity. Defaults to the grid spacing for two ions.
             coulomb_cutoff: Relative SVD cutoff. Singular values no larger than this
                 fraction of the largest one are discarded. Set to zero for the exact
