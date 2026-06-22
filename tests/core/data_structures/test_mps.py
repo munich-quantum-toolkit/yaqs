@@ -21,6 +21,7 @@ from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
 from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
+from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
 
@@ -602,6 +603,105 @@ def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.M
     with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
         psi.measure_shots(shots=5)
     mock_executor.assert_not_called()
+
+
+def test_measure_shots_single_shot() -> None:
+    """A single shot uses the fast path without a process pool."""
+    psi = MPS(length=1, state="zeros")
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
+        results = psi.measure_shots(shots=1)
+    mock_executor.assert_not_called()
+    assert results == {0: 1}
+
+
+def test_measure_shots_serial_when_one_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multiple shots fall back to a serial loop when only one worker is available."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 1)
+    psi = MPS(length=1, state="x+")
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
+        results = psi.measure_shots(shots=5, basis="X")
+    mock_executor.assert_not_called()
+    assert results == {0: 5}
+
+
+class _NoOpPbar:
+    """No-op tqdm stand-in for tests."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def __enter__(self) -> _NoOpPbar:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def update(self, _n: int = 1) -> None:
+        return None
+
+
+class _ImmediateFuture:
+    """Minimal future stand-in that runs the submitted callable immediately."""
+
+    def __init__(self, fn: object, shot_idx: int) -> None:
+        self._outcome = fn(shot_idx)  # type: ignore[operator]
+
+    def result(self) -> int:
+        return self._outcome
+
+
+class _ImmediateProcessPoolExecutor:
+    """Process pool test double that still exercises worker init and submission."""
+
+    def __init__(self, *, max_workers: int, mp_context: object, initializer: object, initargs: tuple[object, ...]) -> None:
+        self.max_workers = max_workers
+        self.initializer = initializer
+        if initializer is not None:
+            initializer(*initargs)
+
+    def __enter__(self) -> _ImmediateProcessPoolExecutor:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def submit(self, fn: object, shot_idx: int) -> _ImmediateFuture:
+        return _ImmediateFuture(fn, shot_idx)
+
+
+def test_measure_shots_parallel_pool_submits_bounded_workers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Parallel ``measure_shots`` initializes worker context and aggregates all outcomes."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    monkeypatch.setattr(mps_mod, "available_cpus", lambda: 8)
+    monkeypatch.setattr(mps_mod, "get_parallel_context", lambda _mode: None)
+
+    created: list[_ImmediateProcessPoolExecutor] = []
+
+    def _factory(**kwargs: object) -> _ImmediateProcessPoolExecutor:
+        executor = _ImmediateProcessPoolExecutor(**kwargs)  # type: ignore[arg-type]
+        created.append(executor)
+        return executor
+
+    psi = MPS(length=1, state="x+")
+    with (
+        patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor", side_effect=_factory),
+        patch("mqt.yaqs.core.data_structures.mps.wait", side_effect=lambda futures, **_: (list(futures), [])),
+        patch("mqt.yaqs.core.data_structures.mps.tqdm", _NoOpPbar),
+    ):
+        results = psi.measure_shots(shots=6, basis="X")
+
+    assert len(created) == 1
+    assert created[0].max_workers == 6
+    assert results == {0: 6}
+
+
+def test_measure_shots_worker_helpers() -> None:
+    """Worker helpers measure using the process-global MPS context."""
+    psi = MPS(length=1, state="x+")
+    mps_mod._measure_shots_worker_init(psi, "X")
+    assert mps_mod._measure_shots_worker(0) == 0
+    assert mps_mod._measure_shots_worker(3) == 0
 
 
 def test_inplace_measure() -> None:

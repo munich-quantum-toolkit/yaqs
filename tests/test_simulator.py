@@ -471,6 +471,38 @@ def test_density_matrix_get_state_at_elapsed_time() -> None:
     assert not np.isclose(rho[1, 1].real, np.exp(-gamma * sim_params.times[-1]), atol=1e-3)
 
 
+def test_density_matrix_get_state_preserves_metadata() -> None:
+    """Lindblad ``get_state`` copies lattice metadata onto ``result.output_state``."""
+    pdim = 2
+    initial_state = State(2, initial="zeros", representation="density_matrix", physical_dimensions=[pdim, pdim])
+    hamiltonian = Hamiltonian.ising(2, J=0.0, g=0.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        get_state=True,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
+    assert result.output_state is not None
+    assert result.output_state.length == 2
+    assert result.output_state.physical_dimensions == [pdim, pdim]
+    assert result.output_state.representation == "density_matrix"
+
+
+def test_density_matrix_without_get_state_leaves_output_state_empty() -> None:
+    """No ``output_state`` is stored when ``get_state`` is false for Lindblad runs."""
+    initial_state = State(1, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
+        get_state=False,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, None)
+    assert result.output_state is None
+
+
 @pytest.mark.parametrize(
     "state",
     [
