@@ -9,8 +9,9 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import pytest
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import (
@@ -30,6 +31,9 @@ from mqt.yaqs.analog.lindblad import (
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_lindblad_amplitude_damping() -> None:
@@ -363,7 +367,9 @@ def test_lindblad_evolve_get_state_false_returns_no_matrix() -> None:
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(
-        processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}],
+        processes=[
+            {"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
+        ],
     )
     sim_params = AnalogSimParams(
         observables=[Observable("z", sites=[0])],
@@ -407,7 +413,9 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
     gamma = 1.0
     elapsed_time = 0.25
     noise = NoiseModel(
-        processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}],
+        processes=[
+            {"name": "destroy", "sites": [0], "strength": gamma, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
+        ],
     )
     sim_params = AnalogSimParams(
         observables=[Observable("z", sites=[0])],
@@ -441,7 +449,9 @@ def test_lindblad_entry_point_returns_density_matrix() -> None:
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(
-        processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}],
+        processes=[
+            {"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
+        ],
     )
     sim_params = AnalogSimParams(
         observables=[Observable("z", sites=[0])],

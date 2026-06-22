@@ -19,6 +19,7 @@ import opt_einsum as oe
 import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
+from typing_extensions import Self
 
 from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
 from mqt.yaqs.core.data_structures import mps as mps_mod
@@ -631,7 +632,7 @@ class _NoOpPbar:
     def __init__(self, *args: object, **kwargs: object) -> None:
         pass
 
-    def __enter__(self) -> _NoOpPbar:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
@@ -654,13 +655,15 @@ class _ImmediateFuture:
 class _ImmediateProcessPoolExecutor:
     """Process pool test double that still exercises worker init and submission."""
 
-    def __init__(self, *, max_workers: int, mp_context: object, initializer: object, initargs: tuple[object, ...]) -> None:
+    def __init__(
+        self, *, max_workers: int, mp_context: object, initializer: object, initargs: tuple[object, ...]
+    ) -> None:
         self.max_workers = max_workers
         self.initializer = initializer
         if initializer is not None:
             initializer(*initargs)
 
-    def __enter__(self) -> _ImmediateProcessPoolExecutor:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
