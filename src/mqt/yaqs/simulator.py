@@ -443,9 +443,6 @@ def _store_lindblad_final_state(
         rho: Final density matrix, or ``None`` when ``get_state`` is ``False``.
         length: Number of lattice sites from the initial state.
         physical_dimensions: Per-site physical dimensions from the initial state.
-
-    Returns:
-        None. Mutates ``result.output_state`` when ``rho`` is not ``None``.
     """
     if rho is not None:
         result.output_state = State(
