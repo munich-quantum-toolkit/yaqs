@@ -153,6 +153,8 @@ def sweep_1site(
             krylov_tol=sim_params.krylov_tol,
         )
 
+    state.set_orthogonality_center(0)
+
 
 def sweep_2site(
     state: MPS,
@@ -280,6 +282,8 @@ def sweep_2site(
 
         if drift_renorm and uses_fixed_chi(sim_params):
             renorm_drift(state, sim_params)
+
+    state.set_orthogonality_center(0)
 
 
 def sweep_dynamic(
@@ -495,3 +499,5 @@ def sweep_dynamic(
 
     if uses_fixed_chi(sim_params):
         renorm_drift(state, sim_params)
+
+    state.set_orthogonality_center(0)

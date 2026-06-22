@@ -202,6 +202,9 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
         msg = "MPS and Hamiltonian must have the same number of sites"
         raise ValueError(msg)
 
+    if state.orthogonality_center is not None:
+        state.require_orthogonality_center(0, context="bug")
+
     if isinstance(sim_params, (WeakSimParams, StrongSimParams)):
         sim_params.dt = 1
 
@@ -226,3 +229,4 @@ def bug(state: MPS, mpo: MPO, sim_params: AnalogSimParams | WeakSimParams | Stro
     state.tensors[0] = updated_tensor
     # Truncation
     state.compress(sim_params.svd_threshold, max_bond_dim=sim_params.max_bond_dim)
+    state.set_orthogonality_center(0)

@@ -984,6 +984,7 @@ def test_pad_shapes_and_centre(length: int, target: int) -> None:
     # invariants
     assert np.isclose(mps.norm(), norm_before, atol=1e-12)
     assert mps.check_canonical_form()[0] == 0
+    assert mps.orthogonality_center == 0
 
     # expected staircase
     for i, T in enumerate(mps.tensors):
@@ -1099,12 +1100,12 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
     # record the full state-vector for fidelity check
     before_vec = mps.to_vec()
     # record the center and canonical-split
-    before_center = mps.check_canonical_form()[0]
+    before_center = mps.orthogonality_center
     assert before_center == center
 
     # do a "no-real" truncation (tiny threshold, generous max bond)
     mps.compress(threshold=1e-16, max_bond_dim=100)
-    after_center = mps.check_canonical_form()[0]
+    after_center = mps.orthogonality_center
     assert after_center == center
 
     # fidelity of state stays unity
@@ -1114,14 +1115,14 @@ def test_truncate_preserves_orthogonality_center_and_canonicity(center: int) -> 
 
     # also check left/right canonicity around that center
     L = mps.length
-    for i in range(before_center):
+    for i in range(center):
         # left-canonical test
         A = mps.tensors[i]
         conjA = np.conj(A)
         gram = oe.contract("ijk, ijl->kl", conjA, A)
         # identity on the i-th right bond
         assert np.allclose(gram, np.eye(gram.shape[0]), atol=1e-12)
-    for i in range(before_center + 1, L):
+    for i in range(center + 1, L):
         # right-canonical test
         A = mps.tensors[i]
         conjA = np.conj(A)
@@ -1423,6 +1424,84 @@ def test_evaluate_observables_local_ops_and_center_shifts() -> None:
     assert np.isclose(z1, 1.0, atol=1e-12)
     assert np.isclose(x2, 0.0, atol=1e-12)
     assert np.isclose(z3, 1.0, atol=1e-12)
+
+
+def _dense_z_expectation(mps: MPS, site: int) -> float:
+    """Reference Z expectation on ``site`` matching ``MPS.to_vec`` bit ordering.
+
+    Args:
+        mps: State to evaluate.
+        site: Site index for the Pauli-Z operator.
+
+    Returns:
+        Real expectation value of Z on ``site``.
+    """
+    psi = mps.to_vec()
+    n = mps.length
+    op = np.eye(1, dtype=np.complex128)
+    for s in range(n):
+        local = np.eye(2, dtype=np.complex128) if s != site else np.array([[1, 0], [0, -1]], dtype=np.complex128)
+        op = np.kron(local, op)
+    return float(np.real(np.vdot(psi, op @ psi)))
+
+
+def test_expect_matches_dense_without_manual_canonicalization() -> None:
+    """``expect`` must be correct on entangled MPS without ``set_canonical_form``."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    assert mps.orthogonality_center == 0
+    for site in range(mps.length):
+        obs = Observable(GateLibrary.z(), site)
+        assert mps.expect(obs) == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
+
+
+def test_evaluate_observables_with_nonzero_initial_center() -> None:
+    """``evaluate_observables`` works when the copy starts away from site 0."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    mps.set_canonical_form(3)
+    assert mps.orthogonality_center == 3
+
+    obs_seq = [Observable(GateLibrary.z(), s) for s in range(4)]
+    sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1)
+    results = np.empty((4, 1), dtype=np.float64)
+    mps.evaluate_observables(sim_params, results, column_index=0)
+
+    for site in range(4):
+        assert results[site, 0] == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
+
+
+def test_shift_orthogonality_center_asserts_on_mismatch() -> None:
+    """Shift helpers assert when the requested center disagrees with tracking."""
+    mps = MPS(3, state="zeros")
+    assert mps.orthogonality_center == 0
+    mps.set_orthogonality_center(1)
+    with pytest.raises(AssertionError):
+        mps.shift_orthogonality_center_right(0)
+
+
+def test_orthogonality_center_preserved_by_deepcopy() -> None:
+    """Deep copies carry the tracked orthogonality center."""
+    mps = MPS(3, state="zeros")
+    mps.set_orthogonality_center(2)
+    copied = copy.deepcopy(mps)
+    assert copied.orthogonality_center == 2
+
+
+def test_single_qubit_gate_gauge_policy() -> None:
+    """Off-center single-qubit updates invalidate gauge; on-center updates preserve it."""
+    mps = MPS(3, state="zeros")
+    assert mps.orthogonality_center == 0
+    gate = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+    mps.tensors[1] = oe.contract("ab, bcd->acd", gate, mps.tensors[1])
+    if mps.orthogonality_center != 1:
+        mps.set_orthogonality_center(None)
+    assert mps.orthogonality_center is None
+
+    mps2 = MPS(1, state="x+")
+    assert mps2.orthogonality_center == 0
+    mps2.tensors[0] = oe.contract("ab, bcd->acd", gate, mps2.tensors[0])
+    assert mps2.orthogonality_center == 0
 
 
 def test_evaluate_observables_meta_validation_errors() -> None:

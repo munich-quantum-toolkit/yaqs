@@ -48,8 +48,8 @@ def test_apply_dissipation_one_site_canonical_0() -> None:
 
     apply_dissipation(state, noise_model, dt, sim_params)
 
-    canonical_site = state.check_canonical_form()
-    assert canonical_site[0] == 0, (
+    canonical_site = state.orthogonality_center
+    assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"
     )
 
@@ -85,8 +85,8 @@ def test_apply_dissipation_two_site_canonical_0() -> None:
 
     apply_dissipation(state, noise_model, dt, sim_params)
 
-    canonical_site = state.check_canonical_form()
-    assert canonical_site[0] == 0, (
+    canonical_site = state.orthogonality_center
+    assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"
     )
 

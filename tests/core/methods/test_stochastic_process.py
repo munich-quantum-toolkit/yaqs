@@ -171,7 +171,24 @@ def test_stochastic_process_jump() -> None:
     dt = 0.1
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
-    new_state = stochastic_process(state_copy, noise_model, dt, sim_params)
+
+    class _AlwaysJumpRng:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
+    new_state = stochastic_process(
+        state_copy,
+        noise_model,
+        dt,
+        sim_params,
+        rng=_AlwaysJumpRng(),  # ty: ignore[invalid-argument-type]
+    )
     # Should still be the same type
     assert isinstance(new_state, MPS)
     # Check that at least one tensor changed (jump applied)

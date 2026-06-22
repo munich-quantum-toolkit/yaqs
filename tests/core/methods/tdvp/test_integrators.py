@@ -64,7 +64,7 @@ def test_single_site_tdvp() -> None:
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
-    canonical_site = state.check_canonical_form()[0]
+    canonical_site = state.orthogonality_center
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after single-site TDVP, but got canonical site: {canonical_site}"
     )
@@ -92,7 +92,7 @@ def test_two_site_tdvp() -> None:
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
-    canonical_site = state.check_canonical_form()[0]
+    canonical_site = state.orthogonality_center
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after two-site TDVP, but got canonical site: {canonical_site}"
     )

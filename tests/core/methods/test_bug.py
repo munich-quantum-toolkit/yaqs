@@ -282,4 +282,5 @@ def test_bug_three_sites() -> None:
     new_state_vec = time_evo_op @ state_vec
     # Check the result
     assert mps.check_canonical_form() == [0]
+    assert mps.orthogonality_center == 0
     np.testing.assert_allclose(mps.to_vec(), new_state_vec, rtol=1e-10, atol=1e-12)

@@ -63,6 +63,7 @@ class MPS:
         tensors: List of rank-3 tensors representing the MPS.
         physical_dimensions: List of physical dimensions for each site.
         flipped: Indicates if the network has been flipped.
+        orthogonality_center: Site index of the mixed-canonical center, or ``None`` if unknown.
     """
 
     def __init__(
@@ -105,6 +106,7 @@ class MPS:
             ValueError: If the provided `state` parameter does not match any valid initialization string.
         """
         self.flipped = False
+        self._orthogonality_center: int | None = None
         if tensors is not None:
             assert len(tensors) == length
             self.tensors = tensors
@@ -289,8 +291,72 @@ class MPS:
 
             if state == "random":
                 self.normalize()
+            if state == "haar-random":
+                self._orthogonality_center = None
+            else:
+                self._orthogonality_center = 0
         if pad is not None and state != "haar-random":
             self.pad_bond_dimension(pad)
+
+    @property
+    def orthogonality_center(self) -> int | None:
+        """Site index of the mixed-canonical center, or ``None`` if the gauge is unknown."""
+        return self._orthogonality_center
+
+    def set_orthogonality_center(self, center: int | None) -> None:
+        """Set the tracked orthogonality center without re-canonicalizing."""
+        self._orthogonality_center = center
+
+    def notify_split_two_site(self, left_site: int, right_site: int, svd_distribution: str) -> None:
+        """Update tracked center after a two-site SVD split."""
+        if svd_distribution == "right":
+            self._orthogonality_center = right_site
+        elif svd_distribution == "left":
+            self._orthogonality_center = left_site
+        else:
+            self._orthogonality_center = None
+
+    def require_orthogonality_center(self, expected: int, *, context: str) -> None:
+        """Raise ``ValueError`` if the tracked center is unknown or not ``expected``.
+
+        Raises:
+            ValueError: If the gauge is unknown or the center does not match.
+        """
+        if self._orthogonality_center is None:
+            msg = f"{context}: MPS gauge unknown (orthogonality_center is None), expected site {expected}."
+            raise ValueError(msg)
+        if self._orthogonality_center != expected:
+            msg = f"{context}: orthogonality center at site {self._orthogonality_center}, expected site {expected}."
+            raise ValueError(msg)
+
+    def center_covers_sites(self, sites: int | list[int]) -> bool:
+        """Return whether the tracked center supports local contraction at ``sites``."""
+        if self._orthogonality_center is None:
+            return False
+        sites_list = [sites] if isinstance(sites, int) else list(sites)
+        if len(sites_list) == 1:
+            return self._orthogonality_center == sites_list[0]
+        if len(sites_list) == 2:
+            i, j = sites_list
+            return j == i + 1 and self._orthogonality_center in {i, j}
+        return False
+
+    def move_orthogonality_center_to(self, target: int, decomposition: str = "QR") -> None:
+        """Shift the orthogonality center to ``target`` via incremental moves.
+
+        Raises:
+            ValueError: If the gauge is unknown.
+        """
+        if self._orthogonality_center is None:
+            msg = "Cannot shift orthogonality center when gauge is unknown."
+            raise ValueError(msg)
+        current = self._orthogonality_center
+        while current < target:
+            self.shift_orthogonality_center_right(current, decomposition)
+            current += 1
+        while current > target:
+            self.shift_orthogonality_center_left(current, decomposition)
+            current -= 1
 
     def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
         """Initialize a list of MPS tensors representing a product state from a basis string.
@@ -592,6 +658,8 @@ class MPS:
         new_tensors.reverse()
         self.tensors = new_tensors
         self.flipped = not self.flipped
+        if self._orthogonality_center is not None:
+            self._orthogonality_center = self.length - 1 - self._orthogonality_center
 
     def almost_equal(self, other: MPS) -> bool:
         """Checks if the tensors of this MPS are almost equal to the other MPS.
@@ -623,6 +691,11 @@ class MPS:
             decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
                            Default is QR.
         """
+        if self._orthogonality_center is not None:
+            assert self._orthogonality_center == current_orthogonality_center, (
+                f"shift_orthogonality_center_right: tracked center is {self._orthogonality_center}, "
+                f"but shift requested from site {current_orthogonality_center}."
+            )
         tensor = self.tensors[current_orthogonality_center]
         if decomposition == "QR" or current_orthogonality_center == self.length - 1:
             site_tensor, bond_tensor = right_qr(tensor)
@@ -653,6 +726,11 @@ class MPS:
                 self.tensors[current_orthogonality_center],
                 self.tensors[current_orthogonality_center + 1],
             ) = (a_new, b_new)
+        if self._orthogonality_center is not None:
+            if current_orthogonality_center + 1 < self.length:
+                self._orthogonality_center = current_orthogonality_center + 1
+            else:
+                self._orthogonality_center = current_orthogonality_center
 
     def shift_orthogonality_center_left(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center left.
@@ -664,6 +742,11 @@ class MPS:
             decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
                 Default is QR.
         """
+        if self._orthogonality_center is not None:
+            assert self._orthogonality_center == current_orthogonality_center, (
+                f"shift_orthogonality_center_left: tracked center is {self._orthogonality_center}, "
+                f"but shift requested from site {current_orthogonality_center}."
+            )
         self.flip_network()
         self.shift_orthogonality_center_right(self.length - current_orthogonality_center - 1, decomposition)
         self.flip_network()
@@ -685,11 +768,13 @@ class MPS:
                     break
                 self.shift_orthogonality_center_right(site, decomposition)
 
+        self._orthogonality_center = None
         sweep_decomposition(orthogonality_center, decomposition)
         self.flip_network()
         flipped_orthogonality_center = self.length - 1 - orthogonality_center
         sweep_decomposition(flipped_orthogonality_center, decomposition)
         self.flip_network()
+        self._orthogonality_center = orthogonality_center
 
     def normalize(self, form: str = "B", decomposition: str = "QR") -> None:
         """Normalize MPS.
@@ -715,6 +800,7 @@ class MPS:
 
         if form == "B":
             self.flip_network()
+            self._orthogonality_center = 0
 
     def compress(
         self,
@@ -733,8 +819,11 @@ class MPS:
         if self.length == 1:
             return
 
-        canonical = self.check_canonical_form()
-        orth_center = canonical[0] if canonical and canonical[0] >= 0 else self.length - 1
+        if self._orthogonality_center is not None:
+            orth_center = self._orthogonality_center
+        else:
+            canonical = self.check_canonical_form()
+            orth_center = canonical[0] if canonical and canonical[0] >= 0 else self.length - 1
 
         for site in range(orth_center):
             left_tensor = self.tensors[site]
@@ -845,6 +934,8 @@ class MPS:
 
         Notes:
             A deep copy of the state is used to prevent modifications to the original MPS.
+            Requires the orthogonality center to cover ``sites``; prefer :meth:`expect` for
+            gauge-safe evaluation.
         """
         temp_state = copy.deepcopy(self)
         if operator.gate.matrix.shape[0] == 2:  # Local observable
@@ -1039,7 +1130,6 @@ class MPS:
             column_index: The time or trajectory index indicating which column of the result array to fill.
         """
         temp_state = copy.deepcopy(self)
-        last_site = 0
         for obs_index, observable in enumerate(sim_params.sorted_observables):
             if observable.gate.name in {"entropy", "schmidt_spectrum"}:
                 assert isinstance(observable.sites, list), "Given metric requires a list of sites"
@@ -1061,12 +1151,21 @@ class MPS:
                 results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
 
             else:
-                idx = observable.sites[0] if isinstance(observable.sites, list) else observable.sites
-                if idx > last_site:
-                    for site in range(last_site, idx):
-                        temp_state.shift_orthogonality_center_right(site)
-                    last_site = idx
-                results[obs_index, column_index] = temp_state.expect(observable)
+                sites_list = [observable.sites] if isinstance(observable.sites, int) else list(observable.sites)
+                if temp_state.orthogonality_center is not None and not temp_state.center_covers_sites(sites_list):
+                    if len(sites_list) == 1:
+                        target = sites_list[0]
+                    else:
+                        i, j = sites_list
+                        center = temp_state.orthogonality_center
+                        target = i if abs(center - i) <= abs(center - j) else j
+                    temp_state.move_orthogonality_center_to(target)
+                if temp_state.orthogonality_center is None:
+                    exp = temp_state.mixed_expectation(temp_state, observable)
+                else:
+                    exp = temp_state.local_expect(observable, sites_list)
+                assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
+                results[obs_index, column_index] = exp.real
 
     def expect(self, observable: Observable) -> np.float64:
         """Measurement of expectation value.
@@ -1093,7 +1192,20 @@ class MPS:
         for s in sites_list:
             assert s in range(self.length), f"Observable acting on non-existing site: {s}"
 
-        exp = self.local_expect(observable, sites_list)
+        if self._orthogonality_center is None:
+            exp = self.mixed_expectation(self, observable)
+        elif self.center_covers_sites(sites_list):
+            exp = self.local_expect(observable, sites_list)
+        else:
+            if len(sites_list) == 1:
+                target = sites_list[0]
+            else:
+                i, j = sites_list
+                center = self._orthogonality_center
+                target = i if abs(center - i) <= abs(center - j) else j
+            shifted = copy.deepcopy(self)
+            shifted.move_orthogonality_center_to(target)
+            exp = shifted.local_expect(observable, sites_list)
 
         assert exp.imag < 1e-13, f"Measurement should be real, '{exp.real:16f}+{exp.imag:16f}i'."
         return exp.real
@@ -1229,9 +1341,9 @@ class MPS:
     def measure(self, site: int, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Perform an in-place projective measurement on a single site of the MPS.
 
-        This method modifies the MPS tensors to reflect the measurement outcome. It assumes the MPS
-        is initially in a right-canonical form (orthogonality center at site 0) and shifts the center
-        to the target site before measuring.
+        This method modifies the MPS tensors to reflect the measurement outcome. When the
+        orthogonality center is tracked, it is shifted incrementally to the target site before
+        measuring; otherwise the state is re-canonicalized at ``site``.
 
         Args:
             site: The index of the site to measure.
@@ -1248,9 +1360,12 @@ class MPS:
             msg = f"Invalid site {site} for MPS of length {self.length}."
             raise ValueError(msg)
 
-        # Shift orthogonality center to target site (assuming starts at 0)
-        for i in range(site):
-            self.shift_orthogonality_center_right(i)
+        # Shift orthogonality center to target site.
+        if self.orthogonality_center is not None:
+            if self.orthogonality_center != site:
+                self.move_orthogonality_center_to(site)
+        else:
+            self.set_canonical_form(site)
 
         basis = basis.upper()
         if basis == "Z":
@@ -1295,6 +1410,7 @@ class MPS:
             original_basis_selection,
             projected_rotated_tensor,
         )
+        self._orthogonality_center = site
 
         return int(chosen_index)
 
@@ -1355,7 +1471,13 @@ class MPS:
             The norm of the state or the specified site.
         """
         if site is not None:
-            return self.scalar_product(self, site).real
+            if self.orthogonality_center is not None:
+                if not self.center_covers_sites(site):
+                    temp = copy.deepcopy(self)
+                    temp.move_orthogonality_center_to(site)
+                    return temp.scalar_product(temp, site).real
+                return self.scalar_product(self, site).real
+            return self.scalar_product(self).real
         return self.scalar_product(self).real
 
     def check_if_valid_mps(self) -> None:
