@@ -1558,6 +1558,43 @@ def test_measure_single_shot_off_center() -> None:
         assert single_shot_frac == pytest.approx(site0_probs[bit], abs=0.05)
 
 
+def test_assert_center_unknown_gauge_raises() -> None:
+    """``assert_center`` rejects an unknown gauge."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(None)
+    with pytest.raises(ValueError, match="gauge unknown"):
+        mps.assert_center(0, context="test")
+
+
+def test_assert_center_mismatch_raises() -> None:
+    """``assert_center`` rejects a tracked center that differs from the expected site."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(2)
+    with pytest.raises(ValueError, match="expected site 0"):
+        mps.assert_center(0, context="test")
+
+
+def test_shift_center_to_unknown_gauge_raises() -> None:
+    """``shift_center_to`` cannot run when the gauge is unknown."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(None)
+    with pytest.raises(ValueError, match="gauge is unknown"):
+        mps.shift_center_to(1)
+
+
+def test_check_covers_sites() -> None:
+    """``check_covers_sites`` reports whether the tracked center supports local contraction."""
+    mps = MPS(3, state="zeros")
+    mps.set_center(1)
+    assert mps.check_covers_sites(1) is True
+    assert mps.check_covers_sites(0) is False
+    assert mps.check_covers_sites([0, 1]) is True
+    assert mps.check_covers_sites([1, 2]) is True
+    assert mps.check_covers_sites([0, 2]) is False
+    assert mps.check_covers_sites([0, 1, 2]) is False
+    mps.set_center(None)
+
+
 def test_evaluate_observables_meta_validation_errors() -> None:
     """Meta-observable input validation: wrong length and non-adjacent sites must assert."""
     mps = _product_state_mps(4)

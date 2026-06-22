@@ -18,6 +18,7 @@ qubit counts.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import multiprocessing
 import os
@@ -237,19 +238,17 @@ def test_threading_config() -> None:
         assert os.environ.get("NUMBA_NUM_THREADS") == "1"
 
     finally:
-        # Restore state
-        numba.set_num_threads(original_numba_threads)
-
-        # Restore environment variables
-        # 1. Remove keys that were added
+        # Restore environment variables before touching the Numba runtime pool.
         for key in list(os.environ):
             if key not in env_snapshot:
                 del os.environ[key]
 
-        # 2. Restore keys that were modified/deleted
         for key, value in env_snapshot.items():
             if os.environ.get(key) != value:
                 os.environ[key] = value
+
+        with contextlib.suppress(Exception):
+            numba.set_num_threads(original_numba_threads)
 
 
 def test_analog_simulation() -> None:

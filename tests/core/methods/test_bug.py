@@ -295,3 +295,13 @@ def test_bug_requires_center_at_zero() -> None:
     sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
     with pytest.raises(ValueError, match="bug"):
         bug(mps, mpo, sim_params)
+
+
+def test_bug_length_mismatch_raises() -> None:
+    """BUG rejects Hamiltonians whose site count differs from the MPS."""
+    mps = MPS(2, state="zeros")
+    mpo = MPO.ising(3, 1, 0.5)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+
+    with pytest.raises(ValueError, match="same number of sites"):
+        bug(mps, mpo, sim_params)
