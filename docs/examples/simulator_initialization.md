@@ -253,7 +253,7 @@ The properties that don't apply to your simulation kind return `None` (or an emp
 | `max_bond`                               | MPS-backed analog and strong digital runs (maximum bond dimension over time).       |
 | `total_bond`                             | MPS-backed analog and strong digital runs (sum of internal bond dimensions).        |
 | `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                            |
-| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams` (no noise).    |
+| `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only. |
 | `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                   |
 | `counts`                                 | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes). |
 

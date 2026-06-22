@@ -395,16 +395,44 @@ def test_analog_simulation_get_state() -> None:
         np.testing.assert_allclose(1, fidelity)
 
 
-def test_density_matrix_get_state_rejected() -> None:
-    """density_matrix evolution does not support returning an output state."""
+def test_density_matrix_get_state() -> None:
+    """density_matrix evolution returns the final density matrix when get_state=True."""
     psi = State(2, initial="zeros", representation="density_matrix")
     h = Hamiltonian.ising(2, J=1.0, g=0.5)
     sim_params = AnalogSimParams(
         observables=[Observable(Z(), 0)],
+        elapsed_time=0.1,
+        dt=0.1,
         get_state=True,
     )
-    with pytest.raises(ValueError, match=r"get_state=True is not supported for State\.representation='density_matrix'"):
-        Simulator(show_progress=False).run(psi, h, sim_params, None)
+    result = Simulator(show_progress=False).run(psi, h, sim_params, None)
+    assert result.output_state is not None
+    assert result.output_state.representation == "density_matrix"
+    rho = result.output_state.density_matrix
+    assert rho.shape == (4, 4)
+    assert np.isclose(np.trace(rho), 1.0)
+
+
+def test_density_matrix_get_state_noisy() -> None:
+    """Noisy Lindblad evolution still returns the exact ensemble-averaged density matrix."""
+    n_sites = 1
+    initial_state = State(n_sites, initial="ones", representation="density_matrix")
+    hamiltonian = Hamiltonian.ising(n_sites, J=0.0, g=0.0)
+    sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
+    noise_model = NoiseModel(
+        processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": sigma_minus}],
+    )
+    sim_params = AnalogSimParams(
+        observables=[Observable(Z(), 0)],
+        elapsed_time=1.0,
+        dt=0.1,
+        get_state=True,
+    )
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+    assert result.output_state is not None
+    rho = result.output_state.density_matrix
+    # Amplitude damping from |1>: rho_11 = exp(-gamma t)
+    assert np.isclose(rho[1, 1].real, np.exp(-1.0), atol=1e-4)
 
 
 @pytest.mark.parametrize(

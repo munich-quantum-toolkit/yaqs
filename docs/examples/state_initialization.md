@@ -197,7 +197,7 @@ print("From vector=, MCWF Z_0:", result.expectation_values[0][-1])
 - **Entangled presets**: `"haar-random"` may need an internal MPS for dense representations.
 - **Circuits**: use `State(..., representation="mps")` (default); `vector=` / `density_matrix=` states cannot run circuits.
 - **Ensemble runs**: `list[State]` for deterministic unitary ensembles requires each member with `representation="mps"`.
-- **`get_state`**: when supported, `result.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State) (use `.mps` for the underlying MPS). Not supported with `representation="density_matrix"` or with stochastic noise.
+- **`get_state`**: when supported, `result.output_state` is a [`State`](mqt.yaqs.core.data_structures.state.State). Use `.mps` for MPS runs, `.vector` for MCWF, or `.density_matrix` for Lindblad. Not supported with stochastic noise on `mps` or `vector` representations (use `density_matrix` for the exact ensemble average).
 
 For MPO/TJM details without `State`, see {doc}`analog_simulation` and the [`MPS`](mqt.yaqs.core.data_structures.mps.MPS) API reference.
 

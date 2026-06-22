@@ -336,6 +336,7 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
         elapsed_time=0.2,
         dt=0.05,
         sample_timesteps=True,
+        get_state=True,
     )
 
     ctx = preprocess_lindblad(psi, h, noise, sim_params)
@@ -348,3 +349,5 @@ def test_lindblad_ode_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     assert expectation is not None
     assert expectation.shape == (len(sim_params.times),)
     assert np.all(np.isfinite(expectation))
+    assert result.output_state is not None
+    assert result.output_state.density_matrix.shape == (4, 4)

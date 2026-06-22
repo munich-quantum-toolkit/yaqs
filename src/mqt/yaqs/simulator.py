@@ -235,11 +235,11 @@ def _mcwf_worker(traj_idx: int) -> tuple[NDArray[np.float64], None, np.ndarray |
     return mcwf((traj_idx, WORKER_CTX["ctx"]))
 
 
-def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, None]:
+def _lindblad_ctx_worker(_traj_idx: int) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Execute Lindblad evolution from a preprocessed context in `WORKER_CTX`.
 
     Returns:
-        Observable expectation values over time for one trajectory.
+        Observable expectation values over time and optional final density matrix.
     """
     return lindblad_evolve(WORKER_CTX["ctx"])
 
@@ -423,6 +423,11 @@ def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
 def _store_mcwf_final_state(result: Result, psi: np.ndarray | None) -> None:
     if psi is not None:
         result.output_state = State(vector=psi)
+
+
+def _store_lindblad_final_state(result: Result, rho: np.ndarray | None) -> None:
+    if rho is not None:
+        result.output_state = State(density_matrix=rho)
 
 
 def _expect_shot_counts(payload: NDArray[np.float64] | dict[int, int]) -> dict[int, int]:
@@ -745,9 +750,10 @@ class Simulator:
             result: Output container populated during this run.
 
         Raises:
-            ValueError: If ``get_state=True`` with ``State.representation='density_matrix'``,
-                or if ``get_state=True`` is combined with a non-trivial noise model
-                (the trajectory ensemble has no single representative state).
+            ValueError: If ``get_state=True`` is combined with a non-trivial noise model
+                on ``mps`` or ``vector`` representations (the trajectory ensemble has no
+                single representative state). Lindblad ``density_matrix`` evolution always
+                returns the exact ensemble-averaged state when ``get_state=True``.
         """
         if isinstance(initial_state, list):
             initial_state_list = cast("list[State]", initial_state)
@@ -782,10 +788,6 @@ class Simulator:
             backend = analog_tjm_1
         else:
             backend = analog_tjm_2
-
-        if state_rep == "density_matrix" and sim_params.get_state:
-            msg = "get_state=True is not supported for State.representation='density_matrix'."
-            raise ValueError(msg)
 
         if (
             noise_model is None
@@ -847,6 +849,7 @@ class Simulator:
 
         final_mps: MPS | None = None
         final_psi: np.ndarray | None = None
+        final_rho: np.ndarray | None = None
 
         if self.parallel and effective_num_traj > 1:
             for i, traj_payload in run_backend_parallel(
@@ -867,6 +870,8 @@ class Simulator:
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
+                    elif state_rep == "density_matrix":
+                        final_rho = cast("np.ndarray", traj_final)
                     else:
                         final_mps = cast("MPS", traj_final)
         else:
@@ -890,11 +895,15 @@ class Simulator:
                 if traj_final is not None:
                     if state_rep == "vector":
                         final_psi = cast("np.ndarray", traj_final)
+                    elif state_rep == "density_matrix":
+                        final_rho = cast("np.ndarray", traj_final)
                     else:
                         final_mps = cast("MPS", traj_final)
 
         if state_rep == "vector":
             _store_mcwf_final_state(result, final_psi)
+        elif state_rep == "density_matrix":
+            _store_lindblad_final_state(result, final_rho)
         else:
             _store_final_mps(result, final_mps)
 
