@@ -243,19 +243,19 @@ print("total_bond:           ", result.total_bond)
 
 The properties that don't apply to your simulation kind return `None` (or an empty list for `observables` in weak simulations), so you can branch on them safely. The full set is:
 
-| Property                                 | Populated for                                                                       |
-| ---------------------------------------- | ----------------------------------------------------------------------------------- |
-| `observables`                            | Analog and strong digital runs. Empty list for weak digital.                        |
-| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                  |
-| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                     |
-| `times`                                  | Shared analog time grid; `None` for digital circuits.                               |
-| `runtime_cost`                           | MPS-backed analog and strong digital runs (contraction-cost heuristic over time).   |
-| `max_bond`                               | MPS-backed analog and strong digital runs (maximum bond dimension over time).       |
-| `total_bond`                             | MPS-backed analog and strong digital runs (sum of internal bond dimensions).        |
-| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                            |
+| Property                                 | Populated for                                                                                                                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `observables`                            | Analog and strong digital runs. Empty list for weak digital.                                                                                                         |
+| `expectation_values`                     | Aggregated expectation per observable (parallel to `observables`).                                                                                                   |
+| `trajectories`                           | Per-trajectory data per observable (parallel to `observables`).                                                                                                      |
+| `times`                                  | Shared analog time grid; `None` for digital circuits.                                                                                                                |
+| `runtime_cost`                           | MPS-backed analog and strong digital runs (contraction-cost heuristic over time).                                                                                    |
+| `max_bond`                               | MPS-backed analog and strong digital runs (maximum bond dimension over time).                                                                                        |
+| `total_bond`                             | MPS-backed analog and strong digital runs (sum of internal bond dimensions).                                                                                         |
+| `noise_model`                            | Any run that was given a `NoiseModel`; otherwise `None`.                                                                                                             |
 | `output_state`                           | Runs with `get_state=True` on `AnalogSimParams` or `StrongSimParams`. For Lindblad (`density_matrix`), noisy runs are supported; for `mps`/`vector`, noiseless only. |
-| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                   |
-| `counts`                                 | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes). |
+| `multi_time_times`, `multi_time_results` | Analog deterministic ensembles with `multi_time_observables` set.                                                                                                    |
+| `counts`                                 | Weak digital simulations (the `dict[int, int]` of aggregated measurement outcomes).                                                                                  |
 
 `Result` (and its wrapped `sim_params`) is pickleable, so you can checkpoint and resume analysis from disk:
 
