@@ -40,6 +40,7 @@ __all__ = [
     "available_cpus",
     "get_parallel_context",
     "limit_worker_threads",
+    "safe_set_numba_threads",
 ]
 
 
@@ -128,3 +129,19 @@ def limit_worker_threads(n_threads: int = 1) -> None:
     if os.environ.get("YAQS_THREAD_DEBUG", "") == "1" and threadpool_info is not None:
         with contextlib.suppress(Exception):
             threadpool_info()
+
+
+def safe_set_numba_threads(n_threads: int) -> None:
+    """Set Numba's thread count when the runtime pool allows it.
+
+    Numba initializes its parallel thread pool on first use and may refuse
+    later changes (for example when ``NUMBA_NUM_THREADS`` pinned the pool at
+    process start). Failures are ignored so callers can still proceed with the
+    existing pool size.
+
+    Args:
+        n_threads: Desired Numba thread count.
+    """
+    with contextlib.suppress(ImportError, AttributeError, ValueError, RuntimeError):
+        numba = importlib.import_module("numba")
+        numba.set_num_threads(n_threads)

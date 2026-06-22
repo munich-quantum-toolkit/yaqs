@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added orthogonality center tracking ([#477]) ([**@aaronleesander**])
 - extended get_state functionality to Lindblad ([#475]) ([**@aaronleesander**])
 - extended EquivalenceChecker output to include entropy and the resulting diff data structure ([#364]) ([**@yiranwang-phys**])
 - OpenQASM2 and 3 files can now be read directly by the Simulator and EquivalenceChecker ([#464]) ([**@Marerido**])
@@ -140,6 +141,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#477]: https://github.com/munich-quantum-toolkit/yaqs/pull/477
 [#475]: https://github.com/munich-quantum-toolkit/yaqs/pull/475
 [#467]: https://github.com/munich-quantum-toolkit/yaqs/pull/467
 [#465]: https://github.com/munich-quantum-toolkit/yaqs/pull/465

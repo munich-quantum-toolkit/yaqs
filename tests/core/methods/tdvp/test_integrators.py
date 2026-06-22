@@ -28,6 +28,7 @@ from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams,
 from mqt.yaqs.core.data_structures.state import State
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Z
 from mqt.yaqs.core.methods.tdvp import tdvp
+from mqt.yaqs.core.methods.tdvp.integrators import sweep_2site
 from mqt.yaqs.core.methods.tdvp.primitives import update_site
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate_tdvp, apply_window, construct_generator_mpo
 from tests.core.methods.tdvp.conftest import (
@@ -64,7 +65,7 @@ def test_single_site_tdvp() -> None:
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
-    canonical_site = state.check_canonical_form()[0]
+    canonical_site = state.orthogonality_center
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after single-site TDVP, but got canonical site: {canonical_site}"
     )
@@ -92,7 +93,7 @@ def test_two_site_tdvp() -> None:
     assert state.length == L
     for tensor in state.tensors:
         assert isinstance(tensor, np.ndarray)
-    canonical_site = state.check_canonical_form()[0]
+    canonical_site = state.orthogonality_center
     assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after two-site TDVP, but got canonical site: {canonical_site}"
     )
@@ -130,6 +131,25 @@ def test_2site_sweep_symmetric() -> None:
     with patch("mqt.yaqs.core.methods.tdvp.integrators.sweep_2site") as mock_sweep:
         tdvp(state, H, sim_params)
         assert mock_sweep.call_args.kwargs["sweep_plan"] == [1.0]
+
+
+def test_2site_tdvp_tracks_center_mid_sweep() -> None:
+    """Two-site LTR sweep updates the tracked center before exit reset to site 0."""
+    L = 4
+    state = MPS(L, state="zeros")
+    operator = MPO.ising(L, 1.0, 0.5)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact", tdvp_mode="2site")
+    original_update = MPS.update_center_after_split
+    seen: list[int | None] = []
+
+    def recording_update(self: MPS, left: int, right: int, dist: str) -> None:
+        original_update(self, left, right, dist)
+        seen.append(self.orthogonality_center)
+
+    with patch.object(MPS, "update_center_after_split", recording_update):
+        sweep_2site(state, operator, sim_params, step_scale=1.0)
+    assert any(center not in {None, 0} for center in seen)
+    assert state.orthogonality_center == 0
 
 
 def test_2site_analog_sweep_dt() -> None:

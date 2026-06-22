@@ -96,9 +96,19 @@ def apply_dissipation(
         - The operator is then applied to each tensor in the MPS via a contraction using `opt_einsum`.
     """
     if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
-        for i in reversed(range(state.length)):
-            state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="QR")
+        if state.orthogonality_center is not None:
+            if state.orthogonality_center != 0:
+                state.shift_center_to(0, decomposition="QR")
+            state.shift_orthogonality_center_left(0, decomposition="QR")
+        else:
+            state.set_canonical_form(0, decomposition="QR")
         return
+
+    if state.orthogonality_center is not None:
+        if state.orthogonality_center != state.length - 1:
+            state.shift_center_to(state.length - 1, decomposition="SVD")
+    else:
+        state.set_canonical_form(state.length - 1, decomposition="SVD")
 
     for i in reversed(range(state.length)):
         # 1. Apply all 1-site dissipators on site i
@@ -147,7 +157,16 @@ def apply_dissipation(
                         max_bond_dim=sim_params.max_bond_dim,
                     )
                     state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
+                    state.update_center_after_split(i - 1, i, "right")
 
         # Shift orthogonality center
         if i != 0:
-            state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="SVD")
+            if state.orthogonality_center is not None:
+                if state.orthogonality_center != i:
+                    state.shift_center_to(i, decomposition="SVD")
+                state.shift_orthogonality_center_left(i, decomposition="SVD")
+            else:
+                state.set_canonical_form(i, decomposition="SVD")
+                state.shift_orthogonality_center_left(i, decomposition="SVD")
+
+    state.set_center(0)
