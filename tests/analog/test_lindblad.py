@@ -7,10 +7,13 @@
 
 """Tests for the Exact Lindblad Solver."""
 
+# ruff: noqa: SLF001
+
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import pytest
 
 import mqt.yaqs.analog.lindblad as lindblad_mod
 from mqt.yaqs import (
@@ -23,13 +26,15 @@ from mqt.yaqs import (
 )
 from mqt.yaqs.analog.lindblad import (
     MAX_LIOUVILLIAN_VECTOR_DIM,
-    _rho_vec_at_elapsed_time,
     lindblad,
     lindblad_evolve,
     preprocess_lindblad,
 )
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_lindblad_amplitude_damping() -> None:
@@ -363,7 +368,9 @@ def test_lindblad_evolve_get_state_false_returns_no_matrix() -> None:
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(
-        processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}],
+        processes=[
+            {"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
+        ],
     )
     sim_params = AnalogSimParams(
         observables=[Observable("z", sites=[0])],
@@ -391,7 +398,7 @@ def test_rho_vec_at_elapsed_time_returns_initial_state_at_zero() -> None:
         get_state=True,
     )
     ctx = preprocess_lindblad(psi, h, None, sim_params)
-    rho_vec = _rho_vec_at_elapsed_time(ctx)
+    rho_vec = lindblad_mod._rho_vec_at_elapsed_time(ctx)
     np.testing.assert_allclose(rho_vec, ctx.rho_initial)
 
 
@@ -407,7 +414,9 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
     gamma = 1.0
     elapsed_time = 0.25
     noise = NoiseModel(
-        processes=[{"name": "destroy", "sites": [0], "strength": gamma, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}],
+        processes=[
+            {"name": "destroy", "sites": [0], "strength": gamma, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
+        ],
     )
     sim_params = AnalogSimParams(
         observables=[Observable("z", sites=[0])],
@@ -424,7 +433,7 @@ def test_rho_vec_at_elapsed_time_fractional_step() -> None:
         num_sites=n_sites,
     )
     assert ctx.step_propagator is not None
-    rho_vec = _rho_vec_at_elapsed_time(ctx)
+    rho_vec = lindblad_mod._rho_vec_at_elapsed_time(ctx)
     rho = rho_vec.reshape((2, 2), order="F")
     expected = np.array(
         [[1.0 - np.exp(-gamma * elapsed_time), 0.0], [0.0, np.exp(-gamma * elapsed_time)]],
@@ -441,7 +450,9 @@ def test_lindblad_entry_point_returns_density_matrix() -> None:
     for i in range(len(h.tensors)):
         h.tensors[i] *= 0.0
     noise = NoiseModel(
-        processes=[{"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}],
+        processes=[
+            {"name": "destroy", "sites": [0], "strength": 1.0, "matrix": np.array([[0, 1], [0, 0]], dtype=complex)}
+        ],
     )
     sim_params = AnalogSimParams(
         observables=[Observable("z", sites=[0])],

@@ -7,11 +7,12 @@
 
 """Tests for :class:`mqt.yaqs.core.data_structures.mps.MPS`."""
 
-# ruff: noqa: N806
+# ruff: noqa: N806, SLF001, PLR6301
 
 from __future__ import annotations
 
 import copy
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import numpy as np
@@ -19,11 +20,15 @@ import opt_einsum as oe
 import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
+from typing_extensions import Self
 
 from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _I2 = np.eye(2, dtype=complex)
 _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
@@ -631,7 +636,7 @@ class _NoOpPbar:
     def __init__(self, *args: object, **kwargs: object) -> None:
         pass
 
-    def __enter__(self) -> _NoOpPbar:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
@@ -644,8 +649,8 @@ class _NoOpPbar:
 class _ImmediateFuture:
     """Minimal future stand-in that runs the submitted callable immediately."""
 
-    def __init__(self, fn: object, shot_idx: int) -> None:
-        self._outcome = fn(shot_idx)  # type: ignore[operator]
+    def __init__(self, fn: Callable[[int], int], shot_idx: int) -> None:
+        self._outcome = fn(shot_idx)
 
     def result(self) -> int:
         return self._outcome
@@ -654,19 +659,27 @@ class _ImmediateFuture:
 class _ImmediateProcessPoolExecutor:
     """Process pool test double that still exercises worker init and submission."""
 
-    def __init__(self, *, max_workers: int, mp_context: object, initializer: object, initargs: tuple[object, ...]) -> None:
+    def __init__(
+        self,
+        *,
+        max_workers: int,
+        mp_context: object,
+        initializer: Callable[..., None] | None,
+        initargs: tuple[object, ...],
+    ) -> None:
         self.max_workers = max_workers
+        _ = mp_context
         self.initializer = initializer
         if initializer is not None:
             initializer(*initargs)
 
-    def __enter__(self) -> _ImmediateProcessPoolExecutor:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def submit(self, fn: object, shot_idx: int) -> _ImmediateFuture:
+    def submit(self, fn: Callable[[int], int], shot_idx: int) -> _ImmediateFuture:
         return _ImmediateFuture(fn, shot_idx)
 
 
@@ -678,8 +691,19 @@ def test_measure_shots_parallel_pool_submits_bounded_workers(monkeypatch: pytest
 
     created: list[_ImmediateProcessPoolExecutor] = []
 
-    def _factory(**kwargs: object) -> _ImmediateProcessPoolExecutor:
-        executor = _ImmediateProcessPoolExecutor(**kwargs)  # type: ignore[arg-type]
+    def _factory(
+        *,
+        max_workers: int,
+        mp_context: object,
+        initializer: Callable[..., None] | None,
+        initargs: tuple[object, ...],
+    ) -> _ImmediateProcessPoolExecutor:
+        executor = _ImmediateProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=mp_context,
+            initializer=initializer,
+            initargs=initargs,
+        )
         created.append(executor)
         return executor
 
