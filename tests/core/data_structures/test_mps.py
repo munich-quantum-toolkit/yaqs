@@ -1528,24 +1528,34 @@ def test_compress_restores_center_when_gauge_unknown() -> None:
 
 
 def test_measure_single_shot_off_center() -> None:
-    """``measure_single_shot`` matches single-site ``measure`` when center starts away from site 0."""
+    """``measure_single_shot`` site-0 marginal matches ``measure`` when center starts away from site 0."""
     mps = MPS(4, state="haar-random", pad=4)
     mps.normalize("B")
     mps.set_canonical_form(2)
+
+    def local_z_probabilities(state: MPS, site: int) -> np.ndarray:
+        temp = copy.deepcopy(state)
+        if temp.orthogonality_center is not None:
+            if temp.orthogonality_center != site:
+                temp.shift_center_to(site)
+        else:
+            temp.set_canonical_form(site)
+        tensor = temp.tensors[site]
+        reduced_density_matrix = oe.contract("abc, dbc->ad", tensor, np.conj(tensor))
+        probabilities = np.diag(reduced_density_matrix).real.copy()
+        return probabilities / probabilities.sum()
+
+    site0_probs = local_z_probabilities(mps, 0)
+    z_expectation = mps.mixed_expectation(mps, Observable(Z(), 0)).real
+    np.testing.assert_allclose(site0_probs[0], (1 + z_expectation) / 2, atol=1e-10)
+
     rng = np.random.default_rng(0)
-    shots = 500
-    single_site_counts = {0: 0, 1: 0}
-    for _ in range(shots):
-        copy_state = copy.deepcopy(mps)
-        single_site_counts[copy_state.measure(0, rng=rng)] += 1
-    full_chain_counts = {0: 0, 1: 0}
-    for _ in range(shots):
-        outcome = mps.measure_single_shot(rng=rng)
-        full_chain_counts[outcome & 1] += 1
+    shots = 3000
     for bit in (0, 1):
-        p_single = single_site_counts[bit] / shots
-        p_full = full_chain_counts[bit] / shots
-        assert p_full == pytest.approx(p_single, abs=0.08)
+        measure_frac = sum(copy.deepcopy(mps).measure(0, rng=rng) == bit for _ in range(shots)) / shots
+        single_shot_frac = sum((mps.measure_single_shot(rng=rng) & 1) == bit for _ in range(shots)) / shots
+        assert measure_frac == pytest.approx(site0_probs[bit], abs=0.05)
+        assert single_shot_frac == pytest.approx(site0_probs[bit], abs=0.05)
 
 
 def test_evaluate_observables_meta_validation_errors() -> None:
