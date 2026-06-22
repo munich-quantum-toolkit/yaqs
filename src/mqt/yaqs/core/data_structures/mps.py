@@ -18,14 +18,14 @@ import opt_einsum as oe
 from tqdm import tqdm
 
 from mqt.yaqs.parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
-
-from .. import linalg
-from ..methods.decompositions import merge_two_site, right_qr, split_two_site
+from yaqs.core import linalg
+from yaqs.core.methods.decompositions import merge_two_site, right_qr, split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from ..methods.decompositions import TruncMode
+    from yaqs.core.methods.decompositions import TruncMode
+
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 
 # Worker-global state for parallel ``measure_shots`` (initialized once per process).
@@ -41,7 +41,14 @@ def _measure_shots_worker_init(mps: MPS, basis: str) -> None:
 
 
 def _measure_shots_worker(_shot_idx: int) -> int:
-    """Run a single measurement shot using the worker-global MPS context."""
+    """Run a single measurement shot using the worker-global MPS context.
+
+    Args:
+        _shot_idx: Unused shot index (required for executor compatibility).
+
+    Returns:
+        The measured basis state encoded as an integer.
+    """
     return _MEASURE_SHOTS_CTX["mps"].measure_single_shot(_MEASURE_SHOTS_CTX["basis"])
 
 
@@ -1284,7 +1291,7 @@ class MPS:
 
         # Normalize and update the site tensor
         self.tensors[site] = (1.0 / np.sqrt(probabilities[chosen_index])) * oe.contract(
-            "a, cd->acd", original_basis_selection, projected_rotated_tensor
+            "a, cd->acd", original_basis_selection, projected_rotated_tensor,
         )
 
         return int(chosen_index)
