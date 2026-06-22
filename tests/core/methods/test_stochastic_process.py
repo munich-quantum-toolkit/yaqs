@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
@@ -173,12 +173,24 @@ def test_stochastic_process_jump() -> None:
     state_copy = copy.deepcopy(state)
 
     class _AlwaysJumpRng:
+        """Minimal RNG stub that always triggers a jump and picks process index 0."""
+
         @staticmethod
         def random() -> float:
+            """Return 0 so ``rng.random() >= dp`` never skips the jump branch.
+
+            Returns:
+                Always 0.0.
+            """
             return 0.0
 
         @staticmethod
         def choice(size: int, p: list[float]) -> int:
+            """Always select the first process in ``noise_model.processes``.
+
+            Returns:
+                Process index 0.
+            """
             _ = (size, p)
             return 0
 
@@ -187,13 +199,14 @@ def test_stochastic_process_jump() -> None:
         noise_model,
         dt,
         sim_params,
-        rng=_AlwaysJumpRng(),  # ty: ignore[invalid-argument-type]
+        rng=cast("np.random.Generator", _AlwaysJumpRng()),
     )
     # Should still be the same type
     assert isinstance(new_state, MPS)
     # Check that at least one tensor changed (jump applied)
     different = any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
     assert different, "At least one tensor should have changed after jump."
+    assert new_state.orthogonality_center == 0
 
 
 def test_create_probability_distribution_two_site() -> None:

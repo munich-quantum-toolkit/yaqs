@@ -13,6 +13,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
@@ -284,3 +285,13 @@ def test_bug_three_sites() -> None:
     assert mps.check_canonical_form() == [0]
     assert mps.orthogonality_center == 0
     np.testing.assert_allclose(mps.to_vec(), new_state_vec, rtol=1e-10, atol=1e-12)
+
+
+def test_bug_requires_center_at_zero() -> None:
+    """BUG rejects an MPS whose tracked center is not at site 0."""
+    mps = random_mps([(2, 1, 4), (2, 4, 4), (2, 4, 1)])
+    mps.set_center(1)
+    mpo = MPO.ising(3, 1, 0.5)
+    sim_params = AnalogSimParams(preset="exact", get_state=True, elapsed_time=1)
+    with pytest.raises(ValueError, match="bug"):
+        bug(mps, mpo, sim_params)

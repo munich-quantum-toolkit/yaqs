@@ -314,7 +314,7 @@ def apply_two_qubit_gate_tdvp(
     if uses_fixed_chi(sim_params):
         renorm_drift(state, sim_params)
     if gauge_known and short_state.orthogonality_center is not None:
-        state.set_center(window[0])
+        state.set_center(window[0] + short_state.orthogonality_center)
     else:
         state.set_center(None)
 

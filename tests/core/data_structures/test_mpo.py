@@ -837,6 +837,11 @@ def test_multiply_mps_invalidates_then_restores_center() -> None:
     assert np.isfinite(exp)
     assert abs(exp) <= 1.0
 
+    no_compress = MPS(length, state="haar-random", pad=4)
+    no_compress.normalize("B")
+    gate_mpo.multiply(no_compress, sim_params=sim_params, compress=False)
+    assert no_compress.orthogonality_center is None
+
 
 def test_multiply_mps_compress_requires_sim_params() -> None:
     """Compression without ``sim_params`` raises ``ValueError``."""
