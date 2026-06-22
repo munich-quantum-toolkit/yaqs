@@ -35,7 +35,7 @@ def test_apply_dissipation_one_site_canonical_0() -> None:
         # Create a random 2-element vector, normalize it, and reshape to (pdim, 1, 1)
         vec = rng.random(pdim).astype(complex)
         vec /= np.linalg.norm(vec)
-        tensor = vec.reshape(pdim, 1, 1)
+        tensor = np.asarray(vec.reshape(pdim, 1, 1), dtype=np.complex128)
         tensors.append(tensor)
 
     state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
@@ -70,7 +70,7 @@ def test_apply_dissipation_two_site_canonical_0() -> None:
         # Create a random 2-element vector, normalize it, and reshape to (pdim, 1, 1)
         vec = rng.random(pdim).astype(complex)
         vec /= np.linalg.norm(vec)
-        tensor = vec.reshape(pdim, 1, 1)
+        tensor = np.asarray(vec.reshape(pdim, 1, 1), dtype=np.complex128)
         tensors.append(tensor)
 
     state = MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)

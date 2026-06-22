@@ -134,11 +134,11 @@ def preprocess_lindblad(
             raise ValueError(msg)
         if not np.isclose(trace, 1.0):
             rho_mat /= trace
-        rho_vec = rho_mat.flatten(order="F")
+        rho_vec = np.asarray(rho_mat.flatten(order="F"), dtype=np.complex128)
     else:
         assert initial_state is not None
         psi = initial_state.to_vec()
-        rho_vec = np.outer(psi, psi.conj()).flatten(order="F")
+        rho_vec = np.asarray(np.outer(psi, psi.conj()).flatten(order="F"), dtype=np.complex128)
 
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     if h_sparse is not None:
@@ -273,14 +273,69 @@ def _measure_rho(
             obs_results[i, t_idx] = 0.0
 
 
+def _rho_vec_at_elapsed_time(ctx: LindbladContext) -> NDArray[np.complex128]:
+    """Evolve ``vec(rho)`` to ``sim_params.elapsed_time`` (not ``times[-1]``).
+
+    Args:
+        ctx: Preprocessed Lindblad context.
+
+    Returns:
+        Flattened density matrix at ``sim_params.elapsed_time``.
+
+    Raises:
+        RuntimeError: If the ODE integration fails on the large-system fallback path.
+    """
+    sim_params = ctx.sim_params
+    dim = ctx.dim
+    target_t = sim_params.elapsed_time
+    if target_t <= 0.0:
+        return ctx.rho_initial.copy()
+
+    dt = sim_params.dt
+    n_full = int(target_t // dt)
+    remainder = target_t - n_full * dt
+
+    if ctx.step_propagator is not None:
+        rho_vec = ctx.rho_initial.copy()
+        for _ in range(n_full):
+            rho_vec = ctx.step_propagator @ rho_vec
+        if remainder > 1e-12:
+            liouvillian = _build_liouvillian_superoperator(dim, ctx.h_mat, ctx.jump_ops, ctx.l_dag_l_sum)
+            rho_vec = linalg.expm(liouvillian * remainder) @ rho_vec
+        return rho_vec
+
+    def lindblad_rhs(_t: float, rho_flat: NDArray[np.complex128]) -> NDArray[np.complex128]:
+        return _lindblad_rhs_flat(rho_flat, dim, ctx.h_mat, ctx.jump_ops, ctx.l_dag_l_sum)
+
+    result = solve_ivp(
+        lindblad_rhs,
+        (0.0, target_t),
+        ctx.rho_initial,
+        t_eval=[target_t],
+        method="RK45",
+        rtol=sim_params.svd_threshold,
+        atol=sim_params.svd_threshold * 1e-2,
+    )
+    if not result.success:
+        msg = (
+            f"Lindblad integration to elapsed_time={target_t} failed: {result.message} "
+            f"(rtol={sim_params.svd_threshold}, atol={sim_params.svd_threshold * 1e-2})"
+        )
+        raise RuntimeError(msg)
+    return result.y.T[0]
+
+
 def _evolve_with_propagator(ctx: LindbladContext) -> NDArray[np.float64]:
     """Evolve rho on the fixed grid ``sim_params.times`` via vec(rho) <- exp(L dt) vec(rho).
 
     Matches the user ``dt`` step used elsewhere in YAQS (not adaptive substeps).
     Noiseless runs use the same map but without separate dissipator terms in L.
 
+    Args:
+        ctx: Preprocessed Lindblad context.
+
     Returns:
-        Observable expectation values at each sampled time.
+        Observable expectation values at each sampled time on ``sim_params.times``.
     """
     sim_params = ctx.sim_params
     dim = ctx.dim
@@ -312,8 +367,11 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
     Uses the same ``_lindblad_rhs_flat`` as the propagator path; tolerances come from
     ``sim_params.svd_threshold``.
 
+    Args:
+        ctx: Preprocessed Lindblad context.
+
     Returns:
-        Observable expectation values at each sampled time.
+        Observable expectation values at each sampled time on ``sim_params.times``.
 
     Raises:
         RuntimeError: If the ODE integration fails.
@@ -360,19 +418,28 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
     return obs_results
 
 
-def lindblad_evolve(ctx: LindbladContext) -> tuple[NDArray[np.float64], None, None]:
+def lindblad_evolve(ctx: LindbladContext) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Evolve a preprocessed Lindblad context and return observable trajectories.
 
+    Args:
+        ctx: Preprocessed Lindblad context.
+
     Returns:
-        tuple[NDArray[np.float64], None, None]: Observable data, no diagnostics, no final state.
+        tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]: Observable data,
+        no diagnostics, and optional final density matrix at ``sim_params.elapsed_time``
+        when ``get_state`` is set.
     """
     obs = _evolve_with_propagator(ctx) if ctx.step_propagator is not None else _evolve_with_ode(ctx)
+    if ctx.sim_params.get_state:
+        rho_vec = _rho_vec_at_elapsed_time(ctx)
+        rho_mat = rho_vec.reshape((ctx.dim, ctx.dim), order="F")
+        return obs, None, rho_mat
     return obs, None, None
 
 
 def lindblad(
     args: tuple[int, MPS, NoiseModel | None, AnalogSimParams, MPO],
-) -> tuple[NDArray[np.float64], None, None]:
+) -> tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]:
     """Run an exact Lindblad master-equation simulation.
 
     Args:
@@ -384,9 +451,9 @@ def lindblad(
             - MPO: The Hamiltonian.
 
     Returns:
-        tuple[NDArray[np.float64], None, None]: Observable data, no diagnostics, no final state.
+        tuple[NDArray[np.float64], None, NDArray[np.complex128] | None]: Observable data,
+        no diagnostics, and optional final density matrix when ``get_state`` is set.
     """
     _i, initial_state, noise_model, sim_params, hamiltonian = args
     ctx = preprocess_lindblad(initial_state, hamiltonian, noise_model, sim_params)
-    obs_results, _, _ = lindblad_evolve(ctx)
-    return obs_results, None, None
+    return lindblad_evolve(ctx)

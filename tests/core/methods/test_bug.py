@@ -139,7 +139,7 @@ def test_prepare_canonical_site_tensors_three_sites() -> None:
     assert np.allclose(correct_env, left_envs[1])
     assert np.allclose(correct_canon, canon_sites[1])
     # Site 2
-    q_last, r_matrix = right_qr(correct_canon)
+    q_last, r_matrix = right_qr(np.asarray(correct_canon, dtype=np.complex128))
     correct_canon = np.tensordot(r_matrix, mps_tensors[2], axes=(1, 1)).transpose(1, 0, 2)
     correct_env = update_left_environment(q_last, q_last, mpo_tensors[1], left_envs[1])
     assert np.allclose(correct_env, left_envs[2])
