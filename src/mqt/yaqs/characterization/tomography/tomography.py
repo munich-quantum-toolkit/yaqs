@@ -139,7 +139,7 @@ def _reprepare_site_zero_forced(
     """
     # Force mixed-canonical form at site 0 to extract proper environment state.
     if mps.orthogonality_center is not None and mps.orthogonality_center != 0:
-        mps.move_orthogonality_center_to(0)
+        mps.shift_center_to(0)
     elif mps.orthogonality_center is None:
         mps.set_canonical_form(orthogonality_center=0)
     t_mps = mps.tensors[0]
@@ -159,7 +159,7 @@ def _reprepare_site_zero_forced(
         new_tensor[s, 0, :] = new_state[s] * env_vec
 
     mps.tensors[0] = new_tensor
-    mps.set_orthogonality_center(0)
+    mps.set_center(0)
 
     # Final Renormalization
     final_norm = mps.norm()

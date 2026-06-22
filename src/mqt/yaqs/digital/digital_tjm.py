@@ -185,7 +185,7 @@ def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
     site = gate.sites[0]
     state.tensors[site] = oe.contract("ab, bcd->acd", gate.tensor, state.tensors[site])
     if state.orthogonality_center is not None and state.orthogonality_center != site:
-        state.set_orthogonality_center(None)
+        state.set_center(None)
 
 
 def construct_generator_mpo(gate: BaseGate, length: int) -> tuple[MPO, int, int]:
@@ -253,7 +253,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
 
     # Shift the orthogonality center to the start of the window.
     if state.orthogonality_center is not None:
-        state.move_orthogonality_center_to(window[0])
+        state.shift_center_to(window[0])
     else:
         for i in range(window[0]):
             state.shift_orthogonality_center_right(i)
@@ -262,7 +262,7 @@ def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_s
     short_mpo.custom(mpo.tensors[window[0] : window[1] + 1], transpose=False)
     assert window[1] - window[0] + 1 > 1, "MPS cannot be length 1"
     short_state = MPS(length=window[1] - window[0] + 1, tensors=state.tensors[window[0] : window[1] + 1])
-    short_state.set_orthogonality_center(state.orthogonality_center)
+    short_state.set_center(state.orthogonality_center)
 
     return short_state, short_mpo, window
 
@@ -305,7 +305,7 @@ def apply_two_qubit_gate_tdvp(
     if uses_fixed_chi(sim_params):
         renorm_drift(state, sim_params)
     if state.orthogonality_center is not None:
-        state.set_orthogonality_center(window[0])
+        state.set_center(window[0])
 
     return first_site, last_site
 
@@ -375,7 +375,7 @@ def apply_two_qubit_gate_tebd(
     )
     state.tensors[left_site] = new_left
     state.tensors[right_site] = new_right
-    state.notify_split_two_site(left_site, right_site, "right")
+    state.update_center_after_split(left_site, right_site, "right")
     return left_site, right_site
 
 

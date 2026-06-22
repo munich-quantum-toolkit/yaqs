@@ -1083,6 +1083,11 @@ class MPO:
 
         Raises:
             ValueError: On length mismatch or missing ``sim_params`` when compressing.
+
+        Notes:
+            Applies the MPO at every site and invalidates the tracked orthogonality
+            center (``set_center(None)``). Compression re-establishes a center via
+            :meth:`~mqt.yaqs.core.data_structures.mps.MPS.compress`.
         """
         if len(self.tensors) != state.length:
             msg = f"MPO length {len(self.tensors)} does not match MPS length {state.length}."
@@ -1090,6 +1095,8 @@ class MPO:
 
         for site, operator in enumerate(self.tensors):
             state.tensors[site] = contract_mpo_site_with_mps_site(operator, state.tensors[site])
+
+        state.set_center(None)
 
         if not compress:
             return

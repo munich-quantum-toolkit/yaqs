@@ -76,7 +76,7 @@ def apply_scheduled_jumps(
                 site = sites[0]
                 state.tensors[site] = oe.contract("ab, bcd->acd", jump_op, state.tensors[site])
                 if state.orthogonality_center is not None and state.orthogonality_center != site:
-                    state.set_orthogonality_center(None)
+                    state.set_center(None)
             elif len(sites) == 2:
                 i, j = sorted(sites)
                 if abs(i - j) != 1:
@@ -96,7 +96,7 @@ def apply_scheduled_jumps(
                     max_bond_dim=sim_params.max_bond_dim,
                 )
                 state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
-                state.notify_split_two_site(i, j, "right")
+                state.update_center_after_split(i, j, "right")
 
     state.normalize("B")
     return state

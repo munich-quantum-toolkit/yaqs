@@ -92,13 +92,13 @@ def create_probability_distribution(
         return []
 
     if state.orthogonality_center is not None:
-        state.require_orthogonality_center(0, context="create_probability_distribution")
+        state.assert_center(0, context="create_probability_distribution")
 
     dp_m_list: list[float] = []
 
     for site in range(state.length):
         if site != 0 and state.orthogonality_center is not None:
-            state.move_orthogonality_center_to(site)
+            state.shift_center_to(site)
 
         # --- 1-site jumps at this site ---
         for process in noise_model.processes:
@@ -182,12 +182,12 @@ def stochastic_process(
         rng = np.random.default_rng()
 
     if state.orthogonality_center is not None:
-        state.require_orthogonality_center(0, context="stochastic_process")
+        state.assert_center(0, context="stochastic_process")
 
     dp = calculate_stochastic_factor(state)
     if noise_model is None or rng.random() >= dp:
         if state.orthogonality_center is not None and state.orthogonality_center != 0:
-            state.move_orthogonality_center_to(0)
+            state.shift_center_to(0)
         elif state.orthogonality_center is None:
             state.set_canonical_form(0)
         return state
@@ -197,7 +197,7 @@ def stochastic_process(
 
     if len(probabilities) == 0:
         if state.orthogonality_center is not None and state.orthogonality_center != 0:
-            state.move_orthogonality_center_to(0)
+            state.shift_center_to(0)
         elif state.orthogonality_center is None:
             state.set_canonical_form(0)
         return state
@@ -217,7 +217,7 @@ def stochastic_process(
         jump_op = chosen_process["matrix"]
         state.tensors[site] = oe.contract("ab, bcd->acd", jump_op, state.tensors[site])
         if state.orthogonality_center is not None and state.orthogonality_center != site:
-            state.set_orthogonality_center(None)
+            state.set_center(None)
 
     else:
         # 2-site jump: check if long-range or adjacent
@@ -227,7 +227,7 @@ def stochastic_process(
             jump_op_0, jump_op_1 = chosen_process["factors"][0], chosen_process["factors"][1]
             state.tensors[i] = oe.contract("ab, bcd->acd", jump_op_0, state.tensors[i])
             state.tensors[j] = oe.contract("ab, bcd->acd", jump_op_1, state.tensors[j])
-            state.set_orthogonality_center(None)
+            state.set_center(None)
         else:
             # Adjacent 2-site process: use matrix
             if np.abs(i - j) > 1:
@@ -248,7 +248,7 @@ def stochastic_process(
             )
             state.tensors[i], state.tensors[j] = tensor_left_new, tensor_right_new
             left_site, right_site = min(i, j), max(i, j)
-            state.notify_split_two_site(left_site, right_site, "right")
+            state.update_center_after_split(left_site, right_site, "right")
 
     # Normalize MPS after jump
     state.normalize("B", decomposition="SVD")

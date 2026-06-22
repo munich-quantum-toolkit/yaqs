@@ -817,6 +817,25 @@ def test_multiply_mps_with_compression() -> None:
     sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
     gate_mpo.multiply(state, sim_params=sim_params, compress=True)
     state.check_if_valid_mps()
+    assert state.orthogonality_center is not None
+
+
+def test_multiply_mps_invalidates_then_restores_center() -> None:
+    """``multiply(MPS)`` clears gauge during apply and ``compress`` restores tracking."""
+    length = 3
+    state = MPS(length, state="haar-random", pad=4)
+    state.normalize("B")
+    assert state.orthogonality_center == 0
+    gate = GateLibrary.cx()
+    gate.set_sites(0, 1)
+    gate_mpo = MPO.from_gate(gate, length)
+    sim_params = StrongSimParams(observables=[Observable(Z(), 0)], preset="exact")
+    gate_mpo.multiply(state, sim_params=sim_params, compress=True)
+    assert state.orthogonality_center is not None
+    obs = Observable(GateLibrary.z(), 1)
+    exp = state.expect(obs)
+    assert np.isfinite(exp)
+    assert abs(exp) <= 1.0
 
 
 def test_multiply_mps_compress_requires_sim_params() -> None:

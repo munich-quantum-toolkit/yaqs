@@ -92,7 +92,7 @@ def tdvp(
         msg = "MPS and operator must have the same number of sites."
         raise ValueError(msg)
     if state.orthogonality_center is not None:
-        state.require_orthogonality_center(0, context="tdvp")
+        state.assert_center(0, context="tdvp")
     tdvp_mode = sim_params.tdvp_mode
     if tdvp_mode in {"2site", "dynamic"} and operator.length == 1:
         tdvp_mode = "1site"

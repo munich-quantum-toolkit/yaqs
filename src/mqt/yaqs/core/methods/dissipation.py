@@ -97,11 +97,11 @@ def apply_dissipation(
     """
     if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
         if state.orthogonality_center is not None and state.orthogonality_center != 0:
-            state.move_orthogonality_center_to(0)
+            state.shift_center_to(0)
         return
 
     if state.orthogonality_center is not None:
-        state.move_orthogonality_center_to(state.length - 1, decomposition="SVD")
+        state.shift_center_to(state.length - 1, decomposition="SVD")
     else:
         state.set_canonical_form(state.length - 1, decomposition="SVD")
 
@@ -152,10 +152,10 @@ def apply_dissipation(
                         max_bond_dim=sim_params.max_bond_dim,
                     )
                     state.tensors[i - 1], state.tensors[i] = tensor_left, tensor_right
-                    state.notify_split_two_site(i - 1, i, "right")
+                    state.update_center_after_split(i - 1, i, "right")
 
         # Shift orthogonality center
         if i != 0:
             state.shift_orthogonality_center_left(current_orthogonality_center=i, decomposition="SVD")
 
-    state.set_orthogonality_center(0)
+    state.set_center(0)

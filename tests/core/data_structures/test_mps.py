@@ -1475,7 +1475,7 @@ def test_shift_orthogonality_center_asserts_on_mismatch() -> None:
     """Shift helpers assert when the requested center disagrees with tracking."""
     mps = MPS(3, state="zeros")
     assert mps.orthogonality_center == 0
-    mps.set_orthogonality_center(1)
+    mps.set_center(1)
     with pytest.raises(AssertionError):
         mps.shift_orthogonality_center_right(0)
 
@@ -1483,7 +1483,7 @@ def test_shift_orthogonality_center_asserts_on_mismatch() -> None:
 def test_orthogonality_center_preserved_by_deepcopy() -> None:
     """Deep copies carry the tracked orthogonality center."""
     mps = MPS(3, state="zeros")
-    mps.set_orthogonality_center(2)
+    mps.set_center(2)
     copied = copy.deepcopy(mps)
     assert copied.orthogonality_center == 2
 
@@ -1495,13 +1495,57 @@ def test_single_qubit_gate_gauge_policy() -> None:
     gate = np.array([[0, 1], [1, 0]], dtype=np.complex128)
     mps.tensors[1] = oe.contract("ab, bcd->acd", gate, mps.tensors[1])
     if mps.orthogonality_center != 1:
-        mps.set_orthogonality_center(None)
+        mps.set_center(None)
     assert mps.orthogonality_center is None
 
     mps2 = MPS(1, state="x+")
     assert mps2.orthogonality_center == 0
     mps2.tensors[0] = oe.contract("ab, bcd->acd", gate, mps2.tensors[0])
     assert mps2.orthogonality_center == 0
+
+
+def test_update_center_after_split() -> None:
+    """``update_center_after_split`` sets the tracked center from SVD distribution."""
+    mps = MPS(4, state="zeros")
+    mps.update_center_after_split(1, 2, "right")
+    assert mps.orthogonality_center == 2
+    mps.update_center_after_split(0, 1, "left")
+    assert mps.orthogonality_center == 0
+    mps.update_center_after_split(1, 2, "sqrt")
+    assert mps.orthogonality_center is None
+
+
+def test_compress_restores_center_when_gauge_unknown() -> None:
+    """``compress`` assigns ``orthogonality_center`` after sweeping from inferred center."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    mps.set_center(None)
+    assert mps.orthogonality_center is None
+    mps.compress(threshold=1e-12, max_bond_dim=8)
+    assert mps.orthogonality_center is not None
+    obs = Observable(GateLibrary.z(), 2)
+    assert isinstance(mps.expect(obs), float)
+
+
+def test_measure_single_shot_off_center() -> None:
+    """``measure_single_shot`` matches single-site ``measure`` when center starts away from site 0."""
+    mps = MPS(4, state="haar-random", pad=4)
+    mps.normalize("B")
+    mps.set_canonical_form(2)
+    rng = np.random.default_rng(0)
+    shots = 500
+    single_site_counts = {0: 0, 1: 0}
+    for _ in range(shots):
+        copy_state = copy.deepcopy(mps)
+        single_site_counts[copy_state.measure(0, rng=rng)] += 1
+    full_chain_counts = {0: 0, 1: 0}
+    for _ in range(shots):
+        outcome = mps.measure_single_shot(rng=rng)
+        full_chain_counts[outcome & 1] += 1
+    for bit in (0, 1):
+        p_single = single_site_counts[bit] / shots
+        p_full = full_chain_counts[bit] / shots
+        assert p_full == pytest.approx(p_single, abs=0.08)
 
 
 def test_evaluate_observables_meta_validation_errors() -> None:

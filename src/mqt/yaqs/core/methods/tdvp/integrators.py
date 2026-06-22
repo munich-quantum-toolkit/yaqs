@@ -153,7 +153,7 @@ def sweep_1site(
             krylov_tol=sim_params.krylov_tol,
         )
 
-    state.set_orthogonality_center(0)
+    state.set_center(0)
 
 
 def sweep_2site(
@@ -211,6 +211,7 @@ def sweep_2site(
                 "right",
                 dynamic=False,
             )
+            state.update_center_after_split(i, i + 1, "right")
             left_blocks[i + 1] = update_left_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
@@ -241,6 +242,7 @@ def sweep_2site(
             "left",
             dynamic=False,
         )
+        state.update_center_after_split(i, i + 1, "left")
 
         right_blocks[i] = update_right_environment(
             state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
@@ -276,6 +278,7 @@ def sweep_2site(
                 "left",
                 dynamic=False,
             )
+            state.update_center_after_split(i, i + 1, "left")
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
@@ -283,7 +286,7 @@ def sweep_2site(
         if drift_renorm and uses_fixed_chi(sim_params):
             renorm_drift(state, sim_params)
 
-    state.set_orthogonality_center(0)
+    state.set_center(0)
 
 
 def sweep_dynamic(
@@ -387,6 +390,7 @@ def sweep_dynamic(
                 "right",
                 dynamic=True,
             )
+            state.update_center_after_split(i, i + 1, "right")
             right_blocks[i] = update_right_environment(
                 state.tensors[i + 1], state.tensors[i + 1], operator.tensors[i + 1], right_blocks[i + 1]
             )
@@ -413,6 +417,7 @@ def sweep_dynamic(
                 "right",
                 dynamic=True,
             )
+            state.update_center_after_split(i, i + 1, "right")
             left_blocks[i + 1] = update_left_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], left_blocks[i]
             )
@@ -484,6 +489,7 @@ def sweep_dynamic(
                 "left",
                 dynamic=True,
             )
+            state.update_center_after_split(i - 1, i, "left")
             right_blocks[i - 1] = update_right_environment(
                 state.tensors[i], state.tensors[i], operator.tensors[i], right_blocks[i]
             )
@@ -500,4 +506,4 @@ def sweep_dynamic(
     if uses_fixed_chi(sim_params):
         renorm_drift(state, sim_params)
 
-    state.set_orthogonality_center(0)
+    state.set_center(0)
