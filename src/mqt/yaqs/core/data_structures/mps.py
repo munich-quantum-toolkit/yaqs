@@ -9,14 +9,15 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import copy
-import multiprocessing
-from typing import TYPE_CHECKING
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
 from tqdm import tqdm
+
+from mqt.yaqs.parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
 
 from .. import linalg
 from ..methods.decompositions import merge_two_site, right_qr, split_two_site
@@ -26,6 +27,22 @@ if TYPE_CHECKING:
 
     from ..methods.decompositions import TruncMode
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
+
+# Worker-global state for parallel ``measure_shots`` (initialized once per process).
+_MEASURE_SHOTS_CTX: dict[str, Any] = {}
+
+
+def _measure_shots_worker_init(mps: MPS, basis: str) -> None:
+    """Initialize a measure-shots worker and cap numerical thread pools."""
+    limit_worker_threads(1)
+    _MEASURE_SHOTS_CTX.clear()
+    _MEASURE_SHOTS_CTX["mps"] = mps
+    _MEASURE_SHOTS_CTX["basis"] = basis
+
+
+def _measure_shots_worker(_shot_idx: int) -> int:
+    """Run a single measurement shot using the worker-global MPS context."""
+    return _MEASURE_SHOTS_CTX["mps"].measure_single_shot(_MEASURE_SHOTS_CTX["basis"])
 
 
 class MPS:
@@ -503,7 +520,7 @@ class MPS:
         theta = np.tensordot(a, b, axes=(2, 1))
         phys_i, left = a.shape[0], a.shape[1]
         phys_j, right = b.shape[0], b.shape[2]
-        theta_mat = theta.reshape(left * phys_i, phys_j * right)
+        theta_mat = theta.reshape(left * phys_i, phys_j * right).astype(np.complex128)
 
         s = linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
         s2 = (s.astype(np.float64)) ** 2
@@ -545,7 +562,7 @@ class MPS:
         theta = np.tensordot(a, b, axes=(2, 1))
         phys_i, left = a.shape[0], a.shape[1]
         phys_j, right = b.shape[0], b.shape[2]
-        theta_mat = theta.reshape(left * phys_i, phys_j * right)
+        theta_mat = theta.reshape(left * phys_i, phys_j * right).astype(np.complex128)
 
         _, s_vec, _ = linalg.svd(theta_mat, full_matrices=False)
 
@@ -1153,20 +1170,53 @@ class MPS:
             - A progress bar (via tqdm) displays the progress of the measurement process.
         """
         results: dict[int, int] = {}
-        if shots > 1:
-            max_workers = max(1, multiprocessing.cpu_count() - 1)
-            with (
-                concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor,
-                tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
-            ):
-                futures = [executor.submit(self.measure_single_shot, basis) for _ in range(shots)]
-                for future in concurrent.futures.as_completed(futures):
-                    result = future.result()
-                    results[result] = results.get(result, 0) + 1
+        if shots <= 1:
+            basis_state = self.measure_single_shot(basis)
+            results[basis_state] = results.get(basis_state, 0) + 1
+            return results
+
+        max_workers = max(1, min(max(1, available_cpus() - 1), shots))
+        if max_workers == 1:
+            with tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar:
+                for _ in range(shots):
+                    outcome = self.measure_single_shot(basis)
+                    results[outcome] = results.get(outcome, 0) + 1
                     pbar.update(1)
             return results
-        basis_state = self.measure_single_shot(basis)
-        results[basis_state] = results.get(basis_state, 0) + 1
+
+        ctx = get_parallel_context("auto")
+        inflight_factor = 2
+        max_inflight = max_workers * inflight_factor
+
+        with (
+            ProcessPoolExecutor(
+                max_workers=max_workers,
+                mp_context=ctx,
+                initializer=_measure_shots_worker_init,
+                initargs=(self, basis),
+            ) as executor,
+            tqdm(total=shots, desc="Measuring shots", ncols=80) as pbar,
+        ):
+            futures: dict[Future[int], None] = {}
+            next_shot = 0
+
+            def submit_shot(idx: int) -> None:
+                futures[executor.submit(_measure_shots_worker, idx)] = None
+
+            while next_shot < shots and len(futures) < max_inflight:
+                submit_shot(next_shot)
+                next_shot += 1
+
+            while futures:
+                done, _ = wait(futures, return_when=FIRST_COMPLETED)
+                for fut in done:
+                    futures.pop(fut)
+                    outcome = fut.result()
+                    results[outcome] = results.get(outcome, 0) + 1
+                    pbar.update(1)
+                    if next_shot < shots:
+                        submit_shot(next_shot)
+                        next_shot += 1
         return results
 
     def measure(self, site: int, basis: str = "Z", rng: np.random.Generator | None = None) -> int:

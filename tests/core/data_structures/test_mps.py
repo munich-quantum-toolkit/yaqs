@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import copy
+from unittest.mock import patch
 
 import numpy as np
 import opt_einsum as oe
@@ -592,6 +593,15 @@ def test_measure_shots_basis() -> None:
     assert results.get(0, 0) > 0
     assert results.get(1, 0) > 0
     assert sum(results.values()) == 20
+
+
+def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``measure_shots`` must not spawn extra workers inside a pytest-xdist worker."""
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    psi = MPS(length=2, state="zeros")
+    with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
+        psi.measure_shots(shots=5)
+    mock_executor.assert_not_called()
 
 
 def test_inplace_measure() -> None:
