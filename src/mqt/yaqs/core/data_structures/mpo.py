@@ -19,7 +19,7 @@ import scipy.sparse
 from numpy.typing import NDArray
 
 from .. import linalg
-from ..libraries.gate_library import BaseGate, Destroy
+from ..libraries.gate_library import Destroy
 from .mpo_utils import (
     contract_mpo_site_with_mpo_site,
     contract_mpo_site_with_mps_site,
@@ -29,6 +29,9 @@ from .mpo_utils import (
 from .mps import MPS
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from ..libraries.gate_library import BaseGate
     from ..methods.decompositions import TruncMode
     from .simulation_parameters import StrongSimParams, WeakSimParams
 
@@ -53,6 +56,7 @@ class MPO:
     - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
     - ``MPO.pauli(...)``: generic one-/two-body Pauli interactions.
     - ``MPO.fermi_hubbard_1d(...)``: 1D Fermi-Hubbard (fermionic or Jordan-Wigner Pauli).
+    - ``MPO.trapped_ions_position_grid(...)``: one or two trapped ions on a position grid.
     - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
     - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
     - ``MPO.identity(...)``: identity operator.
@@ -594,6 +598,157 @@ class MPO:
         # Backward-compat: single attribute even though dims alternate.
         mpo.physical_dimension = local_dim
 
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+        return mpo
+
+    @classmethod
+    def trapped_ions_position_grid(
+        cls,
+        positions: NDArray[np.float64],
+        masses: Sequence[float],
+        omega: float,
+        *,
+        trap_center: float = 0.0,
+        hbar: float = 1.0,
+        coulomb_strength: float = 0.0,
+        softening_length: float | None = None,
+        coulomb_cutoff: float = 1e-12,
+        max_bond_dim: int | None = None,
+    ) -> MPO:
+        r"""Construct a static one- or two-ion Hamiltonian on a uniform position grid.
+
+        Each ion is one MPO site whose local basis consists of the supplied position-grid
+        points. The Hamiltonian is:
+
+        H = sum_i[-hbar^2/(2*m_i) * d^2/dx_i^2 + (1/2)*m_i*omega^2*(x_i - q)^2]
+            + g / sqrt((x_1 - x_2)^2 + a^2)
+
+        The kinetic energy uses a centered second-order finite difference. For two ions, 
+        an SVD of the diagonal Coulomb coefficient matrix produces the MPO interaction 
+        channels. Discarding singular values according to ``coulomb_cutoff`` or 
+        ``max_bond_dim`` approximates only the Coulomb term.
+
+        Args:
+            positions: Uniformly spaced one-dimensional position grid.
+            masses: One or two positive ion masses. Each ion becomes one MPO site.
+            omega: Non-negative harmonic trap angular frequency.
+            trap_center: Center ``q`` of the static harmonic trap.
+            hbar: Positive reduced Planck constant.
+            coulomb_strength: Coulomb prefactor ``g``. Must be zero for one ion.
+            softening_length: Positive short-distance regularizer ``a`` to avoid Coulomb 
+                singularity. Defaults to the grid spacing for two ions.
+            coulomb_cutoff: Relative SVD cutoff. Singular values no larger than this
+                fraction of the largest one are discarded. Set to zero for the exact
+                grid interaction.
+            max_bond_dim: Optional cap on the total MPO bond dimension. For two ions,
+                two channels are reserved for the local Hamiltonians.
+
+        Returns:
+            MPO for the static trapped-ion Hamiltonian in energy units.
+
+        Raises:
+            ValueError: If the grid or physical parameters are invalid, if the number of
+                masses is not one or two, or if ``max_bond_dim`` is too small.
+
+        Notes:
+            YAQS time evolution applies ``exp(-1j * dt * H)``. When using dimensional
+            quantities, rescale the returned MPO to represent ``H / hbar`` or measure
+            time and energy in compatible units.
+        """
+        grid = np.asarray(positions, dtype=np.float64)
+        if grid.ndim != 1 or grid.size < 3:
+            msg = "positions must be a one-dimensional grid with at least three points."
+            raise ValueError(msg)
+        if not np.all(np.isfinite(grid)):
+            msg = "positions must contain only finite values."
+            raise ValueError(msg)
+        spacings = np.diff(grid)
+        if np.any(spacings <= 0.0) or not np.allclose(spacings, spacings[0], rtol=1e-12, atol=1e-15):
+            msg = "positions must be strictly increasing and uniformly spaced."
+            raise ValueError(msg)
+
+        ion_masses = np.asarray(masses, dtype=np.float64)
+        if ion_masses.ndim != 1 or ion_masses.size not in {1, 2}:
+            msg = "masses must contain exactly one or two ion masses."
+            raise ValueError(msg)
+        if not np.all(np.isfinite(ion_masses)) or np.any(ion_masses <= 0.0):
+            msg = "masses must contain only finite positive values."
+            raise ValueError(msg)
+        if not np.isfinite(omega) or omega < 0.0:
+            msg = "omega must be finite and non-negative."
+            raise ValueError(msg)
+        if not np.isfinite(trap_center):
+            msg = "trap_center must be finite."
+            raise ValueError(msg)
+        if not np.isfinite(hbar) or hbar <= 0.0:
+            msg = "hbar must be finite and positive."
+            raise ValueError(msg)
+        if not np.isfinite(coulomb_strength):
+            msg = "coulomb_strength must be finite."
+            raise ValueError(msg)
+        if not np.isfinite(coulomb_cutoff) or not 0.0 <= coulomb_cutoff < 1.0:
+            msg = "coulomb_cutoff must be finite and satisfy 0 <= coulomb_cutoff < 1."
+            raise ValueError(msg)
+        if max_bond_dim is not None and max_bond_dim < 2:
+            msg = "max_bond_dim must be at least 2."
+            raise ValueError(msg)
+        if ion_masses.size == 1 and coulomb_strength:
+            msg = "coulomb_strength must be zero for a one-ion Hamiltonian."
+            raise ValueError(msg)
+
+        d = grid.size
+        dx = float(spacings[0])
+
+        def local_hamiltonian(mass: float) -> ComplexTensor:
+            kinetic_diagonal = np.full(d, hbar**2 / (mass * dx**2), dtype=np.float64)
+            kinetic_off_diagonal = np.full(d - 1, -(hbar**2 / (2.0 * mass * dx**2)), dtype=np.float64)
+            kinetic = (
+                np.diag(kinetic_diagonal) + np.diag(kinetic_off_diagonal, k=-1) + np.diag(kinetic_off_diagonal, k=1)
+            )
+            potential = 0.5 * mass * omega**2 * (grid - trap_center) ** 2
+            return np.asarray(kinetic + np.diag(potential), dtype=np.complex128)
+
+        local_terms = [local_hamiltonian(float(mass)) for mass in ion_masses]
+        mpo = cls()
+        mpo.length = int(ion_masses.size)
+        mpo.physical_dimension = d
+
+        if ion_masses.size == 1:
+            mpo.tensors = [local_terms[0][:, :, None, None]]
+            assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+            return mpo
+
+        if softening_length is None:
+            softening_length = dx
+        if not np.isfinite(softening_length) or softening_length <= 0.0:
+            msg = "softening_length must be finite and positive."
+            raise ValueError(msg)
+
+        distance = grid[:, None] - grid[None, :]
+        coulomb = coulomb_strength / np.sqrt(distance**2 + softening_length**2)
+        u, singular_values, vh = linalg.svd(coulomb, full_matrices=False)
+        if not singular_values[0]:
+            rank = 0
+        else:
+            rank = int(np.count_nonzero(singular_values > coulomb_cutoff * singular_values[0]))
+        if max_bond_dim is not None:
+            rank = min(rank, max_bond_dim - 2)
+
+        bond_dimension = rank + 2
+        identity = np.eye(d, dtype=np.complex128)
+        left = np.zeros((d, d, 1, bond_dimension), dtype=np.complex128)
+        right = np.zeros((d, d, bond_dimension, 1), dtype=np.complex128)
+        left[:, :, 0, 0] = local_terms[0]
+        right[:, :, 0, 0] = identity
+        left[:, :, 0, 1] = identity
+        right[:, :, 1, 0] = local_terms[1]
+
+        for alpha in range(rank):
+            scale = math.sqrt(float(singular_values[alpha]))
+            left[:, :, 0, alpha + 2] = np.diag(scale * u[:, alpha])
+            right[:, :, alpha + 2, 0] = np.diag(scale * vh[alpha, :])
+
+        mpo.tensors = [left, right]
         assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
         return mpo
 

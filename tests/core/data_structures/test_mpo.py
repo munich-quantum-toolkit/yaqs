@@ -24,6 +24,8 @@ from mqt.yaqs.core.data_structures.simulation_parameters import Observable, Stro
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from numpy.typing import NDArray
 
 # ---- single-qubit ops ----
@@ -178,6 +180,26 @@ def _bose_hubbard_dense(length: int, local_dim: int, omega: float, hopping_j: fl
         H += -hopping_j * embed(op_list2)  # noqa: N806
 
     return H
+
+
+def _position_grid_local_hamiltonian(
+    positions: np.ndarray,
+    mass: float,
+    omega: float,
+    trap_center: float,
+    hbar: float,
+) -> np.ndarray:
+    """Construct the dense one-ion finite-difference Hamiltonian used as a test reference.
+
+    Returns:
+        Dense local Hamiltonian in the position-grid basis.
+    """
+    d = positions.size
+    dx = positions[1] - positions[0]
+    second_derivative = (np.diag(np.ones(d - 1), k=-1) - 2.0 * np.eye(d) + np.diag(np.ones(d - 1), k=1)) / dx**2
+    kinetic = -(hbar**2 / (2.0 * mass)) * second_derivative
+    potential = np.diag(0.5 * mass * omega**2 * (positions - trap_center) ** 2)
+    return kinetic + potential
 
 
 def _embed_local_ops(length: int, local_dim: int, site_ops: list[np.ndarray]) -> np.ndarray:
@@ -398,6 +420,106 @@ def test_bose_hubbard_correct_operator() -> None:
     H_dense = _bose_hubbard_dense(length, local_dim, omega, J, U)  # noqa: N806
     H_mpo = mpo.to_matrix()  # noqa: N806
     np.testing.assert_allclose(H_mpo, H_dense, atol=1e-8)
+
+
+def test_trapped_ions_position_grid_one_ion() -> None:
+    """Verify the one-ion position-grid MPO against a dense finite-difference reference."""
+    positions = np.linspace(-1.5, 1.5, 5)
+    mass = 1.7
+    omega = 0.8
+    trap_center = 0.2
+    hbar = 0.9
+
+    mpo = MPO.trapped_ions_position_grid(
+        positions,
+        [mass],
+        omega,
+        trap_center=trap_center,
+        hbar=hbar,
+    )
+
+    expected = _position_grid_local_hamiltonian(positions, mass, omega, trap_center, hbar)
+    assert mpo.length == 1
+    assert mpo.physical_dimension == positions.size
+    assert mpo.tensors[0].shape == (positions.size, positions.size, 1, 1)
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+
+
+def test_trapped_ions_position_grid_two_ions() -> None:
+    """Verify the exact two-ion MPO including its softened Coulomb interaction."""
+    positions = np.linspace(-1.0, 1.0, 4)
+    masses = [1.2, 1.8]
+    omega = 0.7
+    trap_center = -0.1
+    hbar = 0.85
+    coulomb_strength = 0.6
+    softening_length = 0.3
+
+    mpo = MPO.trapped_ions_position_grid(
+        positions,
+        masses,
+        omega,
+        trap_center=trap_center,
+        hbar=hbar,
+        coulomb_strength=coulomb_strength,
+        softening_length=softening_length,
+        coulomb_cutoff=0.0,
+    )
+
+    h1 = _position_grid_local_hamiltonian(positions, masses[0], omega, trap_center, hbar)
+    h2 = _position_grid_local_hamiltonian(positions, masses[1], omega, trap_center, hbar)
+    identity = np.eye(positions.size)
+    distance = positions[:, None] - positions[None, :]
+    coulomb = coulomb_strength / np.sqrt(distance**2 + softening_length**2)
+    expected = np.kron(h1, identity) + np.kron(identity, h2) + np.diag(coulomb.ravel())
+
+    assert mpo.length == 2
+    assert mpo.physical_dimension == positions.size
+    assert mpo.tensors[0].shape[3] == positions.size + 2
+    assert mpo.tensors[1].shape[2] == positions.size + 2
+    np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-11)
+    np.testing.assert_allclose(mpo.to_matrix(), mpo.to_matrix().conj().T, atol=1e-12)
+
+
+def test_trapped_ions_position_grid_coulomb_truncation() -> None:
+    """Verify that max_bond_dim caps Coulomb channels while retaining local terms."""
+    positions = np.linspace(-2.0, 2.0, 6)
+    mpo = MPO.trapped_ions_position_grid(
+        positions,
+        [1.0, 1.0],
+        0.5,
+        coulomb_strength=0.4,
+        max_bond_dim=4,
+    )
+
+    assert mpo.tensors[0].shape[3] == 4
+    assert mpo.tensors[1].shape[2] == 4
+    np.testing.assert_allclose(mpo.to_matrix(), mpo.to_matrix().conj().T, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"positions": np.array([0.0, 1.0]), "masses": [1.0], "omega": 1.0}, "at least three"),
+        ({"positions": np.array([0.0, 1.0, 3.0]), "masses": [1.0], "omega": 1.0}, "uniformly spaced"),
+        ({"positions": np.arange(3.0), "masses": [], "omega": 1.0}, "exactly one or two"),
+        ({"positions": np.arange(3.0), "masses": [-1.0], "omega": 1.0}, "finite positive"),
+        ({"positions": np.arange(3.0), "masses": [1.0], "omega": -1.0}, "non-negative"),
+        (
+            {"positions": np.arange(3.0), "masses": [1.0], "omega": 1.0, "coulomb_strength": 1.0},
+            "must be zero",
+        ),
+        (
+            {"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "softening_length": 0.0},
+            "finite and positive",
+        ),
+        ({"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "max_bond_dim": 1}, "at least 2"),
+    ],
+)
+def test_trapped_ions_position_grid_validation(kwargs: dict[str, Any], match: str) -> None:
+    """Reject malformed trapped-ion grids and physical parameters."""
+    with pytest.raises(ValueError, match=match):
+        MPO.trapped_ions_position_grid(**kwargs)
 
 
 def test_fermi_hubbard_1d_correct_operator() -> None:
