@@ -18,13 +18,14 @@ import opt_einsum as oe
 from tqdm import tqdm
 
 from mqt.yaqs.parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
-from yaqs.core import linalg
-from yaqs.core.methods.decompositions import merge_two_site, right_qr, split_two_site
+
+from .. import linalg
+from ..methods.decompositions import merge_two_site, right_qr, split_two_site
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from yaqs.core.methods.decompositions import TruncMode
+    from ..methods.decompositions import TruncMode
 
     from .simulation_parameters import AnalogSimParams, Observable, StrongSimParams
 
