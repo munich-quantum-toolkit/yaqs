@@ -23,6 +23,9 @@ Every example in this guide uses `Simulator(show_progress=False)` so progress ba
 Tensor-network time evolution on an MPS. Attach a `NoiseModel` for open-system TJM trajectories; without noise, the simulator performs a single unitary trajectory regardless of `num_traj`:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
 L = 3
@@ -39,7 +42,6 @@ params = AnalogSimParams(
 
 sim = Simulator(show_progress=False)
 result = sim.run(state, hamiltonian, params)
-print(f"⟨Z₀⟩(t) = {result.expectation_values[0]}")
 ```
 
 ## 2. Digital circuit simulation
@@ -47,6 +49,9 @@ print(f"⟨Z₀⟩(t) = {result.expectation_values[0]}")
 Noisy or noise-free evolution through a Qiskit circuit on an MPS:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from qiskit.circuit import QuantumCircuit
 
 from mqt.yaqs import Observable, StrongSimParams
@@ -64,7 +69,6 @@ circuit_params = StrongSimParams(
 )
 
 circuit_result = sim.run(circuit_state, qc, circuit_params)
-print("Final ⟨Zᵢ⟩:", [float(v[0]) for v in circuit_result.expectation_values])
 ```
 
 ## 3. Equivalence checking
@@ -72,6 +76,9 @@ print("Final ⟨Zᵢ⟩:", [float(v[0]) for v in circuit_result.expectation_valu
 Verify that two circuits implement the same unitary (up to global phase) with {class}`~mqt.yaqs.EquivalenceChecker`:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import EquivalenceChecker
 from qiskit.circuit import QuantumCircuit
 
@@ -89,7 +96,6 @@ rewritten.cx(0, 1)
 
 checker = EquivalenceChecker(representation="mpo", threshold=1e-6)
 equiv = checker.check(original, rewritten)
-print(f"Equivalent: {equiv['equivalent']}  (fidelity {equiv['fidelity']:.6f})")
 ```
 
 For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence_checking`.
@@ -99,7 +105,7 @@ For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence
 | Goal                                                | Start here                    |
 | --------------------------------------------------- | ----------------------------- |
 | Open-system dynamics, noise, time grids             | {doc}`analog_simulation`      |
-| Bell-curve (Gaussian) noise strengths               | {doc}`realistic_noise_models` |
+| Bell-curve (log-normal) noise strengths               | {doc}`realistic_noise_models` |
 | Circuit observables, mid-circuit sampling, OpenQASM | {doc}`circuit_simulation`     |
 | Accuracy presets and truncation knobs               | {doc}`simulation_parameters`  |
 | Check two circuits for equivalence                  | {doc}`equivalence_checking`   |

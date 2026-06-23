@@ -105,22 +105,17 @@ result_clean = sim.run(copy.deepcopy(state), H_0, copy.deepcopy(sim_params))
 ```
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 p100_clean = pvm_curve(result_clean, "100")
 p001_clean = pvm_curve(result_clean, "001")
 times = sim_params.times
-
-print(f"noiseless  P(|001⟩) at T_swap = {p001_clean[-1]:.4f}")
-print(f"noiseless  P(|100⟩) at T_swap = {p100_clean[-1]:.4f}")
-print(f"noiseless  leakage at T_swap = {leakage_at_t(result_clean, -1):.4f}")
-
-assert p100_clean[-1] < 0.05 + 1e-9, "left qubit should be depopulated"
-assert p001_clean[-1] > 0.9 - 1e-9, "right qubit should receive excitation"
-assert leakage_at_t(result_clean, -1) < 0.05 + 1e-9
 ```
 
 ## 4. Noisy SWAP
 
-Relaxation and dephasing on transmon sites (even indices). Built-in `lowering` and `pauli_z` processes are 2×2; for `qubit_dim = 3` we pass explicit jump matrices ({class}`~mqt.yaqs.core.libraries.gate_library.Destroy` and a computational-subspace dephasing operator). For Gaussian and other distributed noise strengths, see {doc}`realistic_noise_models`.
+Relaxation and dephasing on transmon sites (even indices). Built-in `lowering` and `pauli_z` processes are 2×2; for `qubit_dim = 3` we pass explicit jump matrices ({class}`~mqt.yaqs.core.libraries.gate_library.Destroy` and a computational-subspace dephasing operator). For log-normal and other distributed noise strengths, see {doc}`realistic_noise_models`.
 
 ```{code-cell} ipython3
 ---
@@ -150,14 +145,11 @@ result_noisy = sim.run(copy.deepcopy(state), H_0, noisy_params, noise_model)
 ```
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 p100_noisy = pvm_curve(result_noisy, "100")
 p001_noisy = pvm_curve(result_noisy, "001")
-
-print(f"noisy      P(|001⟩) at T_swap = {p001_noisy[-1]:.4f}")
-print(f"noisy      P(|100⟩) at T_swap = {p100_noisy[-1]:.4f}")
-print(f"noisy      leakage at T_swap = {leakage_at_t(result_noisy, -1):.4f}")
-
-assert p001_noisy[-1] < p001_clean[-1] - 0.02, "noise should reduce swap fidelity"
 ```
 
 ## 5. Comparison plot

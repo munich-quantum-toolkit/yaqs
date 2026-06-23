@@ -21,8 +21,8 @@ For hardware with **static disorder** (calibration drift, fabrication spread), e
 This page shows:
 
 1. A typical multi-channel noise model for an analog chain.
-2. **Gaussian (bell-curve) strengths** and the other built-in distributions.
-3. How sampled disorder changes open-system dynamics compared to a mean-strength baseline.
+2. **Log-normal disorder on strengths** (recommended when rates span orders of magnitude) and other built-in distributions.
+3. How sampled disorder changes open-system dynamics compared to a median-strength baseline.
 4. **Custom jump operators** via an explicit `matrix` (not only built-in library names).
 
 ## 1. Built-in noise processes
@@ -30,6 +30,9 @@ This page shows:
 Each process is a dictionary with `name`, `sites`, and `strength`. YAQS fills in the operator `matrix` (or per-site `factors` for long-range crosstalk) from {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import NoiseModel
 
 L = 4
@@ -42,25 +45,24 @@ processes = [
 ]
 
 noise_model = NoiseModel(processes)
-print(f"{len(noise_model.processes)} processes:")
-for proc in noise_model.processes:
-    print(f"  {proc['name']:16s} sites={proc['sites']}  strength={proc['strength']}")
 ```
 
-## 2. Bell-curve (Gaussian) disorder on strengths
+## 2. Log-normal disorder on strengths
 
-Replace a scalar `strength` with a dict describing the distribution. For a **normal** (Gaussian) bell curve, set `distribution` to `"normal"` and provide `mean` and `std`:
+When calibration rates vary across devices or qubits, strengths often span **several orders of magnitude**. A **log-normal** distribution is usually more realistic than a symmetric Gaussian on the rate itself.
+
+Replace a scalar `strength` with a dict. For log-normal sampling, `mean` and `std` are the parameters of the underlying normal distribution on $\log\gamma$:
 
 ```{code-cell} ipython3
-bell_curve_strength = {"distribution": "normal", "mean": 0.08, "std": 0.02}
+bell_curve_strength = {"distribution": "lognormal", "mean": -2.3, "std": 0.5}
 
 disordered_processes = [
-  {
-      "name": "pauli_z",
-      "sites": [i],
-      "strength": bell_curve_strength,
-  }
-  for i in range(L)
+    {
+        "name": "pauli_z",
+        "sites": [i],
+        "strength": bell_curve_strength,
+    }
+    for i in range(L)
 ]
 
 disordered_model = NoiseModel(disordered_processes)
@@ -70,70 +72,106 @@ Other supported distributions:
 
 | `distribution`       | Parameters    | Use when                                                                                 |
 | -------------------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `"lognormal"`        | `mean`, `std` | **Default choice** for positive rates spanning magnitudes (`mean`/`std` on $\log\gamma$). |
 | `"normal"`           | `mean`, `std` | Symmetric spread around a target rate; negatives are clamped to `0`.                     |
 | `"truncated_normal"` | `mean`, `std` | Same shape as normal but sampled only for non-negative strengths.                        |
-| `"lognormal"`        | `mean`, `std` | Log-normal rates (strictly positive; `mean`/`std` are the underlying normal parameters). |
 
-Sample many independent disorder realizations and plot the bell curve:
+Sample many independent disorder realizations and plot the bell curve on a log scale:
 
 ```{code-cell} ipython3
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
+from scipy import stats
 
 rng = np.random.default_rng(0)
 samples = [disordered_model.sample(rng=rng).processes[0]["strength"] for _ in range(5000)]
 
-fig, ax = plt.subplots(figsize=(6, 3.5))
+mu = bell_curve_strength["mean"]
+sigma = bell_curve_strength["std"]
+x = np.logspace(np.log10(min(samples)), np.log10(max(samples)), 200)
+pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
+
+fig, ax = plt.subplots(figsize=(7, 3.8), layout="constrained")
 ax.hist(samples, bins=40, density=True, alpha=0.7, color="tab:blue", label="sampled strengths")
-x = np.linspace(0, max(samples), 200)
-pdf = (
-    1.0 / (bell_curve_strength["std"] * np.sqrt(2 * np.pi))
-    * np.exp(-0.5 * ((x - bell_curve_strength["mean"]) / bell_curve_strength["std"]) ** 2)
-)
-ax.plot(x, pdf, color="black", lw=1.5, label="Gaussian pdf (negatives clamped)")
+ax.plot(x, pdf, color="black", lw=1.5, label="log-normal pdf")
+ax.set_xscale("log")
+
+# Sparse decade ticks with plain decimal labels (avoids crowded sci-notation on log axes)
+lo, hi = float(min(samples)), float(max(samples))
+tick_decades = np.arange(int(np.floor(np.log10(lo))), int(np.ceil(np.log10(hi))) + 1)
+tick_candidates = np.concatenate([np.array([1, 2, 5]) * 10.0**e for e in tick_decades])
+ticks = tick_candidates[(tick_candidates >= lo * 0.9) & (tick_candidates <= hi * 1.1)]
+if len(ticks) > 6:
+    ticks = ticks[np.linspace(0, len(ticks) - 1, 6, dtype=int)]
+ax.set_xticks(ticks)
+ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v:g}"))
+ax.xaxis.set_minor_locator(mticker.NullLocator())
+
 ax.set_xlabel("sampled dephasing strength")
 ax.set_ylabel("density")
-ax.set_title("Bell-curve disorder from a normal strength distribution")
+ax.set_title("Log-normal disorder (median ≈ {:.3f})".format(np.exp(mu)))
 ax.legend()
-ax.grid(alpha=0.3)
-plt.tight_layout()
+ax.grid(alpha=0.3, which="both")
 plt.show()
 ```
 
 ## 3. Disorder in an analog simulation
 
-We evolve a short Ising chain and compare:
+We evolve a short Ising chain from a Néel product state and compare:
 
-- **Baseline:** every site uses the distribution mean (`0.08`) as a fixed strength.
-- **Disordered:** strengths are drawn from the bell curve once at the start of each run.
+- **Baseline:** every site uses the log-normal **median** $\exp(\text{mean})$ as a fixed strength.
+- **Disordered:** strengths are drawn from the log-normal once at the start of each run.
+- **Ensemble band:** several independent disorder draws (different `random_seed`) to show typical spread.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
+# Wider log-normal spread for a visible disorder effect in dynamics
+dyn_strength = {"distribution": "lognormal", "mean": -0.7, "std": 1.0}
+dyn_disordered = NoiseModel([
+    {"name": "pauli_z", "sites": [i], "strength": dyn_strength} for i in range(L)
+])
+
 hamiltonian = Hamiltonian.ising(length=L, J=1.0, g=0.5)
-state = State(L, initial="zeros")
+state = State(L, initial="Neel")
 z_obs = Observable("z", sites=0)
 
 sim_params = AnalogSimParams(
     observables=[z_obs],
-    elapsed_time=2.0,
+    elapsed_time=8.0,
     dt=0.1,
-    num_traj=64,
-    max_bond_dim=16,
+    num_traj=32,
+    max_bond_dim=24,
     random_seed=7,
 )
 
+median_strength = float(np.exp(dyn_strength["mean"]))
 baseline_model = NoiseModel([
-    {"name": "pauli_z", "sites": [i], "strength": bell_curve_strength["mean"]} for i in range(L)
+    {"name": "pauli_z", "sites": [i], "strength": median_strength} for i in range(L)
 ])
 
 sim = Simulator(show_progress=False)
 result_baseline = sim.run(state, hamiltonian, sim_params, baseline_model)
-result_disordered = sim.run(state, hamiltonian, sim_params, disordered_model)
+result_disordered = sim.run(state, hamiltonian, sim_params, dyn_disordered)
 
-print("Sampled strengths from the disordered run:")
-for proc in result_disordered.noise_model.processes:
-    print(f"  site {proc['sites'][0]}: {proc['strength']:.4f}")
+# Ensemble of disorder realizations for a shaded band (keep small for doc build time)
+ensemble_curves = []
+for seed in range(8, 12):
+    params_i = AnalogSimParams(
+        observables=[z_obs],
+        elapsed_time=8.0,
+        dt=0.1,
+        num_traj=16,
+        max_bond_dim=24,
+        random_seed=seed,
+    )
+    res_i = sim.run(state, hamiltonian, params_i, dyn_disordered)
+    ensemble_curves.append(res_i.expectation_values[0])
+ensemble_curves = np.asarray(ensemble_curves)
 ```
 
 ```{code-cell} ipython3
@@ -143,19 +181,30 @@ mystnb:
     width: 80%
     align: center
 ---
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+
 times = sim_params.times
 baseline_curve = result_baseline.expectation_values[0]
 disordered_curve = result_disordered.expectation_values[0]
 
-plt.figure(figsize=(7, 4))
-plt.plot(times, baseline_curve, label="fixed mean strength", color="black", linestyle="--")
-plt.plot(times, disordered_curve, label="bell-curve disorder (one sample / run)", color="tab:orange")
-plt.xlabel("time")
-plt.ylabel(r"$\langle Z_0 \rangle$")
-plt.title("Static disorder shifts open-system decay")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.tight_layout()
+fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
+ax.fill_between(
+    times,
+    ensemble_curves.min(axis=0),
+    ensemble_curves.max(axis=0),
+    color="tab:orange",
+    alpha=0.25,
+    label="disordered ensemble (4 seeds)",
+)
+ax.plot(times, baseline_curve, label="fixed median strength", color="black", linestyle="--", lw=2)
+ax.plot(times, disordered_curve, label="one disordered sample", color="tab:orange", lw=1.5)
+ax.set_xlabel("time")
+ax.set_ylabel(r"$\langle Z_0 \rangle$")
+ax.set_title("Log-normal static disorder shifts open-system decay")
+ax.xaxis.set_major_locator(mticker.MaxNLocator(6))
+ax.legend()
+ax.grid(alpha=0.3)
 plt.show()
 ```
 
@@ -163,9 +212,12 @@ Re-running with the same `random_seed` reproduces the same sampled strengths and
 
 ## 4. Disorder on a noisy circuit
 
-The same distribution syntax works in digital simulation. Below, bit-flip rates on each qubit follow independent bell curves; one sample is drawn per `Simulator.run` call.
+The same distribution syntax works in digital simulation. Below, bit-flip rates on each qubit follow independent log-normal draws; one sample is drawn per `Simulator.run` call.
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import Observable, StrongSimParams
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 
@@ -176,7 +228,7 @@ circuit_noise = NoiseModel([
     {
         "name": "pauli_x",
         "sites": [i],
-        "strength": {"distribution": "truncated_normal", "mean": 0.05, "std": 0.02},
+        "strength": {"distribution": "lognormal", "mean": -3.0, "std": 0.4},
     }
     for i in range(num_qubits)
 ])
@@ -189,9 +241,6 @@ circuit_params = StrongSimParams(
 )
 
 circuit_result = sim.run(State(num_qubits, initial="zeros"), circuit, circuit_params, circuit_noise)
-sampled = [proc["strength"] for proc in circuit_result.noise_model.processes]
-print(f"truncated-normal bit-flip rates: {[f'{s:.4f}' for s in sampled]}")
-print(f"final <Z_0>: {circuit_result.expectation_values[0][0]:.4f}")
 ```
 
 ## 5. Long-range crosstalk
@@ -199,13 +248,13 @@ print(f"final <Z_0>: {circuit_result.expectation_values[0][0]:.4f}")
 Non-adjacent pairs use the `longrange_crosstalk_{ab}` naming convention; YAQS attaches per-site Pauli factors automatically:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 lr_model = NoiseModel([
     {"name": "longrange_crosstalk_xy", "sites": [0, 2], "strength": 0.05},
 ])
 sampled = lr_model.sample(rng=0)
-print("sites:", sampled.processes[0]["sites"])
-print("strength:", sampled.processes[0]["strength"])
-print("factors:", [f.shape for f in sampled.processes[0]["factors"]])
 ```
 
 ## 6. Custom jump operators
@@ -226,27 +275,30 @@ YAQS does not check complete positivity; supply physically meaningful jump opera
 The built-in `lowering` operator is $\sigma_- = |0\rangle\langle 1|$. You can pass the same matrix explicitly and mix custom and library processes in one model:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 import numpy as np
 
 sigma_minus = np.array([[0, 1], [0, 0]], dtype=complex)
 
 custom_model = NoiseModel([
     {"name": "t1_explicit", "sites": [0], "strength": 0.1, "matrix": sigma_minus},
-    {"name": "pauli_z", "sites": [1], "strength": 0.05},  # library lookup
+    {"name": "pauli_z", "sites": [1], "strength": 0.05},
 ])
-
-for proc in custom_model.processes:
-    print(f"{proc['name']:14s}  matrix shape={proc['matrix'].shape}")
 ```
 
 Run a short analog simulation—the custom operator is used wherever `NoiseModel.processes` is consumed:
 
 ```{code-cell} ipython3
+---
+tags: [remove-output]
+---
 from mqt.yaqs import AnalogSimParams, Hamiltonian, Observable, Simulator, State
 
-L = 2
-hamiltonian = Hamiltonian.ising(length=L, J=1.0, g=0.5)
-state = State(L, initial="one")  # |01>: site 0 can relax toward |00>
+L2 = 2
+hamiltonian = Hamiltonian.ising(length=L2, J=1.0, g=0.5)
+state = State(L2, initial="basis", basis_string="10")
 
 sim_params = AnalogSimParams(
     observables=[Observable("z", sites=0), Observable("z", sites=1)],
@@ -258,8 +310,6 @@ sim_params = AnalogSimParams(
 )
 
 result = Simulator(show_progress=False).run(state, hamiltonian, sim_params, custom_model)
-print(f"final <Z_0> = {result.expectation_values[0][-1]:.4f}")
-print(f"final <Z_1> = {result.expectation_values[1][-1]:.4f}")
 ```
 
 For $d>2$ local Hilbert spaces (e.g. transmon leakage), pass a `d×d` `matrix` matching the site's physical dimension—see {doc}`transmon_emulation`.
