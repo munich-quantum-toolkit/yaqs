@@ -99,7 +99,7 @@ ax.set_xscale("log")
 
 # Sparse decade ticks with plain decimal labels (avoids crowded sci-notation on log axes)
 lo, hi = float(min(samples)), float(max(samples))
-tick_decades = np.arange(int(np.floor(np.log10(lo))), int(np.ceil(np.log10(hi))) + 1)
+tick_decades = np.arrange(int(np.floor(np.log10(lo))), int(np.ceil(np.log10(hi))) + 1)
 tick_candidates = np.concatenate([np.array([1, 2, 5]) * 10.0**e for e in tick_decades])
 ticks = tick_candidates[(tick_candidates >= lo * 0.9) & (tick_candidates <= hi * 1.1)]
 if len(ticks) > 6:
