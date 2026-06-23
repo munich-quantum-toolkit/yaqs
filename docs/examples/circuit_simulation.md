@@ -179,7 +179,7 @@ mystnb:
 ---
 import matplotlib.pyplot as plt
 
-depth = np.arrange(yaqs.shape[1])
+depth = np.arange(yaqs.shape[1])
 qubit_labels = [rf"$q_{i}$" for i in range(layer_qubits)]
 
 fig, ax = plt.subplots(figsize=(8, 4), layout="constrained")
