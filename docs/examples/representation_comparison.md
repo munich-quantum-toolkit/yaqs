@@ -57,8 +57,10 @@ psi0 = init_ref.mps.to_vec()
 rho0 = np.outer(psi0, psi0.conj())
 mps_tensors0 = [np.asarray(t, dtype=np.complex128).copy() for t in init_ref.mps.tensors]
 
-t_max = 5.0
-dt = 0.05
+# Doc-build-friendly settings; increase t_max / num_traj for production runs.
+t_max = 1.0
+dt = 0.1
+num_traj = 32
 seed = 7
 
 params_rho = AnalogSimParams(observables=[obs], elapsed_time=t_max, dt=dt)
@@ -67,13 +69,13 @@ res_rho = result_rho.expectation_values[0].flatten()
 times = params_rho.times
 
 params_vector = AnalogSimParams(
-    observables=[obs], elapsed_time=t_max, dt=dt, num_traj=64, random_seed=seed,
+    observables=[obs], elapsed_time=t_max, dt=dt, num_traj=num_traj, random_seed=seed,
 )
 result_vector = sim.run(State(vector=psi0), H, params_vector, noise)
 res_vector = result_vector.expectation_values[0].flatten()
 
 params_mps = AnalogSimParams(
-    observables=[obs], elapsed_time=t_max, dt=dt, num_traj=64, max_bond_dim=16, random_seed=seed,
+    observables=[obs], elapsed_time=t_max, dt=dt, num_traj=num_traj, max_bond_dim=16, random_seed=seed,
 )
 result_mps = sim.run(State(L, tensors=[t.copy() for t in mps_tensors0]), H, params_mps, noise)
 res_mps = result_mps.expectation_values[0].flatten()
@@ -88,8 +90,8 @@ mystnb:
 ---
 fig, ax = plt.subplots(figsize=(6, 3.5), layout="constrained")
 ax.plot(times, res_rho, label="density_matrix (exact)", linewidth=2, color="black")
-ax.plot(times, res_vector, label="vector (64 traj)", linestyle="--")
-ax.plot(times, res_mps, label="mps (64 traj)", linestyle=":")
+ax.plot(times, res_vector, label=f"vector ({num_traj} traj)", linestyle="--")
+ax.plot(times, res_mps, label=f"mps ({num_traj} traj)", linestyle=":")
 ax.set_xlabel("Time")
 ax.set_ylabel(r"$\langle X_0 \rangle$")
 ax.set_ylim(-1.05, 1.05)
@@ -100,7 +102,7 @@ plt.show()
 ```
 
 ```{note}
-`vector` and `mps` curves are Monte Carlo means over 64 trajectories; statistical error scales as $1/\sqrt{N_{\mathrm{traj}}}$. The `density_matrix` path returns the deterministic ensemble average directly.
+`vector` and `mps` curves are Monte Carlo means over `num_traj` trajectories; statistical error scales as $1/\sqrt{N_{\mathrm{traj}}}$. The `density_matrix` path returns the deterministic ensemble average directly. Increase `num_traj` and `t_max` for smoother curves.
 ```
 
 ## 2. Noiseless cross-check
@@ -113,8 +115,8 @@ We use a product state here so the MPS path is exact at modest bond dimension.
 tags: [remove-output]
 ---
 obs_z = Observable("z", sites=[0])
-params_mps_u = AnalogSimParams(observables=[obs_z], elapsed_time=1.0, dt=0.1, max_bond_dim=16)
-params_rho_u = AnalogSimParams(observables=[obs_z], elapsed_time=1.0, dt=0.1)
+params_mps_u = AnalogSimParams(observables=[obs_z], elapsed_time=0.5, dt=0.1, max_bond_dim=16)
+params_rho_u = AnalogSimParams(observables=[obs_z], elapsed_time=0.5, dt=0.1)
 
 init_product = State(L, initial="x+")
 psi_prod = init_product.mps.to_vec()
