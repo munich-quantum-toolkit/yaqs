@@ -191,6 +191,13 @@ def _position_grid_local_hamiltonian(
 ) -> np.ndarray:
     """Construct the dense one-ion finite-difference Hamiltonian used as a test reference.
 
+    Args:
+        positions: One-dimensional numpy array containing the uniform position grid.
+        mass: Ion mass used in the kinetic and harmonic potential terms.
+        omega: Harmonic trap angular frequency.
+        trap_center: Center position of the harmonic trap.
+        hbar: Reduced Planck constant used in the kinetic prefactor.
+
     Returns:
         Dense local Hamiltonian in the position-grid basis.
     """
@@ -422,7 +429,7 @@ def test_bose_hubbard_correct_operator() -> None:
     np.testing.assert_allclose(H_mpo, H_dense, atol=1e-8)
 
 
-def test_trapped_ions_position_grid_one_ion() -> None:
+def test_trapped_ion_one_ion() -> None:
     """Verify the one-ion position-grid MPO against a dense finite-difference reference."""
     positions = np.linspace(-1.5, 1.5, 5)
     mass = 1.7
@@ -430,12 +437,13 @@ def test_trapped_ions_position_grid_one_ion() -> None:
     trap_center = 0.2
     hbar = 0.9
 
-    mpo = MPO.trapped_ions_position_grid(
+    mpo = MPO.trapped_ion(
         positions,
         [mass],
         omega,
         trap_center=trap_center,
         hbar=hbar,
+        max_bond_dim=1,
     )
 
     expected = _position_grid_local_hamiltonian(positions, mass, omega, trap_center, hbar)
@@ -445,7 +453,7 @@ def test_trapped_ions_position_grid_one_ion() -> None:
     np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
 
 
-def test_trapped_ions_position_grid_two_ions() -> None:
+def test_trapped_ion_two_ions() -> None:
     """Verify the exact two-ion MPO including its softened Coulomb interaction."""
     positions = np.linspace(-1.0, 1.0, 4)
     masses = [1.2, 1.8]
@@ -455,7 +463,7 @@ def test_trapped_ions_position_grid_two_ions() -> None:
     coulomb_strength = 0.6
     softening_length = 0.3
 
-    mpo = MPO.trapped_ions_position_grid(
+    mpo = MPO.trapped_ion(
         positions,
         masses,
         omega,
@@ -481,20 +489,33 @@ def test_trapped_ions_position_grid_two_ions() -> None:
     np.testing.assert_allclose(mpo.to_matrix(), mpo.to_matrix().conj().T, atol=1e-12)
 
 
-def test_trapped_ions_position_grid_coulomb_truncation() -> None:
-    """Verify that max_bond_dim caps Coulomb channels while retaining local terms."""
+def test_trapped_ion_coulomb_truncation() -> None:
+    """Verify that max_bond_dim retains the leading Coulomb SVD channels."""
     positions = np.linspace(-2.0, 2.0, 6)
-    mpo = MPO.trapped_ions_position_grid(
+    omega = 0.5
+    coulomb_strength = 0.4
+    softening_length = positions[1] - positions[0]
+    mpo = MPO.trapped_ion(
         positions,
         [1.0, 1.0],
-        0.5,
-        coulomb_strength=0.4,
+        omega,
+        coulomb_strength=coulomb_strength,
         max_bond_dim=4,
     )
 
     assert mpo.tensors[0].shape[3] == 4
     assert mpo.tensors[1].shape[2] == 4
-    np.testing.assert_allclose(mpo.to_matrix(), mpo.to_matrix().conj().T, atol=1e-12)
+
+    local_h = _position_grid_local_hamiltonian(positions, 1.0, omega, 0.0, 1.0)
+    identity = np.eye(positions.size)
+    dense_coulomb = mpo.to_matrix() - np.kron(local_h, identity) - np.kron(identity, local_h)
+    truncated_coulomb = np.diag(dense_coulomb).reshape(positions.size, positions.size)
+
+    distance = positions[:, None] - positions[None, :]
+    exact_coulomb = coulomb_strength / np.sqrt(distance**2 + softening_length**2)
+    u, singular_values, vh = np.linalg.svd(exact_coulomb, full_matrices=False)
+    expected_rank_2 = u[:, :2] @ np.diag(singular_values[:2]) @ vh[:2, :]
+    np.testing.assert_allclose(truncated_coulomb, expected_rank_2, atol=1e-12)
 
 
 @pytest.mark.parametrize(
@@ -516,10 +537,10 @@ def test_trapped_ions_position_grid_coulomb_truncation() -> None:
         ({"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "max_bond_dim": 1}, "at least 2"),
     ],
 )
-def test_trapped_ions_position_grid_validation(kwargs: dict[str, Any], match: str) -> None:
+def test_trapped_ion_validation(kwargs: dict[str, Any], match: str) -> None:
     """Reject malformed trapped-ion grids and physical parameters."""
     with pytest.raises(ValueError, match=match):
-        MPO.trapped_ions_position_grid(**kwargs)
+        MPO.trapped_ion(**kwargs)
 
 
 def test_fermi_hubbard_1d_correct_operator() -> None:
