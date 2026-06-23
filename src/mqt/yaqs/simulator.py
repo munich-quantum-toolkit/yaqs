@@ -115,7 +115,13 @@ from .core.data_structures.simulation_parameters import (
     _prepare_observable_ordering,
 )
 from .core.data_structures.state import State
-from .parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
+from .parallel_utils import (
+    MPContext,
+    available_cpus,
+    get_parallel_context,
+    limit_worker_threads,
+    safe_set_numba_threads,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -182,12 +188,7 @@ def worker_init(payload: dict[str, Any], n_threads: int = 1) -> None:
 
     # 3. Numba Threading (Runtime)
     # Some Numba versions ignore env vars if imported before.
-    try:
-        import numba  # noqa: PLC0415
-
-        numba.set_num_threads(n_threads)
-    except ImportError:
-        pass
+    safe_set_numba_threads(n_threads)
 
 
 # ---------------------------------------------------------------------------
@@ -497,12 +498,7 @@ def _call_backend(backend: Callable[[Any], TRes], arg: Any, n_threads: int = 1) 
         - If enforcing thread limits fails, falls back silently to direct call.
     """
     # Numba threading must be set BEFORE the threadpoolctl context limits backend threads,
-    try:
-        import numba  # noqa: PLC0415
-
-        numba.set_num_threads(n_threads)
-    except (ImportError, AttributeError):
-        pass
+    safe_set_numba_threads(n_threads)
 
     if threadpool_limits is not None:
         # Caps any pools entered/created within the context

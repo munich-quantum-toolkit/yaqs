@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -48,8 +49,8 @@ def test_apply_dissipation_one_site_canonical_0() -> None:
 
     apply_dissipation(state, noise_model, dt, sim_params)
 
-    canonical_site = state.check_canonical_form()
-    assert canonical_site[0] == 0, (
+    canonical_site = state.orthogonality_center
+    assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"
     )
 
@@ -85,8 +86,8 @@ def test_apply_dissipation_two_site_canonical_0() -> None:
 
     apply_dissipation(state, noise_model, dt, sim_params)
 
-    canonical_site = state.check_canonical_form()
-    assert canonical_site[0] == 0, (
+    canonical_site = state.orthogonality_center
+    assert canonical_site == 0, (
         f"MPS should be site-canonical at site 0 after apply_dissipation, but got canonical site: {canonical_site}"
     )
 
@@ -111,3 +112,52 @@ def test_is_adjacent_and_is_longrange() -> None:
     assert is_longrange(proc_adj_unsorted) is False
     assert is_longrange(proc_long) is True
     assert is_longrange(proc_far) is True
+
+
+def test_apply_dissipation_zero_noise_recenters_tracked_gauge() -> None:
+    """Zero-strength dissipation recenters a tracked MPS at site 0 without applying noise."""
+    state = MPS(3, state="zeros")
+    state.set_center(2)
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.0}])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    apply_dissipation(state, noise_model, dt=0.1, sim_params=sim_params)
+
+    assert state.orthogonality_center == 0
+
+
+def test_apply_dissipation_zero_noise_unknown_gauge() -> None:
+    """Zero-strength dissipation canonicalizes at site 0 when the gauge is unknown."""
+    state = MPS(3, state="haar-random", pad=2)
+    state.set_center(None)
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.0}])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    apply_dissipation(state, noise_model, dt=0.1, sim_params=sim_params)
+
+    assert state.orthogonality_center == 0
+
+
+def test_apply_dissipation_unknown_gauge_with_noise() -> None:
+    """Noisy dissipation restores a tracked center from an unknown starting gauge."""
+    state = MPS(3, state="haar-random", pad=2)
+    state.set_center(None)
+    noise_model = NoiseModel([{"name": "pauli_z", "sites": [0], "strength": 0.1}])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    apply_dissipation(state, noise_model, dt=0.1, sim_params=sim_params)
+
+    assert state.orthogonality_center == 0
+
+
+def test_apply_dissipation_longrange_non_pauli_raises() -> None:
+    """Non-Pauli long-range two-site dissipation is not implemented."""
+    state = MPS(3, state="zeros")
+    lowering = np.array([[0, 0], [1, 0]], dtype=np.complex128)
+    noise_model = NoiseModel([
+        {"name": "custom_lr", "sites": [0, 2], "strength": 0.1, "factors": (lowering, lowering)},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    with pytest.raises(NotImplementedError, match="Long-range processes"):
+        apply_dissipation(state, noise_model, dt=0.1, sim_params=sim_params)

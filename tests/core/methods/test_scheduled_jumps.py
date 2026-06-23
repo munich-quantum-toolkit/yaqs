@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
@@ -120,3 +121,24 @@ def test_apply_scheduled_jumps_multiple() -> None:
     assert np.isclose(new_state.expect(z_obs1), 1.0)
     new_state.set_canonical_form(2)
     assert np.isclose(new_state.expect(z_obs2), -1.0)
+
+
+def test_apply_scheduled_jumps_no_op_when_missing() -> None:
+    """``apply_scheduled_jumps`` returns the input state when no jumps are scheduled."""
+    state = MPS(2, state="zeros")
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+
+    unchanged = apply_scheduled_jumps(state, None, 1.0, sim_params)
+
+    assert unchanged is state
+
+
+def test_apply_scheduled_jumps_non_adjacent_raises() -> None:
+    """Scheduled two-site jumps must act on nearest neighbors."""
+    state = MPS(3, state="zeros")
+    scheduled_jumps = [{"time": 1.0, "sites": [0, 2], "name": "crosstalk_xx"}]
+    noise_model = NoiseModel(scheduled_jumps=scheduled_jumps)
+    sim_params = AnalogSimParams(dt=0.1, get_state=True)
+
+    with pytest.raises(ValueError, match="non-adjacent"):
+        apply_scheduled_jumps(state, noise_model, 1.0, sim_params)

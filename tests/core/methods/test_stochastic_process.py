@@ -10,7 +10,8 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -171,12 +172,42 @@ def test_stochastic_process_jump() -> None:
     dt = 0.1
     sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
     state_copy = copy.deepcopy(state)
-    new_state = stochastic_process(state_copy, noise_model, dt, sim_params)
+
+    class _AlwaysJumpRng:
+        """Minimal RNG stub that always triggers a jump and picks process index 0."""
+
+        @staticmethod
+        def random() -> float:
+            """Return 0 so ``rng.random() >= dp`` never skips the jump branch.
+
+            Returns:
+                Always 0.0.
+            """
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            """Always select the first process in ``noise_model.processes``.
+
+            Returns:
+                Process index 0.
+            """
+            _ = (size, p)
+            return 0
+
+    new_state = stochastic_process(
+        state_copy,
+        noise_model,
+        dt,
+        sim_params,
+        rng=cast("np.random.Generator", _AlwaysJumpRng()),
+    )
     # Should still be the same type
     assert isinstance(new_state, MPS)
     # Check that at least one tensor changed (jump applied)
     different = any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
     assert different, "At least one tensor should have changed after jump."
+    assert new_state.orthogonality_center == 0
 
 
 def test_create_probability_distribution_two_site() -> None:
@@ -203,3 +234,192 @@ def test_create_probability_distribution_two_site() -> None:
     assert process["strength"] == pytest.approx(0.2)
     # Check probability normalization
     assert np.isclose(sum(probabilities), 1.0)
+
+
+def test_create_probability_distribution_adjacent_non_pauli_two_site() -> None:
+    """Adjacent non-Pauli two-site processes contribute normalized probabilities."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    lowering_left = np.kron(np.array([[0, 0], [1, 0]], dtype=np.complex128), np.eye(2))
+    noise_model = NoiseModel([
+        {"name": "custom_2site", "sites": [0, 1], "strength": 0.3, "matrix": lowering_left},
+    ])
+    dt = 0.1
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    probabilities = create_probability_distribution(state, noise_model, dt, sim_params)
+    assert len(probabilities) == 1
+    assert np.isclose(sum(probabilities), 1.0)
+
+
+def test_stochastic_process_no_jump_unknown_gauge() -> None:
+    """A no-jump path with unknown gauge re-canonicalizes the MPS at site 0."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state.set_center(None)
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    new_state = stochastic_process(state, None, dt=0.1, sim_params=sim_params)
+
+    assert new_state.orthogonality_center == 0
+
+
+def test_stochastic_process_empty_probabilities_after_jump() -> None:
+    """A triggered jump with no applicable processes recenters at site 0 without applying a jump."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state.tensors[0] *= 0.99
+    lowering = np.array([[0, 0], [1, 0]], dtype=np.complex128)
+    noise_model = NoiseModel([
+        {"name": "custom_lr", "sites": [0, 2], "strength": 1000.0, "factors": (lowering, lowering)},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    state_copy = copy.deepcopy(state)
+
+    class _JumpButNoProcessRng:
+        """RNG stub that always triggers a jump."""
+
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
+    new_state = stochastic_process(
+        state_copy,
+        noise_model,
+        0.1,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpButNoProcessRng()),
+    )
+    assert new_state.orthogonality_center == 0
+
+
+def test_stochastic_process_empty_probabilities_unknown_gauge() -> None:
+    """Empty jump probabilities canonicalize at site 0 when the gauge is unknown."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state.tensors[0] *= 0.99
+    state.set_center(None)
+    lowering = np.array([[0, 0], [1, 0]], dtype=np.complex128)
+    noise_model = NoiseModel([
+        {"name": "custom_lr", "sites": [0, 2], "strength": 1000.0, "factors": (lowering, lowering)},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+
+    class _JumpButNoProcessRng:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
+    new_state = stochastic_process(
+        state,
+        noise_model,
+        0.1,
+        sim_params,
+        rng=cast("np.random.Generator", _JumpButNoProcessRng()),
+    )
+    assert new_state.orthogonality_center == 0
+
+
+def test_stochastic_process_adjacent_non_pauli_two_site_jump() -> None:
+    """Stochastic jumps support adjacent non-Pauli two-site processes."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state.tensors[0] *= 0.99
+    lowering_left = np.kron(np.array([[0, 0], [1, 0]], dtype=np.complex128), np.eye(2))
+    noise_model = NoiseModel([
+        {"name": "custom_2site", "sites": [0, 1], "strength": 1000.0, "matrix": lowering_left},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    state_copy = copy.deepcopy(state)
+
+    class _AlwaysJumpRng:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
+    new_state = stochastic_process(
+        state_copy,
+        noise_model,
+        0.1,
+        sim_params,
+        rng=cast("np.random.Generator", _AlwaysJumpRng()),
+    )
+    assert new_state.orthogonality_center == 0
+    assert any(not np.allclose(a, b) for a, b in zip(new_state.tensors, state.tensors, strict=False))
+
+
+def test_stochastic_process_longrange_pauli_jump() -> None:
+    """Long-range Pauli crosstalk jumps apply per-site factors and clear the gauge."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state.tensors[0] *= 0.99
+    noise_model = NoiseModel([
+        {"name": "crosstalk_xx", "sites": [0, 2], "strength": 1000.0},
+    ])
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    state_copy = copy.deepcopy(state)
+
+    class _AlwaysJumpRng:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
+    new_state = stochastic_process(
+        state_copy,
+        noise_model,
+        0.1,
+        sim_params,
+        rng=cast("np.random.Generator", _AlwaysJumpRng()),
+    )
+    assert new_state.orthogonality_center == 0
+
+
+def test_stochastic_process_non_adjacent_non_pauli_jump_raises() -> None:
+    """Non-Pauli long-range two-site jumps are rejected during application."""
+    state = random_mps([(2, 1, 2), (2, 2, 2), (2, 2, 1)])
+    state.tensors[0] *= 0.99
+    lowering_left = np.kron(np.array([[0, 0], [1, 0]], dtype=np.complex128), np.eye(2))
+    noise_model = NoiseModel([
+        {"name": "custom_2site", "sites": [0, 1], "strength": 1000.0, "matrix": lowering_left},
+    ])
+    noise_model.processes[0]["sites"] = [0, 2]
+    sim_params = AnalogSimParams(get_state=True, elapsed_time=0.0)
+    state_copy = copy.deepcopy(state)
+
+    class _AlwaysJumpRng:
+        @staticmethod
+        def random() -> float:
+            return 0.0
+
+        @staticmethod
+        def choice(size: int, p: list[float]) -> int:
+            _ = (size, p)
+            return 0
+
+    with (
+        patch(
+            "mqt.yaqs.core.methods.stochastic_process.create_probability_distribution",
+            return_value=[1.0],
+        ),
+        pytest.raises(ValueError, match="nearest-neighbor"),
+    ):
+        stochastic_process(
+            state_copy,
+            noise_model,
+            0.1,
+            sim_params,
+            rng=cast("np.random.Generator", _AlwaysJumpRng()),
+        )
