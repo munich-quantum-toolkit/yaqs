@@ -433,6 +433,19 @@ def _store_mcwf_final_state(
     length: int | None = None,
     physical_dimensions: list[int] | int | None = None,
 ) -> None:
+    """Store the final MCWF state vector on ``result.output_state``.
+
+    If ``psi`` is not ``None``, this function stores a vector
+    :class:`~mqt.yaqs.core.data_structures.state.State` on ``result.output_state``
+    while preserving the original lattice length and local dimensions.
+
+    Args:
+        result: Output container for the simulation run.
+        psi: Final state vector, or ``None`` when ``get_state`` is ``False``.
+        length: Number of lattice sites from the initial state. Passed through so
+            non-qubit vector states do not need to infer a qubit chain length.
+        physical_dimensions: Per-site physical dimensions from the initial state.
+    """
     if psi is not None:
         result.output_state = State(length=length, vector=psi, physical_dimensions=physical_dimensions)
 
@@ -857,6 +870,7 @@ class Simulator:
                 worker_params,
                 rho_initial=initial_state.density_matrix,
                 num_sites=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
                 h_sparse=h_sparse,
             )
             payload = {"ctx": lindblad_ctx}

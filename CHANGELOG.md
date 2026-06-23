@@ -47,7 +47,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
-- fixed vector analog simulation for non-qubit local dimensions ([#476]) ([@linusschulte])
+- fixed vector and Lindblad analog simulation for non-qubit local dimensions ([#476]) ([**@linusschulte**])
 - fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])

@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numba
 import numpy as np
 import pytest
+import scipy.sparse
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
 
@@ -405,7 +406,7 @@ def test_trapped_ion_position_grid_vector_and_mps_simulation_agree() -> None:
     initial_grid_state = np.exp(-0.5 * (positions - initial_displacement) ** 2).astype(np.complex128)
     initial_grid_state /= np.linalg.norm(initial_grid_state)
 
-    hamiltonian = Hamiltonian.from_mpo(MPO.trapped_ions_position_grid(positions, masses=[1.0], omega=omega))
+    hamiltonian = Hamiltonian.from_mpo(MPO.trapped_ion(positions, masses=[1.0], omega=omega))
     sim_params = AnalogSimParams(
         observables=[],
         elapsed_time=half_period,
@@ -487,6 +488,44 @@ def test_density_matrix_get_state_noisy() -> None:
     np.testing.assert_allclose(rho, expected, atol=1e-4)
     assert np.isclose(np.trace(rho), 1.0)
     assert np.allclose(rho.imag, 0.0, atol=1e-10)
+
+
+def test_density_matrix_non_qubit_physical_dimension() -> None:
+    """Lindblad density-matrix evolution supports non-qubit local dimensions."""
+    physical_dimension = 3
+    rho_initial = np.zeros((physical_dimension, physical_dimension), dtype=np.complex128)
+    rho_initial[2, 2] = 1.0
+    initial_state = State(length=1, density_matrix=rho_initial, physical_dimensions=[physical_dimension])
+    hamiltonian = Hamiltonian(
+        sparse_matrix=scipy.sparse.csr_matrix((physical_dimension, physical_dimension), dtype=np.complex128),
+        length=1,
+        physical_dimension=physical_dimension,
+    )
+
+    lowering_21 = np.zeros((physical_dimension, physical_dimension), dtype=np.complex128)
+    lowering_21[1, 2] = 1.0
+    gamma = 0.7
+    elapsed_time = 0.4
+    noise_model = NoiseModel(
+        processes=[{"name": "qutrit_decay_2_to_1", "sites": [0], "strength": gamma, "matrix": lowering_21}],
+    )
+    sim_params = AnalogSimParams(
+        observables=[],
+        elapsed_time=elapsed_time,
+        dt=0.1,
+        get_state=True,
+    )
+
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+
+    assert result.output_state is not None
+    assert result.output_state.length == 1
+    assert result.output_state.physical_dimensions == [physical_dimension]
+    rho = result.output_state.density_matrix
+    expected = np.zeros_like(rho)
+    expected[1, 1] = 1.0 - np.exp(-gamma * elapsed_time)
+    expected[2, 2] = np.exp(-gamma * elapsed_time)
+    np.testing.assert_allclose(rho, expected, atol=1e-4)
 
 
 def test_density_matrix_get_state_at_elapsed_time() -> None:
