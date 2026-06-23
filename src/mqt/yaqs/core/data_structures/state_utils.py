@@ -283,12 +283,25 @@ def normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:
     return vec / norm
 
 
+def _resolve_site_dims(
+    length: int,
+    physical_dimensions: list[int] | int | None,
+    *,
+    local_dim: int = 2,
+) -> list[int]:
+    """Return per-site Hilbert-space dimensions for embedding helpers."""
+    if physical_dimensions is not None:
+        return resolve_physical_dimensions(length, physical_dimensions)
+    return [local_dim] * length
+
+
 def embed_one_site_operator(
     op: NDArray[np.complex128],
     length: int,
     site: int,
     *,
     local_dim: int = 2,
+    physical_dimensions: list[int] | int | None = None,
 ) -> NDArray[np.complex128]:
     """Embed a one-site operator into the full Hilbert space.
 
@@ -300,7 +313,9 @@ def embed_one_site_operator(
         op: Local ``(local_dim, local_dim)`` operator matrix.
         length: Number of sites in the chain.
         site: Site index on which ``op`` acts.
-        local_dim: Local Hilbert-space dimension at each site.
+        local_dim: Uniform local dimension when ``physical_dimensions`` is not provided.
+        physical_dimensions: Optional per-site dimensions (broadcast int or length-``length``
+            list). When set, overrides ``local_dim``.
 
     Returns:
         Dense ``(prod(local_dim**length), prod(local_dim**length))`` embedded operator.
@@ -311,14 +326,16 @@ def embed_one_site_operator(
     if site < 0 or site >= length:
         msg = f"site {site} out of range for length {length}."
         raise ValueError(msg)
+    dims = _resolve_site_dims(length, physical_dimensions, local_dim=local_dim)
+    site_dim = dims[site]
     op_arr = np.asarray(op, dtype=np.complex128)
-    if op_arr.shape != (local_dim, local_dim):
-        msg = f"op must have shape ({local_dim}, {local_dim}), got {op_arr.shape}."
+    if op_arr.shape != (site_dim, site_dim):
+        msg = f"op must have shape ({site_dim}, {site_dim}), got {op_arr.shape}."
         raise ValueError(msg)
-    eye_local = np.eye(local_dim, dtype=np.complex128)
     res = np.eye(1, dtype=np.complex128)
     for k in range(length):
-        local = op_arr if k == site else eye_local
+        eye_k = np.eye(dims[k], dtype=np.complex128)
+        local = op_arr if k == site else eye_k
         res = np.kron(local, res)
     return np.asarray(res, dtype=np.complex128)
 
@@ -329,6 +346,7 @@ def embed_adjacent_two_site_operator(
     site_left: int,
     *,
     local_dim: int = 2,
+    physical_dimensions: list[int] | int | None = None,
 ) -> NDArray[np.complex128]:
     """Embed a two-site operator on neighboring sites ``(site_left, site_left + 1)``.
 
@@ -338,7 +356,9 @@ def embed_adjacent_two_site_operator(
         op4: Local ``(local_dim**2, local_dim**2)`` operator on the adjacent pair.
         length: Number of sites in the chain.
         site_left: Left site index of the pair.
-        local_dim: Local Hilbert-space dimension at each site.
+        local_dim: Uniform local dimension when ``physical_dimensions`` is not provided.
+        physical_dimensions: Optional per-site dimensions (broadcast int or length-``length``
+            list). When set, overrides ``local_dim``.
 
     Returns:
         Dense embedded operator on the full Hilbert space.
@@ -350,12 +370,12 @@ def embed_adjacent_two_site_operator(
     if site_left < 0 or site_right >= length:
         msg = f"adjacent pair ({site_left}, {site_right}) invalid for length {length}."
         raise ValueError(msg)
-    dim4 = local_dim * local_dim
+    dims = _resolve_site_dims(length, physical_dimensions, local_dim=local_dim)
+    pair_dim = dims[site_left] * dims[site_right]
     op_arr = np.asarray(op4, dtype=np.complex128)
-    if op_arr.shape != (dim4, dim4):
-        msg = f"op4 must have shape ({dim4}, {dim4}), got {op_arr.shape}."
+    if op_arr.shape != (pair_dim, pair_dim):
+        msg = f"op4 must have shape ({pair_dim}, {pair_dim}), got {op_arr.shape}."
         raise ValueError(msg)
-    eye_local = np.eye(local_dim, dtype=np.complex128)
     res = np.eye(1, dtype=np.complex128)
     site = 0
     while site < length:
@@ -363,7 +383,7 @@ def embed_adjacent_two_site_operator(
             res = np.kron(op_arr, res)
             site += 2
         else:
-            res = np.kron(eye_local, res)
+            res = np.kron(np.eye(dims[site], dtype=np.complex128), res)
             site += 1
     return np.asarray(res, dtype=np.complex128)
 
@@ -376,6 +396,7 @@ def embed_two_site_factors(
     site2: int,
     *,
     local_dim: int = 2,
+    physical_dimensions: list[int] | int | None = None,
 ) -> NDArray[np.complex128]:
     """Embed a product of local operators on two (possibly non-adjacent) sites.
 
@@ -385,7 +406,9 @@ def embed_two_site_factors(
         length: Number of sites in the chain.
         site1: First site index.
         site2: Second site index.
-        local_dim: Local Hilbert-space dimension at each site.
+        local_dim: Uniform local dimension when ``physical_dimensions`` is not provided.
+        physical_dimensions: Optional per-site dimensions (broadcast int or length-``length``
+            list). When set, overrides ``local_dim``.
 
     Returns:
         Dense embedded operator on the full Hilbert space.
@@ -402,10 +425,13 @@ def embed_two_site_factors(
             raise ValueError(msg)
     op1_arr = np.asarray(op1, dtype=np.complex128)
     op2_arr = np.asarray(op2, dtype=np.complex128)
-    if op1_arr.shape != (local_dim, local_dim) or op2_arr.shape != (local_dim, local_dim):
-        msg = f"local operators must be ({local_dim}, {local_dim})."
+    dims = _resolve_site_dims(length, physical_dimensions, local_dim=local_dim)
+    if op1_arr.shape != (dims[site1], dims[site1]) or op2_arr.shape != (dims[site2], dims[site2]):
+        msg = (
+            f"local operators must match site dimensions "
+            f"({dims[site1]}, {dims[site1]}) and ({dims[site2]}, {dims[site2]})."
+        )
         raise ValueError(msg)
-    eye_local = np.eye(local_dim, dtype=np.complex128)
     res = np.eye(1, dtype=np.complex128)
     for k in range(length):
         if k == site1:
@@ -413,7 +439,7 @@ def embed_two_site_factors(
         elif k == site2:
             local = op2_arr
         else:
-            local = eye_local
+            local = np.eye(dims[k], dtype=np.complex128)
         res = np.kron(local, res)
     return np.asarray(res, dtype=np.complex128)
 

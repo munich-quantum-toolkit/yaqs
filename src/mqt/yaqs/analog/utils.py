@@ -19,6 +19,7 @@ from ..core.data_structures.state_utils import (
     embed_adjacent_two_site_operator,
     embed_one_site_operator,
     embed_two_site_factors,
+    resolve_physical_dimensions,
 )
 
 if TYPE_CHECKING:
@@ -84,6 +85,7 @@ def _embed_generic(
     op_factors: tuple[NDArray[np.complex128] | scipy.sparse.spmatrix, NDArray[np.complex128] | scipy.sparse.spmatrix]
     | None = None,
     sparse: bool = False,
+    physical_dimensions: list[int] | int | None = None,
 ) -> NDArray[np.complex128] | scipy.sparse.spmatrix:
     """Embed a local operator into the full Hilbert space (MPS / Qiskit indexing).
 
@@ -93,6 +95,7 @@ def _embed_generic(
         op_matrix: Optional matrix for 1-site or adjacent 2-site embedding.
         op_factors: Optional non-adjacent two-site product factors.
         sparse: If True, return a CSR sparse matrix.
+        physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
 
     Returns:
         Embedded operator on the full space.
@@ -101,9 +104,15 @@ def _embed_generic(
         ValueError: If 2-site matrix is not adjacent or factors are not 2-site.
         NotImplementedError: If neither matrix nor factors provided.
     """
+    dims = resolve_physical_dimensions(num_sites, physical_dimensions)
     if op_matrix is not None:
         if len(sites) == 1:
-            dense = embed_one_site_operator(_to_dense(op_matrix), num_sites, sites[0])
+            dense = embed_one_site_operator(
+                _to_dense(op_matrix),
+                num_sites,
+                sites[0],
+                physical_dimensions=dims,
+            )
             return scipy.sparse.csr_matrix(dense) if sparse else dense
 
         if len(sites) == 2:
@@ -111,7 +120,12 @@ def _embed_generic(
             if s2 != s1 + 1:
                 msg = "Matrix-based 2-site op must be adjacent"
                 raise ValueError(msg)
-            dense = embed_adjacent_two_site_operator(_to_dense(op_matrix), num_sites, s1)
+            dense = embed_adjacent_two_site_operator(
+                _to_dense(op_matrix),
+                num_sites,
+                s1,
+                physical_dimensions=dims,
+            )
             return scipy.sparse.csr_matrix(dense) if sparse else dense
 
     if op_factors is not None:
@@ -120,7 +134,14 @@ def _embed_generic(
             msg = f"Factors require exactly 2 sites, got {len(sites)}"
             raise ValueError(msg)
         s1, s2 = sites
-        dense = embed_two_site_factors(_to_dense(op1), _to_dense(op2), num_sites, s1, s2)
+        dense = embed_two_site_factors(
+            _to_dense(op1),
+            _to_dense(op2),
+            num_sites,
+            s1,
+            s2,
+            physical_dimensions=dims,
+        )
         return scipy.sparse.csr_matrix(dense) if sparse else dense
 
     msg = "Invalid embedding request: neither matrix nor factors provided."
@@ -130,13 +151,19 @@ def _embed_generic(
 # --- Dense Embedding ---
 
 
-def _embed_operator_dense(process: dict, num_sites: int) -> NDArray[np.complex128]:
+def _embed_operator_dense(
+    process: dict,
+    num_sites: int,
+    *,
+    physical_dimensions: list[int] | int | None = None,
+) -> NDArray[np.complex128]:
     """Embeds a local noise process operator into the full Hilbert space (dense).
 
     Args:
         process: Dictionary containing "sites" (list of ints) and either "matrix" (operator matrix)
                  or "factors" (tuple of operators).
         num_sites: Total number of sites in the system.
+        physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
 
     Returns:
         The embedded operator as a dense matrix.
@@ -154,16 +181,28 @@ def _embed_operator_dense(process: dict, num_sites: int) -> NDArray[np.complex12
         msg = f"Cannot embed operator for process: {process}"
         raise NotImplementedError(msg)
 
-    result = _embed_generic(sites=sites, num_sites=num_sites, sparse=False, **params)
+    result = _embed_generic(
+        sites=sites,
+        num_sites=num_sites,
+        sparse=False,
+        physical_dimensions=physical_dimensions,
+        **params,
+    )
     return cast("NDArray[np.complex128]", result)
 
 
-def _embed_observable_dense(obs: Observable, num_sites: int) -> NDArray[np.complex128]:
+def _embed_observable_dense(
+    obs: Observable,
+    num_sites: int,
+    *,
+    physical_dimensions: list[int] | int | None = None,
+) -> NDArray[np.complex128]:
     """Embeds an observable into the full Hilbert space (dense).
 
     Args:
         obs: Observable object containing sites and the gate/operator definition.
         num_sites: Total number of sites in the system.
+        physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
 
     Returns:
         The embedded observable as a dense matrix.
@@ -184,6 +223,7 @@ def _embed_observable_dense(obs: Observable, num_sites: int) -> NDArray[np.compl
         num_sites=num_sites,
         op_matrix=obs.gate.matrix,
         sparse=False,
+        physical_dimensions=physical_dimensions,
     )
     return cast("NDArray[np.complex128]", result)
 
@@ -191,13 +231,19 @@ def _embed_observable_dense(obs: Observable, num_sites: int) -> NDArray[np.compl
 # --- Sparse Embedding ---
 
 
-def _embed_operator_sparse(process: dict, num_sites: int) -> scipy.sparse.spmatrix:
+def _embed_operator_sparse(
+    process: dict,
+    num_sites: int,
+    *,
+    physical_dimensions: list[int] | int | None = None,
+) -> scipy.sparse.spmatrix:
     """Embeds a local noise process operator into the full Hilbert space (sparse).
 
     Args:
         process: Dictionary containing "sites" (list of ints) and either "matrix" (operator matrix)
                  or "factors" (tuple of operators).
         num_sites: Total number of sites in the system.
+        physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
 
     Returns:
         The embedded operator as a sparse matrix.
@@ -216,16 +262,28 @@ def _embed_operator_sparse(process: dict, num_sites: int) -> scipy.sparse.spmatr
         msg = f"Cannot embed operator for process: {process}"
         raise NotImplementedError(msg)
 
-    result = _embed_generic(sites=sites, num_sites=num_sites, sparse=True, **params)
+    result = _embed_generic(
+        sites=sites,
+        num_sites=num_sites,
+        sparse=True,
+        physical_dimensions=physical_dimensions,
+        **params,
+    )
     return cast("scipy.sparse.spmatrix", result)
 
 
-def _embed_observable_sparse(obs: Observable, num_sites: int) -> scipy.sparse.spmatrix:
+def _embed_observable_sparse(
+    obs: Observable,
+    num_sites: int,
+    *,
+    physical_dimensions: list[int] | int | None = None,
+) -> scipy.sparse.spmatrix:
     """Embeds an observable into the full Hilbert space (sparse).
 
     Args:
         obs: Observable object containing sites and the gate/operator definition.
         num_sites: Total number of sites in the system.
+        physical_dimensions: Per-site Hilbert-space dimensions (defaults to qubits).
 
     Returns:
         The embedded observable as a sparse matrix.
@@ -246,5 +304,6 @@ def _embed_observable_sparse(obs: Observable, num_sites: int) -> scipy.sparse.sp
         num_sites=num_sites,
         op_matrix=_to_sparse_csr(obs.gate.matrix),
         sparse=True,
+        physical_dimensions=physical_dimensions,
     )
     return cast("scipy.sparse.spmatrix", result)

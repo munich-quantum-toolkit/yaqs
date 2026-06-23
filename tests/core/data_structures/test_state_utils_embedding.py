@@ -65,6 +65,15 @@ def test_embed_matches_mps_expect_on_haar() -> None:
             assert mps_val == pytest.approx(embed_val, abs=1e-9)
 
 
+def test_embed_one_site_non_qubit_local_dimension() -> None:
+    """One-site embedding supports local dimensions larger than two."""
+    length = 1
+    local_dim = 3
+    op = np.eye(local_dim, dtype=np.complex128)
+    embedded = embed_one_site_operator(op, length, 0, physical_dimensions=[local_dim])
+    np.testing.assert_allclose(embedded, op, atol=1e-12)
+
+
 def test_embed_two_site_factors_non_adjacent() -> None:
     """Non-adjacent factor embedding matches sequential one-site products."""
     length = 3
