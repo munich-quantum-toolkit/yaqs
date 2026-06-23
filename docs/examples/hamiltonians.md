@@ -43,6 +43,7 @@ Access the internal MPO with `H.mpo` when you need bond dimension or tensor core
 | 1D Fermi–Hubbard | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d` | 4 (fermionic) or 2 (Jordan–Wigner) |
 | Bose–Hubbard | {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.bose_hubbard` → `Hamiltonian.from_mpo` | `local_dim` (boson occupation cutoff) |
 | Coupled transmon chain | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon` | alternating qubit / resonator dims |
+| Trapped ion (position grid) | {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` → `Hamiltonian.from_mpo` | grid points per ion (1–2 ions) |
 
 Open (`bc="open"`) and periodic (`bc="periodic"`) boundaries are supported on the Pauli builders.
 
@@ -193,6 +194,49 @@ H_transmon = Hamiltonian.coupled_transmon(
 
 A full SWAP-style open-system example is in {doc}`transmon_emulation`.
 
+## Trapped-ion position grid
+
+{meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` builds a **static** Hamiltonian for one or two ions on a uniform position grid. Each ion is one MPO site with local dimension equal to the number of grid points. The local terms are a harmonic trap plus a centered finite-difference kinetic energy; for two ions, a softened Coulomb repulsion is compressed into MPO channels (optional SVD truncation via `coulomb_cutoff` or `max_bond_dim`).
+
+$$
+H = \sum_i \left[-\frac{\hbar^2}{2m_i}\frac{d^2}{dx_i^2} + \tfrac{1}{2} m_i \omega^2 (x_i - q)^2\right]
++ \frac{g}{\sqrt{(x_1-x_2)^2 + a^2}}
+$$
+
+(the Coulomb term applies only when two masses are supplied).
+
+```{code-cell} ipython3
+from mqt.yaqs import Hamiltonian, MPO
+import numpy as np
+
+positions = np.linspace(-6.0, 6.0, 25)
+H_ion = Hamiltonian.from_mpo(
+    MPO.trapped_ion(
+        positions,
+        masses=[1.0],
+        omega=1.0,
+        trap_center=0.0,
+    )
+)
+
+# Two ions with softened Coulomb repulsion on the same grid spacing
+H_pair = Hamiltonian.from_mpo(
+    MPO.trapped_ion(
+        positions,
+        masses=[1.0, 1.0],
+        omega=1.0,
+        coulomb_strength=1.0,
+        softening_length=float(positions[1] - positions[0]),
+    )
+)
+```
+
+Pair with {class}`~mqt.yaqs.core.data_structures.state.State` using `physical_dimensions=[len(positions)]` per ion site. A wavepacket reflection benchmark is in {doc}`trapped_ion`.
+
+```{note}
+YAQS applies $\exp(-\mathrm{i}\,\Delta t\, H)$ during evolution. When using SI units, pass energies and times in consistent units or rescale $H/\hbar$ explicitly (see the factory docstring).
+```
+
 ## Manual Hamiltonians
 
 For imported MPO cores or small-system dense operators:
@@ -209,5 +253,6 @@ H = Hamiltonian(matrix=dense_h, physical_dimension=2)
 
 - {doc}`analog_simulation` — TJM evolution, noise, and observables
 - {doc}`transmon_emulation` — multi-level transmon physics
+- {doc}`trapped_ion` — position-grid wavepacket dynamics
 - {doc}`state_initialization` — `physical_dimensions` and representations
 - {doc}`simulation_parameters` — truncation presets for MPO evolution
