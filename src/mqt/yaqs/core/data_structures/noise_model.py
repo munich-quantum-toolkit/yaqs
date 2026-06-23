@@ -69,7 +69,7 @@ class NoiseModel:
                 system. Each dict must contain ``name``, ``sites``, and
                 ``strength``. Optional keys:
 
-                - ``matrix``: local jump operator L as a ``d×d`` array for
+                - ``matrix``: local jump operator L as a ``d x d`` array for
                   1-site or adjacent 2-site processes. When provided, YAQS uses
                   this matrix and does not look up ``name`` in
                   {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary`.
@@ -79,8 +79,8 @@ class NoiseModel:
                   processes (required unless ``name`` is a recognized long-range
                   crosstalk label).
 
-                ``strength`` is the Lindblad rate γ; jump operators are
-                formed as √γ·L during simulation.
+                ``strength`` is the Lindblad rate ``gamma``; jump operators are
+                formed as ``sqrt(gamma) * L`` during simulation.
             scheduled_jumps: A list of scheduled jumps to apply at specific times.
                 Each dict must contain ``time``, ``sites``, and ``name``. An
                 optional ``matrix`` overrides the library lookup for the jump

@@ -103,7 +103,7 @@ keys = sorted(
     if hamming_weight(k) <= 2
 )
 bitstrings = [format_bitstring(k, num_qubits) for k in keys]
-x = np.arange(len(keys))
+x = np.arrange(len(keys))
 width = 0.38
 
 clean_vals = [result_clean.counts.get(k, 0) for k in keys]

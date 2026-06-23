@@ -158,7 +158,9 @@ def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex1
         msg = "The lengths of the state and the operator must match."
         raise ValueError(msg)
 
-    right_blocks = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
+    right_blocks: list[NDArray[np.complex128]] = [
+        np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)
+    ]
     right_virtual_dim = psi.tensors[num_sites - 1].shape[2]
     mpo_right_dim = op.tensors[num_sites - 1].shape[3]
     right_identity = np.zeros((right_virtual_dim, mpo_right_dim, right_virtual_dim), dtype=np.complex128)

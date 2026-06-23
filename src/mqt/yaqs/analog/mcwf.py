@@ -301,10 +301,10 @@ def mcwf(args: tuple[int, MCWFContext]) -> tuple[NDArray[np.float64], None, NDAr
                 psi = _apply_noisy_step(psi_before, psi_next, ctx, rng)
         elif ctx.is_unitary:
             # Noiseless but Hilbert space too large to store U_step: Hermitian Lanczos per step.
-            psi = expm_krylov(lambda v: ctx.heff @ v, psi, dt)  # ty: ignore[unsupported-operator]
+            psi = expm_krylov(lambda v: ctx.heff @ v, psi, dt)
         else:
             # Noisy and no stored U_step: general non-Hermitian Arnoldi per step.
-            psi_next = expm_arnoldi(lambda v: ctx.heff @ v, psi, dt)  # ty: ignore[unsupported-operator]
+            psi_next = expm_arnoldi(lambda v: ctx.heff @ v, psi, dt)
             psi = _apply_noisy_step(psi, psi_next, ctx, rng)
 
         if sim_params.sample_timesteps:

@@ -431,7 +431,7 @@ def test_bose_hubbard_correct_operator() -> None:
 
 def test_trapped_ion_one_ion() -> None:
     """Verify the one-ion position-grid MPO against a dense finite-difference reference."""
-    positions = np.linspace(-1.5, 1.5, 5)
+    positions = np.linspace(-1.5, 1.5, 5, dtype=np.float64)
     mass = 1.7
     omega = 0.8
     trap_center = 0.2
@@ -455,7 +455,7 @@ def test_trapped_ion_one_ion() -> None:
 
 def test_trapped_ion_two_ions() -> None:
     """Verify the exact two-ion MPO including its softened Coulomb interaction."""
-    positions = np.linspace(-1.0, 1.0, 4)
+    positions = np.linspace(-1.0, 1.0, 4, dtype=np.float64)
     masses = [1.2, 1.8]
     omega = 0.7
     trap_center = -0.1
@@ -491,7 +491,7 @@ def test_trapped_ion_two_ions() -> None:
 
 def test_trapped_ion_coulomb_truncation() -> None:
     """Verify that max_bond_dim retains the leading Coulomb SVD channels."""
-    positions = np.linspace(-2.0, 2.0, 6)
+    positions = np.linspace(-2.0, 2.0, 6, dtype=np.float64)
     omega = 0.5
     coulomb_strength = 0.4
     softening_length = positions[1] - positions[0]
