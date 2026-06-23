@@ -34,46 +34,23 @@ _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
 _Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
 
+from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
+
 
 def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
-    """Embed a single-site operator into a length-L qubit Hilbert space.
-
-    Args:
-        op: Local 2x2 operator acting on site i.
-        length: Total number of sites.
-        i: Site index at which to apply the operator.
-
-    Returns:
-        Dense (2**length, 2**length) matrix representing I⊗…⊗op_i⊗…⊗I.
-    """
-    out = np.array([[1.0]], dtype=complex)
-    for k in range(length):
-        out = np.kron(out, op if k == i else _I2)
-    return out
+    """Embed a single-site operator (MPS / Qiskit site-0 LSB convention)."""
+    return embed_one_site_operator(np.asarray(op, dtype=np.complex128), length, i)
 
 
 def _embed_two_body(op1: np.ndarray, op2: np.ndarray, length: int, i: int) -> np.ndarray:
-    """Embed a nearest-neighbor two-site operator into a length-L qubit Hilbert space.
-
-    Args:
-        op1: Local operator acting on site i.
-        op2: Local operator acting on site i+1.
-        length: Total number of sites.
-        i: Left site index of the two-body term.
-
-    Returns:
-        Dense (2**length, 2**length) matrix representing
-        I⊗…⊗op1_i⊗op2_{i+1}⊗…⊗I.
-    """
-    out = np.array([[1.0]], dtype=complex)
-    for k in range(length):
-        if k == i:
-            out = np.kron(out, op1)
-        elif k == i + 1:
-            out = np.kron(out, op2)
-        else:
-            out = np.kron(out, _I2)
-    return out
+    """Embed a nearest-neighbor two-site product operator."""
+    return embed_two_site_factors(
+        np.asarray(op1, dtype=np.complex128),
+        np.asarray(op2, dtype=np.complex128),
+        length,
+        i,
+        i + 1,
+    )
 
 
 def _ising_dense(length: int, j_val: float, g: float) -> np.ndarray:

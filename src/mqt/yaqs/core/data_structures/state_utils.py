@@ -283,6 +283,141 @@ def normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:
     return vec / norm
 
 
+def embed_one_site_operator(
+    op: NDArray[np.complex128],
+    length: int,
+    site: int,
+    *,
+    local_dim: int = 2,
+) -> NDArray[np.complex128]:
+    """Embed a one-site operator into the full Hilbert space.
+
+    Uses the same qubit indexing as :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`,
+    Qiskit little-endian circuits, and weak-simulation bitstring keys: site ``0`` is the
+    least significant bit in the flat state index.
+
+    Args:
+        op: Local ``(local_dim, local_dim)`` operator matrix.
+        length: Number of sites in the chain.
+        site: Site index on which ``op`` acts.
+        local_dim: Local Hilbert-space dimension at each site.
+
+    Returns:
+        Dense ``(prod(local_dim**length), prod(local_dim**length))`` embedded operator.
+
+    Raises:
+        ValueError: If ``site`` is out of range or ``op`` has the wrong shape.
+    """
+    if site < 0 or site >= length:
+        msg = f"site {site} out of range for length {length}."
+        raise ValueError(msg)
+    op_arr = np.asarray(op, dtype=np.complex128)
+    if op_arr.shape != (local_dim, local_dim):
+        msg = f"op must have shape ({local_dim}, {local_dim}), got {op_arr.shape}."
+        raise ValueError(msg)
+    eye_local = np.eye(local_dim, dtype=np.complex128)
+    res = np.eye(1, dtype=np.complex128)
+    for k in range(length):
+        local = op_arr if k == site else eye_local
+        res = np.kron(local, res)
+    return np.asarray(res, dtype=np.complex128)
+
+
+def embed_adjacent_two_site_operator(
+    op4: NDArray[np.complex128],
+    length: int,
+    site_left: int,
+    *,
+    local_dim: int = 2,
+) -> NDArray[np.complex128]:
+    """Embed a two-site operator on neighboring sites ``(site_left, site_left + 1)``.
+
+    Indexing matches :func:`embed_one_site_operator` (site ``0`` = LSB).
+
+    Args:
+        op4: Local ``(local_dim**2, local_dim**2)`` operator on the adjacent pair.
+        length: Number of sites in the chain.
+        site_left: Left site index of the pair.
+        local_dim: Local Hilbert-space dimension at each site.
+
+    Returns:
+        Dense embedded operator on the full Hilbert space.
+
+    Raises:
+        ValueError: If the pair is not inside the chain or ``op4`` has the wrong shape.
+    """
+    site_right = site_left + 1
+    if site_left < 0 or site_right >= length:
+        msg = f"adjacent pair ({site_left}, {site_right}) invalid for length {length}."
+        raise ValueError(msg)
+    dim4 = local_dim * local_dim
+    op_arr = np.asarray(op4, dtype=np.complex128)
+    if op_arr.shape != (dim4, dim4):
+        msg = f"op4 must have shape ({dim4}, {dim4}), got {op_arr.shape}."
+        raise ValueError(msg)
+    eye_local = np.eye(local_dim, dtype=np.complex128)
+    res = np.eye(1, dtype=np.complex128)
+    site = 0
+    while site < length:
+        if site == site_left:
+            res = np.kron(op_arr, res)
+            site += 2
+        else:
+            res = np.kron(eye_local, res)
+            site += 1
+    return np.asarray(res, dtype=np.complex128)
+
+
+def embed_two_site_factors(
+    op1: NDArray[np.complex128],
+    op2: NDArray[np.complex128],
+    length: int,
+    site1: int,
+    site2: int,
+    *,
+    local_dim: int = 2,
+) -> NDArray[np.complex128]:
+    """Embed a product of local operators on two (possibly non-adjacent) sites.
+
+    Args:
+        op1: Local operator on ``site1``.
+        op2: Local operator on ``site2``.
+        length: Number of sites in the chain.
+        site1: First site index.
+        site2: Second site index.
+        local_dim: Local Hilbert-space dimension at each site.
+
+    Returns:
+        Dense embedded operator on the full Hilbert space.
+
+    Raises:
+        ValueError: If site indices are invalid or operator shapes mismatch.
+    """
+    if site1 == site2:
+        msg = "site1 and site2 must differ."
+        raise ValueError(msg)
+    for site in (site1, site2):
+        if site < 0 or site >= length:
+            msg = f"site {site} out of range for length {length}."
+            raise ValueError(msg)
+    op1_arr = np.asarray(op1, dtype=np.complex128)
+    op2_arr = np.asarray(op2, dtype=np.complex128)
+    if op1_arr.shape != (local_dim, local_dim) or op2_arr.shape != (local_dim, local_dim):
+        msg = f"local operators must be ({local_dim}, {local_dim})."
+        raise ValueError(msg)
+    eye_local = np.eye(local_dim, dtype=np.complex128)
+    res = np.eye(1, dtype=np.complex128)
+    for k in range(length):
+        if k == site1:
+            local = op1_arr
+        elif k == site2:
+            local = op2_arr
+        else:
+            local = eye_local
+        res = np.kron(local, res)
+    return np.asarray(res, dtype=np.complex128)
+
+
 def normalize_density_matrix(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
     """Return a trace-one copy of a density matrix.
 

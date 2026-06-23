@@ -25,6 +25,7 @@ from typing_extensions import Self
 from mqt.yaqs import AnalogSimParams, Observable, Simulator, State, StrongSimParams
 from mqt.yaqs.core.data_structures import mps as mps_mod
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary, X, Z
 
 if TYPE_CHECKING:
@@ -1437,11 +1438,8 @@ def _dense_z_expectation(mps: MPS, site: int) -> float:
         Real expectation value of Z on ``site``.
     """
     psi = mps.to_vec()
-    n = mps.length
-    op = np.eye(1, dtype=np.complex128)
-    for s in range(n):
-        local = np.eye(2, dtype=np.complex128) if s != site else np.array([[1, 0], [0, -1]], dtype=np.complex128)
-        op = np.kron(local, op)
+    z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+    op = embed_one_site_operator(z, mps.length, site)
     return float(np.real(np.vdot(psi, op @ psi)))
 
 

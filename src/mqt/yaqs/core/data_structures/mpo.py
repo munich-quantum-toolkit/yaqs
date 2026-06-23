@@ -1631,8 +1631,8 @@ class MPO:
                     op_local = scipy.sparse.csr_matrix(op_local_dense)
                     op_left = current_operators[alpha]
 
-                    # Kronecker product: Left (X) Local
-                    term = scipy.sparse.kron(op_left, op_local, format="csr")
+                    # Kronecker product: local (x) accumulated (MPS to_vec order)
+                    term = scipy.sparse.kron(op_local, op_left, format="csr")
 
                     accumulated = term if accumulated is None else accumulated + term
 
