@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from qiskit.circuit.library import CXGate
+from qiskit.quantum_info import Pauli
 
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable
@@ -29,7 +31,6 @@ def test_embed_one_site_matches_qiskit(length: int, site: int, local: str) -> No
     """One-site embedding agrees with Qiskit ``Operator`` layout."""
     if site >= length:
         pytest.skip("site out of range for chain length")
-    from qiskit.quantum_info import Pauli
 
     local_mat = np.asarray(Pauli(local).to_matrix(), dtype=np.complex128)
     yaqs = embed_one_site_operator(local_mat, length, site)
@@ -43,7 +44,6 @@ def test_embed_adjacent_two_site_matches_qiskit(length: int, site_left: int) -> 
     """Adjacent two-site embedding agrees with Qiskit ``Operator`` layout."""
     if site_left + 1 >= length:
         pytest.skip("pair out of range for chain length")
-    from qiskit.circuit.library import CXGate
 
     local_mat = np.asarray(CXGate().to_matrix(), dtype=np.complex128)
     yaqs = embed_adjacent_two_site_operator(local_mat, length, site_left)

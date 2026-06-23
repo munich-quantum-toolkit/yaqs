@@ -21,6 +21,7 @@ from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import make_identity_site
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.simulation_parameters import Observable, StrongSimParams
+from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
 from mqt.yaqs.core.libraries.gate_library import Destroy, GateLibrary, Id, Z
 
 if TYPE_CHECKING:
@@ -34,16 +35,22 @@ _X2 = np.array([[0, 1], [1, 0]], dtype=complex)
 _Y2 = np.array([[0, -1j], [1j, 0]], dtype=complex)
 _Z2 = np.array([[1, 0], [0, -1]], dtype=complex)
 
-from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator, embed_two_site_factors
-
 
 def _embed_one_body(op: np.ndarray, length: int, i: int) -> np.ndarray:
-    """Embed a single-site operator (MPS / Qiskit site-0 LSB convention)."""
+    """Embed a single-site operator (MPS / Qiskit site-0 LSB convention).
+
+    Returns:
+        Dense embedded operator matrix.
+    """
     return embed_one_site_operator(np.asarray(op, dtype=np.complex128), length, i)
 
 
 def _embed_two_body(op1: np.ndarray, op2: np.ndarray, length: int, i: int) -> np.ndarray:
-    """Embed a nearest-neighbor two-site product operator."""
+    """Embed a nearest-neighbor two-site product operator.
+
+    Returns:
+        Dense embedded operator matrix.
+    """
     return embed_two_site_factors(
         np.asarray(op1, dtype=np.complex128),
         np.asarray(op2, dtype=np.complex128),
@@ -408,7 +415,7 @@ def test_bose_hubbard_correct_operator() -> None:
 
 def test_trapped_ion_one_ion() -> None:
     """Verify the one-ion position-grid MPO against a dense finite-difference reference."""
-    positions = np.linspace(-1.5, 1.5, 5)
+    positions = np.linspace(-1.5, 1.5, 5, dtype=np.float64)
     mass = 1.7
     omega = 0.8
     trap_center = 0.2
@@ -432,7 +439,7 @@ def test_trapped_ion_one_ion() -> None:
 
 def test_trapped_ion_two_ions() -> None:
     """Verify the exact two-ion MPO including its softened Coulomb interaction."""
-    positions = np.linspace(-1.0, 1.0, 4)
+    positions = np.linspace(-1.0, 1.0, 4, dtype=np.float64)
     masses = [1.2, 1.8]
     omega = 0.7
     trap_center = -0.1
@@ -468,7 +475,7 @@ def test_trapped_ion_two_ions() -> None:
 
 def test_trapped_ion_coulomb_truncation() -> None:
     """Verify that max_bond_dim retains the leading Coulomb SVD channels."""
-    positions = np.linspace(-2.0, 2.0, 6)
+    positions = np.linspace(-2.0, 2.0, 6, dtype=np.float64)
     omega = 0.5
     coulomb_strength = 0.4
     softening_length = positions[1] - positions[0]

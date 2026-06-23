@@ -13,13 +13,17 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simulator, State
-from mqt.yaqs.analog.utils import _embed_observable_dense
 from mqt.yaqs.core.data_structures.mps import MPS
+from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 
 
 @pytest.fixture
 def haar_state() -> tuple[MPS, np.ndarray, np.ndarray, list[np.ndarray]]:
-    """Haar-random 3-qubit MPS and dense snapshots."""
+    """Haar-random 3-qubit MPS and dense snapshots.
+
+    Returns:
+        Tuple of ``(mps, psi, rho, tensors)``.
+    """
     length = 3
     mps = MPS(length, state="haar-random", pad=4)
     psi = np.asarray(mps.to_vec(), dtype=np.complex128)
@@ -36,7 +40,7 @@ def test_haar_embedded_observables_match_mps(haar_state: tuple[MPS, np.ndarray, 
         for name in ("x", "z"):
             obs = Observable(name, site)
             mps_val = mps.expect(obs)
-            op = _embed_observable_dense(obs, length)
+            op = embed_one_site_operator(np.asarray(obs.gate.matrix, dtype=np.complex128), length, site)
             embed_val = float(np.real(np.vdot(psi, op @ psi)))
             assert mps_val == pytest.approx(embed_val, abs=1e-9), f"{name} site {site}"
 
