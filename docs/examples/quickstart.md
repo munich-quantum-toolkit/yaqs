@@ -105,7 +105,7 @@ For larger circuits, compiler passes, and OpenQASM inputs, see {doc}`equivalence
 | Goal                                                | Start here                    |
 | --------------------------------------------------- | ----------------------------- |
 | Open-system dynamics, noise, time grids             | {doc}`analog_simulation`      |
-| Bell-curve (log-normal) noise strengths               | {doc}`realistic_noise_models` |
+| Bell-curve (log-normal) noise strengths             | {doc}`realistic_noise_models` |
 | Circuit observables, mid-circuit sampling, OpenQASM | {doc}`circuit_simulation`     |
 | Accuracy presets and truncation knobs               | {doc}`simulation_parameters`  |
 | Check two circuits for equivalence                  | {doc}`equivalence_checking`   |

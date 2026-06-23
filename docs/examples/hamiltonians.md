@@ -20,10 +20,10 @@ This page covers the factory methods in the library. For open-system evolution a
 
 ## `Hamiltonian` versus `MPO`
 
-| Layer | Role |
-| ----- | ---- |
-| {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` | User-facing type passed to `Simulator.run` |
-| {class}`~mqt.yaqs.core.data_structures.mpo.MPO` | Tensor-network operator; built by factories below |
+| Layer                                                           | Role                                              |
+| --------------------------------------------------------------- | ------------------------------------------------- |
+| {class}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` | User-facing type passed to `Simulator.run`        |
+| {class}`~mqt.yaqs.core.data_structures.mpo.MPO`                 | Tensor-network operator; built by factories below |
 
 Typical patterns:
 
@@ -35,15 +35,15 @@ Access the internal MPO with `H.mpo` when you need bond dimension or tensor core
 
 ## Built-in models (quick reference)
 
-| Model | Entry point | Local dimension per site |
-| ----- | ----------- | ------------------------ |
-| Transverse-field Ising | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.ising` | 2 (qubits) |
-| Heisenberg | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.heisenberg` | 2 |
-| Generic Pauli sums | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.pauli` or {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.from_pauli_sum` | 2 |
-| 1D Fermi–Hubbard | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d` | 4 (fermionic) or 2 (Jordan–Wigner) |
-| Bose–Hubbard | {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.bose_hubbard` → `Hamiltonian.from_mpo` | `local_dim` (boson occupation cutoff) |
-| Coupled transmon chain | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon` | alternating qubit / resonator dims |
-| Trapped ion (position grid) | {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` → `Hamiltonian.from_mpo` | grid points per ion (1–2 ions) |
+| Model                       | Entry point                                                                                                                           | Local dimension per site              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Transverse-field Ising      | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.ising`                                                                  | 2 (qubits)                            |
+| Heisenberg                  | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.heisenberg`                                                             | 2                                     |
+| Generic Pauli sums          | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.pauli` or {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.from_pauli_sum` | 2                                     |
+| 1D Fermi–Hubbard            | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.fermi_hubbard_1d`                                                       | 4 (fermionic) or 2 (Jordan–Wigner)    |
+| Bose–Hubbard                | {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.bose_hubbard` → `Hamiltonian.from_mpo`                                                  | `local_dim` (boson occupation cutoff) |
+| Coupled transmon chain      | {meth}`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian.coupled_transmon`                                                       | alternating qubit / resonator dims    |
+| Trapped ion (position grid) | {meth}`~mqt.yaqs.core.data_structures.mpo.MPO.trapped_ion` → `Hamiltonian.from_mpo`                                                   | grid points per ion (1–2 ions)        |
 
 Open (`bc="open"`) and periodic (`bc="periodic"`) boundaries are supported on the Pauli builders.
 
