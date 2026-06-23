@@ -70,6 +70,7 @@ flowchart LR
 | Scheduled jumps at fixed times                           | {doc}`examples/scheduled_jumps`           |
 | Fermi–Hubbard MPO and analog evolution                   | {doc}`examples/fermi_hubbard_mpo`         |
 | Transmon–resonator SWAP (noiseless vs noisy)             | {doc}`examples/transmon_emulation`        |
+| Trapped-ion position-grid dynamics                       | {doc}`examples/trapped_ion`               |
 | Process tensor tomography                                | {doc}`examples/process_tomography`        |
 | Custom gate translation from Qiskit                      | {doc}`examples/custom_gates`              |
 
@@ -98,6 +99,7 @@ examples/scheduled_jumps
 examples/ensemble_evolution
 examples/representation_comparison
 examples/transmon_emulation
+examples/trapped_ion
 examples/fermi_hubbard_mpo
 examples/process_tomography
 ```
