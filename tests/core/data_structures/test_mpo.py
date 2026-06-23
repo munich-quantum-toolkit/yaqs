@@ -535,6 +535,10 @@ def test_trapped_ion_coulomb_truncation() -> None:
             "finite and positive",
         ),
         ({"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "max_bond_dim": 1}, "at least 2"),
+        (
+            {"positions": np.arange(3.0), "masses": [1.0, 1.0], "omega": 1.0, "max_bond_dim": 4.0},
+            "must be an integer",
+        ),
     ],
 )
 def test_trapped_ion_validation(kwargs: dict[str, Any], match: str) -> None:

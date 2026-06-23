@@ -25,6 +25,7 @@ or ``'vector'`` for larger lattices.
 
 from __future__ import annotations
 
+import math
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -110,7 +111,7 @@ def preprocess_lindblad(
         msg = "preprocess_lindblad requires initial_state or rho_initial."
         raise ValueError(msg)
 
-    dim = int(np.prod(resolve_physical_dimensions(num_sites, physical_dimensions), dtype=np.int64))
+    dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
 
     if dim > 2**10:
         msg = (

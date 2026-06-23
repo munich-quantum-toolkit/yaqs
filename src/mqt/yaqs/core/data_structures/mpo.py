@@ -712,6 +712,17 @@ class MPO:
     ) -> tuple[NDArray[np.float64], NDArray[np.float64], float, float]:
         """Validate trapped-ion position-grid inputs and return normalized parameters.
 
+        Args:
+            positions: Uniformly spaced one-dimensional position grid.
+            masses: One or two positive ion masses.
+            omega: Non-negative harmonic trap angular frequency.
+            trap_center: Center position of the harmonic trap.
+            hbar: Positive reduced Planck constant.
+            coulomb_strength: Softened Coulomb prefactor. Must be zero for one ion.
+            softening_length: Positive Coulomb softening length, or ``None`` to use the grid spacing.
+            coulomb_cutoff: Relative SVD cutoff for Coulomb channels.
+            max_bond_dim: Optional integer cap on the total MPO bond dimension.
+
         Returns:
             Tuple containing the validated grid, ion masses, grid spacing, and resolved
             softening length.
@@ -758,16 +769,24 @@ class MPO:
             msg = "coulomb_strength must be zero for a one-ion Hamiltonian."
             raise ValueError(msg)
         if ion_masses.size == 1:
-            if max_bond_dim is not None and max_bond_dim < 1:
-                msg = "max_bond_dim must be at least 1 for a one-ion Hamiltonian."
-                raise ValueError(msg)
+            if max_bond_dim is not None:
+                if not isinstance(max_bond_dim, int) or isinstance(max_bond_dim, bool):
+                    msg = "max_bond_dim must be an integer."
+                    raise ValueError(msg)
+                if max_bond_dim < 1:
+                    msg = "max_bond_dim must be at least 1 for a one-ion Hamiltonian."
+                    raise ValueError(msg)
             resolved_softening = spacings[0] if softening_length is None else softening_length
             return grid, ion_masses, float(spacings[0]), float(resolved_softening)
 
         dx = float(spacings[0])
-        if max_bond_dim is not None and max_bond_dim < 2:
-            msg = "max_bond_dim must be at least 2 for a two-ion Hamiltonian."
-            raise ValueError(msg)
+        if max_bond_dim is not None:
+            if not isinstance(max_bond_dim, int) or isinstance(max_bond_dim, bool):
+                msg = "max_bond_dim must be an integer."
+                raise ValueError(msg)
+            if max_bond_dim < 2:
+                msg = "max_bond_dim must be at least 2 for a two-ion Hamiltonian."
+                raise ValueError(msg)
         if softening_length is None:
             softening_length = dx
         if not np.isfinite(softening_length) or softening_length <= 0.0:
@@ -785,6 +804,14 @@ class MPO:
         dx: float,
     ) -> list[ComplexTensor]:
         """Construct finite-difference kinetic plus harmonic-potential local terms.
+
+        Args:
+            grid: Uniform one-dimensional position grid.
+            ion_masses: Validated positive ion masses.
+            omega: Non-negative harmonic trap angular frequency.
+            trap_center: Center position of the harmonic trap.
+            hbar: Positive reduced Planck constant.
+            dx: Uniform grid spacing.
 
         Returns:
             Local Hamiltonian matrix for each ion mass.
@@ -810,6 +837,13 @@ class MPO:
         max_bond_dim: int | None,
     ) -> list[tuple[ComplexTensor, ComplexTensor]]:
         """Factorize the softened Coulomb grid into diagonal MPO interaction channels.
+
+        Args:
+            grid: Uniform one-dimensional position grid.
+            coulomb_strength: Softened Coulomb prefactor.
+            softening_length: Positive Coulomb softening length.
+            coulomb_cutoff: Relative SVD cutoff for Coulomb channels.
+            max_bond_dim: Optional integer cap on the total MPO bond dimension.
 
         Returns:
             Pairs of diagonal left/right MPO channel matrices for the retained SVD terms.

@@ -26,6 +26,7 @@ store ``U_step``. For larger lattices use ``representation='mps'`` instead.
 
 from __future__ import annotations
 
+import math
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -115,7 +116,7 @@ def preprocess_mcwf(
         msg = "preprocess_mcwf requires initial_state or psi_initial."
         raise ValueError(msg)
 
-    dim = int(np.prod(resolve_physical_dimensions(num_sites, physical_dimensions), dtype=np.int64))
+    dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
 
     if dim > 2**14:
         msg = (
