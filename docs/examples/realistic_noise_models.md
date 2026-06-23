@@ -70,11 +70,11 @@ disordered_model = NoiseModel(disordered_processes)
 
 Other supported distributions:
 
-| `distribution`       | Parameters    | Use when                                                                                 |
-| -------------------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `distribution`       | Parameters    | Use when                                                                                  |
+| -------------------- | ------------- | ----------------------------------------------------------------------------------------- |
 | `"lognormal"`        | `mean`, `std` | **Default choice** for positive rates spanning magnitudes (`mean`/`std` on $\log\gamma$). |
-| `"normal"`           | `mean`, `std` | Symmetric spread around a target rate; negatives are clamped to `0`.                     |
-| `"truncated_normal"` | `mean`, `std` | Same shape as normal but sampled only for non-negative strengths.                        |
+| `"normal"`           | `mean`, `std` | Symmetric spread around a target rate; negatives are clamped to `0`.                      |
+| `"truncated_normal"` | `mean`, `std` | Same shape as normal but sampled only for non-negative strengths.                         |
 
 Sample many independent disorder realizations and plot the bell curve on a log scale:
 
@@ -99,7 +99,7 @@ ax.set_xscale("log")
 
 # Sparse decade ticks with plain decimal labels (avoids crowded sci-notation on log axes)
 lo, hi = float(min(samples)), float(max(samples))
-tick_decades = np.arange(int(np.floor(np.log10(lo))), int(np.ceil(np.log10(hi))) + 1)
+tick_decades = np.arrange(int(np.floor(np.log10(lo))), int(np.ceil(np.log10(hi))) + 1)
 tick_candidates = np.concatenate([np.array([1, 2, 5]) * 10.0**e for e in tick_decades])
 ticks = tick_candidates[(tick_candidates >= lo * 0.9) & (tick_candidates <= hi * 1.1)]
 if len(ticks) > 6:
@@ -261,12 +261,12 @@ sampled = lr_model.sample(rng=0)
 
 Every noise process is a dictionary. Besides the built-in {class}`~mqt.yaqs.core.libraries.noise_library.NoiseLibrary` names (`lowering`, `pauli_x`, `crosstalk_xx`, …), you can supply your own operator as a NumPy array:
 
-| Key | Required | Description |
-| --- | --- | --- |
-| `name` | yes | Label for the process. When `matrix` is omitted, must match a `NoiseLibrary` entry. When `matrix` is provided, any string is fine. |
-| `sites` | yes | Site indices the jump acts on (one site for single-qubit channels). |
-| `strength` | yes | Rate $\gamma$ in Lindblad form; YAQS uses jump operators $L_k = \sqrt{\gamma}\,L$. |
-| `matrix` | no | Local operator $L$ as a `d×d` array (`d=2` for qubits). If omitted, YAQS looks up `name` in `NoiseLibrary`. |
+| Key        | Required | Description                                                                                                                        |
+| ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | yes      | Label for the process. When `matrix` is omitted, must match a `NoiseLibrary` entry. When `matrix` is provided, any string is fine. |
+| `sites`    | yes      | Site indices the jump acts on (one site for single-qubit channels).                                                                |
+| `strength` | yes      | Rate $\gamma$ in Lindblad form; YAQS uses jump operators $L_k = \sqrt{\gamma}\,L$.                                                 |
+| `matrix`   | no       | Local operator $L$ as a `d×d` array (`d=2` for qubits). If omitted, YAQS looks up `name` in `NoiseLibrary`.                        |
 
 YAQS does not check complete positivity; supply physically meaningful jump operators. The same `matrix` override works for **scheduled jumps** (see {doc}`scheduled_jumps`) and for all backends—TJM (`mps`), MCWF (`vector`), Lindblad (`density_matrix`), and noisy circuits.
 
