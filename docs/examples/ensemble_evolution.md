@@ -252,7 +252,6 @@ for d in deltas:
         multi_time_observables=pairs_jj,
     )
     result_transport = sim.run(states_transport, h_periodic, sp)
-    assert result_transport.multi_time_results is not None
     t_transport = result_transport.multi_time_times
     c_jj = np.real(np.sum(result_transport.multi_time_results, axis=0) / Ltr)
     transport_curves[d] = c_jj

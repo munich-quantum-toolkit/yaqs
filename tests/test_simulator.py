@@ -401,7 +401,7 @@ def test_trapped_ion_position_grid_vector_and_mps_simulation_agree() -> None:
     omega = 1.0
     half_period = np.pi / omega
 
-    positions = np.linspace(-8.0, 8.0, 33)
+    positions = np.linspace(-8.0, 8.0, 33, dtype=np.float64)
     grid_dim = len(positions)
     initial_grid_state = np.exp(-0.5 * (positions - initial_displacement) ** 2).astype(np.complex128)
     initial_grid_state /= np.linalg.norm(initial_grid_state)
