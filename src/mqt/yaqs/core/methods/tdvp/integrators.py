@@ -74,9 +74,7 @@ def sweep_1site(
 
     right_blocks = initialize_right_environments(state, operator)
 
-    left_blocks: list[NDArray[np.complex128]] = [
-        np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)
-    ]
+    left_blocks: list[NDArray[np.complex128]] = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = operator.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -185,9 +183,7 @@ def sweep_2site(
     plan = sweep_plan if sweep_plan is not None else [step_scale]
 
     right_blocks = initialize_right_environments(state, operator)
-    left_blocks: list[NDArray[np.complex128]] = [
-        np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)
-    ]
+    left_blocks: list[NDArray[np.complex128]] = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     left_virtual_dim = state.tensors[0].shape[1]
     mpo_left_dim = operator.tensors[0].shape[2]
     left_identity = np.zeros((left_virtual_dim, mpo_left_dim, left_virtual_dim), dtype=right_blocks[0].dtype)
@@ -329,9 +325,7 @@ def sweep_dynamic(
     num_sites = operator.length
 
     right_blocks = initialize_right_environments(state, operator)
-    left_blocks: list[NDArray[np.complex128]] = [
-        np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)
-    ]
+    left_blocks: list[NDArray[np.complex128]] = [np.empty((0, 0, 0), dtype=np.complex128) for _ in range(num_sites)]
     chi0 = state.tensors[0].shape[1]
     mpo_dim = operator.tensors[0].shape[2]
     eye = np.zeros((chi0, mpo_dim, chi0), dtype=np.complex128)
