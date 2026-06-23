@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numba
 import numpy as np
 import pytest
+import scipy.sparse
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli, Statevector
 
@@ -394,6 +395,54 @@ def test_analog_simulation_get_state() -> None:
         np.testing.assert_allclose(1, fidelity)
 
 
+def test_trapped_ion_position_grid_vector_and_mps_simulation_agree() -> None:
+    """Noiseless vector and MPS evolution agree for a displaced ion in a static harmonic well."""
+    initial_displacement = 1.0
+    omega = 1.0
+    half_period = np.pi / omega
+
+    positions = np.linspace(-8.0, 8.0, 33)
+    grid_dim = len(positions)
+    initial_grid_state = np.exp(-0.5 * (positions - initial_displacement) ** 2).astype(np.complex128)
+    initial_grid_state /= np.linalg.norm(initial_grid_state)
+
+    hamiltonian = Hamiltonian.from_mpo(MPO.trapped_ion(positions, masses=[1.0], omega=omega))
+    sim_params = AnalogSimParams(
+        observables=[],
+        elapsed_time=half_period,
+        dt=half_period / 16,
+        num_traj=1,
+        max_bond_dim=None,
+        svd_threshold=1e-12,
+        krylov_tol=1e-12,
+        order=2,
+        preset="exact",
+        get_state=True,
+        sample_timesteps=False,
+    )
+
+    vector_state = State(length=1, vector=initial_grid_state, physical_dimensions=[grid_dim])
+    mps_state = State(length=1, tensors=[initial_grid_state.reshape(grid_dim, 1, 1)], physical_dimensions=[grid_dim])
+
+    vector_result = Simulator(parallel=False, show_progress=False).run(vector_state, hamiltonian, sim_params, None)
+    mps_result = Simulator(parallel=False, show_progress=False).run(mps_state, hamiltonian, sim_params, None)
+
+    assert vector_result.output_state is not None
+    assert mps_result.output_state is not None
+    vector_final = vector_result.output_state.vector
+    mps_final = mps_result.output_state.mps.to_vec()
+    overlap = np.vdot(vector_final, mps_final)
+
+    np.testing.assert_allclose(np.abs(overlap) ** 2, 1.0, atol=1e-12)
+    # A displaced harmonic-oscillator ground state reaches the opposite turning point
+    # after half a trap period. The tolerance accounts for the finite grid/discretized kinetic operator.
+    np.testing.assert_allclose(
+        float(np.sum(positions * np.abs(vector_final) ** 2)),
+        -initial_displacement,
+        atol=3e-2,
+    )
+
+
 def test_density_matrix_get_state() -> None:
     """density_matrix evolution returns the final density matrix when get_state=True."""
     psi = State(2, initial="zeros", representation="density_matrix")
@@ -439,6 +488,44 @@ def test_density_matrix_get_state_noisy() -> None:
     np.testing.assert_allclose(rho, expected, atol=1e-4)
     assert np.isclose(np.trace(rho), 1.0)
     assert np.allclose(rho.imag, 0.0, atol=1e-10)
+
+
+def test_density_matrix_non_qubit_physical_dimension() -> None:
+    """Lindblad density-matrix evolution supports non-qubit local dimensions."""
+    physical_dimension = 3
+    rho_initial = np.zeros((physical_dimension, physical_dimension), dtype=np.complex128)
+    rho_initial[2, 2] = 1.0
+    initial_state = State(length=1, density_matrix=rho_initial, physical_dimensions=[physical_dimension])
+    hamiltonian = Hamiltonian(
+        sparse_matrix=scipy.sparse.csr_matrix((physical_dimension, physical_dimension), dtype=np.complex128),
+        length=1,
+        physical_dimension=physical_dimension,
+    )
+
+    lowering_21 = np.zeros((physical_dimension, physical_dimension), dtype=np.complex128)
+    lowering_21[1, 2] = 1.0
+    gamma = 0.7
+    elapsed_time = 0.4
+    noise_model = NoiseModel(
+        processes=[{"name": "qutrit_decay_2_to_1", "sites": [0], "strength": gamma, "matrix": lowering_21}],
+    )
+    sim_params = AnalogSimParams(
+        observables=[],
+        elapsed_time=elapsed_time,
+        dt=0.1,
+        get_state=True,
+    )
+
+    result = Simulator(show_progress=False).run(initial_state, hamiltonian, sim_params, noise_model)
+
+    assert result.output_state is not None
+    assert result.output_state.length == 1
+    assert result.output_state.physical_dimensions == [physical_dimension]
+    rho = result.output_state.density_matrix
+    expected = np.zeros_like(rho)
+    expected[1, 1] = 1.0 - np.exp(-gamma * elapsed_time)
+    expected[2, 2] = np.exp(-gamma * elapsed_time)
+    np.testing.assert_allclose(rho, expected, atol=1e-4)
 
 
 def test_density_matrix_get_state_at_elapsed_time() -> None:

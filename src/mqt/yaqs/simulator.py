@@ -72,6 +72,7 @@ if TYPE_CHECKING:
     from .core.data_structures.hamiltonian import Representation
     from .core.data_structures.mpo import MPO
     from .core.data_structures.mps import MPS
+    from .parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
@@ -425,9 +426,28 @@ def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
         result.output_state = State.from_mps(final_mps)
 
 
-def _store_mcwf_final_state(result: Result, psi: np.ndarray | None) -> None:
+def _store_mcwf_final_state(
+    result: Result,
+    psi: np.ndarray | None,
+    *,
+    length: int | None = None,
+    physical_dimensions: list[int] | int | None = None,
+) -> None:
+    """Store the final MCWF state vector on ``result.output_state``.
+
+    If ``psi`` is not ``None``, this function stores a vector
+    :class:`~mqt.yaqs.core.data_structures.state.State` on ``result.output_state``
+    while preserving the original lattice length and local dimensions.
+
+    Args:
+        result: Output container for the simulation run.
+        psi: Final state vector, or ``None`` when ``get_state`` is ``False``.
+        length: Number of lattice sites from the initial state. Passed through so
+            non-qubit vector states do not need to infer a qubit chain length.
+        physical_dimensions: Per-site physical dimensions from the initial state.
+    """
     if psi is not None:
-        result.output_state = State(vector=psi)
+        result.output_state = State(length=length, vector=psi, physical_dimensions=physical_dimensions)
 
 
 def _store_lindblad_final_state(
@@ -837,6 +857,7 @@ class Simulator:
                 worker_params,
                 psi_initial=None if mps is not None else initial_state.vector,
                 num_sites=initial_state.length if mps is None else None,
+                physical_dimensions=initial_state.physical_dimensions,
                 h_sparse=h_sparse,
             )
             payload = {"ctx": ctx}
@@ -849,6 +870,7 @@ class Simulator:
                 worker_params,
                 rho_initial=initial_state.density_matrix,
                 num_sites=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
                 h_sparse=h_sparse,
             )
             payload = {"ctx": lindblad_ctx}
@@ -919,7 +941,12 @@ class Simulator:
                         final_mps = cast("MPS", traj_final)
 
         if state_rep == "vector":
-            _store_mcwf_final_state(result, final_psi)
+            _store_mcwf_final_state(
+                result,
+                final_psi,
+                length=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
+            )
         elif state_rep == "density_matrix":
             _store_lindblad_final_state(
                 result,

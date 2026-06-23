@@ -12,8 +12,9 @@ This module integrates the ensemble-averaged master equation (deterministic in r
     drho/dt = -i[H, rho] + sum_k ( L_k rho L_k^dag - 0.5 {L_k^dag L_k, rho} )
 
 MPS/MPO specify the initial pure state and Hamiltonian; the state is carried as a
-dense ``dim x dim`` matrix with ``dim = 2^N``. With ``noise_model=None`` (or zero
-strengths), the dissipator vanishes and evolution is unitary on rho.
+dense ``dim x dim`` matrix with ``dim = prod(physical_dimensions)``. With
+``noise_model=None`` (or zero strengths), the dissipator vanishes and evolution is
+unitary on rho.
 
 Because ``H`` and the jump operators are time-independent, the generator is fixed.
 For small systems we precompute ``exp(L dt)`` where ``L`` is the Liouvillian
@@ -24,6 +25,7 @@ or ``'vector'`` for larger lattices.
 
 from __future__ import annotations
 
+import math
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -32,6 +34,10 @@ import numpy as np
 import scipy.sparse
 from scipy.integrate import solve_ivp
 
+from ..core import linalg
+from ..core.data_structures.state_utils import resolve_physical_dimensions
+from .utils import _embed_observable_sparse, _embed_operator_sparse
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -39,9 +45,6 @@ if TYPE_CHECKING:
     from ..core.data_structures.mps import MPS
     from ..core.data_structures.noise_model import NoiseModel
     from ..core.data_structures.simulation_parameters import AnalogSimParams
-
-from ..core import linalg
-from .utils import _embed_observable_sparse, _embed_operator_sparse
 
 # Maximum length of vec(rho) = dim**2 for storing dense exp(L * dt).
 # vec_dim=4096 corresponds to N=6 qubits (propagator ~256 MB); N=7+ uses ODE fallback.
@@ -73,6 +76,7 @@ def preprocess_lindblad(
     *,
     rho_initial: NDArray[np.complex128] | None = None,
     num_sites: int | None = None,
+    physical_dimensions: int | list[int] | None = None,
     h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> LindbladContext:
     """Pre-compute operators and optional fixed-step propagator for Lindblad evolution.
@@ -85,6 +89,8 @@ def preprocess_lindblad(
         sim_params: Simulation parameters.
         rho_initial: Optional density matrix (square) or flattened vector for vec(rho).
         num_sites: Number of lattice sites when ``initial_state`` is ``None``.
+        physical_dimensions: Per-site physical dimensions used to validate dense
+            density matrices and sparse Hamiltonian sizes. Defaults to qubits.
         h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
 
     Returns:
@@ -96,6 +102,7 @@ def preprocess_lindblad(
     """
     if initial_state is not None:
         num_sites = initial_state.length
+        physical_dimensions = initial_state.physical_dimensions
     elif rho_initial is not None:
         if num_sites is None:
             msg = "num_sites is required when preprocess_lindblad is called with rho_initial only."
@@ -104,11 +111,11 @@ def preprocess_lindblad(
         msg = "preprocess_lindblad requires initial_state or rho_initial."
         raise ValueError(msg)
 
-    dim = 2**num_sites
+    dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
 
-    if num_sites > 10:
+    if dim > 2**10:
         msg = (
-            f"System size {num_sites} exceeds the recommended limit (10) for representation='density_matrix'. "
+            f"Hilbert-space dimension {dim} exceeds the recommended limit (2^10) for representation='density_matrix'. "
             "Density-matrix evolution uses dense-like scaling (2^2N elements). "
             "Simulation may be very slow or run out of memory. "
             "Consider using representation='mps' for larger systems."
@@ -143,6 +150,9 @@ def preprocess_lindblad(
     # 2. Hamiltonian as sparse matrix on the full Hilbert space.
     if h_sparse is not None:
         h_mat = scipy.sparse.csr_matrix(h_sparse)
+        if h_mat.shape != (dim, dim):
+            msg = f"h_sparse must have shape ({dim}, {dim}), got {h_mat.shape}."
+            raise ValueError(msg)
     elif hamiltonian is not None:
         h_mat = hamiltonian.to_sparse_matrix()
     else:
