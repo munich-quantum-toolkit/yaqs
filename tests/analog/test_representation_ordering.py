@@ -86,8 +86,9 @@ def test_noisy_short_step_mps_vs_mcwf(
     )
 
     mps_val = float(
-        sim.run(State(length, tensors=[t.copy() for t in tensors]), hamiltonian, params, noise)
-        .expectation_values[0][-1]
+        sim.run(State(length, tensors=[t.copy() for t in tensors]), hamiltonian, params, noise).expectation_values[0][
+            -1
+        ]
     )
     vec_val = float(sim.run(State(vector=psi.copy()), hamiltonian, params, noise).expectation_values[0][-1])
     assert mps_val == pytest.approx(vec_val, abs=1e-6)
