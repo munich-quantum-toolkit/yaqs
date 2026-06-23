@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Added
 
+- added an MPO constructor for static one- and two-ion trapped-ion Hamiltonians in the position basis ([#476]) ([**@linusschulte**])
 - extended get_state functionality to Lindblad ([#475]) ([**@aaronleesander**])
 - extended EquivalenceChecker output to include entropy and the resulting diff data structure ([#364]) ([**@yiranwang-phys**])
 - OpenQASM2 and 3 files can now be read directly by the Simulator and EquivalenceChecker ([#464]) ([**@Marerido**])
@@ -45,6 +46,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- fixed vector analog simulation for non-qubit local dimensions ([#476]) ([@linusschulte])
 - fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
@@ -140,6 +142,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#476]: https://github.com/munich-quantum-toolkit/yaqs/pull/476
 [#475]: https://github.com/munich-quantum-toolkit/yaqs/pull/475
 [#467]: https://github.com/munich-quantum-toolkit/yaqs/pull/467
 [#465]: https://github.com/munich-quantum-toolkit/yaqs/pull/465
@@ -204,6 +207,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 [**@Marerido**]: https://github.com/Marerido
 [**@yiranwang-phys**]: https://github.com/yiranwang-phys
 [**@aleramos119**]: https://github.com/aleramos119
+[**@linusschulte**]: https://github.com/linusschulte
 
 <!-- General links -->
 
