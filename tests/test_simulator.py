@@ -1360,7 +1360,7 @@ def test_circuit_simulation_rejects_non_circuit_operator() -> None:
     state = State(2, initial="zeros")
     params = StrongSimParams(observables=[Observable(Z(), 0)])
     bad_operator = cast("Any", Hamiltonian.ising(2, J=1.0, g=0.5))
-    with pytest.raises(TypeError, match="Circuit simulation requires a QuantumCircuit operator"):
+    with pytest.raises(TypeError, match="Circuit simulation requires a QuantumCircuit or qudit QuantumCircuit"):
         Simulator(show_progress=False).run(state, bad_operator, params, None)
 
 
