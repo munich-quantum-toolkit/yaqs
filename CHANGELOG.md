@@ -46,6 +46,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- added regression tests for tjm and mcwf jump probabilities ([#479]) ([**@aaronleesander**])
 - fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
 - added tests to ensure qubit ordering matches Qiskit ([#446]) ([**@aaronleesander**])
@@ -141,6 +142,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#479]: https://github.com/munich-quantum-toolkit/yaqs/pull/479
 [#477]: https://github.com/munich-quantum-toolkit/yaqs/pull/477
 [#475]: https://github.com/munich-quantum-toolkit/yaqs/pull/475
 [#467]: https://github.com/munich-quantum-toolkit/yaqs/pull/467
