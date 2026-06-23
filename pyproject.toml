@@ -94,6 +94,7 @@ filterwarnings = ["error"]
 run.source = ["mqt.yaqs"]
 run.omit = [
     "src/mqt/yaqs/digital/utils/qudit_dag_utils.py",
+    "src/mqt/yaqs/digital/qudit_tjm.py",
 ]
 
 report.exclude_also = [
@@ -118,6 +119,8 @@ exclude = [
     "docs/**",
     "src/mqt/yaqs/digital/utils/qudit_dag_utils.py",
     "tests/digital/utils/test_qudit_dag_utils.py",
+    "src/mqt/yaqs/digital/qudit_tjm.py",
+    "tests/digital/test_digital_tjm_qudits.py",
 ]
 
 
