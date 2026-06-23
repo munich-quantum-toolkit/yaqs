@@ -72,6 +72,7 @@ if TYPE_CHECKING:
     from .core.data_structures.hamiltonian import Representation
     from .core.data_structures.mpo import MPO
     from .core.data_structures.mps import MPS
+    from .parallel_utils import MPContext
 
 # Optional: extra control over threadpools inside worker processes.
 # We keep references as optionals, set by a guarded import.
@@ -114,7 +115,7 @@ from .core.data_structures.simulation_parameters import (
     _prepare_observable_ordering,
 )
 from .core.data_structures.state import State
-from .parallel_utils import MPContext, available_cpus, get_parallel_context, limit_worker_threads
+from .parallel_utils import available_cpus, get_parallel_context, limit_worker_threads
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -424,9 +425,15 @@ def _store_final_mps(result: Result, final_mps: MPS | None) -> None:
         result.output_state = State.from_mps(final_mps)
 
 
-def _store_mcwf_final_state(result: Result, psi: np.ndarray | None) -> None:
+def _store_mcwf_final_state(
+    result: Result,
+    psi: np.ndarray | None,
+    *,
+    length: int | None = None,
+    physical_dimensions: list[int] | int | None = None,
+) -> None:
     if psi is not None:
-        result.output_state = State(vector=psi)
+        result.output_state = State(length=length, vector=psi, physical_dimensions=physical_dimensions)
 
 
 def _store_lindblad_final_state(
@@ -841,6 +848,7 @@ class Simulator:
                 worker_params,
                 psi_initial=None if mps is not None else initial_state.vector,
                 num_sites=initial_state.length if mps is None else None,
+                physical_dimensions=initial_state.physical_dimensions,
                 h_sparse=h_sparse,
             )
             payload = {"ctx": ctx}
@@ -923,7 +931,12 @@ class Simulator:
                         final_mps = cast("MPS", traj_final)
 
         if state_rep == "vector":
-            _store_mcwf_final_state(result, final_psi)
+            _store_mcwf_final_state(
+                result,
+                final_psi,
+                length=initial_state.length,
+                physical_dimensions=initial_state.physical_dimensions,
+            )
         elif state_rep == "density_matrix":
             _store_lindblad_final_state(
                 result,

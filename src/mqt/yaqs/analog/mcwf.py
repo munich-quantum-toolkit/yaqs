@@ -34,6 +34,7 @@ import numpy as np
 import scipy.sparse
 
 from ..core import linalg
+from ..core.data_structures.state_utils import resolve_physical_dimensions
 from ..core.methods.matrix_exponential import expm_arnoldi, expm_krylov
 from ..core.random_utils import make_trajectory_rng
 
@@ -76,6 +77,7 @@ def preprocess_mcwf(
     *,
     psi_initial: NDArray[np.complex128] | None = None,
     num_sites: int | None = None,
+    physical_dimensions: int | list[int] | None = None,
     h_sparse: scipy.sparse.spmatrix | None = None,
 ) -> MCWFContext:
     """Pre-compute dense operators and initial state for MCWF simulation.
@@ -90,6 +92,8 @@ def preprocess_mcwf(
         sim_params: Simulation parameters.
         psi_initial: Optional pre-encoded dense state vector (unit norm applied here).
         num_sites: Number of lattice sites when ``initial_state`` is ``None``.
+        physical_dimensions: Per-site physical dimensions used to validate dense
+            vector and sparse Hamiltonian sizes. Defaults to qubits.
         h_sparse: Pre-materialized sparse Hamiltonian (skips ``hamiltonian.to_sparse_matrix()``).
 
     Returns:
@@ -102,6 +106,7 @@ def preprocess_mcwf(
     """
     if initial_state is not None:
         num_sites = initial_state.length
+        physical_dimensions = initial_state.physical_dimensions
     elif psi_initial is not None:
         if num_sites is None:
             msg = "num_sites is required when preprocess_mcwf is called with psi_initial only."
@@ -110,11 +115,11 @@ def preprocess_mcwf(
         msg = "preprocess_mcwf requires initial_state or psi_initial."
         raise ValueError(msg)
 
-    dim = 2**num_sites
+    dim = int(np.prod(resolve_physical_dimensions(num_sites, physical_dimensions), dtype=np.int64))
 
-    if num_sites > 14:
+    if dim > 2**14:
         msg = (
-            f"System size {num_sites} is too large for representation='vector' even with sparse matrices. "
+            f"Hilbert-space dimension {dim} is large for representation='vector' even with sparse matrices. "
             "Simulation may be very slow or run out of memory. "
             "Consider using representation='mps' for larger systems."
         )
