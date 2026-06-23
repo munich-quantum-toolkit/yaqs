@@ -22,7 +22,7 @@ import importlib
 import multiprocessing
 import os
 import sys
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import numba
 import numpy as np
@@ -46,7 +46,7 @@ from mqt.yaqs import (
 )
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import XX, YY, ZZ, X, Z
-from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, worker_init
+from mqt.yaqs.simulator import _expect_shot_counts, _get_parallel_context, _looks_like_qudit_circuit, worker_init
 from tests.conftest import (
     LARGE_QASM2_STRING,
     SAMPLE_QASM3_STRING,
@@ -69,6 +69,17 @@ def test_simulator_defaults() -> None:
     assert sim.max_retries == 10
     assert isinstance(sim.retry_exceptions, tuple)
     assert all(issubclass(exc, BaseException) for exc in sim.retry_exceptions)
+
+
+def test_looks_like_qudit_circuit_without_mqt_qudits() -> None:
+    """_looks_like_qudit_circuit works via duck typing, without requiring mqt-qudits."""
+
+    class FakeQuditCircuit:
+        dimensions: ClassVar[list[int]] = [2, 3]
+        num_qudits = 2
+
+    assert _looks_like_qudit_circuit(FakeQuditCircuit())
+    assert not _looks_like_qudit_circuit(QuantumCircuit(2))
 
 
 def test_simulator_max_workers_resolution() -> None:
