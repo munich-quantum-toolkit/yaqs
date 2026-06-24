@@ -117,6 +117,7 @@ def preprocess_mcwf(
         raise ValueError(msg)
 
     dim = math.prod(resolve_physical_dimensions(num_sites, physical_dimensions))
+    site_dims = resolve_physical_dimensions(num_sites, physical_dimensions)
 
     if dim > 2**14:
         msg = (
@@ -161,7 +162,7 @@ def preprocess_mcwf(
             strength = process["strength"]
             if strength <= 0:
                 continue
-            op_full = _embed_operator_sparse(process, num_sites)
+            op_full = _embed_operator_sparse(process, num_sites, physical_dimensions=site_dims)
             jump_ops.append(np.sqrt(strength) * op_full)
 
     is_unitary = len(jump_ops) == 0
@@ -190,7 +191,7 @@ def preprocess_mcwf(
         if obs.gate.name in {"entropy", "schmidt_spectrum"}:
             embedded_observables.append(None)
         else:
-            op = _embed_observable_sparse(obs, num_sites)
+            op = _embed_observable_sparse(obs, num_sites, physical_dimensions=site_dims)
             embedded_observables.append(op)
 
     return MCWFContext(

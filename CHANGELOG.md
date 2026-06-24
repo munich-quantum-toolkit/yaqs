@@ -48,6 +48,7 @@ This project adheres to [Semantic Versioning], with the exception that minor rel
 
 ### Fixed
 
+- fixed mcwf/lindblad ordering not matching tjm ([#481]) ([**@aaronleesander**])
 - added regression tests for tjm and mcwf jump probabilities ([#479]) ([**@aaronleesander**])
 - fixed NoiseModel factor order when two-site indices are normalized ([#396]) ([**@aleramos119**])
 - refactored observable handling in simulator to preserve user order ([#447]) ([**@aaronleesander**])
@@ -144,6 +145,7 @@ _📚 Refer to the [GitHub Release Notes](https://github.com/munich-quantum-tool
 
 <!-- PR links -->
 
+[#481]: https://github.com/munich-quantum-toolkit/yaqs/pull/481
 [#476]: https://github.com/munich-quantum-toolkit/yaqs/pull/476
 [#479]: https://github.com/munich-quantum-toolkit/yaqs/pull/479
 [#477]: https://github.com/munich-quantum-toolkit/yaqs/pull/477
