@@ -89,7 +89,7 @@ def _to_sparse_csr(op: NDArray[np.complex128] | scipy.sparse.spmatrix) -> scipy.
         CSR sparse matrix with the same entries as ``op``.
     """
     if issparse(op):
-        return cast("Any", op)
+        return cast("Any", op).tocsr()
     return scipy.sparse.csr_matrix(op)
 
 
@@ -114,6 +114,14 @@ def _transpose_adjacent_pair(
 
 
 def _sparse_identity(dim: int) -> scipy.sparse.spmatrix:
+    """Return a CSR identity matrix of the given local dimension.
+
+    Args:
+        dim: Hilbert-space dimension of a single site.
+
+    Returns:
+        CSR sparse identity of shape ``(dim, dim)``.
+    """
     return scipy.sparse.identity(dim, format="csr", dtype=np.complex128)
 
 
@@ -123,6 +131,20 @@ def _embed_one_site_sparse(
     site: int,
     dims: list[int],
 ) -> scipy.sparse.spmatrix:
+    """Embed a one-site operator into the full Hilbert space without densifying.
+
+    Args:
+        op: Local operator on ``site``.
+        num_sites: Total number of sites in the chain.
+        site: Site index on which ``op`` acts.
+        dims: Per-site Hilbert-space dimensions.
+
+    Returns:
+        CSR sparse embedded operator on the full space.
+
+    Raises:
+        ValueError: If ``op`` does not have shape ``(dims[site], dims[site])``.
+    """
     op_csr = _to_sparse_csr(op)
     site_dim = dims[site]
     if op_csr.shape != (site_dim, site_dim):
@@ -141,6 +163,20 @@ def _embed_adjacent_two_site_sparse(
     site_left: int,
     dims: list[int],
 ) -> scipy.sparse.spmatrix:
+    """Embed an adjacent two-site operator into the full Hilbert space without densifying.
+
+    Args:
+        op: Local operator on the pair ``(site_left, site_left + 1)``.
+        num_sites: Total number of sites in the chain.
+        site_left: Left site index of the adjacent pair.
+        dims: Per-site Hilbert-space dimensions.
+
+    Returns:
+        CSR sparse embedded operator on the full space.
+
+    Raises:
+        ValueError: If ``op`` does not have the expected pair shape.
+    """
     site_right = site_left + 1
     pair_dim = dims[site_left] * dims[site_right]
     op_csr = _to_sparse_csr(op)
@@ -167,6 +203,22 @@ def _embed_two_site_factors_sparse(
     site2: int,
     dims: list[int],
 ) -> scipy.sparse.spmatrix:
+    """Embed a product of local operators on two sites without densifying.
+
+    Args:
+        op1: Local operator on ``site1``.
+        op2: Local operator on ``site2``.
+        num_sites: Total number of sites in the chain.
+        site1: First site index.
+        site2: Second site index.
+        dims: Per-site Hilbert-space dimensions.
+
+    Returns:
+        CSR sparse embedded operator on the full space.
+
+    Raises:
+        ValueError: If either local operator does not match its site dimension.
+    """
     op1_csr = _to_sparse_csr(op1)
     op2_csr = _to_sparse_csr(op2)
     if op1_csr.shape != (dims[site1], dims[site1]) or op2_csr.shape != (dims[site2], dims[site2]):
@@ -235,6 +287,10 @@ def _embed_generic(
                 msg = "Matrix-based 2-site op must be adjacent"
                 raise ValueError(msg)
             site_left = min(s1, s2)
+            site_right = site_left + 1
+            if site_left < 0 or site_right >= num_sites:
+                msg = f"adjacent pair ({site_left}, {site_right}) invalid for length {num_sites}."
+                raise ValueError(msg)
             pair_op = op_matrix
             if s1 > s2:
                 pair_op = _transpose_adjacent_pair(op_matrix, dims[site_left], dims[site_left + 1])
@@ -253,6 +309,13 @@ def _embed_generic(
             msg = f"Factors require exactly 2 sites, got {len(sites)}"
             raise ValueError(msg)
         s1, s2 = sites
+        if s1 == s2:
+            msg = "site1 and site2 must differ."
+            raise ValueError(msg)
+        for site in (s1, s2):
+            if site < 0 or site >= num_sites:
+                msg = f"site {site} out of range for length {num_sites}."
+                raise ValueError(msg)
         if sparse:
             return _embed_two_site_factors_sparse(op1, op2, num_sites, s1, s2, dims)
         return embed_two_site_factors(

@@ -291,6 +291,15 @@ def _resolve_site_dims(
 ) -> list[int]:
     """Return per-site Hilbert-space dimensions for embedding helpers.
 
+    Args:
+        length: Number of sites in the chain.
+        physical_dimensions: Optional per-site dimensions (broadcast int or length-``length``
+            list). When provided, ``local_dim`` is ignored.
+        local_dim: Uniform local dimension used when ``physical_dimensions`` is ``None``.
+
+    Returns:
+        A list of length ``length`` with each site's Hilbert-space dimension.
+
     Raises:
         ValueError: If ``local_dim`` is not a positive integer when ``physical_dimensions`` is
             ``None``.

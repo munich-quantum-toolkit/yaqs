@@ -203,3 +203,23 @@ def test_embed_operator_dense_rejects_non_adjacent_pair() -> None:
     num_sites = 4
     with pytest.raises(ValueError, match="adjacent"):
         _embed_operator_dense({"sites": [0, 2], "matrix": np.eye(4, dtype=complex)}, num_sites)
+
+
+def test_embed_operator_sparse_rejects_out_of_range_matrix_sites() -> None:
+    """Sparse matrix embedding rejects invalid adjacent site indices."""
+    num_sites = 4
+    op4 = scipy.sparse.eye(4, format="csc", dtype=complex)
+    with pytest.raises(ValueError, match="adjacent pair"):
+        _embed_operator_sparse({"sites": [-1, 0], "matrix": op4}, num_sites)
+    with pytest.raises(ValueError, match="adjacent pair"):
+        _embed_operator_sparse({"sites": [3, 4], "matrix": op4}, num_sites)
+
+
+def test_embed_operator_sparse_rejects_invalid_factor_sites() -> None:
+    """Sparse factor embedding rejects duplicate and out-of-range sites."""
+    num_sites = 3
+    op = scipy.sparse.eye(2, format="coo", dtype=complex)
+    with pytest.raises(ValueError, match="site1 and site2 must differ"):
+        _embed_operator_sparse({"sites": [1, 1], "factors": (op, op)}, num_sites)
+    with pytest.raises(ValueError, match="site 3 out of range"):
+        _embed_operator_sparse({"sites": [0, 3], "factors": (op, op)}, num_sites)
